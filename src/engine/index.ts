@@ -21,3 +21,5 @@ export * from './result.js';
 export * from './actions.js';
 export * from './phases.js';
 export * from './apply.js';
+export * from './view.js';
+export * from './legalActions.js';
