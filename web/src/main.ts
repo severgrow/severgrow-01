@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { isBoardAction, kindsAvailable, options, targetHexes, usableCards } from './logic/interaction.js';
+import { isBoardAction, kindsAvailable, options, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
 import { guideTarget } from './logic/guide.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
@@ -967,10 +967,11 @@ function renderControls(v: View, advice: Advice | null) {
     const warn = $('confirm-warn');
     warn.hidden = !pv?.warning;
     warn.textContent = pv?.warning ?? '';
-    const n = options(v, legal, sel).length;
+    const opts = options(v, legal, sel);
+    const n = opts.length;
     const other = $('confirm-other');
     other.hidden = n < 2;
-    other.textContent = `Other way ${(sel.option % Math.max(n, 1)) + 1}/${n}`;
+    other.textContent = `${optionsLabel(opts)} ${(sel.option % Math.max(n, 1)) + 1}/${n}`;
     $('confirm').hidden = false;
   }
 }
