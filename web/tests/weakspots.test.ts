@@ -3,11 +3,21 @@ import { coordKey } from '../../src/engine/index.js';
 import { cutLoss, threats } from '../src/analysis.js';
 import { opportunities, weakSpots } from '../src/logic/weakspots.js';
 import { customBoard, findState, rootFan } from './ui-helpers.js';
+import type { State } from '../../src/engine/index.js';
+
+/** The first position (over several games) where `pred` holds. */
+const findAny = (pred: (s: State) => boolean): State => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const s = findState(seed, pred);
+    if (s) return s;
+  }
+  throw new Error('no such position');
+};
 import { viewFor } from '../../src/engine/index.js';
 
 describe('weak spots and opportunities', () => {
   it('weak spots are my tiles whose loss cuts the most, biggest first, with the number lost', () => {
-    const s = findState(5, (x) => x.turnNumber >= 10 && threats(viewFor(x, 0), 0).length > 0)!;
+    const s = findAny((x) => x.turnNumber >= 10 && threats(viewFor(x, 0), 0).length > 0);
     const v = viewFor(s, 0);
     const spots = weakSpots(v);
     expect(spots.length).toBeGreaterThan(0);
@@ -20,7 +30,7 @@ describe('weak spots and opportunities', () => {
   });
 
   it("opportunities are the bot's weak links, with how many tiles I would cut off", () => {
-    const s = findState(5, (x) => x.turnNumber >= 10 && threats(viewFor(x, 0), 1).length > 0)!;
+    const s = findAny((x) => x.turnNumber >= 10 && threats(viewFor(x, 0), 1).length > 0);
     const v = viewFor(s, 0);
     const ops = opportunities(v);
     expect(ops).toEqual(threats(v, 1));
