@@ -154,3 +154,23 @@ describe('the "other option" button says what changes', () => {
     expect(optionsLabel([S(1, 0, 0), S(1, 1, 0)])).toBe('Other way');
   });
 });
+
+describe('undo (take back a move in your own turn)', () => {
+  it('undoes board moves back to the start of the turn, but never past a draw', () => {
+    const s = actState(3);
+    const ses = new Session(s);
+    const a = ses.legal.find(isBoard)!;
+    ses.play(a);
+    expect(ses.canUndo).toBe(true);
+    expect(ses.undo()).toBe(true);
+    expect(JSON.stringify(ses.state)).toBe(JSON.stringify(s));
+    expect(ses.canUndo).toBe(false);
+    expect(ses.undo()).toBe(false);
+  });
+  it('a draw, a discard or the bot moving makes earlier moves final', () => {
+    const d = findState(4, (x) => x.actor === 0 && x.phase === 'DRAW')!;
+    const ses = new Session(d);
+    ses.play({ t: 'Draw', from: 'deck' });
+    expect(ses.canUndo).toBe(false); // the new card has been seen
+  });
+});

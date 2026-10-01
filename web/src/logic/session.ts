@@ -15,6 +15,8 @@ const same = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 export class Session {
   sel: Sel = EMPTY_SEL;
   private turns: { player: Player; plays: Played[] }[] = [];
+  /** States before each take-back-able move of the player's current turn (see undo). */
+  private undoStack: State[] = [];
   private cache: { state: State; view: View; legal: Action[] } | null = null;
 
   constructor(
@@ -71,6 +73,10 @@ export class Session {
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
     if (!legal.some((a) => same(a, action))) return null;
     const after = apply(s, action);
+    // Growing tiles (and pressing "Throw a card away") reveal nothing new, so the player
+    // may take them back. A draw, a discard or any bot move makes everything before final.
+    if (who === this.viewer && (action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout' || action.t === 'EndAct')) this.undoStack.push(s);
+    else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
     this.sel = EMPTY_SEL;
@@ -79,6 +85,21 @@ export class Session {
     else this.turns.push({ player: s.turnPlayer, plays: [played] });
     if (this.turns.length > 6) this.turns.shift();
     return played;
+  }
+
+  /** True when the player can take back their last move. */
+  get canUndo(): boolean {
+    return this.undoStack.length > 0 && this.state.actor === this.viewer && this.state.phase !== 'GAME_OVER';
+  }
+
+  /** Takes back the player's last move of this turn. Returns false if there is none. */
+  undo(): boolean {
+    if (!this.canUndo) return false;
+    this.state = this.undoStack.pop()!;
+    this.sel = EMPTY_SEL;
+    const last = this.turns.at(-1);
+    if (last && last.player === this.viewer) last.plays.pop();
+    return true;
   }
 
   /** Every action of `player`'s latest turn (for "Replay last turn"). */

@@ -355,6 +355,18 @@ and no empty early turns; games last 8.3 turns per player (median 8.5, 90% under
 Sprout, a third or more of the first five turns place nothing; with Sprout and fewer cards
 (maxRank 7 or less, 2 copies) the deck runs out too fast (4-6 turns each).
 
+### 11.2 Bot levels (page only)
+
+`src/bots/levels.ts` gives the page three levels; all read only their own `View` and are
+deterministic.
+- **Normal** is GreedyBot unchanged (the golden games and the 11.1 grid still hold).
+- **Easy** plays the best move half the time and otherwise the 2nd or 3rd best. A test
+  checks it loses to Normal in most games.
+- **Hard** plans its whole turn. For its 6 best growing moves it also weighs the best
+  move it could play right after, and picks the best pair. Tuned weights alone did not
+  help: 8 variants scored 47-50.5% against Normal over 400 games each. The look-ahead won
+  **55% (220/400)** against Normal, with about +2 points per game.
+
 ---
 
 ## Appendix A: Parked rules (off by default)

@@ -54,7 +54,9 @@ export type Facts =
   | { kind: 'rotPick'; botLoss: number };
 
 export type Scored = { action: Action; score: number; facts: Facts };
-export type GreedyOptions = { allowKnock?: boolean };
+/** The weights' shape; a bot level may pass its own (the default bot uses WEIGHTS). */
+export type Weights = { readonly [K in keyof typeof WEIGHTS]: number };
+export type GreedyOptions = { allowKnock?: boolean; weights?: Weights };
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
@@ -62,7 +64,7 @@ const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
 const inCombo = (hand: readonly Card[], c: Card): boolean =>
   bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
 
-const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'Fruit' | 'Sprout' }>): Scored => {
+const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'Fruit' | 'Sprout' }>, w: Weights): Scored => {
   const me = v.player;
   const opp = other(me);
   const sim = simulate(v, a)!;
@@ -117,24 +119,24 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
   const wasted = placedKeys.reduce((sum, k, i) => sum + (v.board[k] ? 0 : (strengths[i] ?? 0)), 0);
   const breaksCombo = a.t === 'Sprout' && inCombo(v.hand, v.hand.find((c) => c.id === a.card)!);
   const score =
-    (sim.wins ? WEIGHTS.win : 0) -
-    (breaksCombo ? WEIGHTS.breakCombo : 0) -
-    WEIGHTS.wastedStrength * wasted +
+    (sim.wins ? w.win : 0) -
+    (breaksCombo ? w.breakCombo : 0) -
+    w.wastedStrength * wasted +
     sim.points +
     sim.botPointsLost -
-    WEIGHTS.exposure * (myAfter - myBefore) +
-    WEIGHTS.pressure * (pressureAfter - pressureBefore);
+    w.exposure * (myAfter - myBefore) +
+    w.pressure * (pressureAfter - pressureBefore);
   return { action: a, score, facts: { kind: a.t === 'Fruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'meld', move } };
 };
 
 
-const scoreAction = (v: View, a: Action, meldsAvailable: boolean): Scored => {
+const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): Scored => {
   switch (a.t) {
     case 'MeldRun':
     case 'MeldSet':
     case 'Sprout':
     case 'Fruit':
-      return scoreBoardMove(v, a);
+      return scoreBoardMove(v, a, w);
     case 'Draw': {
       if (a.from === 'deck') return { action: a, score: 0, facts: { kind: 'draw', from: 'deck', completesCombo: false, comboWith: [] } };
       const top = v.discard.at(-1)!;
@@ -142,7 +144,7 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean): Scored => {
       const meld = bestMeldPartition(withTop).melds.find((m) => m.some((x) => x.id === top.id)) ?? null;
       return {
         action: a,
-        score: meld ? WEIGHTS.discardDraw : -WEIGHTS.discardDraw,
+        score: meld ? w.discardDraw : -w.discardDraw,
         facts: { kind: 'draw', from: 'discard', completesCombo: meld !== null, comboWith: (meld ?? []).filter((x) => x.id !== top.id) },
       };
     }
@@ -158,7 +160,7 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean): Scored => {
     case 'Knock': {
       const lead = v.score - v.opponentScore;
       const risk = worst(v, v.player)?.loss ?? 0;
-      return { action: a, score: lead - risk - WEIGHTS.knockMargin, facts: { kind: 'knock', lead, risk } };
+      return { action: a, score: lead - risk - w.knockMargin, facts: { kind: 'knock', lead, risk } };
     }
     case 'Continue':
       return { action: a, score: 0, facts: { kind: 'continue' } };
@@ -176,7 +178,8 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean): Scored => {
 export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
   const acts = legalActions(v).filter((a) => opts.allowKnock !== false || a.t !== 'Knock');
   const meldsAvailable = acts.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet');
-  const scored = acts.map((a) => scoreAction(v, a, meldsAvailable));
+  const w = opts.weights ?? WEIGHTS;
+  const scored = acts.map((a) => scoreAction(v, a, meldsAvailable, w));
   return scored
     .map((s, i) => ({ s, i }))
     .sort((x, y) => y.s.score - x.s.score || x.i - y.i)

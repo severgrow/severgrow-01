@@ -1,10 +1,14 @@
 // Player settings, saved in the browser. Parsing is forgiving: anything missing or
 // broken falls back to the default, so an old or damaged save never breaks the page.
 
+import { LEVELS } from '../../../src/bots/levels.js';
+import type { Level } from '../../../src/bots/levels.js';
+
 export const SPEEDS = ['slow', 'normal', 'fast', 'skip'] as const;
 export type Speed = (typeof SPEEDS)[number];
 
 export type Settings = {
+  level: Level;
   sound: boolean;
   music: boolean;
   vibration: boolean;
@@ -17,6 +21,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
+  level: 'normal',
   sound: true,
   music: false,
   vibration: true,
@@ -42,6 +47,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out;
   const s = saved as Record<string, unknown>;
   if (SPEEDS.includes(s.speed as Speed)) out.speed = s.speed as Speed;
+  if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }

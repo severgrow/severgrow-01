@@ -21,12 +21,13 @@ export type Preview = {
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-export const chipText = (p: { placed: number; replaced: number; cuts: number; wins: boolean }): string => {
+export const chipText = (p: { placed: number; replaced: number; cuts: number; wins: boolean; points?: number }): string => {
   const parts = [`+${plural(p.placed, 'tile')}`];
   if (p.replaced > 0) parts.push(`replaces ${p.replaced}`);
   if (p.cuts > 0) parts.push(`cuts ${p.cuts}`);
   if (p.wins) parts.push('wins the game');
-  return parts.join(', ');
+  const text = parts.join(', ');
+  return p.points === undefined || p.wins ? text : `${text} · ${p.points >= 0 ? '+' : '−'}${plural(Math.abs(p.points), 'point')}`;
 };
 
 export const previewMove = (v: View, a: Action): Preview | null => {
@@ -54,7 +55,7 @@ export const previewMove = (v: View, a: Action): Preview | null => {
     ...core,
     cutKeys,
     points: sim.points,
-    chip: chipText(core),
+    chip: chipText({ ...core, points: sim.points }),
     warning: after > before && !sim.wins ? `The bot could cut ${after} of your tiles.` : null,
   };
 };

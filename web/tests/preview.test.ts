@@ -62,3 +62,11 @@ describe('move preview', () => {
     expect(chipText({ placed: 2, replaced: 0, cuts: 0, wins: true })).toBe('+2 tiles, wins the game');
   });
 });
+
+describe('points in the preview', () => {
+  it('the chip ends with the points the move gains', () => {
+    expect(chipText({ placed: 3, replaced: 1, cuts: 4, wins: false, points: 7 })).toBe('+3 tiles, replaces 1, cuts 4 · +7 points');
+    expect(chipText({ placed: 1, replaced: 0, cuts: 0, wins: false, points: 1 })).toBe('+1 tile · +1 point');
+    expect(chipText({ placed: 1, replaced: 0, cuts: 0, wins: false, points: 0 })).toBe('+1 tile · +0 points');
+  });
+});

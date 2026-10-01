@@ -7,6 +7,12 @@
     <meta name="description" content="Severgrow: grow your network, keep it joined to your root, cut the bot's links." />
     <title>Severgrow</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230d0e11%27/%3E%3Cpolygon points=%2716,5 25,10 25,22 16,27 7,22 7,10%27 fill=%27none%27 stroke=%27%234df0b4%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%273.5%27 fill=%27%234df0b4%27/%3E%3C/svg%3E" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Severgrow" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -18,6 +24,7 @@
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">Severgrow</h1>
         <p class="tagline">Grow your network. Keep it joined to your root. Cut the bot's links.</p>
+        <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
           <button id="menu-play" class="btn primary big" type="button">Play</button>
@@ -27,6 +34,8 @@
             <button id="menu-settings" class="btn ghost" type="button"><span class="i" data-icon="gear"></span>Settings</button>
           </div>
         </div>
+        <div class="level-pick"><span class="muted small">Bot</span><div class="seg" role="radiogroup" aria-label="Bot level" data-level-seg></div></div>
+        <p id="menu-stats" class="muted small stats-line"></p>
         <p class="menu-foot">Severgrow · v0.4</p>
       </div>
     </section>
@@ -53,6 +62,7 @@
         <li data-step="ACT"><span class="n">2</span>Grow</li>
         <li data-step="DISCARD"><span class="n">3</span>Throw away</li>
       </ol>
+      <p id="endnote" class="endnote" hidden></p>
       <p id="hint" class="hint" role="status" aria-live="polite"></p>
 
       <div class="play">
@@ -134,6 +144,8 @@
           <button id="test-vibration" class="btn ghost small" type="button">Test vibration</button>
         </div>
         <p id="test-note" class="muted small"></p>
+        <h3>The bot</h3>
+        <div class="row"><span>Level</span><div class="seg" role="radiogroup" aria-label="Bot level" data-level-seg></div></div>
         <h3>Animations</h3>
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
@@ -172,11 +184,13 @@
         <h2 id="go-title" class="go-title"></h2>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
+        <p id="go-break" class="muted small"></p>
         <ul id="go-highlights" class="highlights"></ul>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Rematch</button>
           <button id="go-board" class="btn ghost" type="button">See the board</button>
           <button id="go-menu" class="btn link" type="button">Back to menu</button>
+          <p id="go-stats" class="muted small stats-line"></p>
         </div>
       </div>
     </section>
