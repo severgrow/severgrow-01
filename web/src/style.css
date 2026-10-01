@@ -13,6 +13,8 @@
   --bot: #8e5bd6;
   --bot-soft: #e6dbf7;
   --accent: #e0632f;
+  --danger: #d23b3b;
+  --danger-soft: #fbe3e1;
   --button: #1d2420;
   --button-ink: #ffffff;
   --radius: 12px;
@@ -34,6 +36,8 @@
     --bot: #a982ea;
     --bot-soft: #352a4b;
     --accent: #ff8a54;
+    --danger: #ff6b6b;
+    --danger-soft: #3d1f1f;
     --button: #e9ede9;
     --button-ink: #111613;
     color-scheme: dark;
@@ -133,3 +137,29 @@ button.link { background: none; color: var(--accent); padding: 0; border: 0; }
 .rules summary { font-weight: 700; cursor: pointer; }
 .rules li { margin: 6px 0; }
 button:focus-visible, .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.top-actions { display: flex; gap: 8px; align-items: center; }
+.mode { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.mode button { background: transparent; color: var(--ink); border: 0; border-radius: 0; padding: 6px 10px; }
+.mode button[aria-pressed='true'] { background: var(--button); color: var(--button-ink); }
+.summary { margin: 10px 0 0; font-weight: 600; }
+.summary p { margin: 0; }
+.coach {
+  display: flex; flex-direction: column; gap: 4px; margin: 10px 0 0; padding: 10px 12px;
+  border-radius: var(--radius); background: var(--you-soft); border: 2px solid var(--you);
+}
+.coach-actions { display: flex; gap: 12px; align-items: center; margin-top: 4px; }
+.coach-glow { box-shadow: 0 0 0 3px var(--you) inset; animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 50% { box-shadow: 0 0 0 1px var(--you) inset; } }
+@media (prefers-reduced-motion: reduce) { .coach-glow { animation: none; } }
+.tile-info { margin: 4px 0 0; min-height: 2.6em; font-size: 0.9rem; color: var(--muted); }
+.tile-info.danger { color: var(--danger); font-weight: 600; }
+.board .doomed { fill: var(--danger); opacity: 0.35; pointer-events: none; }
+.board .risk { fill: var(--danger); stroke: #fff; stroke-width: 1.5; pointer-events: none; }
+.board .risk-mark { fill: #fff; font-size: 9px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.board .inspect { fill: none; stroke: var(--danger); stroke-width: 3; pointer-events: none; }
+.warn { flex: 1 1 100%; margin: 0; padding: 6px 8px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.move.risky { border-color: var(--danger); }
+.footer { margin-top: 18px; }
+.top { flex-wrap: wrap; }
+.top-actions button { white-space: nowrap; }
