@@ -49,6 +49,10 @@ const meld = (s: State, placement: Placement): State => {
   const used = new Set(placement.cards.map((c) => c.id));
   const hand = s.hands[p].filter((c) => !used.has(c.id));
   if (hand.length === 0) fail('HAND_WOULD_BE_EMPTY', 'keep at least one card for the mandatory discard');
+  if (s.config.forbidRedundantDiscard && hand.length === 1 && hand[0]!.id === s.drawnFromDiscard) {
+    // v0.3.1: the only card left could not be discarded (spec 6.3), so the turn would freeze.
+    fail('NO_DISCARDABLE_CARD', 'keep a card you are allowed to discard');
+  }
   const out = applyPlacement(s.board, placement);
   const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord) };
   return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand) }, p, res);

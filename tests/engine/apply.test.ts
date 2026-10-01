@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IllegalActionError, apply, applyAs, deadwood, newGame } from '../../src/engine/index.js';
+import { IllegalActionError, apply, applyAs, deadwood, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { clone, fixture, tilesOf } from '../helpers.js';
 
@@ -152,6 +152,25 @@ describe('ACT: melds', () => {
     const r = run();
     const s = makeState({ phase: 'ACT', hands: [r, junk(7)] });
     illegal(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }, 'HAND_WOULD_BE_EMPTY');
+  });
+
+  it('a meld may not leave only the card just taken from the discard pile (v0.3.1)', () => {
+    const r = run();
+    const taken = c(EMBER, 9);
+    const s = makeState({ phase: 'ACT', hands: [[...r, taken], junk(7)], patch: { drawnFromDiscard: taken.id } });
+    illegal(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }, 'NO_DISCARDABLE_CARD');
+    expect(legalActions(viewFor(s, 0)).some((a) => a.t === 'MeldRun')).toBe(false);
+    // With another card left over, the same meld is fine.
+    const ok = makeState({ phase: 'ACT', hands: [[...r, taken, c(DEW, 2)], junk(7)], patch: { drawnFromDiscard: taken.id } });
+    expect(act(ok, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }).hands[0]).toHaveLength(2);
+    // With the loophole rule off, the taken card may be discarded, so the meld is legal.
+    const off = makeState({
+      phase: 'ACT',
+      config: { forbidRedundantDiscard: false },
+      hands: [[...r, taken], junk(7)],
+      patch: { drawnFromDiscard: taken.id },
+    });
+    expect(act(off, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }).hands[0]).toEqual([taken]);
   });
 
   it('an illegal meld changes nothing (atomic)', () => {

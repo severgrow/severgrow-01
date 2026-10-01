@@ -10,6 +10,7 @@ Scope of this document: a **pure, deterministic, headless TypeScript rules engin
 
 **v0.3.1** (playtest decisions)
 - **Empty deck ends the game (6.5).** A turn never starts with an empty deck: if the deck is empty after a Refill, the game ends at once by `deck_exhaustion`. Before, an exactly-empty deck did not end the game, and games could loop forever (3.6% of RandomBot games, 1.3% of GreedyBot games).
+- **No stuck hands (6.2, 6.3).** A meld may not leave the hand empty, and (when `forbidRedundantDiscard` is on) may not leave only the card just taken from the discard pile: otherwise no discard would be legal and the game would freeze (found by RandomBot, seed 4230).
 - **Turn safety cap (15, item 9)** is now per bot: at most 60 player-turns for GreedyBot games and 150 for RandomBot games. Random play is slow (median 55 turns), not broken.
 
 ## 0. Changes from v0.2 (read first)
@@ -165,6 +166,7 @@ After **each** placement/Fruit: Sever, then Strangle check (section 8).
 ### 6.3 DISCARD
 Action: `Discard { card }`. Exactly one card from the hand goes to the top of the discard pile.
 - If `forbidRedundantDiscard` and `drawnFromDiscard` is set, discarding that card is illegal.
+- Because a discard is mandatory, a meld in ACT is illegal if it would leave no card that may be discarded (an empty hand, or only the card just taken from the discard pile). *(v0.3.1)*
 - Then phase becomes `KNOCK` (or the game ends if this was a final turn, see 7.2).
 
 ### 6.4 KNOCK

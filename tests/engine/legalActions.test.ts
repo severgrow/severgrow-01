@@ -95,8 +95,10 @@ const bruteForce = (s: State): Set<string> => {
       const seenCards = new Set<string>();
       for (let k = 3; k <= hand.length; k++) {
         for (const cards of subsets<Card>(hand, k)) {
-          // Only card groups that are melds can be placed; copies are equivalent.
-          const ck = cards.map((c) => `${c.suit}:${c.rank}`).sort().join(',');
+          // Only card groups that are melds can be placed. Copies are equivalent, except the
+          // copy just taken from the discard pile (which may not be stranded, v0.3.1).
+          const ck =
+            cards.map((c) => `${c.suit}:${c.rank}`).sort().join(',') + (cards.some((c) => c.id === s.drawnFromDiscard) ? '*' : '');
           if (seenCards.has(ck)) continue;
           seenCards.add(ck);
           const ids = cards.map((c) => c.id);
@@ -209,6 +211,27 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { t: 'Discard', card: 51 },
       { t: 'Discard', card: 60 },
     ]);
+  });
+
+  it('with two copies, uses the copy just taken from the discard pile when the lower id would leave it stranded', () => {
+    const s0 = newGame(3);
+    // Moss 3 (id 10) and its copy (id 50, just taken from the discard pile), Moss 4, Moss 5.
+    const hand: Card[] = [
+      { id: 10, suit: 0, rank: 3 },
+      { id: 50, suit: 0, rank: 3 },
+      { id: 60, suit: 0, rank: 4 },
+      { id: 70, suit: 0, rank: 5 },
+    ];
+    const s: State = { ...s0, phase: 'ACT', hands: [hand, s0.hands[1]], drawnFromDiscard: 50 };
+    const runs = legalActionsForState(s).filter((a) => a.t === 'MeldRun');
+    expect(runs.length).toBeGreaterThan(0);
+    for (const a of runs) {
+      expect(a.t === 'MeldRun' && a.cards).toContain(50);
+      expect(() => apply(s, a)).not.toThrow();
+    }
+    expect(new Set(runs.map((a) => canon(s, a)))).toEqual(
+      new Set([...bruteForce(s)].filter((k) => k.startsWith('R '))),
+    );
   });
 
   it('legalActions reads only the view (no hidden state needed)', () => {

@@ -89,11 +89,28 @@ const actActions = (v: View): Action[] => {
   const board = allCoords(radius);
   const reps = representatives(v.hand);
   const out: Action[] = [];
-  const keepsACard = (g: Card[]) => g.length < v.hand.length;
+  // A meld must leave a card that may be discarded: not an empty hand, and not only the
+  // card just taken from the discard pile (spec 6.3, v0.3.1).
+  const keepsACard = (g: Card[]) => {
+    const left = v.hand.filter((c) => !g.some((x) => x.id === c.id));
+    if (left.length === 0) return false;
+    return !(v.config.forbidRedundantDiscard && left.length === 1 && left[0]!.id === v.drawnFromDiscard);
+  };
+  // Identical copies are deduped to the lowest id; if that copy would strand the card just
+  // taken from the discard pile, the same meld using the taken card instead is the legal one.
+  const drawn = v.hand.find((c) => c.id === v.drawnFromDiscard);
+  const fit = (g: Card[]): Card[] | null => {
+    if (keepsACard(g)) return g;
+    if (!drawn || g.some((c) => c.id === drawn.id)) return null;
+    const i = g.findIndex((c) => c.suit === drawn.suit && c.rank === drawn.rank);
+    if (i < 0) return null;
+    const swapped = g.map((c, j) => (j === i ? drawn : c));
+    return keepsACard(swapped) ? swapped : null;
+  };
 
   // Hypha: start must touch the network; planRun checks every hex on the line.
   const starts = board.filter((c) => touchesNetwork(v.board, p, c));
-  for (const g of runGroups(reps).filter(keepsACard)) {
+  for (const g of runGroups(reps).map(fit).filter((x): x is Card[] => x !== null)) {
     const cards = g.map((c) => c.id);
     for (const start of starts) {
       for (let dir = 0; dir < DIRECTIONS.length; dir++) {
@@ -103,7 +120,7 @@ const actActions = (v: View): Action[] => {
   }
 
   // Bloom: connected clusters of claimable hexes with at least one network contact.
-  for (const g of setGroups(reps).filter(keepsACard)) {
+  for (const g of setGroups(reps).map(fit).filter((x): x is Card[] => x !== null)) {
     const rank = g[0]!.rank;
     const claimable = board.filter((c) => claimBlocker(v, p, c, rank) === null);
     for (const hexes of connectedSubsets(claimable, g.length)) {
