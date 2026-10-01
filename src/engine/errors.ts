@@ -54,7 +54,17 @@ export type IllegalActionCode =
   | 'FRUIT_SACRIFICE_NOT_CONNECTED'
   | 'FRUIT_TARGET_NOT_ENEMY'
   | 'FRUIT_TARGET_ROOT'
-  | 'FRUIT_TARGET_NOT_ADJACENT';
+  | 'FRUIT_TARGET_NOT_ADJACENT'
+  // turn flow
+  | 'GAME_OVER'
+  | 'WRONG_PHASE'
+  | 'NOT_ACTOR'
+  | 'DECK_EMPTY'
+  | 'DISCARD_EMPTY'
+  | 'HAND_WOULD_BE_EMPTY'
+  | 'REDUNDANT_DISCARD'
+  | 'KNOCK_TOO_MUCH_DEADWOOD'
+  | 'NOT_ROT_CANDIDATE';
 
 /** Thrown by `apply` for any illegal action. `code` is stable; the message is not. */
 export class IllegalActionError extends Error {

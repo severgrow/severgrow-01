@@ -18,3 +18,6 @@ export * from './rot.js';
 export * from './fruit.js';
 export * from './scoring.js';
 export * from './result.js';
+export * from './actions.js';
+export * from './phases.js';
+export * from './apply.js';
