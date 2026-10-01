@@ -234,7 +234,8 @@ button {
 /* ---------- game layout ---------- */
 .game {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  /* scores, turn steps, hint, then the board and controls */
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 .hud {
   width: 100%;
