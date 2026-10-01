@@ -45,7 +45,16 @@ export type IllegalActionCode =
   | 'NOT_ADJACENT'
   | 'HEX_COUNT_MISMATCH'
   | 'DUPLICATE_HEX'
-  | 'HEXES_NOT_CONNECTED';
+  | 'HEXES_NOT_CONNECTED'
+  // fruit
+  | 'FRUIT_EXHAUSTED'
+  | 'FRUIT_SACRIFICE_COUNT'
+  | 'FRUIT_SACRIFICE_NOT_OWN'
+  | 'FRUIT_SACRIFICE_ROOT'
+  | 'FRUIT_SACRIFICE_NOT_CONNECTED'
+  | 'FRUIT_TARGET_NOT_ENEMY'
+  | 'FRUIT_TARGET_ROOT'
+  | 'FRUIT_TARGET_NOT_ADJACENT';
 
 /** Thrown by `apply` for any illegal action. `code` is stable; the message is not. */
 export class IllegalActionError extends Error {
