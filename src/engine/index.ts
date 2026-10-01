@@ -16,3 +16,5 @@ export * from './strangle.js';
 export * from './deadwood.js';
 export * from './rot.js';
 export * from './fruit.js';
+export * from './scoring.js';
+export * from './result.js';
