@@ -19,6 +19,8 @@ export const WEIGHTS = {
   discardDraw: 1,
   /** Knock only with a lead bigger than this plus my own weak spot. */
   knockMargin: 2,
+  /** Per strength point spent on a plain empty hex (keeps high cards for takeovers). */
+  wastedStrength: 0.02,
 } as const;
 
 export type MoveFacts = {
@@ -95,8 +97,18 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
     pressureBefore,
     pressureAfter,
   };
+  // Strength placed on empty hexes is "spent" without taking anything.
+  const strengths =
+    a.t === 'Fruit'
+      ? []
+      : a.cards
+          .map((id) => v.hand.find((c) => c.id === id)!.rank)
+          .sort((x, y) => x - y)
+          .map((r, _i, all) => (a.t === 'MeldSet' ? all[0]! : r));
+  const wasted = placedKeys.reduce((sum, k, i) => sum + (v.board[k] ? 0 : (strengths[i] ?? 0)), 0);
   const score =
-    (sim.wins ? WEIGHTS.win : 0) +
+    (sim.wins ? WEIGHTS.win : 0) -
+    WEIGHTS.wastedStrength * wasted +
     sim.points +
     sim.botPointsLost -
     WEIGHTS.exposure * (myAfter - myBefore) +

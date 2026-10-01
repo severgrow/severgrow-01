@@ -108,4 +108,13 @@ describe('GreedyBot (spec 16)', () => {
     const s = stateWith({ phase: 'ACT', hand: [card(1, 0, 1), card(2, 1, 5)] });
     expect(GreedyBot.chooseAction(viewFor(s, 0) as View)).toEqual({ t: 'EndAct' });
   });
+
+  it('does not waste high cards: between equal moves it plays the lower combo', () => {
+    // Two runs that place 3 tiles on empty hexes: Moss 7-8-9 (listed first) and Ember 1-2-3.
+    const hand = [card(7, 0, 7), card(8, 0, 8), card(9, 0, 9), card(1, 3, 1), card(2, 3, 2), card(3, 3, 3), card(20, 2, 5)];
+    const s = stateWith({ phase: 'ACT', hand });
+    const best = rankActions(viewFor(s, 0))[0]!;
+    expect(best.action.t).toBe('MeldRun');
+    expect(best.action.t === 'MeldRun' && [...best.action.cards].sort()).toEqual([1, 2, 3]);
+  });
 });
