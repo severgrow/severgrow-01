@@ -19,7 +19,7 @@ const isCoord = (c: unknown): c is Coord =>
   Number.isInteger((c as Coord).q) &&
   Number.isInteger((c as Coord).r);
 
-const assertCoord = (c: unknown): Coord => {
+export const assertCoord = (c: unknown): Coord => {
   if (!isCoord(c)) throw new IllegalActionError('INVALID_COORD', 'coordinates must be integer {q, r}');
   return normalizeCoord(c);
 };
