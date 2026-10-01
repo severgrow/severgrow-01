@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COLOR_TOKENS, STYLE_TOKENS, THEMES, THEME_IDS, contrast, resolveColors } from '../src/logic/themes.js';
+import type { ColorToken } from '../src/logic/themes.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -38,7 +39,7 @@ describe('themes (design tokens)', () => {
   it('text is readable (WCAG contrast) in every theme', () => {
     for (const id of THEME_IDS) {
       const c = resolveColors(THEMES[id]);
-      const at = (a: string, b: string, min: number) => expect(contrast(c[a]!, c[b]!), `${id}: ${a} on ${b}`).toBeGreaterThanOrEqual(min);
+      const at = (a: ColorToken, b: ColorToken, min: number) => expect(contrast(c[a]!, c[b]!), `${id}: ${a} on ${b}`).toBeGreaterThanOrEqual(min);
       at('text', 'bg', 7);
       at('text', 'surface', 4.5);
       at('muted', 'bg', 4.5);
