@@ -14,3 +14,4 @@ export * from './placement.js';
 export * from './sever.js';
 export * from './strangle.js';
 export * from './deadwood.js';
+export * from './rot.js';
