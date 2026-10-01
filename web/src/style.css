@@ -244,8 +244,9 @@ button {
   border-color: var(--c-danger);
 }
 #tool-targets[aria-pressed='true'] {
-  background: var(--c-you);
-  border-color: var(--c-you);
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-accentInk);
 }
 
 /* ---------- screens ---------- */
@@ -2016,8 +2017,9 @@ svg.usable .hex-cell {
 .vein.snapping {
   stroke: var(--c-text) !important;
 }
-/* The big-moment banner: cream, a little larger. */
+/* The big-moment banner: cream, a little larger, high up so it never hides the cut. */
 .banner.big {
+  top: 4%;
   font-size: 1.35rem;
   background: var(--c-accent);
   color: var(--c-accentInk);

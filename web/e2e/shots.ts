@@ -52,6 +52,15 @@ for (const id of THEME_IDS) {
   await shot(page, 'piles-grow');
   await page.close();
 }
+// Veins: fragile links (thin, flickering), with the bot's weak links switched on.
+{
+  const page = await open({ palette: 'soil', speed: 'skip' }, demo.state);
+  await page.click('#tool-targets');
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(700);
+  await shot(page, 'veins-weak-links');
+  await page.close();
+}
 // A gold hex with and without a tile.
 {
   const page = await open({ palette: 'soil', speed: 'skip' }, gold.state);

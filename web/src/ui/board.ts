@@ -207,8 +207,9 @@ export class BoardView {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
         const b = el('g', { class: 'gold-badge', 'data-key': key }, this.layers.marks);
-        el('circle', { cx: x + S * 0.52, cy: y - S * 0.5, r: 6.2, class: 'gold-badge-bg' }, b);
-        el('text', { x: x + S * 0.52, y: y - S * 0.5 + 0.4, class: 'gold-badge-text num' }, b).textContent = '2';
+        // lower right, clear of the weak-link badges above the hex and the owner mark below
+        el('circle', { cx: x + S * 0.58, cy: y + S * 0.42, r: 6.2, class: 'gold-badge-bg' }, b);
+        el('text', { x: x + S * 0.58, y: y + S * 0.42 + 0.4, class: 'gold-badge-text num' }, b).textContent = '2';
       }
       this.bindHex(g, key);
     }
