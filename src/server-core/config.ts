@@ -1,6 +1,6 @@
 // World rules, all in one place. Times are in milliseconds; `now` is always passed in
 // (pure code never reads a clock).
-export const RULES_VERSION = 'v0.4-defaults-1';
+export const RULES_VERSION = 'v0.4-defaults-2';
 
 export type WorldConfig = {
   rulesVersion: string;

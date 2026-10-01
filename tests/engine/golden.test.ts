@@ -11,8 +11,8 @@ type Golden = { seed: number; actions: Action[]; stateHash: string; historyHash:
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/golden-v04.json', import.meta.url), 'utf8')) as { games: Golden[] };
 
 describe('golden games on the default rules', () => {
-  it('the defaults are the ones chosen in Part 4 (cards 1-9, Sprout on, guaranteed opening combo, 2 copies)', () => {
-    expect(DEFAULT_CONFIG).toMatchObject({ maxRank: 9, sproutsPerTurn: 1, guaranteeOpeningMeld: true, copiesPerCard: 2 });
+  it('the defaults are the ones chosen in Part 4 (cards 1-9, Sprout on, 2 copies), with a plain random deal (no combo guarantee)', () => {
+    expect(DEFAULT_CONFIG).toMatchObject({ maxRank: 9, sproutsPerTurn: 1, guaranteeOpeningMeld: false, copiesPerCard: 2 });
   });
 
   it('has 5 recorded games', () => expect(fixture.games.map((g) => g.seed)).toEqual([1, 2, 3, 4, 5]));

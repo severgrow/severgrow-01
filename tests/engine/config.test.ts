@@ -20,7 +20,7 @@ describe('DEFAULT_CONFIG', () => {
       rootsScore: false,
       maxRank: 9,
       sproutsPerTurn: 1,
-      guaranteeOpeningMeld: true,
+      guaranteeOpeningMeld: false,
       maxTurnsPerPlayer: 30,
       rotEnabled: false,
       knockEnabled: false,

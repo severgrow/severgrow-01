@@ -15,7 +15,8 @@ default (see the appendix).
 **v0.4: one game** (this version)
 - **One game, no modes.** "Classic" and "Lite" are merged. The page has one New game button.
 - **Sprout (new move).** Spend one card to grow one tile next to your network (section 7).
-- **Guaranteed opening combo.** Both opening hands always hold at least one combo (section 5).
+- **Plain random deal.** The deck is shuffled once from the game seed and dealt as it falls.
+  The optional opening-combo guarantee (section 5) is **off** by default since v0.4-defaults-2.
 - **Card range.** Cards run 1..`maxRank` (5 to 9). Simulation chose **9** as the default
   (section 11.1); smaller values make games too short once Sprout is on.
 - **Parked rules.** Rot, Knock (with its final turn) and Fruit are off by default
@@ -90,7 +91,7 @@ type RulesConfig = {
   maxRank: number;              // 9: cards 1..maxRank, 5 to 9 (chosen by simulation, 11.1)
   copiesPerCard: number;        // 2 (chosen by simulation, 11.1)
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
-  guaranteeOpeningMeld: boolean;// true
+  guaranteeOpeningMeld: boolean;// false (plain random deal; see 11.1)
   maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
   rockCount: number;            // 4 (even)
   richCount: number;            // 5 (odd: centre + pairs)
@@ -143,7 +144,7 @@ to a root. Rock is impassable. Gold tiles score 2.
 **Setup (`newGame`):** terrain, cards, seeded shuffle, deal `handSize` to P1 then P2, flip one
 card to start the discard pile, place both roots, P1 to `DRAW`, turn 1.
 
-**Guaranteed opening combo** (`guaranteeOpeningMeld`): if either hand holds no combo (a run or
+**Guaranteed opening combo** (`guaranteeOpeningMeld`, off by default): if either hand holds no combo (a run or
 set of 3), the deal is redone from the seed plus an attempt counter (attempt 0 is the plain
 deal). After **200** failed attempts `newGame` throws `DealError` (`NO_OPENING_COMBO`). Every card
 appears exactly once; the same seed always gives the same deal. `state.dealAttempt` records the
@@ -354,6 +355,13 @@ Only three settings meet every target: (9, on, on, 2), (8, on, off, 3) and (7, o
 and no empty early turns; games last 8.3 turns per player (median 8.5, 90% under 10). Without
 Sprout, a third or more of the first five turns place nothing; with Sprout and fewer cards
 (maxRank 7 or less, 2 copies) the deck runs out too fast (4-6 turns each).
+
+**Changed (v0.4-defaults-2): guarantee off.** The guarantee redealt until both hands had a
+combo, so every opening hand held a line or clump of 3. Players found that felt arranged,
+not shuffled, so the default is now a plain random deal: shuffle once, deal, draw in order
+(the row maxRank 9, Sprout on, guarantee off, 2 copies). The trade: first-player wins rise
+from 50.7% to 54.5% (just over the 54% target), games run 9.0 turns per player, and Strangle
+ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1.
 
 ### 11.2 Bot levels (page only)
 

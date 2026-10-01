@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rootsScore: false,
   maxRank: 9,
   sproutsPerTurn: 1,
-  guaranteeOpeningMeld: true,
+  guaranteeOpeningMeld: false,
   maxTurnsPerPlayer: 30,
   rotEnabled: false,
   knockEnabled: false,

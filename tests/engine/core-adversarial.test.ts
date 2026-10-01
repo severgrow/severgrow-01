@@ -36,11 +36,11 @@ describe('v0.4 adversarial', () => {
   });
 
   it('ADV-3: a redeal that never finds a combo stops at 200 with a typed error', () => {
-    expect(() => dealOpening(1, resolveConfig(), () => false)).toThrow(DealError);
+    expect(() => dealOpening(1, resolveConfig({ guaranteeOpeningMeld: true }), () => false)).toThrow(DealError);
     // A real config where combos are impossible: 1 card per hand is not allowed (handSize >= 3),
     // so use the injectable check; the error must name the cause.
     try {
-      dealOpening(1, resolveConfig(), () => false);
+      dealOpening(1, resolveConfig({ guaranteeOpeningMeld: true }), () => false);
     } catch (e) {
       expect((e as DealError).message).toMatch(/200/);
     }

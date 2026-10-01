@@ -17,6 +17,7 @@ import {
   viewFor,
 } from '../../src/engine/index.js';
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
+import { shuffleDeck } from '../../src/engine/deck.js';
 import { clone, fixture, tilesOf } from '../helpers.js';
 import { LEGACY_V03 } from '../legacy.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
@@ -88,7 +89,7 @@ describe('v0.4 config', () => {
       copiesPerCard: 2,
       handSize: 7,
       sproutsPerTurn: 1,
-      guaranteeOpeningMeld: true,
+      guaranteeOpeningMeld: false,
       rotEnabled: false,
       knockEnabled: false,
       fruitPerPlayer: 0,
@@ -132,15 +133,31 @@ describe('guaranteed opening combo', () => {
   it('both hands hold a combo, every card appears once, same seed same deal (1,000 seeds)', () => {
     const all = createCards(resolveConfig()).map((x) => x.id);
     for (let seed = 1; seed <= 1000; seed++) {
-      const g = newGame(seed);
+      const g = newGame(seed, { guaranteeOpeningMeld: true });
       expect(hasCombo(g.hands[0])).toBe(true);
       expect(hasCombo(g.hands[1])).toBe(true);
       const ids = [...g.hands[0], ...g.hands[1], ...g.deck, ...g.discard].map((x) => x.id).sort((a, b) => a - b);
       expect(ids).toEqual(all);
       expect(g.dealAttempt).toBeGreaterThanOrEqual(0);
       expect(g.dealAttempt).toBeLessThan(200);
-      if (seed <= 50) expect(JSON.stringify(newGame(seed))).toBe(JSON.stringify(g));
+      if (seed <= 50) expect(JSON.stringify(newGame(seed, { guaranteeOpeningMeld: true }))).toBe(JSON.stringify(g));
     }
+  });
+
+  it('the default deal is a plain shuffle: no redeals, so a hand with no combo is possible (1,000 seeds)', () => {
+    let noCombo = 0;
+    for (let seed = 1; seed <= 1000; seed++) {
+      const g = newGame(seed);
+      expect(g.dealAttempt).toBe(0);
+      const shuffled = shuffleDeck(createCards(g.config), seed, 0);
+      expect(g.hands[0]).toEqual(shuffled.slice(0, 7));
+      expect(g.hands[1]).toEqual(shuffled.slice(7, 14));
+      expect(g.discard).toEqual([shuffled[14]]);
+      expect(g.deck).toEqual(shuffled.slice(15));
+      if (!hasCombo(g.hands[0]) || !hasCombo(g.hands[1])) noCombo++;
+    }
+    // Nothing is fixed up: plenty of real deals start without a combo in one hand.
+    expect(noCombo).toBeGreaterThan(100);
   });
 
   it('without the guarantee the first deal is used', () => {
@@ -151,7 +168,7 @@ describe('guaranteed opening combo', () => {
     let tries = 0;
     let err: unknown;
     try {
-      dealOpening(5, resolveConfig(), () => {
+      dealOpening(5, resolveConfig({ guaranteeOpeningMeld: true }), () => {
         tries++;
         return false;
       });
