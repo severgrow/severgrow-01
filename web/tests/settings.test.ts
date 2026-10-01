@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, parseSettings, speedFactor } from '../src/logic/settings.js';
+import { DEFAULT_SETTINGS, EFFECTS, parseSettings, speedFactor } from '../src/logic/settings.js';
 
 describe('settings (saved in the browser)', () => {
   it('has every setting from the brief, with sensible defaults', () => {
@@ -14,7 +14,17 @@ describe('settings (saved in the browser)', () => {
       weakSpots: false,
       largeText: false,
       coach: true,
+      palette: 'soil',
+      weakPulse: true,
+      effects: 'normal',
     });
+  });
+
+  it('palette, weak-link pulse and effects intensity are remembered; bad values fall back', () => {
+    expect(parseSettings(JSON.stringify({ palette: 'ink', weakPulse: false, effects: 'high' }))).toMatchObject({ palette: 'ink', weakPulse: false, effects: 'high' });
+    expect(parseSettings(JSON.stringify({ palette: 'moss', effects: 'low' }))).toMatchObject({ palette: 'moss', effects: 'low' });
+    expect(parseSettings(JSON.stringify({ palette: 'neon', effects: 'max', weakPulse: 1 }))).toMatchObject({ palette: 'soil', effects: 'normal', weakPulse: true });
+    expect(EFFECTS).toEqual(['low', 'normal', 'high']);
   });
 
   it('nothing saved: defaults, with reduce motion following the system', () => {

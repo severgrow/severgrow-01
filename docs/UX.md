@@ -6,51 +6,68 @@ draws the game and listens to taps.
 
 ## Design rules
 
-- **One hero: the network.** Your tiles are joined to your root by visible veins.
-  A link that is the only way back to the root is drawn thin and flickers, so you
-  can see where you are fragile. Cut-off tiles leave a faint dashed outline (a scar)
-  for two turns.
-- **Restraint.** Big effects only for the big moments: a cut (flash, short shake,
-  the cut-off tiles wither in a ripple, "−4 tiles" floats up) and the win. Everything
-  else is small and quick.
-- **Hierarchy.** Your hand and the board first, numbers second, labels last.
-- **Tiles look alive.** Tiles grow bigger and brighter with strength. Roots are
-  big bulbs with a slow pulse. Gold hexes shimmer softly. Rock is grey and heavy.
-- **Colour-blind safe.** The two players always differ by a mark and a pattern,
-  not only by colour: your tiles are plain with a round mark; the bot's tiles carry
-  a pattern (hatching, grain or stripes) and an angular mark.
+- **One hero: the network.** Your tiles are joined to your root by glowing veins.
+  A vein is thicker and brighter the more tiles depend on it (thickest next to the
+  root). A link that is the only way back for some tiles is thin and flickers, so you
+  can see where you are fragile. Cut-off tiles leave a faint dashed scar for two turns.
+- **A juice budget.** Small moves get small effects, big moments get big ones, and the
+  screen never turns into noise (see "Satisfying feel" below).
+- **Colour roles.** Mint is only you, coral is only the bot, amber is only gold hexes.
+  Buttons, the coach and text are a neutral warm cream, so nothing competes with the
+  pieces. Suit colours appear only on cards in your hand, never on the board.
+- **Not colour alone.** The two players differ by a mark and a pattern (yours: a ring;
+  the bot's: a diamond and a grain). Gold hexes have a fine weave and a "2" badge.
+  Suits have their own icons. Board marks have their own shapes (see the legend).
 - **No emoji as icons.** Every icon is a small SVG line drawing, made in code.
 - **Nothing downloaded.** No images, no sound files, no trackers, no outside
   requests. Fonts are free (SIL Open Font License) and bundled in `web/src/fonts`.
 
-## The look: Ink and glow
+## The look: three palettes
 
-*Near-black paper, soft organic tiles, and one glowing colour for your network.*
+Settings → **Look → Colours** switches instantly and is remembered. Same screen, same
+shapes; only the colours and the background change. All colours are design tokens in
+`web/src/logic/themes.ts`; a test checks every palette defines every token.
 
-Three themes were built and played (Ink and glow, Macro nature, Tabletop). The
-player chose Ink and glow's colours with Macro nature's shapes, so the page now has
-this one look and no theme switch. Everything still comes from design tokens in
-`web/src/logic/themes.ts`; a test checks every token, the 5-colour limit and contrast.
+| Palette | Background | Feel |
+| --- | --- | --- |
+| **Soil** (default) | very dark warm olive-brown `#1b1912` | a fine soil grain, a soft vignette, a few slow drifting spores; empty hexes are shallow soil pockets |
+| **Moss night** | cool green-black `#0d1613` | a soft green glow pooled under the board |
+| **Ink** | near-black paper `#0d0e11` | flat, no texture |
 
-| Role | Hex |
-| --- | --- |
-| Paper (background) | `#0d0e11` |
-| Ink (text) | `#edeae2` |
-| Glow (you) | `#4df0b4` |
-| Signal (bot) | `#ff6b4a` |
-| Gold | `#f2c14e` |
+Shared by all three: you `#4df0b4` (mint), bot `#ff6b4a` (coral), gold `#f2b84b`
+(amber), rock a cool blue-grey stone with speckle, facets and a darker lower edge.
+Suit tints (cards only): Moss olive-lichen `#bfcf7c`, Ash lavender `#bd9be8`,
+Dew sky blue `#a3d1eb`, Ember terracotta `#cd876f`, each with a thin tinted card edge.
 
-- **Typeface:** Alegreya Sans (a humanist sans with calligraphic roots: organic and
-  warm, yet clear at small sizes; text 500, numbers 800). Free (SIL Open Font License), bundled in `web/src/fonts`.
-- **Shapes (from Macro nature):** soft, slightly uneven hexes; thin curved veins;
-  rounded cards and pill-shaped main buttons.
-- **Glow:** only your network's veins and root glow.
-- **Marks:** you = ring, bot = diamond, and the bot's tiles are grained.
-- Shades between these colours (empty hexes, rock) are mixes of two palette colours.
-- **Finishing touches:** fine film grain over a soft pool of light (both made in code),
-  a framed hexagonal plate with corner pins under the board, printed inner frames on
-  the cards, a hairline under the scores, a slim gold edge on the coach, a grab handle
-  on the sheets, and a small footer on the menu.
+**Checks** (made by `npx tsx web/e2e/palette-report.ts`; contrast is the WCAG ratio,
+AA needs 4.5; colour distance is CIE delta E, 12 or more counts as clearly different):
+
+| Palette | Text on page | Hints on page | Button text | Suit numbers on cards (lowest) | Closest pair, normal vision | Deuteranopia | Protanopia | Tritanopia |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Soil | 14.4 PASS | 7.7 PASS | 14.0 PASS | 5.1 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
+| Moss night | 14.9 PASS | 8.3 PASS | 14.4 PASS | 5.4 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
+| Ink | 15.9 PASS | 7.3 PASS | 15.5 PASS | 5.8 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
+
+The colour-blind columns simulate full deuteranopia, protanopia and tritanopia
+(Machado 2009) for the two players and the four suits.
+
+**Size:** textures, spores and glows are made in code (CSS gradients and a tiny SVG
+noise); the whole polish pass adds about 5 kB to the page after compression.
+
+- **Typeface:** Alegreya Sans (text 500, numbers 800), bundled.
+- **Shapes:** soft, slightly uneven hexes; curved veins; rounded cards; pill buttons.
+
+## Gold hexes and board marks
+
+- **Gold hex:** warm amber with a fine diagonal weave, a soft shimmer, and a small
+  amber "2" badge in its lower-right corner. The badge sits above tiles, so it stays
+  visible when a tile is on the hex.
+- **What the dashed yellow outline used to mean:** two things, both amber. The dashed
+  ring marked a gold hex (it showed around tiles standing on gold), and a dotted ring
+  was the coach's suggested hex. Now gold is the weave plus the "2" badge, and the
+  coach's hint is a cream circle that breathes.
+- **Legend** (one line in How to play): gold hex (×2), coach tip (circle), preview
+  (dashed ghost hex), weak link ("−4" badge).
 
 ## Playing
 
@@ -69,19 +86,27 @@ this one look and no theme switch. Everything still comes from design tokens in
 - **Throw:** when it is time to throw, the hint says "Tap a card to throw it" and one
   tap throws that card (no Confirm). If nothing in your hand can grow, the game skips
   straight to the throw step for you.
+- **My weakest link pulses** by default: the one tile the bot could cut next turn that
+  would cost the most, with a small "−4" and a gentle growing ring (Settings → "Pulse my
+  weakest link" turns it off).
 - **Weak spots** (the icon at top-left of the board; its name shows when switched on): your tiles whose loss would cut off the
   most, with a number like "−4". Before you confirm a move that leaves a bigger
   weak spot, the confirm bar warns: "The bot could cut 5 of your tiles."
 - **Bot's weak links** (the icon at top-right): the bot's tiles you could cut, with how many
-  tiles it would lose.
+  tiles it would lose; the bot's fragile veins flicker too.
 - **Hold a tile** (or hover with a mouse): strength, owner, gold or not, and what
   losing it would cost.
-- **Deck and throw pile** are small stacks with counts; tap one to draw.
+- **Deck and throw pile** sit side by side, each with a label and a count; the top
+  thrown card shows its number and suit. In the Draw step both glow softly and say
+  "Tap to draw" / "Tap to take"; in the Grow and Throw steps they are dimmed and
+  cannot be tapped. (There are no separate "Draw a card" buttons any more.)
 
 ## Playing against the bot
 
-- **Bot level**: **Play** opens a 3×3 screen of levels 1-9, each with a nature name,
-  one line about how it plays and your wins against it. Level 7 (Oak) is the original
+- **Bot level**: **Play** opens a 3×3 screen of levels 1-9. Each shows its number, a
+  small nature icon that grows with the level (seedling, sprig, clover, moss, fern, ivy,
+  oak, elder, ancient tree) and its name; your wins show as a small count in the
+  corner once you have some. Level 7 (Oak) is the original
   bot and the default; the last level you picked is remembered. See `docs/LADDER.md`.
 - **Undo**: take back the moves you made this turn (growing tiles, or pressing "Throw a
   card"), until you draw a new card or throw one.
@@ -103,47 +128,72 @@ short tip. **Show me where** puts a bouncing arrow on the one thing to tap next:
 first the card, then the hex, then Confirm (or the deck, or "End turn"). **Why?**
 explains the move. It never plays for you.
 
-## Animations
+## Animations and satisfying feel
 
-Animations are driven by the engine's own event list. They only change what is
-*shown*; the real game state never waits for them. The last step of every move sets
-the shown board to the real one, so skipping or turning animations off can never
-leave a wrong board (tests check this).
+Animations are driven by the engine's own event list, through one animation queue.
+They only change what is *shown*; the real game state never waits for them. The last
+step of every move sets the shown board to the real one, so skipping, interrupting or
+turning animations off can never leave a wrong board (tests check this).
 
-| Moment | What you see |
+**The juice budget** (`web/src/logic/juice.ts`, tested): each move gets a size from its
+engine events.
+
+| Size | When | Effects |
+| --- | --- | --- |
+| Small | a Sprout, 1-2 tiles | a quick squash-and-stretch pop, a soft note, one small spark |
+| Medium | 3-4 tiles, a gold hex, replacing a bot tile, a cut of 1-3 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
+| Big | 5+ tiles, a cut of 4+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
+
+| Moment | What you see and hear |
 | --- | --- |
-| Line (Hypha) | tiles unroll one by one from the start, veins follow |
-| Clump (Bloom) | tiles pop outward from the middle |
-| Sprout | a quick spring pop |
-| Replacing a tile | the old tile bursts into sparks as yours grows in |
-| Cut (Sever) | flash at the cut, short shake, veins snap, cut-off tiles fade grey and wither in a ripple outward, "−4 tiles" floats up, caption "You cut off 4 bot tiles!" |
-| Strangle | tiles around the root squeeze inward twice, a slow beat, then a flash |
-| Scores | count up or down smoothly |
-| Turns | "Your turn" / "Bot's turn" slides across |
-| Draw / throw | the card flies from the pile into your hand / flips onto the pile |
-| Bot turn | a short "thinking" beat, then each of its moves one at a time |
+| Growth | tiles pop in a ripple; each makes a short rising note, so a long line plays a little scale |
+| Replacing a bot tile | it dissolves into sparks as yours takes its place |
+| The cut | the vein flashes and snaps (a sharp snap), cut-off tiles go grey and wither outward from the cut, shedding a few motes, and "−4 tiles" floats up |
+| Place, then cut | both play back to back, the second a little higher in pitch |
+| Scores | a fast tick, then a tiny bounce on the final number |
+| Your turn | "Your turn" slides in and a soft glow passes over your hand |
+| Picking a card | it lifts with a small spring; legal hexes fade in, then breathe |
+| New veins | draw themselves on from the old tile to the new one |
+| Win / loss | a fuller flourish (flashes, sparks from your root, a short arpeggio and chord) / one calm soft tone, never mocking |
+| Idle | after about 8 seconds without a tap, the next control pulses twice, very quietly |
+| Draw / throw | the card flies from the pile into your hand / flips onto the throw pile |
 
-**Replay bot** (bottom-left of the board) plays the bot's last turn again. **Skip**
-(bottom-right, while animating) jumps to the end. With **Reduce motion** on, movement
-becomes quick fades.
+**Keeping it light:** at most 60 particles on screen at once (a tested budget; each
+frees its slot when it ends), elements are made only for the moment and removed after,
+movement uses transforms and opacity only, and the board is redrawn only when it
+changes. Measured in the browser test with the CPU slowed 4× (about a mid-range phone):
+54-57 fps on average during a big cut, slowest single frame about 70-115 ms (the board
+redraw), peak 36 particles.
 
-## Sound and feel
+**Settings that shape it:** Effects intensity (Low, Normal, High; Low has no shake or
+hit-stop and fewer sparks), Animation speed, Reduce motion (shakes and particles become
+quick fades), Sound, Vibration. No fake urgency, countdowns, streak guilt or random
+rewards: the satisfaction comes from your own good moves.
 
-All sounds are made in code with the Web Audio API: a soft click for taps, a rising
-hum for growth, a bright chime on gold, a snap and a low thud for a cut, a soft sad
-tone for lost tiles, and a short fanfare for a win. "Music" is a very quiet hum.
-Nothing plays before your first tap. Phones that support it vibrate lightly on cuts and wins (iPhone browsers never allow
-websites to vibrate). Settings has **Test sound** and **Test vibration** buttons.
+**Replay bot** plays the bot's last turn again. **Skip** (while animating) jumps to the end.
+
+## Sound
+
+All sounds are made in code with the Web Audio API, short and softly layered at a
+modest volume, each note with a tiny random pitch wobble so repeats don't sound
+robotic: a soft click for taps, rising notes for growth, a bright chime on gold, a
+sharp snap for a cut and a low thud for big moments, a soft falling tone for lost
+tiles, a flourish for a win and one calm tone for a loss. "Music" is a very quiet hum.
+Nothing plays before your first tap. Phones that support it vibrate lightly on big
+moments (iPhone browsers never allow websites to vibrate). Settings has **Test sound**
+and **Test vibration** buttons.
 
 ## Settings (saved in this browser only)
 
-Sound, Music, Vibration, Reduce motion, Animation speed (Slow, Normal, Fast,
-Off), Confirm moves (on: preview then Confirm; off: a tap on a hex plays at once),
-Show weak spots, Large text, Coach.
+Colours (Soil, Moss night, Ink), Sound, Music, Vibration, Reduce motion, Animation
+speed (Slow, Normal, Fast, Off), Effects (Low, Normal, High), Confirm moves (on:
+preview then Confirm; off: a tap on a hex plays at once), Show weak spots, Pulse my
+weakest link, Large text, Coach.
 
 ## Accessibility
 
-- Text contrast is checked by a test (main text 7:1 or better, all other text 4.5:1).
+- Text contrast is checked by a test in every palette (main text 7:1 or better, all
+  other text 4.5:1), and so is colour-blind separation of the players and suits.
 - Touch targets are at least 44 px. Large text makes everything about 18% bigger.
 - Keyboard: Tab through buttons and cards, number keys 1-9 pick a card, arrows move
   over the board, Enter picks a hex, Esc cancels or closes.
@@ -154,8 +204,9 @@ Show weak spots, Large text, Coach.
 
 ## Code map
 
-- `web/src/logic/` pure, tested logic: themes, settings, preview, weak spots, veins,
-  animation steps, highlights, taps and the game session.
+- `web/src/logic/` pure, tested logic: palettes and colour checks, settings, preview,
+  weak spots, veins (link loads), piles, the juice budget, animation steps,
+  highlights, taps and the game session.
 - `web/src/ui/` drawing and effects: board (SVG), icons, sound, the bot worker client.
 - `web/src/main.ts` ties it together; `web/src/style.css` holds the looks.
 - `web/e2e/smoke.ts` plays the page in a real browser and saves the

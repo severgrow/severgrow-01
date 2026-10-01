@@ -8,9 +8,11 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
-import { botCut, cutDemo, endgame } from './positions.js';
+import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
+import type { CutDemo } from './positions.js';
+import { THEME_IDS } from '../src/logic/themes.js';
 
-const THEMES = ['ink'] as const; // one look since v0.4 (the theme switch was removed)
+const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
 const SIZES = { phone: { width: 390, height: 844 }, desktop: { width: 1280, height: 800 } } as const;
 const shotsDir = process.argv.find((a) => a.startsWith('--shots='))?.slice(8);
 const results: { name: string; ok: boolean; note?: string | undefined }[] = [];
@@ -28,7 +30,7 @@ const end = endgame();
 const bigBotCut = botCut();
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
-type Hook = { state: () => State | null; settings: () => Record<string, unknown>; busy: () => boolean };
+type Hook = { state: () => State | null; settings: () => Record<string, unknown>; busy: () => boolean; particles: () => { alive: number; peak: number } };
 const getState = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: Hook }).__severgrow.state());
 const isBusy = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: Hook }).__severgrow.busy());
 const stateJson = (page: Page) => page.evaluate(() => JSON.stringify((window as unknown as { __severgrow: Hook }).__severgrow.state()));
@@ -57,7 +59,7 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
       localStorage.setItem('severgrow.settings.v1', s as string);
       if (saved) localStorage.setItem('severgrow.save.v5', saved as string);
     },
-    [JSON.stringify({ theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
+    [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
   );
   await page.goto(BASE);
   await page.waitForTimeout(250);
@@ -97,8 +99,12 @@ const playTurn = async (page: Page) => {
         if (await pickTarget(page)) {
           if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
           else await page.click('#confirm-cancel').catch(() => {});
-        } else await page.locator('#moves .cancel').click();
-      } else await page.locator('#moves .end').click();
+        } else await page.locator('#moves .cancel').click({ timeout: 2000 }).catch(() => {}); // the game may have moved on to Throw (auto-advance)
+      } else {
+        // When nothing can grow, the game moves on to the Throw step by itself (auto-advance),
+        // which can remove this button while we tap it: then just carry on with the new step.
+        await page.locator('#moves .end').click({ timeout: 2000 }).catch(() => {});
+      }
     } else if (s.phase === 'DISCARD') {
       // Throw step: tapping a card throws it at once (no Confirm).
       await page.locator('#hand .card.playable').first().click();
@@ -317,6 +323,123 @@ for (const theme of THEMES) {
     check(`${theme} ${size}: no errors through game over`, errors.length === 0, errors.join(' | '));
     await page.close();
   }
+}
+
+// --- every palette: a fresh game, a few turns, no errors, board correct ---
+for (const id of THEME_IDS) {
+  const { page, errors } = await openPage(id, 'phone', { speed: 'fast' });
+  await newGame(page);
+  await idle(page);
+  for (let t = 0; t < 3; t++) await playTurn(page);
+  const look = await page.evaluate(() => document.documentElement.dataset.theme);
+  check(`palette ${id}: plays a few turns with no errors, board correct`, look === id && errors.length === 0 && (await boardTiles(page)) === (await stateTiles(page)), errors.join(' | '));
+  await page.close();
+}
+
+// --- juice: the 6 adversarial checks, frame rate and particles ---
+const particleInfo = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: Hook }).__severgrow.particles());
+/** Picks the demo's card, hex and option, then confirms (does not wait). */
+const startMove = async (page: Page, d: CutDemo) => {
+  await page.click(`#hand [data-card="${d.card}"]`);
+  if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
+  for (let i = 0; i < d.option; i++) await page.click('#confirm-other');
+  await page.click('#confirm-play');
+};
+const settled = async (page: Page) => {
+  await idle(page, 20000);
+  await page.waitForTimeout(200);
+  return (await boardTiles(page)) === (await stateTiles(page));
+};
+{
+  const gold = goldCutDemo();
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'normal' }, gold.state);
+  await page.click('#menu-continue');
+  const goldKeys = Object.keys(gold.state.terrain).filter((k) => gold.state.terrain[k] === 'rich');
+  await startMove(page, gold);
+  const ok = await settled(page);
+  const badges = await page.locator('.l-marks .gold-badge').count();
+  check('juice ADVERSARIAL 1: a cut that removes a tile on a gold hex', ok && badges === goldKeys.length && errors.length === 0, `${badges}/${goldKeys.length} gold badges`);
+  await page.close();
+}
+{
+  const tri = tripleDemo();
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'normal', effects: 'high' }, tri.state);
+  await page.click('#menu-continue');
+  await startMove(page, tri);
+  const ok = await settled(page);
+  const p = await particleInfo(page);
+  check('juice ADVERSARIAL 2: three effects in one turn (grow, gold or replace, cut)', ok && p.peak <= 60 && errors.length === 0, `peak ${p.peak} particles`);
+  await page.close();
+}
+const big = bigCutDemo();
+{
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'slow' }, big.state);
+  await page.click('#menu-continue');
+  await startMove(page, big);
+  await page.waitForTimeout(450); // mid-cut
+  const mid = await isBusy(page);
+  await page.click('#tool-skip');
+  const ok = await settled(page);
+  check('juice ADVERSARIAL 3: skipping animations during the cut gives the exact board', mid && ok && errors.length === 0);
+  await page.close();
+}
+{
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'normal', reduceMotion: true, effects: 'high' }, big.state);
+  await page.click('#menu-continue');
+  await startMove(page, big);
+  let shook = false;
+  for (let i = 0; i < 8; i++) {
+    shook ||= await page.evaluate(() => document.getElementById('board-wrap')!.getAnimations().some((a) => JSON.stringify((a.effect as KeyframeEffect).getKeyframes()).includes('translate(')));
+    await page.waitForTimeout(80);
+  }
+  const ok = await settled(page);
+  const p = await particleInfo(page);
+  check('juice ADVERSARIAL 4: Reduce motion with a big cut (no shake, no particles, board correct)', ok && !shook && p.peak === 0 && errors.length === 0, `shake ${shook}, peak ${p.peak}`);
+  await page.close();
+}
+{
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'normal' }, bigBotCut.state);
+  await page.click('#menu-continue').catch(() => {});
+  for (let t = 0; t < 2 && (await getState(page))?.actor !== 0; t++) await idle(page, 30000);
+  await playTurn(page);
+  const ok = await settled(page);
+  check('juice ADVERSARIAL 5: a bot turn that grows then cuts', ok && errors.length === 0);
+  await page.close();
+}
+{
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'slow' }, big.state);
+  await page.click('#menu-continue');
+  await startMove(page, big);
+  await page.waitForTimeout(400);
+  await page.click('#hud-menu');
+  await page.click('#gm-settings');
+  await page.click('#palette-seg [data-value="moss"]');
+  await page.click('#sheet-settings [data-close]');
+  const ok = await settled(page);
+  const look = await page.evaluate(() => document.documentElement.dataset.theme);
+  check('juice ADVERSARIAL 6: switching palette mid-animation keeps a correct board', ok && look === 'moss' && errors.length === 0);
+  await page.close();
+}
+// Frame rate during a big cut, with the CPU slowed 4x (about a mid-range phone).
+{
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'normal', effects: 'normal' }, big.state);
+  const cdp = await page.context().newCDPSession(page);
+  await page.click('#menu-continue');
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  // (a plain string: the test runner's helpers do not exist inside the page)
+  await page.evaluate(`window.__frames = []; (function tick(t) { window.__frames.push(t); if (window.__frames.length < 2000) requestAnimationFrame(tick); })(performance.now());`);
+  await startMove(page, big);
+  await idle(page, 30000);
+  const frames = await page.evaluate(() => (window as unknown as { __frames: number[] }).__frames);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  const gaps = frames.slice(1).map((t, i) => t - frames[i]!);
+  const busyGaps = gaps.slice(0, Math.min(gaps.length, 150));
+  const avg = busyGaps.reduce((a, b) => a + b, 0) / Math.max(busyGaps.length, 1);
+  const worst = Math.max(...busyGaps);
+  const p = await particleInfo(page);
+  console.log(`FRAME RATE during a big cut (CPU 4x slower): about ${(1000 / avg).toFixed(0)} fps on average, slowest frame ${worst.toFixed(0)} ms; peak particles ${p.peak}`);
+  check('juice: frame rate measured during a big cut, particles under the cap', errors.length === 0 && p.peak <= 60);
+  await page.close();
 }
 
 await browser.close();
