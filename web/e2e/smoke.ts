@@ -130,7 +130,9 @@ for (const theme of THEMES) {
     await idle(page);
     for (let t = 0; t < 3; t++) await playTurn(page);
     const s = await getState(page);
-    check(`${theme}: a fresh game plays several turns`, !!s && s.turnNumber >= 5, `turn ${s?.turnNumber}`);
+    // A quick Strangle can legitimately end a game early: that counts, being stuck does not.
+    const progressed = !!s && (s.turnNumber >= 5 || (s.phase === 'GAME_OVER' && !!s.result));
+    check(`${theme}: a fresh game plays several turns (or ends properly)`, progressed, `turn ${s?.turnNumber}, ${s?.phase}`);
     check(`${theme}: board on screen matches the game`, (await boardTiles(page)) === (await stateTiles(page)));
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     check(`${theme}: no horizontal scroll at 390px`, !overflow);
