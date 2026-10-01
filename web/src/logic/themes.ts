@@ -59,7 +59,7 @@ export type ThemeStyle = {
   shadow: number;
   motion: number;
   youMark: 'dot' | 'ring' | 'pip';
-  botMark: 'box' | 'diamond' | 'cross';
+  botMark: 'box' | 'diamond' | 'tri';
   youFill: 'solid' | 'soft';
   botFill: 'hatch' | 'grain' | 'stripe';
   soundBase: number;
@@ -150,7 +150,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       radius: 16,
       tileShape: 'organic',
       texture: 'soil',
-      veinWidth: 1.6,
+      veinWidth: 2.2,
       glow: 0,
       shadow: 0.5,
       motion: 1,
@@ -197,7 +197,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       shadow: 1,
       motion: 0.6,
       youMark: 'pip',
-      botMark: 'cross',
+      botMark: 'tri',
       youFill: 'solid',
       botFill: 'stripe',
       soundBase: 220,

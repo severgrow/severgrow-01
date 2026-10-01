@@ -43,7 +43,7 @@ const boardTiles = (page: Page) => page.locator('.l-tiles .tile').count();
 const stateTiles = (page: Page) => page.evaluate(() => Object.values((window as unknown as { __severgrow: Hook }).__severgrow.state()!.board).filter((t) => t).length);
 
 const openPage = async (theme: string, size: keyof typeof SIZES, settings: Record<string, unknown> = {}, save?: State) => {
-  const page = await browser.newPage({ viewport: SIZES[size], deviceScaleFactor: size === 'phone' ? 2 : 1 });
+  const page = await browser.newPage({ viewport: SIZES[size], deviceScaleFactor: 1 });
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
@@ -134,16 +134,18 @@ for (const theme of THEMES) {
   // --- adversarial 2 + the cut, previews and screenshots ---
   for (const size of ['phone', 'desktop'] as const) {
     const { page, errors } = await openPage(theme, size, { speed: 'normal' }, demo.state);
-    if (dir) await page.screenshot({ path: `${dir}/${size}-menu.png` });
+    if (dir) await page.screenshot({ path: `${dir}/${size}-menu.jpg`, quality: 82 });
     await page.click('#menu-continue');
+    await page.mouse.move(1, 1); // no hover tooltip in the picture
     await page.waitForTimeout(300);
-    if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.png` });
+    if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
     await page.click(`#hand [data-card="${demo.card}"]`);
     await tapHex(page, demo.hex);
     for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
+    await page.mouse.move(1, 1);
     const chip = await page.textContent('#confirm-chip');
     check(`${theme} ${size}: preview chip shows the cut`, !!chip && chip.includes(`cuts ${demo.cuts}`), chip ?? '');
-    if (dir) await page.screenshot({ path: `${dir}/${size}-preview.png` });
+    if (dir) await page.screenshot({ path: `${dir}/${size}-preview.jpg`, quality: 82 });
     const histBefore = ((await getState(page))!.history?.length ?? 0);
     await page.dblclick('#confirm-play'); // ADVERSARIAL 2: a double tap plays once
     const histAfter = ((await getState(page))!.history?.length ?? 0);
@@ -153,15 +155,16 @@ for (const theme of THEMES) {
     if (dir) {
       await page.waitForSelector('.float', { timeout: 4000 }).catch(() => {});
       await page.waitForTimeout(250);
-      await page.screenshot({ path: `${dir}/${size}-cut.png` });
+      await page.screenshot({ path: `${dir}/${size}-cut.jpg`, quality: 82 });
     }
     await page.waitForFunction(() => !(window as unknown as { __severgrow: Hook }).__severgrow.busy(), undefined, { timeout: 8000 });
     await page.waitForTimeout(150);
-    if (dir) await page.screenshot({ path: `${dir}/${size}-after-cut.png` });
+    if (dir) await page.screenshot({ path: `${dir}/${size}-after-cut.jpg`, quality: 82 });
     // Danger view and opportunities.
     await page.click('#tool-weak');
     await page.click('#tool-targets');
-    if (dir) await page.screenshot({ path: `${dir}/${size}-danger.png` });
+    await page.mouse.move(1, 1);
+    if (dir) await page.screenshot({ path: `${dir}/${size}-danger.jpg`, quality: 82 });
     check(`${theme} ${size}: no page errors`, errors.length === 0, errors.join(' | '));
     await page.close();
   }
@@ -224,8 +227,9 @@ for (const theme of THEMES) {
     await page.click('#menu-continue');
     for (let t = 0; t < 4; t++) await playTurn(page);
     const shown = await page.locator('#gameover').isVisible();
+    await page.waitForTimeout(700); // let the screen fade in
     if (size === 'phone') check(`${theme}: game-over screen with highlights`, shown && (await page.locator('#go-highlights li').count()) === 3);
-    if (dir && shown) await page.screenshot({ path: `${dir}/${size}-gameover.png` });
+    if (dir && shown) await page.screenshot({ path: `${dir}/${size}-gameover.jpg`, quality: 82 });
     check(`${theme} ${size}: no errors through game over`, errors.length === 0, errors.join(' | '));
     await page.close();
   }

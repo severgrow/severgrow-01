@@ -284,6 +284,9 @@ button {
   grid-template-rows: auto auto minmax(0, 1fr);
 }
 .hud {
+  width: 100%;
+  max-width: 760px;
+  justify-self: center;
   display: grid;
   grid-template-columns: 44px 1fr auto 1fr 44px;
   align-items: center;
@@ -411,7 +414,12 @@ button {
   -webkit-touch-callout: none;
   overflow: visible;
 }
+.board:focus,
 .board:focus-visible {
+  outline: none;
+}
+html.kbd .board:focus-visible {
+  outline: 3px solid var(--c-text);
   outline-offset: -3px;
 }
 .corner {
@@ -594,10 +602,10 @@ svg.usable .hex-cell {
   stroke-linecap: round;
 }
 .veins.you .vein {
-  stroke: var(--c-you);
+  stroke: color-mix(in srgb, var(--c-you) 55%, var(--c-text));
 }
 .veins.bot .vein {
-  stroke: var(--c-bot);
+  stroke: color-mix(in srgb, var(--c-bot) 55%, var(--c-text));
 }
 .vein.fragile {
   animation: flicker 2.8s ease-in-out infinite;
@@ -635,7 +643,7 @@ svg.usable .hex-cell {
 }
 .target {
   fill: none;
-  stroke: var(--c-accent);
+  stroke: var(--c-you);
   stroke-width: 2.4;
   animation: breathe 1.6s ease-in-out infinite;
 }
@@ -980,7 +988,7 @@ svg.usable .hex-cell {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  height: calc(var(--ch) + 30px);
+  height: calc(var(--ch) + 34px);
   padding-top: 20px;
   --n: 7;
 }
@@ -1003,10 +1011,10 @@ svg.usable .hex-cell {
   user-select: none;
 }
 .hand .card {
-  transform-origin: 50% 120%;
+  transform-origin: 50% 100%;
   transform: rotate(var(--rot, 0deg)) translateY(var(--dy, 0px));
   transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1.2), opacity 0.2s;
-  margin-left: min(-6px, calc((100% - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
+  margin-left: min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1)));
 }
 .hand .card:first-child {
   margin-left: 0;
@@ -1362,8 +1370,8 @@ svg.usable .hex-cell {
 [data-theme='ink'] .mark.bot {
   border-radius: 0;
   transform: none;
-  height: 5px;
-  width: 14px;
+  width: 10px;
+  height: 10px;
 }
 
 /* =================================================================
@@ -1469,9 +1477,9 @@ svg.usable .hex-cell {
   box-shadow: inset 0 0 0 3px var(--c-you), inset 0 0 0 6px var(--c-bg);
 }
 [data-theme='tabletop'] .mark.bot {
-  background: transparent;
   transform: none;
-  background-image: linear-gradient(45deg, transparent 40%, var(--c-bot) 40% 60%, transparent 60%), linear-gradient(-45deg, transparent 40%, var(--c-bot) 40% 60%, transparent 60%);
+  width: 13px;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
 }
 [data-theme='tabletop'] .go-card,
 [data-theme='tabletop'] .sheet,

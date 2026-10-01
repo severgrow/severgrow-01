@@ -74,7 +74,7 @@ grained.
 
 Typeface: **Bree Serif**. Chunky pieces with a darker side and a bevel, a wooden
 table texture made in code, a soft lamp-light vignette, parchment cards. Marks:
-you = pip, bot = cross, bot tiles striped.
+you = pip, bot = triangle, bot tiles striped.
 
 Shades between these colours (for example the empty hexes) are mixes of two palette
 colours, never new colours.

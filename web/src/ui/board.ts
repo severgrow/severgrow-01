@@ -141,8 +141,8 @@ export class BoardView {
     this.layers = {
       base: el('g', { class: 'l-base' }, svg),
       scars: el('g', { class: 'l-scars' }, svg),
-      veins: el('g', { class: 'l-veins' }, svg),
       tiles: el('g', { class: 'l-tiles' }, svg),
+      veins: el('g', { class: 'l-veins' }, svg),
       over: el('g', { class: 'l-over' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
@@ -255,7 +255,7 @@ export class BoardView {
     const A = centerOf(a);
     const B = centerOf(b);
     const st = this.style;
-    const from = st.tileShape === 'organic' ? 0.18 : 0.26;
+    const from = 0.3;
     const p = { x: A.x + (B.x - A.x) * from, y: A.y + (B.y - A.y) * from };
     const q = { x: A.x + (B.x - A.x) * (1 - from), y: A.y + (B.y - A.y) * (1 - from) };
     const w = st.veinWidth * (kind === 'live' ? 1 : 0.55);
@@ -319,8 +319,8 @@ export class BoardView {
       case 'diamond':
         el('path', { d: `M${x},${y - 4}L${x + 4},${y}L${x},${y + 4}L${x - 4},${y}Z`, class: 'mark-ink' }, g);
         break;
-      case 'cross':
-        el('path', { d: `M${x - 3.5},${y - 3.5}L${x + 3.5},${y + 3.5}M${x + 3.5},${y - 3.5}L${x - 3.5},${y + 3.5}`, class: 'mark-line thick' }, g);
+      case 'tri':
+        el('path', { d: `M${x},${y - 4}L${x + 4.4},${y + 3.4}L${x - 4.4},${y + 3.4}Z`, class: 'mark-ink' }, g);
         break;
     }
   }

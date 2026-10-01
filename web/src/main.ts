@@ -776,7 +776,7 @@ function renderBoard(v: View, advice: Advice | null) {
     const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
     o = {
       ...o,
-      targets: sel.card !== null || sel.kind !== null ? targetHexes(v, session.legal, sel) : null,
+      targets: !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null,
       selectedHex: sel.hex ?? (pending?.t === 'RotPick' ? coordKey(pending.coord) : null),
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
@@ -785,8 +785,8 @@ function renderBoard(v: View, advice: Advice | null) {
     };
   }
   if (!busy()) {
-    if (settings.weakSpots) o.weak = weakSpots(v).slice(0, 4);
-    if (showOpps) o.opps = opportunities(v).slice(0, 4);
+    if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
+    if (showOpps) o.opps = opportunities(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
   }
   board.render(queue.board, o);
   $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
@@ -920,7 +920,7 @@ function renderHand(v: View, advice: Advice | null) {
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
   const cards = [...v.hand].sort((a, b) => a.suit - b.suit || a.rank - b.rank || a.id - b.id);
   const n = cards.length;
-  const spread = Math.min(5, 28 / Math.max(n, 1));
+  const spread = Math.min(3.5, 22 / Math.max(n, 1));
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
   cards.forEach((c, i) => {
     let b = existing.get(c.id);
@@ -937,7 +937,7 @@ function renderHand(v: View, advice: Advice | null) {
     const playable = legal.length > 0 && usable.has(c.id);
     b.className = `card s${c.suit}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
     b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
-    b.style.setProperty('--dy', `${(off * off * 0.9).toFixed(1)}px`);
+    b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${lifted ? ', picked' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
@@ -1272,7 +1272,17 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => render(), 80);
 });
-document.addEventListener('pointerdown', () => sound.unlock(), { capture: true });
+document.addEventListener(
+  'pointerdown',
+  () => {
+    sound.unlock();
+    document.documentElement.classList.remove('kbd');
+  },
+  { capture: true },
+);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kbd');
+});
 
 // ---------- start ----------
 
