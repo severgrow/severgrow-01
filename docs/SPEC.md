@@ -16,7 +16,8 @@ default (see the appendix).
 - **One game, no modes.** "Classic" and "Lite" are merged. The page has one New game button.
 - **Sprout (new move).** Spend one card to grow one tile next to your network (section 7).
 - **Guaranteed opening combo.** Both opening hands always hold at least one combo (section 5).
-- **Smaller deck.** Cards run 1..`maxRank` (default chosen by simulation, section 3).
+- **Card range.** Cards run 1..`maxRank` (5 to 9). Simulation chose **9** as the default
+  (section 11.1); smaller values make games too short once Sprout is on.
 - **Parked rules.** Rot, Knock (with its final turn) and Fruit are off by default
   (`rotEnabled`, `knockEnabled`, `fruitPerPlayer`). Their code and tests remain (appendix A).
 - **The turn ends by itself** after the discard when Rot and Knock are off: no Continue step.
@@ -86,8 +87,8 @@ type RulesConfig = {
   boardRadius: number;          // 3
   rootStyle: 'ring2' | 'corner';
   handSize: number;             // 7
-  maxRank: number;              // cards 1..maxRank, 5 to 9 (default chosen in Part 4)
-  copiesPerCard: number;        // default chosen in Part 4
+  maxRank: number;              // 9: cards 1..maxRank, 5 to 9 (chosen by simulation, 11.1)
+  copiesPerCard: number;        // 2 (chosen by simulation, 11.1)
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
   guaranteeOpeningMeld: boolean;// true
   maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
@@ -302,6 +303,57 @@ SPROUT_LIMIT, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER, KNOCK_DISABLED, ...`).
   saved). Both read only a `View`.
 - `npm run sim` (metrics report + `sim-results.json`), `npm run sweep`, `npm run properties`,
   `npm run play` (terminal), `npm run replay -- <seed> <log.json>`.
+
+### 11.1 How the defaults were chosen (v0.4 Part 4)
+
+`npm run grid` played **1,000 GreedyBot-vs-GreedyBot games per setting** for every mix of
+`maxRank` {9, 8, 7, 6} x Sprout {off, on} x guaranteed opening combo {off, on} x
+`copiesPerCard` {2, 3} (32 settings, 32,000 games). Targets: no tile placed in under 25% of
+turns 1-5; 8-14 turns per player; first-player win rate 46-54%; Strangle ends under 15% of
+games; a real choice on most turns (measured as: a combo or a Sprout was playable that turn;
+with Sprout on this is nearly always true, so it is a weak test).
+
+| maxRank | Sprout | guarantee | copies | no-tile turns (1-5) | turns/player (mean/median/p90) | P1 win | choice | Strangle | close <=2 | score gap | games |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 9 | off | off | 2 | 64.2% | 15.2 / 15.5 / 18.5 | 46.3% | 30.5% | 11.7% | 11.3% | 12.7 | 1000 |
+| 9 | off | off | 3 | 67.4% | 26.4 / 29.5 / 30 | 49.3% | 22.3% | 20.6% | 5.4% | 17.0 | 1000 |
+| 9 | off | on | 2 | 35.5% | 13.6 / 14 / 17 | 45.9% | 35.9% | 14.8% | 9.2% | 13.1 | 1000 |
+| 9 | off | on | 3 | 38.2% | 25.7 / 29 / 30 | 47.6% | 23.3% | 18.7% | 5.7% | 16.8 | 1000 |
+| 9 | on | off | 2 | 0.0% | 9.0 / 9 / 10.5 | 54.5% | 99.8% | 7.8% | 13.0% | 10.9 | 1000 |
+| 9 | on | off | 3 | 0.0% | 15.1 / 15.5 / 17.5 | 54.6% | 98.8% | 15.8% | 10.1% | 13.7 | 1000 |
+| **9** | **on** | **on** | **2** | **0.0%** | **8.3 / 8.5 / 10** | **50.7%** | **99.6%** | **8.8%** | **13.0%** | **10.7** | **1000** |
+| 9 | on | on | 3 | 0.0% | 14.4 / 15 / 17 | 52.1% | 98.5% | 14.8% | 9.1% | 13.6 | 1000 |
+| 8 | off | off | 2 | 57.7% | 11.9 / 12 / 15 | 49.5% | 36.8% | 11.4% | 11.6% | 12.4 | 1000 |
+| 8 | off | off | 3 | 59.7% | 22.4 / 23.5 / 29.5 | 45.8% | 26.1% | 21.2% | 6.2% | 17.0 | 1000 |
+| 8 | off | on | 2 | 32.8% | 10.7 / 11 / 13.5 | 46.3% | 43.3% | 12.9% | 10.7% | 12.7 | 1000 |
+| 8 | off | on | 3 | 34.2% | 21.7 / 23 / 29 | 48.6% | 27.3% | 20.8% | 7.3% | 16.3 | 1000 |
+| 8 | on | off | 2 | 0.0% | 7.3 / 7.5 / 8.5 | 53.8% | 99.9% | 6.2% | 13.0% | 10.5 | 1000 |
+| 8 | on | off | 3 | 0.0% | 12.5 / 13 / 15 | 52.8% | 98.9% | 13.4% | 11.6% | 13.2 | 1000 |
+| 8 | on | on | 2 | 0.0% | 6.8 / 7 / 8 | 51.6% | 99.8% | 6.5% | 14.0% | 10.3 | 1000 |
+| 8 | on | on | 3 | 0.0% | 11.8 / 12 / 14.5 | 50.9% | 98.4% | 15.5% | 10.3% | 13.6 | 1000 |
+| 7 | off | off | 2 | 50.0% | 8.8 / 9 / 11.5 | 49.5% | 46.8% | 8.4% | 11.8% | 11.4 | 1000 |
+| 7 | off | off | 3 | 52.7% | 17.2 / 17.5 / 23 | 48.8% | 32.6% | 21.6% | 6.7% | 16.5 | 1000 |
+| 7 | off | on | 2 | 27.9% | 7.8 / 8 / 10 | 47.9% | 54.2% | 10.3% | 11.2% | 11.6 | 1000 |
+| 7 | off | on | 3 | 29.6% | 16.6 / 17 / 23 | 47.9% | 33.8% | 21.1% | 6.4% | 16.4 | 1000 |
+| 7 | on | off | 2 | 0.0% | 5.8 / 5.5 / 7 | 53.9% | 99.9% | 4.8% | 14.5% | 10.0 | 1000 |
+| 7 | on | off | 3 | 0.0% | 9.9 / 10 / 12 | 51.5% | 99.0% | 14.8% | 9.9% | 13.2 | 1000 |
+| 7 | on | on | 2 | 0.0% | 5.2 / 5 / 6 | 52.5% | 99.9% | 6.4% | 14.0% | 9.7 | 1000 |
+| 7 | on | on | 3 | 0.0% | 9.4 / 9.5 / 11.5 | 52.9% | 98.8% | 15.1% | 10.1% | 13.5 | 1000 |
+| 6 | off | off | 2 | 36.5% | 6.1 / 6 / 8 | 52.3% | 59.4% | 6.8% | 15.7% | 10.2 | 1000 |
+| 6 | off | off | 3 | 41.0% | 12.2 / 12.5 / 16 | 50.6% | 43.9% | 19.4% | 6.5% | 15.6 | 1000 |
+| 6 | off | on | 2 | 19.9% | 5.4 / 5.5 / 7 | 49.7% | 67.9% | 7.8% | 14.6% | 9.9 | 1000 |
+| 6 | off | on | 3 | 22.6% | 11.5 / 11.5 / 15.5 | 48.5% | 46.2% | 22.3% | 6.4% | 15.6 | 1000 |
+| 6 | on | off | 2 | 0.0% | 4.3 / 4 / 5 | 53.0% | 100.0% | 4.2% | 14.8% | 9.2 | 1000 |
+| 6 | on | off | 3 | 0.0% | 7.6 / 7.5 / 9 | 51.7% | 99.4% | 10.8% | 10.1% | 12.3 | 1000 |
+| 6 | on | on | 2 | 0.0% | 3.8 / 4 / 4.5 | 54.1% | 100.0% | 3.2% | 15.2% | 8.7 | 1000 |
+| 6 | on | on | 3 | 0.0% | 7.1 / 7 / 8.5 | 49.7% | 99.4% | 13.9% | 13.1% | 12.0 | 1000 |
+
+Only three settings meet every target: (9, on, on, 2), (8, on, off, 3) and (7, on, off, 3).
+**Chosen: maxRank 9, Sprout on, guarantee on, 2 copies** (bold row). It has the fairest start
+(50.7% first-player wins), the fewest Strangle endings (8.8%), a real choice on 99.6% of turns
+and no empty early turns; games last 8.3 turns per player (median 8.5, 90% under 10). Without
+Sprout, a third or more of the first five turns place nothing; with Sprout and fewer cards
+(maxRank 7 or less, 2 copies) the deck runs out too fast (4-6 turns each).
 
 ---
 

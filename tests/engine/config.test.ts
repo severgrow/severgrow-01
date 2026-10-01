@@ -18,7 +18,7 @@ describe('DEFAULT_CONFIG', () => {
       allowHyphaOneBend: false,
       fruitPerPlayer: 0,
       rootsScore: false,
-      maxRank: 7,
+      maxRank: 9,
       sproutsPerTurn: 1,
       guaranteeOpeningMeld: true,
       maxTurnsPerPlayer: 30,
