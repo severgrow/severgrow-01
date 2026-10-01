@@ -10,12 +10,13 @@ import {
   newGame,
   replay,
 } from '../../src/engine/index.js';
-import type { Action, Event, State, Tile } from '../../src/engine/index.js';
+import type { Action, Event, RulesConfig, State, Tile } from '../../src/engine/index.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 /** Seeded random legal play that also records the action log. */
-const playLog = (seed: number, maxActions = 400): { actions: Action[]; states: State[] } => {
+const playLog = (seed: number, maxActions = 400, config: Partial<RulesConfig> = {}): { actions: Action[]; states: State[] } => {
   const rand = mulberry32(seed ^ 0xabc);
-  let s = newGame(seed);
+  let s = newGame(seed, config);
   const actions: Action[] = [];
   const states: State[] = [s];
   for (let i = 0; i < maxActions && s.phase !== 'GAME_OVER'; i++) {
@@ -48,15 +49,22 @@ describe('events (spec 12, step 18)', () => {
     expect(eventsFor(d1, 1)).toEqual([{ t: 'Draw', player: 0, from: 'discard', card: taken.id }]);
   });
 
-  it('every event type that random play produces has the spec shape', () => {
+  it('every event type that random play produces has the spec shape (parked rules on)', () => {
     const seen = new Set<string>();
     for (let seed = 1; seed <= 40; seed++) {
-      const { states } = playLog(seed);
+      const { states } = playLog(seed, 400, LEGACY_V03);
       for (const e of states.at(-1)!.history!) seen.add(e.t);
     }
     for (const t of ['Draw', 'MeldRun', 'MeldSet', 'Overgrow', 'Discard', 'RotCount', 'Sever', 'GameEnd']) {
       expect(seen).toContain(t);
     }
+  });
+
+  it('the core game records Sprout events and never Rot or Knock events', () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 30; seed++) for (const e of playLog(seed).states.at(-1)!.history!) seen.add(e.t);
+    expect(seen).toContain('Sprout');
+    for (const t of ['RotCount', 'Rot', 'RotPick', 'Knock', 'FinalTurnStart', 'Fruit']) expect(seen).not.toContain(t);
   });
 
   it('a finished game ends with exactly one GameEnd event carrying the result', () => {
@@ -83,9 +91,11 @@ describe('events (spec 12, step 18)', () => {
   });
 
   it('every board change can be explained from the events alone (gate 6)', () => {
-    const cards = new Map(createCards(newGame(1).config).map((c) => [c.id, c]));
     for (let seed = 1; seed <= 60; seed++) {
-      const { states } = playLog(seed);
+      // Half the games on the core rules, half with the parked rules on.
+      const config = seed % 2 ? {} : LEGACY_V03;
+      const cards = new Map(createCards(newGame(1, config).config).map((c) => [c.id, c]));
+      const { states } = playLog(seed, 400, config);
       const board: Record<string, Tile | null> = JSON.parse(JSON.stringify(states[0]!.board)) as Record<string, Tile | null>;
       for (let i = 1; i < states.length; i++) {
         const before = states[i - 1]!;
@@ -96,6 +106,7 @@ describe('events (spec 12, step 18)', () => {
             const ranks = e.cards.map((id) => cards.get(id)!.rank).sort((a, b) => a - b);
             e.hexes.forEach((h, j) => (board[coordKey(h)] = { owner: p, strength: e.t === 'MeldSet' ? ranks[0]! : ranks[j]! }));
           }
+          if (e.t === 'Sprout') board[coordKey(e.coord)] = { owner: p, strength: cards.get(e.card)!.rank };
           if (e.t === 'Fruit') for (const c of [...e.sacrifice, e.target]) board[coordKey(c)] = null;
           if (e.t === 'Rot' || e.t === 'Sever') for (const c of e.coords) board[coordKey(c)] = null;
           if (e.t === 'RotPick') board[coordKey(e.coord)] = null;
@@ -126,7 +137,7 @@ describe('events (spec 12, step 18)', () => {
 
   it('refills are recorded as deck draws and hidden from the opponent', () => {
     for (let seed = 1; seed <= 20; seed++) {
-      const { states, actions } = playLog(seed);
+      const { states, actions } = playLog(seed, 400, LEGACY_V03); // refill happens in Continue here
       for (let i = 0; i < actions.length; i++) {
         if (actions[i]!.t !== 'Continue' || states[i + 1]!.phase === 'ROT_PICK') continue;
         const before = states[i]!;

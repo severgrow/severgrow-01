@@ -48,6 +48,11 @@ export const moveSentence = (v: View, a: Action): string => {
       const names = a.hexes.map(hn).sort((x, y) => x[0]!.localeCompare(y[0]!) || Number(x.slice(1)) - Number(y.slice(1)));
       return `Grow a clump of ${a.hexes.length} tiles at ${names.join(', ')}${effects(sim)}${pointsText(sim)}`;
     }
+    case 'Sprout': {
+      const sim = simulate(v, a)!;
+      const card = v.hand.find((c) => c.id === a.card)!;
+      return `Sprout one tile at ${hn(a.coord)} with the ${cardName(card)}${effects(sim)}${pointsText(sim)}`;
+    }
     case 'Fruit': {
       const sim = simulate(v, a)!;
       const more = sim.botCut > 0 ? `, cutting off ${sim.botCut} more` : '';
@@ -76,6 +81,8 @@ export const moveHexes = (a: Action): Coord[] => {
       }));
     case 'MeldSet':
       return a.hexes;
+    case 'Sprout':
+      return [a.coord];
     case 'Fruit':
       return [...a.sacrifice, a.target];
     case 'RotPick':
@@ -88,6 +95,7 @@ export const moveHexes = (a: Action): Coord[] => {
 /** Card ids a move uses. */
 export const moveCards = (a: Action): number[] => {
   if (a.t === 'MeldRun' || a.t === 'MeldSet') return a.cards;
+  if (a.t === 'Sprout') return [a.card];
   if (a.t === 'Discard') return [a.card];
   return [];
 };

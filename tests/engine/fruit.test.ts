@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { SEVERGROW_SPECIES, applyFruit, coordKey, planFruit, sever } from '../../src/engine/index.js';
 import type { Coord } from '../../src/engine/index.js';
-import { clone, codeOf, fixture, tilesOf } from '../helpers.js';
+import { clone, codeOf, fixture as baseFixture, tilesOf } from '../helpers.js';
+import { LEGACY_V03 } from '../legacy.js';
+
+// Fruit is a parked rule (v0.4): these tests run with it switched on.
+const fixture = (o: Parameters<typeof baseFixture>[0] = {}) => baseFixture({ ...o, config: { ...LEGACY_V03, ...o.config } });
 
 // P1 sacrifice trio: (-1,1), (0,1), (0,0), linked to P1's root at (-2,2).
 // P2 target (1,0), strength 9, on the P2 arm (1,0) - (1,-1) - root (2,-2).

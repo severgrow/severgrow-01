@@ -27,7 +27,7 @@ describe('Lite preset (RulesConfig only)', () => {
     const tiles: State = newGame(5, LITE);
     const knockState: State = { ...tiles, phase: 'KNOCK', hands: [[], tiles.hands[1]] };
     const v = viewFor(knockState, 0);
-    expect(legalActions(v).map((a) => a.t)).toContain('Knock'); // the engine would allow it at deadwood 0
+    expect(legalActions(v).map((a) => a.t)).not.toContain('Knock'); // v0.4: Knock is off in the engine itself
     expect(visibleMoves(v, 'lite').map((a) => a.t)).toEqual(['Continue']);
     expect(visibleMoves(v, 'classic')).toEqual(legalActions(v));
   });

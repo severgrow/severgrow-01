@@ -1,6 +1,7 @@
 import { coordKey } from './board.js';
 import { deadwood } from './deadwood.js';
 import { rotCount } from './rot.js';
+import { leftoverRulesOn } from './phases.js';
 import type { Action, Card, Event, Player, State } from './types.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
@@ -56,12 +57,23 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       out.push(...settleEvents(before, after, p, false));
       break;
     }
+    case 'Sprout': {
+      out.push({ t: 'Sprout', player: p, card: a.card, coord: { ...res!.sprout! } });
+      for (const c of res?.overgrown ?? []) {
+        const old = before.board[coordKey(c)]!;
+        out.push({ t: 'Overgrow', player: p, coord: { ...c }, oldOwner: old.owner, oldStrength: old.strength, newStrength: after.board[coordKey(c)]!.strength });
+      }
+      out.push(...settleEvents(before, after, p, false));
+      break;
+    }
     case 'Fruit':
       out.push({ t: 'Fruit', player: p, sacrifice: res!.fruit!.sacrifice.map((c) => ({ ...c })), target: { ...res!.fruit!.target } });
       out.push(...settleEvents(before, after, p, false));
       break;
     case 'Discard':
       out.push({ t: 'Discard', player: p, card: a.card });
+      // v0.4: with Rot and Knock off the turn finishes inside the discard.
+      if (!before.finalTurn && !leftoverRulesOn(before)) out.push(...settleEvents(before, after, p, true));
       break;
     case 'Knock':
       out.push({ t: 'Knock', player: p });
@@ -80,6 +92,8 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       if (after.phase !== 'ROT_PICK') out.push(...settleEvents(before, after, p, true));
       break;
     case 'EndAct':
+      // v0.4: an empty hand skips the discard; the turn may finish right here.
+      if (before.hands[p].length === 0 && !before.finalTurn && !leftoverRulesOn(before)) out.push(...settleEvents(before, after, p, true));
       break;
   }
   if (after.phase === 'GAME_OVER' && before.phase !== 'GAME_OVER' && after.result) out.push({ t: 'GameEnd', result: after.result });

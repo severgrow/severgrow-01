@@ -6,10 +6,11 @@ import {
   shuffleDeck,
   SUIT_NAMES,
 } from '../../src/engine/index.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 describe('createCards', () => {
   it('builds 72 cards by default: 4 suits x ranks 1-9 x 2 copies', () => {
-    const cards = createCards(resolveConfig());
+    const cards = createCards(resolveConfig(LEGACY_V03));
     expect(cards).toHaveLength(72);
     for (const suit of [0, 1, 2, 3] as const) {
       for (let rank = 1; rank <= 9; rank++) {
@@ -19,13 +20,13 @@ describe('createCards', () => {
   });
 
   it('assigns unique, stable ids 0..n-1', () => {
-    const a = createCards(resolveConfig());
+    const a = createCards(resolveConfig(LEGACY_V03));
     expect(a.map((c) => c.id)).toEqual(Array.from({ length: 72 }, (_, i) => i));
-    expect(createCards(resolveConfig())).toEqual(a);
+    expect(createCards(resolveConfig(LEGACY_V03))).toEqual(a);
   });
 
   it('gives identical copies adjacent ids (lowest id first is well defined)', () => {
-    const cards = createCards(resolveConfig());
+    const cards = createCards(resolveConfig(LEGACY_V03));
     expect(cards[0]).toEqual({ id: 0, suit: 0, rank: 1 });
     expect(cards[1]).toEqual({ id: 1, suit: 0, rank: 1 });
     expect(cards[2]).toEqual({ id: 2, suit: 0, rank: 2 });
@@ -33,8 +34,8 @@ describe('createCards', () => {
   });
 
   it('honours copiesPerCard', () => {
-    expect(createCards(resolveConfig({ copiesPerCard: 1 }))).toHaveLength(36);
-    expect(createCards(resolveConfig({ copiesPerCard: 3 }))).toHaveLength(108);
+    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 1 }))).toHaveLength(36);
+    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 3 }))).toHaveLength(108);
   });
 
   it('names the suits Moss, Ash, Dew, Ember', () => {
@@ -43,7 +44,7 @@ describe('createCards', () => {
 });
 
 describe('shuffleDeck', () => {
-  const cards = createCards(resolveConfig());
+  const cards = createCards(resolveConfig(LEGACY_V03));
 
   it('is a deterministic permutation and does not mutate input', () => {
     const before = JSON.stringify(cards);
@@ -68,7 +69,7 @@ describe('shuffleDeck', () => {
 });
 
 describe('drawFromDeck', () => {
-  const deck = createCards(resolveConfig()).slice(0, 5);
+  const deck = createCards(resolveConfig(LEGACY_V03)).slice(0, 5);
 
   it('draws from the top (index 0) without mutating', () => {
     const { drawn, deck: rest } = drawFromDeck(deck, 2);

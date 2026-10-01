@@ -140,6 +140,7 @@ export const runPropertyGame = (
     s = apply(s, a);
     actions.push(a);
     if (a.t === 'MeldRun' || a.t === 'MeldSet') for (const id of a.cards) melded.add(id);
+    if (a.t === 'Sprout') melded.add(a.card);
     if (checks) {
       // 6. apply never mutates its input.
       if (withoutHistory(before) !== snapshot) throw new PropertyFailure(6, 'apply mutated its input', report({ failingAction: a, before }));

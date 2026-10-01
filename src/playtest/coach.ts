@@ -222,6 +222,8 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
     case 'meld':
     case 'fruit':
       return whyBoard(c, f.move, f.kind === 'fruit');
+    case 'sprout':
+      return whyBoard(c, f.move, false);
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {

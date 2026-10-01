@@ -95,6 +95,20 @@ export const planSet = (
   return { player, cards, tiles };
 };
 
+/**
+ * Validates a Sprout (v0.4): one card becomes one tile with strength = its rank, on a
+ * hex touching the player's network (root included) that is empty or holds a strictly
+ * weaker enemy tile. Changes nothing.
+ */
+export const planSprout = (ctx: BoardCtx, player: Player, hand: readonly Card[], cardId: number, coord: Coord): Placement => {
+  const [card] = takeCards(hand, [cardId]);
+  const c = assertCoord(coord);
+  if (!touchesNetwork(ctx.board, player, c)) throw new IllegalActionError('NOT_ADJACENT', 'a sprout must touch your network');
+  const tiles = [{ coord: c, strength: card!.rank }];
+  assertClaims(ctx, player, tiles);
+  return { player, cards: [card!], tiles };
+};
+
 /** Writes a validated placement onto a copy of the board. Does not Sever. */
 export const applyPlacement = (
   board: Record<string, Tile | null>,

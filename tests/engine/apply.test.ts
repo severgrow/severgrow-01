@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { IllegalActionError, apply, applyAs, deadwood, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { clone, fixture, tilesOf } from '../helpers.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 const MOSS = 0;
 const ASH = 1;
@@ -25,13 +26,15 @@ const makeState = (o: {
   turnPlayer?: Player;
   patch?: Partial<State>;
 }): State => {
+  // These tests cover the v0.3 turn flow, including the parked rules (Knock, Rot, Fruit).
+  const config = { ...LEGACY_V03, ...o.config };
   const f = fixture({
     ...(o.tiles ? { tiles: o.tiles } : {}),
     ...(o.rock ? { rock: o.rock } : {}),
     ...(o.rich ? { rich: o.rich } : {}),
-    ...(o.config ? { config: o.config } : {}),
+    config,
   });
-  const base = newGame(1, o.config ?? {});
+  const base = newGame(1, config);
   const tp = o.turnPlayer ?? 0;
   return {
     ...base,
@@ -148,29 +151,23 @@ describe('ACT: melds', () => {
     expect(n.board['-1,0']).toBeNull();
   });
 
-  it('a meld may not leave the hand empty (the discard is mandatory)', () => {
+  it('a meld may use the last card; the discard is then skipped (v0.4, replaces the v0.3 rule)', () => {
     const r = run();
     const s = makeState({ phase: 'ACT', hands: [r, junk(7)] });
-    illegal(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }, 'HAND_WOULD_BE_EMPTY');
+    const m = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    expect(m.hands[0]).toEqual([]);
+    expect(act(m, { t: 'EndAct' }).phase).toBe('KNOCK'); // Knock is on in these tests
   });
 
-  it('a meld may not leave only the card just taken from the discard pile (v0.3.1)', () => {
+  it('a meld may leave only the card just taken; it may then be discarded (v0.4, replaces v0.3.1)', () => {
     const r = run();
     const taken = c(EMBER, 9);
     const s = makeState({ phase: 'ACT', hands: [[...r, taken], junk(7)], patch: { drawnFromDiscard: taken.id } });
-    illegal(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }, 'NO_DISCARDABLE_CARD');
-    expect(legalActions(viewFor(s, 0)).some((a) => a.t === 'MeldRun')).toBe(false);
-    // With another card left over, the same meld is fine.
-    const ok = makeState({ phase: 'ACT', hands: [[...r, taken, c(DEW, 2)], junk(7)], patch: { drawnFromDiscard: taken.id } });
-    expect(act(ok, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }).hands[0]).toHaveLength(2);
-    // With the loophole rule off, the taken card may be discarded, so the meld is legal.
-    const off = makeState({
-      phase: 'ACT',
-      config: { forbidRedundantDiscard: false },
-      hands: [[...r, taken], junk(7)],
-      patch: { drawnFromDiscard: taken.id },
-    });
-    expect(act(off, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }).hands[0]).toEqual([taken]);
+    const m = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    expect(m.hands[0]).toEqual([taken]);
+    const d = act(m, { t: 'EndAct' });
+    expect(legalActions(viewFor(d, 0))).toEqual([{ t: 'Discard', card: taken.id }]);
+    expect(act(d, { t: 'Discard', card: taken.id }).phase).toBe('KNOCK');
   });
 
   it('an illegal meld changes nothing (atomic)', () => {

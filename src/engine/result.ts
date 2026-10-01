@@ -15,13 +15,17 @@ export const knockResult = (knocker: Player, scores: [number, number], deadwood:
   };
 };
 
-/** Spec 11: higher score; tie -> lower kept-hand deadwood; still tied -> P2. */
-export const deckExhaustionResult = (scores: [number, number], deadwood: [number, number]): GameResult => {
+/**
+ * Spec 11: higher score wins. With the parked leftover-card rules on, a tie goes to
+ * lower kept-hand deadwood, then P2. In the core game (no deadwood given) a tie goes
+ * straight to P2 (v0.4).
+ */
+export const deckExhaustionResult = (scores: [number, number], deadwood: [number, number] | null): GameResult => {
   let winner: Player;
   if (scores[0] !== scores[1]) winner = scores[0] > scores[1] ? 0 : 1;
-  else if (deadwood[0] !== deadwood[1]) winner = deadwood[0] < deadwood[1] ? 0 : 1;
+  else if (deadwood && deadwood[0] !== deadwood[1]) winner = deadwood[0] < deadwood[1] ? 0 : 1;
   else winner = 1;
-  return { winner, reason: 'deck_exhaustion', scores, deadwood };
+  return deadwood ? { winner, reason: 'deck_exhaustion', scores, deadwood } : { winner, reason: 'deck_exhaustion', scores };
 };
 
 /** Spec 8.6: the strangled player loses; both strangled is a draw. */

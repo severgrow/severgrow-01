@@ -174,6 +174,8 @@ const describe = (before: State, a: Action, after: State): string => {
       return `Bot grew a line of ${a.cards.length} tiles from ${hn(a.start)} (${names(a.cards)})${tail}`;
     case 'MeldSet':
       return `Bot grew a clump of ${a.cards.length} tiles at ${a.hexes.map(hn).join(', ')} (${names(a.cards)})${tail}`;
+    case 'Sprout':
+      return `Bot sprouted a ${cardName(hand.find((c) => c.id === a.card)!)} at ${hn(a.coord)}${tail}`;
     case 'Fruit':
       return `Bot gave up ${a.sacrifice.map(hn).join(' ')} to destroy your tile at ${hn(a.target)}${tail}`;
     case 'EndAct':
