@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#14201a" />
+    <title>Mycelium</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpolygon points=%2716,2 28,9 28,23 16,30 4,23 4,9%27 fill=%27%232f9e5b%27/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="top">
+        <h1>Mycelium</h1>
+        <button id="new-game" class="ghost" type="button">New game</button>
+      </header>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section class="scores" aria-label="Scores">
+        <div class="pill you"><span class="dot"></span>You <b id="score-you">0</b></div>
+        <div class="pill bot"><span class="dot"></span>Bot <b id="score-bot">0</b></div>
+        <div class="pill" title="Cards left in the deck">Deck <b id="deck">0</b></div>
+        <div class="pill" title="Top of the discard pile">Discard <b id="discard">–</b></div>
+      </section>
+
+      <svg id="board" class="board" role="img" aria-label="Hex board"></svg>
+
+      <section aria-label="Your cards">
+        <div class="row-head">
+          <h2>Your cards</h2>
+          <span id="deadwood" class="muted"></span>
+        </div>
+        <div id="hand" class="hand"></div>
+        <p id="bot-hand" class="muted small"></p>
+      </section>
+
+      <section aria-label="Your moves">
+        <div class="row-head">
+          <h2>Your moves</h2>
+          <button id="clear-filter" class="link" type="button" hidden>Show all</button>
+        </div>
+        <p id="hint" class="muted small"></p>
+        <div id="confirm" class="confirm" hidden>
+          <span id="confirm-text"></span>
+          <button id="confirm-play" type="button">Play it</button>
+          <button id="confirm-cancel" class="ghost" type="button">Cancel</button>
+        </div>
+        <div id="moves" class="moves"></div>
+      </section>
+
+      <section aria-label="What happened">
+        <h2>What happened</h2>
+        <ul id="log" class="log"></ul>
+      </section>
+
+      <details class="rules">
+        <summary>How to play</summary>
+        <ul>
+          <li>You are <b class="you-text">green</b> and start from the root marked <b>R</b> at the bottom left. The bot is <b class="bot-text">purple</b>.</li>
+          <li>Each turn: <b>draw</b> a card, <b>play</b> any card combos, <b>discard</b> one card, then <b>Continue</b> (or <b>Knock</b>).</li>
+          <li><b>Hypha</b> = 3+ cards of one suit in a row (like Moss 3-4-5). It grows a straight line of tiles from next to your network, strength rising outward.</li>
+          <li><b>Bloom</b> = 3-4 cards of the same number in different suits. It grows a small clump of tiles, all that strength.</li>
+          <li>A new tile can replace a bot tile only if it is <b>stronger</b>. Roots can never be replaced.</li>
+          <li>Tiles that lose their path back to their root <b>wither</b> (Sever). Cut the bot's links, protect yours.</li>
+          <li>Leftover cards that are not in combos are <b>deadwood</b>. Too much deadwood when you Continue makes your weakest edge tiles <b>rot</b>.</li>
+          <li><b>Knock</b> when your deadwood is 10 or less: the bot gets one last turn, then the higher score wins (a tie goes to the bot).</li>
+          <li>Once per game, <b>Fruit</b>: give up 3 of your linked tiles to destroy one touching bot tile, however strong.</li>
+          <li>Surround the bot's root completely (with at least one of your tiles) to win at once: <b>Strangle</b>.</li>
+          <li>Tiles score 1, gold <b>rich</b> hexes score 2. Grey hexes are rock.</li>
+        </ul>
+        <p class="muted small">Tip: tap a hex or a card to see only the moves that use it.</p>
+      </details>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -8,14 +8,18 @@
     "node": ">=20.19"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts",
+    "web:preview": "vite preview --config web/vite.config.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
     "typescript": "^7.0.2",
+    "vite": "^8.3.2",
     "vitest": "^4.1.11"
   }
 }
