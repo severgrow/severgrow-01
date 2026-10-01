@@ -12,8 +12,9 @@ import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.j
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
 
-/** A fixed seed for the "Tutorial game" button (Lite rules). Checked in tests. */
-export const TUTORIAL_SEED = 296;
+/** A fixed seed for the "Tutorial game" button (v0.4 defaults): in 15 coached steps it
+ * teaches 10 ideas and shows lines, a clump, Sprout, taking over and a cut of 4. */
+export const TUTORIAL_SEED = 10;
 
 export type TipId =
   | 'goal'

@@ -84,7 +84,7 @@ const hasCombo = (h: Card[]) => bestMeldPartition(h).melds.length > 0;
 describe('v0.4 config', () => {
   it('has the one-game defaults', () => {
     expect(DEFAULT_CONFIG).toMatchObject({
-      maxRank: 7,
+      maxRank: 9,
       copiesPerCard: 2,
       handSize: 7,
       sproutsPerTurn: 1,

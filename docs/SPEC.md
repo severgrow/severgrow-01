@@ -16,7 +16,8 @@ default (see the appendix).
 - **One game, no modes.** "Classic" and "Lite" are merged. The page has one New game button.
 - **Sprout (new move).** Spend one card to grow one tile next to your network (section 7).
 - **Guaranteed opening combo.** Both opening hands always hold at least one combo (section 5).
-- **Smaller deck.** Cards run 1..`maxRank` (default chosen by simulation, section 3).
+- **Card range.** Cards run 1..`maxRank` (5 to 9). Simulation chose **9** as the default
+  (section 11.1); smaller values make games too short once Sprout is on.
 - **Parked rules.** Rot, Knock (with its final turn) and Fruit are off by default
   (`rotEnabled`, `knockEnabled`, `fruitPerPlayer`). Their code and tests remain (appendix A).
 - **The turn ends by itself** after the discard when Rot and Knock are off: no Continue step.
@@ -86,8 +87,8 @@ type RulesConfig = {
   boardRadius: number;          // 3
   rootStyle: 'ring2' | 'corner';
   handSize: number;             // 7
-  maxRank: number;              // cards 1..maxRank, 5 to 9 (default chosen in Part 4)
-  copiesPerCard: number;        // default chosen in Part 4
+  maxRank: number;              // 9: cards 1..maxRank, 5 to 9 (chosen by simulation, 11.1)
+  copiesPerCard: number;        // 2 (chosen by simulation, 11.1)
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
   guaranteeOpeningMeld: boolean;// true
   maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
