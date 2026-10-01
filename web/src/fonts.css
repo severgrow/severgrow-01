@@ -1,16 +1,17 @@
-/* Free fonts (SIL Open Font License), bundled in web/src/fonts. Latin only, woff2.
-   One typeface: Bricolage Grotesque (text 500, numbers 800). */
+/* Free font (SIL Open Font License), bundled in web/src/fonts. Latin only, woff2.
+   One typeface: Alegreya Sans, a humanist sans with calligraphic roots
+   (text 500, numbers 800). */
 @font-face {
-  font-family: 'Bricolage Grotesque';
+  font-family: 'Alegreya Sans';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('./fonts/bricolage-grotesque-latin-500-normal.woff2') format('woff2');
+  src: url('./fonts/alegreya-sans-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Bricolage Grotesque';
+  font-family: 'Alegreya Sans';
   font-style: normal;
   font-weight: 800;
   font-display: swap;
-  src: url('./fonts/bricolage-grotesque-latin-800-normal.woff2') format('woff2');
+  src: url('./fonts/alegreya-sans-latin-800-normal.woff2') format('woff2');
 }

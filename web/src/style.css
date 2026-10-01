@@ -44,8 +44,9 @@ body {
   color: var(--c-text);
   font-family: var(--font);
   font-weight: var(--w-text);
-  font-size: 1rem;
+  font-size: 1.0625rem; /* Alegreya Sans runs small */
   line-height: 1.35;
+  font-variant-numeric: lining-nums; /* even-height numbers everywhere */
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
@@ -56,7 +57,7 @@ button {
 }
 .num {
   font-weight: var(--w-num);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .muted {
   color: var(--c-muted);
