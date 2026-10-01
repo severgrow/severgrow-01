@@ -8,8 +8,14 @@ import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
 
 const isBoard = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout';
-const actState = (seed: number) =>
-  findState(seed, (s) => s.actor === 0 && s.phase === 'ACT' && s.turnNumber >= 5 && new Set(legalActions(viewFor(s, 0)).filter(isBoard).map(kindOf)).size >= 2)!;
+/** The first position from `seed` on (trying later seeds if needed) with two kinds of moves. */
+const actState = (seed: number): State => {
+  for (let k = seed; k < seed + 50; k++) {
+    const s = findState(k, (x) => x.actor === 0 && x.phase === 'ACT' && x.turnNumber >= 5 && new Set(legalActions(viewFor(x, 0)).filter(isBoard).map(kindOf)).size >= 2);
+    if (s) return s;
+  }
+  throw new Error('no position found');
+};
 
 describe('tap a card, then a hex', () => {
   const s = actState(3);
