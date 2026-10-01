@@ -84,5 +84,10 @@ export const aggregate = (records: GameRecord[]) => {
     comebacks: records.filter((r) => r.comeback).length,
     closeGames: records.filter((r) => Math.abs(r.result.scores[0] - r.result.scores[1]) <= 2).length,
     meanLegalActions: ratio(sum((r) => r.legalActionsSum), sum((r) => r.decisions)),
+    choiceRate: ratio(sum((r) => r.choiceTurns), playerTurns),
+    noTileRateEarly: ratio(sum((r) => r.noTileTurnsEarly), sum((r) => Math.min(5, r.turns))),
+    avgScoreGap: mean(records.map((r) => Math.abs(r.result.scores[0] - r.result.scores[1]))),
+    closeGameRate: ratio(records.filter((r) => Math.abs(r.result.scores[0] - r.result.scores[1]) <= 2).length, games),
+    strangleRate: ratio((endings.strangle ?? 0) + (endings.double_strangle ?? 0), games),
   };
 };

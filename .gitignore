@@ -5,3 +5,4 @@ sim-results.json
 web/dist/
 property-failure.json
 sweep-results.json
+grid-out/

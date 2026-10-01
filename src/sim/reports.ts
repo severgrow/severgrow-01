@@ -26,5 +26,7 @@ export const formatReport = (m: Metrics, label: string): string => {
     `First contact turn: mean ${n(m.firstContactTurn.mean, 1)}, median ${m.firstContactTurn.median}, by turn 2 in ${pct(m.firstContactTurn.onTurn1or2)}, never ${m.firstContactTurn.never}`,
     `Near-win: Strangle chances/game ${n(m.strangleChancesPerGame)}, double strangles ${m.doubleStrangles}, largest Sever ${m.largestSever}, largest swing ${m.largestSwing}, comebacks from 5+ behind ${m.comebacks}, games decided by <= 2 points ${m.closeGames}`,
     `Mean legal actions per decision: ${n(m.meanLegalActions, 1)}`,
+    `Turns with a playable combo or Sprout: ${pct(m.choiceRate)}   no-tile turns in turns 1-5: ${pct(m.noTileRateEarly)}`,
+    `Score gap avg ${n(m.avgScoreGap, 1)}, games decided by <= 2 points ${pct(m.closeGameRate)}, Strangle rate ${pct(m.strangleRate)}`,
   ].join('\n');
 };

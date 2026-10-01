@@ -19,7 +19,8 @@
     "sim": "tsx src/sim/sim.ts",
     "sweep": "tsx src/sim/sweep.ts",
     "play": "tsx src/cli/play-cli.ts",
-    "replay": "tsx src/cli/replay-cli.ts"
+    "replay": "tsx src/cli/replay-cli.ts",
+    "grid": "tsx src/sim/grid.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

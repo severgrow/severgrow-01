@@ -35,6 +35,10 @@ export type GameRecord = {
   comeback: boolean;
   legalActionsSum: number;
   decisions: number;
+  /** Player-turns in which a combo or Sprout was playable (a real choice). */
+  choiceTurns: number;
+  /** Turns 1-5 in which no tile was placed. */
+  noTileTurnsEarly: number;
 };
 
 const makeBot = (kind: BotKind, seed: number, seat: Player): Bot => (kind === 'greedy' ? GreedyBot : createRandomBot(seed * 2 + seat + 1));
@@ -66,7 +70,7 @@ const canStrangle = (s: State, acts: Action[]): boolean => {
 export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial<RulesConfig> = {}): GameRecord => {
   const players = [makeBot(bots[0], seed, 0), makeBot(bots[1], seed, 1)];
   let s = newGame(seed, config);
-  const rec: Omit<GameRecord, 'result' | 'turns' | 'noTileTurns' | 'comeback'> = {
+  const rec: Omit<GameRecord, 'result' | 'turns' | 'noTileTurns' | 'comeback' | 'noTileTurnsEarly'> = {
     seed,
     bots,
     actions: [],
@@ -87,7 +91,9 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
     maxSwing: 0,
     legalActionsSum: 0,
     decisions: 0,
+    choiceTurns: 0,
   };
+  const choiceSeen = new Set<number>();
   let knock: { player: Player; led: boolean } | null = null;
   const worstDiff: [number, number] = [0, 0]; // lowest (mine - theirs) each player reached
 
@@ -99,6 +105,10 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
     rec.decisions++;
     rec.legalActionsSum += legal.length;
     if (canStrangle(s, legal)) rec.strangleChances++;
+    if (s.phase === 'ACT' && !choiceSeen.has(s.turnNumber) && legal.some((x) => x.t === 'MeldRun' || x.t === 'MeldSet' || x.t === 'Sprout')) {
+      choiceSeen.add(s.turnNumber);
+      rec.choiceTurns++;
+    }
     const a = players[s.actor]!.chooseAction(v);
     s = apply(s, a);
     rec.actions.push(a);
@@ -110,6 +120,10 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
         rec.melds++;
         rec.tilesPlaced += e.hexes.length;
         rec.tilesByTurn[turn - 1]! += e.hexes.length;
+      }
+      if (e.t === 'Sprout') {
+        rec.tilesPlaced += 1;
+        rec.tilesByTurn[turn - 1]! += 1;
       }
       if (e.t === 'Overgrow') rec.overgrows++;
       if (e.t === 'Sever') {
@@ -145,6 +159,7 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
     result,
     turns: s.turnNumber,
     noTileTurns: rec.tilesByTurn.filter((n) => n === 0).length,
+    noTileTurnsEarly: rec.tilesByTurn.slice(0, 5).filter((n) => n === 0).length,
     comeback: result.winner !== null && worstDiff[result.winner] <= -5,
   };
 };

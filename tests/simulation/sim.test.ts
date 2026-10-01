@@ -13,11 +13,18 @@ describe('sim: one game record', () => {
     expect(g.result).toEqual(end.result);
     expect(g.turns).toBe(end.turnNumber);
     expect(g.melds).toBe(h.filter((e) => e.t === 'MeldRun' || e.t === 'MeldSet').length);
-    expect(g.tilesPlaced).toBe(h.reduce((n, e) => n + (e.t === 'MeldRun' || e.t === 'MeldSet' ? e.hexes.length : 0), 0));
+    // Tiles placed = combo tiles + one per Sprout (v0.4).
+    expect(g.tilesPlaced).toBe(h.reduce((n, e) => n + (e.t === 'MeldRun' || e.t === 'MeldSet' ? e.hexes.length : e.t === 'Sprout' ? 1 : 0), 0));
     expect(g.overgrows).toBe(h.filter((e) => e.t === 'Overgrow').length);
     expect(g.severedTiles).toBe(h.reduce((n, e) => n + (e.t === 'Sever' ? e.coords.length : 0), 0));
     expect(g.fruitUses).toBe(h.filter((e) => e.t === 'Fruit').length);
     expect(g.knocked).toBe(h.some((e) => e.t === 'Knock'));
+  });
+
+  it('choice and early-turn numbers add up', () => {
+    expect(g.choiceTurns).toBeGreaterThanOrEqual(0);
+    expect(g.choiceTurns).toBeLessThanOrEqual(g.turns);
+    expect(g.noTileTurnsEarly).toBe(g.tilesByTurn.slice(0, 5).filter((n) => n === 0).length);
   });
 
   it('per-turn numbers add up', () => {
@@ -60,9 +67,19 @@ describe('sim: batches and metrics', () => {
       'undercutRate', 'knockReversalRate', 'firstContactTurn', 'firstPlayerWinRate', 'byBot', 'doubleStrangles',
       'strangleChancesPerGame', 'largestSever', 'largestSwing', 'comebacks', 'closeGames', 'meanLegalActions',
       'noTileTurnRate', 'tilesPerTurnEarly', 'avgGameLength',
+      'choiceRate', 'noTileRateEarly', 'avgScoreGap', 'closeGameRate', 'strangleRate',
     ]) {
       expect(m).toHaveProperty(k);
     }
+  });
+
+  it('rates are between 0 and 1 and consistent with counts', () => {
+    for (const k of ['choiceRate', 'noTileRateEarly', 'closeGameRate', 'strangleRate'] as const) {
+      expect(m[k]).toBeGreaterThanOrEqual(0);
+      expect(m[k]).toBeLessThanOrEqual(1);
+    }
+    expect(m.closeGameRate).toBeCloseTo(m.closeGames / m.games);
+    expect(m.avgScoreGap).toBeGreaterThanOrEqual(0);
   });
 
   it('greedy beats random', () => {
