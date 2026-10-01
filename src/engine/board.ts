@@ -4,6 +4,9 @@ import type { Coord, Player, RootStyle } from './types.js';
 /** Normalises -0 to 0 so keys and JSON stay canonical. */
 const n0 = (x: number): number => x + 0;
 
+/** A fresh copy of a coord with -0 normalised to 0 (keeps state JSON-stable). */
+export const normalizeCoord = (c: Coord): Coord => ({ q: n0(c.q), r: n0(c.r) });
+
 export const coordKey = (c: Coord): string => `${n0(c.q)},${n0(c.r)}`;
 
 export const parseKey = (key: string): Coord => {

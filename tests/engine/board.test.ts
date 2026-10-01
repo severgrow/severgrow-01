@@ -12,6 +12,7 @@ import {
   isOnBoard,
   mirror,
   neighbors,
+  normalizeCoord,
   parseKey,
   rootCoord,
   scaleCoord,
@@ -168,5 +169,15 @@ describe('rootCoord', () => {
     for (const style of ['ring2', 'corner'] as const) {
       expect(mirror(rootCoord(0, style, 3))).toEqual(rootCoord(1, style, 3));
     }
+  });
+});
+
+describe('normalizeCoord', () => {
+  it('copies and turns -0 into 0', () => {
+    const input = { q: -0, r: -0 };
+    const out = normalizeCoord(input);
+    expect(out).not.toBe(input);
+    expect(Object.is(out.q, -0) || Object.is(out.r, -0)).toBe(false);
+    expect(normalizeCoord({ q: -2, r: 3 })).toEqual({ q: -2, r: 3 });
   });
 });

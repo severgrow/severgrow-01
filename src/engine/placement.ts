@@ -1,4 +1,4 @@
-import { addCoord, allNeighbors, coordKey, isConnected, scaleCoord } from './board.js';
+import { addCoord, allNeighbors, coordKey, isConnected, normalizeCoord, scaleCoord } from './board.js';
 import { DIRECTIONS } from './constants.js';
 import { IllegalActionError } from './errors.js';
 import { validateRun, validateSet, takeCards } from './melds.js';
@@ -21,7 +21,7 @@ const isCoord = (c: unknown): c is Coord =>
 
 const assertCoord = (c: unknown): Coord => {
   if (!isCoord(c)) throw new IllegalActionError('INVALID_COORD', 'coordinates must be integer {q, r}');
-  return { q: c.q, r: c.r };
+  return normalizeCoord(c);
 };
 
 /** start, start+dir, start+2*dir, ... (n hexes). */
