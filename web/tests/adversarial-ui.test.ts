@@ -88,14 +88,14 @@ describe('adversarial UI tests', () => {
     expect(h.value).toBeGreaterThanOrEqual(n);
   });
 
-  it('ADVERSARIAL 5: switching theme (or reloading after a rotation) keeps the game exactly', () => {
+  it('ADVERSARIAL 5: changing a display setting (or reloading after a rotation) keeps the game exactly', () => {
     const { ses } = playThrough(31, () => {});
     const mid = new Session(playGame(32, undefined, 60));
     for (const s of [ses, mid]) {
       const raw = encodeSave({ state: s.state, coach: null });
-      const settingsBefore = parseSettings(JSON.stringify({ theme: 'ink' }));
-      const settingsAfter = { ...settingsBefore, theme: 'tabletop' as const };
-      expect(settingsAfter.theme).not.toBe(settingsBefore.theme);
+      const settingsBefore = parseSettings(JSON.stringify({ largeText: false }));
+      const settingsAfter = { ...settingsBefore, largeText: true };
+      expect(settingsAfter.largeText).not.toBe(settingsBefore.largeText);
       const back = decodeSave(raw)!;
       expect(JSON.stringify(back.state)).toBe(JSON.stringify(s.state));
       // The restored game still plays on identically.

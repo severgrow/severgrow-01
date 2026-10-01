@@ -20,8 +20,10 @@ import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
 import type { Settings } from './logic/settings.js';
-import { THEMES, THEME_IDS, cssVars, resolveColors } from './logic/themes.js';
-import type { ThemeId } from './logic/themes.js';
+import { THEMES, cssVars, resolveColors } from './logic/themes.js';
+
+/** The one look (Ink and glow colours, organic shapes). */
+const THEME = THEMES.ink;
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf, el, star } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
@@ -64,7 +66,7 @@ const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 /** Animation time scale (0 = no animations). */
 const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1);
 /** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : THEMES[settings.theme].style.motion);
+const motion = () => (settings.reduceMotion ? 0 : THEME.style.motion);
 
 // ---------- game state ----------
 
@@ -94,10 +96,10 @@ const save = () => {
   if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach }));
 };
 
-// ---------- themes ----------
+// ---------- the look ----------
 
 function applyTheme() {
-  const t = THEMES[settings.theme];
+  const t = THEME;
   const root = document.documentElement;
   root.dataset.theme = t.id;
   for (const [k, v] of Object.entries(cssVars(t))) root.style.setProperty(k, v);
@@ -107,39 +109,11 @@ function applyTheme() {
   sound.tune(t.style.soundBase, t.style.soundWave);
   if (session) board.setup(session.state.config, session.state.terrain, t.style);
   drawLogo();
-  renderThemePickers();
   render();
 }
 
-function renderThemePickers() {
-  for (const host of document.querySelectorAll<HTMLElement>('[data-theme-pick]')) {
-    host.replaceChildren(
-      ...THEME_IDS.map((id) => {
-        const t = THEMES[id];
-        const c = resolveColors(t);
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `theme-swatch${settings.theme === id ? ' on' : ''}`;
-        b.dataset.themeId = id;
-        b.setAttribute('role', 'radio');
-        b.setAttribute('aria-checked', String(settings.theme === id));
-        b.setAttribute('aria-label', `${t.name}: ${t.description}`);
-        b.innerHTML = `<span class="sw" style="background:${c.bg};border-color:${c.line}"><i style="background:${c.you}"></i><i style="background:${c.bot}"></i><i style="background:${c.gold}"></i></span><span class="sw-name" style="font-family:'${t.style.font}'">${t.name}</span>`;
-        b.addEventListener('click', () => {
-          sound.unlock();
-          sound.click();
-          settings.theme = id as ThemeId;
-          saveSettings();
-          applyTheme();
-        });
-        return b;
-      }),
-    );
-  }
-}
-
 function drawLogo() {
-  const c = resolveColors(THEMES[settings.theme]);
+  const c = resolveColors(THEME);
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
     <g stroke="${c.you}" stroke-width="3" stroke-linecap="round" fill="none">
       <path d="M60 50 L34 30"/><path d="M60 50 L86 30"/><path d="M60 50 L60 74" stroke-dasharray="2 6"/>
@@ -198,6 +172,10 @@ function renderHowTo() {
 }
 
 function syncSettingsForm() {
+  // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
+  const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
+  vib.disabled = !('vibrate' in navigator);
+  $('vibration-label').textContent = vib.disabled ? 'Vibration (not available on this phone)' : 'Vibration';
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
@@ -229,7 +207,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   for (const w of [...waiters]) w();
   pumping = false;
   session = new Session(state, HUMAN);
-  coach = c ?? freshCoach();
+  coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
   shownScores = [v.score, v.opponentScore];
@@ -239,7 +217,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, THEMES[settings.theme].style);
+  board.setup(state.config, state.terrain, THEME.style);
   showScreen('game');
   scheduleBot();
 }
@@ -1046,7 +1024,6 @@ function renderCoach(advice: Advice | null) {
     $('coach-why').hidden = !coachWhyOpen;
     $('coach-why-btn').setAttribute('aria-expanded', String(coachWhyOpen));
     $('coach-why-btn').textContent = coachWhyOpen ? 'Less' : 'Why?';
-    $<HTMLButtonElement>('coach-next').disabled = advice.choices < 2;
     $('coach-show').textContent = guideGoal ? 'Hide arrow' : 'Show me where';
     $('coach-show').setAttribute('aria-pressed', String(!!guideGoal));
   } else if (showSummary && session) {
@@ -1257,13 +1234,22 @@ bind('coach-why-btn', () => {
   coachWhyOpen = !coachWhyOpen;
   render();
 });
-bind('coach-next', () => {
-  const ideas = Math.min(5, currentAdvice()?.choices ?? 1); // a few good ideas, not dozens
-  coach.choice = (coach.choice + 1) % ideas;
-  guideGoal = null;
-  session?.cancel();
-  save();
-  render();
+// Sound and vibration can't be checked from a computer: let the player test them here.
+const canVibrate = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+bind('test-sound', () => {
+  sound.unlock();
+  const was = sound.enabled;
+  sound.enabled = true;
+  sound.click();
+  sound.chime(0.15);
+  setTimeout(() => sound.snap(), 600);
+  setTimeout(() => sound.fanfare(true), 1300);
+  setTimeout(() => (sound.enabled = was), 2400);
+  $('test-note').textContent = "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.";
+});
+bind('test-vibration', () => {
+  vibrate(true, [60, 60, 120]);
+  $('test-note').textContent = canVibrate ? 'Your phone should buzz three times.' : "This phone's browser doesn't let websites vibrate (iPhones never do).";
 });
 bind('coach-summary-ok', () => {
   coach.summaryDone = true;

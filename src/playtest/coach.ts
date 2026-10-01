@@ -79,10 +79,10 @@ const GLOSSARY: Record<string, string> = {
   root: 'the big round bulb you start from',
   'discard pile': 'the cards thrown away',
   deck: 'the face-down pile',
-  combo: 'cards that go together',
+  combo: '3+ cards played together',
   'gold hex': 'a yellow hex',
   strength: 'the number on a tile',
-  'weak spot': 'one tile holding up many others',
+  'weak spot': 'one tile holding up others',
   withers: 'disappears',
   'leftover cards': 'cards that do not fit a combo',
   rot: 'disappear',
@@ -121,63 +121,58 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   goal: {
     active: () => true,
     fits: () => true,
-    text: ({ say }) => `Your goal: grow a network of tiles from your ${say('root')}. Every tile must stay joined to it.`,
+    text: ({ say }) => `Grow tiles out from your ${say('root')}. Keep every tile joined to it.`,
   },
   draw: {
     active: () => true,
     fits: ({ v }) => v.phase === 'DRAW',
-    text: ({ say }) =>
-      `Each turn starts with a draw. Take the top card of the ${say('discard pile')} only if it makes a ${say('combo')}. Otherwise draw from the ${say('deck')}.`,
+    text: ({ say }) => `Take the ${say('discard pile')} card only if it makes a ${say('combo')}.`,
   },
   combos: {
     active: () => true,
     fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'meld'),
-    text: ({ say }) =>
-      `A ${say('combo')} is 3 or more cards played together. A Hypha is cards of one suit in a row, like 3-4-5: it grows a straight line. A Bloom is the same number in different suits: it grows a small clump.`,
+    text: ({ say }) => `A ${say('combo')}: one suit in a row (3-4-5) grows a line; one number grows a clump.`,
   },
   sprout: {
     active: ({ v }) => v.config.sproutsPerTurn > 0,
     fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'sprout'),
-    text: ({ say }) =>
-      `A Sprout plays one card as one tile next to your network. Use it when you have no ${say('combo')}, or to grab a gold hex.`,
+    text: ({ say }) => `Sprout: one card, one tile. Handy when you have no ${say('combo')}.`,
   },
   strength: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.taken > 0),
-    text: ({ say }) => `Every tile has a ${say('strength')}. A stronger tile can replace a weaker bot tile. The same strength cannot.`,
+    text: ({ say }) => `A higher ${say('strength')} replaces a weaker bot tile. Equal can't.`,
   },
   gold: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.onRich > 0),
-    text: ({ say }) => `A ${say('gold hex')} is worth 2 points. Other hexes are worth 1.`,
+    text: ({ say }) => `A ${say('gold hex')} scores 2 points.`,
   },
   connection: {
     active: () => true,
     fits: ({ v }) =>
       threats(v, v.player).length > 0 || Object.values(v.board).filter((t) => t?.owner === v.player && !t.root).length >= 3,
-    text: ({ say }) => `A tile that loses its path to your root ${say('withers')}. Protect every ${say('weak spot')} in your network.`,
+    text: ({ say }) => `Cut off from your root, a tile ${say('withers')}. Guard each ${say('weak spot')}.`,
   },
   cutting: {
     active: () => true,
     fits: ({ v, ranked }) => boardFacts(ranked).some((m) => m.botCut > 0) || threats(v, other(v.player)).length > 0,
-    text: ({ say }) => `Look for a ${say('weak spot')} in the bot's network. Replace that one tile and everything behind it ${say('withers')}.`,
+    text: ({ say }) => `Take a bot ${say('weak spot')} and everything behind it ${say('withers')}.`,
   },
   leftovers: {
     active: ({ v }) => rotOn(v),
     fits: ({ v }) => v.phase === 'DISCARD' || v.phase === 'KNOCK',
-    text: ({ v, say }) =>
-      `Watch your ${say('leftover cards')}. If they add up to more than ${v.config.rotThreshold} when you end your turn, some edge tiles ${say('rot')}.`,
+    text: ({ v, say }) => `${say('leftover cards')} over ${v.config.rotThreshold} at turn end make edge tiles ${say('rot')}.`,
   },
   knock: {
     active: ({ v }) => knockOn(v),
     fits: ({ v }) => v.phase === 'KNOCK',
-    text: ({ v, say }) =>
-      `When your leftover cards add up to ${v.config.knockDeadwood} or less, you can ${say('knock')}. The bot gets one last turn, then the higher score wins.`,
+    text: ({ v, say }) => `Leftovers of ${v.config.knockDeadwood} or less? You can ${say('knock')}: the bot gets one last turn.`,
   },
   fruit: {
     active: ({ v }) => fruitOn(v),
     fits: ({ ranked }) => ranked.some((r) => r.facts.kind === 'fruit'),
-    text: () => 'Once per game you can use Fruit: give up 3 of your joined tiles to destroy one touching bot tile, even a strong one.',
+    text: () => 'Fruit, once per game: give up 3 tiles to destroy one touching bot tile.',
   },
   strangle: {
     active: () => true,
@@ -186,13 +181,12 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
       const near = Object.entries(v.board).some(([k, t]) => t?.owner === v.player && hexDistance(parseKey(k), target) <= 2);
       return near || boardFacts(ranked).some((m) => m.wins);
     },
-    text: ({ say }) =>
-      `If you ${say('strangle')} the bot's root, you win at once. Rock and the board edge help, but at least one side must be your tile.`,
+    text: ({ say }) => `Win at once: ${say('strangle')} the bot's root.`,
   },
   planning: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.exposureAfter > m.exposureBefore),
-    text: () => 'Before a big move, check what the bot could cut afterwards. Tap a tile to see how much you would lose.',
+    text: () => 'Before a big move, check what the bot could cut back.',
   },
 };
 

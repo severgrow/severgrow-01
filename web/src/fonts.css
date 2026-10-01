@@ -1,5 +1,5 @@
 /* Free fonts (SIL Open Font License), bundled in web/src/fonts. Latin only, woff2.
-   The browser downloads only the font of the theme in use. */
+   One typeface: Bricolage Grotesque (text 500, numbers 800). */
 @font-face {
   font-family: 'Bricolage Grotesque';
   font-style: normal;
@@ -13,25 +13,4 @@
   font-weight: 800;
   font-display: swap;
   src: url('./fonts/bricolage-grotesque-latin-800-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Young Serif';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./fonts/young-serif-latin-400-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Fredoka';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('./fonts/fredoka-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Fredoka';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('./fonts/fredoka-latin-600-normal.woff2') format('woff2');
 }

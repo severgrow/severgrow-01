@@ -10,7 +10,7 @@ import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
 import { botCut, cutDemo, endgame } from './positions.js';
 
-const THEMES = ['ink', 'nature', 'tabletop'] as const;
+const THEMES = ['ink'] as const; // one look since v0.4 (the theme switch was removed)
 const SIZES = { phone: { width: 390, height: 844 }, desktop: { width: 1280, height: 800 } } as const;
 const shotsDir = process.argv.find((a) => a.startsWith('--shots='))?.slice(8);
 const results: { name: string; ok: boolean; note?: string | undefined }[] = [];
@@ -120,7 +120,7 @@ const playTurn = async (page: Page) => {
 }
 
 for (const theme of THEMES) {
-  const dir = shotsDir ? `${shotsDir}/${theme}` : null;
+  const dir = shotsDir ?? null;
   if (dir) mkdirSync(dir, { recursive: true });
 
   // --- smoke: menu, a fresh game, a few turns with animations on ---
@@ -225,15 +225,16 @@ for (const theme of THEMES) {
     await page.close();
   }
 
-  // --- adversarial 5: switch theme and rotate mid-game ---
+  // --- adversarial 5: change a display setting and rotate mid-game ---
   {
     const { page } = await openPage(theme, 'phone', {}, demo.state);
     await page.click('#menu-continue');
     await page.click(`#hand [data-card="${demo.card}"]`);
     const before = await stateJson(page);
     await page.click('#hud-menu');
-    await page.locator('#sheet-menu .theme-swatch').nth((THEMES.indexOf(theme) + 1) % 3).click();
-    await page.click('#gm-resume');
+    await page.click('#gm-settings');
+    await page.locator('[data-setting="largeText"]').click();
+    await page.click('#sheet-settings [data-close]');
     await page.setViewportSize({ width: 844, height: 390 }); // rotate to landscape
     await page.waitForTimeout(200);
     await page.setViewportSize({ width: 390, height: 844 });
@@ -242,7 +243,7 @@ for (const theme of THEMES) {
     await page.reload(); // a reload (some phones reload on rotation) keeps the game too
     await page.click('#menu-continue');
     const reloaded = await stateJson(page);
-    check(`${theme}: ADVERSARIAL 5 theme switch and rotation keep the game`, before === after && after === reloaded && (await boardTiles(page)) === (await stateTiles(page)));
+    check(`${theme}: ADVERSARIAL 5 a settings change and rotation keep the game`, before === after && after === reloaded && (await boardTiles(page)) === (await stateTiles(page)));
     await page.close();
   }
 

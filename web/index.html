@@ -27,7 +27,6 @@
             <button id="menu-settings" class="btn ghost" type="button"><span class="i" data-icon="gear"></span>Settings</button>
           </div>
         </div>
-        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
       </div>
     </section>
 
@@ -77,7 +76,6 @@
               <div class="coach-actions">
                 <button id="coach-show" class="btn small" type="button" aria-pressed="false">Show me where</button>
                 <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false">Why?</button>
-                <button id="coach-next" class="btn link small" type="button">Another idea</button>
               </div>
             </div>
             <div id="coach-summary" hidden>
@@ -121,12 +119,15 @@
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title">Settings</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
-        <h3>Theme</h3>
-        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
         <h3>Sound and feel</h3>
         <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
         <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
-        <label class="row"><span>Vibration</span><input type="checkbox" data-setting="vibration" /></label>
+        <label class="row"><span id="vibration-label">Vibration</span><input type="checkbox" data-setting="vibration" /></label>
+        <div class="test-row">
+          <button id="test-sound" class="btn ghost small" type="button">Test sound</button>
+          <button id="test-vibration" class="btn ghost small" type="button">Test vibration</button>
+        </div>
+        <p id="test-note" class="muted small"></p>
         <h3>Animations</h3>
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
@@ -146,8 +147,6 @@
         <button id="gm-new" class="btn ghost" type="button">New game</button>
         <button id="gm-howto" class="btn ghost" type="button">How to play</button>
         <button id="gm-settings" class="btn ghost" type="button">Settings</button>
-        <h3>Theme</h3>
-        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
         <button id="gm-main" class="btn link" type="button">Main menu</button>
       </div>
     </section>

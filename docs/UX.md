@@ -4,7 +4,7 @@ This file explains the design of the playable page in plain words. The rules of 
 game are in `docs/SPEC.md` and are not changed by anything here: the page only
 draws the game and listens to taps.
 
-## Design rules (all themes)
+## Design rules
 
 - **One hero: the network.** Your tiles are joined to your root by visible veins.
   A link that is the only way back to the root is drawn thin and flickers, so you
@@ -23,15 +23,14 @@ draws the game and listens to taps.
 - **Nothing downloaded.** No images, no sound files, no trackers, no outside
   requests. Fonts are free (SIL Open Font License) and bundled in `web/src/fonts`.
 
-## The three themes
+## The look: Ink and glow
 
-Every colour, the typeface, tile shape, texture, shadow and movement strength come
-from design tokens in `web/src/logic/themes.ts`. A test checks that every theme
-defines every token, uses at most 5 palette colours, and has readable contrast.
+*Near-black paper, soft organic tiles, and one glowing colour for your network.*
 
-### Theme A: Ink and glow
-
-*Near-black paper, flat bold shapes, and one glowing colour for your network.*
+Three themes were built and played (Ink and glow, Macro nature, Tabletop). The
+player chose Ink and glow's colours with Macro nature's shapes, so the page now has
+this one look and no theme switch. Everything still comes from design tokens in
+`web/src/logic/themes.ts`; a test checks every token, the 5-colour limit and contrast.
 
 | Role | Hex |
 | --- | --- |
@@ -41,43 +40,13 @@ defines every token, uses at most 5 palette colours, and has readable contrast.
 | Signal (bot) | `#ff6b4a` |
 | Gold | `#f2c14e` |
 
-Typeface: **Bricolage Grotesque** (a clean sans with quirky details). Flat hexagons, no texture, no shadows. Only your veins
-and root glow. Marks: you = dot, bot = small square, bot tiles hatched.
-
-### Theme B: Macro nature
-
-*Dark soil up close: soft organic tiles joined by fine living veins.*
-
-| Role | Hex |
-| --- | --- |
-| Soil (background) | `#1a120c` |
-| Bone (text) | `#f0e2c4` |
-| Lichen (you) | `#86d0bd` |
-| Rust (bot) | `#e0703f` |
-| Amber (gold) | `#e3b04b` |
-
-Typeface: **Young Serif** (a soft, warm serif). Slightly uneven, soft-cornered hexes; a soil texture made
-in code (SVG noise); thin curved veins. Marks: you = ring, bot = diamond, bot tiles
-grained.
-
-### Theme C: Tabletop
-
-*A board game on a dark wooden table: chunky pieces, printed cards, lamp light.*
-
-| Role | Hex |
-| --- | --- |
-| Walnut (background) | `#24160c` |
-| Parchment (text, cards) | `#f4e7cf` |
-| Enamel blue (you) | `#6aa3e0` |
-| Lacquer red (bot) | `#e0604a` |
-| Brass (gold) | `#d8a23c` |
-
-Typeface: **Fredoka** (rounded and friendly, like printed game pieces). Chunky pieces with a darker side and a bevel, a wooden
-table texture made in code, a soft lamp-light vignette, parchment cards. Marks:
-you = pip, bot = triangle, bot tiles striped.
-
-Shades between these colours (for example the empty hexes) are mixes of two palette
-colours, never new colours.
+- **Typeface:** Bricolage Grotesque (a clean sans with quirky details; text 500,
+  numbers 800). Free (SIL Open Font License), bundled in `web/src/fonts`.
+- **Shapes (from Macro nature):** soft, slightly uneven hexes; thin curved veins;
+  rounded cards and pill-shaped main buttons.
+- **Glow:** only your network's veins and root glow.
+- **Marks:** you = ring, bot = diamond, and the bot's tiles are grained.
+- Shades between these colours (empty hexes, rock) are mixes of two palette colours.
 
 ## Playing
 
@@ -101,10 +70,10 @@ colours, never new colours.
 
 ## The coach
 
-The coach suggests one move at a time for your first 15 actions. **Show me where**
-puts a bouncing arrow on the one thing to tap next: first the card, then the hex,
-then Confirm (or the deck, or "End turn"). **Why?** explains the move, **Another
-idea** shows a different good move. It never plays for you.
+The coach suggests its one best move at a time for your first 15 actions, with one
+short tip. **Show me where** puts a bouncing arrow on the one thing to tap next:
+first the card, then the hex, then Confirm (or the deck, or "End turn"). **Why?**
+explains the move. It never plays for you.
 
 ## Animations
 
@@ -128,19 +97,19 @@ leave a wrong board (tests check this).
 
 **Replay bot** (bottom-left of the board) plays the bot's last turn again. **Skip**
 (bottom-right, while animating) jumps to the end. With **Reduce motion** on, movement
-becomes quick fades; each theme also sets its own movement strength.
+becomes quick fades.
 
 ## Sound and feel
 
 All sounds are made in code with the Web Audio API: a soft click for taps, a rising
 hum for growth, a bright chime on gold, a snap and a low thud for a cut, a soft sad
-tone for lost tiles, and a short fanfare for a win. "Music" is a very quiet hum. Each
-theme tunes the pitch and tone slightly. Nothing plays before your first tap. Phones
-that support it vibrate lightly on cuts and wins.
+tone for lost tiles, and a short fanfare for a win. "Music" is a very quiet hum.
+Nothing plays before your first tap. Phones that support it vibrate lightly on cuts and wins (iPhone browsers never allow
+websites to vibrate). Settings has **Test sound** and **Test vibration** buttons.
 
 ## Settings (saved in this browser only)
 
-Theme, Sound, Music, Vibration, Reduce motion, Animation speed (Slow, Normal, Fast,
+Sound, Music, Vibration, Reduce motion, Animation speed (Slow, Normal, Fast,
 Off), Confirm moves (on: preview then Confirm; off: a tap on a hex plays at once),
 Show weak spots, Large text, Coach.
 
@@ -161,5 +130,5 @@ Show weak spots, Large text, Coach.
   animation steps, highlights, taps and the game session.
 - `web/src/ui/` drawing and effects: board (SVG), icons, sound, the bot worker client.
 - `web/src/main.ts` ties it together; `web/src/style.css` holds the looks.
-- `web/e2e/smoke.ts` plays the page in a real browser in every theme and saves the
-  screenshots in `docs/screens/<theme>/`.
+- `web/e2e/smoke.ts` plays the page in a real browser and saves the
+  screenshots in `docs/screens/`.
