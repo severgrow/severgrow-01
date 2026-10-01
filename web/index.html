@@ -12,14 +12,16 @@
     <main id="app">
       <header class="top">
         <h1>Mycelium</h1>
-        <div class="top-actions">
-          <div class="mode" role="group" aria-label="Rules">
-            <button type="button" data-mode="lite">Lite</button>
-            <button type="button" data-mode="classic">Classic</button>
-          </div>
-          <button id="new-game" class="ghost" type="button">New game</button>
-        </div>
+        <button id="coach-toggle" class="toggle" type="button" aria-pressed="true">Coach: ON</button>
       </header>
+      <div class="game-bar">
+        <div class="mode" role="group" aria-label="Rules">
+          <button type="button" data-mode="lite">Lite</button>
+          <button type="button" data-mode="classic">Classic</button>
+        </div>
+        <button id="new-game" class="ghost" type="button">New game</button>
+        <button id="tutorial-game" class="ghost" type="button">Tutorial game</button>
+      </div>
 
       <section class="summary" aria-label="How to play">
         <p>Grow your network.</p>
@@ -27,14 +29,29 @@
         <p>Cut the bot's links.</p>
       </section>
 
-      <div id="coach" class="coach" role="note" hidden>
-        <b id="coach-title"></b>
-        <span id="coach-text"></span>
-        <div class="coach-actions">
-          <button id="coach-ok" type="button" hidden>Got it</button>
-          <button id="coach-skip" class="link" type="button">Skip tutorial</button>
+      <section id="coach" class="coach" aria-label="Coach" hidden>
+        <div class="coach-head">
+          <b>Coach</b>
+          <span id="coach-step" class="muted small"></span>
         </div>
-      </div>
+        <div id="coach-advice">
+          <p><b>Suggested:</b> <span id="coach-suggested"></span></p>
+          <p><b>Why:</b> <span id="coach-why"></span></p>
+          <p id="coach-tip" class="tip"></p>
+          <div class="coach-actions">
+            <button id="coach-show" class="ghost" type="button">Show me</button>
+            <button id="coach-do" type="button">Do it for me</button>
+            <button id="coach-next" class="link" type="button">Not this, show another</button>
+          </div>
+        </div>
+        <div id="coach-summary" hidden>
+          <p><b id="coach-summary-title"></b></p>
+          <ul id="coach-summary-list"></ul>
+          <div class="coach-actions">
+            <button id="coach-summary-ok" type="button">Got it</button>
+          </div>
+        </div>
+      </section>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
 
@@ -78,7 +95,7 @@
       </section>
 
       <p class="muted small footer">
-        <button id="replay-coach" class="link" type="button">Show me how to play again</button>
+        <button id="restart-tutorial" class="link" type="button">Restart tutorial</button>
       </p>
     </main>
     <script type="module" src="./src/main.ts"></script>

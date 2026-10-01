@@ -163,3 +163,15 @@ button:focus-visible, .card:focus-visible { outline: 3px solid var(--accent); ou
 .footer { margin-top: 18px; }
 .top { flex-wrap: wrap; }
 .top-actions button { white-space: nowrap; }
+
+.game-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.game-bar button { white-space: nowrap; }
+.toggle { padding: 6px 12px; white-space: nowrap; }
+.toggle[aria-pressed='false'] { background: transparent; color: var(--ink); border-color: var(--line); }
+.coach p { margin: 4px 0; }
+.coach-head { display: flex; justify-content: space-between; align-items: baseline; }
+.coach .tip { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: var(--panel); font-size: 0.9rem; }
+.coach .coach-actions { flex-wrap: wrap; }
+.coach ul { margin: 4px 0; padding-left: 20px; }
+.board .coach-hex { fill: none; stroke: var(--you); stroke-width: 3; stroke-dasharray: 6 4; pointer-events: none; }
+.card.coach-card { box-shadow: 0 0 0 3px var(--you); }
