@@ -119,6 +119,42 @@ const playTurn = async (page: Page) => {
   await page.close();
 }
 
+// --- new player, bot level, undo ---
+{
+  const { page, errors } = await openPage('ink', 'phone', { speed: 'skip' });
+  await page.evaluate(() => {
+    localStorage.removeItem('severgrow.settings.v1');
+    localStorage.removeItem('severgrow.seen');
+  });
+  await page.reload();
+  check('first visit: the menu suggests the tutorial', await page.locator('#menu-welcome').isVisible());
+  await page.locator('#menu [data-level-seg] .seg-btn', { hasText: 'Easy' }).click();
+  const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: string } } }).__severgrow.settings().level);
+  check('the bot level can be chosen on the menu', level === 'easy', level);
+  await page.goto(BASE);
+  await page.click('#menu-continue').catch(() => {});
+  if (!(await getState(page))) await page.click('#menu-play');
+  await page.click('#deck');
+  await idle(page);
+  const before = await stateJson(page);
+  const card = page.locator('#hand .card.playable').first();
+  let undone = false;
+  if ((await card.count()) > 0) {
+    await card.click();
+    const t = page.locator('.l-over .target').first();
+    if ((await t.count()) > 0) {
+      await tapHex(page, (await t.getAttribute('data-key'))!);
+      await page.click('#confirm-play');
+      await idle(page);
+      await page.click('#moves .undo');
+      undone = (await stateJson(page)) === before && (await boardTiles(page)) === (await stateTiles(page));
+    }
+  }
+  check('undo takes back a move exactly', undone);
+  check('new-player checks: no page errors', errors.length === 0, errors.join(' | '));
+  await page.close();
+}
+
 for (const theme of THEMES) {
   const dir = shotsDir ?? null;
   if (dir) mkdirSync(dir, { recursive: true });

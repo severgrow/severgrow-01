@@ -245,8 +245,8 @@ button {
 /* ---------- game layout ---------- */
 .game {
   display: grid;
-  /* scores, turn steps, hint, then the board and controls */
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  /* scores, turn steps, end-of-game note, hint, then the board and controls */
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 .hud {
   border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
@@ -1577,4 +1577,52 @@ svg.usable .hex-cell {
   margin: 0 10px;
   vertical-align: middle;
   background: var(--c-line);
+}
+
+/* ---------- welcome, record, level, endgame note ---------- */
+.welcome {
+  margin: 0 0 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--c-line);
+  border-left: 3px solid var(--c-gold);
+  background: var(--c-surface);
+  font-size: 0.92rem;
+  text-align: left;
+}
+.level-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.stats-line {
+  margin: 6px 0 0;
+  min-height: 1em;
+}
+.endnote {
+  margin: 4px auto 0;
+  padding: 2px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--c-gold);
+  color: var(--c-gold);
+  font-weight: var(--w-num);
+  font-size: 0.85rem;
+  justify-self: center;
+}
+/* Each part keeps its own row even when another part is hidden. */
+.game > .hud {
+  grid-row: 1;
+}
+.game > .steps {
+  grid-row: 2;
+}
+.game > .endnote {
+  grid-row: 3;
+}
+.game > .hint {
+  grid-row: 4;
+}
+.game > .play {
+  grid-row: 5;
 }

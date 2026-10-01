@@ -72,6 +72,24 @@ this one look and no theme switch. Everything still comes from design tokens in
   losing it would cost.
 - **Deck and discard** are small stacks with counts; tap one to draw.
 
+## Playing against the bot
+
+- **Bot level** (menu and Settings): Easy, Normal or Hard. Normal is the original bot;
+  Easy sometimes settles for a lesser move; Hard plans its whole turn and won 55% of
+  games against Normal in testing.
+- **Undo**: take back the moves you made this turn (growing tiles, or pressing "Throw a
+  card away"), until you draw a new card or throw one away.
+- **Points before you play**: the preview says what a move scores, e.g.
+  "+3 tiles, cuts 2 · +5 points".
+- **The end is never a surprise**: "3 turns left", "Last turn!" or "Only 4 cards left"
+  shows under the turn steps near the end.
+- **Your record**: wins, losses, best score and winning streak, on the menu and the
+  game-over screen (this browser only). Game over also shows how each score was made
+  (tiles, and how many on gold).
+- **First visit**: the menu suggests the tutorial game.
+- **Install it**: "Add to Home Screen" makes it an app that also works offline. The page
+  always checks for a newer version first.
+
 ## The coach
 
 The coach suggests its one best move at a time for your first 15 actions, with one

@@ -2,8 +2,8 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { SUIT_NAMES, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
-import type { Action, Card, Player, State, View } from '../../src/engine/index.js';
+import { coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -12,7 +12,10 @@ import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
 import { isBoardAction, kindsAvailable, options, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
+import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
+import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { LEVELS } from '../../src/bots/levels.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -25,10 +28,11 @@ import { THEMES, cssVars, resolveColors } from './logic/themes.js';
 /** The one look (Ink and glow colours, organic shapes). */
 const THEME = THEMES.ink;
 import { opportunities, weakSpots } from './logic/weakspots.js';
-import { BoardView, NO_OVERLAY, S, centerOf, el, star } from './ui/board.js';
+import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
-import { SUIT_SVG, fillIcons } from './ui/icons.js';
+import { anim, cardFace, createEffects, shakeFrames } from './ui/effects.js';
+import { fillIcons } from './ui/icons.js';
 import { Sound, vibrate } from './ui/sound.js';
 
 const HUMAN: Player = 0;
@@ -61,6 +65,8 @@ const sameAction = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringif
 // ---------- settings ----------
 
 let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce());
+let stats = parseStats(store.get(STATS_KEY));
+const SEEN_KEY = 'severgrow.seen';
 if (store.get(SETTINGS_KEY) === null && store.get(COACH_KEY_OLD) === '0') settings = { ...settings, coach: false };
 const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 /** Animation time scale (0 = no animations). */
@@ -91,6 +97,7 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k) });
+const { flash, sparks, boardWrapPoint, floatText, caption, banner, flyCard, flyBack } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
   if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach }));
@@ -108,6 +115,7 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   sound.tune(t.style.soundBase, t.style.soundWave);
   if (session) board.setup(session.state.config, session.state.terrain, t.style);
+  lastBoard = null;
   drawLogo();
   render();
 }
@@ -137,6 +145,17 @@ function showScreen(name: 'menu' | 'game') {
     $('menu-play').textContent = canContinue ? 'New game' : 'Play';
     $('menu-play').classList.toggle('primary', !canContinue);
     $('menu-play').classList.toggle('ghost', canContinue);
+    // First visit: point new players at the tutorial.
+    const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
+    $('menu-welcome').hidden = !firstVisit;
+    $('menu-tutorial').classList.toggle('primary', firstVisit);
+    $('menu-tutorial').classList.toggle('ghost', !firstVisit);
+    if (firstVisit) {
+      $('menu-play').classList.remove('primary');
+      $('menu-play').classList.add('ghost');
+    }
+    $('menu-stats').textContent = statsLine(stats);
+    renderLevelPickers();
   }
   $('gameover').hidden = true;
   render();
@@ -171,7 +190,30 @@ function renderHowTo() {
   ].join('');
 }
 
+const LEVEL_NAMES = { easy: 'Easy', normal: 'Normal', hard: 'Hard' } as const;
+function renderLevelPickers() {
+  for (const host of document.querySelectorAll<HTMLElement>('[data-level-seg]')) {
+    host.replaceChildren(
+      ...LEVELS.map((lv) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `seg-btn${settings.level === lv ? ' on' : ''}`;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(settings.level === lv));
+        b.textContent = LEVEL_NAMES[lv];
+        b.addEventListener('click', () => {
+          settings = { ...settings, level: lv };
+          saveSettings();
+          renderLevelPickers();
+        });
+        return b;
+      }),
+    );
+  }
+}
+
 function syncSettingsForm() {
+  renderLevelPickers();
   // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
@@ -218,12 +260,14 @@ function beginSession(state: State, c: CoachProgress | null) {
   gameOverDismissed = false;
   botBusy = false;
   board.setup(state.config, state.terrain, THEME.style);
+  lastBoard = null;
   showScreen('game');
   scheduleBot();
 }
 
 function startGame(seed: number) {
-  log = ['New game. You go first.'];
+  store.set(SEEN_KEY, '1');
+  log = [`New game against the ${LEVEL_NAMES[settings.level].toLowerCase()} bot. You go first.`];
   beginSession(newGame(seed), null);
   save();
   banner('Your turn');
@@ -252,7 +296,13 @@ function currentAdvice(): Advice | null {
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
-  if (p.after.phase === 'GAME_OVER' && p.after.result) log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
+  if (p.after.phase === 'GAME_OVER' && p.after.result) {
+    log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
+    if (p.before.phase !== 'GAME_OVER') {
+      stats = recordResult(stats, p.after.result, HUMAN);
+      store.set(STATS_KEY, JSON.stringify(stats));
+    }
+  }
   log = log.slice(0, 300);
   if (by === HUMAN) {
     coach.step++;
@@ -294,8 +344,10 @@ function scheduleBot() {
     const started = performance.now();
     thinking = true;
     renderHud();
-    const action = await askBot(viewFor(session.state, BOT));
-    const beat = (first ? 700 : 280) * timeScale();
+    const action = await askBot(viewFor(session.state, BOT), settings.level);
+    // A short think before the bot's turn and before each tile move; housekeeping is quick.
+    const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
+    const beat = (first ? 550 : grows ? 300 : 90) * timeScale();
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
@@ -307,6 +359,8 @@ function scheduleBot() {
   })();
 }
 let thinking = false;
+let lastBoard: unknown = null;
+let lastOverlay = '';
 let coachWhyOpen = false;
 /** The move the coach's arrow is guiding to (null: no arrow). */
 let guideGoal: Action | null = null;
@@ -393,18 +447,6 @@ async function pump() {
   flushIdle();
 }
 
-const anim = (target: Element | null | undefined, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
-  if (!target) return null;
-  try {
-    return target.animate(frames, { fill: 'backwards', ...opts });
-  } catch {
-    return null;
-  }
-};
-const removeAfter = (a: Animation | null, node: Element, fallbackMs: number) => {
-  if (a) a.finished.then(() => node.remove()).catch(() => node.remove());
-  else setTimeout(() => node.remove(), fallbackMs);
-};
 const hexDist = (a: string, b: string) => {
   const p = parseKey(a);
   const q = parseKey(b);
@@ -435,7 +477,7 @@ async function playStep(step: Step, my: number) {
         await wait(240 * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        await wait(220 * f, my);
+        await wait(120 * f, my);
       }
       return;
     }
@@ -562,109 +604,6 @@ async function playStep(step: Step, my: number) {
   }
 }
 
-// ---------- effects ----------
-
-const shakeFrames = (a: number): Keyframe[] => [
-  { transform: 'translate(0,0)' },
-  { transform: `translate(${-a}px, ${a * 0.4}px)` },
-  { transform: `translate(${a * 0.8}px, ${-a * 0.3}px)` },
-  { transform: `translate(${-a * 0.4}px, ${a * 0.2}px)` },
-  { transform: 'translate(0,0)' },
-];
-
-function flash(key: string, f: number, big: boolean) {
-  const { x, y } = centerOf(key);
-  const c = el('circle', { cx: x, cy: y, r: S * 0.5, class: `fx-flash${big ? ' big' : ''}` }, board.fx);
-  removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: 1 }, { transform: `scale(${big ? 3.2 : 2.2})`, opacity: 0 }], { duration: 520 * Math.max(f, 0.3), easing: 'ease-out', fill: 'forwards' }), c, 600);
-}
-
-function sparks(key: string, who: 'you' | 'bot', delay: number, f: number) {
-  if (motion() === 0) return;
-  const { x, y } = centerOf(key);
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2 + i;
-    const d = S * (0.7 + (i % 3) * 0.28);
-    const p = el('path', { d: star(x, y, 3.4), class: `fx-spark ${who}` }, board.fx);
-    removeAfter(anim(p, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }], { duration: 560 * f, delay, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' }), p, 800);
-  }
-}
-
-function boardWrapPoint(key: string | null) {
-  const wrap = $('board-wrap').getBoundingClientRect();
-  if (!key) return { x: wrap.width / 2, y: wrap.height * 0.16 };
-  const p = board.screenPoint(key);
-  return { x: p.x - wrap.left, y: p.y - wrap.top };
-}
-
-function floatText(text: string, key: string, tone: string, f: number) {
-  const d = document.createElement('div');
-  d.className = `float num ${tone}`;
-  d.textContent = text;
-  const p = boardWrapPoint(key);
-  d.style.left = `${p.x}px`;
-  d.style.top = `${p.y}px`;
-  $('captions').appendChild(d);
-  removeAfter(anim(d, [{ transform: 'translate(-50%, -20%) scale(.7)', opacity: 0 }, { transform: 'translate(-50%, -90%) scale(1.15)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%, -200%) scale(1)', opacity: 0 }], { duration: 1600 * Math.max(f, 0.5), easing: 'ease-out', fill: 'forwards' }), d, 1600);
-}
-
-function caption(text: string, key: string | null, tone: string) {
-  const box = $('captions');
-  const d = document.createElement('div');
-  d.className = `caption ${tone}`;
-  d.textContent = text;
-  const p = boardWrapPoint(key);
-  const wrap = $('board-wrap').getBoundingClientRect();
-  d.style.left = `${Math.min(Math.max(p.x, 110), wrap.width - 110)}px`;
-  d.style.top = `${Math.min(Math.max(p.y + (key ? S * 1.1 : 0), 20), wrap.height - 40)}px`;
-  box.querySelectorAll('.caption').forEach((c) => c.remove());
-  box.appendChild(d);
-  const ms = 2400 * Math.max(timeScale(), 0.7);
-  removeAfter(anim(d, [{ opacity: 0, transform: 'translate(-50%, 6px)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.1 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, 0)' }], { duration: ms, fill: 'forwards' }), d, ms);
-}
-
-function banner(text: string) {
-  const b = $('banner');
-  b.textContent = text;
-  b.className = `banner ${text.startsWith('Bot') ? 'bot' : 'you'}`;
-  const f = Math.max(timeScale(), 0.5);
-  anim(
-    b,
-    motion() === 0
-      ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }]
-      : [{ transform: 'translate(-50%, 0) translateX(-40vw)', opacity: 0 }, { transform: 'translate(-50%, 0)', opacity: 1, offset: 0.22 }, { transform: 'translate(-50%, 0)', opacity: 1, offset: 0.75 }, { transform: 'translate(-50%, 0) translateX(30vw)', opacity: 0 }],
-    { duration: 1300 * f, easing: 'ease-in-out', fill: 'both' },
-  );
-}
-
-const cardFace = (c: Card) => `<span class="c-num num">${c.rank}</span><span class="c-suit">${SUIT_SVG[c.suit]}</span><span class="c-name">${SUIT_NAMES[c.suit]}</span>`;
-
-function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number) {
-  const d = document.createElement('div');
-  d.className = `flyer card s${c.suit}`;
-  d.innerHTML = cardFace(c);
-  Object.assign(d.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
-  document.body.appendChild(d);
-  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
-  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
-  const sc = to.height / Math.max(from.height, 1);
-  const frames: Keyframe[] =
-    motion() === 0
-      ? [{ opacity: 1 }, { opacity: 0 }]
-      : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-  removeAfter(anim(d, frames, { duration: 440 * f, easing: 'ease-in-out', fill: 'forwards' }), d, 0);
-}
-
-function flyBack(from: HTMLElement, to: HTMLElement, f: number) {
-  if (motion() === 0) return;
-  const a = from.getBoundingClientRect();
-  const b = to.getBoundingClientRect();
-  const d = document.createElement('div');
-  d.className = 'flyer card back';
-  Object.assign(d.style, { left: `${a.left}px`, top: `${a.top}px`, width: `${a.width}px`, height: `${a.height}px` });
-  document.body.appendChild(d);
-  removeAfter(anim(d, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.4)`, opacity: 0 }], { duration: 400 * f, easing: 'ease-in', fill: 'forwards' }), d, 0);
-}
-
 let scoreRaf = 0;
 function countScores(to: [number, number]) {
   const target: [number, number] = [to[HUMAN], to[BOT]];
@@ -779,6 +718,9 @@ function renderHud() {
     ? '<b>Game over</b>'
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''}</small>`;
   $('hint').textContent = hintText(session.view);
+  const note = st.phase === 'GAME_OVER' ? null : endgameNote(session.view);
+  $('endnote').hidden = !note;
+  $('endnote').textContent = note ?? '';
   // The turn as three steps; the current one is lit (only on your turn).
   const steps = $('steps');
   steps.hidden = st.phase === 'GAME_OVER';
@@ -845,7 +787,13 @@ function renderBoard(v: View, advice: Advice | null) {
     if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     if (showOpps) o.opps = opportunities(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
   }
-  board.render(queue.board, o);
+  // Redraw the board only when something on it changed (cheaper on older phones).
+  const key = JSON.stringify({ ...o, targets: o.targets ? [...o.targets] : null });
+  if (queue.board !== lastBoard || key !== lastOverlay) {
+    board.render(queue.board, o);
+    lastBoard = queue.board;
+    lastOverlay = key;
+  }
   $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
   $('tool-targets').setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
@@ -959,6 +907,7 @@ function renderControls(v: View, advice: Advice | null) {
     }
   }
   if (anySel && !pending) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
+  if (session.canUndo && !anySel) moves.append(button('Undo', 'ghost undo', () => undoMove(), 'Undo your last move'));
 
   if (pending) {
     const pv = previewMove(v, pending);
@@ -1075,6 +1024,12 @@ function renderGameOver() {
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   $('go-reason').textContent = resultReason(r, HUMAN);
+  const part = (p: Player) => {
+    const b = scoreBreakdown(st, p);
+    return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
+  };
+  $('go-break').textContent = `You: ${part(HUMAN)} · Bot: ${part(BOT)}`;
+  $('go-stats').textContent = statsLine(stats);
   $('go-highlights').replaceChildren(
     ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
       const li = document.createElement('li');
@@ -1097,6 +1052,22 @@ function renderHistory() {
 }
 
 // ---------- input ----------
+
+/** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
+function undoMove() {
+  if (!session) return;
+  fastForward();
+  if (!session.undo()) return;
+  queue.reset(session.state.board);
+  const v = session.view;
+  shownScores = [v.score, v.opponentScore];
+  scars = [];
+  inspectKey = null;
+  guideGoal = null;
+  log.unshift('You took back a move.');
+  save();
+  render();
+}
 
 function cancelSel() {
   session?.cancel();
@@ -1337,6 +1308,20 @@ function describeHex(key: string) {
   if (v.terrain[key] === 'rock') return `${name}, rock`;
   if (!t) return `${name}, empty${v.terrain[key] === 'rich' ? ' gold hex' : ''}`;
   return `${name}, ${t.owner === HUMAN ? 'your' : 'bot'} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
+}
+
+// In the background, finish animations at once: on return the board is simply current.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) fastForward();
+});
+
+// Install as an app and play offline (the service worker caches the page's own files).
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* offline play is a bonus; the page works without it */
+    });
+  });
 }
 
 // Rotation or resize: just redraw (the game itself is untouched).
