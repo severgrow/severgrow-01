@@ -28,7 +28,8 @@ export const visibleMoves = (v: View, mode: Mode): Action[] => {
 /**
  * Lite ends when the deck runs out: when a turn would start with an empty deck, the
  * game is scored with the engine's own deck-exhaustion result (higher score wins).
- * Classic is left to the engine, where only a short refill ends the game.
+ * Since spec v0.3.1 the engine itself does this for every mode, so this is only a
+ * safety net. Classic is left to the engine.
  */
 export const settle = (s: State, mode: Mode): State => {
   if (mode !== 'lite' || s.phase !== 'DRAW' || s.deck.length > 0) return s;

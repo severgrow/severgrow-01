@@ -14,7 +14,8 @@
     "check": "npm run typecheck && npm run test",
     "web:dev": "vite --config web/vite.config.ts",
     "web:build": "vite build --config web/vite.config.ts",
-    "web:preview": "vite preview --config web/vite.config.ts"
+    "web:preview": "vite preview --config web/vite.config.ts",
+    "properties": "tsx src/sim/properties.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

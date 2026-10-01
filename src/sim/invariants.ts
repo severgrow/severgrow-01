@@ -13,9 +13,11 @@ import {
 } from '../engine/index.js';
 import type { Action, RulesConfig, State } from '../engine/index.js';
 import { createRandomBot } from '../bots/RandomBot.js';
+import { GreedyBot } from '../bots/GreedyBot.js';
 
-/** Development safety cap from section 15, invariant 9. */
-export const MAX_PLAYER_TURNS = 60;
+/** Development safety caps from section 15, invariant 9 (v0.3.1: per bot). */
+export const MAX_TURNS = { greedy: 60, random: 150 } as const;
+export type PropertyBot = keyof typeof MAX_TURNS;
 
 export type FailureReport = {
   seed: number;
@@ -45,7 +47,12 @@ const NO_REPORT: FailureReport = { seed: -1, actions: [] };
  * 4 strengths, 5 card conservation, 9 turn cap. `melded` holds every card id played
  * in a meld so far.
  */
-export const checkState = (s: State, melded: ReadonlySet<number>, report: FailureReport = NO_REPORT): void => {
+export const checkState = (
+  s: State,
+  melded: ReadonlySet<number>,
+  report: FailureReport = NO_REPORT,
+  maxTurns: number = MAX_TURNS.greedy,
+): void => {
   const fail = (n: number, msg: string): never => {
     throw new PropertyFailure(n, msg, report);
   };
@@ -90,28 +97,30 @@ export const checkState = (s: State, melded: ReadonlySet<number>, report: Failur
   for (const c of createCards(s.config)) if (!seen.has(c.id) && !melded.has(c.id)) fail(5, `card ${c.id} vanished`);
 
   // 9. Development safety cap.
-  if (s.turnNumber > MAX_PLAYER_TURNS) fail(9, `turn ${s.turnNumber} > ${MAX_PLAYER_TURNS}`);
+  if (s.turnNumber > maxTurns) fail(9, `turn ${s.turnNumber} > ${maxTurns}`);
 };
 
 const withoutHistory = (s: State): string => JSON.stringify({ ...s, history: s.history?.length ?? null });
 
 /**
- * One RandomBot-vs-RandomBot game with every section 15 invariant checked after every
+ * One bot-vs-bot game (RandomBot by default, or GreedyBot) with every section 15 invariant checked after every
  * action: 1-5 and 9 on each state, 6 apply never mutates its input, 7 a finished game
  * accepts nothing, 8 every listed legal action is accepted by apply.
  */
 export const runPropertyGame = (
   seed: number,
   config: Partial<RulesConfig> = {},
-  opts: { checks?: boolean; maxActions?: number } = {},
+  opts: { checks?: boolean; maxActions?: number; bot?: PropertyBot } = {},
 ): { state: State; actions: Action[] } => {
   const checks = opts.checks ?? true;
-  const bots = [createRandomBot(seed * 2 + 1), createRandomBot(seed * 2 + 2)];
+  const kind = opts.bot ?? 'random';
+  const maxTurns = MAX_TURNS[kind];
+  const bots = kind === 'random' ? [createRandomBot(seed * 2 + 1), createRandomBot(seed * 2 + 2)] : [GreedyBot, GreedyBot];
   const actions: Action[] = [];
   const melded = new Set<number>();
   let s = newGame(seed, config);
   const report = (extra: Partial<FailureReport> = {}): FailureReport => ({ seed, config, actions: [...actions], ...extra });
-  if (checks) checkState(s, melded, report());
+  if (checks) checkState(s, melded, report(), maxTurns);
 
   for (let i = 0; i < (opts.maxActions ?? 20_000) && s.phase !== 'GAME_OVER'; i++) {
     const legal = legalActionsForState(s);
@@ -134,7 +143,7 @@ export const runPropertyGame = (
     if (checks) {
       // 6. apply never mutates its input.
       if (withoutHistory(before) !== snapshot) throw new PropertyFailure(6, 'apply mutated its input', report({ failingAction: a, before }));
-      checkState(s, melded, report({ failingAction: a, before, after: s }));
+      checkState(s, melded, report({ failingAction: a, before, after: s }), maxTurns);
     }
   }
   if (s.phase !== 'GAME_OVER') throw new PropertyFailure(9, 'game did not finish', report({ after: s }));

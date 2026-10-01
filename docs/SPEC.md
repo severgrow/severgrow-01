@@ -6,6 +6,12 @@ Scope of this document: a **pure, deterministic, headless TypeScript rules engin
 
 ---
 
+## Changelog
+
+**v0.3.1** (playtest decisions)
+- **Empty deck ends the game (6.5).** A turn never starts with an empty deck: if the deck is empty after a Refill, the game ends at once by `deck_exhaustion`. Before, an exactly-empty deck did not end the game, and games could loop forever (3.6% of RandomBot games, 1.3% of GreedyBot games).
+- **Turn safety cap (15, item 9)** is now per bot: at most 60 player-turns for GreedyBot games and 150 for RandomBot games. Random play is slow (median 55 turns), not broken.
+
 ## 0. Changes from v0.2 (read first)
 
 | # | Change | Why |
@@ -148,7 +154,7 @@ State tracks `turnPlayer` (whose turn it is) and `actor` (who must act now). The
 ### 6.1 DRAW (actor = turn player)
 Action: `Draw { from: 'deck' | 'discard' }`. Mandatory. Hand becomes `handSize + 1`.
 - The discard pile is never empty at the start of a turn (the previous turn discarded onto it).
-- The deck may be empty (see 6.5). Then only `from: 'discard'` is legal.
+- The deck may be empty only in a final turn after a Knock (see 6.5 and 7). Then only `from: 'discard'` is legal.
 - Record `drawnFromDiscard: cardId | null` for rule 6.3.
 
 ### 6.2 ACT
@@ -175,7 +181,7 @@ Draw from the deck until the hand has `handSize` cards. If the deck runs short:
 - draw what exists,
 - the game ends immediately after this turn (`deck_exhaustion`, section 11).
 
-An exactly-empty deck after a successful refill does **not** end the game.
+If the deck is empty after the refill (even an exactly-empty deck after a full refill), the game also ends immediately (`deck_exhaustion`), so a turn never starts with an empty deck. Tie-break deadwood: after a short refill, the turn player's kept hand (before the refill); after a full refill that emptied the deck, both players' current hands. *(v0.3.1)*
 
 ---
 
@@ -446,7 +452,7 @@ Every rule has unit tests. Every simulation-found bug becomes a regression test.
 
 **14.11 Discard loophole:** taking the top discard and discarding the same card is illegal; allowed when the card was drawn from the deck; allowed after melding the card away and discarding another.
 
-**14.12 Deck exhaustion:** refill to `handSize`; short refill ends the game; exactly-empty deck does not; score then deadwood then P2 tie-break; only discard draw legal when the deck is empty.
+**14.12 Deck exhaustion:** refill to `handSize`; short refill ends the game; an exactly-empty deck after refill also ends it (v0.3.1); score then deadwood then P2 tie-break; only discard draw legal when the deck is empty.
 
 **14.13 View and legality:** the opponent's hand and deck order never appear in `viewFor`; `legalActions(view)` equals the set of actions `apply` accepts (fuzz-compare against brute-force validation on random states); identical-copy actions are deduped.
 
@@ -471,7 +477,7 @@ Run **10,000+ random-legal-play games** (RandomBot vs RandomBot). After every ac
 6. `apply` does not mutate its input;
 7. terminal states accept no actions;
 8. `legalActions` only returns actions `apply` accepts;
-9. no game exceeds 60 player-turns (development safety assertion, not a design goal).
+9. no GreedyBot game exceeds 60 player-turns and no RandomBot game exceeds 150 (development safety assertion, not a design goal; v0.3.1).
 
 On failure print: seed, full action log, state before, failing action, state after, event log (a replayable bug).
 

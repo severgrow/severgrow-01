@@ -25,9 +25,8 @@ alone cannot express them:
 
 - the engine always allows Knock with a perfect hand (0 leftover points), so the
   page never offers Knock in Lite and the bot never uses it;
-- the engine only ends a game when a refill comes up short, so in Lite the page
-  ends the game as soon as a turn would start with an empty deck (scored with
-  the engine's own deck-exhaustion result).
+- "the game ends when the deck runs out" is now an engine rule for both modes
+  (spec v0.3.1); the page's own Lite check (`settle`) is kept as a harmless safety net.
 
 ## How the page works
 

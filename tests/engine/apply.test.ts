@@ -450,14 +450,37 @@ describe('Continue: Rot, Sever, Refill (14.8, 14.12)', () => {
     });
   });
 
-  it('an exactly-empty deck after refill does not end the game; only the discard draw is then legal', () => {
+  it('an exactly-empty deck after a full refill ends the game (v0.3.1)', () => {
     const kept = [c(MOSS, 1), c(ASH, 2), c(DEW, 3), c(EMBER, 4)];
     const deck = [c(MOSS, 9), c(ASH, 9), c(DEW, 7)];
+    const s = makeState({ phase: 'KNOCK', hands: [kept, junk(7)], deck, tiles: { '-1,1': [0, 1] } });
+    const n = act(s, { t: 'Continue' });
+    expect(n.hands[0]).toHaveLength(7);
+    expect(n.deck).toEqual([]);
+    expect(n.phase).toBe('GAME_OVER');
+    // Both hands are current here (the refill was full): deadwood of each current hand.
+    expect(n.result).toEqual({
+      winner: 0,
+      reason: 'deck_exhaustion',
+      scores: [1, 0],
+      deadwood: [deadwood(n.hands[0]), deadwood(n.hands[1])],
+    });
+  });
+
+  it('a deck with cards left after the refill keeps the game going', () => {
+    const kept = [c(MOSS, 1), c(ASH, 2), c(DEW, 3), c(EMBER, 4)];
+    const deck = [c(MOSS, 9), c(ASH, 9), c(DEW, 7), c(EMBER, 6)];
     const n = act(makeState({ phase: 'KNOCK', hands: [kept, junk(7)], deck }), { t: 'Continue' });
     expect(n.phase).toBe('DRAW');
-    expect(n.deck).toEqual([]);
-    illegal(n, { t: 'Draw', from: 'deck' }, 'DECK_EMPTY');
-    expect(act(n, { t: 'Draw', from: 'discard' }).phase).toBe('ACT');
+    expect(n.deck).toHaveLength(1);
+  });
+
+  it('a final turn after a Knock can start with an empty deck: only the discard draw is legal', () => {
+    const hand10 = [c(MOSS, 1), c(MOSS, 2), c(MOSS, 3), c(MOSS, 4), c(MOSS, 5), c(DEW, 9), c(EMBER, 1)];
+    const k = act(makeState({ phase: 'KNOCK', hands: [hand10, junk(7)], deck: [] }), { t: 'Knock' });
+    expect(k.phase).toBe('DRAW');
+    illegal(k, { t: 'Draw', from: 'deck' }, 'DECK_EMPTY');
+    expect(act(k, { t: 'Draw', from: 'discard' }).phase).toBe('ACT');
   });
 
   it('deck exhaustion tie-breaks on kept-hand deadwood, then P2', () => {
