@@ -47,6 +47,10 @@ this one look and no theme switch. Everything still comes from design tokens in
 - **Glow:** only your network's veins and root glow.
 - **Marks:** you = ring, bot = diamond, and the bot's tiles are grained.
 - Shades between these colours (empty hexes, rock) are mixes of two palette colours.
+- **Finishing touches:** fine film grain over a soft pool of light (both made in code),
+  a framed hexagonal plate with corner pins under the board, printed inner frames on
+  the cards, a hairline under the scores, a slim gold edge on the coach, a grab handle
+  on the sheets, and a small footer on the menu.
 
 ## Playing
 

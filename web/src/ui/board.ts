@@ -118,7 +118,7 @@ export class BoardView {
     this.keys = coords.map(coordKey);
     const xs = this.keys.map((k) => centerOf(k).x);
     const ys = this.keys.map((k) => centerOf(k).y);
-    const pad = S + 6;
+    const pad = S * 1.6 + 6; // room for the board's plate and frame
     const [x0, y0] = [Math.min(...xs) - pad, Math.min(...ys) - pad];
     svg.setAttribute('viewBox', `${x0} ${y0} ${Math.max(...xs) - Math.min(...xs) + 2 * pad} ${Math.max(...ys) - Math.min(...ys) + 2 * pad}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -137,6 +137,27 @@ export class BoardView {
     const merge = el('feMerge', {}, glow);
     el('feMergeNode', { in: 'b' }, merge);
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
+
+    // The plate: a soft hexagonal tray under the board with a thin frame and corner pins,
+    // so the board sits on the table instead of floating.
+    const R = config.boardRadius;
+    const corners = [
+      { q: R, r: -R },
+      { q: R, r: 0 },
+      { q: 0, r: R },
+      { q: -R, r: R },
+      { q: -R, r: 0 },
+      { q: 0, r: -R },
+    ].map((c) => {
+      const { x, y } = centerOf(coordKey(c));
+      const d = Math.hypot(x, y) || 1;
+      return { x, y, d };
+    });
+    const ring = (grow: number) => corners.map(({ x, y, d }) => `${(x * (1 + grow / d)).toFixed(1)},${(y * (1 + grow / d)).toFixed(1)}`).join(' ');
+    const plate = el('g', { class: 'l-plate' }, svg);
+    el('polygon', { points: ring(S * 1.35), class: 'plate' }, plate);
+    el('polygon', { points: ring(S * 1.35), class: 'plate-rim' }, plate);
+    for (const { x, y, d } of corners) el('circle', { cx: x * (1 + (S * 1.35) / d), cy: y * (1 + (S * 1.35) / d), r: 2.2, class: 'plate-pin' }, plate);
 
     this.layers = {
       base: el('g', { class: 'l-base' }, svg),
