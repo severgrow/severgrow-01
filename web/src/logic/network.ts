@@ -46,3 +46,22 @@ export const networkEdges = (board: Board, config: RulesConfig, player: Player):
   for (const k of joined) if (!order.has(k)) visit(k, null);
   return pairs.map(([a, b]) => ({ a, b, owner: player, fragile: bridges.has([a, b].join('|')) }));
 };
+
+/** Links between touching tiles of `player` that are NOT joined to the root (a cut-off arm). */
+export const looseEdges = (board: Board, config: RulesConfig, player: Player): Edge[] => {
+  let joined: Set<string>;
+  try {
+    joined = connectedKeys(board, config, player);
+  } catch {
+    joined = new Set();
+  }
+  const out: Edge[] = [];
+  for (const [k, t] of Object.entries(board)) {
+    if (!t || t.owner !== player || joined.has(k)) continue;
+    for (const n of allNeighbors(parseKey(k))) {
+      const nk = coordKey(n);
+      if (k < nk && board[nk]?.owner === player && !joined.has(nk)) out.push({ a: k, b: nk, owner: player, fragile: true });
+    }
+  }
+  return out;
+};

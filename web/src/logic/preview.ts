@@ -11,6 +11,8 @@ export type Preview = {
   placed: number;
   replaced: number;
   cuts: number;
+  /** Bot tiles this move would cut off (not counting the ones it replaces). */
+  cutKeys: string[];
   wins: boolean;
   points: number;
   chip: string;
@@ -45,9 +47,12 @@ export const previewMove = (v: View, a: Action): Preview | null => {
   const before = threats(v, p)[0]?.loss ?? 0;
   const after = threats({ config: v.config, terrain: v.terrain, board: sim.board }, p)[0]?.loss ?? 0;
   const core = { placed: sim.placed, replaced: sim.taken, cuts: sim.botCut, wins: sim.wins };
+  const grown = new Set(ghosts.map((g) => g.key));
+  const cutKeys = Object.keys(v.board).filter((k) => v.board[k]?.owner === opp && !grown.has(k) && !sim.board[k]);
   return {
     ghosts,
     ...core,
+    cutKeys,
     points: sim.points,
     chip: chipText(core),
     warning: after > before && !sim.wins ? `The bot could cut ${after} of your tiles.` : null,

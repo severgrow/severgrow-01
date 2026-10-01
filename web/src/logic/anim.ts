@@ -126,6 +126,10 @@ export class AnimQueue {
   push(steps: readonly Step[]): void {
     this.queue.push(...steps);
   }
+  /** The next step, without showing it yet. */
+  peek(): Step | undefined {
+    return this.queue[0];
+  }
   /** Shows the next step; returns it (undefined when nothing is waiting). */
   next(): Step | undefined {
     const s = this.queue.shift();

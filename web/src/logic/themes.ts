@@ -59,7 +59,7 @@ export type ThemeStyle = {
   shadow: number;
   motion: number;
   youMark: 'dot' | 'ring' | 'pip';
-  botMark: 'bar' | 'diamond' | 'cross';
+  botMark: 'box' | 'diamond' | 'cross';
   youFill: 'solid' | 'soft';
   botFill: 'hatch' | 'grain' | 'stripe';
   soundBase: number;
@@ -113,7 +113,7 @@ export const THEMES: Record<ThemeId, Theme> = {
       shadow: 0,
       motion: 0.8,
       youMark: 'dot',
-      botMark: 'bar',
+      botMark: 'box',
       youFill: 'solid',
       botFill: 'hatch',
       soundBase: 330,

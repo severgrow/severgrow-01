@@ -105,6 +105,15 @@ export const pendingAction = (v: View, legal: readonly Action[], sel: Sel): Acti
   return opts.length ? opts[sel.option % opts.length]! : null;
 };
 
+/** The selection that makes `a` the pending move (for the coach's "Show me"). */
+export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
+  const ids = moveCards(a);
+  const hexes = moveHexes(a);
+  const sel: Sel = { card: ids[0] ?? null, hex: hexes.length ? coordKey(hexes[0]!) : null, kind: kindOf(a), option: 0 };
+  const i = options(v, legal, sel).findIndex((x) => JSON.stringify(x) === JSON.stringify(a));
+  return { ...sel, option: Math.max(0, i) };
+};
+
 // ---------- taps ----------
 
 export const tapCard = (v: View, legal: readonly Action[], sel: Sel, id: number): Sel => {

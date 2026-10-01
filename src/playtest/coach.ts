@@ -76,7 +76,7 @@ export type Advice = {
 // ---------- words ----------
 
 const GLOSSARY: Record<string, string> = {
-  root: 'your starting hex, marked R',
+  root: 'the big round bulb you start from',
   'discard pile': 'the cards thrown away',
   deck: 'the face-down pile',
   combo: 'cards that go together',

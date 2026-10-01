@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, selFor, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -53,6 +53,10 @@ describe('tap a card, then a hex', () => {
     for (const c of v.hand) expect(cards.has(c.id)).toBe(using.some((a) => moveCards(a).some(same(c.id))));
     expect(kindsAvailable(v, legal, sel).map((k) => k.kind).sort()).toEqual([...new Set(using.map(kindOf))].sort());
     expect(pendingAction(v, legal, sel)).not.toBeNull();
+  });
+
+  it('selFor picks exactly a given move (used by the coach\'s "Show me")', () => {
+    for (const a of legal.filter(isBoard)) expect(pendingAction(v, legal, selFor(v, legal, a))).toEqual(a);
   });
 
   it('move kinds have plain names', () => {

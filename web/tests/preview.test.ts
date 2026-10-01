@@ -34,6 +34,11 @@ describe('move preview', () => {
         expect(p.replaced).toBe(sim.taken);
         expect(p.ghosts.filter((g) => g.replaces).length).toBe(sim.taken);
         expect(p.cuts).toBe(sim.botCut);
+        expect(p.cutKeys.length).toBe(sim.botCut);
+        for (const k of p.cutKeys) {
+          expect(v.board[k]?.owner).toBe(1);
+          expect(sim.board[k] ?? null).toBeNull();
+        }
         expect(p.wins).toBe(sim.wins);
         for (const g of p.ghosts) expect(g.strength).toBeGreaterThanOrEqual(1);
         const after = threats({ config: v.config, terrain: v.terrain, board: sim.board }, v.player)[0]?.loss ?? 0;

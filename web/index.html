@@ -1,99 +1,182 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="ink">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#14201a" />
+    <meta name="theme-color" content="#0d0e11" />
+    <meta name="description" content="Severgrow: grow your network, keep it joined to your root, cut the bot's links." />
     <title>Severgrow</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpolygon points=%2716,2 28,9 28,23 16,30 4,23 4,9%27 fill=%27%232f9e5b%27/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230d0e11%27/%3E%3Cpolygon points=%2716,5 25,10 25,22 16,27 7,22 7,10%27 fill=%27none%27 stroke=%27%234df0b4%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%273.5%27 fill=%27%234df0b4%27/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
-    <main id="app">
-      <header class="top">
-        <h1>Severgrow</h1>
-        <button id="coach-toggle" class="toggle" type="button" aria-pressed="true">Coach: ON</button>
-      </header>
-      <div class="game-bar">
-        <button id="new-game" class="ghost" type="button">New game</button>
-        <button id="tutorial-game" class="ghost" type="button">Tutorial game</button>
+    <div id="texture" aria-hidden="true"></div>
+
+    <!-- ===== Main menu ===== -->
+    <section id="menu" class="screen menu" aria-label="Main menu">
+      <div class="menu-inner">
+        <div id="logo" class="logo" aria-hidden="true"></div>
+        <h1 class="title">Severgrow</h1>
+        <p class="tagline">Grow your network. Keep it joined to your root. Cut the bot's links.</p>
+        <div class="menu-buttons">
+          <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
+          <button id="menu-play" class="btn primary big" type="button">Play</button>
+          <button id="menu-tutorial" class="btn ghost" type="button">Tutorial game</button>
+          <div class="menu-row">
+            <button id="menu-howto" class="btn ghost" type="button">How to play</button>
+            <button id="menu-settings" class="btn ghost" type="button"><span class="i" data-icon="gear"></span>Settings</button>
+          </div>
+        </div>
+        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
       </div>
+    </section>
 
-      <section class="summary" aria-label="How to play">
-        <p>Grow your network.</p>
-        <p>Keep it joined to your root.</p>
-        <p>Cut the bot's links.</p>
-      </section>
-
-      <section id="coach" class="coach" aria-label="Coach" hidden>
-        <div class="coach-head">
-          <b>Coach</b>
-          <span id="coach-step" class="muted small"></span>
+    <!-- ===== Game ===== -->
+    <section id="game" class="screen game" aria-label="Game" hidden>
+      <header class="hud">
+        <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
+        <div class="score you">
+          <span class="mark you" aria-hidden="true"></span>
+          <span class="who">You</span>
+          <b id="score-you" class="num" aria-label="Your score">0</b>
         </div>
-        <div id="coach-advice">
-          <p><b>Suggested:</b> <span id="coach-suggested"></span></p>
-          <p><b>Why:</b> <span id="coach-why"></span></p>
-          <p id="coach-tip" class="tip"></p>
-          <div class="coach-actions">
-            <button id="coach-show" class="ghost" type="button">Show me</button>
-            <button id="coach-do" type="button">Do it for me</button>
-            <button id="coach-next" class="link" type="button">Not this, show another</button>
+        <div id="turn" class="turn" aria-live="polite"></div>
+        <div class="score bot">
+          <b id="score-bot" class="num" aria-label="Bot score">0</b>
+          <span class="who">Bot</span>
+          <span class="mark bot" aria-hidden="true"></span>
+        </div>
+        <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
+      </header>
+      <p id="hint" class="hint" role="status" aria-live="polite"></p>
+
+      <div class="play">
+        <div class="board-wrap" id="board-wrap">
+          <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." tabindex="0"></svg>
+          <div id="captions" class="captions" aria-live="polite"></div>
+          <div id="banner" class="banner" aria-hidden="true"></div>
+          <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+          <button id="tool-weak" class="chip corner tl" type="button" aria-pressed="false"><span class="i" data-icon="shield"></span>Weak spots</button>
+          <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false"><span class="i" data-icon="target"></span>Bot's weak links</button>
+          <button id="tool-replay" class="chip corner bl" type="button"><span class="i" data-icon="replay"></span>Replay bot</button>
+          <button id="tool-skip" class="chip corner br" type="button" hidden><span class="i" data-icon="skip"></span>Skip</button>
+        </div>
+
+        <aside class="side">
+          <section id="coach" class="coach" aria-label="Coach" hidden>
+            <div class="coach-head">
+              <span class="i" data-icon="coach"></span>
+              <b>Coach</b>
+              <span id="coach-step" class="muted small"></span>
+              <button id="coach-hide" class="icon-only small" type="button" aria-label="Turn the coach off"><span class="i" data-icon="close"></span></button>
+            </div>
+            <div id="coach-advice">
+              <p id="coach-suggested" class="coach-main"></p>
+              <p id="coach-tip" class="tip"></p>
+              <p id="coach-why" class="muted" hidden></p>
+              <div class="coach-actions">
+                <button id="coach-show" class="btn ghost small" type="button">Show me</button>
+                <button id="coach-do" class="btn small" type="button">Do it for me</button>
+                <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false">Why?</button>
+                <button id="coach-next" class="btn link small" type="button">Not this</button>
+              </div>
+            </div>
+            <div id="coach-summary" hidden>
+              <p><b id="coach-summary-title"></b></p>
+              <ul id="coach-summary-list"></ul>
+              <button id="coach-summary-ok" class="btn small" type="button">Got it</button>
+            </div>
+          </section>
+
+          <div id="confirm" class="confirm" hidden>
+            <div class="confirm-text">
+              <span id="confirm-chip" class="result-chip"></span>
+              <span id="confirm-warn" class="warn" hidden></span>
+            </div>
+            <div class="confirm-buttons">
+              <button id="confirm-other" class="btn ghost small" type="button" hidden>Other way</button>
+              <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
+              <button id="confirm-play" class="btn primary" type="button">Confirm</button>
+            </div>
           </div>
-        </div>
-        <div id="coach-summary" hidden>
-          <p><b id="coach-summary-title"></b></p>
-          <ul id="coach-summary-list"></ul>
-          <div class="coach-actions">
-            <button id="coach-summary-ok" type="button">Got it</button>
+
+          <div class="table-row">
+            <button id="deck" class="pile deck" type="button" aria-label="Deck">
+              <span class="pile-stack" aria-hidden="true"></span>
+              <span class="pile-count num" id="deck-count">0</span>
+            </button>
+            <div id="moves" class="moves" role="group" aria-label="Moves"></div>
+            <button id="discard" class="pile discard" type="button" aria-label="Discard pile">
+              <span class="pile-top" id="discard-top" aria-hidden="true"></span>
+            </button>
           </div>
+
+          <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===== Sheets and overlays ===== -->
+    <div id="scrim" class="scrim" hidden></div>
+
+    <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+      <header class="sheet-head"><h2 id="settings-title">Settings</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body">
+        <h3>Theme</h3>
+        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
+        <h3>Sound and feel</h3>
+        <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
+        <label class="row"><span>Vibration</span><input type="checkbox" data-setting="vibration" /></label>
+        <h3>Animations</h3>
+        <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
+        <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+        <h3>Playing</h3>
+        <label class="row"><span>Confirm moves</span><input type="checkbox" data-setting="confirmMoves" /></label>
+        <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
+        <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
+        <label class="row"><span>Coach</span><input type="checkbox" data-setting="coach" /></label>
+        <button id="restart-tutorial" class="btn ghost small" type="button">Restart the coach with a new game</button>
+      </div>
+    </section>
+
+    <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
+      <header class="sheet-head"><h2 id="gm-title">Menu</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body stack">
+        <button id="gm-resume" class="btn primary" type="button">Back to the game</button>
+        <button id="gm-new" class="btn ghost" type="button">New game</button>
+        <button id="gm-howto" class="btn ghost" type="button">How to play</button>
+        <button id="gm-settings" class="btn ghost" type="button">Settings</button>
+        <h3>Theme</h3>
+        <div class="theme-pick" role="radiogroup" aria-label="Theme" data-theme-pick></div>
+        <button id="gm-main" class="btn link" type="button">Main menu</button>
+      </div>
+    </section>
+
+    <section id="sheet-howto" class="sheet" role="dialog" aria-modal="true" aria-labelledby="howto-title" hidden>
+      <header class="sheet-head"><h2 id="howto-title">How to play</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body prose" id="howto-body"></div>
+    </section>
+
+    <section id="sheet-history" class="sheet" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+      <header class="sheet-head"><h2 id="history-title">What happened</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <div class="sheet-body"><ol id="history" class="history"></ol></div>
+    </section>
+
+    <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
+      <div class="go-card">
+        <h2 id="go-title" class="go-title"></h2>
+        <p id="go-score" class="go-score num"></p>
+        <p id="go-reason" class="muted"></p>
+        <ul id="go-highlights" class="highlights"></ul>
+        <div class="go-buttons">
+          <button id="go-rematch" class="btn primary big" type="button">Rematch</button>
+          <button id="go-board" class="btn ghost" type="button">See the board</button>
+          <button id="go-menu" class="btn link" type="button">Back to menu</button>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <p id="status" class="status" role="status" aria-live="polite"></p>
-
-      <section class="scores" aria-label="Scores">
-        <div class="pill you"><span class="dot"></span>You <b id="score-you">0</b></div>
-        <div class="pill bot"><span class="dot"></span>Bot <b id="score-bot">0</b></div>
-        <div class="pill" title="Cards left in the deck">Deck <b id="deck">0</b></div>
-        <div class="pill" title="Top of the discard pile">Discard <b id="discard">–</b></div>
-      </section>
-
-      <svg id="board" class="board" role="img" aria-label="Hex board"></svg>
-      <p id="tile-info" class="tile-info">Tap a tile to see what you would lose if it were cut.</p>
-
-      <section aria-label="Your cards">
-        <div class="row-head">
-          <h2>Your cards</h2>
-          <span id="deadwood" class="muted"></span>
-        </div>
-        <div id="hand" class="hand"></div>
-        <p id="bot-hand" class="muted small"></p>
-      </section>
-
-      <section aria-label="Your moves">
-        <div class="row-head">
-          <h2>Your moves</h2>
-          <button id="clear-filter" class="link" type="button" hidden>Show all</button>
-        </div>
-        <p id="hint" class="muted small"></p>
-        <div id="confirm" class="confirm" hidden>
-          <span id="confirm-text"></span>
-          <p id="confirm-warn" class="warn" hidden></p>
-          <button id="confirm-play" type="button">Play it</button>
-          <button id="confirm-cancel" class="ghost" type="button">Cancel</button>
-        </div>
-        <div id="moves" class="moves"></div>
-      </section>
-
-      <section aria-label="What happened">
-        <h2>What happened</h2>
-        <ul id="log" class="log"></ul>
-      </section>
-
-      <p class="muted small footer">
-        <button id="restart-tutorial" class="link" type="button">Restart tutorial</button>
-      </p>
-    </main>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

@@ -103,4 +103,13 @@ describe('animation queue from engine events', () => {
     const steps: Step[] = buildSteps(p.before, p.action, p.after, 0);
     expect(JSON.parse(JSON.stringify(steps))).toEqual(steps);
   });
+
+  it('peek shows the next step without changing the shown board', () => {
+    const p = played.find((x) => x.action.t === 'MeldRun')!;
+    const q = new AnimQueue(p.before.board);
+    q.push(buildSteps(p.before, p.action, p.after, 0));
+    const first = q.peek();
+    expect(q.board).toBe(p.before.board);
+    expect(q.next()).toBe(first);
+  });
 });
