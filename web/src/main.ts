@@ -11,7 +11,8 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, isBoardAction, kindsAvailable, options, selFor, targetHexes, usableCards } from './logic/interaction.js';
+import { isBoardAction, kindsAvailable, options, targetHexes, usableCards } from './logic/interaction.js';
+import { guideTarget } from './logic/guide.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -298,6 +299,7 @@ function humanPlay(a: Action) {
   const p = session.play(a, HUMAN);
   if (!p) return;
   inspectKey = null;
+  guideGoal = null;
   afterPlay(p, HUMAN, advice);
 }
 
@@ -328,6 +330,8 @@ function scheduleBot() {
 }
 let thinking = false;
 let coachWhyOpen = false;
+/** The move the coach's arrow is guiding to (null: no arrow). */
+let guideGoal: Action | null = null;
 
 // ---------- the animation player ----------
 
@@ -719,6 +723,67 @@ function render() {
   renderPiles(v);
   renderCoach(advice);
   renderGameOver();
+  renderGuide(advice);
+}
+
+/** The coach's arrow: points at the one thing to tap next for the suggested move. */
+function renderGuide(advice: Advice | null) {
+  const arrow = $('guide-arrow');
+  arrow.hidden = true;
+  if (!session || !guideGoal || !advice || !myTurn() || busy() || openSheet) return;
+  if (JSON.stringify(advice.action) !== JSON.stringify(guideGoal)) {
+    guideGoal = null;
+    return;
+  }
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal);
+  if (t?.kind === 'other') {
+    // Right card and hex: switch straight to the coach's way of growing there.
+    session.sel = { ...session.sel, option: t.option };
+    render();
+    return;
+  }
+  if (!t) {
+    guideGoal = null;
+    return;
+  }
+  let rect: { x: number; y: number } | null = null;
+  const above = (el: Element | null) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + 4 };
+  };
+  switch (t.kind) {
+    case 'card':
+      rect = above(document.querySelector(`#hand [data-card="${t.id}"]`));
+      break;
+    case 'hex':
+      rect = board.screenPoint(t.key);
+      rect = { x: rect.x, y: rect.y - 6 };
+      break;
+    case 'confirm':
+      rect = above($('confirm-play'));
+      break;
+    case 'cancel':
+      rect = above(document.querySelector('#confirm-cancel:not([hidden]), #moves .cancel') ?? $('confirm-cancel'));
+      break;
+    case 'deck':
+      rect = above($('deck'));
+      break;
+    case 'discard':
+      rect = above($('discard'));
+      break;
+    case 'end':
+      rect = above(document.querySelector('#moves .end'));
+      break;
+    case 'button':
+      rect = above(document.querySelector('#moves .btn.primary'));
+      break;
+  }
+  if (!rect) return;
+  arrow.hidden = false;
+  arrow.dataset.target = t.kind === 'card' ? `card:${t.id}` : t.kind === 'hex' ? `hex:${t.key}` : t.kind;
+  arrow.style.left = `${rect.x}px`;
+  arrow.style.top = `${rect.y}px`;
 }
 
 function renderHud() {
@@ -982,7 +1047,8 @@ function renderCoach(advice: Advice | null) {
     $('coach-why-btn').setAttribute('aria-expanded', String(coachWhyOpen));
     $('coach-why-btn').textContent = coachWhyOpen ? 'Less' : 'Why?';
     $<HTMLButtonElement>('coach-next').disabled = advice.choices < 2;
-    $('coach-next').textContent = advice.choices > 1 ? `Not this (${advice.choice + 1}/${advice.choices})` : 'Not this';
+    $('coach-show').textContent = guideGoal ? 'Hide arrow' : 'Show me where';
+    $('coach-show').setAttribute('aria-pressed', String(!!guideGoal));
   } else if (showSummary && session) {
     $('coach-step').textContent = '';
     const sum = coachSummary(coach.taught, session.state.config);
@@ -1180,23 +1246,21 @@ bind('coach-hide', () => {
   render();
 });
 bind('coach-show', () => {
+  // "Show me where": an arrow points at each thing to tap, one step at a time.
   const advice = currentAdvice();
   if (!session || !advice) return;
-  if (isBoardAction(advice.action)) session.sel = selFor(session.view, session.legal, advice.action);
-  else if (advice.action.t === 'Discard') session.sel = { ...EMPTY_SEL, card: advice.action.card };
+  guideGoal = guideGoal ? null : advice.action;
+  if (guideGoal) session.cancel();
   render();
-  if (!isBoardAction(advice.action) && advice.action.t !== 'Discard') document.querySelector<HTMLElement>('#moves .coach-glow')?.focus();
-});
-bind('coach-do', () => {
-  const advice = currentAdvice();
-  if (advice) humanPlay(advice.action);
 });
 bind('coach-why-btn', () => {
   coachWhyOpen = !coachWhyOpen;
   render();
 });
 bind('coach-next', () => {
-  coach.choice++;
+  const ideas = Math.min(5, currentAdvice()?.choices ?? 1); // a few good ideas, not dozens
+  coach.choice = (coach.choice + 1) % ideas;
+  guideGoal = null;
   session?.cancel();
   save();
   render();

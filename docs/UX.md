@@ -41,7 +41,7 @@ defines every token, uses at most 5 palette colours, and has readable contrast.
 | Signal (bot) | `#ff6b4a` |
 | Gold | `#f2c14e` |
 
-Typeface: **Space Grotesk**. Flat hexagons, no texture, no shadows. Only your veins
+Typeface: **Bricolage Grotesque** (a clean sans with quirky details). Flat hexagons, no texture, no shadows. Only your veins
 and root glow. Marks: you = dot, bot = small square, bot tiles hatched.
 
 ### Theme B: Macro nature
@@ -56,7 +56,7 @@ and root glow. Marks: you = dot, bot = small square, bot tiles hatched.
 | Rust (bot) | `#e0703f` |
 | Amber (gold) | `#e3b04b` |
 
-Typeface: **Fraunces**. Slightly uneven, soft-cornered hexes; a soil texture made
+Typeface: **Young Serif** (a soft, warm serif). Slightly uneven, soft-cornered hexes; a soil texture made
 in code (SVG noise); thin curved veins. Marks: you = ring, bot = diamond, bot tiles
 grained.
 
@@ -72,7 +72,7 @@ grained.
 | Lacquer red (bot) | `#e0604a` |
 | Brass (gold) | `#d8a23c` |
 
-Typeface: **Bree Serif**. Chunky pieces with a darker side and a bevel, a wooden
+Typeface: **Fredoka** (rounded and friendly, like printed game pieces). Chunky pieces with a darker side and a bevel, a wooden
 table texture made in code, a soft lamp-light vignette, parchment cards. Marks:
 you = pip, bot = triangle, bot tiles striped.
 
@@ -98,6 +98,13 @@ colours, never new colours.
 - **Hold a tile** (or hover with a mouse): strength, owner, gold or not, and what
   losing it would cost.
 - **Deck and discard** are small stacks with counts; tap one to draw.
+
+## The coach
+
+The coach suggests one move at a time for your first 15 actions. **Show me where**
+puts a bouncing arrow on the one thing to tap next: first the card, then the hex,
+then Confirm (or the deck, or "End turn"). **Why?** explains the move, **Another
+idea** shows a different good move. It never plays for you.
 
 ## Animations
 

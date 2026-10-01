@@ -75,10 +75,9 @@
               <p id="coach-tip" class="tip"></p>
               <p id="coach-why" class="muted" hidden></p>
               <div class="coach-actions">
-                <button id="coach-show" class="btn ghost small" type="button">Show me</button>
-                <button id="coach-do" class="btn small" type="button">Do it for me</button>
+                <button id="coach-show" class="btn small" type="button" aria-pressed="false">Show me where</button>
                 <button id="coach-why-btn" class="btn link small" type="button" aria-expanded="false">Why?</button>
-                <button id="coach-next" class="btn link small" type="button">Not this</button>
+                <button id="coach-next" class="btn link small" type="button">Another idea</button>
               </div>
             </div>
             <div id="coach-summary" hidden>
@@ -176,6 +175,10 @@
         </div>
       </div>
     </section>
+
+    <div id="guide-arrow" class="guide-arrow" aria-hidden="true" hidden>
+      <svg viewBox="0 0 40 48" width="40" height="48"><path d="M20 46 L4 26 H14 V2 H26 V26 H36 Z" /></svg>
+    </div>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

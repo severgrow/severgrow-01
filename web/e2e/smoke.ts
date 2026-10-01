@@ -94,6 +94,31 @@ const playTurn = async (page: Page) => {
   }
 };
 
+// --- the coach's arrow: following it plays the suggested move, step by step ---
+{
+  const { page, errors } = await openPage('ink', 'phone', { speed: 'fast', coach: true });
+  await page.click('#menu-tutorial');
+  await idle(page);
+  let followed = 0;
+  for (let step = 0; step < 6; step++) {
+    const before = (await getState(page))!.history?.length ?? 0;
+    if (!(await page.locator('#coach-show').isVisible())) break;
+    await page.click('#coach-show');
+    for (let i = 0; i < 5; i++) {
+      if (!(await page.locator('#guide-arrow').isVisible())) break;
+      const t = (await page.getAttribute('#guide-arrow', 'data-target'))!;
+      if (t.startsWith('card:')) await page.click(`#hand [data-card="${t.slice(5)}"]`);
+      else if (t.startsWith('hex:')) await tapHex(page, t.slice(4));
+      else await page.click({ confirm: '#confirm-play', deck: '#deck', discard: '#discard', end: '#moves .end', cancel: '#confirm-cancel', button: '#moves .btn.primary' }[t]!);
+      if (((await getState(page))!.history?.length ?? 0) > before) break;
+    }
+    if (((await getState(page))!.history?.length ?? 0) > before) followed++;
+    await idle(page);
+  }
+  check('coach arrow: following it plays the suggested moves', followed >= 5 && errors.length === 0, `${followed} moves`);
+  await page.close();
+}
+
 for (const theme of THEMES) {
   const dir = shotsDir ? `${shotsDir}/${theme}` : null;
   if (dir) mkdirSync(dir, { recursive: true });

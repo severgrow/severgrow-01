@@ -1,37 +1,37 @@
 /* Free fonts (SIL Open Font License), bundled in web/src/fonts. Latin only, woff2.
    The browser downloads only the font of the theme in use. */
 @font-face {
-  font-family: 'Space Grotesk';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('./fonts/space-grotesk-latin-500-normal.woff2') format('woff2');
+  src: url('./fonts/bricolage-grotesque-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Space Grotesk';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 700;
+  font-weight: 800;
   font-display: swap;
-  src: url('./fonts/space-grotesk-latin-700-normal.woff2') format('woff2');
+  src: url('./fonts/bricolage-grotesque-latin-800-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Fraunces';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('./fonts/fraunces-latin-400-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Fraunces';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('./fonts/fraunces-latin-700-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Bree Serif';
+  font-family: 'Young Serif';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('./fonts/bree-serif-latin-400-normal.woff2') format('woff2');
+  src: url('./fonts/young-serif-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/fredoka-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/fredoka-latin-600-normal.woff2') format('woff2');
 }
