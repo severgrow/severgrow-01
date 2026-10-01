@@ -74,3 +74,40 @@ export const goldDemo = (): { state: State; empty: string; covered: string } => 
   }
   throw new Error('no gold demo found');
 };
+
+/** The first position (seeds 1-400) where the player can make a move matching `want`. */
+const findMove = (want: (v: ReturnType<typeof viewFor>, a: Action, after: State) => boolean): CutDemo => {
+  for (let seed = 1; seed <= 400; seed++) {
+    let found: CutDemo | null = null;
+    playGame(seed, ({ after }) => {
+      if (found || after.actor !== 0 || after.phase !== 'ACT' || count(after, 0) < 6) return;
+      const v = viewFor(after, 0);
+      const legal = legalActions(v);
+      for (const a of legal) {
+        const pv = previewMove(v, a);
+        if (pv && !pv.wins && want(v, a, after)) {
+          const sel = selFor(v, legal, a);
+          if (sel.hex === null) continue;
+          found = { state: after, action: a, card: moveCards(a)[0]!, hex: sel.hex, option: sel.option, cuts: pv.cuts };
+          return;
+        }
+      }
+    });
+    if (found) return found;
+  }
+  throw new Error('no such move found');
+};
+
+/** A cut that removes a bot tile standing on a gold hex. */
+export const goldCutDemo = () =>
+  findMove((v, a, s) => (previewMove(v, a)?.cutKeys ?? []).some((k) => s.terrain[k] === 'rich'));
+
+/** One move with three effects: tiles grow (one on gold or replacing a bot tile), then a cut. */
+export const tripleDemo = () =>
+  findMove((v, a, s) => {
+    const pv = previewMove(v, a)!;
+    return pv.cuts >= 1 && pv.ghosts.length >= 3 && pv.ghosts.some((g) => g.replaces || s.terrain[g.key] === 'rich');
+  });
+
+/** A big cut (4 or more bot tiles). */
+export const bigCutDemo = () => findMove((v, a) => (previewMove(v, a)?.cuts ?? 0) >= 4);

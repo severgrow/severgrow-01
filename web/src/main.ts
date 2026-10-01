@@ -22,6 +22,8 @@ import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
 import { pileStates } from './logic/piles.js';
+import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './logic/juice.js';
+import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
@@ -99,7 +101,7 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k) });
-const { flash, sparks, boardWrapPoint, floatText, caption, banner, flyCard, flyBack } = createEffects(board, () => timeScale(), () => motion());
+const { flash, sparks, spark, drift, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
   if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach, level: gameLevel }));
@@ -350,6 +352,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     coach.choice = 0;
   }
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
+  markMoment(p.steps, p.before);
   queue.push(p.steps);
   save();
   render();
@@ -484,6 +487,44 @@ function autoAdvance() {
   humanPlay(end);
 }
 
+// ---------- the juice budget ----------
+
+type Moment = { tier: Tier; budget: Budget; banner: string | null; chain: number; first: boolean };
+const moments = new WeakMap<Step, Moment>();
+
+/** Tags one action's steps with how big the moment is, and which effect in a chain each is. */
+function markMoment(steps: readonly Step[], before: State) {
+  const tier = moveTier(steps, (k) => before.terrain[k] === 'rich');
+  const budget = effectBudget(tier, settings.effects, settings.reduceMotion);
+  const banner = budget.banner ? tierBanner(steps) : null;
+  let chain = 0;
+  let first = true;
+  for (const st of steps) {
+    if (st.k !== 'grow' && st.k !== 'sever' && st.k !== 'strangle') continue;
+    moments.set(st, { tier, budget, banner, chain, first });
+    chain++;
+    first = false;
+  }
+}
+const momentOf = (st: Step): Moment => moments.get(st) ?? { tier: 'none', budget: effectBudget('none', 'normal', false), banner: null, chain: 0, first: false };
+
+/** The big-moment build-up: a short beat (the board draws in), then the impact. */
+async function anticipate(m: Moment, f: number, my: number) {
+  if (m.budget.anticipationMs <= 0 || !m.first) return;
+  anim($('board-wrap'), [{ transform: 'scale(1)' }, { transform: 'scale(0.985)' }, { transform: 'scale(1)' }], { duration: (m.budget.anticipationMs + 120) * f, easing: 'ease-in-out' });
+  await wait(m.budget.anticipationMs * f, my);
+}
+
+/** The impact of a big moment: shake, thud, banner, vibration, then a brief freeze (hit-stop). */
+async function impact(m: Moment, f: number, my: number) {
+  const b = m.budget;
+  if (b.shake > 0) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
+  if (b.thud) sound.thud();
+  if (b.vibrate) vibrate(settings.vibration, b.vibrate);
+  if (m.banner && m.first) banner(m.banner, 'big');
+  if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
+}
+
 async function pump() {
   if (pumping) return;
   pumping = true;
@@ -538,68 +579,81 @@ async function playStep(step: Step, my: number) {
     }
     case 'grow': {
       const by = step.player;
+      const mo = momentOf(step);
+      const b = mo.budget;
+      await anticipate(mo, f, my);
       if (!show()) return;
       const per = (step.style === 'line' ? 140 : step.style === 'bloom' ? 110 : 0) * f;
       const cx = step.tiles.reduce((s, t) => s + centerOf(t.key).x, 0) / step.tiles.length;
       const cy = step.tiles.reduce((s, t) => s + centerOf(t.key).y, 0) / step.tiles.length;
+      const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       step.tiles.forEach((t, i) => {
         const tileEl = board.tile(t.key);
         const p = centerOf(t.key);
         const delay = step.style === 'line' ? i * per : step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
         last = Math.max(last, delay);
+        // Squash and stretch: a quick pop that overshoots and settles.
         const frames: Keyframe[] =
-          m === 0
+          m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
             : step.style === 'sprout'
-              ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.08 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
-              : step.style === 'bloom'
-                ? [{ transform: 'scale(0.1)', opacity: 0 }, { transform: `scale(${1 + 0.14 * m})`, opacity: 1, offset: 0.7 }, { transform: 'scale(1)' }]
-                : [{ transform: 'scale(0.2)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }];
-        anim(tileEl, frames, { duration: (step.style === 'sprout' ? 460 : 360) * f, delay, easing: 'cubic-bezier(.2,.8,.3,1.1)' });
+              ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
+              : [{ transform: 'scale(0.15)', opacity: 0 }, { transform: `scale(${1 + 0.13 * m * pop})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
+        anim(tileEl, frames, { duration: (step.style === 'sprout' ? 460 : 380) * f, delay, easing: 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
         if (t.replaced) {
-          sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f);
+          // The bot's tile dissolves into sparks as mine takes its place.
+          sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
           setTimeout(() => sound.sparks(), delay);
-        }
+        } else if (mo.tier === 'big' && b.particles > 0) sparks(t.key, by === HUMAN ? 'you' : 'bot', delay, f, Math.round(b.particles / step.tiles.length));
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
-      // The veins of the new tiles grow in after them.
-      for (const v of board.veinsTouching(new Set(step.tiles.map((t) => t.key)))) {
-        anim(v, [{ opacity: 0 }, { opacity: 1 }], { duration: 260 * f, delay: last + 120 * f });
-      }
-      sound.grow(step.tiles.length, per || 60);
+      if (mo.tier === 'small' && b.particles > 0) spark(step.tiles[0]!.key, 120 * f, f);
+      sound.grow(pitchLadder(step.tiles.length, mo.chain), per || 60);
+      if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
       const cap = captionFor(step, HUMAN);
-      if (cap) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
+      if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
+      if (mo.tier === 'big') await impact(mo, f, my);
+      else if (mo.tier === 'small') vibrate(settings.vibration && settings.effects === 'high', 8);
       await wait(last + 420 * f, my);
       return;
     }
     case 'sever': {
       const keys = new Set(step.keys);
       const mine = step.player === HUMAN;
-      // The snap: a flash at the cut and a short shake, then the cut-off tiles fade
-      // to grey and wither in a ripple outward from the cut.
-      flash(step.origin, f, true);
-      if (m > 0) anim($('board-wrap'), shakeFrames(7 * m), { duration: 340 * Math.max(f, 0.5) });
-      sound.snap();
-      vibrate(settings.vibration, mine ? [40, 30, 80] : 35);
-      for (const v of board.veinsTouching(keys)) anim(v, [{ opacity: 1 }, { opacity: 1, offset: 0.15 }, { opacity: 0.2, offset: 0.3 }, { opacity: 0.8, offset: 0.4 }, { opacity: 0 }], { duration: 480 * f, fill: 'forwards' });
+      const mo = momentOf(step);
+      const b = mo.budget;
+      await anticipate(mo, f, my);
+      // The snap: the vein flashes and snaps, then the cut-off tiles go grey and wither
+      // in a ripple outward from the cut, shedding a few motes; a number floats up.
+      flash(step.origin, f, mo.tier === 'big');
+      sound.snap(2 ** ((2 * mo.chain) / 12));
+      if (mo.tier === 'big') await impact(mo, f, my);
+      else vibrate(settings.vibration, mine ? 35 : 20);
+      for (const v of board.veinsTouching(keys)) {
+        v.classList.add('snapping');
+        anim(v, [{ opacity: 1 }, { opacity: 1, offset: 0.15 }, { opacity: 0.2, offset: 0.3 }, { opacity: 0.8, offset: 0.4 }, { opacity: 0 }], { duration: 480 * f, fill: 'forwards' });
+      }
+      const motes = b.particles > 0 ? Math.max(1, Math.round(b.particles / Math.max(step.keys.length, 1) / 2)) : 0;
       let far = 0;
       for (const k of step.keys) {
         const d = hexDist(k, step.origin);
         far = Math.max(far, d);
         const tileEl = board.tile(k);
         tileEl?.classList.add('withering');
+        const delay = 220 * f + d * 110 * f;
         anim(
           tileEl,
-          m === 0
+          m === 0 || b.fadeOnly
             ? [{ opacity: 1 }, { opacity: 0.35, offset: 0.5 }, { opacity: 0 }]
             : [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.85, transform: 'scale(.94)', offset: 0.35 }, { opacity: 0, transform: `scale(${1 - 0.5 * m}) rotate(${(d % 2 ? 1 : -1) * 10 * m}deg)` }],
-          { duration: 600 * f, delay: 220 * f + d * 110 * f, fill: 'forwards', easing: 'ease-in' },
+          { duration: 600 * f, delay, fill: 'forwards', easing: 'ease-in' },
         );
+        if (motes) drift(k, delay + 200 * f, f, motes);
       }
       setTimeout(() => sound.sad(), 300 * f);
       floatText(`−${plural(step.keys.length, 'tile')}`, step.origin, mine ? 'bad' : 'good', f);
-      caption(captionFor(step, HUMAN)!, step.origin, mine ? 'bad' : 'good');
+      if (!(mo.banner && mo.first)) caption(captionFor(step, HUMAN)!, step.origin, mine ? 'bad' : 'good');
       await wait(220 * f + far * 110 * f + 640 * f, my);
       show();
       return;
@@ -631,8 +685,8 @@ async function playStep(step: Step, my: number) {
       }
       await wait(1400 * f, my);
       flash(root, f * 1.6, true);
-      if (m > 0) anim($('board-wrap'), shakeFrames(5 * m), { duration: 500 * f });
       sound.snap();
+      await impact(momentOf(step), f, my);
       caption(captionFor(step, HUMAN)!, root, step.loser === HUMAN ? 'bad' : 'good');
       await wait(500 * f, my);
       show();
@@ -641,6 +695,8 @@ async function playStep(step: Step, my: number) {
     case 'turn': {
       if (!show()) return;
       banner(step.player === HUMAN ? (step.final ? 'Your last turn' : 'Your turn') : "Bot's turn");
+      // My turn starts: a soft glow passes over my hand.
+      if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
       await wait(320 * f, my);
       return;
     }
@@ -649,7 +705,12 @@ async function playStep(step: Step, my: number) {
       const won = step.result.winner === HUMAN;
       sound.fanfare(won);
       vibrate(settings.vibration, won ? [30, 60, 30, 60, 140] : 70);
-      if (won) for (let i = 0; i < 4; i++) setTimeout(() => flash(board.rootKey(HUMAN), f, false), i * 170 * f);
+      if (won) {
+        // A fuller flourish: soft flashes and a ring of sparks from my root (within the cap).
+        for (let i = 0; i < 4; i++) setTimeout(() => flash(board.rootKey(HUMAN), f, false), i * 170 * f);
+        const spend = effectBudget('big', settings.effects, settings.reduceMotion).particles;
+        if (spend) sparks(board.rootKey(HUMAN), 'you', 300 * f, f * 1.4, spend);
+      }
       await wait(800 * f, my);
       return;
     }
@@ -675,8 +736,10 @@ function countScores(to: [number, number]) {
     if (k < 1) scoreRaf = requestAnimationFrame(tick);
   };
   scoreRaf = requestAnimationFrame(tick);
-  if (target[0] !== start[0]) anim($('score-you'), [{ transform: 'scale(1.4)' }, { transform: 'scale(1)' }], { duration: 420 });
-  if (target[1] !== start[1]) anim($('score-bot'), [{ transform: 'scale(1.4)' }, { transform: 'scale(1)' }], { duration: 420 });
+  // A fast tick, then a tiny bounce on the final number.
+  const bounce: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.28)', offset: 0.45 }, { transform: 'scale(0.96)', offset: 0.75 }, { transform: 'scale(1)' }];
+  if (target[0] !== start[0]) anim($('score-you'), bounce, { duration: 360, delay: dur });
+  if (target[1] !== start[1]) anim($('score-bot'), bounce, { duration: 360, delay: dur });
 }
 
 // ---------- rendering ----------
@@ -684,8 +747,25 @@ function countScores(to: [number, number]) {
 const busy = () => queue.pending > 0 || pumping;
 const myTurn = () => !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 
+// ---------- idle hint ----------
+// After about 8 seconds without a tap on my turn, the next control pulses very gently.
+// One quiet pulse, no sound, no nagging; any tap or change clears it.
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+function armIdle() {
+  clearTimeout(idleTimer);
+  document.querySelectorAll('.idle-hint').forEach((e) => e.classList.remove('idle-hint'));
+  if (!session || busy()) return;
+  const t = idleTarget(session.view.phase, myTurn(), !!session.pending);
+  if (!t) return;
+  idleTimer = setTimeout(() => {
+    const el = t === 'deck' ? $('deck') : t === 'confirm' ? $('confirm-play') : $('hand');
+    el.classList.add('idle-hint');
+  }, 8000);
+}
+
 function render() {
   if (!session || $('game').hidden) return;
+  armIdle();
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
@@ -1452,6 +1532,7 @@ document.addEventListener('keydown', (e) => {
   state: () => session?.state ?? null,
   settings: () => ({ ...settings }),
   busy: () => busy(),
+  particles: () => ({ alive: particles.alive, peak: particles.peak }),
 };
 
 fillIcons();

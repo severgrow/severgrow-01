@@ -5,6 +5,7 @@ import type { Card } from '../../../src/engine/index.js';
 import type { BoardView } from './board.js';
 import { S, centerOf, el, star } from './board.js';
 import { SUIT_SVG } from './icons.js';
+import { ParticleBudget } from '../logic/juice.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -34,6 +35,16 @@ export const shakeFrames = (a: number): Keyframe[] => [
 
 /** Effects bound to the board and the current animation speed / motion settings. */
 export const createEffects = (board: BoardView, timeScale: () => number, motion: () => number) => {
+  // At most 60 particles on screen at once; each one frees its slot when it ends.
+  const particles = new ParticleBudget(60);
+  const particle = (node: Element, a: Animation | null, ms: number) => {
+    const done = () => {
+      node.remove();
+      particles.free(1);
+    };
+    if (a) a.finished.then(done).catch(done);
+    else setTimeout(done, ms);
+  };
 
   function flash(key: string, f: number, big: boolean) {
     const { x, y } = centerOf(key);
@@ -41,15 +52,37 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: 1 }, { transform: `scale(${big ? 3.2 : 2.2})`, opacity: 0 }], { duration: 520 * Math.max(f, 0.3), easing: 'ease-out', fill: 'forwards' }), c, 600);
   }
 
-  function sparks(key: string, who: 'you' | 'bot', delay: number, f: number) {
+  /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
+  function sparks(key: string, who: 'you' | 'bot', delay: number, f: number, n = 9) {
     if (motion() === 0) return;
     const { x, y } = centerOf(key);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + i;
+    const k = particles.take(n);
+    for (let i = 0; i < k; i++) {
+      const a = (i / k) * Math.PI * 2 + i;
       const d = S * (0.7 + (i % 3) * 0.28);
       const p = el('path', { d: star(x, y, 3.4), class: `fx-spark ${who}` }, board.fx);
-      removeAfter(anim(p, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }], { duration: 560 * f, delay, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' }), p, 800);
+      particle(p, anim(p, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }], { duration: 560 * f, delay, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' }), 800);
     }
+  }
+
+  /** A few grey motes drifting up and away from a cut-off tile. */
+  function drift(key: string, delay: number, f: number, n = 2) {
+    if (motion() === 0) return;
+    const { x, y } = centerOf(key);
+    const k = particles.take(n);
+    for (let i = 0; i < k; i++) {
+      const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
+      const c = el('circle', { cx: x, cy: y, r: 1.6, class: 'fx-mote' }, board.fx);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.8 }, { transform: `translate(${dx}px, ${-S * 0.9}px)`, opacity: 0 }], { duration: 900 * f, delay: delay + i * 60, easing: 'ease-out', fill: 'both' }), 1200);
+    }
+  }
+
+  /** One tiny spark for a small move. */
+  function spark(key: string, delay: number, f: number) {
+    if (motion() === 0 || !particles.take(1)) return;
+    const { x, y } = centerOf(key);
+    const p = el('path', { d: star(x + S * 0.35, y - S * 0.35, 3), class: 'fx-spark you' }, board.fx);
+    particle(p, anim(p, [{ transform: 'scale(0)', opacity: 1 }, { transform: 'scale(1.3)', opacity: 1, offset: 0.4 }, { transform: 'scale(0)', opacity: 0 }], { duration: 420 * f, delay, fill: 'both', transformOrigin: 'center' } as KeyframeAnimationOptions), 600);
   }
 
   function boardWrapPoint(key: string | null) {
@@ -85,10 +118,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ opacity: 0, transform: 'translate(-50%, 6px)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.1 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, 0)' }], { duration: ms, fill: 'forwards' }), d, ms);
   }
 
-  function banner(text: string) {
+  function banner(text: string, tone?: 'you' | 'bot' | 'big') {
     const b = $('banner');
     b.textContent = text;
-    b.className = `banner ${text.startsWith('Bot') ? 'bot' : 'you'}`;
+    b.className = `banner ${tone ?? (text.startsWith('Bot') ? 'bot' : 'you')}`;
     const f = Math.max(timeScale(), 0.5);
     anim(
       b,
@@ -126,5 +159,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.4)`, opacity: 0 }], { duration: 400 * f, easing: 'ease-in', fill: 'forwards' }), d, 0);
   }
 
-  return { flash, sparks, boardWrapPoint, floatText, caption, banner, flyCard, flyBack };
+  return { flash, sparks, spark, drift, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
 };

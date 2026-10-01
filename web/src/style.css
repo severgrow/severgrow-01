@@ -783,7 +783,16 @@ svg.usable .hex-cell {
   fill: none;
   stroke: var(--c-you);
   stroke-width: 2.4;
-  animation: breathe 1.6s ease-in-out infinite;
+  /* Legal targets pulse gently into view, then breathe. */
+  animation: target-in 0.28s ease-out both, breathe 1.6s ease-in-out 0.28s infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes target-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
 }
 @keyframes breathe {
   0%,
@@ -1977,4 +1986,38 @@ svg.usable .hex-cell {
   border-radius: 9px;
   background: var(--c-danger);
   color: var(--c-bg);
+}
+
+/* ---------- juice ---------- */
+.fx-mote {
+  fill: var(--c-muted);
+}
+/* A snapping vein flashes bright before it goes. */
+.vein.snapping {
+  stroke: var(--c-text) !important;
+}
+/* The big-moment banner: cream, a little larger. */
+.banner.big {
+  font-size: 1.35rem;
+  background: var(--c-accent);
+  color: var(--c-accentInk);
+}
+/* Idle hint: one very quiet pulse on the next control. */
+.idle-hint {
+  animation: idle-pulse 2.4s ease-in-out 2;
+}
+.hand.idle-hint .card.playable {
+  animation: idle-pulse 2.4s ease-in-out 2;
+}
+.hand.idle-hint {
+  animation: none;
+}
+@keyframes idle-pulse {
+  50% {
+    filter: brightness(1.18);
+  }
+}
+.reduce-motion .idle-hint,
+.reduce-motion .hand.idle-hint .card.playable {
+  animation: none;
 }
