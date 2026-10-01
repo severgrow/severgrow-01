@@ -55,9 +55,9 @@ describe('moveSentence: one plain sentence per move', () => {
   it('simple moves', () => {
     const v = viewWith(run, {}, { phase: 'DRAW' });
     expect(moveSentence(v, { t: 'Draw', from: 'deck' })).toBe('Draw a card from the deck');
-    expect(moveSentence(v, { t: 'Draw', from: 'discard' })).toMatch(/^Take the .+ from the discard pile$/);
+    expect(moveSentence(v, { t: 'Draw', from: 'discard' })).toMatch(/^Take the .+ from the throw pile$/);
     expect(moveSentence(v, { t: 'EndAct' })).toBe("I'm done playing cards");
-    expect(moveSentence(v, { t: 'Discard', card: 4 })).toBe('Discard Dew 8');
+    expect(moveSentence(v, { t: 'Discard', card: 4 })).toBe('Throw Dew 8');
     expect(moveSentence(v, { t: 'Continue' })).toBe('End my turn');
   });
 

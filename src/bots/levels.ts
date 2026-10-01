@@ -38,15 +38,21 @@ const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exp
 
 /** Tuned with the ladder simulation (docs/LADDER.md). */
 export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
-  1: { ...base, mistakeRate: 0.85, topN: 8, dangerWeight: 0, pressureWeight: 0 },
-  2: { ...base, mistakeRate: 0.7, topN: 6, dangerWeight: 0, pressureWeight: 0 },
-  3: { ...base, mistakeRate: 0.55, topN: 5, dangerWeight: 0, pressureWeight: 0 },
-  4: { ...base, mistakeRate: 0.4, topN: 4, dangerWeight: 0.2, pressureWeight: 0.1 },
-  5: { ...base, mistakeRate: 0.28, topN: 3, dangerWeight: 0.4, pressureWeight: 0.2 },
-  6: { ...base, mistakeRate: 0.15, topN: 2, dangerWeight: 0.6, pressureWeight: 0.3 },
-  7: { ...base }, // the original GreedyBot
-  8: { ...base, lookahead: 1, cardDenial: true },
-  9: { ...base, lookahead: 1, cardDenial: true, searchIterations: 6 },
+  // 1-6: one "sloppiness" dial k (0 = level 7, 1 = careless) sets mistakes, laziness and
+  // how little it cares about danger. k = 0.95, 0.85, 0.72, 0.55, 0.40, 0.15.
+  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015 },
+  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045 },
+  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084 },
+  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135 },
+  5: { ...base, mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18 },
+  6: { ...base, mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255 },
+  7: { ...base }, // the original GreedyBot, unchanged
+  // 8: keeps its strong cards and combos when throwing (level 7's weak spot), but still
+  //    slips now and then.
+  8: { ...base, discardStyle: 'keepHigh', mistakeRate: 0.45, topN: 3 },
+  // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
+  //    and imagines 6 possible opponent hands to judge their best reply.
+  9: { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3 },
 };
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */

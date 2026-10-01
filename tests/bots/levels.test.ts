@@ -115,7 +115,11 @@ describe('bot levels: adversarial', () => {
   });
 
   it('ADVERSARIAL 5: levels 8 and 9 never read hidden cards (same view, different hidden cards, same move)', () => {
-    const states = positions(600).filter((x) => x.phase === 'ACT' && x.turnNumber > 4).slice(0, 25);
+    // Only positions where the deck holds enough cards for a full swap (else the deck size changes).
+    const states = positions(600)
+      .filter((x) => x.phase === 'ACT' && x.turnNumber > 4 && x.deck.length >= x.hands[x.actor === 0 ? 1 : 0].length)
+      .slice(0, 25);
+    expect(states.length).toBe(25);
     for (const s of states) {
       const opp = s.actor === 0 ? 1 : 0;
       // Swap the opponent's hand with the top of the deck: the bot's view is identical.

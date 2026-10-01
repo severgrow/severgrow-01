@@ -31,7 +31,7 @@ export const moveSentence = (v: View, a: Action): string => {
   const hn = (c: Coord) => hexName(c, R);
   switch (a.t) {
     case 'Draw':
-      return a.from === 'deck' ? 'Draw a card from the deck' : `Take the ${cardName(v.discard.at(-1)!)} from the discard pile`;
+      return a.from === 'deck' ? 'Draw a card from the deck' : `Take the ${cardName(v.discard.at(-1)!)} from the throw pile`;
     case 'MeldRun': {
       const sim = simulate(v, a)!;
       const opp: Player = v.player === 0 ? 1 : 0;
@@ -61,7 +61,7 @@ export const moveSentence = (v: View, a: Action): string => {
     case 'EndAct':
       return "I'm done playing cards";
     case 'Discard':
-      return `Discard ${cardName(v.hand.find((c) => c.id === a.card)!)}`;
+      return `Throw ${cardName(v.hand.find((c) => c.id === a.card)!)}`;
     case 'Knock':
       return 'Knock: the bot gets one last turn, then the higher score wins';
     case 'Continue':

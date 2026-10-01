@@ -68,13 +68,16 @@
         </div>
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
-      <ol id="steps" class="steps" aria-label="Your turn, step by step">
-        <li data-step="DRAW"><span class="n">1</span>Draw</li>
-        <li data-step="ACT"><span class="n">2</span>Grow</li>
-        <li data-step="DISCARD"><span class="n">3</span>Discard</li>
-      </ol>
+      <div class="steps-row">
+        <ol id="steps" class="steps" aria-label="Your turn, step by step">
+          <li data-step="DRAW"><span class="n">1</span>Draw</li>
+          <li data-step="ACT"><span class="n">2</span>Grow</li>
+          <li data-step="DISCARD"><span class="n">3</span>Throw</li>
+        </ol>
+        <button id="hint-btn" class="help-btn" type="button" aria-label="Show a tip" aria-expanded="false">?</button>
+      </div>
       <p id="endnote" class="endnote" hidden></p>
-      <p id="hint" class="hint" role="status" aria-live="polite"></p>
+      <p id="hint" class="hint" role="status" aria-live="polite" hidden></p>
 
       <div class="play">
         <div class="board-wrap" id="board-wrap">
@@ -82,8 +85,8 @@
           <div id="captions" class="captions" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
-          <button id="tool-weak" class="chip corner tl" type="button" aria-pressed="false"><span class="i" data-icon="shield"></span>Weak spots</button>
-          <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false"><span class="i" data-icon="target"></span>Bot's weak links</button>
+          <button id="tool-weak" class="chip corner tl" type="button" aria-pressed="false" aria-label="Your weak spots"><span class="i" data-icon="shield"></span><span class="chip-label">Your weak spots</span></button>
+          <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false" aria-label="The bot's weak links"><span class="i" data-icon="target"></span><span class="chip-label">Bot's weak links</span></button>
           <button id="tool-replay" class="chip corner bl" type="button"><span class="i" data-icon="replay"></span>Replay bot</button>
           <button id="tool-skip" class="chip corner br" type="button" hidden><span class="i" data-icon="skip"></span>Skip</button>
         </div>
@@ -130,7 +133,7 @@
               <span class="pile-count num" id="deck-count">0</span>
             </button>
             <div id="moves" class="moves" role="group" aria-label="Moves"></div>
-            <button id="discard" class="pile discard" type="button" aria-label="Discard pile">
+            <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
               <span class="pile-top" id="discard-top" aria-hidden="true"></span>
             </button>
           </div>

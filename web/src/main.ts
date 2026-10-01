@@ -183,7 +183,7 @@ function renderHowTo() {
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
     '<p><b>Goal:</b> have more points than the bot at the end. Each tile scores 1 point, or 2 on a gold hex.</p>',
-    '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then discard one card.</p>',
+    '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? ' Once per turn you can <b>sprout</b> one tile with any single card.' : ''}</p>`,
     '<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker bot tile.</p>',
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
@@ -333,6 +333,7 @@ function humanPlay(a: Action) {
   if (!p) return;
   inspectKey = null;
   guideGoal = null;
+  hintOpen = false;
   afterPlay(p, HUMAN, advice);
 }
 
@@ -365,6 +366,8 @@ function scheduleBot() {
   })();
 }
 let thinking = false;
+/** Whether the ? tip is open. */
+let hintOpen = false;
 /** The bot level of the game being played (kept with the saved game). */
 let gameLevel: Level = 7;
 let lastBoard: unknown = null;
@@ -435,6 +438,16 @@ function settleStep(s: Step, animated: boolean) {
     else shownScores = [s.scores[HUMAN], s.scores[BOT]];
   }
   if (!animated && s.k === 'sever') caption(captionFor(s, HUMAN)!, s.origin, s.player === HUMAN ? 'bad' : 'good');
+}
+
+/** Nothing can grow this turn: skip the "Throw a card" tap and go straight to throwing. */
+function autoAdvance() {
+  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  if (session.legal.some(isBoardAction) || session.view.hand.length === 0) return;
+  const end = session.legal.find((a) => a.t === 'EndAct');
+  if (!end) return;
+  caption('Nothing can grow. Tap a card to throw it.', null, 'info');
+  humanPlay(end);
 }
 
 async function pump() {
@@ -649,7 +662,15 @@ function render() {
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);
+  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
+    autoQueued = true;
+    setTimeout(() => {
+      autoQueued = false;
+      autoAdvance();
+    }, 250);
+  }
 }
+let autoQueued = false;
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
 function renderGuide(advice: Advice | null) {
@@ -725,7 +746,10 @@ function renderHud() {
   turn.innerHTML = over
     ? '<b>Game over</b>'
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
+  // The tip shows only when the ? is tapped; it closes again after each move.
   $('hint').textContent = hintText(session.view);
+  $('hint').hidden = !hintOpen || !$('hint').textContent;
+  $('hint-btn').setAttribute('aria-expanded', String(hintOpen));
   const note = st.phase === 'GAME_OVER' ? null : endgameNote(session.view);
   $('endnote').hidden = !note;
   $('endnote').textContent = note ?? '';
@@ -741,7 +765,7 @@ function renderHud() {
   }
 }
 
-/** In the default game (Rot and Knock off) discarding a card ends the turn. */
+/** In the default game (Rot and Knock off) throwing a card ends the turn. */
 const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
 
 function hintText(v: View): string {
@@ -753,14 +777,14 @@ function hintText(v: View): string {
   const sel = session.sel;
   switch (v.phase) {
     case 'DRAW':
-      return `Draw a card: tap the deck or the discard pile.${low}`;
+      return `Draw a card: tap the deck or the throw pile.${low}`;
     case 'ACT': {
       if (session.pending) return settings.confirmMoves ? 'Check the preview, then Confirm.' : '';
       if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? 'Tap a glowing hex to grow there.' : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
       if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
-      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Discard a card”.' : 'Nothing to grow this time. Tap “Discard a card”.';
+      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card”.' : 'Nothing to grow this time.';
     }
     case 'DISCARD':
       return discardEndsTurn(v) ? 'Last step: discard 1 card. Then your turn ends.' : 'Discard 1 card.';
@@ -899,14 +923,14 @@ function renderControls(v: View, advice: Advice | null) {
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
-    // Done growing: the next step is discarding a card (or, with an empty hand, the turn just ends).
+    // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    const label = v.hand.length > 0 ? 'Discard a card' : 'End turn';
+    const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
     if (end && !pending) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
   } else if (v.phase === 'DISCARD') {
     const note = document.createElement('p');
     note.className = 'step-note';
-    note.textContent = 'Pick 1 card to discard';
+    note.textContent = 'Tap a card to throw it';
     moves.append(note);
   } else {
     for (const a of legal) {
@@ -1107,6 +1131,13 @@ function onCardTap(id: number) {
   sound.click();
   session.tapCard(id);
   inspectKey = null;
+  // Throw step: tapping a card throws it (no extra confirm).
+  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard') return humanPlay(session.pending);
+  // A card with just one place to grow shows its preview at once (no hex tap needed).
+  if (session.sel.card !== null && session.sel.hex === null) {
+    const only = [...targetHexes(session.view, session.legal, session.sel)];
+    if (only.length === 1) session.tapHex(only[0]!);
+  }
   render();
   maybeAutoPlay();
 }
@@ -1121,6 +1152,8 @@ function onHexTap(key: string) {
     return;
   }
   sound.click();
+  // Tapping the previewed hex again plays the move (same as Confirm).
+  if (session.sel.hex === key && session.pending) return humanPlay(session.pending);
   session.tapHex(key);
   inspectKey = session.pending ? null : key;
   render();
@@ -1159,6 +1192,10 @@ bind('menu-play', () => {
   showScreen('levels');
 });
 bind('levels-back', () => showScreen('menu'));
+bind('hint-btn', () => {
+  hintOpen = !hintOpen;
+  render();
+});
 bind('go-other', () => {
   const lv = Number($('go-other').dataset.level) as Level;
   settings = { ...settings, level: lv };

@@ -1614,7 +1614,7 @@ svg.usable .hex-cell {
 .game > .hud {
   grid-row: 1;
 }
-.game > .steps {
+.game > .steps-row {
   grid-row: 2;
 }
 .game > .endnote {
@@ -1696,4 +1696,52 @@ svg.usable .hex-cell {
 .go-sub {
   margin: 6px 0 0;
   color: var(--c-muted);
+}
+
+/* ---------- steps row with the tip button ---------- */
+.steps-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+.steps-row .steps {
+  margin-left: 0;
+  margin-right: 0;
+}
+.help-btn {
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c-line);
+  background: transparent;
+  color: var(--c-muted);
+  font-weight: var(--w-num);
+  font-size: 0.9rem;
+  cursor: pointer;
+  position: relative;
+}
+.help-btn::after {
+  /* a bigger invisible touch area (44px) */
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.help-btn[aria-expanded='true'] {
+  color: var(--c-bg);
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+/* Weak-spot buttons: just the icon until switched on. */
+.chip .chip-label {
+  display: none;
+}
+.chip[aria-pressed='true'] .chip-label {
+  display: inline;
+}
+.chip.corner {
+  min-width: 40px;
+  min-height: 40px;
+  justify-content: center;
 }

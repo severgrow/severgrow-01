@@ -56,29 +56,35 @@ this one look and no theme switch. Everything still comes from design tokens in
 
 - **Tap a card:** every hex it can grow on glows; the rest dims. **Tap a glowing
   hex:** ghost tiles show exactly where the tiles will grow, with a result chip like
-  "+3 tiles, replaces 1, cuts 4". Then **Confirm**. If the same card and hex allow
+  "+3 tiles, replaces 1, cuts 4". Then **Confirm**, or tap the same hex again. If the same card and hex allow
   more than one move, the next button shows the next one: **Change card** when only the card differs, **Other way** when the tiles would land elsewhere.
+- **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
 - **Move buttons** above the hand say what kinds of moves you have ("Grow a line of
   3", "Grow a clump of 3", "Sprout one tile"); tapping one shows only those.
 - **Cancel** always clears your choice. Esc does the same on a keyboard.
-- **Weak spots** (top-left of the board): your tiles whose loss would cut off the
+- **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
+  **?** button next to them; tap it to read the tip, tap again to hide it.
+- **Throw:** when it is time to throw, the hint says "Tap a card to throw it" and one
+  tap throws that card (no Confirm). If nothing in your hand can grow, the game skips
+  straight to the throw step for you.
+- **Weak spots** (the icon at top-left of the board; its name shows when switched on): your tiles whose loss would cut off the
   most, with a number like "−4". Before you confirm a move that leaves a bigger
   weak spot, the confirm bar warns: "The bot could cut 5 of your tiles."
-- **Bot's weak links** (top-right): the bot's tiles you could cut, with how many
+- **Bot's weak links** (the icon at top-right): the bot's tiles you could cut, with how many
   tiles it would lose.
 - **Hold a tile** (or hover with a mouse): strength, owner, gold or not, and what
   losing it would cost.
-- **Deck and discard** are small stacks with counts; tap one to draw.
+- **Deck and throw pile** are small stacks with counts; tap one to draw.
 
 ## Playing against the bot
 
-- **Bot level** (menu and Settings): Easy, Normal or Hard. Normal is the original bot;
-  Easy sometimes settles for a lesser move; Hard plans its whole turn and won 55% of
-  games against Normal in testing.
-- **Undo**: take back the moves you made this turn (growing tiles, or pressing "Discard a
-  card"), until you draw a new card or discard one.
+- **Bot level**: **Play** opens a 3×3 screen of levels 1-9, each with a nature name,
+  one line about how it plays and your wins against it. Level 7 (Oak) is the original
+  bot and the default; the last level you picked is remembered. See `docs/LADDER.md`.
+- **Undo**: take back the moves you made this turn (growing tiles, or pressing "Throw a
+  card"), until you draw a new card or throw one.
 - **Points before you play**: the preview says what a move scores, e.g.
   "+3 tiles, cuts 2 · +5 points".
 - **The end is never a surprise**: "3 turns left", "Last turn!" or "Only 4 cards left"
@@ -114,7 +120,7 @@ leave a wrong board (tests check this).
 | Strangle | tiles around the root squeeze inward twice, a slow beat, then a flash |
 | Scores | count up or down smoothly |
 | Turns | "Your turn" / "Bot's turn" slides across |
-| Draw / discard | the card flies from the pile into your hand / flips onto the pile |
+| Draw / throw | the card flies from the pile into your hand / flips onto the pile |
 | Bot turn | a short "thinking" beat, then each of its moves one at a time |
 
 **Replay bot** (bottom-left of the board) plays the bot's last turn again. **Skip**
