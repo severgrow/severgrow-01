@@ -40,8 +40,8 @@ this one look and no theme switch. Everything still comes from design tokens in
 | Signal (bot) | `#ff6b4a` |
 | Gold | `#f2c14e` |
 
-- **Typeface:** Bricolage Grotesque (a clean sans with quirky details; text 500,
-  numbers 800). Free (SIL Open Font License), bundled in `web/src/fonts`.
+- **Typeface:** Alegreya Sans (a humanist sans with calligraphic roots: organic and
+  warm, yet clear at small sizes; text 500, numbers 800). Free (SIL Open Font License), bundled in `web/src/fonts`.
 - **Shapes (from Macro nature):** soft, slightly uneven hexes; thin curved veins;
   rounded cards and pill-shaped main buttons.
 - **Glow:** only your network's veins and root glow.

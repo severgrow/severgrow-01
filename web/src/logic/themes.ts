@@ -104,7 +104,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     },
     style: {
       // Ink colours with the soft, organic shapes first tried in "Macro nature".
-      font: 'Bricolage Grotesque',
+      font: 'Alegreya Sans',
       textWeight: 500,
       numberWeight: 800,
       radius: 16,
