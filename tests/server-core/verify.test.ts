@@ -31,7 +31,7 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
     expect(verifyGame(t, bad, 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/not allowed/) });
   });
 
-  it("rejects a changed bot action (even a legal one)", () => {
+  it("ADVERSARIAL 1: rejects a changed bot action (even a legal one)", () => {
     // Find a bot step with another legal option and swap it in.
     let s = newGame(win.seed);
     let done = false;
@@ -72,7 +72,7 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
     expect(verifyGame(t, [...win.actions, { t: 'EndAct' }], 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/after the game ended/) });
   });
 
-  it('rejects junk instead of actions without crashing', () => {
+  it('ADVERSARIAL 2: rejects junk instead of actions without crashing', () => {
     expect(verifyGame(t, [{ t: 'Nope' } as unknown as Action], 2_000_000).ok).toBe(false);
     expect(verifyGame(t, 'hello' as unknown as Action[], 2_000_000).ok).toBe(false);
     expect(verifyGame(t, Array(10_001).fill({ t: 'EndAct' }), 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/too long/) });
@@ -82,7 +82,7 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
 describe('finishGame: tickets work once, wins become tokens', () => {
   const win = winningGame(6, 3);
 
-  it('a verified win banks one token of that level; the ticket cannot be reused', () => {
+  it('ADVERSARIAL 3: a verified win banks one token of that level; the ticket cannot be reused', () => {
     const t = ticketFor(win.seed, 6);
     const r = finishGame(newAccount('p1', 0), t, win.actions, 2_000_000, DEFAULT_WORLD_CONFIG);
     expect(r.ok).toBe(true);

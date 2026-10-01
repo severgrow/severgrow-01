@@ -9,7 +9,7 @@ describe('nicknames', () => {
     for (const bad of ['ab', 'abcdefghijklmno', 'emoji🌱', 'semi;colon', '   ', ' lead', 'trail ', 'two  spaces']) expect(validateNickname(bad).ok, bad).toBe(false);
   });
 
-  it('a basic blocklist, including look-alike spellings', () => {
+  it('ADVERSARIAL 5: a basic blocklist, including look-alike spellings', () => {
     for (const bad of ['fuck', 'FUCKER', 'fvck', 'f u c k', 'Sh1t', 'n4zi', 'Adm1n', 'moderator']) expect(validateNickname(bad).ok, bad).toBe(false);
     for (const fine of ['Scunthorpe x', 'Shitake', 'Cassandra']) expect(typeof validateNickname(fine).ok).toBe('boolean'); // no crash
   });

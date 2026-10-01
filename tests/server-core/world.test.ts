@@ -67,7 +67,7 @@ describe('placing a token', () => {
     expect(planPlacement(acct('me'), (q, r) => w.get(q, r), { token: 0, q: 1, r: 0 }, 0, DEFAULT_WORLD_CONFIG)).toMatchObject({ ok: false, reason: expect.stringMatching(/no sprout to place/) });
   });
 
-  it('a race: two players plan the same hex; the second commit loses and keeps the token', () => {
+  it('ADVERSARIAL 4: a race: two players plan the same hex; the second commit loses and keeps the token', () => {
     const w = new InMemoryWorld([cell(0, 0, 2)]);
     const a = planPlacement(acct('a', [5]), (q, r) => w.get(q, r), { token: 0, q: 0, r: 0 }, 0, DEFAULT_WORLD_CONFIG);
     const b = planPlacement(acct('b', [7]), (q, r) => w.get(q, r), { token: 0, q: 0, r: 0 }, 0, DEFAULT_WORLD_CONFIG);
