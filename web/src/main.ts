@@ -11,7 +11,8 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, isBoardAction, kindsAvailable, options, selFor, targetHexes, usableCards } from './logic/interaction.js';
+import { isBoardAction, kindsAvailable, options, targetHexes, usableCards } from './logic/interaction.js';
+import { guideTarget } from './logic/guide.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -19,8 +20,10 @@ import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
 import type { Settings } from './logic/settings.js';
-import { THEMES, THEME_IDS, cssVars, resolveColors } from './logic/themes.js';
-import type { ThemeId } from './logic/themes.js';
+import { THEMES, cssVars, resolveColors } from './logic/themes.js';
+
+/** The one look (Ink and glow colours, organic shapes). */
+const THEME = THEMES.ink;
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf, el, star } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
@@ -63,7 +66,7 @@ const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 /** Animation time scale (0 = no animations). */
 const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1);
 /** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : THEMES[settings.theme].style.motion);
+const motion = () => (settings.reduceMotion ? 0 : THEME.style.motion);
 
 // ---------- game state ----------
 
@@ -93,10 +96,10 @@ const save = () => {
   if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach }));
 };
 
-// ---------- themes ----------
+// ---------- the look ----------
 
 function applyTheme() {
-  const t = THEMES[settings.theme];
+  const t = THEME;
   const root = document.documentElement;
   root.dataset.theme = t.id;
   for (const [k, v] of Object.entries(cssVars(t))) root.style.setProperty(k, v);
@@ -106,39 +109,11 @@ function applyTheme() {
   sound.tune(t.style.soundBase, t.style.soundWave);
   if (session) board.setup(session.state.config, session.state.terrain, t.style);
   drawLogo();
-  renderThemePickers();
   render();
 }
 
-function renderThemePickers() {
-  for (const host of document.querySelectorAll<HTMLElement>('[data-theme-pick]')) {
-    host.replaceChildren(
-      ...THEME_IDS.map((id) => {
-        const t = THEMES[id];
-        const c = resolveColors(t);
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `theme-swatch${settings.theme === id ? ' on' : ''}`;
-        b.dataset.themeId = id;
-        b.setAttribute('role', 'radio');
-        b.setAttribute('aria-checked', String(settings.theme === id));
-        b.setAttribute('aria-label', `${t.name}: ${t.description}`);
-        b.innerHTML = `<span class="sw" style="background:${c.bg};border-color:${c.line}"><i style="background:${c.you}"></i><i style="background:${c.bot}"></i><i style="background:${c.gold}"></i></span><span class="sw-name" style="font-family:'${t.style.font}'">${t.name}</span>`;
-        b.addEventListener('click', () => {
-          sound.unlock();
-          sound.click();
-          settings.theme = id as ThemeId;
-          saveSettings();
-          applyTheme();
-        });
-        return b;
-      }),
-    );
-  }
-}
-
 function drawLogo() {
-  const c = resolveColors(THEMES[settings.theme]);
+  const c = resolveColors(THEME);
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
     <g stroke="${c.you}" stroke-width="3" stroke-linecap="round" fill="none">
       <path d="M60 50 L34 30"/><path d="M60 50 L86 30"/><path d="M60 50 L60 74" stroke-dasharray="2 6"/>
@@ -197,6 +172,10 @@ function renderHowTo() {
 }
 
 function syncSettingsForm() {
+  // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
+  const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
+  vib.disabled = !('vibrate' in navigator);
+  $('vibration-label').textContent = vib.disabled ? 'Vibration (not available on this phone)' : 'Vibration';
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
@@ -228,7 +207,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   for (const w of [...waiters]) w();
   pumping = false;
   session = new Session(state, HUMAN);
-  coach = c ?? freshCoach();
+  coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
   shownScores = [v.score, v.opponentScore];
@@ -238,7 +217,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, THEMES[settings.theme].style);
+  board.setup(state.config, state.terrain, THEME.style);
   showScreen('game');
   scheduleBot();
 }
@@ -298,6 +277,7 @@ function humanPlay(a: Action) {
   const p = session.play(a, HUMAN);
   if (!p) return;
   inspectKey = null;
+  guideGoal = null;
   afterPlay(p, HUMAN, advice);
 }
 
@@ -328,6 +308,8 @@ function scheduleBot() {
 }
 let thinking = false;
 let coachWhyOpen = false;
+/** The move the coach's arrow is guiding to (null: no arrow). */
+let guideGoal: Action | null = null;
 
 // ---------- the animation player ----------
 
@@ -719,6 +701,67 @@ function render() {
   renderPiles(v);
   renderCoach(advice);
   renderGameOver();
+  renderGuide(advice);
+}
+
+/** The coach's arrow: points at the one thing to tap next for the suggested move. */
+function renderGuide(advice: Advice | null) {
+  const arrow = $('guide-arrow');
+  arrow.hidden = true;
+  if (!session || !guideGoal || !advice || !myTurn() || busy() || openSheet) return;
+  if (JSON.stringify(advice.action) !== JSON.stringify(guideGoal)) {
+    guideGoal = null;
+    return;
+  }
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal);
+  if (t?.kind === 'other') {
+    // Right card and hex: switch straight to the coach's way of growing there.
+    session.sel = { ...session.sel, option: t.option };
+    render();
+    return;
+  }
+  if (!t) {
+    guideGoal = null;
+    return;
+  }
+  let rect: { x: number; y: number } | null = null;
+  const above = (el: Element | null) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + 4 };
+  };
+  switch (t.kind) {
+    case 'card':
+      rect = above(document.querySelector(`#hand [data-card="${t.id}"]`));
+      break;
+    case 'hex':
+      rect = board.screenPoint(t.key);
+      rect = { x: rect.x, y: rect.y - 6 };
+      break;
+    case 'confirm':
+      rect = above($('confirm-play'));
+      break;
+    case 'cancel':
+      rect = above(document.querySelector('#confirm-cancel:not([hidden]), #moves .cancel') ?? $('confirm-cancel'));
+      break;
+    case 'deck':
+      rect = above($('deck'));
+      break;
+    case 'discard':
+      rect = above($('discard'));
+      break;
+    case 'end':
+      rect = above(document.querySelector('#moves .end'));
+      break;
+    case 'button':
+      rect = above(document.querySelector('#moves .btn.primary'));
+      break;
+  }
+  if (!rect) return;
+  arrow.hidden = false;
+  arrow.dataset.target = t.kind === 'card' ? `card:${t.id}` : t.kind === 'hex' ? `hex:${t.key}` : t.kind;
+  arrow.style.left = `${rect.x}px`;
+  arrow.style.top = `${rect.y}px`;
 }
 
 function renderHud() {
@@ -736,7 +779,20 @@ function renderHud() {
     ? '<b>Game over</b>'
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''}</small>`;
   $('hint').textContent = hintText(session.view);
+  // The turn as three steps; the current one is lit (only on your turn).
+  const steps = $('steps');
+  steps.hidden = st.phase === 'GAME_OVER';
+  steps.classList.toggle('idle', st.actor !== HUMAN || busy());
+  for (const li of steps.querySelectorAll<HTMLElement>('li')) {
+    const on = st.actor === HUMAN && !busy() && li.dataset.step === st.phase;
+    li.classList.toggle('on', on);
+    if (on) li.setAttribute('aria-current', 'step');
+    else li.removeAttribute('aria-current');
+  }
 }
+
+/** In the default game (Rot and Knock off) throwing a card away ends the turn. */
+const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
 
 function hintText(v: View): string {
   if (!session) return '';
@@ -753,10 +809,11 @@ function hintText(v: View): string {
       if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? 'Tap a glowing hex to grow there.' : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
-      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow.' : 'Nothing to grow this time. Tap “End turn”.';
+      if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
+      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card away”.' : 'Nothing to grow this time. Tap “Throw a card away”.';
     }
     case 'DISCARD':
-      return 'Throw one card away: tap it.';
+      return discardEndsTurn(v) ? 'Last step: throw 1 card away. Then your turn ends.' : 'Throw 1 card away.';
     case 'KNOCK':
       return 'Knock to end the game soon, or end your turn.';
     case 'ROT_PICK':
@@ -886,9 +943,16 @@ function renderControls(v: View, advice: Advice | null) {
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
+    // Done growing: the next step is throwing a card away (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    if (end && !pending) moves.append(button('End turn', `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), 'End turn: stop playing cards'));
-  } else if (v.phase !== 'DISCARD') {
+    const label = v.hand.length > 0 ? 'Throw a card away' : 'End turn';
+    if (end && !pending) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+  } else if (v.phase === 'DISCARD') {
+    const note = document.createElement('p');
+    note.className = 'step-note';
+    note.textContent = 'Pick 1 card to throw away';
+    moves.append(note);
+  } else {
     for (const a of legal) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
@@ -899,6 +963,7 @@ function renderControls(v: View, advice: Advice | null) {
   if (pending) {
     const pv = previewMove(v, pending);
     $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Throw away ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
+    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Throw away & end turn' : pending.t === 'Discard' ? 'Throw away' : 'Confirm';
     const warn = $('confirm-warn');
     warn.hidden = !pv?.warning;
     warn.textContent = pv?.warning ?? '';
@@ -981,8 +1046,8 @@ function renderCoach(advice: Advice | null) {
     $('coach-why').hidden = !coachWhyOpen;
     $('coach-why-btn').setAttribute('aria-expanded', String(coachWhyOpen));
     $('coach-why-btn').textContent = coachWhyOpen ? 'Less' : 'Why?';
-    $<HTMLButtonElement>('coach-next').disabled = advice.choices < 2;
-    $('coach-next').textContent = advice.choices > 1 ? `Not this (${advice.choice + 1}/${advice.choices})` : 'Not this';
+    $('coach-show').textContent = guideGoal ? 'Hide arrow' : 'Show me where';
+    $('coach-show').setAttribute('aria-pressed', String(!!guideGoal));
   } else if (showSummary && session) {
     $('coach-step').textContent = '';
     const sum = coachSummary(coach.taught, session.state.config);
@@ -1180,26 +1245,33 @@ bind('coach-hide', () => {
   render();
 });
 bind('coach-show', () => {
+  // "Show me where": an arrow points at each thing to tap, one step at a time.
   const advice = currentAdvice();
   if (!session || !advice) return;
-  if (isBoardAction(advice.action)) session.sel = selFor(session.view, session.legal, advice.action);
-  else if (advice.action.t === 'Discard') session.sel = { ...EMPTY_SEL, card: advice.action.card };
+  guideGoal = guideGoal ? null : advice.action;
+  if (guideGoal) session.cancel();
   render();
-  if (!isBoardAction(advice.action) && advice.action.t !== 'Discard') document.querySelector<HTMLElement>('#moves .coach-glow')?.focus();
-});
-bind('coach-do', () => {
-  const advice = currentAdvice();
-  if (advice) humanPlay(advice.action);
 });
 bind('coach-why-btn', () => {
   coachWhyOpen = !coachWhyOpen;
   render();
 });
-bind('coach-next', () => {
-  coach.choice++;
-  session?.cancel();
-  save();
-  render();
+// Sound and vibration can't be checked from a computer: let the player test them here.
+const canVibrate = typeof navigator !== 'undefined' && 'vibrate' in navigator;
+bind('test-sound', () => {
+  sound.unlock();
+  const was = sound.enabled;
+  sound.enabled = true;
+  sound.click();
+  sound.chime(0.15);
+  setTimeout(() => sound.snap(), 600);
+  setTimeout(() => sound.fanfare(true), 1300);
+  setTimeout(() => (sound.enabled = was), 2400);
+  $('test-note').textContent = "You should hear a click, a chime, a snap and a short tune. Nothing? Check your phone's silent switch and volume.";
+});
+bind('test-vibration', () => {
+  vibrate(true, [60, 60, 120]);
+  $('test-note').textContent = canVibrate ? 'Your phone should buzz three times.' : "This phone's browser doesn't let websites vibrate (iPhones never do).";
 });
 bind('coach-summary-ok', () => {
   coach.summaryDone = true;

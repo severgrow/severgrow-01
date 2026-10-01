@@ -1,13 +1,10 @@
 // Player settings, saved in the browser. Parsing is forgiving: anything missing or
 // broken falls back to the default, so an old or damaged save never breaks the page.
-import { THEME_IDS } from './themes.js';
-import type { ThemeId } from './themes.js';
 
 export const SPEEDS = ['slow', 'normal', 'fast', 'skip'] as const;
 export type Speed = (typeof SPEEDS)[number];
 
 export type Settings = {
-  theme: ThemeId;
   sound: boolean;
   music: boolean;
   vibration: boolean;
@@ -20,7 +17,6 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  theme: 'ink',
   sound: true,
   music: false,
   vibration: true,
@@ -45,7 +41,6 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   }
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out;
   const s = saved as Record<string, unknown>;
-  if (THEME_IDS.includes(s.theme as ThemeId)) out.theme = s.theme as ThemeId;
   if (SPEEDS.includes(s.speed as Speed)) out.speed = s.speed as Speed;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;

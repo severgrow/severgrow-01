@@ -1,8 +1,9 @@
-// The three visual themes as design tokens. Every colour on the page comes from a
-// theme's palette (at most 5 colours) or a mix of two palette colours, so switching
-// the theme changes the whole look at once. Pure data plus small colour helpers.
+// The page's look as design tokens ("Ink and glow"). Every colour on the page comes
+// from the palette (at most 5 colours) or a mix of two palette colours; fonts, tile
+// shapes and motion are tokens too. Pure data plus small colour helpers. (Three themes
+// were tried; the player chose this one, so the theme switch was removed.)
 
-export const THEME_IDS = ['ink', 'nature', 'tabletop'] as const;
+export const THEME_IDS = ['ink'] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export const COLOR_TOKENS = [
@@ -81,7 +82,7 @@ export const THEMES: Record<ThemeId, Theme> = {
   ink: {
     id: 'ink',
     name: 'Ink and glow',
-    description: 'Near-black paper, flat bold shapes, and one glowing colour for your network.',
+    description: 'Near-black paper, soft organic tiles, and one glowing colour for your network.',
     // paper, ink, glow (you), signal (bot), gold
     palette: ['#0d0e11', '#edeae2', '#4df0b4', '#ff6b4a', '#f2c14e'],
     colors: {
@@ -102,106 +103,23 @@ export const THEMES: Record<ThemeId, Theme> = {
       danger: 3,
     },
     style: {
-      font: 'Space Grotesk',
+      // Ink colours with the soft, organic shapes first tried in "Macro nature".
+      font: 'Bricolage Grotesque',
       textWeight: 500,
-      numberWeight: 700,
-      radius: 6,
-      tileShape: 'flat',
-      texture: 'none',
-      veinWidth: 3.2,
-      glow: 1,
-      shadow: 0,
-      motion: 0.8,
-      youMark: 'dot',
-      botMark: 'box',
-      youFill: 'solid',
-      botFill: 'hatch',
-      soundBase: 330,
-      soundWave: 'triangle',
-    },
-  },
-  nature: {
-    id: 'nature',
-    name: 'Macro nature',
-    description: 'Dark soil up close: soft organic tiles joined by fine living veins.',
-    // soil, bone, lichen (you), rust (bot), amber
-    palette: ['#1a120c', '#f0e2c4', '#86d0bd', '#e0703f', '#e3b04b'],
-    colors: {
-      bg: 0,
-      surface: mix(1, 0, 10),
-      text: 1,
-      muted: mix(1, 0, 68),
-      line: mix(1, 0, 16),
-      hexFill: mix(1, 0, 8),
-      rock: mix(1, 0, 30),
-      gold: 4,
-      you: 2,
-      bot: 3,
-      youInk: 0,
-      botInk: 0,
-      accent: 4,
-      accentInk: 0,
-      danger: 3,
-    },
-    style: {
-      font: 'Fraunces',
-      textWeight: 400,
-      numberWeight: 700,
+      numberWeight: 800,
       radius: 16,
       tileShape: 'organic',
-      texture: 'soil',
+      texture: 'none',
       veinWidth: 2.2,
-      glow: 0,
-      shadow: 0.5,
-      motion: 1,
+      glow: 1,
+      shadow: 0,
+      motion: 0.9,
       youMark: 'ring',
       botMark: 'diamond',
       youFill: 'soft',
       botFill: 'grain',
       soundBase: 262,
       soundWave: 'sine',
-    },
-  },
-  tabletop: {
-    id: 'tabletop',
-    name: 'Tabletop',
-    description: 'A board game on a dark wooden table: chunky pieces, printed cards, lamp light.',
-    // walnut, parchment, enamel blue (you), lacquer red (bot), brass
-    palette: ['#24160c', '#f4e7cf', '#6aa3e0', '#e0604a', '#d8a23c'],
-    colors: {
-      bg: 0,
-      surface: mix(1, 0, 12),
-      text: 1,
-      muted: mix(1, 0, 70),
-      line: mix(1, 0, 24),
-      hexFill: mix(1, 0, 14),
-      rock: mix(1, 0, 40),
-      gold: 4,
-      you: 2,
-      bot: 3,
-      youInk: 0,
-      botInk: 0,
-      accent: 4,
-      accentInk: 0,
-      danger: 3,
-    },
-    style: {
-      font: 'Bree Serif',
-      textWeight: 400,
-      numberWeight: 400,
-      radius: 10,
-      tileShape: 'chunky',
-      texture: 'wood',
-      veinWidth: 4,
-      glow: 0,
-      shadow: 1,
-      motion: 0.6,
-      youMark: 'pip',
-      botMark: 'tri',
-      youFill: 'solid',
-      botFill: 'stripe',
-      soundBase: 220,
-      soundWave: 'triangle',
     },
   },
 };

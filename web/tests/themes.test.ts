@@ -5,8 +5,10 @@ import type { ColorToken } from '../src/logic/themes.js';
 const HEX = /^#[0-9a-f]{6}$/i;
 
 describe('themes (design tokens)', () => {
-  it('there are exactly three themes: ink, nature, tabletop', () => {
-    expect(THEME_IDS).toEqual(['ink', 'nature', 'tabletop']);
+  it('there is one look: Ink and glow (the player chose it; no theme switch)', () => {
+    expect(THEME_IDS).toEqual(['ink']);
+    expect(THEMES.ink.name).toBe('Ink and glow');
+    expect(THEMES.ink.style.tileShape).toBe('organic'); // shapes from "Macro nature"
     for (const id of THEME_IDS) expect(THEMES[id].id).toBe(id);
   });
 
