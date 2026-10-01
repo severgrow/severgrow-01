@@ -6,7 +6,7 @@ import { allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/in
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
-import { looseEdges, networkEdges } from '../logic/network.js';
+import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -73,6 +73,10 @@ export type Overlay = {
   focusKey: string | null;
   scars: { key: string; owner: Player }[];
   usable: boolean;
+  /** My most dangerous weak spot, pulsing gently with its "-4" (a setting). */
+  pulse: Spot | null;
+  /** Show the bot's fragile links flickering ("Bot's weak links" is on). */
+  botFragile: boolean;
 };
 export const NO_OVERLAY: Overlay = {
   targets: null,
@@ -85,6 +89,8 @@ export const NO_OVERLAY: Overlay = {
   focusKey: null,
   scars: [],
   usable: false,
+  pulse: null,
+  botFragile: false,
 };
 
 export type BoardHandlers = {
@@ -99,6 +105,7 @@ export class BoardView {
   private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'marks' | 'over' | 'fx', SVGGElement>;
   private tileEls = new Map<string, SVGGElement>();
   private veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
+  private shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private pressed: string | null = null;
   private longPressed = false;
@@ -112,6 +119,7 @@ export class BoardView {
   setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle) {
     this.config = config;
     this.style = style;
+    this.shownVeins = new Set();
     const svg = this.svg;
     svg.replaceChildren();
     const coords = allCoords(config.boardRadius);
@@ -254,13 +262,24 @@ export class BoardView {
       el('path', { d: hexPath(s.key, S * 0.62, st.tileShape), class: `scar ${s.owner === 0 ? 'you' : 'bot'}` }, scars);
     }
 
-    // Veins: live links back to the root, fragile single links, and loose (cut-off) links.
+    // Veins: thick, glowing links back to the root. Thickness and brightness follow how
+    // many tiles depend on each link; fragile links (cutting them removes tiles) are thin
+    // and flicker. The bot's fragile links flicker only when "Bot's weak links" is on.
+    const now = new Set<string>();
+    const fresh = this.shownVeins.size > 0; // no draw-on for the very first picture
     for (const p of [0, 1] as const) {
       const g = el('g', { class: `veins ${p === 0 ? 'you' : 'bot'}` }, veins);
-      if (p === 0 && st.glow > 0) g.setAttribute('filter', 'url(#glow)');
-      for (const e of networkEdges(board, this.config, p)) this.vein(g, e.a, e.b, p, e.fragile ? 'fragile' : 'live');
-      for (const e of looseEdges(board, this.config, p)) this.vein(g, e.a, e.b, p, 'loose');
+      if (st.glow > 0) g.setAttribute('filter', 'url(#glow)');
+      for (const e of networkEdges(board, this.config, p)) {
+        const fragile = e.fragile && (p === 0 || o.botFragile);
+        const id = `${p}:${e.a}|${e.b}`;
+        now.add(id);
+        const look = veinLook(e.load, fragile);
+        this.vein(g, e.a, e.b, p, fragile ? 'fragile' : 'live', look.width, look.opacity, fresh && !this.shownVeins.has(id));
+      }
+      for (const e of looseEdges(board, this.config, p)) this.vein(g, e.a, e.b, p, 'loose', 0.55, 0.7, false);
     }
+    this.shownVeins = now;
 
     const maxRank = this.config.maxRank;
     for (const key of this.keys) {
@@ -292,31 +311,36 @@ export class BoardView {
     }
     if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, st.tileShape), class: 'selected' }, over);
     for (const w of o.weak) this.badge(over, w.key, `−${w.loss}`, 'weak');
+    if (o.pulse && !o.weak.some((w) => w.key === o.pulse!.key)) this.badge(over, o.pulse.key, `−${o.pulse.loss}`, 'weak pulse');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
     if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, st.tileShape), class: 'focus' }, over);
     this.svg.classList.toggle('usable', o.usable);
   }
 
-  private vein(g: SVGGElement, a: string, b: string, owner: Player, kind: 'live' | 'fragile' | 'loose') {
+  private vein(g: SVGGElement, a: string, b: string, owner: Player, kind: 'live' | 'fragile' | 'loose', width: number, opacity: number, grow: boolean) {
     const A = centerOf(a);
     const B = centerOf(b);
     const st = this.style;
-    const from = 0.3;
+    const from = 0.22;
     const p = { x: A.x + (B.x - A.x) * from, y: A.y + (B.y - A.y) * from };
     const q = { x: A.x + (B.x - A.x) * (1 - from), y: A.y + (B.y - A.y) * (1 - from) };
-    const w = st.veinWidth * (kind === 'live' ? 1 : 0.55);
-    let e: SVGElement;
-    if (st.tileShape === 'organic') {
-      // a gently curved vein
-      const bend = (hash(a + b) - 0.5) * 9;
-      const nx = -(B.y - A.y) / (S * SQ3);
-      const ny = (B.x - A.x) / (S * SQ3);
-      const c = { x: (p.x + q.x) / 2 + nx * bend, y: (p.y + q.y) / 2 + ny * bend };
-      e = el('path', { d: `M${p.x.toFixed(1)},${p.y.toFixed(1)}Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`, class: `vein ${kind}`, 'stroke-width': w }, g);
-    } else {
-      e = el('line', { x1: p.x.toFixed(1), y1: p.y.toFixed(1), x2: q.x.toFixed(1), y2: q.y.toFixed(1), class: `vein ${kind}`, 'stroke-width': w }, g);
-    }
-    if (kind === 'fragile') (e as SVGElement & { style: CSSStyleDeclaration }).style.animationDelay = `${(-hash(a + b) * 3).toFixed(2)}s`;
+    // a gently curved vein (organic shapes)
+    const bend = st.tileShape === 'organic' ? (hash(a + b) - 0.5) * 9 : 0;
+    const nx = -(B.y - A.y) / (S * SQ3);
+    const ny = (B.x - A.x) / (S * SQ3);
+    const c = { x: (p.x + q.x) / 2 + nx * bend, y: (p.y + q.y) / 2 + ny * bend };
+    const e = el(
+      'path',
+      {
+        d: `M${p.x.toFixed(1)},${p.y.toFixed(1)}Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`,
+        class: `vein ${kind}${grow ? ' grow-in' : ''}`,
+        'stroke-width': (st.veinWidth * width).toFixed(2),
+        'stroke-opacity': opacity.toFixed(2),
+        pathLength: 1,
+      },
+      g,
+    );
+    if (kind === 'fragile') e.style.animationDelay = `${(-hash(a + b) * 3).toFixed(2)}s`;
     this.veinEls.push({ a, b, owner, el: e });
   }
 
@@ -371,7 +395,7 @@ export class BoardView {
     }
   }
 
-  private badge(parent: SVGGElement, key: string, text: string, kind: 'weak' | 'opp') {
+  private badge(parent: SVGGElement, key: string, text: string, kind: 'weak' | 'opp' | 'weak pulse') {
     const { x, y } = centerOf(key);
     const g = el('g', { class: `badge ${kind}` }, parent);
     el('path', { d: hexPath(key, S - 3, this.style.tileShape), class: 'badge-ring' }, g);

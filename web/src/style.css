@@ -724,10 +724,26 @@ svg.usable .hex-cell {
   stroke-linecap: round;
 }
 .veins.you .vein {
-  stroke: color-mix(in srgb, var(--c-you) 55%, var(--c-text));
+  stroke: color-mix(in srgb, var(--c-you) 45%, #fff);
 }
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--c-bot) 55%, var(--c-text));
+  stroke: color-mix(in srgb, var(--c-bot) 45%, #fff);
+}
+/* A new vein draws itself on, from the old tile to the new one. */
+.vein.grow-in {
+  stroke-dasharray: 1;
+  animation: draw-on calc(0.32s * var(--anim, 1)) ease-out both;
+}
+@keyframes draw-on {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.reduce-motion .vein.grow-in {
+  animation: none;
 }
 .vein.fragile {
   animation: flicker 2.8s ease-in-out infinite;
@@ -814,11 +830,11 @@ svg.usable .hex-cell {
   stroke: var(--c-accent);
   stroke-width: 2;
   stroke-opacity: 0.9;
-  animation: breathe 2.2s ease-in-out infinite;
+  animation: coach-breathe 2.2s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: center;
 }
-@keyframes breathe {
+@keyframes coach-breathe {
   50% {
     transform: scale(0.92);
     stroke-opacity: 0.55;
@@ -849,11 +865,32 @@ svg.usable .hex-cell {
   stroke-width: 2.2;
   animation: breathe 1.4s ease-in-out infinite;
 }
+/* My weakest link, pulsing gently by default (a setting): a soft ring that grows and fades. */
+.badge.pulse .badge-ring {
+  animation: weak-pulse 2.6s ease-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes weak-pulse {
+  0% {
+    stroke-opacity: 0.9;
+    transform: scale(0.9);
+  }
+  70%,
+  100% {
+    stroke-opacity: 0;
+    transform: scale(1.18);
+  }
+}
+.reduce-motion .badge.pulse .badge-ring {
+  animation: none;
+  stroke-opacity: 0.8;
+}
 .badge.opp .badge-bg {
-  fill: var(--c-you);
+  fill: var(--c-accent);
 }
 .badge.opp .badge-ring {
-  stroke: var(--c-you);
+  stroke: var(--c-accent);
   stroke-dasharray: 4 3;
 }
 .fx-flash {
@@ -1902,4 +1939,42 @@ svg.usable .hex-cell {
   min-width: 40px;
   min-height: 40px;
   justify-content: center;
+}
+
+/* The one-line legend in How to play: each board mark has its own shape. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 0.85rem;
+}
+.lg {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-size: 0.7rem;
+  font-weight: var(--w-num);
+  vertical-align: middle;
+}
+.lg-gold {
+  border-radius: 50%;
+  background: var(--c-gold);
+  color: var(--c-goldInk);
+}
+.lg-coach {
+  border-radius: 50%;
+  border: 2px solid var(--c-accent);
+}
+.lg-ghost {
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+  background: repeating-linear-gradient(90deg, var(--c-you) 0 3px, transparent 3px 6px);
+}
+.lg-weak {
+  width: auto;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--c-danger);
+  color: var(--c-bg);
 }

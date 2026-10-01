@@ -112,7 +112,7 @@ export const looseEdges = (board: Board, config: RulesConfig, player: Player): E
  */
 export const veinLook = (load: number, fragile: boolean): { width: number; opacity: number } => {
   if (fragile) return { width: 0.6, opacity: Math.min(1, 0.6 + 0.06 * load) };
-  return { width: Math.min(2.6, 0.75 + 0.42 * Math.sqrt(load)), opacity: Math.min(1, 0.45 + 0.11 * load) };
+  return { width: Math.min(2.6, 0.9 + 0.45 * Math.sqrt(load)), opacity: Math.min(1, 0.62 + 0.09 * load) };
 };
 
 /** The fragile link that would cut off the most tiles, or null. Ties: the first in board order. */

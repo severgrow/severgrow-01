@@ -205,6 +205,7 @@ function renderHowTo() {
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
     "<p><b>Win early:</b> surround the bot's root so it can't grow.</p>",
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to the bot.</p>`,
+    '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
   ].join('');
 }
@@ -687,6 +688,7 @@ function render() {
   if (!session || $('game').hidden) return;
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
+  document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
   renderBoard(v, advice);
   renderControls(v, advice);
@@ -851,6 +853,9 @@ function renderBoard(v: View, advice: Advice | null) {
   if (!busy()) {
     if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     if (showOpps) o.opps = opportunities(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
+    // My most dangerous weak link (one the bot could cut next turn) pulses gently.
+    if (settings.weakPulse && !settings.weakSpots && v.phase !== 'GAME_OVER') o.pulse = weakSpots(v)[0] ?? null;
+    o.botFragile = showOpps;
   }
   // Redraw the board only when something on it changed (cheaper on older phones).
   const key = JSON.stringify({ ...o, targets: o.targets ? [...o.targets] : null });
