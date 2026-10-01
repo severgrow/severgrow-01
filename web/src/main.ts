@@ -779,7 +779,20 @@ function renderHud() {
     ? '<b>Game over</b>'
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''}</small>`;
   $('hint').textContent = hintText(session.view);
+  // The turn as three steps; the current one is lit (only on your turn).
+  const steps = $('steps');
+  steps.hidden = st.phase === 'GAME_OVER';
+  steps.classList.toggle('idle', st.actor !== HUMAN || busy());
+  for (const li of steps.querySelectorAll<HTMLElement>('li')) {
+    const on = st.actor === HUMAN && !busy() && li.dataset.step === st.phase;
+    li.classList.toggle('on', on);
+    if (on) li.setAttribute('aria-current', 'step');
+    else li.removeAttribute('aria-current');
+  }
 }
+
+/** In the default game (Rot and Knock off) throwing a card away ends the turn. */
+const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
 
 function hintText(v: View): string {
   if (!session) return '';
@@ -796,10 +809,11 @@ function hintText(v: View): string {
       if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? 'Tap a glowing hex to grow there.' : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
-      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow.' : 'Nothing to grow this time. Tap “End turn”.';
+      if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
+      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card away”.' : 'Nothing to grow this time. Tap “Throw a card away”.';
     }
     case 'DISCARD':
-      return 'Throw one card away: tap it.';
+      return discardEndsTurn(v) ? 'Last step: throw 1 card away. Then your turn ends.' : 'Throw 1 card away.';
     case 'KNOCK':
       return 'Knock to end the game soon, or end your turn.';
     case 'ROT_PICK':
@@ -929,9 +943,16 @@ function renderControls(v: View, advice: Advice | null) {
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
+    // Done growing: the next step is throwing a card away (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    if (end && !pending) moves.append(button('End turn', `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), 'End turn: stop playing cards'));
-  } else if (v.phase !== 'DISCARD') {
+    const label = v.hand.length > 0 ? 'Throw a card away' : 'End turn';
+    if (end && !pending) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+  } else if (v.phase === 'DISCARD') {
+    const note = document.createElement('p');
+    note.className = 'step-note';
+    note.textContent = 'Pick 1 card to throw away';
+    moves.append(note);
+  } else {
     for (const a of legal) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
@@ -942,6 +963,7 @@ function renderControls(v: View, advice: Advice | null) {
   if (pending) {
     const pv = previewMove(v, pending);
     $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Throw away ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
+    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Throw away & end turn' : pending.t === 'Discard' ? 'Throw away' : 'Confirm';
     const warn = $('confirm-warn');
     warn.hidden = !pv?.warning;
     warn.textContent = pv?.warning ?? '';
