@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, parseSettings, speedFactor } from '../src/logic/setti
 describe('settings (saved in the browser)', () => {
   it('has every setting from the brief, with sensible defaults', () => {
     expect(DEFAULT_SETTINGS).toEqual({
-      level: 'normal',
+      level: 7,
       sound: true,
       music: false,
       vibration: true,
@@ -25,8 +25,13 @@ describe('settings (saved in the browser)', () => {
   it('keeps valid saved values and repairs broken ones', () => {
     const s = parseSettings(JSON.stringify({ theme: 'tabletop', sound: false, speed: 'fast', confirmMoves: false, largeText: true }));
     expect(s).not.toHaveProperty('theme'); // an old saved theme choice is ignored
-    expect(parseSettings(JSON.stringify({ level: 'hard' })).level).toBe('hard');
-    expect(parseSettings(JSON.stringify({ level: 'brutal' })).level).toBe('normal');
+    expect(parseSettings(JSON.stringify({ level: 4 })).level).toBe(4);
+    expect(parseSettings(JSON.stringify({ level: 10 })).level).toBe(7);
+    expect(parseSettings(JSON.stringify({ level: 2.5 })).level).toBe(7);
+    // The old Easy / Normal / Hard choice carries over.
+    expect(parseSettings(JSON.stringify({ level: 'easy' })).level).toBe(3);
+    expect(parseSettings(JSON.stringify({ level: 'normal' })).level).toBe(7);
+    expect(parseSettings(JSON.stringify({ level: 'hard' })).level).toBe(8);
     expect(s).toMatchObject({ sound: false, speed: 'fast', confirmMoves: false, largeText: true, music: false });
     const bad = parseSettings(JSON.stringify({ theme: 'neon', sound: 'yes', speed: 9, extra: 1 }));
     expect(bad).toEqual(DEFAULT_SETTINGS);

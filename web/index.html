@@ -34,9 +34,20 @@
             <button id="menu-settings" class="btn ghost" type="button"><span class="i" data-icon="gear"></span>Settings</button>
           </div>
         </div>
-        <div class="level-pick"><span class="muted small">Bot</span><div class="seg" role="radiogroup" aria-label="Bot level" data-level-seg></div></div>
         <p id="menu-stats" class="muted small stats-line"></p>
         <p class="menu-foot">Severgrow · v0.4</p>
+      </div>
+    </section>
+
+    <!-- ===== Pick a level ===== -->
+    <section id="levels" class="screen levels" aria-label="Pick a level" hidden>
+      <div class="levels-inner">
+        <header class="levels-head">
+          <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2>Pick a level</h2>
+        </header>
+        <div id="level-grid" class="level-grid"></div>
+        <p class="muted small levels-note">Level 7 is the classic bot. Your wins at each level are counted.</p>
       </div>
     </section>
 
@@ -60,7 +71,7 @@
       <ol id="steps" class="steps" aria-label="Your turn, step by step">
         <li data-step="DRAW"><span class="n">1</span>Draw</li>
         <li data-step="ACT"><span class="n">2</span>Grow</li>
-        <li data-step="DISCARD"><span class="n">3</span>Throw away</li>
+        <li data-step="DISCARD"><span class="n">3</span>Discard</li>
       </ol>
       <p id="endnote" class="endnote" hidden></p>
       <p id="hint" class="hint" role="status" aria-live="polite"></p>
@@ -144,8 +155,6 @@
           <button id="test-vibration" class="btn ghost small" type="button">Test vibration</button>
         </div>
         <p id="test-note" class="muted small"></p>
-        <h3>The bot</h3>
-        <div class="row"><span>Level</span><div class="seg" role="radiogroup" aria-label="Bot level" data-level-seg></div></div>
         <h3>Animations</h3>
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
@@ -182,12 +191,14 @@
     <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
       <div class="go-card">
         <h2 id="go-title" class="go-title"></h2>
+        <p id="go-sub" class="go-sub"></p>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
         <p id="go-break" class="muted small"></p>
         <ul id="go-highlights" class="highlights"></ul>
         <div class="go-buttons">
-          <button id="go-rematch" class="btn primary big" type="button">Rematch</button>
+          <button id="go-rematch" class="btn primary big" type="button">Play again</button>
+          <button id="go-other" class="btn ghost" type="button"></button>
           <button id="go-board" class="btn ghost" type="button">See the board</button>
           <button id="go-menu" class="btn link" type="button">Back to menu</button>
           <p id="go-stats" class="muted small stats-line"></p>

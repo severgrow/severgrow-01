@@ -21,7 +21,9 @@
     "play": "tsx src/cli/play-cli.ts",
     "replay": "tsx src/cli/replay-cli.ts",
     "grid": "tsx src/sim/grid.ts",
-    "e2e": "tsx web/e2e/smoke.ts"
+    "e2e": "tsx web/e2e/smoke.ts",
+    "ladder": "tsx src/sim/ladder.ts",
+    "calibrate": "tsx src/sim/calibrate.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

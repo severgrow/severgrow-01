@@ -1,8 +1,8 @@
 // Your record against the bot, saved in this browser only.
 import type { GameResult, Player } from '../../../src/engine/index.js';
 
-export type Stats = { played: number; wins: number; losses: number; draws: number; best: number; streak: number; bestStreak: number };
-export const EMPTY_STATS: Stats = Object.freeze({ played: 0, wins: 0, losses: 0, draws: 0, best: 0, streak: 0, bestStreak: 0 }) as Stats;
+export type Stats = { played: number; wins: number; losses: number; draws: number; best: number; streak: number; bestStreak: number; winsByLevel: number[] };
+export const EMPTY_STATS: Stats = Object.freeze({ played: 0, wins: 0, losses: 0, draws: 0, best: 0, streak: 0, bestStreak: 0, winsByLevel: Object.freeze(Array<number>(9).fill(0)) as number[] }) as Stats;
 export const STATS_KEY = 'severgrow.stats.v1';
 
 export const parseStats = (raw: string | null): Stats => {
@@ -12,17 +12,24 @@ export const parseStats = (raw: string | null): Stats => {
   } catch {
     saved = null;
   }
-  const out: Stats = { ...EMPTY_STATS };
+  const out: Stats = { ...EMPTY_STATS, winsByLevel: [...EMPTY_STATS.winsByLevel] };
   if (!saved || typeof saved !== 'object') return out;
-  for (const k of Object.keys(EMPTY_STATS) as (keyof Stats)[]) {
-    const v = (saved as Record<string, unknown>)[k];
+  const rec = saved as Record<string, unknown>;
+  for (const k of ['played', 'wins', 'losses', 'draws', 'best', 'streak', 'bestStreak'] as const) {
+    const v = rec[k];
     if (typeof v === 'number' && Number.isInteger(v) && v >= 0) out[k] = v;
+  }
+  if (Array.isArray(rec.winsByLevel)) {
+    out.winsByLevel = out.winsByLevel.map((_, i) => {
+      const v = (rec.winsByLevel as unknown[])[i];
+      return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : 0;
+    });
   }
   return out;
 };
 
-/** The record after one more finished game (never changes `s`). */
-export const recordResult = (s: Stats, r: GameResult, me: Player): Stats => {
+/** The record after one more finished game at bot `level` (1-9); never changes `s`. */
+export const recordResult = (s: Stats, r: GameResult, me: Player, level: number): Stats => {
   const won = r.winner === me;
   const streak = won ? s.streak + 1 : 0;
   return {
@@ -33,6 +40,7 @@ export const recordResult = (s: Stats, r: GameResult, me: Player): Stats => {
     best: Math.max(s.best, r.scores[me]),
     streak,
     bestStreak: Math.max(s.bestStreak, streak),
+    winsByLevel: s.winsByLevel.map((n, i) => n + (won && i === level - 1 ? 1 : 0)),
   };
 };
 

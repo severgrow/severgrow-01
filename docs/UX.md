@@ -77,8 +77,8 @@ this one look and no theme switch. Everything still comes from design tokens in
 - **Bot level** (menu and Settings): Easy, Normal or Hard. Normal is the original bot;
   Easy sometimes settles for a lesser move; Hard plans its whole turn and won 55% of
   games against Normal in testing.
-- **Undo**: take back the moves you made this turn (growing tiles, or pressing "Throw a
-  card away"), until you draw a new card or throw one away.
+- **Undo**: take back the moves you made this turn (growing tiles, or pressing "Discard a
+  card"), until you draw a new card or discard one.
 - **Points before you play**: the preview says what a move scores, e.g.
   "+3 tiles, cuts 2 · +5 points".
 - **The end is never a surprise**: "3 turns left", "Last turn!" or "Only 4 cards left"

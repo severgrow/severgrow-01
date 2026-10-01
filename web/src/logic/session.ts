@@ -73,7 +73,7 @@ export class Session {
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
     if (!legal.some((a) => same(a, action))) return null;
     const after = apply(s, action);
-    // Growing tiles (and pressing "Throw a card away") reveal nothing new, so the player
+    // Growing tiles (and pressing "Discard a card") reveal nothing new, so the player
     // may take them back. A draw, a discard or any bot move makes everything before final.
     if (who === this.viewer && (action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout' || action.t === 'EndAct')) this.undoStack.push(s);
     else this.undoStack = [];

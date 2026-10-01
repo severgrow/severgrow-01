@@ -4,6 +4,9 @@
 import { LEVELS } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
 
+/** The old Easy / Normal / Hard choice, mapped to the 1-9 levels. */
+const OLD_LEVELS: Record<string, Level> = { easy: 3, normal: 7, hard: 8 };
+
 export const SPEEDS = ['slow', 'normal', 'fast', 'skip'] as const;
 export type Speed = (typeof SPEEDS)[number];
 
@@ -21,7 +24,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  level: 'normal',
+  level: 7,
   sound: true,
   music: false,
   vibration: true,
@@ -48,6 +51,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   const s = saved as Record<string, unknown>;
   if (SPEEDS.includes(s.speed as Speed)) out.speed = s.speed as Speed;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
+  else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }

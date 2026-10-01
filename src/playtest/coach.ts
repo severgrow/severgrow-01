@@ -77,7 +77,7 @@ export type Advice = {
 
 const GLOSSARY: Record<string, string> = {
   root: 'the big round bulb you start from',
-  'discard pile': 'the cards thrown away',
+  'discard pile': 'the cards already discarded',
   deck: 'the face-down pile',
   combo: '3+ cards played together',
   'gold hex': 'a yellow hex',
@@ -242,7 +242,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       const loose = bestMeldPartition(v.hand).leftover.length;
       const why: string[] = [];
       if (f.fitsCombo) why.push(`Every card fits a ${say('combo')}, so let go of the ${name}: it hurts your combos least.`);
-      else if (loose >= 3) why.push(`You are holding ${loose} cards that do not fit a ${say('combo')}. Throwing away the ${name} keeps your hand tidy.`);
+      else if (loose >= 3) why.push(`You are holding ${loose} cards that do not fit a ${say('combo')}. Discarding the ${name} keeps your hand tidy.`);
       else why.push(`The ${name} does not fit any ${say('combo')}, so it is the easiest card to let go.`);
       if (rotOn(v) && f.card.rank >= 7 && !f.fitsCombo) why.push(`It is a high card, so this also keeps your ${say('leftover cards')} low.`);
       return why;

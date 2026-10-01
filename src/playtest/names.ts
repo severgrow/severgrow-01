@@ -61,7 +61,7 @@ export const moveSentence = (v: View, a: Action): string => {
     case 'EndAct':
       return "I'm done playing cards";
     case 'Discard':
-      return `Throw away ${cardName(v.hand.find((c) => c.id === a.card)!)}`;
+      return `Discard ${cardName(v.hand.find((c) => c.id === a.card)!)}`;
     case 'Knock':
       return 'Knock: the bot gets one last turn, then the higher score wins';
     case 'Continue':
