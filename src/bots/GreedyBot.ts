@@ -19,6 +19,10 @@ export const WEIGHTS = {
   discardDraw: 1,
   /** Knock only with a lead bigger than this plus my own weak spot. */
   knockMargin: 2,
+  /** Per strength point spent on a plain empty hex (keeps high cards for takeovers). */
+  wastedStrength: 0.02,
+  /** Sprouting a card that belongs to a combo in hand (v0.4). */
+  breakCombo: 1.5,
 } as const;
 
 export type MoveFacts = {
@@ -41,7 +45,7 @@ export type MoveFacts = {
 };
 
 export type Facts =
-  | { kind: 'meld' | 'fruit'; move: MoveFacts }
+  | { kind: 'meld' | 'fruit' | 'sprout'; move: MoveFacts }
   | { kind: 'draw'; from: 'deck' | 'discard'; completesCombo: boolean; comboWith: Card[] }
   | { kind: 'discard'; card: Card; fitsCombo: boolean; deadwoodAfter: number }
   | { kind: 'endAct'; meldsAvailable: boolean }
@@ -55,7 +59,10 @@ export type GreedyOptions = { allowKnock?: boolean };
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
 
-const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'Fruit' }>): Scored => {
+const inCombo = (hand: readonly Card[], c: Card): boolean =>
+  bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
+
+const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'Fruit' | 'Sprout' }>): Scored => {
   const me = v.player;
   const opp = other(me);
   const sim = simulate(v, a)!;
@@ -71,7 +78,9 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
       ? Array.from({ length: a.cards.length }, (_, i) => coordKey({ q: a.start.q + DIR[a.dir]!.q * i, r: a.start.r + DIR[a.dir]!.r * i }))
       : a.t === 'MeldSet'
         ? a.hexes.map(coordKey)
-        : [];
+        : a.t === 'Sprout'
+          ? [coordKey(a.coord)]
+          : [];
   let toward = false;
   if (a.t === 'MeldRun') {
     const target = rootCoord(opp, v.config.rootStyle, v.config.boardRadius);
@@ -95,22 +104,35 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
     pressureBefore,
     pressureAfter,
   };
+  // Strength placed on empty hexes is "spent" without taking anything.
+  const strengths =
+    a.t === 'Fruit'
+      ? []
+      : a.t === 'Sprout'
+        ? [v.hand.find((c) => c.id === a.card)!.rank]
+        : a.cards
+          .map((id) => v.hand.find((c) => c.id === id)!.rank)
+          .sort((x, y) => x - y)
+          .map((r, _i, all) => (a.t === 'MeldSet' ? all[0]! : r));
+  const wasted = placedKeys.reduce((sum, k, i) => sum + (v.board[k] ? 0 : (strengths[i] ?? 0)), 0);
+  const breaksCombo = a.t === 'Sprout' && inCombo(v.hand, v.hand.find((c) => c.id === a.card)!);
   const score =
-    (sim.wins ? WEIGHTS.win : 0) +
+    (sim.wins ? WEIGHTS.win : 0) -
+    (breaksCombo ? WEIGHTS.breakCombo : 0) -
+    WEIGHTS.wastedStrength * wasted +
     sim.points +
     sim.botPointsLost -
     WEIGHTS.exposure * (myAfter - myBefore) +
     WEIGHTS.pressure * (pressureAfter - pressureBefore);
-  return { action: a, score, facts: { kind: a.t === 'Fruit' ? 'fruit' : 'meld', move } };
+  return { action: a, score, facts: { kind: a.t === 'Fruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'meld', move } };
 };
 
-const inCombo = (hand: readonly Card[], c: Card): boolean =>
-  bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
 
 const scoreAction = (v: View, a: Action, meldsAvailable: boolean): Scored => {
   switch (a.t) {
     case 'MeldRun':
     case 'MeldSet':
+    case 'Sprout':
     case 'Fruit':
       return scoreBoardMove(v, a);
     case 'Draw': {

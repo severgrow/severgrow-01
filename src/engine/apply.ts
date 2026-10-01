@@ -3,8 +3,9 @@ import { ACTION_PHASE, assertActionShape } from './actions.js';
 import { deadwood } from './deadwood.js';
 import { IllegalActionError } from './errors.js';
 import { applyFruit, planFruit } from './fruit.js';
-import { emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
-import { applyPlacement, assertCoord, planRun, planSet } from './placement.js';
+import { eventsOf } from './events.js';
+import { afterDiscard, emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
+import { applyPlacement, assertCoord, planRun, planSet, planSprout } from './placement.js';
 import type { Placement } from './placement.js';
 import { knockResult } from './result.js';
 import { planRot, removeTiles, rotCount } from './rot.js';
@@ -47,11 +48,29 @@ const meld = (s: State, placement: Placement): State => {
   const p = s.turnPlayer;
   const used = new Set(placement.cards.map((c) => c.id));
   const hand = s.hands[p].filter((c) => !used.has(c.id));
-  if (hand.length === 0) fail('HAND_WOULD_BE_EMPTY', 'keep at least one card for the mandatory discard');
   const out = applyPlacement(s.board, placement);
   const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord) };
   return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand) }, p, res);
 };
+
+const sprout = (s: State, cardId: number, coord: unknown): State => {
+  const p = s.turnPlayer;
+  if (s.sproutsThisTurn >= s.config.sproutsPerTurn) fail('SPROUT_LIMIT', `at most ${s.config.sproutsPerTurn} sprout(s) per turn`);
+  const plan = planSprout(s, p, s.hands[p], cardId, coord as never);
+  const out = applyPlacement(s.board, plan);
+  const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord), sprout: { ...out.placed[0]! } };
+  const hand = s.hands[p].filter((c) => c.id !== cardId);
+  return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand), sproutsThisTurn: s.sproutsThisTurn + 1 }, p, res);
+};
+
+/** End of the opponent's final turn after a Knock (spec 7.2). */
+const knockEnd = (s: State): State => {
+  const dw: [number, number] = [deadwood(s.hands[0]), deadwood(s.hands[1])];
+  return endGame(s, knockResult(s.finalTurn!.knocker, scores(s), dw));
+};
+
+/** EndAct: go to the discard, or skip it when the hand is empty (v0.4). */
+const endAct = (s: State): State => (s.hands[s.turnPlayer].length === 0 ? afterDiscard(s, knockEnd) : { ...s, phase: 'DISCARD' });
 
 const fruit = (s: State, a: Extract<Action, { t: 'Fruit' }>): State => {
   const p = s.turnPlayer;
@@ -65,7 +84,8 @@ const fruit = (s: State, a: Extract<Action, { t: 'Fruit' }>): State => {
 const discard = (s: State, cardId: number): State => {
   const p = s.turnPlayer;
   const card = s.hands[p].find((c) => c.id === cardId) ?? fail('CARD_NOT_IN_HAND', `card ${cardId} is not in hand`);
-  if (s.config.forbidRedundantDiscard && s.drawnFromDiscard === cardId) {
+  // v0.4: allowed when it is the only card in hand, so the turn can never freeze.
+  if (s.config.forbidRedundantDiscard && s.drawnFromDiscard === cardId && s.hands[p].length > 1) {
     fail('REDUNDANT_DISCARD', 'cannot discard the card just taken from the discard pile');
   }
   const next: State = {
@@ -73,16 +93,12 @@ const discard = (s: State, cardId: number): State => {
     hands: setHand(s, p, s.hands[p].filter((c) => c.id !== cardId)),
     discard: [...s.discard, card],
   };
-  if (s.finalTurn) {
-    // End of the opponent's final turn (spec 7.2).
-    const dw: [number, number] = [deadwood(next.hands[0]), deadwood(next.hands[1])];
-    return endGame(next, knockResult(s.finalTurn.knocker, scores(next), dw));
-  }
-  return { ...next, phase: 'KNOCK' };
+  return afterDiscard(next, knockEnd);
 };
 
 const knock = (s: State): State => {
   const p = s.turnPlayer;
+  if (!s.config.knockEnabled) fail('KNOCK_DISABLED', 'Knock is switched off in this game');
   const dw = deadwood(s.hands[p]);
   if (dw > s.config.knockDeadwood) fail('KNOCK_TOO_MUCH_DEADWOOD', `deadwood ${dw} > ${s.config.knockDeadwood}`);
   if (!s.config.knockGivesFinalTurn) {
@@ -94,7 +110,7 @@ const knock = (s: State): State => {
 
 const continueTurn = (s: State): State => {
   const p = s.turnPlayer;
-  const plan = planRot(s, p, rotCount(deadwood(s.hands[p]), s.config));
+  const plan = planRot(s, p, s.config.rotEnabled ? rotCount(deadwood(s.hands[p]), s.config) : 0);
   const board = removeTiles(s.board, plan.auto);
   if (!plan.pick) return finishTurn({ ...s, board }, plan.auto);
   return {
@@ -131,6 +147,12 @@ const rotPick = (s: State, coord: unknown): State => {
  * Throws IllegalActionError with a stable code for any illegal action.
  */
 export const apply = (state: State, action: Action): State => {
+  const next = applyRules(state, action);
+  // The action log of events (spec 12) is kept when the state carries a history.
+  return state.history ? { ...next, history: [...state.history, ...eventsOf(state, action, next)] } : next;
+};
+
+const applyRules = (state: State, action: Action): State => {
   if (state.phase === 'GAME_OVER') fail('GAME_OVER', 'the game is over');
   const a = assertActionShape(action);
   if (ACTION_PHASE[a.t] !== state.phase) fail('WRONG_PHASE', `${a.t} is not legal in ${state.phase}`);
@@ -144,8 +166,10 @@ export const apply = (state: State, action: Action): State => {
       return meld(state, planSet(state, p, state.hands[p], a.cards, a.hexes));
     case 'Fruit':
       return fruit(state, a);
+    case 'Sprout':
+      return sprout(state, a.card, a.coord);
     case 'EndAct':
-      return { ...state, phase: 'DISCARD' };
+      return endAct(state);
     case 'Discard':
       return discard(state, a.card);
     case 'Knock':

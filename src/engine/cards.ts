@@ -1,4 +1,4 @@
-import { MAX_RANK, MIN_RANK, SUITS } from './constants.js';
+import { MIN_RANK, SUITS } from './constants.js';
 import type { Card, RulesConfig } from './types.js';
 
 /**
@@ -9,7 +9,7 @@ import type { Card, RulesConfig } from './types.js';
 export const createCards = (config: RulesConfig): Card[] => {
   const cards: Card[] = [];
   for (const suit of SUITS) {
-    for (let rank = MIN_RANK; rank <= MAX_RANK; rank++) {
+    for (let rank = MIN_RANK; rank <= config.maxRank; rank++) {
       for (let copy = 0; copy < config.copiesPerCard; copy++) {
         cards.push({ id: cards.length, suit, rank });
       }

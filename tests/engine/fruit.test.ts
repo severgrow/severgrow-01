@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MYCELIUM_SPECIES, applyFruit, coordKey, planFruit, sever } from '../../src/engine/index.js';
+import { SEVERGROW_SPECIES, applyFruit, coordKey, planFruit, sever } from '../../src/engine/index.js';
 import type { Coord } from '../../src/engine/index.js';
-import { clone, codeOf, fixture, tilesOf } from '../helpers.js';
+import { clone, codeOf, fixture as baseFixture, tilesOf } from '../helpers.js';
+import { LEGACY_V03 } from '../legacy.js';
+
+// Fruit is a parked rule (v0.4): these tests run with it switched on.
+const fixture = (o: Parameters<typeof baseFixture>[0] = {}) => baseFixture({ ...o, config: { ...LEGACY_V03, ...o.config } });
 
 // P1 sacrifice trio: (-1,1), (0,1), (0,0), linked to P1's root at (-2,2).
 // P2 target (1,0), strength 9, on the P2 arm (1,0) - (1,-1) - root (2,-2).
@@ -22,10 +26,10 @@ const target: Coord = { q: 1, r: 0 };
 
 describe('Fruit (spec 10)', () => {
   it('ships exactly one species power implementing canFruit/resolveFruit', () => {
-    expect(MYCELIUM_SPECIES.id).toBe('mycelium');
+    expect(SEVERGROW_SPECIES.id).toBe('severgrow');
     const f = base();
-    expect(MYCELIUM_SPECIES.canFruit(f, 0, 0, trio, target)).toBeNull();
-    expect(MYCELIUM_SPECIES.canFruit(f, 0, 1, trio, target)).toBe('FRUIT_EXHAUSTED');
+    expect(SEVERGROW_SPECIES.canFruit(f, 0, 0, trio, target)).toBeNull();
+    expect(SEVERGROW_SPECIES.canFruit(f, 0, 1, trio, target)).toBe('FRUIT_EXHAUSTED');
   });
 
   it('removes the 3 sacrificed tiles and the target, ignoring target strength (removes a 9)', () => {

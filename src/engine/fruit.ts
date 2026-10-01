@@ -56,8 +56,8 @@ export const planFruit = (
 export const applyFruit = (board: Record<string, Tile | null>, plan: FruitPlan): Record<string, Tile | null> =>
   removeTiles(board, [...plan.sacrifice, plan.target]);
 
-export const MYCELIUM_SPECIES: SpeciesPower = {
-  id: 'mycelium',
+export const SEVERGROW_SPECIES: SpeciesPower = {
+  id: 'severgrow',
   canFruit(ctx, player, used, sacrifice, target) {
     try {
       planFruit(ctx, player, used, sacrifice, target);

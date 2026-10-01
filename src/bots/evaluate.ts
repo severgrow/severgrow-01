@@ -9,6 +9,7 @@ import {
   planFruit,
   planRun,
   planSet,
+  planSprout,
   removeTiles,
   score,
   sever,
@@ -72,8 +73,13 @@ export const simulate = (v: View, a: Action): Simulation | null => {
   let placed = 0;
   let taken = 0;
   let sacrificed = 0;
-  if (a.t === 'MeldRun' || a.t === 'MeldSet') {
-    const plan = a.t === 'MeldRun' ? planRun(v, p, v.hand, a.cards, a.start, a.dir) : planSet(v, p, v.hand, a.cards, a.hexes);
+  if (a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout') {
+    const plan =
+      a.t === 'MeldRun'
+        ? planRun(v, p, v.hand, a.cards, a.start, a.dir)
+        : a.t === 'MeldSet'
+          ? planSet(v, p, v.hand, a.cards, a.hexes)
+          : planSprout(v, p, v.hand, a.card, a.coord);
     const out = applyPlacement(v.board, plan);
     board = out.board;
     placed = plan.tiles.length;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError, DEFAULT_CONFIG, resolveConfig } from '../../src/engine/index.js';
 
 describe('DEFAULT_CONFIG', () => {
-  it('matches the spec defaults (section 3)', () => {
+  it('matches the spec defaults (v0.4)', () => {
     expect(DEFAULT_CONFIG).toEqual({
       boardRadius: 3,
       rootStyle: 'ring2',
@@ -16,8 +16,14 @@ describe('DEFAULT_CONFIG', () => {
       rotStep: 8,
       forbidRedundantDiscard: true,
       allowHyphaOneBend: false,
-      fruitPerPlayer: 1,
+      fruitPerPlayer: 0,
       rootsScore: false,
+      maxRank: 7,
+      sproutsPerTurn: 1,
+      guaranteeOpeningMeld: true,
+      maxTurnsPerPlayer: 30,
+      rotEnabled: false,
+      knockEnabled: false,
     });
   });
 

@@ -67,7 +67,7 @@ describe('moveSentence: one plain sentence per move', () => {
       for (let i = 0; i < 250 && s.phase !== 'GAME_OVER'; i++) {
         const v = viewFor(s, s.actor);
         for (const a of legalActions(v)) expect(moveSentence(v, a as Action).length).toBeGreaterThan(8);
-        s = apply(s, chooseAction(v, 'classic'));
+        s = apply(s, chooseAction(v));
       }
     }
   }, 120_000);

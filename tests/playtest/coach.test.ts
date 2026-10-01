@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { apply, legalActions, mulberry32, newGame, viewFor } from '../../src/engine/index.js';
-import type { Action, Card, Player, State, View } from '../../src/engine/index.js';
+import { apply, legalActions, mulberry32, newGame, resolveConfig, viewFor } from '../../src/engine/index.js';
+import type { Action, Card, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TIP_ORDER, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
-import { LITE, PRESETS, settle } from '../../src/playtest/presets.js';
-import type { Mode } from '../../src/playtest/presets.js';
+import { LEGACY_V03 } from '../legacy.js';
 import { createGreedyBot, rankActions } from '../../src/bots/GreedyBot.js';
 import { fixture } from '../helpers.js';
 
 const key = (a: Action) => JSON.stringify(a);
 const card = (id: number, suit: 0 | 1 | 2 | 3, rank: number): Card => ({ id, suit, rank });
-const input = (view: View, mode: Mode, extra: Partial<Parameters<typeof coachAdvice>[0]> = {}) => ({
+const input = (view: View, extra: Partial<Parameters<typeof coachAdvice>[0]> = {}) => ({
   view,
-  mode,
   step: 0,
   enabled: true,
   taught: [] as TipId[],
@@ -20,16 +18,16 @@ const input = (view: View, mode: Mode, extra: Partial<Parameters<typeof coachAdv
   ...extra,
 });
 
-/** Human-to-act states (player 1) from seeded random play in the given mode. */
-const humanStates = (mode: Mode, count: number): State[] => {
+/** Human-to-act states (player 1) from seeded random play with the given config. */
+const humanStates = (config: Partial<RulesConfig>, count: number): State[] => {
   const out: State[] = [];
   for (let seed = 1; out.length < count && seed < 2000; seed++) {
     const rand = mulberry32(seed * 7 + 1);
-    let s = newGame(seed, PRESETS[mode]);
+    let s = newGame(seed, config);
     for (let i = 0; i < 400 && s.phase !== 'GAME_OVER' && out.length < count; i++) {
       if (s.actor === 0 && i % 3 === 0) out.push(s);
-      const acts = legalActions(viewFor(s, s.actor)).filter((a) => mode === 'classic' || a.t !== 'Knock');
-      s = settle(apply(s, acts[Math.floor(rand() * acts.length)]!), mode);
+      const acts = legalActions(viewFor(s, s.actor));
+      s = apply(s, acts[Math.floor(rand() * acts.length)]!);
     }
   }
   return out;
@@ -38,18 +36,19 @@ const humanStates = (mode: Mode, count: number): State[] => {
 const texts = (a: Advice): string[] => [a.suggested, ...a.why, a.tip?.text ?? ''];
 
 describe('coach: suggestions', () => {
-  const lite = humanStates('lite', 500);
-  const classic = humanStates('classic', 500);
+  // The one game (parked rules off), and the parked rules switched on.
+  const lite = humanStates({}, 500);
+  const classic = humanStates(LEGACY_V03, 500);
 
   it('always suggests a move from the engine’s legal-actions list (1,000 states)', () => {
     expect(lite.length + classic.length).toBe(1000);
-    for (const [mode, states] of [['lite', lite], ['classic', classic]] as const) {
+    for (const [core, states] of [[true, lite], [false, classic]] as const) {
       for (const s of states) {
         const v = viewFor(s, 0);
-        const adv = coachAdvice(input(v, mode))!;
+        const adv = coachAdvice(input(v))!;
         expect(adv).not.toBeNull();
         expect(legalActions(v).map(key)).toContain(key(adv.action));
-        if (mode === 'lite') expect(adv.action.t).not.toBe('Knock');
+        if (core) expect(['Knock', 'Continue', 'Fruit', 'RotPick']).not.toContain(adv.action.t);
       }
     }
   }, 300_000);
@@ -57,16 +56,16 @@ describe('coach: suggestions', () => {
   it('the same state always gives the same suggestion (and survives a JSON round trip)', () => {
     for (const s of lite.slice(0, 120)) {
       const v = viewFor(s, 0);
-      const a = coachAdvice(input(v, 'lite'));
-      expect(coachAdvice(input(v, 'lite'))).toEqual(a);
-      expect(coachAdvice(input(JSON.parse(JSON.stringify(v)) as View, 'lite'))).toEqual(a);
+      const a = coachAdvice(input(v));
+      expect(coachAdvice(input(v))).toEqual(a);
+      expect(coachAdvice(input(JSON.parse(JSON.stringify(v)) as View))).toEqual(a);
     }
   }, 120_000);
 
   it('never reads the bot’s hidden cards: it only gets a View, and hidden changes do not matter', () => {
     for (const s of classic.slice(0, 120)) {
       const hidden: State = { ...s, deck: [...s.deck].reverse(), hands: [s.hands[0], s.hands[1].map((c) => ({ ...c, rank: 10 - c.rank }))] };
-      expect(coachAdvice(input(viewFor(hidden, 0), 'classic'))).toEqual(coachAdvice(input(viewFor(s, 0), 'classic')));
+      expect(coachAdvice(input(viewFor(hidden, 0)))).toEqual(coachAdvice(input(viewFor(s, 0))));
     }
     // What it is given: a View has no opponent hand and no deck.
     const v = viewFor(classic[0]!, 0) as unknown as Record<string, unknown>;
@@ -79,7 +78,7 @@ describe('coach: suggestions', () => {
     const v = viewFor(s, 0);
     const ranked = rankActions(v, { allowKnock: false });
     for (let i = 0; i < ranked.length + 2; i++) {
-      const adv = coachAdvice(input(v, 'lite'), i)!;
+      const adv = coachAdvice(input(v), i)!;
       expect(adv.action).toEqual(ranked[i % ranked.length]!.action);
       expect(adv.choice).toBe(i % ranked.length);
       expect(adv.choices).toBe(ranked.length);
@@ -88,7 +87,7 @@ describe('coach: suggestions', () => {
 
   it('explains with at most 2 short sentences and highlights the move’s cards and hexes', () => {
     for (const s of lite.slice(0, 200)) {
-      const adv = coachAdvice(input(viewFor(s, 0), 'lite'))!;
+      const adv = coachAdvice(input(viewFor(s, 0)))!;
       expect(adv.why.length).toBeGreaterThanOrEqual(1);
       expect(adv.why.length).toBeLessThanOrEqual(2);
       for (const w of adv.why) expect(w.length).toBeLessThan(160);
@@ -101,48 +100,46 @@ describe('coach: suggestions', () => {
 });
 
 describe('coach: on and off', () => {
-  const v = viewFor(newGame(4, LITE), 0);
+  const v = viewFor(newGame(4), 0);
 
   it(`is active for the first ${COACH_STEPS} steps only`, () => {
     expect(COACH_STEPS).toBe(15);
-    expect(coachAdvice(input(v, 'lite', { step: 0 }))).not.toBeNull();
-    expect(coachAdvice(input(v, 'lite', { step: COACH_STEPS - 1 }))).not.toBeNull();
-    expect(coachAdvice(input(v, 'lite', { step: COACH_STEPS }))).toBeNull();
+    expect(coachAdvice(input(v, { step: 0 }))).not.toBeNull();
+    expect(coachAdvice(input(v, { step: COACH_STEPS - 1 }))).not.toBeNull();
+    expect(coachAdvice(input(v, { step: COACH_STEPS }))).toBeNull();
   });
 
   it('gives nothing when the toggle is off, and hints again when it is turned back on', () => {
-    expect(coachAdvice(input(v, 'lite', { enabled: false }))).toBeNull();
-    expect(coachAdvice(input(v, 'lite', { enabled: true }))).not.toBeNull();
+    expect(coachAdvice(input(v, { enabled: false }))).toBeNull();
+    expect(coachAdvice(input(v, { enabled: true }))).not.toBeNull();
   });
 
   it('gives nothing when it is not the player’s move or the game is over', () => {
-    const s = apply(newGame(4, LITE), { t: 'Draw', from: 'deck' }); // player 1 is acting
-    expect(coachAdvice(input(viewFor(s, 1), 'lite'))).toBeNull();
+    const s = apply(newGame(4), { t: 'Draw', from: 'deck' }); // player 1 is acting
+    expect(coachAdvice(input(viewFor(s, 1)))).toBeNull();
     const over: State = { ...s, phase: 'GAME_OVER', result: { winner: 0, reason: 'strangle', scores: [1, 0] } };
-    expect(coachAdvice(input(viewFor(over, 0), 'lite'))).toBeNull();
+    expect(coachAdvice(input(viewFor(over, 0)))).toBeNull();
   });
 });
 
 describe('coach: tactic tips and words', () => {
   it('teaches one new idea at a time, in order, and never repeats one', () => {
-    let s = newGame(TUTORIAL_SEED, LITE);
+    let s = newGame(TUTORIAL_SEED);
     const taught: TipId[] = [];
     let known: string[] = [];
     const bot = createGreedyBot({ allowKnock: false });
     for (let step = 0; step < COACH_STEPS && s.phase !== 'GAME_OVER'; ) {
       if (s.actor === 1) {
-        s = settle(apply(s, bot.chooseAction(viewFor(s, 1))), 'lite');
+        s = apply(s, bot.chooseAction(viewFor(s, 1)));
         continue;
       }
-      const adv = coachAdvice(input(viewFor(s, 0), 'lite', { step, taught, known }))!;
+      const adv = coachAdvice(input(viewFor(s, 0), { step, taught, known }))!;
       if (adv.tip) {
         expect(taught).not.toContain(adv.tip.id);
         taught.push(adv.tip.id);
       }
       known = adv.known;
       s = apply(s, adv.action);
-      if (s.phase === 'KNOCK' && s.actor === 0) s = apply(s, { t: 'Continue' }); // Lite: automatic
-      s = settle(s, 'lite');
       step++;
     }
     expect(taught[0]).toBe('goal');
@@ -151,49 +148,56 @@ describe('coach: tactic tips and words', () => {
   });
 
   it('explains a game word the first time it is used, then not again', () => {
-    const v = viewFor(newGame(4, LITE), 0);
-    const first = coachAdvice(input(v, 'lite'))!;
+    const v = viewFor(newGame(4), 0);
+    const first = coachAdvice(input(v))!;
     expect(texts(first).join(' ')).toMatch(/\(/); // some word explained in brackets
-    const again = coachAdvice(input(v, 'lite', { known: first.known, taught: first.tip ? [first.tip.id] : [] }))!;
+    const again = coachAdvice(input(v, { known: first.known, taught: first.tip ? [first.tip.id] : [] }))!;
     for (const word of first.known) {
       const explained = new RegExp(`${word} \\(`, 'i');
       expect(texts(again).some((t) => explained.test(t))).toBe(false);
     }
   });
 
-  it('in Lite it never mentions Rot, Knock, Fruit or leftover points', () => {
-    const bad = /\brot\b|rotted|knock|fruit|deadwood|leftover points/i;
-    for (const s of humanStates('lite', 300)) {
+  it('with the parked rules off it never mentions Rot, Knock, Fruit or leftover points', () => {
+    const bad = /\brot\b|rotted|knock|fruit|deadwood|leftover/i;
+    for (const s of humanStates({}, 300)) {
       const v = viewFor(s, 0);
       for (let choice = 0; choice < 3; choice++) {
-        const adv = coachAdvice(input(v, 'lite', { taught: TIP_ORDER.slice(0, s.turnNumber % TIP_ORDER.length) }), choice)!;
+        const adv = coachAdvice(input(v, { taught: TIP_ORDER.slice(0, s.turnNumber % TIP_ORDER.length) }), choice)!;
         for (const t of texts(adv)) expect(t).not.toMatch(bad);
       }
     }
-    for (const t of coachSummary(TIP_ORDER, 'lite').bullets) expect(t).not.toMatch(bad);
+    for (const t of coachSummary(TIP_ORDER, resolveConfig()).bullets) expect(t).not.toMatch(bad);
   }, 120_000);
 
+  it('teaches Sprout when it is on, and only then', () => {
+    const states = humanStates({}, 200).filter((s) => s.phase === 'ACT' && legalActions(viewFor(s, 0)).some((a) => a.t === 'Sprout'));
+    expect(states.length).toBeGreaterThan(0);
+    const tip = coachAdvice(input(viewFor(states[0]!, 0), { taught: ['goal', 'draw', 'combos'] }))!.tip;
+    expect(tip?.id).toBe('sprout');
+    const off = humanStates({ sproutsPerTurn: 0 }, 100);
+    for (const s of off) expect(coachAdvice(input(viewFor(s, 0), { taught: ['goal', 'draw', 'combos'] }))!.tip?.id).not.toBe('sprout');
+  });
+
   it('the summary at the end lists 3 things to remember', () => {
-    const sum = coachSummary(['goal', 'draw', 'combos', 'connection', 'cutting'], 'lite');
+    const sum = coachSummary(['goal', 'draw', 'combos', 'connection', 'cutting'], resolveConfig());
     expect(sum.title).toBe("You're on your own now. Here's what to remember:");
     expect(sum.bullets).toHaveLength(3);
   });
 
   it('the tutorial seed’s first 15 steps are always the same', () => {
     const run = () => {
-      let s = newGame(TUTORIAL_SEED, LITE);
+      let s = newGame(TUTORIAL_SEED);
       const out: string[] = [];
       const bot = createGreedyBot({ allowKnock: false });
       for (let step = 0; step < COACH_STEPS && s.phase !== 'GAME_OVER'; ) {
         if (s.actor === 1) {
-          s = settle(apply(s, bot.chooseAction(viewFor(s, 1))), 'lite');
+          s = apply(s, bot.chooseAction(viewFor(s, 1)));
           continue;
         }
-        const adv = coachAdvice(input(viewFor(s, 0), 'lite', { step }))!;
+        const adv = coachAdvice(input(viewFor(s, 0), { step }))!;
         out.push(adv.suggested);
         s = apply(s, adv.action);
-        if (s.phase === 'KNOCK' && s.actor === 0) s = apply(s, { t: 'Continue' });
-        s = settle(s, 'lite');
         step++;
       }
       return out;
@@ -208,7 +212,7 @@ describe('coach: tactic tips and words', () => {
 
 const actState = (tiles: Record<string, [Player, number]>, hand: Card[]): View => {
   const f = fixture({ tiles });
-  const base = newGame(1, LITE);
+  const base = newGame(1);
   return viewFor({ ...base, board: f.board, terrain: f.terrain, hands: [hand, base.hands[1]], phase: 'ACT' }, 0);
 };
 const sixes = [card(11, 1, 6), card(12, 2, 6), card(13, 3, 6)];
@@ -222,7 +226,7 @@ describe('coach: adversarial safety', () => {
     const risky: Action = { t: 'MeldRun', cards: [1, 2, 3], start: { q: 0, r: 0 }, dir: 0 };
     const rf = factsOf(v, risky);
     expect(rf.kind === 'meld' && rf.move.exposureAfter).toBe(4);
-    const adv = coachAdvice(input(v, 'lite'))!;
+    const adv = coachAdvice(input(v))!;
     expect(key(adv.action)).not.toBe(key(risky));
     const f = factsOf(v, adv.action);
     expect(f.kind === 'meld' ? f.move.exposureAfter : 0).toBeLessThan(4);
@@ -235,7 +239,7 @@ describe('coach: adversarial safety', () => {
     const rf = factsOf(v, greedyTake);
     expect(rf.kind === 'meld' && rf.move.taken).toBe(1);
     expect(rf.kind === 'meld' && rf.move.exposureAfter).toBeGreaterThanOrEqual(4);
-    const adv = coachAdvice(input(v, 'lite'))!;
+    const adv = coachAdvice(input(v))!;
     const f = factsOf(v, adv.action);
     expect(f.kind === 'meld' ? f.move.exposureAfter : 0).toBeLessThan(4);
   });
@@ -247,7 +251,7 @@ describe('coach: adversarial safety', () => {
     const pf = factsOf(v, protect);
     expect(pf.kind === 'meld' && pf.move.exposureBefore).toBe(4);
     expect(pf.kind === 'meld' && pf.move.exposureAfter).toBeLessThan(4);
-    const adv = coachAdvice(input(v, 'lite'))!;
+    const adv = coachAdvice(input(v))!;
     const f = factsOf(v, adv.action);
     expect(f.kind === 'meld' ? f.move.exposureAfter : 4).toBeLessThan(4);
     expect(adv.why.join(' ')).toMatch(/weak spot/i);

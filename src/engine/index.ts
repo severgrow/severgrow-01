@@ -23,3 +23,5 @@ export * from './phases.js';
 export * from './apply.js';
 export * from './view.js';
 export * from './legalActions.js';
+export * from './events.js';
+export * from './replay.js';

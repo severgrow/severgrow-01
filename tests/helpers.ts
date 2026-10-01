@@ -64,15 +64,20 @@ export const tilesOf = (board: Record<string, Tile | null>, player: Player): str
 export const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
 import { apply as applyAction, legalActions as legal, mulberry32 as rng32, newGame as fresh, viewFor as view } from '../src/engine/index.js';
-import type { Action as Act, State as St } from '../src/engine/index.js';
+import type { Action as Act, RulesConfig as Cfg, State as St } from '../src/engine/index.js';
 
 /**
  * Seeded random legal play. Calls `visit` on every state reached (including the
  * first). Stops at game over or after maxActions.
  */
-export const randomPlay = (seed: number, maxActions: number, visit: (s: St, i: number) => void): St => {
+export const randomPlay = (
+  seed: number,
+  maxActions: number,
+  visit: (s: St, i: number) => void,
+  config: Partial<Cfg> = {},
+): St => {
   const rand = rng32(seed ^ 0x5eed);
-  let s = fresh(seed);
+  let s = fresh(seed, config);
   for (let i = 0; i < maxActions; i++) {
     visit(s, i);
     if (s.phase === 'GAME_OVER') break;

@@ -8,7 +8,6 @@ import { rankActions } from '../bots/GreedyBot.js';
 import type { MoveFacts, Scored } from '../bots/GreedyBot.js';
 import { threats } from '../bots/evaluate.js';
 import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.js';
-import type { Mode } from './presets.js';
 
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
@@ -20,6 +19,7 @@ export type TipId =
   | 'goal'
   | 'draw'
   | 'combos'
+  | 'sprout'
   | 'strength'
   | 'gold'
   | 'connection'
@@ -35,6 +35,7 @@ export const TIP_ORDER: readonly TipId[] = [
   'goal',
   'draw',
   'combos',
+  'sprout',
   'strength',
   'gold',
   'connection',
@@ -48,7 +49,6 @@ export const TIP_ORDER: readonly TipId[] = [
 
 export type CoachInput = {
   view: View;
-  mode: Mode;
   /** Player actions taken so far this game. */
   step: number;
   enabled: boolean;
@@ -102,16 +102,17 @@ const glossary = (known: readonly string[]) => {
 
 // ---------- rules switched on in this game ----------
 
-const rotOn = (v: View) => rotCount(9 * (v.config.handSize + 1), v.config) > 0;
-const knockOn = (mode: Mode) => mode === 'classic';
+// Parked rules (spec appendix A) are taught only when switched on.
+const rotOn = (v: View) => v.config.rotEnabled && rotCount(9 * (v.config.handSize + 1), v.config) > 0;
+const knockOn = (v: View) => v.config.knockEnabled;
 const fruitOn = (v: View) => v.config.fruitPerPlayer > 0;
 
 // ---------- tips ----------
 
-type Ctx = { v: View; mode: Mode; ranked: Scored[]; say: (w: string) => string };
+type Ctx = { v: View; ranked: Scored[]; say: (w: string) => string };
 
 const boardFacts = (ranked: Scored[]): MoveFacts[] =>
-  ranked.flatMap((r) => (r.facts.kind === 'meld' || r.facts.kind === 'fruit' ? [r.facts.move] : []));
+  ranked.flatMap((r) => (r.facts.kind === 'meld' || r.facts.kind === 'fruit' || r.facts.kind === 'sprout' ? [r.facts.move] : []));
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -132,6 +133,12 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
     fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'meld'),
     text: ({ say }) =>
       `A ${say('combo')} is 3 or more cards played together. A Hypha is cards of one suit in a row, like 3-4-5: it grows a straight line. A Bloom is the same number in different suits: it grows a small clump.`,
+  },
+  sprout: {
+    active: ({ v }) => v.config.sproutsPerTurn > 0,
+    fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'sprout'),
+    text: ({ say }) =>
+      `A Sprout plays one card as one tile next to your network. Use it when you have no ${say('combo')}, or to grab a gold hex.`,
   },
   strength: {
     active: () => true,
@@ -161,7 +168,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
       `Watch your ${say('leftover cards')}. If they add up to more than ${v.config.rotThreshold} when you end your turn, some edge tiles ${say('rot')}.`,
   },
   knock: {
-    active: ({ mode }) => knockOn(mode),
+    active: ({ v }) => knockOn(v),
     fits: ({ v }) => v.phase === 'KNOCK',
     text: ({ v, say }) =>
       `When your leftover cards add up to ${v.config.knockDeadwood} or less, you can ${say('knock')}. The bot gets one last turn, then the higher score wins.`,
@@ -216,12 +223,16 @@ const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
 };
 
 const whyFor = (c: Ctx, best: Scored): string[] => {
-  const { v, mode, say, ranked } = c;
+  const { v, say, ranked } = c;
   const f = best.facts;
   switch (f.kind) {
     case 'meld':
     case 'fruit':
       return whyBoard(c, f.move, f.kind === 'fruit');
+    case 'sprout':
+      return f.move.placed > 0 && !f.move.taken && !f.move.botCut && !f.move.onRich && !f.move.wins
+        ? [`A Sprout grows one tile for you with a single card, so your ${say('combo')} cards stay in your hand.`, ...whyBoard(c, f.move, false).slice(1)]
+        : whyBoard(c, f.move, false);
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
@@ -252,7 +263,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
     case 'knock':
       return [`You lead by ${f.lead} points and the bot has no big cut on you, so knocking now should win.`];
     case 'continue': {
-      if (mode === 'lite') return ['End your turn and refill your hand.'];
+      if (!rotOn(v) && !knockOn(v)) return ['End your turn and refill your hand.'];
       const rc = rotCount(v.myDeadwood, v.config);
       const why: string[] = [];
       if (rc > 0) why.push(`Your ${say('leftover cards')} add up to ${v.myDeadwood}, so ${rc} of your edge tiles will ${say('rot')}.`);
@@ -277,14 +288,14 @@ export const coachActive = (step: number, enabled: boolean): boolean => enabled 
  * ("Not this, show another") and wraps around.
  */
 export const coachAdvice = (input: CoachInput, choice = 0): Advice | null => {
-  const { view: v, mode } = input;
+  const { view: v } = input;
   if (!coachActive(input.step, input.enabled) || v.phase === 'GAME_OVER' || v.actor !== v.player) return null;
-  const ranked = rankActions(v, { allowKnock: knockOn(mode) });
+  const ranked = rankActions(v, { allowKnock: knockOn(v) });
   if (ranked.length === 0) return null;
   const pick = ((choice % ranked.length) + ranked.length) % ranked.length;
   const best = ranked[pick]!;
   const words = glossary(input.known);
-  const c: Ctx = { v, mode, ranked, say: words.say };
+  const c: Ctx = { v, ranked, say: words.say };
   const tipId = nextTip(c, input.taught);
   const tip = tipId ? { id: tipId, text: TIPS[tipId].text(c) } : null;
   const why = whyFor(c, best);
@@ -305,6 +316,7 @@ const BULLETS: Record<TipId, string> = {
   goal: 'Keep every tile joined to your root.',
   draw: 'Take the discard only if it makes a combo.',
   combos: 'Cards of one suit in a row grow lines; same numbers grow clumps.',
+  sprout: 'No combo? Sprout one card as one tile.',
   strength: 'A stronger tile can replace a weaker bot tile.',
   gold: 'Gold hexes are worth 2 points.',
   connection: 'Protect weak spots that hold up many tiles.',
@@ -320,6 +332,7 @@ const SUMMARY_PRIORITY: readonly TipId[] = [
   'cutting',
   'planning',
   'combos',
+  'sprout',
   'strength',
   'gold',
   'draw',
@@ -329,11 +342,10 @@ const SUMMARY_PRIORITY: readonly TipId[] = [
   'knock',
   'fruit',
 ];
-const LITE_SAFE = (id: TipId) => id !== 'leftovers' && id !== 'knock' && id !== 'fruit';
-
-/** The goodbye message at COACH_STEPS: three things the player used. */
-export const coachSummary = (taught: readonly TipId[], mode: Mode): { title: string; bullets: string[] } => {
-  const allowed = (id: TipId) => mode === 'classic' || LITE_SAFE(id);
+/** The goodbye message at COACH_STEPS: three things the player used (only rules that are on). */
+export const coachSummary = (taught: readonly TipId[], config: View['config']): { title: string; bullets: string[] } => {
+  const allowed = (id: TipId) =>
+    (id !== 'leftovers' || config.rotEnabled) && (id !== 'knock' || config.knockEnabled) && (id !== 'fruit' || config.fruitPerPlayer > 0);
   const used = SUMMARY_PRIORITY.filter((id) => taught.includes(id) && allowed(id));
   const fill = (['connection', 'cutting', 'combos', 'goal'] as TipId[]).filter((id) => !used.includes(id));
   return {

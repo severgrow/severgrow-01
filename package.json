@@ -1,8 +1,8 @@
 {
-  "name": "mycelium",
+  "name": "severgrow",
   "version": "0.1.0",
   "private": true,
-  "description": "MYCELIUM: pure, deterministic, headless TypeScript rules engine",
+  "description": "SEVERGROW: pure, deterministic, headless TypeScript rules engine",
   "type": "module",
   "engines": {
     "node": ">=20.19"
@@ -14,10 +14,17 @@
     "check": "npm run typecheck && npm run test",
     "web:dev": "vite --config web/vite.config.ts",
     "web:build": "vite build --config web/vite.config.ts",
-    "web:preview": "vite preview --config web/vite.config.ts"
+    "web:preview": "vite preview --config web/vite.config.ts",
+    "properties": "tsx src/sim/properties.ts",
+    "sim": "tsx src/sim/sim.ts",
+    "sweep": "tsx src/sim/sweep.ts",
+    "play": "tsx src/cli/play-cli.ts",
+    "replay": "tsx src/cli/replay-cli.ts",
+    "grid": "tsx src/sim/grid.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^4.1.11"

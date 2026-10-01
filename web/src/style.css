@@ -139,9 +139,6 @@ button.link { background: none; color: var(--accent); padding: 0; border: 0; }
 button:focus-visible, .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .top-actions { display: flex; gap: 8px; align-items: center; }
-.mode { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.mode button { background: transparent; color: var(--ink); border: 0; border-radius: 0; padding: 6px 10px; }
-.mode button[aria-pressed='true'] { background: var(--button); color: var(--button-ink); }
 .summary { margin: 10px 0 0; font-weight: 600; }
 .summary p { margin: 0; }
 .coach {
@@ -175,3 +172,4 @@ button:focus-visible, .card:focus-visible { outline: 3px solid var(--accent); ou
 .coach ul { margin: 4px 0; padding-left: 20px; }
 .board .coach-hex { fill: none; stroke: var(--you); stroke-width: 3; stroke-dasharray: 6 4; pointer-events: none; }
 .card.coach-card { box-shadow: 0 0 0 3px var(--you); }
+.move.sprout { border-color: var(--you); font-weight: 600; }

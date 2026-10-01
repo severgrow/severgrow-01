@@ -26,6 +26,7 @@ export const viewFor = (state: State, player: Player): View => ({
   finalTurn: copy(state.finalTurn),
   rotPick: copy(state.rotPick),
   turnNumber: state.turnNumber,
+  sproutsThisTurn: state.sproutsThisTurn,
   score: score(state, player),
   opponentScore: score(state, opponent(player)),
   myDeadwood: deadwood(state.hands[player]),

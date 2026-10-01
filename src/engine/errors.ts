@@ -61,10 +61,20 @@ export type IllegalActionCode =
   | 'NOT_ACTOR'
   | 'DECK_EMPTY'
   | 'DISCARD_EMPTY'
-  | 'HAND_WOULD_BE_EMPTY'
+  | 'SPROUT_LIMIT'
+  | 'KNOCK_DISABLED'
   | 'REDUNDANT_DISCARD'
   | 'KNOCK_TOO_MUCH_DEADWOOD'
   | 'NOT_ROT_CANDIDATE';
+
+/** Thrown by `newGame` when no opening deal gives both hands a combo (v0.4). */
+export class DealError extends Error {
+  readonly code = 'NO_OPENING_COMBO' as const;
+  constructor(message: string) {
+    super(`NO_OPENING_COMBO: ${message}`);
+    this.name = 'DealError';
+  }
+}
 
 /** Thrown by `apply` for any illegal action. `code` is stable; the message is not. */
 export class IllegalActionError extends Error {

@@ -17,9 +17,18 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rotStep: 8,
   forbidRedundantDiscard: true,
   allowHyphaOneBend: false,
-  fruitPerPlayer: 1,
+  fruitPerPlayer: 0,
   rootsScore: false,
+  maxRank: 7,
+  sproutsPerTurn: 1,
+  guaranteeOpeningMeld: true,
+  maxTurnsPerPlayer: 30,
+  rotEnabled: false,
+  knockEnabled: false,
 });
+
+/** Lowest allowed maxRank (v0.4). */
+const MIN_MAX_RANK = 5;
 
 /** Minimum value for each numeric key (all must be finite integers). */
 const NUMBER_MIN: Record<string, number> = {
@@ -32,6 +41,9 @@ const NUMBER_MIN: Record<string, number> = {
   rotThreshold: 0,
   rotStep: 1,
   fruitPerPlayer: 0,
+  maxRank: MIN_MAX_RANK,
+  sproutsPerTurn: 0,
+  maxTurnsPerPlayer: 0,
 };
 
 const BOOLEAN_KEYS = [
@@ -39,7 +51,11 @@ const BOOLEAN_KEYS = [
   'forbidRedundantDiscard',
   'allowHyphaOneBend',
   'rootsScore',
+  'guaranteeOpeningMeld',
+  'rotEnabled',
+  'knockEnabled',
 ] as const;
+
 
 /** Merges overrides onto the defaults and validates. Throws ConfigError. */
 export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig => {
@@ -57,6 +73,7 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
   for (const key of BOOLEAN_KEYS) {
     if (typeof c[key] !== 'boolean') throw new ConfigError('INVALID_BOOLEAN', `${key} must be a boolean`);
   }
+  if (c.maxRank > MAX_RANK) throw new ConfigError('INVALID_NUMBER', `maxRank must be ${MIN_MAX_RANK}-${MAX_RANK}, got ${c.maxRank}`);
   if (c.rootStyle !== 'ring2' && c.rootStyle !== 'corner') {
     throw new ConfigError('INVALID_ROOT_STYLE', `rootStyle must be 'ring2' or 'corner'`);
   }
@@ -71,10 +88,12 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     throw new ConfigError('NOT_IMPLEMENTED', 'allowHyphaOneBend is not implemented until Milestone C');
   }
 
-  const deckSize = SUITS.length * (MAX_RANK - MIN_RANK + 1) * c.copiesPerCard;
-  if (deckSize < 2 * c.handSize + 1) {
-    throw new ConfigError('DECK_TOO_SMALL', `${deckSize} cards cannot deal two hands of ${c.handSize} plus a discard`);
+  const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard;
+  // Two hands, a starting discard, and at least one card left to draw.
+  if (deckSize < 2 * c.handSize + 2) {
+    throw new ConfigError('DECK_TOO_SMALL', `${deckSize} cards cannot deal two hands of ${c.handSize}, a discard, and leave a card to draw`);
   }
+
 
   for (const p of [0, 1] as const) {
     if (!isOnBoard(rootCoord(p, c.rootStyle, c.boardRadius), c.boardRadius)) {

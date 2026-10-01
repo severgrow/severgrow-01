@@ -14,6 +14,7 @@ import {
 } from '../../src/engine/index.js';
 import type { Action, Card, Coord, State } from '../../src/engine/index.js';
 import { randomPlay } from '../helpers.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 /** Canonical key: identical card copies and hex order do not matter. */
 const canon = (s: State, a: Action): string => {
@@ -34,6 +35,8 @@ const canon = (s: State, a: Action): string => {
       return `S ${cardKey(a.cards)} ${hexKey(a.hexes)}`;
     case 'Fruit':
       return `F ${hexKey(a.sacrifice)} ${coordKey(a.target)}`;
+    case 'Sprout':
+      return `T ${cardKey([a.card])} ${coordKey(a.coord)}`;
     case 'Discard': {
       const c = hand.find((x) => x.id === a.card)!;
       return `D ${c.suit}:${c.rank}`;
@@ -95,8 +98,10 @@ const bruteForce = (s: State): Set<string> => {
       const seenCards = new Set<string>();
       for (let k = 3; k <= hand.length; k++) {
         for (const cards of subsets<Card>(hand, k)) {
-          // Only card groups that are melds can be placed; copies are equivalent.
-          const ck = cards.map((c) => `${c.suit}:${c.rank}`).sort().join(',');
+          // Only card groups that are melds can be placed. Copies are equivalent, except the
+          // copy just taken from the discard pile (which may not be stranded, v0.3.1).
+          const ck =
+            cards.map((c) => `${c.suit}:${c.rank}`).sort().join(',') + (cards.some((c) => c.id === s.drawnFromDiscard) ? '*' : '');
           if (seenCards.has(ck)) continue;
           seenCards.add(ck);
           const ids = cards.map((c) => c.id);
@@ -109,6 +114,7 @@ const bruteForce = (s: State): Set<string> => {
           }
         }
       }
+      for (const card of hand) for (const coord of board) add({ t: 'Sprout', card: card.id, coord });
       const mine = own.filter((c) => !s.board[coordKey(c)]!.root);
       const enemy = board.filter((c) => {
         const t = s.board[coordKey(c)];
@@ -122,12 +128,17 @@ const bruteForce = (s: State): Set<string> => {
 };
 
 /** States from random play, preferring ACT states with several cards and tiles. */
-const sampleStates = (count: number, pick: (s: State) => boolean): State[] => {
+const sampleStates = (count: number, pick: (s: State) => boolean, config = {}): State[] => {
   const out: State[] = [];
   for (let seed = 1; out.length < count && seed < 5000; seed++) {
-    randomPlay(seed, 300, (s) => {
-      if (out.length < count && pick(s)) out.push(s);
-    });
+    randomPlay(
+      seed,
+      300,
+      (s) => {
+        if (out.length < count && pick(s)) out.push(s);
+      },
+      config,
+    );
   }
   return out;
 };
@@ -170,9 +181,7 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
 
   it('matches brute force on ACT states with Fruit available and many tiles', () => {
     // States where at least one Fruit is legal; the full list must still match brute force.
-    const states = sampleStates(4, (s) =>
-      s.phase === 'ACT' && legalActionsForState(s).some((a) => a.t === 'Fruit'),
-    );
+    const states = sampleStates(4, (s) => s.phase === 'ACT' && legalActionsForState(s).some((a) => a.t === 'Fruit'), LEGACY_V03);
     expect(states.length).toBe(4);
     for (const s of states) {
       const listed = new Set(legalActionsForState(s).map((a) => canon(s, a)));
@@ -182,7 +191,8 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
 
   it('matches brute force in DRAW, DISCARD, KNOCK and ROT_PICK', () => {
     for (const phase of ['DRAW', 'DISCARD', 'KNOCK', 'ROT_PICK'] as const) {
-      const states = sampleStates(5, (s) => s.phase === phase);
+      // KNOCK and ROT_PICK only happen with the parked rules on.
+      const states = sampleStates(5, (s) => s.phase === phase, phase === 'KNOCK' || phase === 'ROT_PICK' ? LEGACY_V03 : {});
       expect(states.length).toBeGreaterThan(0);
       for (const s of states) {
         expect(new Set(legalActionsForState(s).map((a) => canon(s, a)))).toEqual(bruteForce(s));
@@ -209,6 +219,26 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { t: 'Discard', card: 51 },
       { t: 'Discard', card: 60 },
     ]);
+  });
+
+  it('with two copies, the lowest id stands for both; leaving the taken copy alone is fine (v0.4 rule 2b)', () => {
+    const s0 = newGame(3);
+    // Moss 3 (id 10) and its copy (id 50, just taken from the discard pile), Moss 4, Moss 5.
+    const hand: Card[] = [
+      { id: 10, suit: 0, rank: 3 },
+      { id: 50, suit: 0, rank: 3 },
+      { id: 60, suit: 0, rank: 4 },
+      { id: 70, suit: 0, rank: 5 },
+    ];
+    const s: State = { ...s0, phase: 'ACT', hands: [hand, s0.hands[1]], drawnFromDiscard: 50 };
+    const runs = legalActionsForState(s).filter((a) => a.t === 'MeldRun');
+    expect(runs.length).toBeGreaterThan(0);
+    for (const a of runs) {
+      expect(a.t === 'MeldRun' && a.cards).toContain(10);
+      const after = apply(apply(s, a), { t: 'EndAct' });
+      expect(legalActionsForState(after)).toEqual([{ t: 'Discard', card: 50 }]);
+    }
+    expect(new Set(runs.map((a) => canon(s, a)))).toEqual(new Set([...bruteForce(s)].filter((k) => k.startsWith('R '))));
   });
 
   it('legalActions reads only the view (no hidden state needed)', () => {

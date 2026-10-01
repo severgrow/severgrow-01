@@ -3,6 +3,7 @@ import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js
 import type { Action, Card, Player, State, View } from '../../src/engine/index.js';
 import { GreedyBot, createGreedyBot, rankActions } from '../../src/bots/GreedyBot.js';
 import { fixture, randomPlay } from '../helpers.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 const key = (a: Action) => JSON.stringify(a);
 
@@ -13,9 +14,11 @@ const stateWith = (o: {
   hand: Card[];
   phase: State['phase'];
   discard?: Card[];
+  legacy?: boolean;
 }): State => {
-  const f = fixture({ ...(o.tiles ? { tiles: o.tiles } : {}), ...(o.rich ? { rich: o.rich } : {}), ...(o.rock ? { rock: o.rock } : {}) });
-  const base = newGame(1);
+  const config = o.legacy ? LEGACY_V03 : {};
+  const f = fixture({ ...(o.tiles ? { tiles: o.tiles } : {}), ...(o.rich ? { rich: o.rich } : {}), ...(o.rock ? { rock: o.rock } : {}), config });
+  const base = newGame(1, config);
   return { ...base, board: f.board, terrain: f.terrain, hands: [o.hand, base.hands[1]], phase: o.phase, ...(o.discard ? { discard: o.discard } : {}) };
 };
 const card = (id: number, suit: 0 | 1 | 2 | 3, rank: number): Card => ({ id, suit, rank });
@@ -38,7 +41,7 @@ describe('GreedyBot (spec 16)', () => {
   }, 120_000);
 
   it('allowKnock: false never ranks Knock', () => {
-    const s = stateWith({ hand: [], phase: 'KNOCK' });
+    const s = stateWith({ hand: [], phase: 'KNOCK', legacy: true }); // Knock is a parked rule
     const v = viewFor(s, 0);
     expect(legalActions(v).some((a) => a.t === 'Knock')).toBe(true);
     expect(rankActions(v, { allowKnock: false }).map((r) => r.action.t)).toEqual(['Continue']);
@@ -104,8 +107,17 @@ describe('GreedyBot (spec 16)', () => {
     expect(r.facts.move).toMatchObject({ placed: 3, onRich: 1, taken: 2, botCut: 1, points: 4, toward: true, wins: false });
   });
 
-  it('EndAct is chosen when there is nothing to play', () => {
-    const s = stateWith({ phase: 'ACT', hand: [card(1, 0, 1), card(2, 1, 5)] });
+  it('EndAct is chosen when there is nothing to play (no combos, no Sprout)', () => {
+    const s = stateWith({ phase: 'ACT', hand: [card(1, 0, 1), card(2, 1, 5)], legacy: true });
     expect(GreedyBot.chooseAction(viewFor(s, 0) as View)).toEqual({ t: 'EndAct' });
+  });
+
+  it('does not waste high cards: between equal moves it plays the lower combo', () => {
+    // Two runs that place 3 tiles on empty hexes: Moss 7-8-9 (listed first) and Ember 1-2-3.
+    const hand = [card(7, 0, 7), card(8, 0, 8), card(9, 0, 9), card(1, 3, 1), card(2, 3, 2), card(3, 3, 3), card(20, 2, 5)];
+    const s = stateWith({ phase: 'ACT', hand });
+    const best = rankActions(viewFor(s, 0))[0]!;
+    expect(best.action.t).toBe('MeldRun');
+    expect(best.action.t === 'MeldRun' && [...best.action.cards].sort()).toEqual([1, 2, 3]);
   });
 });

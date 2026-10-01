@@ -11,6 +11,7 @@ import {
   shuffleDeck,
 } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
+import { LEGACY_V03 } from '../legacy.js';
 
 const allCards = (s: State) => [...s.hands[0], ...s.hands[1], ...s.deck, ...s.discard];
 
@@ -36,18 +37,26 @@ describe('newGame', () => {
     expect(newGame(1, { rotThreshold: 18 }).config.rotThreshold).toBe(18);
   });
 
-  it('deals handSize to P1 then P2, flips one discard, rest is the deck', () => {
-    const shuffled = shuffleDeck(createCards(s.config), 42);
+  it('deals handSize to P1 then P2, flips one discard, rest is the deck (first deal, legacy deck)', () => {
+    const l = newGame(42, LEGACY_V03);
+    const shuffled = shuffleDeck(createCards(l.config), 42);
+    expect(l.hands[0]).toEqual(shuffled.slice(0, 7));
+    expect(l.hands[1]).toEqual(shuffled.slice(7, 14));
+    expect(l.discard).toEqual([shuffled[14]]);
+    expect(l.deck).toEqual(shuffled.slice(15));
+    expect(l.deck).toHaveLength(72 - 15);
+  });
+
+  it('the dealt cards come from the shuffle of the attempt that was used (v0.4)', () => {
+    const shuffled = shuffleDeck(createCards(s.config), 42, s.dealAttempt);
     expect(s.hands[0]).toEqual(shuffled.slice(0, 7));
-    expect(s.hands[1]).toEqual(shuffled.slice(7, 14));
-    expect(s.discard).toEqual([shuffled[14]]);
     expect(s.deck).toEqual(shuffled.slice(15));
-    expect(s.deck).toHaveLength(72 - 15);
+    expect(s.deck).toHaveLength(4 * s.config.maxRank * 2 - 15);
   });
 
   it('conserves every card exactly once', () => {
     const ids = allCards(s).map((c) => c.id).sort((a, b) => a - b);
-    expect(ids).toEqual(Array.from({ length: 72 }, (_, i) => i));
+    expect(ids).toEqual(Array.from({ length: createCards(s.config).length }, (_, i) => i));
   });
 
   it('uses the generated terrain', () => {
@@ -85,7 +94,7 @@ describe('newGame', () => {
     expect(g.hands[0]).toHaveLength(5);
     expect(g.hands[1]).toHaveLength(5);
     expect(g.discard).toHaveLength(1);
-    expect(g.deck).toHaveLength(36 - 11);
+    expect(g.deck).toHaveLength(4 * g.config.maxRank * 1 - 11);
   });
 
   it('is deterministic: same seed gives byte-identical state', () => {

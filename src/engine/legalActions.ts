@@ -89,11 +89,9 @@ const actActions = (v: View): Action[] => {
   const board = allCoords(radius);
   const reps = representatives(v.hand);
   const out: Action[] = [];
-  const keepsACard = (g: Card[]) => g.length < v.hand.length;
-
   // Hypha: start must touch the network; planRun checks every hex on the line.
   const starts = board.filter((c) => touchesNetwork(v.board, p, c));
-  for (const g of runGroups(reps).filter(keepsACard)) {
+  for (const g of runGroups(reps)) {
     const cards = g.map((c) => c.id);
     for (const start of starts) {
       for (let dir = 0; dir < DIRECTIONS.length; dir++) {
@@ -103,11 +101,20 @@ const actActions = (v: View): Action[] => {
   }
 
   // Bloom: connected clusters of claimable hexes with at least one network contact.
-  for (const g of setGroups(reps).filter(keepsACard)) {
+  for (const g of setGroups(reps)) {
     const rank = g[0]!.rank;
     const claimable = board.filter((c) => claimBlocker(v, p, c, rank) === null);
     for (const hexes of connectedSubsets(claimable, g.length)) {
       if (hexes.some((c) => touchesNetwork(v.board, p, c))) out.push({ t: 'MeldSet', cards: g.map((c) => c.id), hexes });
+    }
+  }
+
+  // Sprout (v0.4): one card, one tile next to the network; one card per suit/rank.
+  if (v.sproutsThisTurn < v.config.sproutsPerTurn) {
+    for (const card of [...reps.values()].sort((x, y) => x.id - y.id)) {
+      for (const coord of starts) {
+        if (claimBlocker(v, p, coord, card.rank) === null) out.push({ t: 'Sprout', card: card.id, coord });
+      }
     }
   }
 
@@ -146,12 +153,15 @@ export const legalActions = (view: View): Action[] => {
     case 'ACT':
       return actActions(view);
     case 'DISCARD': {
-      const skip = view.config.forbidRedundantDiscard ? view.drawnFromDiscard : null;
+      // v0.4: the card just taken may be discarded when it is the only card.
+      const skip = view.config.forbidRedundantDiscard && view.hand.length > 1 ? view.drawnFromDiscard : null;
       const reps = [...representatives(view.hand, skip).values()].sort((a, b) => a.id - b.id);
       return reps.map((c) => ({ t: 'Discard', card: c.id }));
     }
     case 'KNOCK':
-      return view.myDeadwood <= view.config.knockDeadwood ? [{ t: 'Knock' }, { t: 'Continue' }] : [{ t: 'Continue' }];
+      return view.config.knockEnabled && view.myDeadwood <= view.config.knockDeadwood
+        ? [{ t: 'Knock' }, { t: 'Continue' }]
+        : [{ t: 'Continue' }];
     case 'ROT_PICK':
       return (view.rotPick?.candidates ?? []).map((coord) => ({ t: 'RotPick', coord: { ...coord } }));
   }
