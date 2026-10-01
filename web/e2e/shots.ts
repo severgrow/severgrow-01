@@ -76,6 +76,23 @@ for (const id of THEME_IDS) {
   await shot(page, 'mid-cut');
   await page.close();
 }
+// The level screen (with a few wins recorded).
+{
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  await page.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, palette: 'soil', level: 7 }));
+    localStorage.setItem('severgrow.stats.v1', JSON.stringify({ wins: 5, losses: 3, best: 30, streak: 1, bestStreak: 2, winsByLevel: [2, 1, 1, 0, 0, 0, 1, 0, 0] }));
+    localStorage.setItem('severgrow.seen', '1');
+  });
+  await page.goto(BASE);
+  await page.waitForTimeout(300);
+  await shot(page, 'menu');
+  await page.click('#menu-play');
+  await page.waitForTimeout(300);
+  await shot(page, 'levels');
+  await page.close();
+}
 await browser.close();
 await server.close();
 console.log(errors.length ? `errors: ${errors.join(' | ')}` : `saved to ${dir}`);

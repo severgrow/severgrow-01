@@ -18,6 +18,7 @@ import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
+import { LEVEL_ICONS } from './ui/levelIcons.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -221,8 +222,8 @@ function renderLevelGrid() {
       const wins = stats.winsByLevel[lv - 1] ?? 0;
       b.className = `level-tile${settings.level === lv ? ' on' : ''}${lv === 7 ? ' classic' : ''}`;
       b.dataset.level = String(lv);
-      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}: ${LEVEL_INFO[lv].line} You won ${wins} time${wins === 1 ? '' : 's'}.`);
-      b.innerHTML = `<span class="lt-num num">${lv}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span><span class="lt-line">${LEVEL_INFO[lv].line}</span><span class="lt-wins">${wins ? `${wins} win${wins === 1 ? '' : 's'}` : 'No wins yet'}</span>`;
+      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? ', the classic bot' : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
+      b.innerHTML = `<span class="lt-num num">${lv}</span>${wins ? `<span class="lt-wins num">${wins}</span>` : ''}<span class="lt-icon">${LEVEL_ICONS[lv]}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span>`;
       b.addEventListener('click', () => {
         sound.unlock();
         sound.click();

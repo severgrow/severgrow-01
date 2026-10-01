@@ -23,7 +23,7 @@ export const removeAfter = (a: Animation | null, node: Element, fallbackMs: numb
 };
 
 export const cardFace = (c: Card) =>
-  `<span class="c-num num">${c.rank}</span><span class="c-suit">${SUIT_SVG[c.suit]}</span><span class="c-name">${SUIT_NAMES[c.suit]}</span>`;
+  `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
 
 export const shakeFrames = (a: number): Keyframe[] => [
   { transform: 'translate(0,0)' },
