@@ -1,11 +1,11 @@
 // A simple opponent. It only reads its own View (never your hand) and only
-// chooses from legalActions, so it always follows the rules.
+// chooses from the moves the page offers in the current mode, so it always
+// follows the rules (and never knocks in Lite).
 import {
   applyFruit,
   applyPlacement,
   bestMeldPartition,
   coordKey,
-  legalActions,
   planFruit,
   planRun,
   planSet,
@@ -15,6 +15,8 @@ import {
   strangleOutcome,
 } from '../../src/engine/index.js';
 import type { Action, Tile, View } from '../../src/engine/index.js';
+import { visibleMoves } from './presets.js';
+import type { Mode } from './presets.js';
 
 type Board = Record<string, Tile | null>;
 
@@ -47,8 +49,8 @@ const actValue = (v: View, a: Action): number => {
   return 0;
 };
 
-export const chooseAction = (v: View): Action => {
-  const acts = legalActions(v);
+export const chooseAction = (v: View, mode: Mode = 'classic'): Action => {
+  const acts = visibleMoves(v, mode);
   if (acts.length === 0) throw new Error('bot has no legal actions');
   switch (v.phase) {
     case 'DRAW': {
