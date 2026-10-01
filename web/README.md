@@ -1,4 +1,4 @@
-# Mycelium in the browser
+# Severgrow in the browser
 
 A simple playable version of the game: you (green) against a bot (purple).
 It lives entirely in this `web/` folder. It uses the rules engine in `src/engine/`

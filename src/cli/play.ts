@@ -55,7 +55,7 @@ export const runTerminalGame = async (io: TerminalIO): Promise<State> => {
   const mode = io.mode ?? 'classic';
   const bot = createGreedyBot({ allowKnock: mode === 'classic' });
   let s = newGame(io.seed, PRESETS[mode]);
-  io.print(`Mycelium (${mode}). You are Y, the bot is B. Grow your network, keep it linked to your root, cut the bot's links.`);
+  io.print(`Severgrow (${mode}). You are Y, the bot is B. Grow your network, keep it linked to your root, cut the bot's links.`);
   while (s.phase !== 'GAME_OVER') {
     if (s.actor === 1) {
       const a = bot.chooseAction(viewFor(s, 1));

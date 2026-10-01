@@ -1,4 +1,4 @@
-# MYCELIUM: Engine Spec v0.3 (Claude Code ready)
+# SEVERGROW: Engine Spec v0.3 (Claude Code ready)
 
 > **Grow a living network. Protect the connection. Cut theirs.**
 

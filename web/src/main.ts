@@ -1,4 +1,4 @@
-// Mycelium in the browser: you (green, player 1) against a simple bot (purple).
+// Severgrow in the browser: you (green, player 1) against a simple bot (purple).
 // All rules come from the engine in src/engine; this file only draws and clicks.
 import { SUIT_NAMES, allCoords, apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Coord, GameResult, Player, State, View } from '../../src/engine/index.js';
@@ -12,9 +12,9 @@ import type { Mode } from './presets.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
-const SAVE_KEY = 'mycelium.save.v3';
-const MODE_KEY = 'mycelium.mode';
-const COACH_KEY = 'mycelium.coach.enabled';
+const SAVE_KEY = 'severgrow.save.v3';
+const MODE_KEY = 'severgrow.mode';
+const COACH_KEY = 'severgrow.coach.enabled';
 const PAGE_SIZE = 15;
 const BOT_DELAY_MS = 650;
 
