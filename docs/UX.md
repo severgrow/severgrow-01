@@ -57,7 +57,7 @@ this one look and no theme switch. Everything still comes from design tokens in
 - **Tap a card:** every hex it can grow on glows; the rest dims. **Tap a glowing
   hex:** ghost tiles show exactly where the tiles will grow, with a result chip like
   "+3 tiles, replaces 1, cuts 4". Then **Confirm**. If the same card and hex allow
-  more than one move, **Other way** shows the next one.
+  more than one move, the next button shows the next one: **Change card** when only the card differs, **Other way** when the tiles would land elsewhere.
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
 - **Move buttons** above the hand say what kinds of moves you have ("Grow a line of

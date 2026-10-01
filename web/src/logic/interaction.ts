@@ -131,3 +131,11 @@ export const tapHex = (v: View, legal: readonly Action[], sel: Sel, key: string)
 };
 
 export const tapKind = (sel: Sel, kind: string): Sel => (sel.kind === kind ? { ...sel, kind: null, option: 0 } : { ...sel, kind, option: 0 });
+
+/** The label of the button that switches between options: say what actually changes. */
+export const optionsLabel = (opts: readonly Action[]): string => {
+  const place = (a: Action) => moveHexes(a).map(coordKey).sort().join('|');
+  const samePlace = opts.every((a) => place(a) === place(opts[0]!));
+  if (!samePlace) return 'Other way';
+  return opts.every((a) => moveCards(a).length === 1) ? 'Change card' : 'Change cards';
+};
