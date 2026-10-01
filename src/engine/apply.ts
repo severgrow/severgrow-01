@@ -3,6 +3,7 @@ import { ACTION_PHASE, assertActionShape } from './actions.js';
 import { deadwood } from './deadwood.js';
 import { IllegalActionError } from './errors.js';
 import { applyFruit, planFruit } from './fruit.js';
+import { eventsOf } from './events.js';
 import { emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
 import { applyPlacement, assertCoord, planRun, planSet } from './placement.js';
 import type { Placement } from './placement.js';
@@ -131,6 +132,12 @@ const rotPick = (s: State, coord: unknown): State => {
  * Throws IllegalActionError with a stable code for any illegal action.
  */
 export const apply = (state: State, action: Action): State => {
+  const next = applyRules(state, action);
+  // The action log of events (spec 12) is kept when the state carries a history.
+  return state.history ? { ...next, history: [...state.history, ...eventsOf(state, action, next)] } : next;
+};
+
+const applyRules = (state: State, action: Action): State => {
   if (state.phase === 'GAME_OVER') fail('GAME_OVER', 'the game is over');
   const a = assertActionShape(action);
   if (ACTION_PHASE[a.t] !== state.phase) fail('WRONG_PHASE', `${a.t} is not legal in ${state.phase}`);

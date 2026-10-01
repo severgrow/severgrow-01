@@ -46,5 +46,6 @@ export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): Sta
     turnNumber: 1,
     result: null,
     lastResolution: null,
+    history: [],
   };
 };
