@@ -15,7 +15,9 @@ import { isBoardAction, kindsAvailable, options, optionsLabel, targetHexes, usab
 import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
-import { LEVELS } from '../../src/bots/levels.js';
+import { LEVELS, botSeed } from '../../src/bots/levels.js';
+import type { Level } from '../../src/bots/levels.js';
+import { LEVEL_INFO } from './logic/levels-ui.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -100,7 +102,7 @@ const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) =
 const { flash, sparks, boardWrapPoint, floatText, caption, banner, flyCard, flyBack } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
-  if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach }));
+  if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach, level: gameLevel }));
 };
 
 // ---------- the look ----------
@@ -135,9 +137,11 @@ function drawLogo() {
 // ---------- screens and sheets ----------
 
 let openSheet: HTMLElement | null = null;
-function showScreen(name: 'menu' | 'game') {
+function showScreen(name: 'menu' | 'levels' | 'game') {
   $('menu').hidden = name !== 'menu';
+  $('levels').hidden = name !== 'levels';
   $('game').hidden = name !== 'game';
+  if (name === 'levels') renderLevelGrid();
   if (name === 'menu') {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
     const canContinue = !!saved && saved.state.phase !== 'GAME_OVER';
@@ -155,7 +159,6 @@ function showScreen(name: 'menu' | 'game') {
       $('menu-play').classList.add('ghost');
     }
     $('menu-stats').textContent = statsLine(stats);
-    renderLevelPickers();
   }
   $('gameover').hidden = true;
   render();
@@ -180,7 +183,7 @@ function renderHowTo() {
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
     '<p><b>Goal:</b> have more points than the bot at the end. Each tile scores 1 point, or 2 on a gold hex.</p>',
-    '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card away.</p>',
+    '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? ' Once per turn you can <b>sprout</b> one tile with any single card.' : ''}</p>`,
     '<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker bot tile.</p>',
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
@@ -190,30 +193,30 @@ function renderHowTo() {
   ].join('');
 }
 
-const LEVEL_NAMES = { easy: 'Easy', normal: 'Normal', hard: 'Hard' } as const;
-function renderLevelPickers() {
-  for (const host of document.querySelectorAll<HTMLElement>('[data-level-seg]')) {
-    host.replaceChildren(
-      ...LEVELS.map((lv) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `seg-btn${settings.level === lv ? ' on' : ''}`;
-        b.setAttribute('role', 'radio');
-        b.setAttribute('aria-checked', String(settings.level === lv));
-        b.textContent = LEVEL_NAMES[lv];
-        b.addEventListener('click', () => {
-          settings = { ...settings, level: lv };
-          saveSettings();
-          renderLevelPickers();
-        });
-        return b;
-      }),
-    );
-  }
+/** The 3x3 level screen: number, name, one line, and my wins at that level. */
+function renderLevelGrid() {
+  $('level-grid').replaceChildren(
+    ...LEVELS.map((lv) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const wins = stats.winsByLevel[lv - 1] ?? 0;
+      b.className = `level-tile${settings.level === lv ? ' on' : ''}${lv === 7 ? ' classic' : ''}`;
+      b.dataset.level = String(lv);
+      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}: ${LEVEL_INFO[lv].line} You won ${wins} time${wins === 1 ? '' : 's'}.`);
+      b.innerHTML = `<span class="lt-num num">${lv}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span><span class="lt-line">${LEVEL_INFO[lv].line}</span><span class="lt-wins">${wins ? `${wins} win${wins === 1 ? '' : 's'}` : 'No wins yet'}</span>`;
+      b.addEventListener('click', () => {
+        sound.unlock();
+        sound.click();
+        settings = { ...settings, level: lv };
+        saveSettings();
+        startGame(randomSeed(), lv);
+      });
+      return b;
+    }),
+  );
 }
 
 function syncSettingsForm() {
-  renderLevelPickers();
   // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
@@ -265,9 +268,10 @@ function beginSession(state: State, c: CoachProgress | null) {
   scheduleBot();
 }
 
-function startGame(seed: number) {
+function startGame(seed: number, level: Level = settings.level) {
   store.set(SEEN_KEY, '1');
-  log = [`New game against the ${LEVEL_NAMES[settings.level].toLowerCase()} bot. You go first.`];
+  gameLevel = level;
+  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(newGame(seed), null);
   save();
   banner('Your turn');
@@ -277,6 +281,7 @@ function continueGame() {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
   log = ['Welcome back.'];
+  gameLevel = saved.level;
   beginSession(saved.state, saved.coach);
 }
 
@@ -299,7 +304,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER') {
-      stats = recordResult(stats, p.after.result, HUMAN);
+      stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
   }
@@ -328,6 +333,7 @@ function humanPlay(a: Action) {
   if (!p) return;
   inspectKey = null;
   guideGoal = null;
+  hintOpen = false;
   afterPlay(p, HUMAN, advice);
 }
 
@@ -344,7 +350,8 @@ function scheduleBot() {
     const started = performance.now();
     thinking = true;
     renderHud();
-    const action = await askBot(viewFor(session.state, BOT), settings.level);
+    const st = session.state;
+    const action = await askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
     // A short think before the bot's turn and before each tile move; housekeeping is quick.
     const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
     const beat = (first ? 550 : grows ? 300 : 90) * timeScale();
@@ -359,6 +366,10 @@ function scheduleBot() {
   })();
 }
 let thinking = false;
+/** Whether the ? tip is open. */
+let hintOpen = false;
+/** The bot level of the game being played (kept with the saved game). */
+let gameLevel: Level = 7;
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -427,6 +438,16 @@ function settleStep(s: Step, animated: boolean) {
     else shownScores = [s.scores[HUMAN], s.scores[BOT]];
   }
   if (!animated && s.k === 'sever') caption(captionFor(s, HUMAN)!, s.origin, s.player === HUMAN ? 'bad' : 'good');
+}
+
+/** Nothing can grow this turn: skip the "Throw a card" tap and go straight to throwing. */
+function autoAdvance() {
+  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  if (session.legal.some(isBoardAction) || session.view.hand.length === 0) return;
+  const end = session.legal.find((a) => a.t === 'EndAct');
+  if (!end) return;
+  caption('Nothing can grow. Tap a card to throw it.', null, 'info');
+  humanPlay(end);
 }
 
 async function pump() {
@@ -641,7 +662,15 @@ function render() {
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);
+  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
+    autoQueued = true;
+    setTimeout(() => {
+      autoQueued = false;
+      autoAdvance();
+    }, 250);
+  }
 }
+let autoQueued = false;
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
 function renderGuide(advice: Advice | null) {
@@ -716,8 +745,11 @@ function renderHud() {
   const turnNo = Math.min(Math.ceil(st.turnNumber / 2), each > 0 ? each : Infinity);
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
+  // The tip shows only when the ? is tapped; it closes again after each move.
   $('hint').textContent = hintText(session.view);
+  $('hint').hidden = !hintOpen || !$('hint').textContent;
+  $('hint-btn').setAttribute('aria-expanded', String(hintOpen));
   const note = st.phase === 'GAME_OVER' ? null : endgameNote(session.view);
   $('endnote').hidden = !note;
   $('endnote').textContent = note ?? '';
@@ -733,7 +765,7 @@ function renderHud() {
   }
 }
 
-/** In the default game (Rot and Knock off) throwing a card away ends the turn. */
+/** In the default game (Rot and Knock off) throwing a card ends the turn. */
 const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
 
 function hintText(v: View): string {
@@ -745,17 +777,17 @@ function hintText(v: View): string {
   const sel = session.sel;
   switch (v.phase) {
     case 'DRAW':
-      return `Draw a card: tap the deck or the discard pile.${low}`;
+      return `Draw a card: tap the deck or the throw pile.${low}`;
     case 'ACT': {
       if (session.pending) return settings.confirmMoves ? 'Check the preview, then Confirm.' : '';
       if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? 'Tap a glowing hex to grow there.' : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
       if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
-      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card away”.' : 'Nothing to grow this time. Tap “Throw a card away”.';
+      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card”.' : 'Nothing to grow this time.';
     }
     case 'DISCARD':
-      return discardEndsTurn(v) ? 'Last step: throw 1 card away. Then your turn ends.' : 'Throw 1 card away.';
+      return discardEndsTurn(v) ? 'Last step: discard 1 card. Then your turn ends.' : 'Discard 1 card.';
     case 'KNOCK':
       return 'Knock to end the game soon, or end your turn.';
     case 'ROT_PICK':
@@ -891,14 +923,14 @@ function renderControls(v: View, advice: Advice | null) {
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
-    // Done growing: the next step is throwing a card away (or, with an empty hand, the turn just ends).
+    // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    const label = v.hand.length > 0 ? 'Throw a card away' : 'End turn';
+    const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
     if (end && !pending) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
   } else if (v.phase === 'DISCARD') {
     const note = document.createElement('p');
     note.className = 'step-note';
-    note.textContent = 'Pick 1 card to throw away';
+    note.textContent = 'Tap a card to throw it';
     moves.append(note);
   } else {
     for (const a of legal) {
@@ -911,8 +943,8 @@ function renderControls(v: View, advice: Advice | null) {
 
   if (pending) {
     const pv = previewMove(v, pending);
-    $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Throw away ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
-    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Throw away & end turn' : pending.t === 'Discard' ? 'Throw away' : 'Confirm';
+    $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Discard ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
+    $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Discard & end turn' : pending.t === 'Discard' ? 'Discard' : 'Confirm';
     const warn = $('confirm-warn');
     warn.hidden = !pv?.warning;
     warn.textContent = pv?.warning ?? '';
@@ -1020,7 +1052,16 @@ function renderGameOver() {
   go.hidden = !show;
   if (!show || !st?.result) return;
   const r = st.result;
-  $('go-title').textContent = resultTitle(r, HUMAN);
+  const won = r.winner === HUMAN;
+  $('go-title').textContent = won ? `You beat Level ${gameLevel}!` : resultTitle(r, HUMAN);
+  // No world map yet: every game is practice.
+  $('go-sub').textContent = won ? 'Practice game: no sprout this time.' : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+  $('go-rematch').textContent = won ? 'Play again' : 'Try again';
+  const other = $('go-other');
+  const target = won ? Math.min(9, gameLevel + 1) : Math.max(1, gameLevel - 1);
+  other.hidden = target === gameLevel;
+  other.textContent = won ? `Try Level ${target}` : 'Try a lower level';
+  other.dataset.level = String(target);
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   $('go-reason').textContent = resultReason(r, HUMAN);
@@ -1090,6 +1131,13 @@ function onCardTap(id: number) {
   sound.click();
   session.tapCard(id);
   inspectKey = null;
+  // Throw step: tapping a card throws it (no extra confirm).
+  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard') return humanPlay(session.pending);
+  // A card with just one place to grow shows its preview at once (no hex tap needed).
+  if (session.sel.card !== null && session.sel.hex === null) {
+    const only = [...targetHexes(session.view, session.legal, session.sel)];
+    if (only.length === 1) session.tapHex(only[0]!);
+  }
   render();
   maybeAutoPlay();
 }
@@ -1104,6 +1152,8 @@ function onHexTap(key: string) {
     return;
   }
   sound.click();
+  // Tapping the previewed hex again plays the move (same as Confirm).
+  if (session.sel.hex === key && session.pending) return humanPlay(session.pending);
   session.tapHex(key);
   inspectKey = session.pending ? null : key;
   render();
@@ -1139,13 +1189,24 @@ const bind = (id: string, fn: () => void) =>
 
 bind('menu-play', () => {
   if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
-  startGame(randomSeed());
+  showScreen('levels');
+});
+bind('levels-back', () => showScreen('menu'));
+bind('hint-btn', () => {
+  hintOpen = !hintOpen;
+  render();
+});
+bind('go-other', () => {
+  const lv = Number($('go-other').dataset.level) as Level;
+  settings = { ...settings, level: lv };
+  saveSettings();
+  startGame(randomSeed(), lv);
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
   settings = { ...settings, coach: true };
   saveSettings();
-  startGame(TUTORIAL_SEED);
+  startGame(TUTORIAL_SEED, 7); // the tutorial is tuned for the classic bot
 });
 bind('menu-howto', () => sheet('sheet-howto'));
 bind('menu-settings', () => sheet('sheet-settings'));
@@ -1204,7 +1265,7 @@ bind('tool-targets', () => {
 });
 bind('tool-skip', () => fastForward());
 bind('tool-replay', () => replayBotTurn());
-bind('go-rematch', () => startGame(randomSeed()));
+bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {
   gameOverDismissed = true;
   render();

@@ -1,10 +1,10 @@
 // Asks the bot for a move in a Web Worker, so the page stays responsive while it
 // thinks. Falls back to the main thread if workers are not available or fail.
 import type { Action, View } from '../../../src/engine/index.js';
-import { botFor } from '../../../src/bots/levels.js';
+import { chooseLevelAction } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
 
-type Job = { view: View; level: Level; resolve: (a: Action) => void };
+type Job = { view: View; level: Level; seed: number; resolve: (a: Action) => void };
 let worker: Worker | null = null;
 let failed = false;
 let nextId = 1;
@@ -16,7 +16,7 @@ const fallBack = () => {
   worker = null;
   for (const [id, job] of jobs) {
     jobs.delete(id);
-    setTimeout(() => job.resolve(botFor(job.level).chooseAction(job.view)), 0);
+    setTimeout(() => job.resolve(chooseLevelAction(job.view, job.level, job.seed)), 0);
   }
 };
 
@@ -37,14 +37,15 @@ const getWorker = (): Worker | null => {
   }
 };
 
-export const askBot = (view: View, level: Level = 'normal'): Promise<Action> =>
+/** The bot's move at `level`, with the game's seeded randomness (see botSeed). */
+export const askBot = (view: View, level: Level, seed: number): Promise<Action> =>
   new Promise((resolve) => {
     const w = getWorker();
     if (!w) {
-      setTimeout(() => resolve(botFor(level).chooseAction(view)), 0);
+      setTimeout(() => resolve(chooseLevelAction(view, level, seed)), 0);
       return;
     }
     const id = nextId++;
-    jobs.set(id, { view, level, resolve });
-    w.postMessage({ id, view, level });
+    jobs.set(id, { view, level, seed, resolve });
+    w.postMessage({ id, view, level, seed });
   });

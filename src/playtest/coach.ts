@@ -77,7 +77,7 @@ export type Advice = {
 
 const GLOSSARY: Record<string, string> = {
   root: 'the big round bulb you start from',
-  'discard pile': 'the cards thrown away',
+  'throw pile': 'cards already thrown',
   deck: 'the face-down pile',
   combo: '3+ cards played together',
   'gold hex': 'a yellow hex',
@@ -126,7 +126,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   draw: {
     active: () => true,
     fits: ({ v }) => v.phase === 'DRAW',
-    text: ({ say }) => `Take the ${say('discard pile')} card only if it makes a ${say('combo')}.`,
+    text: ({ say }) => `Take the ${say('throw pile')} card only if it makes a ${say('combo')}.`,
   },
   combos: {
     active: () => true,
@@ -231,18 +231,18 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
-        return [`The ${cardName(top)} on the ${say('discard pile')} fits with your ${f.comboWith.map(cardName).join(' and ')} to make a ${say('combo')}.`];
+        return [`The ${cardName(top)} on the ${say('throw pile')} fits with your ${f.comboWith.map(cardName).join(' and ')} to make a ${say('combo')}.`];
       }
-      if (f.from === 'discard') return [`The ${say('deck')} is empty, so take the card from the ${say('discard pile')}.`];
+      if (f.from === 'discard') return [`The ${say('deck')} is empty, so take the card from the ${say('throw pile')}.`];
       if (!top) return [`Draw a new card from the ${say('deck')}.`];
-      return [`The ${cardName(top)} on the ${say('discard pile')} does not make a ${say('combo')}, so try a new card from the ${say('deck')}.`];
+      return [`The ${cardName(top)} on the ${say('throw pile')} makes no ${say('combo')}, so draw from the ${say('deck')}.`];
     }
     case 'discard': {
       const name = cardName(f.card);
       const loose = bestMeldPartition(v.hand).leftover.length;
       const why: string[] = [];
       if (f.fitsCombo) why.push(`Every card fits a ${say('combo')}, so let go of the ${name}: it hurts your combos least.`);
-      else if (loose >= 3) why.push(`You are holding ${loose} cards that do not fit a ${say('combo')}. Throwing away the ${name} keeps your hand tidy.`);
+      else if (loose >= 3) why.push(`You are holding ${loose} cards that do not fit a ${say('combo')}. Throwing the ${name} keeps your hand tidy.`);
       else why.push(`The ${name} does not fit any ${say('combo')}, so it is the easiest card to let go.`);
       if (rotOn(v) && f.card.rank >= 7 && !f.fitsCombo) why.push(`It is a high card, so this also keeps your ${say('leftover cards')} low.`);
       return why;
@@ -309,7 +309,7 @@ export const coachAdvice = (input: CoachInput, choice = 0): Advice | null => {
 
 const BULLETS: Record<TipId, string> = {
   goal: 'Keep every tile joined to your root.',
-  draw: 'Take the discard only if it makes a combo.',
+  draw: 'Take from the throw pile only if it makes a combo.',
   combos: 'Cards of one suit in a row grow lines; same numbers grow clumps.',
   sprout: 'No combo? Sprout one card as one tile.',
   strength: 'A stronger tile can replace a weaker bot tile.',

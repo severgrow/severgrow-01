@@ -92,7 +92,7 @@ describe('adversarial UI tests', () => {
     const { ses } = playThrough(31, () => {});
     const mid = new Session(playGame(32, undefined, 60));
     for (const s of [ses, mid]) {
-      const raw = encodeSave({ state: s.state, coach: null });
+      const raw = encodeSave({ state: s.state, coach: null, level: 7 });
       const settingsBefore = parseSettings(JSON.stringify({ largeText: false }));
       const settingsAfter = { ...settingsBefore, largeText: true };
       expect(settingsAfter.largeText).not.toBe(settingsBefore.largeText);

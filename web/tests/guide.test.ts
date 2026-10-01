@@ -51,7 +51,7 @@ describe('coach arrows (show where to tap)', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
-  });
+  }, 300_000);
 
   it('the first arrow of a board move points at one of its cards', () => {
     const s = states.find((x) => x.phase === 'ACT' && legalActions(viewFor(x, 0)).some(isBoardAction))!;

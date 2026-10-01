@@ -64,6 +64,21 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   return { page, errors };
 };
 
+/** Play → level screen → the given level (default 7): starts a new game. */
+const newGame = async (page: Page, level = 7) => {
+  await page.click('#menu-play');
+  await page.click(`#level-grid [data-level="${level}"]`);
+};
+
+/** Picks a target hex for the selected card, unless the card already previewed its only spot. */
+const pickTarget = async (page: Page) => {
+  if (await page.locator('#confirm-play').isVisible()) return true;
+  const t = page.locator('.l-over .target').first();
+  if ((await t.count()) === 0) return false;
+  await tapHex(page, (await t.getAttribute('data-key'))!);
+  return true;
+};
+
 const tapHex = async (page: Page, key: string) => {
   const box = await page.locator(`.hex-cell[data-key="${key}"] path.hex`).boundingBox();
   await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
@@ -79,16 +94,14 @@ const playTurn = async (page: Page) => {
       const card = page.locator('#hand .card.playable').first();
       if ((await card.count()) > 0 && i < 6) {
         await card.click();
-        const t = page.locator('.l-over .target').first();
-        if ((await t.count()) > 0) {
-          await tapHex(page, (await t.getAttribute('data-key'))!);
+        if (await pickTarget(page)) {
           if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
           else await page.click('#confirm-cancel').catch(() => {});
         } else await page.locator('#moves .cancel').click();
       } else await page.locator('#moves .end').click();
     } else if (s.phase === 'DISCARD') {
+      // Throw step: tapping a card throws it at once (no Confirm).
       await page.locator('#hand .card.playable').first().click();
-      await page.click('#confirm-play');
     }
     await idle(page);
   }
@@ -128,12 +141,21 @@ const playTurn = async (page: Page) => {
   });
   await page.reload();
   check('first visit: the menu suggests the tutorial', await page.locator('#menu-welcome').isVisible());
-  await page.locator('#menu [data-level-seg] .seg-btn', { hasText: 'Easy' }).click();
-  const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: string } } }).__severgrow.settings().level);
-  check('the bot level can be chosen on the menu', level === 'easy', level);
+  await newGame(page, 3);
+  await idle(page);
+  const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: number } } }).__severgrow.settings().level);
+  const hud = (await page.textContent('#turn')) ?? '';
+  check('the level screen starts a game at the picked level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
+  {
+    const hiddenFirst = !(await page.locator('#hint').isVisible());
+    await page.click('#hint-btn');
+    const shown = await page.locator('#hint').isVisible();
+    await page.click('#hint-btn');
+    check('the tip hides behind the ? button', hiddenFirst && shown && !(await page.locator('#hint').isVisible()));
+  }
   await page.goto(BASE);
   await page.click('#menu-continue').catch(() => {});
-  if (!(await getState(page))) await page.click('#menu-play');
+  if (!(await getState(page))) await newGame(page);
   await page.click('#deck');
   await idle(page);
   const before = await stateJson(page);
@@ -141,9 +163,7 @@ const playTurn = async (page: Page) => {
   let undone = false;
   if ((await card.count()) > 0) {
     await card.click();
-    const t = page.locator('.l-over .target').first();
-    if ((await t.count()) > 0) {
-      await tapHex(page, (await t.getAttribute('data-key'))!);
+    if (await pickTarget(page)) {
       await page.click('#confirm-play');
       await idle(page);
       await page.click('#moves .undo');
@@ -162,7 +182,7 @@ for (const theme of THEMES) {
   // --- smoke: menu, a fresh game, a few turns with animations on ---
   {
     const { page, errors } = await openPage(theme, 'phone', { speed: 'fast' });
-    await page.click('#menu-play');
+    await newGame(page);
     await idle(page);
     for (let t = 0; t < 3; t++) await playTurn(page);
     const s = await getState(page);
@@ -203,7 +223,7 @@ for (const theme of THEMES) {
     await page.waitForTimeout(300);
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
     await page.click(`#hand [data-card="${demo.card}"]`);
-    await tapHex(page, demo.hex);
+    if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
     for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
     await page.mouse.move(1, 1);
     const chip = await page.textContent('#confirm-chip');
@@ -237,7 +257,7 @@ for (const theme of THEMES) {
     const { page } = await openPage(theme, 'phone', { speed: 'slow' }, demo.state);
     await page.click('#menu-continue');
     await page.click(`#hand [data-card="${demo.card}"]`);
-    await tapHex(page, demo.hex);
+    if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
     for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
     await page.click('#confirm-play');
     await page.waitForTimeout(400); // mid-animation

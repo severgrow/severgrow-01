@@ -1614,7 +1614,7 @@ svg.usable .hex-cell {
 .game > .hud {
   grid-row: 1;
 }
-.game > .steps {
+.game > .steps-row {
   grid-row: 2;
 }
 .game > .endnote {
@@ -1625,4 +1625,123 @@ svg.usable .hex-cell {
 }
 .game > .play {
   grid-row: 5;
+}
+
+/* ---------- the level screen (3 x 3) ---------- */
+.levels {
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+}
+.levels-inner {
+  width: min(520px, 100% - 24px);
+  padding: 16px 0 24px;
+}
+.levels-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.levels-head h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.level-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 112px;
+  padding: 10px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--c-line);
+  background: var(--c-surface);
+  cursor: pointer;
+}
+.level-tile.on {
+  border-color: var(--c-accent);
+}
+.level-tile.classic .lt-num {
+  color: var(--c-gold);
+}
+.lt-num {
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--c-you);
+}
+.lt-name {
+  font-weight: var(--w-num);
+}
+.lt-line {
+  font-size: 0.78rem;
+  color: var(--c-muted);
+  line-height: 1.2;
+}
+.lt-wins {
+  margin-top: auto;
+  font-size: 0.72rem;
+  color: var(--c-muted);
+}
+.levels-note {
+  margin-top: 12px;
+  text-align: center;
+}
+.go-sub {
+  margin: 6px 0 0;
+  color: var(--c-muted);
+}
+
+/* ---------- steps row with the tip button ---------- */
+.steps-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+.steps-row .steps {
+  margin-left: 0;
+  margin-right: 0;
+}
+.help-btn {
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c-line);
+  background: transparent;
+  color: var(--c-muted);
+  font-weight: var(--w-num);
+  font-size: 0.9rem;
+  cursor: pointer;
+  position: relative;
+}
+.help-btn::after {
+  /* a bigger invisible touch area (44px) */
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.help-btn[aria-expanded='true'] {
+  color: var(--c-bg);
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+/* Weak-spot buttons: just the icon until switched on. */
+.chip .chip-label {
+  display: none;
+}
+.chip[aria-pressed='true'] .chip-label {
+  display: inline;
+}
+.chip.corner {
+  min-width: 40px;
+  min-height: 40px;
+  justify-content: center;
 }
