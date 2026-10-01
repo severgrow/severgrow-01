@@ -8,3 +8,8 @@ export * from './terrain.js';
 export * from './cards.js';
 export * from './deck.js';
 export * from './newGame.js';
+export * from './melds.js';
+export * from './overgrow.js';
+export * from './placement.js';
+export * from './sever.js';
+export * from './strangle.js';

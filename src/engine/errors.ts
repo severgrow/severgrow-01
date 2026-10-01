@@ -22,10 +22,35 @@ export class ConfigError extends Error {
   }
 }
 
+export type IllegalActionCode =
+  // malformed input
+  | 'MALFORMED_ACTION'
+  | 'INVALID_COORD'
+  | 'INVALID_DIR'
+  // cards
+  | 'CARD_NOT_IN_HAND'
+  | 'DUPLICATE_CARD'
+  | 'RUN_TOO_SHORT'
+  | 'RUN_MIXED_SUITS'
+  | 'RUN_NOT_CONSECUTIVE'
+  | 'SET_WRONG_SIZE'
+  | 'SET_MIXED_RANKS'
+  | 'SET_DUPLICATE_SUIT'
+  // placement
+  | 'OFF_BOARD'
+  | 'ROCK'
+  | 'OWN_TILE'
+  | 'ROOT_IMMUNE'
+  | 'NOT_STRONGER'
+  | 'NOT_ADJACENT'
+  | 'HEX_COUNT_MISMATCH'
+  | 'DUPLICATE_HEX'
+  | 'HEXES_NOT_CONNECTED';
+
 /** Thrown by `apply` for any illegal action. `code` is stable; the message is not. */
 export class IllegalActionError extends Error {
-  readonly code: string;
-  constructor(code: string, message: string) {
+  readonly code: IllegalActionCode;
+  constructor(code: IllegalActionCode, message: string) {
     super(`${code}: ${message}`);
     this.name = 'IllegalActionError';
     this.code = code;
