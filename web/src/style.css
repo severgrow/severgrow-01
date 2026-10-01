@@ -74,20 +74,72 @@ button {
 }
 
 #texture {
-  /* A soft pool of light behind the board, plus fine film grain (SVG noise made in
-     code) so the page reads as printed paper, not a flat screen. Static: no cost per frame. */
+  /* The page background, made in code and static (no cost per frame). Each palette
+     picks its own treatment below. */
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse 90% 70% at 50% 38%, color-mix(in srgb, var(--c-text) 5%, var(--c-bg)) 0%, var(--c-bg) 72%);
+  background: var(--c-bg);
 }
+#texture::before,
 #texture::after {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93  0 0 0 0 .92  0 0 0 0 .89  0 0 0 .7 -.25'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  opacity: 0.09;
+}
+/* Soil: a fine, warm soil grain (SVG noise) and a soft vignette. */
+[data-theme='soil'] #texture {
+  background: radial-gradient(ellipse 85% 70% at 50% 40%, color-mix(in srgb, var(--c-text) 4%, var(--c-bg)) 0%, var(--c-bg) 75%);
+}
+[data-theme='soil'] #texture::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .82  0 0 0 0 .72  0 0 0 0 .52  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.16;
+}
+/* Moss night: a soft green glow pooled under the board. */
+[data-theme='moss'] #texture {
+  background: radial-gradient(ellipse 70% 48% at 50% 44%, color-mix(in srgb, var(--c-you) calc(var(--board-glow) * 9%), var(--c-bg)) 0%, var(--c-bg) 78%);
+}
+/* A vignette, darker at the edges (Soil and Moss night). */
+#texture::after {
+  background: radial-gradient(ellipse 120% 95% at 50% 45%, transparent 55%, color-mix(in srgb, #000 calc(var(--vignette) * 70%), transparent) 100%);
+}
+/* Ink: flat near-black paper, nothing else. */
+[data-theme='ink'] #texture::before,
+[data-theme='ink'] #texture::after {
+  display: none;
+}
+/* Spores (Soil): a few faint motes drifting very slowly. Transform-only animation. */
+#spores {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+#spores i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--c-text);
+  opacity: 0.13;
+  animation: drift var(--t, 40s) linear infinite;
+  animation-delay: var(--d, 0s);
+}
+@keyframes drift {
+  from {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(18px, -45vh);
+  }
+  to {
+    transform: translate(-10px, -90vh);
+  }
+}
+.reduce-motion #spores {
+  display: none;
 }
 
 /* ---------- icons ---------- */
@@ -478,20 +530,73 @@ html.kbd .board:focus-visible {
   fill: var(--c-rock);
   stroke: var(--c-rock);
 }
+.hex.rock {
+  fill: color-mix(in srgb, var(--c-rock) 25%, var(--c-hexFill));
+  stroke: var(--c-line);
+}
+.rock-base {
+  fill: color-mix(in srgb, var(--c-rock) 45%, #000);
+}
+.rock-body {
+  fill: url(#grad-rock);
+}
+.rock-top {
+  stop-color: color-mix(in srgb, var(--c-rockEdge) 45%, var(--c-rock));
+}
+.rock-bottom {
+  stop-color: var(--c-rock);
+}
+.rock-speckle {
+  fill: url(#pat-stone);
+}
+.stone-dot {
+  fill: color-mix(in srgb, var(--c-rock) 55%, #000);
+  opacity: 0.55;
+}
+.stone-dot.light {
+  fill: var(--c-rockEdge);
+}
 .rock-facet {
   fill: none;
-  stroke: var(--c-bg);
-  stroke-opacity: 0.4;
-  stroke-width: 1.4;
+  stroke-width: 1.2;
   stroke-linejoin: round;
+  stroke-linecap: round;
 }
+.rock-facet.light {
+  stroke: var(--c-rockEdge);
+  stroke-opacity: 0.6;
+}
+.rock-facet.dark {
+  stroke: color-mix(in srgb, var(--c-rock) 50%, #000);
+  stroke-opacity: 0.7;
+}
+/* Gold hexes: warm amber, a fine diagonal weave, a soft shimmer and a "2" badge. */
 .hex.rich {
-  fill: color-mix(in srgb, var(--c-gold) 16%, var(--c-hexFill));
+  fill: color-mix(in srgb, var(--c-gold) 22%, var(--c-hexFill));
+  stroke: color-mix(in srgb, var(--c-gold) 55%, var(--c-hexFill));
 }
-.gold-ring {
-  fill: none;
-  stroke: var(--c-gold);
-  stroke-width: 1.6;
+.gold-weave-fill {
+  fill: url(#pat-gold);
+  pointer-events: none;
+}
+.gold-weave {
+  fill: var(--c-gold);
+  opacity: 0.22;
+}
+.gold-badge {
+  pointer-events: none;
+}
+.gold-badge-bg {
+  fill: var(--c-gold);
+  stroke: var(--c-bg);
+  stroke-width: 1.4;
+}
+.gold-badge-text {
+  fill: var(--c-goldInk);
+  font-size: 8.5px;
+  font-weight: var(--w-num);
+  text-anchor: middle;
+  dominant-baseline: central;
 }
 .gold-sheen {
   fill: var(--c-gold);
@@ -694,7 +799,7 @@ svg.usable .hex-cell {
   font-family: var(--font);
 }
 .spark-mark {
-  fill: var(--c-gold);
+  fill: var(--c-accent);
 }
 .will-cut {
   fill: var(--c-bg);
@@ -704,11 +809,23 @@ svg.usable .hex-cell {
   stroke-dasharray: 3 3;
 }
 .coach-ring {
+  /* The coach's hint: a cream circle that breathes (not a hex, not amber). */
   fill: none;
-  stroke: var(--c-gold);
-  stroke-width: 2.2;
-  stroke-dasharray: 1 4;
-  stroke-linecap: round;
+  stroke: var(--c-accent);
+  stroke-width: 2;
+  stroke-opacity: 0.9;
+  animation: breathe 2.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes breathe {
+  50% {
+    transform: scale(0.92);
+    stroke-opacity: 0.55;
+  }
+}
+.reduce-motion .coach-ring {
+  animation: none;
 }
 .focus {
   fill: none;
@@ -743,7 +860,7 @@ svg.usable .hex-cell {
   fill: var(--c-text);
 }
 .fx-flash.big {
-  fill: var(--c-gold);
+  fill: var(--c-accent);
 }
 .fx-spark.you {
   fill: var(--c-you);
@@ -838,7 +955,7 @@ svg.usable .hex-cell {
 /* ---------- coach ---------- */
 .coach {
   border: 1px solid var(--c-line);
-  border-left: 3px solid var(--c-gold);
+  border-left: 3px solid var(--c-accent);
   border-radius: var(--radius);
   padding: 8px 10px 10px;
   background: var(--c-surface);
@@ -848,7 +965,7 @@ svg.usable .hex-cell {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--c-gold);
+  color: var(--c-accent);
 }
 .coach-head .muted {
   margin-left: auto;
@@ -864,7 +981,7 @@ svg.usable .hex-cell {
   font-weight: var(--w-num);
 }
 .coach .tip {
-  color: var(--c-gold);
+  color: var(--c-accent);
 }
 .coach-actions {
   display: flex;
@@ -877,8 +994,8 @@ svg.usable .hex-cell {
   padding: 0 8px;
 }
 #coach-show[aria-pressed='true'] {
-  border-color: var(--c-gold);
-  color: var(--c-gold);
+  border-color: var(--c-accent);
+  color: var(--c-accent);
 }
 
 /* ---------- the coach's arrow ---------- */
@@ -893,7 +1010,7 @@ svg.usable .hex-cell {
 }
 .guide-arrow svg {
   display: block;
-  fill: var(--c-gold);
+  fill: var(--c-accent);
   stroke: var(--c-bg);
   stroke-width: 2.5;
   stroke-linejoin: round;
@@ -916,7 +1033,7 @@ svg.usable .hex-cell {
   padding-left: 18px;
 }
 .coach-glow {
-  box-shadow: 0 0 0 2px var(--c-gold);
+  box-shadow: 0 0 0 2px var(--c-accent);
 }
 
 /* ---------- confirm bar, moves, piles ---------- */
@@ -952,9 +1069,9 @@ svg.usable .hex-cell {
 }
 .table-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 .moves {
   display: flex;
@@ -971,14 +1088,49 @@ svg.usable .hex-cell {
   border-color: var(--c-accent);
   color: var(--c-accent);
 }
+/* Deck and throw pile: side by side, close together, each with a label and a count. */
+.piles {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
 .pile {
   position: relative;
-  width: 52px;
-  height: 72px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
   border: 0;
   padding: 0;
   background: none;
+  color: var(--c-muted);
   cursor: pointer;
+  transition: opacity 0.2s;
+}
+.pile-card {
+  position: relative;
+  width: 52px;
+  height: 72px;
+}
+.pile-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.pile-hint {
+  min-height: 0.8rem;
+  font-size: 0.68rem;
+  line-height: 1;
+  color: var(--c-text);
+}
+.pile:disabled {
+  cursor: default;
+}
+.pile.dim {
+  opacity: 0.45;
+}
+.pile.ready .pile-card {
+  border-radius: calc(var(--radius) * 0.6);
+  box-shadow: 0 0 0 1.5px var(--c-accent), 0 0 14px -2px color-mix(in srgb, var(--c-accent) 55%, transparent);
 }
 .pile-stack,
 .pile-stack::before,
@@ -1016,8 +1168,8 @@ svg.usable .hex-cell {
   color: var(--c-bg);
   font-size: 0.78rem;
 }
-.pile.ready {
-  animation: ready 1.4s ease-in-out infinite;
+.pile.ready .pile-card {
+  animation: ready 1.6s ease-in-out infinite;
 }
 @keyframes ready {
   0%,
@@ -1039,6 +1191,10 @@ svg.usable .hex-cell {
 .pile-top.empty {
   border: 1.5px dashed var(--c-line);
   border-radius: calc(var(--radius) * 0.6);
+}
+#discard-count {
+  top: -6px;
+  bottom: auto;
 }
 .pile-top.card {
   width: 100%;
@@ -1113,21 +1269,26 @@ svg.usable .hex-cell {
   text-transform: uppercase;
   opacity: 0.8;
 }
-.card.s0 .c-suit,
-.card.s0 .c-num {
-  color: var(--c-you);
+/* Suit tints: only on cards (never the board). Moss olive-lichen, Ash lavender,
+   Dew sky blue, Ember terracotta; plus a thin tinted edge. */
+.card.s0 {
+  --suit: var(--c-moss);
 }
-.card.s1 .c-suit,
-.card.s1 .c-num {
-  color: var(--c-muted);
+.card.s1 {
+  --suit: var(--c-ash);
 }
-.card.s2 .c-suit,
-.card.s2 .c-num {
-  color: var(--card-ink);
+.card.s2 {
+  --suit: var(--c-dew);
 }
-.card.s3 .c-suit,
-.card.s3 .c-num {
-  color: var(--c-gold);
+.card.s3 {
+  --suit: var(--c-ember);
+}
+.card[class*=' s'] .c-suit,
+.card[class*=' s'] .c-num {
+  color: var(--suit);
+}
+.card[class*=' s']::after {
+  border: 1.5px solid color-mix(in srgb, var(--suit) 60%, transparent) !important;
 }
 .flyer {
   position: fixed;
@@ -1468,7 +1629,7 @@ svg.usable .hex-cell {
 .reduce-motion .vein.fragile,
 .reduce-motion .target,
 .reduce-motion .badge-ring,
-.reduce-motion .pile.ready,
+.reduce-motion .pile.ready .pile-card,
 .reduce-motion .dots i {
   animation: none;
 }
@@ -1493,9 +1654,6 @@ svg.usable .hex-cell {
 .tile.root.you .body {
   filter: url(#glow);
 }
-.gold-ring {
-  stroke-dasharray: 3 3;
-}
 .hex {
   stroke-width: 1.2;
 }
@@ -1510,7 +1668,7 @@ svg.usable .hex-cell {
   fill: url(#pat-grain);
 }
 .card {
-  --card-bg: color-mix(in srgb, var(--c-text) 8%, var(--c-bg));
+  --card-bg: var(--c-card);
 }
 .mark.you {
   background: transparent;
@@ -1585,7 +1743,7 @@ svg.usable .hex-cell {
   padding: 10px 14px;
   border-radius: var(--radius);
   border: 1px solid var(--c-line);
-  border-left: 3px solid var(--c-gold);
+  border-left: 3px solid var(--c-accent);
   background: var(--c-surface);
   font-size: 0.92rem;
   text-align: left;
@@ -1604,8 +1762,8 @@ svg.usable .hex-cell {
   margin: 4px auto 0;
   padding: 2px 12px;
   border-radius: 999px;
-  border: 1.5px solid var(--c-gold);
-  color: var(--c-gold);
+  border: 1.5px solid var(--c-accent);
+  color: var(--c-accent);
   font-weight: var(--w-num);
   font-size: 0.85rem;
   justify-self: center;
@@ -1669,7 +1827,7 @@ svg.usable .hex-cell {
   border-color: var(--c-accent);
 }
 .level-tile.classic .lt-num {
-  color: var(--c-gold);
+  color: var(--c-accent);
 }
 .lt-num {
   font-size: 1.8rem;

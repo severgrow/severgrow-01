@@ -21,14 +21,15 @@ import { LEVEL_INFO } from './logic/levels-ui.js';
 import { describe, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
+import { pileStates } from './logic/piles.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
-import { SETTINGS_KEY, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
 import type { Settings } from './logic/settings.js';
-import { THEMES, cssVars, resolveColors } from './logic/themes.js';
+import { THEMES, THEME_IDS, cssVars, resolveColors, themeOf } from './logic/themes.js';
 
 /** The one look (Ink and glow colours, organic shapes). */
-const THEME = THEMES.ink;
+const theme = () => themeOf(settings.palette);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
@@ -62,7 +63,6 @@ const store = {
 };
 const systemReduce = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
-const sameAction = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 
 // ---------- settings ----------
 
@@ -74,7 +74,7 @@ const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 /** Animation time scale (0 = no animations). */
 const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1);
 /** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : THEME.style.motion);
+const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
 
 // ---------- game state ----------
 
@@ -108,13 +108,14 @@ const save = () => {
 // ---------- the look ----------
 
 function applyTheme() {
-  const t = THEME;
+  const t = theme();
   const root = document.documentElement;
   root.dataset.theme = t.id;
   for (const [k, v] of Object.entries(cssVars(t))) root.style.setProperty(k, v);
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
+  drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
   if (session) board.setup(session.state.config, session.state.terrain, t.style);
   lastBoard = null;
@@ -122,8 +123,23 @@ function applyTheme() {
   render();
 }
 
+/** Seven faint spores at fixed, spread-out places (no randomness needed). */
+function drawSpores(on: boolean) {
+  const box = $('spores');
+  if (!on) return box.replaceChildren();
+  if (box.childElementCount) return;
+  for (let i = 0; i < 7; i++) {
+    const m = document.createElement('i');
+    m.style.left = `${(i * 37 + 9) % 100}%`;
+    m.style.top = `${100 + ((i * 23) % 30)}%`;
+    m.style.setProperty('--t', `${46 + ((i * 13) % 30)}s`);
+    m.style.setProperty('--d', `${-((i * 11) % 40)}s`);
+    box.appendChild(m);
+  }
+}
+
 function drawLogo() {
-  const c = resolveColors(THEME);
+  const c = resolveColors(theme());
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
     <g stroke="${c.you}" stroke-width="3" stroke-linecap="round" fill="none">
       <path d="M60 50 L34 30"/><path d="M60 50 L86 30"/><path d="M60 50 L60 74" stroke-dasharray="2 6"/>
@@ -224,18 +240,35 @@ function syncSettingsForm() {
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
-  $('speed-seg').replaceChildren(
-    ...SPEEDS.map((sp) => {
+  segmented('speed-seg', SPEEDS, settings.speed, (sp) => (sp === 'skip' ? 'Off' : cap(sp)), (sp) => {
+    settings.speed = sp;
+    if (sp === 'skip') fastForward();
+  });
+  segmented('palette-seg', THEME_IDS, settings.palette, (id) => THEMES[id].name, (id) => {
+    settings.palette = id;
+    applyTheme();
+  });
+  segmented('effects-seg', EFFECTS, settings.effects, cap, (e) => {
+    settings.effects = e;
+  });
+}
+
+const cap = (w: string) => w[0]!.toUpperCase() + w.slice(1);
+
+/** A row of radio-like buttons for one setting; picking one saves and redraws the form. */
+function segmented<T extends string>(id: string, values: readonly T[], current: T, label: (v: T) => string, pick: (v: T) => void) {
+  $(id).replaceChildren(
+    ...values.map((val) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = `seg-btn${settings.speed === sp ? ' on' : ''}`;
+      b.className = `seg-btn${current === val ? ' on' : ''}`;
+      b.dataset.value = val;
       b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(settings.speed === sp));
-      b.textContent = sp === 'skip' ? 'Off' : sp[0]!.toUpperCase() + sp.slice(1);
+      b.setAttribute('aria-checked', String(current === val));
+      b.textContent = label(val);
       b.addEventListener('click', () => {
-        settings.speed = sp;
+        pick(val);
         saveSettings();
-        if (sp === 'skip') fastForward();
         syncSettingsForm();
       });
       return b;
@@ -262,7 +295,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, THEME.style);
+  board.setup(state.config, state.terrain, theme().style);
   lastBoard = null;
   showScreen('game');
   scheduleBot();
@@ -658,7 +691,7 @@ function render() {
   renderBoard(v, advice);
   renderControls(v, advice);
   renderHand(v, advice);
-  renderPiles(v);
+  renderPiles(v, advice);
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);
@@ -908,11 +941,7 @@ function renderControls(v: View, advice: Advice | null) {
   const coachKind = advice?.action.t === 'Sprout' ? 'sprout' : null;
 
   if (v.phase === 'DRAW') {
-    for (const a of legal) {
-      if (a.t !== 'Draw') continue;
-      const glow = advice && sameAction(advice.action, a) ? ' coach-glow' : '';
-      moves.append(a.from === 'deck' ? button('Draw a card', `primary${glow}`, () => humanPlay(a)) : button(`Take ${cardName(v.discard.at(-1)!)}`, `ghost${glow}`, () => humanPlay(a)));
-    }
+    // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
   } else if (v.phase === 'ACT') {
     for (const k of kindsAvailable(v, legal, sel)) {
       const on = sel.kind === k.kind;
@@ -999,17 +1028,25 @@ const rememberCardRects = () => {
   cardRects = new Map([...document.querySelectorAll<HTMLElement>('#hand [data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
 };
 
-function renderPiles(v: View) {
-  $('deck-count').textContent = String(v.deckCount);
-  const canDraw = myTurn() && !busy() && v.phase === 'DRAW';
-  $('deck').setAttribute('aria-label', `Deck: ${plural(v.deckCount, 'card')}.${canDraw ? ' Tap to draw.' : ''}`);
+function renderPiles(v: View, advice: Advice | null) {
+  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
   const top = v.discard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card s${top.suit}` : ' empty'}`;
   t.innerHTML = top ? cardFace(top) : '';
-  $('discard').setAttribute('aria-label', top ? `Discard pile: ${cardName(top)} on top.${canDraw ? ' Tap to take it.' : ''}` : 'Discard pile: empty');
-  $('deck').classList.toggle('ready', canDraw && session!.legal.some((a) => a.t === 'Draw' && a.from === 'deck'));
-  $('discard').classList.toggle('ready', canDraw && session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'));
+  $('deck-count').textContent = String(v.deckCount);
+  $('discard-count').textContent = String(v.discard.length);
+  for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
+    const b = $(id) as HTMLButtonElement;
+    b.disabled = !look.enabled;
+    b.classList.toggle('ready', look.glow);
+    b.classList.toggle('dim', look.dim);
+    const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
+    b.classList.toggle('coach-glow', coachOn);
+    $(`${id}-hint`).textContent = look.hint ?? '';
+  }
+  $('deck').setAttribute('aria-label', `Deck: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
+  $('discard').setAttribute('aria-label', top ? `Throw pile: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : 'Throw pile: empty');
 }
 
 function renderCoach(advice: Advice | null) {

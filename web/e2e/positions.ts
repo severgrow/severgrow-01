@@ -58,3 +58,19 @@ export const botCut = (): { state: State; cut: number } => {
   }
   throw new Error('no bot cut found');
 };
+
+/** Mid-game at the player's Draw step, with one empty gold hex and one gold hex under a tile. */
+export const goldDemo = (): { state: State; empty: string; covered: string } => {
+  for (let seed = 1; seed <= 400; seed++) {
+    let found: { state: State; empty: string; covered: string } | null = null;
+    playGame(seed, ({ after }) => {
+      if (found || after.actor !== 0 || after.phase !== 'DRAW' || count(after, 0) < 8 || count(after, 1) < 8) return;
+      const rich = Object.keys(after.terrain).filter((k) => after.terrain[k] === 'rich');
+      const empty = rich.find((k) => !after.board[k]);
+      const covered = rich.find((k) => after.board[k]);
+      if (empty && covered) found = { state: after, empty, covered };
+    });
+    if (found) return found;
+  }
+  throw new Error('no gold demo found');
+};

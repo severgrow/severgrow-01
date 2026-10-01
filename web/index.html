@@ -17,6 +17,7 @@
   </head>
   <body>
     <div id="texture" aria-hidden="true"></div>
+    <div id="spores" aria-hidden="true"></div>
 
     <!-- ===== Main menu ===== -->
     <section id="menu" class="screen menu" aria-label="Main menu">
@@ -128,14 +129,25 @@
           </div>
 
           <div class="table-row">
-            <button id="deck" class="pile deck" type="button" aria-label="Deck">
-              <span class="pile-stack" aria-hidden="true"></span>
-              <span class="pile-count num" id="deck-count">0</span>
-            </button>
+            <div class="piles">
+              <button id="deck" class="pile deck" type="button" aria-label="Deck">
+                <span class="pile-card">
+                  <span class="pile-stack" aria-hidden="true"></span>
+                  <span class="pile-count num" id="deck-count">0</span>
+                </span>
+                <span class="pile-label" aria-hidden="true">Deck</span>
+                <span class="pile-hint" id="deck-hint" aria-hidden="true"></span>
+              </button>
+              <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
+                <span class="pile-card">
+                  <span class="pile-top" id="discard-top" aria-hidden="true"></span>
+                  <span class="pile-count num" id="discard-count">0</span>
+                </span>
+                <span class="pile-label" aria-hidden="true">Throw pile</span>
+                <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
+              </button>
+            </div>
             <div id="moves" class="moves" role="group" aria-label="Moves"></div>
-            <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
-              <span class="pile-top" id="discard-top" aria-hidden="true"></span>
-            </button>
           </div>
 
           <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
@@ -149,6 +161,8 @@
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title">Settings</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
+        <h3>Look</h3>
+        <div class="row"><span>Colours</span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
         <h3>Sound and feel</h3>
         <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
         <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
@@ -161,9 +175,11 @@
         <h3>Animations</h3>
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+        <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
         <h3>Playing</h3>
         <label class="row"><span>Confirm moves</span><input type="checkbox" data-setting="confirmMoves" /></label>
         <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
+        <label class="row"><span>Pulse my weakest link</span><input type="checkbox" data-setting="weakPulse" /></label>
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
         <label class="row"><span>Coach</span><input type="checkbox" data-setting="coach" /></label>
         <button id="restart-tutorial" class="btn ghost small" type="button">Restart the coach with a new game</button>

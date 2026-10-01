@@ -96,7 +96,7 @@ export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
   private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'over' | 'fx', SVGGElement>;
+  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'marks' | 'over' | 'fx', SVGGElement>;
   private tileEls = new Map<string, SVGGElement>();
   private veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -132,6 +132,17 @@ export class BoardView {
     el('circle', { cx: 5.5, cy: 5, r: 0.9, class: 'pat-ink' }, grain);
     const stripe = el('pattern', { id: 'pat-stripe', width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-30)' }, defs);
     el('rect', { width: 4, height: 10, class: 'pat-ink' }, stripe);
+    // Stone speckle for rocks and a fine diagonal weave for gold hexes (gold is
+    // recognisable by pattern and its "2" badge, not by colour alone).
+    const stone = el('pattern', { id: 'pat-stone', width: 9, height: 9, patternUnits: 'userSpaceOnUse' }, defs);
+    el('circle', { cx: 2, cy: 3, r: 0.9, class: 'stone-dot' }, stone);
+    el('circle', { cx: 6.5, cy: 7, r: 0.7, class: 'stone-dot' }, stone);
+    el('circle', { cx: 7, cy: 1.5, r: 0.5, class: 'stone-dot light' }, stone);
+    const weave = el('pattern', { id: 'pat-gold', width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+    el('rect', { width: 1.1, height: 5, class: 'gold-weave' }, weave);
+    const rockGrad = el('linearGradient', { id: 'grad-rock', x1: 0, y1: 0, x2: 0.3, y2: 1 }, defs);
+    el('stop', { offset: 0, class: 'rock-top' }, rockGrad);
+    el('stop', { offset: 1, class: 'rock-bottom' }, rockGrad);
     const glow = el('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
     el('feGaussianBlur', { stdDeviation: 2.4, result: 'b' }, glow);
     const merge = el('feMerge', {}, glow);
@@ -164,6 +175,7 @@ export class BoardView {
       scars: el('g', { class: 'l-scars' }, svg),
       tiles: el('g', { class: 'l-tiles' }, svg),
       veins: el('g', { class: 'l-veins' }, svg),
+      marks: el('g', { class: 'l-marks' }, svg),
       over: el('g', { class: 'l-over' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
@@ -172,14 +184,23 @@ export class BoardView {
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: `hex ${t}` }, g);
       if (t === 'rock') {
-        // cold, heavy facets
-        const pts = cornerPts(key, S * 0.62);
+        // A cool stone with depth: a darker lower edge, speckle, and light/dark facets.
         const { x, y } = centerOf(key);
-        el('path', { d: `M${pts[0]![0]},${pts[0]![1]}L${x - 4},${y + 3}L${pts[3]![0]},${pts[3]![1]}M${x - 4},${y + 3}L${pts[4]![0]},${pts[4]![1]}`, class: 'rock-facet' }, g);
+        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-base', transform: 'translate(0 2.5)' }, g);
+        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-body' }, g);
+        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-speckle' }, g);
+        const pts = cornerPts(key, S * 0.62);
+        el('path', { d: `M${pts[4]![0]},${pts[4]![1]}L${x - 3},${y + 2}L${pts[0]![0]},${pts[0]![1]}`, class: 'rock-facet light' }, g);
+        el('path', { d: `M${x - 3},${y + 2}L${pts[2]![0]},${pts[2]![1]}`, class: 'rock-facet dark' }, g);
       }
       if (t === 'rich') {
-        el('path', { d: hexPath(key, S * 0.8, style.tileShape), class: 'gold-ring' }, g);
+        el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: 'gold-weave-fill' }, g);
         el('path', { d: hexPath(key, S * 0.8, style.tileShape), class: 'gold-sheen', style: `animation-delay:${(-hash(key) * 4).toFixed(2)}s` }, g);
+        // The "2" badge sits above the tiles, so it stays visible when a tile is here.
+        const { x, y } = centerOf(key);
+        const b = el('g', { class: 'gold-badge', 'data-key': key }, this.layers.marks);
+        el('circle', { cx: x + S * 0.52, cy: y - S * 0.5, r: 6.2, class: 'gold-badge-bg' }, b);
+        el('text', { x: x + S * 0.52, y: y - S * 0.5 + 0.4, class: 'gold-badge-text num' }, b).textContent = '2';
       }
       this.bindHex(g, key);
     }
@@ -264,7 +285,11 @@ export class BoardView {
       el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
       if (g.replaces) el('path', { d: star(x + S * 0.5, y - S * 0.5, 6), class: 'spark-mark' }, gg);
     }
-    for (const key of o.coachHexes) el('path', { d: hexPath(key, S - 4, st.tileShape), class: 'coach-ring' }, over);
+    // The coach's hint is a circle (not a hex outline), so it never looks like gold.
+    for (const key of o.coachHexes) {
+      const { x, y } = centerOf(key);
+      el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
+    }
     if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, st.tileShape), class: 'selected' }, over);
     for (const w of o.weak) this.badge(over, w.key, `−${w.loss}`, 'weak');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');

@@ -3,12 +3,17 @@
 
 import { LEVELS } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
+import { DEFAULT_THEME, THEME_IDS } from './themes.js';
+import type { ThemeId } from './themes.js';
 
 /** The old Easy / Normal / Hard choice, mapped to the 1-9 levels. */
 const OLD_LEVELS: Record<string, Level> = { easy: 3, normal: 7, hard: 8 };
 
 export const SPEEDS = ['slow', 'normal', 'fast', 'skip'] as const;
 export type Speed = (typeof SPEEDS)[number];
+
+export const EFFECTS = ['low', 'normal', 'high'] as const;
+export type Effects = (typeof EFFECTS)[number];
 
 export type Settings = {
   level: Level;
@@ -21,6 +26,9 @@ export type Settings = {
   weakSpots: boolean;
   largeText: boolean;
   coach: boolean;
+  palette: ThemeId;
+  weakPulse: boolean; // pulse my most dangerous weak link with its "-4"
+  effects: Effects; // how big the satisfying effects are
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -34,6 +42,9 @@ export const DEFAULT_SETTINGS: Settings = {
   weakSpots: false,
   largeText: false,
   coach: true,
+  palette: DEFAULT_THEME,
+  weakPulse: true,
+  effects: 'normal',
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -50,9 +61,11 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out;
   const s = saved as Record<string, unknown>;
   if (SPEEDS.includes(s.speed as Speed)) out.speed = s.speed as Speed;
+  if (THEME_IDS.includes(s.palette as ThemeId)) out.palette = s.palette as ThemeId;
+  if (EFFECTS.includes(s.effects as Effects)) out.effects = s.effects as Effects;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach', 'weakPulse'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   return out;
