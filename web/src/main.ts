@@ -4,16 +4,17 @@ import { SUIT_NAMES, allCoords, apply, coordKey, newGame, parseKey, viewFor } fr
 import type { Action, Coord, GameResult, Player, State, View } from '../../src/engine/index.js';
 import { cutLoss, dangerWarning, threats } from './analysis.js';
 import { chooseAction } from './bot.js';
-import { coachStep } from './coach.js';
+import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
+import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { SUIT_ICONS, cardName, hexName, moveCards, moveHexes, moveSentence, touchesHex } from './names.js';
 import { PRESETS, modeOf, settle, visibleMoves } from './presets.js';
 import type { Mode } from './presets.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
-const SAVE_KEY = 'mycelium.save.v2';
+const SAVE_KEY = 'mycelium.save.v3';
 const MODE_KEY = 'mycelium.mode';
-const COACH_KEY = 'mycelium.coach.done';
+const COACH_KEY = 'mycelium.coach.enabled';
 const PAGE_SIZE = 15;
 const BOT_DELAY_MS = 650;
 
@@ -27,6 +28,13 @@ let hoverKey: string | null = null;
 let shownLimit = PAGE_SIZE;
 let flash: string[] = [];
 let botTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Coach progress for the current game (saved with it). */
+type CoachProgress = { step: number; taught: TipId[]; known: string[]; choice: number; summaryDone: boolean };
+const freshCoach = (): CoachProgress => ({ step: 0, taught: [], known: [], choice: 0, summaryDone: false });
+let coach: CoachProgress = freshCoach();
+/** The coach's advice for the current position (recomputed on every render). */
+let advice: Advice | null = null;
 
 const mode = (): Mode => modeOf(state.config);
 const isLite = () => mode() === 'lite';
@@ -59,23 +67,31 @@ const store = {
   },
 };
 
-const save = () => store.set(SAVE_KEY, JSON.stringify({ state, log }));
+const save = () => store.set(SAVE_KEY, JSON.stringify({ state, log, coach }));
 
 const load = (): boolean => {
   try {
     const raw = store.get(SAVE_KEY);
     if (!raw) return false;
-    const saved = JSON.parse(raw) as { state: State; log: string[] };
+    const saved = JSON.parse(raw) as { state: State; log: string[]; coach?: CoachProgress };
     if (!saved.state?.board || !Array.isArray(saved.log)) return false;
     state = saved.state;
     log = saved.log;
+    coach = saved.coach ?? freshCoach();
     return true;
   } catch {
     return false;
   }
 };
 
-const coachDone = () => store.get(COACH_KEY) === '1';
+/** The coach is on unless the player turned it off (remembered on this device). */
+const coachEnabled = () => store.get(COACH_KEY) !== '0';
+
+const currentAdvice = (): Advice | null =>
+  coachAdvice(
+    { view: viewFor(state, HUMAN), mode: mode(), step: coach.step, enabled: coachEnabled(), taught: coach.taught, known: coach.known },
+    coach.choice,
+  );
 
 // ---------- game flow ----------
 
@@ -85,6 +101,7 @@ const startGame = (seed: number, m: Mode) => {
   clearTimeout(botTimer);
   botTimer = undefined;
   state = newGame(seed, PRESETS[m]);
+  coach = freshCoach();
   store.set(MODE_KEY, m);
   log = [`New ${m === 'lite' ? 'Lite' : 'Classic'} game. You go first.`];
   selected = null;
@@ -193,8 +210,17 @@ const step = (a: Action) => {
 };
 
 const play = (a: Action) => {
+  const humanMove = state.actor === HUMAN;
+  const shown = humanMove ? advice : null;
   try {
     step(a);
+    if (humanMove) {
+      // One coach step per player action. Keep the tip and word explanations shown.
+      coach.step++;
+      if (shown?.tip && !coach.taught.includes(shown.tip.id)) coach.taught.push(shown.tip.id);
+      if (shown) coach.known = shown.known;
+      coach.choice = 0;
+    }
     // Lite has no Knock and no Rot, so ending the turn after a discard is automatic.
     if (isLite() && state.phase === 'KNOCK' && state.actor === HUMAN) step({ t: 'Continue' });
   } catch (e) {
@@ -349,6 +375,9 @@ const renderBoard = (v: View) => {
       if (isTarget) el.appendChild(svg('text', { x, y: y - S * 0.55, class: 'ghost', 'font-size': 12 }, '✕'));
     }
   }
+  if (advice && !selected) {
+    for (const c of advice.hexes) el.appendChild(svg('polygon', { points: corners(c, S - 2), class: 'coach-hex' }));
+  }
   if (focus) el.appendChild(svg('polygon', { points: corners(parseKey(focus), S - 1), class: 'inspect' }));
 
   const infoEl = $('tile-info');
@@ -371,7 +400,8 @@ const renderHand = (v: View) => {
   for (const c of sorted) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `card s${c.suit}${used.has(c.id) ? ' used' : ''}${filterCard === c.id ? ' filtered' : ''}`;
+    const suggested = advice !== null && !selected && advice.cards.includes(c.id);
+    b.className = `card s${c.suit}${used.has(c.id) ? ' used' : ''}${filterCard === c.id ? ' filtered' : ''}${suggested ? ' coach-card' : ''}`;
     b.setAttribute('aria-label', cardName(c));
     b.innerHTML = `<span class="icon">${SUIT_ICONS[c.suit]}</span>${c.rank}<small>${SUIT_NAMES[c.suit]}</small>`;
     b.addEventListener('click', () => {
@@ -389,21 +419,6 @@ const renderHand = (v: View) => {
 };
 
 const isBoardMove = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Fruit' || a.t === 'RotPick';
-
-const coachWants = (id: string | undefined, a: Action): boolean => {
-  switch (id) {
-    case 'draw':
-      return a.t === 'Draw';
-    case 'play':
-      return a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'EndAct';
-    case 'discard':
-      return a.t === 'Discard';
-    case 'end':
-      return a.t === 'Continue';
-    default:
-      return false;
-  }
-};
 
 const renderMoves = (v: View) => {
   const el = $('moves');
@@ -424,7 +439,6 @@ const renderMoves = (v: View) => {
   shown = [...shown.filter((a) => !isBoardMove(a)), ...shown.filter(isBoardMove)];
   const filtered = filterHex !== null || filterCard !== null;
   $('clear-filter').hidden = !filtered;
-  const coach = coachStep(state, coachDone());
 
   const hint = $('hint');
   if (v.actor !== HUMAN) hint.textContent = v.result ? 'Tap “New game” to play again.' : 'Waiting for the bot…';
@@ -441,7 +455,7 @@ const renderMoves = (v: View) => {
     const primary = a.t === 'Draw' || a.t === 'EndAct' || a.t === 'Continue';
     const warn = isBoardMove(a) ? dangerWarning(v, a) : null;
     const isSel = selected !== null && JSON.stringify(selected) === JSON.stringify(a);
-    b.className = `move${primary ? ' primary' : ''}${isSel ? ' selected' : ''}${warn ? ' risky' : ''}${coachWants(coach?.id, a) ? ' coach-glow' : ''}`;
+    b.className = `move${primary ? ' primary' : ''}${isSel ? ' selected' : ''}${warn ? ' risky' : ''}${advice && JSON.stringify(advice.action) === JSON.stringify(a) ? ' coach-glow' : ''}`;
     b.textContent = `${warn ? '⚠ ' : ''}${moveSentence(v, a)}`;
     b.addEventListener('click', () => {
       if (isBoardMove(a)) {
@@ -476,18 +490,41 @@ const renderMoves = (v: View) => {
 };
 
 const renderCoach = () => {
-  const step = coachStep(state, coachDone());
-  const el = $('coach');
-  el.hidden = !step;
-  if (!step) return;
-  $('coach-title').textContent = step.title;
-  $('coach-text').textContent = step.text;
-  $('coach-ok').hidden = step.id !== 'done';
-  $('coach-skip').hidden = step.id === 'done';
+  const on = coachEnabled();
+  const toggle = $('coach-toggle');
+  toggle.textContent = `Coach: ${on ? 'ON' : 'OFF'}`;
+  toggle.setAttribute('aria-pressed', String(on));
+  const box = $('coach');
+  const showSummary = on && coach.step >= COACH_STEPS && !coach.summaryDone && state.phase !== 'GAME_OVER';
+  box.hidden = !(advice || showSummary);
+  $('coach-advice').hidden = !advice;
+  $('coach-summary').hidden = !showSummary || !!advice;
+  if (advice) {
+    $('coach-step').textContent = `Step ${coach.step + 1} of ${COACH_STEPS}`;
+    $('coach-suggested').textContent = advice.suggested;
+    $('coach-why').textContent = advice.why.join(' ');
+    const tip = $('coach-tip');
+    tip.hidden = !advice.tip;
+    tip.textContent = advice.tip ? `Tactic tip: ${advice.tip.text}` : '';
+    $('coach-next').textContent = advice.choices > 1 ? `Not this, show another (${advice.choice + 1} of ${advice.choices})` : 'Not this, show another';
+    ($('coach-next') as HTMLButtonElement).disabled = advice.choices < 2;
+  } else if (showSummary) {
+    $('coach-step').textContent = '';
+    const sum = coachSummary(coach.taught, mode());
+    $('coach-summary-title').textContent = sum.title;
+    $('coach-summary-list').replaceChildren(
+      ...sum.bullets.map((t) => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        return li;
+      }),
+    );
+  }
 };
 
 const render = () => {
   const v = viewFor(state, HUMAN);
+  advice = currentAdvice();
   for (const b of document.querySelectorAll<HTMLButtonElement>('.mode button')) {
     b.setAttribute('aria-pressed', String(b.dataset.mode === mode()));
   }
@@ -567,15 +604,50 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('.mode button')) {
     if (m !== mode()) askNewGame(m);
   });
 }
-const finishCoach = () => {
-  store.set(COACH_KEY, '1');
+const isBoardAction = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Fruit' || a.t === 'RotPick';
+
+$('coach-toggle').addEventListener('click', () => {
+  store.set(COACH_KEY, coachEnabled() ? '0' : '1');
+  coach.choice = 0;
   render();
-};
-$('coach-ok').addEventListener('click', finishCoach);
-$('coach-skip').addEventListener('click', finishCoach);
-$('replay-coach').addEventListener('click', () => {
-  store.set(COACH_KEY, '0');
-  askNewGame(mode());
+});
+$('coach-show').addEventListener('click', () => {
+  if (!advice) return;
+  filterHex = null;
+  filterCard = null;
+  if (isBoardAction(advice.action)) {
+    selected = advice.action;
+    render();
+    $('board').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    render();
+    document.querySelector('.move.coach-glow')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
+$('coach-do').addEventListener('click', () => {
+  if (advice) play(advice.action);
+});
+$('coach-next').addEventListener('click', () => {
+  coach.choice++;
+  selected = null;
+  save();
+  render();
+});
+$('coach-summary-ok').addEventListener('click', () => {
+  coach.summaryDone = true;
+  save();
+  render();
+});
+$('tutorial-game').addEventListener('click', () => {
+  if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm('Start the tutorial game? This game will be lost.')) return;
+  store.set(COACH_KEY, '1');
+  startGame(TUTORIAL_SEED, 'lite');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+$('restart-tutorial').addEventListener('click', () => {
+  if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm('Restart the tutorial with a new game? This game will be lost.')) return;
+  store.set(COACH_KEY, '1');
+  startGame(randomSeed(), mode());
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 

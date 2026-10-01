@@ -39,8 +39,16 @@ alone cannot express them:
   toward the bot (+4 points)". Board moves show a preview first; tap **Play it**.
   A ⚠ and a red note warn you when a move would let the bot cut off a big piece
   of your network.
-- **Guided first turn:** the first game walks you through draw, play and throw away.
-  "Show me how to play again" at the bottom replays it.
+- **Coach:** for the first 15 moves of a game, a coach box suggests the best move
+  ("Suggested"), says why in plain words ("Why", built from real facts about the
+  move), and teaches one tactic at a time ("Tactic tip"). Buttons: **Show me**,
+  **Do it for me**, **Not this, show another**. The suggested cards and hexes glow
+  green. At move 15 it sums up three things to remember. The **Coach: ON/OFF**
+  switch at the top hides or shows it at any time and is remembered on your device.
+  **Tutorial game** always deals the same game (seed 296), so its 15 coached moves
+  are always the same; **Restart tutorial** starts a fresh game with the coach on.
+  The coach logic lives in `src/playtest/coach.ts` and uses GreedyBot's scoring
+  (`src/bots/GreedyBot.ts`), which is also the bot you play against.
 - **What happened:** a running log of both players' moves. It never shows the
   bot's hidden cards.
 - The game is saved on your device, so you can close the page and come back.
@@ -52,13 +60,10 @@ alone cannot express them:
 | --- | --- |
 | `index.html` | The page layout and the 3-line summary |
 | `src/main.ts` | Draws the board, cards and buttons; runs the turns |
-| `src/presets.ts` | The Lite and Classic rule settings |
-| `src/analysis.ts` | "What if" maths: what a move does, what a cut would cost |
-| `src/coach.ts` | The guided first turn |
-| `src/bot.ts` | The bot: picks the legal move that gains it the most points |
-| `src/names.ts` | Plain sentences for moves; names for hexes (like `E1`) and cards |
+| `src/presets.ts`, `src/analysis.ts`, `src/names.ts` | Re-export the shared logic from `src/playtest/` |
+| `src/bot.ts` | The bot: GreedyBot from `src/bots` (no Knock in Lite) |
 | `src/style.css` | Colours and layout, with light and dark modes |
-| `tests/*.test.ts` | Lite rules, move sentences, danger maths, tutorial, bot games |
+| `tests/*.test.ts` | Lite rules, move sentences, danger maths, bot games (coach tests are in `tests/playtest`) |
 
 ## Publishing
 
