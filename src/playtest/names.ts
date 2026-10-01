@@ -45,7 +45,8 @@ export const moveSentence = (v: View, a: Action): string => {
     }
     case 'MeldSet': {
       const sim = simulate(v, a)!;
-      return `Grow a clump of ${a.hexes.length} tiles at ${a.hexes.map(hn).join(', ')}${effects(sim)}${pointsText(sim)}`;
+      const names = a.hexes.map(hn).sort((x, y) => x[0]!.localeCompare(y[0]!) || Number(x.slice(1)) - Number(y.slice(1)));
+      return `Grow a clump of ${a.hexes.length} tiles at ${names.join(', ')}${effects(sim)}${pointsText(sim)}`;
     }
     case 'Fruit': {
       const sim = simulate(v, a)!;
