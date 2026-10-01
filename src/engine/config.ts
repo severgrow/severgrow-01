@@ -22,6 +22,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   maxRank: 7,
   sproutsPerTurn: 1,
   guaranteeOpeningMeld: true,
+  maxTurnsPerPlayer: 30,
   rotEnabled: false,
   knockEnabled: false,
 });
@@ -42,6 +43,7 @@ const NUMBER_MIN: Record<string, number> = {
   fruitPerPlayer: 0,
   maxRank: MIN_MAX_RANK,
   sproutsPerTurn: 0,
+  maxTurnsPerPlayer: 0,
 };
 
 const BOOLEAN_KEYS = [

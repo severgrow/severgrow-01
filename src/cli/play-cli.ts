@@ -1,4 +1,4 @@
-// `npm run play -- [--seed=N] [--lite]`
+// `npm run play -- [--seed=N]`
 import { createInterface } from 'node:readline';
 import { runTerminalGame } from './play.js';
 
@@ -9,7 +9,6 @@ const rl = createInterface({ input: process.stdin });
 const lines = rl[Symbol.asyncIterator]();
 await runTerminalGame({
   seed,
-  mode: process.argv.includes('--lite') ? 'lite' : 'classic',
   ask: async (prompt) => {
     process.stdout.write(prompt);
     const next = await lines.next();

@@ -1,19 +1,17 @@
 // Severgrow in the browser: you (green, player 1) against a simple bot (purple).
 // All rules come from the engine in src/engine; this file only draws and clicks.
-import { SUIT_NAMES, allCoords, apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { SUIT_NAMES, allCoords, apply, coordKey, legalActions, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { rankActions } from '../../src/bots/GreedyBot.js';
 import type { Action, Coord, GameResult, Player, State, View } from '../../src/engine/index.js';
 import { cutLoss, dangerWarning, threats } from './analysis.js';
 import { chooseAction } from './bot.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { SUIT_ICONS, cardName, hexName, moveCards, moveHexes, moveSentence, touchesHex } from './names.js';
-import { PRESETS, modeOf, settle, visibleMoves } from './presets.js';
-import type { Mode } from './presets.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
-const SAVE_KEY = 'severgrow.save.v3';
-const MODE_KEY = 'severgrow.mode';
+const SAVE_KEY = 'severgrow.save.v4';
 const COACH_KEY = 'severgrow.coach.enabled';
 const PAGE_SIZE = 15;
 const BOT_DELAY_MS = 650;
@@ -36,8 +34,10 @@ let coach: CoachProgress = freshCoach();
 /** The coach's advice for the current position (recomputed on every render). */
 let advice: Advice | null = null;
 
-const mode = (): Mode => modeOf(state.config);
-const isLite = () => mode() === 'lite';
+/** True when a parked leftover-card rule (Rot or Knock) is switched on (spec appendix A). */
+const parkedOn = () => state.config.rotEnabled || state.config.knockEnabled;
+/** When true, the move list shows only Sprout moves (best first). */
+let sproutMode = false;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -89,7 +89,7 @@ const coachEnabled = () => store.get(COACH_KEY) !== '0';
 
 const currentAdvice = (): Advice | null =>
   coachAdvice(
-    { view: viewFor(state, HUMAN), mode: mode(), step: coach.step, enabled: coachEnabled(), taught: coach.taught, known: coach.known },
+    { view: viewFor(state, HUMAN), step: coach.step, enabled: coachEnabled(), taught: coach.taught, known: coach.known },
     coach.choice,
   );
 
@@ -97,13 +97,12 @@ const currentAdvice = (): Advice | null =>
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-const startGame = (seed: number, m: Mode) => {
+const startGame = (seed: number) => {
   clearTimeout(botTimer);
   botTimer = undefined;
-  state = newGame(seed, PRESETS[m]);
+  state = newGame(seed);
   coach = freshCoach();
-  store.set(MODE_KEY, m);
-  log = [`New ${m === 'lite' ? 'Lite' : 'Classic'} game. You go first.`];
+  log = ['New game. You go first.'];
   selected = null;
   filterHex = null;
   filterCard = null;
@@ -133,8 +132,10 @@ const resultText = (r: GameResult): { text: string; tone: 'win' | 'lose' | '' } 
         tone,
       };
     }
+    case 'turn_limit':
+      return { text: `Time's up: 30 turns each. ${won ? 'You win!' : 'The bot wins.'} ${tally}${you === bot ? ' A tie goes to the bot.' : ''}`, tone };
     case 'deck_exhaustion': {
-      const tie = you === bot ? (won ? ' Tied on points: you win the tie-break.' : ' Tied on points: the bot wins the tie-break.') : '';
+      const tie = you === bot ? ' Tied on points: a tie goes to the bot.' : '';
       return { text: `The deck ran out. ${won ? 'You win!' : 'The bot wins.'} ${tally}${tie}`, tone };
     }
   }
@@ -199,9 +200,8 @@ const changedHexes = (s: State): string[] => {
 
 const step = (a: Action) => {
   const before = state;
-  state = settle(apply(state, a), mode());
-  const quiet = isLite() && a.t === 'Continue' && before.actor === HUMAN; // automatic in Lite
-  if (!quiet) log.unshift(describe(before, a, state));
+  state = apply(state, a);
+  log.unshift(describe(before, a, state));
   if (['MeldRun', 'MeldSet', 'Fruit', 'Continue', 'RotPick'].includes(a.t) && state.lastResolution !== before.lastResolution) {
     flash = changedHexes(state);
   }
@@ -223,8 +223,6 @@ const play = (a: Action) => {
       if (shown) coach.known = shown.known;
       coach.choice = 0;
     }
-    // Lite has no Knock and no Rot, so ending the turn after a discard is automatic.
-    if (isLite() && state.phase === 'KNOCK' && state.actor === HUMAN) step({ t: 'Continue' });
   } catch (e) {
     log.unshift(`That move was not allowed (${(e as Error).message}).`);
   }
@@ -233,6 +231,7 @@ const play = (a: Action) => {
   filterCard = null;
   inspectKey = null;
   shownLimit = PAGE_SIZE;
+  sproutMode = false;
   log = log.slice(0, 200);
   save();
   render();
@@ -242,7 +241,7 @@ const scheduleBot = () => {
   if (botTimer !== undefined || state.phase === 'GAME_OVER' || state.actor !== BOT) return;
   botTimer = setTimeout(() => {
     botTimer = undefined;
-    if (state.phase !== 'GAME_OVER' && state.actor === BOT) play(chooseAction(viewFor(state, BOT), mode()));
+    if (state.phase !== 'GAME_OVER' && state.actor === BOT) play(chooseAction(viewFor(state, BOT)));
   }, BOT_DELAY_MS);
 };
 
@@ -255,7 +254,7 @@ const statusText = (v: View): { text: string; tone: string } => {
     return { text: v.finalTurn ? 'The bot is playing its last turn…' : 'Bot is thinking…', tone: '' };
   }
   const last = v.finalTurn ? 'Last turn! ' : '';
-  const deckNote = isLite() && v.deckCount <= 3 ? ` (${v.deckCount === 0 ? 'Deck is empty' : `Only ${v.deckCount} cards left`}: the game ends when it runs out.)` : '';
+  const deckNote = v.deckCount <= 3 ? ` (${v.deckCount === 0 ? 'Deck is empty' : `Only ${v.deckCount} cards left`}: the game ends when it runs out.)` : '';
   switch (v.phase) {
     case 'DRAW':
       return { text: `${last}Your turn: draw a card.${deckNote}`, tone: '' };
@@ -414,18 +413,23 @@ const renderHand = (v: View) => {
     });
     el.appendChild(b);
   }
-  $('deadwood').textContent = isLite() ? '' : `Leftover (deadwood): ${v.myDeadwood}`;
-  $('bot-hand').textContent = isLite()
-    ? `The bot holds ${v.opponentHandCount} hidden cards.`
-    : `The bot holds ${v.opponentHandCount} hidden cards. Fruit used: you ${v.fruitUsed[HUMAN]}/${v.config.fruitPerPlayer}, bot ${v.fruitUsed[BOT]}/${v.config.fruitPerPlayer}.`;
+  $('deadwood').textContent = parkedOn() ? `Leftover (deadwood): ${v.myDeadwood}` : '';
+  $('bot-hand').textContent =
+    v.config.fruitPerPlayer > 0
+      ? `The bot holds ${v.opponentHandCount} hidden cards. Fruit used: you ${v.fruitUsed[HUMAN]}/${v.config.fruitPerPlayer}, bot ${v.fruitUsed[BOT]}/${v.config.fruitPerPlayer}.`
+      : `The bot holds ${v.opponentHandCount} hidden cards.`;
 };
 
-const isBoardMove = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Fruit' || a.t === 'RotPick';
+const isBoardMove = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'Fruit' || a.t === 'RotPick';
 
 const renderMoves = (v: View) => {
   const el = $('moves');
   el.replaceChildren();
-  const all = v.actor === HUMAN ? visibleMoves(v, mode()) : [];
+  const all = v.actor === HUMAN ? legalActions(v) : [];
+  // Best moves first (GreedyBot's ranking), so the strongest options sit on top.
+  const rankOf = new Map(v.actor === HUMAN ? rankActions(v).map((r, i) => [JSON.stringify(r.action), i]) : []);
+  const byRank = (x: Action, y: Action) => (rankOf.get(JSON.stringify(x)) ?? 0) - (rankOf.get(JSON.stringify(y)) ?? 0);
+  const sprouts = all.filter((a) => a.t === 'Sprout');
   const card = filterCard === null ? null : v.hand.find((c) => c.id === filterCard);
   const sameCard = (id: number) => {
     const c = v.hand.find((h) => h.id === id);
@@ -438,7 +442,10 @@ const renderMoves = (v: View) => {
     return card ? moveCards(a).some(sameCard) : true;
   };
   let shown = all.filter(keep);
-  shown = [...shown.filter((a) => !isBoardMove(a)), ...shown.filter(isBoardMove)];
+  // Sprout moves are many: they get their own button unless a hex or card is picked.
+  if (sproutMode) shown = shown.filter((a) => a.t === 'Sprout');
+  else if (filterHex === null && filterCard === null) shown = shown.filter((a) => a.t !== 'Sprout');
+  shown = [...shown.filter((a) => !isBoardMove(a)), ...shown.filter(isBoardMove).sort(byRank)];
   const filtered = filterHex !== null || filterCard !== null;
   $('clear-filter').hidden = !filtered;
 
@@ -451,6 +458,29 @@ const renderMoves = (v: View) => {
   else if (all.some(isBoardMove)) hint.textContent = 'Tap a move to see it on the board first.';
   else hint.textContent = '';
 
+  if (sprouts.length > 0 && !sproutMode && filterHex === null && filterCard === null) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `move sprout${advice?.action.t === 'Sprout' ? ' coach-glow' : ''}`;
+    b.textContent = `🌱 Sprout one tile (${sprouts.length} places)`;
+    b.addEventListener('click', () => {
+      sproutMode = true;
+      shownLimit = PAGE_SIZE;
+      render();
+    });
+    el.appendChild(b);
+  }
+  if (sproutMode) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'move more';
+    back.textContent = '← Back to all moves';
+    back.addEventListener('click', () => {
+      sproutMode = false;
+      render();
+    });
+    el.appendChild(back);
+  }
   for (const a of shown.slice(0, shownLimit)) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -512,7 +542,7 @@ const renderCoach = () => {
     ($('coach-next') as HTMLButtonElement).disabled = advice.choices < 2;
   } else if (showSummary) {
     $('coach-step').textContent = '';
-    const sum = coachSummary(coach.taught, mode());
+    const sum = coachSummary(coach.taught, state.config);
     $('coach-summary-title').textContent = sum.title;
     $('coach-summary-list').replaceChildren(
       ...sum.bullets.map((t) => {
@@ -527,9 +557,6 @@ const renderCoach = () => {
 const render = () => {
   const v = viewFor(state, HUMAN);
   advice = currentAdvice();
-  for (const b of document.querySelectorAll<HTMLButtonElement>('.mode button')) {
-    b.setAttribute('aria-pressed', String(b.dataset.mode === mode()));
-  }
   const status = statusText(v);
   const st = $('status');
   st.textContent = status.text;
@@ -558,7 +585,7 @@ const render = () => {
 const onHex = (key: string) => {
   const v = viewFor(state, HUMAN);
   if (v.actor === HUMAN && v.phase === 'ROT_PICK') {
-    const pick = visibleMoves(v, mode()).find((a) => a.t === 'RotPick' && coordKey(a.coord) === key);
+    const pick = legalActions(v).find((a) => a.t === 'RotPick' && coordKey(a.coord) === key);
     if (pick) {
       selected = pick;
       inspectKey = key;
@@ -572,7 +599,7 @@ const onHex = (key: string) => {
   selected = null;
   shownLimit = PAGE_SIZE;
   if (filterHex && v.actor === HUMAN) {
-    const matches = visibleMoves(v, mode()).filter((a) => touchesHex(a, filterHex!));
+    const matches = legalActions(v).filter((a) => touchesHex(a, filterHex!));
     if (matches.length === 1 && isBoardMove(matches[0]!)) selected = matches[0]!;
   }
   render();
@@ -592,20 +619,10 @@ $('clear-filter').addEventListener('click', () => {
   selected = null;
   render();
 });
-const askNewGame = (m: Mode) => {
-  if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm(`Start a new ${m === 'lite' ? 'Lite' : 'Classic'} game? This one will be lost.`)) {
-    render();
-    return;
-  }
-  startGame(randomSeed(), m);
-};
-$('new-game').addEventListener('click', () => askNewGame(mode()));
-for (const b of document.querySelectorAll<HTMLButtonElement>('.mode button')) {
-  b.addEventListener('click', () => {
-    const m = b.dataset.mode as Mode;
-    if (m !== mode()) askNewGame(m);
-  });
-}
+$('new-game').addEventListener('click', () => {
+  if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
+  startGame(randomSeed());
+});
 const isBoardAction = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Fruit' || a.t === 'RotPick';
 
 $('coach-toggle').addEventListener('click', () => {
@@ -643,20 +660,19 @@ $('coach-summary-ok').addEventListener('click', () => {
 $('tutorial-game').addEventListener('click', () => {
   if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm('Start the tutorial game? This game will be lost.')) return;
   store.set(COACH_KEY, '1');
-  startGame(TUTORIAL_SEED, 'lite');
+  startGame(TUTORIAL_SEED);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 $('restart-tutorial').addEventListener('click', () => {
   if (state.phase !== 'GAME_OVER' && state.turnNumber > 1 && !window.confirm('Restart the tutorial with a new game? This game will be lost.')) return;
   store.set(COACH_KEY, '1');
-  startGame(randomSeed(), mode());
+  startGame(randomSeed());
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
 // ---------- start ----------
 
-const savedMode: Mode = store.get(MODE_KEY) === 'classic' ? 'classic' : 'lite';
 const urlSeed = Number(new URLSearchParams(location.search).get('seed'));
-if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed, savedMode);
+if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else if (load()) render();
-else startGame(randomSeed(), savedMode);
+else startGame(randomSeed());

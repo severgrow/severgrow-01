@@ -34,6 +34,8 @@ export type RulesConfig = {
   sproutsPerTurn: number;
   /** v0.4: redeal until both opening hands hold a combo. */
   guaranteeOpeningMeld: boolean;
+  /** v0.4: the game ends after this many turns each (0 = no limit). */
+  maxTurnsPerPlayer: number;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
@@ -46,7 +48,7 @@ export type Tile = { owner: Player; strength: number; root?: boolean };
 
 export type Phase = 'DRAW' | 'ACT' | 'DISCARD' | 'KNOCK' | 'ROT_PICK' | 'GAME_OVER';
 
-export type EndReason = 'knock' | 'deck_exhaustion' | 'strangle' | 'double_strangle';
+export type EndReason = 'knock' | 'deck_exhaustion' | 'turn_limit' | 'strangle' | 'double_strangle';
 
 export type GameResult = {
   /** null only for double_strangle */

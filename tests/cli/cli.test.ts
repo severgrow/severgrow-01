@@ -29,7 +29,9 @@ describe('terminal client (spec 20 milestone E)', () => {
     const text = out.join('\n');
     expect(result.phase).toBe('GAME_OVER');
     expect(asked).toBeGreaterThan(3);
-    for (const part of ['Your hand', 'Discard', 'Deck', 'Score', 'Leftover', 'Moves', 'Game over']) expect(text).toContain(part);
+    for (const part of ['Your hand', 'Discard', 'Deck', 'Score', 'Moves', 'Game over']) expect(text).toContain(part);
+    // v0.4: leftover points belong to the parked rules, so the one game never shows them.
+    expect(text).not.toContain('Leftover');
   });
 
   it('re-asks on bad input and can quit', async () => {

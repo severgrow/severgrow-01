@@ -19,6 +19,7 @@ import {
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { clone, fixture, tilesOf } from '../helpers.js';
 import { LEGACY_V03 } from '../legacy.js';
+import { GreedyBot } from '../../src/bots/GreedyBot.js';
 
 let nextId = 5000;
 const c = (suit: Suit, rank: number): Card => ({ id: nextId++, suit, rank });
@@ -91,6 +92,7 @@ describe('v0.4 config', () => {
       rotEnabled: false,
       knockEnabled: false,
       fruitPerPlayer: 0,
+      maxTurnsPerPlayer: 30,
     });
   });
 
@@ -357,6 +359,36 @@ describe('edge cases (v0.4)', () => {
   });
 });
 
+describe('turn limit (v0.4)', () => {
+  it('the game ends right after turn 2 x maxTurnsPerPlayer, scored like the deck running out', () => {
+    // Player 2 finishes turn 60 (30 each): the game ends with reason turn_limit; a tie goes to Player 2.
+    const s = makeState({ phase: 'DISCARD', turnPlayer: 1, hands: [junk(7), junk(8)], patch: { turnNumber: 60 } });
+    const n = act(s, { t: 'Discard', card: s.hands[1][0]!.id });
+    expect(n.phase).toBe('GAME_OVER');
+    expect(n.result).toEqual({ winner: 1, reason: 'turn_limit', scores: [0, 0] });
+    // Turn 59 still passes to the next player.
+    const t59 = makeState({ phase: 'DISCARD', hands: [junk(8), junk(7)], patch: { turnNumber: 59 } });
+    expect(act(t59, { t: 'Discard', card: t59.hands[0][0]!.id }).phase).toBe('DRAW');
+  });
+
+  it('a short limit is respected; 0 means no limit; the limit is validated', () => {
+    let g = newGame(4, { maxTurnsPerPlayer: 2 });
+    for (let i = 0; i < 500 && g.phase !== 'GAME_OVER'; i++) g = apply(g, legalActions(viewFor(g, g.actor))[0]!);
+    expect(g.phase).toBe('GAME_OVER');
+    expect(g.turnNumber).toBeLessThanOrEqual(4);
+    const free = makeState({ phase: 'DISCARD', config: { maxTurnsPerPlayer: 0 }, hands: [junk(8), junk(7)], patch: { turnNumber: 500 } });
+    expect(act(free, { t: 'Discard', card: free.hands[0][0]!.id }).phase).toBe('DRAW');
+    expect(() => resolveConfig({ maxTurnsPerPlayer: -1 })).toThrow(ConfigError);
+  });
+
+  it('the recorded stall (seed 122, both players swapping discards) now ends', () => {
+    let g = newGame(122, { maxRank: 9, sproutsPerTurn: 0, guaranteeOpeningMeld: false, copiesPerCard: 3 });
+    for (let i = 0; i < 5000 && g.phase !== 'GAME_OVER'; i++) g = apply(g, GreedyBot.chooseAction(viewFor(g, g.actor)));
+    expect(g.phase).toBe('GAME_OVER');
+    expect(g.result!.reason).toBe('turn_limit');
+  });
+});
+
 describe('legacyV03 reproduces v0.3.1 byte-for-byte', () => {
   const canonical = (x: unknown): string =>
     JSON.stringify(x, (_, v: unknown) =>
@@ -366,7 +398,7 @@ describe('legacyV03 reproduces v0.3.1 byte-for-byte', () => {
     );
   const hash = (x: unknown) => createHash('sha256').update(canonical(x)).digest('hex');
   const NEW_STATE_KEYS = ['sproutsThisTurn', 'dealAttempt'];
-  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'guaranteeOpeningMeld', 'rotEnabled', 'knockEnabled'];
+  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'guaranteeOpeningMeld', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer'];
   const toV03 = (s: State) => {
     const { history: _h, ...rest } = s;
     const out: Record<string, unknown> = { ...rest };

@@ -21,6 +21,7 @@ describe('DEFAULT_CONFIG', () => {
       maxRank: 7,
       sproutsPerTurn: 1,
       guaranteeOpeningMeld: true,
+      maxTurnsPerPlayer: 30,
       rotEnabled: false,
       knockEnabled: false,
     });

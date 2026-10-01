@@ -76,6 +76,11 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
     const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
     return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null));
   }
+  if (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer) {
+    // v0.4 turn limit: every game ends, scored like the deck running out.
+    const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
+    return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, 'turn_limit'));
+  }
   return passTurn(refilled);
 };
 

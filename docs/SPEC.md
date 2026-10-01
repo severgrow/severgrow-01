@@ -26,6 +26,10 @@ default (see the appendix).
   discard pile may be discarded when it is the only card in hand. These replace the v0.3.1
   rules "a meld may not empty the hand" and "a meld may not strand the taken card".
 - **legacyV03.** A test-only config reproduces v0.3.1 byte-for-byte for recorded games.
+- **Turn limit.** A game ends after `maxTurnsPerPlayer` turns each (default 30, so 60 in total),
+  scored like the deck running out (reason `turn_limit`). Found by simulation: both players can
+  keep taking each other's discard without playing, so the deck never shrinks and the game would
+  never end.
 
 **v0.3.1** (playtest decisions, kept)
 - A turn never starts with an empty deck: a refill that leaves the deck empty ends the game.
@@ -86,6 +90,7 @@ type RulesConfig = {
   copiesPerCard: number;        // default chosen in Part 4
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
   guaranteeOpeningMeld: boolean;// true
+  maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
   rockCount: number;            // 4 (even)
   richCount: number;            // 5 (odd: centre + pairs)
   forbidRedundantDiscard: boolean; // true
@@ -108,7 +113,7 @@ known keys only, and a deck large enough to deal both hands, flip a starting dis
 still leave at least one card to draw** (`4 * maxRank * copiesPerCard >= 2 * handSize + 2`).
 
 **legacyV03** (test-only, never in the page): `maxRank 9, copiesPerCard 2, sproutsPerTurn 0,
-guaranteeOpeningMeld false, rotEnabled true, knockEnabled true, fruitPerPlayer 1`. Replaying
+guaranteeOpeningMeld false, maxTurnsPerPlayer 0, rotEnabled true, knockEnabled true, fruitPerPlayer 1`. Replaying
 the recorded v0.3.1 games with it gives byte-identical states and events (state fields and
 config keys added in v0.4 excluded).
 
@@ -180,6 +185,10 @@ Draw from the deck until the hand holds `handSize`. The game ends **right after 
 
 The result is `deck_exhaustion`: higher score wins; **a tie goes to Player 2**.
 
+**Turn limit:** the game also ends right after turn `2 * maxTurnsPerPlayer` (the second player's
+last turn), scored the same way, with reason `turn_limit`. This guarantees every game ends, even
+if both players keep taking each other's discard.
+
 ---
 
 ## 7. Moves: placement, Hypha, Bloom, Sprout, replacing
@@ -226,7 +235,7 @@ one is an enemy tile. One strangled root: its owner loses at once (`strangle`). 
 `rootsScore`.
 
 ```ts
-type EndReason = 'knock' | 'deck_exhaustion' | 'strangle' | 'double_strangle';
+type EndReason = 'knock' | 'deck_exhaustion' | 'turn_limit' | 'strangle' | 'double_strangle';
 type GameResult = { winner: Player | null; reason: EndReason; undercut?: boolean;
                     scores: [number, number]; deadwood?: [number, number] };
 ```
