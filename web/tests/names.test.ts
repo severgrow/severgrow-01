@@ -26,7 +26,7 @@ describe('moveSentence: one plain sentence per move', () => {
   it('a line toward the bot, with points', () => {
     const v = viewWith(run, { rich: ['0,0'] });
     expect(moveSentence(v, { t: 'MeldRun', cards: [1, 2, 3], start: { q: -1, r: 1 }, dir: 1 })).toBe(
-      'Grow a line of 3 tiles from E3 toward the bot (+4 points)',
+      'Grow a line of 3 tiles from E3 toward your opponent (+4 points)',
     );
   });
 
@@ -49,7 +49,7 @@ describe('moveSentence: one plain sentence per move', () => {
     const v = viewWith(set, { tiles: { '0,1': [1, 2], '0,2': [1, 2], '1,0': [1, 2], '1,-1': [1, 2] } });
     expect(
       moveSentence(v, { t: 'MeldSet', cards: [1, 2, 3], hexes: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: -1, r: 2 }] }),
-    ).toBe('Grow a clump of 3 tiles at E3, E4, F3, taking 1 bot tile and cutting off 1 more (+3 points)');
+    ).toBe('Grow a clump of 3 tiles at E3, E4, F3, taking 1 opponent tile and cutting off 1 more (+3 points)');
   });
 
   it('simple moves', () => {

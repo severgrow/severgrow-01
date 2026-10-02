@@ -18,9 +18,9 @@ describe('game-over highlights', () => {
     ];
     const h = gameHighlights(history, 0);
     expect(h.map((x) => x.title)).toEqual(['Biggest cut', 'Biggest single move', 'Most tiles at once']);
-    expect(h[0]).toMatchObject({ by: 0, value: 4, text: 'You cut off 4 bot tiles' });
+    expect(h[0]).toMatchObject({ by: 0, value: 4, text: 'You cut off 4 opponent tiles' });
     expect(h[1]).toMatchObject({ by: 0, value: 7, text: 'You changed 7 tiles in one move' });
-    expect(h[2]).toMatchObject({ by: 1, value: 4, text: 'The bot grew 4 tiles at once' });
+    expect(h[2]).toMatchObject({ by: 1, value: 4, text: 'Your opponent grew 4 tiles at once' });
   });
 
   it('a game with no cuts says so', () => {

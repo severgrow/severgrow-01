@@ -50,6 +50,7 @@ import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
+import { OPP } from '../../src/strings.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -233,19 +234,19 @@ function renderHowTo() {
   const sprout = (cfg?.sproutsPerTurn ?? 1) > 0;
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
-    '<p><b>Goal:</b> have more points than the bot at the end. Each tile scores 1 point, or 2 on a gold hex.</p>',
+    `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? ' Once per turn you can <b>sprout</b> one tile with any single card.' : ''}</p>`,
-    '<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker bot tile.</p>',
+    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
-      ? ['<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for the bot to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to the bot; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>']
+      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((cfg?.fruitPerPlayer ?? 1) > 0
-      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one bot tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. <i>Example: a bot 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
+      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
-    "<p><b>Win early:</b> surround the bot's root so it can't grow.</p>",
-    `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to the bot.</p>`,
+    `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
+    `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
@@ -266,7 +267,7 @@ function renderLevelGrid() {
       const wins = stats.winsByLevel[lv - 1] ?? 0;
       b.className = `level-tile${settings.level === lv ? ' on' : ''}${lv === 7 ? ' classic' : ''}`;
       b.dataset.level = String(lv);
-      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? ', the classic bot' : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
+      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? `, the classic ${OPP.noun}` : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
       b.innerHTML = `<span class="lt-num num">${lv}</span>${wins ? `<span class="lt-wins num">${wins}</span>` : ''}<span class="lt-icon">${LEVEL_ICONS[lv]}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span>`;
       b.addEventListener('click', () => {
         sound.unlock();
@@ -980,7 +981,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.label} thinking<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
   // The tip shows only when the ? is tapped; it closes again after each move.
   $('hint').textContent = hintText(session.view);
   $('hint').hidden = !hintOpen || !$('hint').textContent;
@@ -1006,7 +1007,7 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 function hintText(v: View): string {
   if (!session) return '';
   if (v.phase === 'GAME_OVER') return busy() ? '' : 'Game over.';
-  if (v.actor !== HUMAN) return busy() ? 'Watch the bot’s move…' : 'The bot is thinking…';
+  if (v.actor !== HUMAN) return busy() ? `Watch ${OPP.theirs} move…` : `${OPP.The} is thinking…`;
   if (busy()) return '';
   const low = v.deckCount <= 3 ? ` ${v.deckCount === 0 ? 'The deck is empty.' : `Only ${plural(v.deckCount, 'card')} left.`}` : '';
   const sel = session.sel;
@@ -1017,7 +1018,7 @@ function hintText(v: View): string {
       if (fruitFlow) {
         if (fruitMsg) return fruitMsg;
         if (fruitFlow.step === 1) return `Fruit, step 1: pick ${v.config.fruitSacrifice} of your tiles that touch each other, to give up (${fruitFlow.counter}).`;
-        if (fruitFlow.step === 2) return fruitFlow.note ? `Fruit, step 2: pick the bot tile to remove. ${fruitFlow.note}` : 'Fruit, step 2: pick the bot tile to remove.';
+        if (fruitFlow.step === 2) return fruitFlow.note ? `Fruit, step 2: pick ${OPP.theirs} tile to remove. ${fruitFlow.note}` : `Fruit, step 2: pick ${OPP.theirs} tile to remove.`;
         return 'Fruit, step 3: check the result, then Confirm.';
       }
       if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
@@ -1026,7 +1027,7 @@ function hintText(v: View): string {
         const kinds = new Set(targetKinds(v, session.legal, sel).values());
         if (kinds.size === 0) return "That card can't grow anywhere now.";
         if (sel.kind !== 'sprout') return 'Tap a glowing hex to grow there.';
-        const parts = [kinds.has('grow') ? 'grow on an empty hex' : null, kinds.has('replace') ? 'replace a bot tile (⇆)' : null, kinds.has('strengthen') ? 'strengthen your tile (+)' : null].filter(Boolean);
+        const parts = [kinds.has('grow') ? 'grow on an empty hex' : null, kinds.has('replace') ? `replace an ${OPP.noun} tile (⇆)` : null, kinds.has('strengthen') ? 'strengthen your tile (+)' : null].filter(Boolean);
         return `Tap a glowing hex: ${parts.join(', ')}.`;
       }
       if (sel.kind !== null) return 'Tap a glowing hex.';
@@ -1039,7 +1040,7 @@ function hintText(v: View): string {
     case 'KNOCK':
       return 'Knock to end the game soon, or end your turn.';
     case 'ROT_PICK':
-      return 'Tap the bot tile that rots.';
+      return `Tap ${OPP.theirs} tile that rots.`;
     default:
       return '';
   }
@@ -1140,13 +1141,13 @@ function renderTooltip(v: View) {
   else if (!t) html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>`;
   else {
     const mine = t.owner === HUMAN;
-    const who = mine ? 'Your' : "Bot's";
+    const who = mine ? 'Your' : OPP.Label;
     if (t.root) html = `<b>${name} · ${who} root</b><span>It can never be taken.</span>`;
     else {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
-      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : 'the bot loses'} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'its'} root. ${lose}</span>`;
+      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
     }
   }
   tip.innerHTML = html;
@@ -1237,7 +1238,7 @@ function renderControls(v: View, advice: Advice | null) {
         fruitMsg = null;
         session!.cancel();
         render();
-      }, fb.enabled ? 'Use your Fruit: give up 3 tiles to remove one bot tile' : `Fruit: ${fb.reason}`);
+      }, fb.enabled ? `Use your Fruit: give up 3 tiles to remove one ${OPP.noun} tile` : `Fruit: ${fb.reason}`);
       b.dataset.kind = 'fruit';
       if (!fb.enabled) {
         b.setAttribute('aria-disabled', 'true');
@@ -1468,7 +1469,7 @@ function renderGameOver() {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
   };
-  $('go-break').textContent = `You: ${part(HUMAN)} · Bot: ${part(BOT)}`;
+  $('go-break').textContent = `You: ${part(HUMAN)} · ${OPP.label}: ${part(BOT)}`;
   $('go-stats').textContent = statsLine(stats);
   $('go-highlights').replaceChildren(
     ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
@@ -1587,7 +1588,7 @@ function replayBotTurn() {
   for (const p of turn) queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && !(s.k === 'draw' && s.player === HUMAN)));
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
-  banner('Replay: bot’s turn');
+  banner(`Replay: ${OPP.Label} turn`, 'bot');
   render();
   void pump();
 }
@@ -1792,7 +1793,7 @@ function describeHex(key: string) {
   const name = hexName(parseKey(key), v.config.boardRadius);
   if (v.terrain[key] === 'rock') return `${name}, rock`;
   if (!t) return `${name}, empty${v.terrain[key] === 'rich' ? ' gold hex' : ''}`;
-  return `${name}, ${t.owner === HUMAN ? 'your' : 'bot'} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
+  return `${name}, ${t.owner === HUMAN ? 'your' : OPP.noun} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
 }
 
 // In the background, finish animations at once: on return the board is simply current.

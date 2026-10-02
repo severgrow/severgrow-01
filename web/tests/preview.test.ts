@@ -50,7 +50,7 @@ describe('move preview', () => {
         for (const g of p.ghosts) expect(g.strength).toBeGreaterThanOrEqual(1);
         const after = threats({ config: v.config, terrain: v.terrain, board: sim.board }, v.player)[0]?.loss ?? 0;
         const before = threats(v, v.player)[0]?.loss ?? 0;
-        expect(p.warning).toBe(after > before && !sim.wins ? `The bot could cut ${after} of your tiles.` : null);
+        expect(p.warning).toBe(after > before && !sim.wins ? `Your opponent could cut ${after} of your tiles.` : null);
       }
       expect(JSON.stringify(v)).toBe(frozen); // never mutates
     }

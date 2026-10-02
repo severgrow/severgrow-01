@@ -5,6 +5,7 @@
 import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/engine/index.js';
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
+import { OPP } from '../../../src/strings.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
@@ -167,22 +168,22 @@ const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
 export const captionFor = (s: Step, viewer: Player): string | null => {
   switch (s.k) {
     case 'sever':
-      return s.player !== viewer ? `You cut off ${s.keys.length} bot tile${s.keys.length === 1 ? '' : 's'}!` : `The bot cut off ${s.keys.length} of your tiles`;
+      return s.player !== viewer ? `You cut off ${s.keys.length} ${OPP.noun} tile${s.keys.length === 1 ? '' : 's'}!` : `${OPP.The} cut off ${s.keys.length} of your tiles`;
     case 'grow': {
       const taken = s.tiles.filter((t) => t.replaced).length;
-      if (s.player === viewer) return taken > 0 ? `You took over ${taken} bot tile${taken === 1 ? '' : 's'}` : null;
-      return taken > 0 ? `The bot grew ${tiles(s.tiles.length)}, taking ${taken} of yours` : `The bot grew ${tiles(s.tiles.length)}`;
+      if (s.player === viewer) return taken > 0 ? `You took over ${taken} ${OPP.noun} tile${taken === 1 ? '' : 's'}` : null;
+      return taken > 0 ? `${OPP.The} grew ${tiles(s.tiles.length)}, taking ${taken} of yours` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
     }
     case 'strangle':
-      return s.loser === viewer ? 'Your root is surrounded!' : "The bot's root is surrounded!";
+      return s.loser === viewer ? 'Your root is surrounded!' : `${OPP.Theirs} root is surrounded!`;
     case 'strengthen':
-      return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `The bot strengthened a ${s.from} to a ${s.to}`;
+      return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
     case 'fruit':
-      return s.player === viewer ? 'Fruited! Their tile is gone' : 'The bot used its Fruit!';
+      return s.player === viewer ? 'Fruited! Their tile is gone' : `${OPP.The} used their Fruit!`;
     case 'discard':
-      return s.player === viewer ? null : `The bot threw away ${cardName(s.card)}`;
+      return s.player === viewer ? null : `${OPP.The} threw away ${cardName(s.card)}`;
     case 'draw':
-      return s.player === viewer || s.from === 'deck' ? null : `The bot took ${cardName(s.card!)}`;
+      return s.player === viewer || s.from === 'deck' ? null : `${OPP.The} took ${cardName(s.card!)}`;
     default:
       return null;
   }

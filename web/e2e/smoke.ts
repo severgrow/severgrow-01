@@ -531,6 +531,89 @@ await Promise.race([
   ),
 ]);
 
+// Polish pass 3: the word "bot" never reaches the player. Scans visible text, aria-labels,
+// alt and title text, the page title and description, in every state the page can reach.
+const BOT_ALLOWLIST: readonly string[] = []; // intentional exceptions: none
+const botWords = (page: Page) =>
+  page.evaluate((allow) => {
+    const re = /\bbots?\b/i;
+    const found: string[] = [];
+    const push = (where: string, t: string | null | undefined) => {
+      if (t && re.test(t) && !allow.some((a) => t.includes(a))) found.push(`${where}: ${t.trim().slice(0, 80)}`);
+    };
+    push('text', document.body.innerText);
+    push('title', document.title);
+    push('description', document.querySelector('meta[name="description"]')?.getAttribute('content'));
+    for (const el of document.querySelectorAll('[aria-label],[alt],[title],[placeholder]'))
+      for (const a of ['aria-label', 'alt', 'title', 'placeholder']) push(a, el.getAttribute(a));
+    return found;
+  }, BOT_ALLOWLIST as string[]);
+{
+  const found: string[] = [];
+  const scan = async (page: Page, where: string) => found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'fast' });
+  await scan(page, 'menu');
+  await page.click('#menu-howto');
+  await page.waitForTimeout(200);
+  await scan(page, 'how to play');
+  await page.keyboard.press('Escape');
+  await page.locator('#sheet-howto [data-close]').click().catch(() => {});
+  await page.click('#menu-settings');
+  await page.waitForTimeout(200);
+  await scan(page, 'settings');
+  await page.locator('#sheet-settings [data-close]').click().catch(() => {});
+  await page.click('#menu-play');
+  await page.waitForTimeout(200);
+  await scan(page, 'level picker');
+  await page.click('#level-grid [data-level="7"]');
+  await idle(page);
+  await scan(page, 'draw step');
+  await page.click('#deck');
+  await idle(page);
+  await scan(page, 'grow step');
+  // a tile card on an opponent tile, then a picked card
+  const opp = await page.evaluate(() => {
+    const s = (window as unknown as { __severgrow: Hook }).__severgrow.state()!;
+    return Object.keys(s.board).find((k) => s.board[k]?.owner === 1) ?? null;
+  });
+  if (opp) {
+    await tapHex(page, opp);
+    await scan(page, 'tile card');
+  }
+  const card = page.locator('#hand .card.playable').first();
+  if (await card.count()) {
+    await card.click();
+    await page.waitForTimeout(150);
+    await scan(page, 'card picked');
+  }
+  // the opponent's turn (pill, captions), the history, then play to the end
+  for (let t = 0; t < 40; t++) {
+    const s = await getState(page);
+    if (!s || s.phase === 'GAME_OVER') break;
+    if (t === 1) {
+      await page.waitForFunction(() => document.querySelector('#turn-pill:not([hidden])') !== null, undefined, { timeout: 4000 }).catch(() => {});
+      await scan(page, "opponent's turn");
+    }
+    await playTurn(page);
+    await idle(page, 30000).catch(() => {});
+    if (t === 2) {
+      await page.click('#hud-history');
+      await page.waitForTimeout(200);
+      await scan(page, 'history');
+      await page.locator('#sheet-history [data-close]').click().catch(() => {});
+      await page.click('#hud-menu');
+      await page.waitForTimeout(200);
+      await scan(page, 'game menu');
+      await page.locator('#sheet-menu [data-close]').click().catch(() => {});
+    }
+  }
+  await idle(page, 30000).catch(() => {});
+  if ((await getState(page))?.phase === 'GAME_OVER') await scan(page, 'game over');
+  else found.push('(the scan game did not reach game over)');
+  check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
+  await page.close();
+}
+
 await browser.close();
 await new Promise<void>((r) => server.httpServer.close(() => r()));
 const failed = results.filter((r) => !r.ok);
