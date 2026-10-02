@@ -15,7 +15,8 @@ export type GuideTarget =
   | { kind: 'deck' }
   | { kind: 'discard' }
   | { kind: 'end' }
-  | { kind: 'button' };
+  | { kind: 'button' }
+  | { kind: 'kind'; move: string };
 
 const same = (a: Action | null, b: Action) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
@@ -28,7 +29,10 @@ export const guideTarget = (v: View, legal: readonly Action[], sel: Sel, goal: A
   if (same(pending, goal)) return { kind: 'confirm' };
   if (goal.t === 'Discard') return { kind: 'card', id: goal.card };
   if (!isBoardAction(goal)) return { kind: 'button' };
-  if (sel.kind !== null && sel.kind !== kindOf(goal)) return { kind: 'cancel' };
+  // A line or clump: tap its button first (a plain card tap would pick Sprout).
+  const goalKind = kindOf(goal)!;
+  if (goalKind !== 'sprout' && sel.kind !== goalKind && sel.hex === null) return { kind: 'kind', move: goalKind };
+  if (sel.kind !== null && sel.kind !== goalKind) return { kind: 'cancel' };
 
   const want = selFor(v, legal, goal);
   const copy = (id: number) => {

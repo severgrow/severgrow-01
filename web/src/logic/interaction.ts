@@ -81,6 +81,10 @@ export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { k
     .sort((a, b) => KIND_ORDER(a.kind) - KIND_ORDER(b.kind) || a.kind.localeCompare(b.kind, 'en', { numeric: true }));
 };
 
+/** The move buttons above the hand: lines and clumps only. Sprouting needs no button,
+ *  because tapping a card picks Sprout by default. */
+export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout');
+
 /** A quick "how good is it" score, so the best option is offered first. */
 const quickScore = (v: View, a: Action): number => {
   const sim = simulate(v, a);
@@ -116,11 +120,17 @@ export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
 
 // ---------- taps ----------
 
+/**
+ * Tapping a card. In the Grow step a card picks Sprout by default (only its sprout spots
+ * glow), unless a line or clump was chosen first or a hex was tapped first. Tapping the
+ * same card again clears it.
+ */
 export const tapCard = (v: View, legal: readonly Action[], sel: Sel, id: number): Sel => {
-  if (sel.card === id) return { ...sel, card: null, option: 0 };
+  if (sel.card === id) return { ...sel, card: null, kind: sel.kind === 'sprout' ? null : sel.kind, option: 0 };
   const next: Sel = { ...sel, card: id, option: 0 };
   if (next.kind !== null && matching(v, legal, { ...next, hex: null }).length === 0) next.kind = null;
   if (next.hex !== null && matching(v, legal, next).length === 0) next.hex = null;
+  if (next.kind === null && next.hex === null && matching(v, legal, { ...next, kind: 'sprout' }).length > 0) next.kind = 'sprout';
   return next;
 };
 

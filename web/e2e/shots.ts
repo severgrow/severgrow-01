@@ -7,6 +7,7 @@ import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { THEME_IDS } from '../src/logic/themes.js';
 import { cutDemo, goldDemo } from './positions.js';
+import { kindOf } from '../src/logic/interaction.js';
 
 const dir = process.argv.find((a) => a.startsWith('--dir='))?.slice(6) ?? 'docs/screens';
 mkdirSync(dir, { recursive: true });
@@ -74,6 +75,7 @@ for (const id of THEME_IDS) {
 // A frame in the middle of a big cut.
 {
   const page = await open({ palette: 'soil', speed: 'slow', confirmMoves: true }, demo.state);
+  if (demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(demo.action)}"]`).catch(() => {});
   await page.click(`#hand [data-card="${demo.card}"]`).catch(() => {});
   if (!(await page.locator('#confirm-play').isVisible())) {
     const b = await page.locator(`.hex-cell[data-key="${demo.hex}"] path.hex`).boundingBox();

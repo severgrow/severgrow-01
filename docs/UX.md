@@ -78,8 +78,12 @@ noise); the whole polish pass adds about 5 kB to the page after compression.
 - **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
-- **Move buttons** above the hand say what kinds of moves you have ("Grow a line of
-  3", "Grow a clump of 3", "Sprout one tile"); tapping one shows only those.
+- **Sprout is the default.** In the Grow step the bar says "Pick a card to sprout":
+  tapping a card shows only where it can sprout. A card with one spot previews at once,
+  and one more tap on that spot plays it.
+- **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one, then a
+  card, to see where that combo can grow. Tapping a hex first still shows the best move
+  there of any kind.
 - **Cancel** always clears your choice. Esc does the same on a keyboard.
 - **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
   **?** button next to them; tap it to read the tip, tap again to hide it.

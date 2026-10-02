@@ -10,6 +10,7 @@ import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
+import { kindOf } from '../src/logic/interaction.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
 const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
@@ -72,6 +73,12 @@ const newGame = async (page: Page, level = 7) => {
   await page.click(`#level-grid [data-level="${level}"]`);
 };
 
+/** Picks the demo move's card: a line or clump needs its button first (a card tap alone picks Sprout). */
+const pickCard = async (page: Page, d: { action: CutDemo['action']; card: number }) => {
+  if (d.action.t === 'MeldRun' || d.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(d.action)}"]`);
+  await page.click(`#hand [data-card="${d.card}"]`);
+};
+
 /** Picks a target hex for the selected card, unless the card already previewed its only spot. */
 const pickTarget = async (page: Page) => {
   if (await page.locator('#confirm-play').isVisible()) return true;
@@ -128,6 +135,7 @@ const playTurn = async (page: Page) => {
       const t = (await page.getAttribute('#guide-arrow', 'data-target'))!;
       if (t.startsWith('card:')) await page.click(`#hand [data-card="${t.slice(5)}"]`);
       else if (t.startsWith('hex:')) await tapHex(page, t.slice(4));
+      else if (t.startsWith('kind:')) await page.click(`#moves [data-kind="${t.slice(5)}"]`);
       else await page.click({ confirm: '#confirm-play', deck: '#deck', discard: '#discard', end: '#moves .end', cancel: '#confirm-cancel', button: '#moves .btn.primary' }[t]!);
       if (((await getState(page))!.history?.length ?? 0) > before) break;
     }
@@ -228,7 +236,7 @@ for (const theme of THEMES) {
     await page.mouse.move(1, 1); // no hover tooltip in the picture
     await page.waitForTimeout(300);
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
-    await page.click(`#hand [data-card="${demo.card}"]`);
+    await pickCard(page, demo);
     if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
     for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
     await page.mouse.move(1, 1);
@@ -262,7 +270,7 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', { speed: 'slow' }, demo.state);
     await page.click('#menu-continue');
-    await page.click(`#hand [data-card="${demo.card}"]`);
+    await pickCard(page, demo);
     if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
     for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
     await page.click('#confirm-play');
@@ -293,7 +301,7 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', {}, demo.state);
     await page.click('#menu-continue');
-    await page.click(`#hand [data-card="${demo.card}"]`);
+    await pickCard(page, demo);
     const before = await stateJson(page);
     await page.click('#hud-menu');
     await page.click('#gm-settings');
@@ -340,7 +348,7 @@ for (const id of THEME_IDS) {
 const particleInfo = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: Hook }).__severgrow.particles());
 /** Picks the demo's card, hex and option, then confirms (does not wait). */
 const startMove = async (page: Page, d: CutDemo) => {
-  await page.click(`#hand [data-card="${d.card}"]`);
+  await pickCard(page, d);
   if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
   for (let i = 0; i < d.option; i++) await page.click('#confirm-other');
   await page.click('#confirm-play');

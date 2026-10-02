@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { isBoardAction, kindsAvailable, options, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
+import { isBoardAction, kindOf, moveButtons, options, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
 import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -840,10 +840,13 @@ function renderGuide(advice: Advice | null) {
     case 'button':
       rect = above(document.querySelector('#moves .btn.primary'));
       break;
+    case 'kind':
+      rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
+      break;
   }
   if (!rect) return;
   arrow.hidden = false;
-  arrow.dataset.target = t.kind === 'card' ? `card:${t.id}` : t.kind === 'hex' ? `hex:${t.key}` : t.kind;
+  arrow.dataset.target = t.kind === 'card' ? `card:${t.id}` : t.kind === 'hex' ? `hex:${t.key}` : t.kind === 'kind' ? `kind:${t.move}` : t.kind;
   arrow.style.left = `${rect.x}px`;
   arrow.style.top = `${rect.y}px`;
 }
@@ -896,11 +899,11 @@ function hintText(v: View): string {
       return `Draw a card: tap the deck or the throw pile.${low}`;
     case 'ACT': {
       if (session.pending) return settings.confirmMoves ? 'Check the preview, then Confirm.' : '';
-      if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? 'Tap a glowing hex to grow there.' : "That card can't grow anywhere now.";
+      if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? (sel.kind === 'sprout' ? 'Tap a glowing hex to sprout there.' : 'Tap a glowing hex to grow there.') : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
       if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
-      return session.legal.some(isBoardAction) ? 'Tap a card to see where it can grow. Done? Tap “Throw a card”.' : 'Nothing to grow this time.';
+      return session.legal.some(isBoardAction) ? 'Tap a card to sprout it, or a line or clump button for a combo. Done? Tap “Throw a card”.' : 'Nothing to grow this time.';
     }
     case 'DISCARD':
       return discardEndsTurn(v) ? 'Last step: discard 1 card. Then your turn ends.' : 'Discard 1 card.';
@@ -1024,17 +1027,25 @@ function renderControls(v: View, advice: Advice | null) {
   const sel = session.sel;
   const pending = session.pending;
   const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
-  const coachKind = advice?.action.t === 'Sprout' ? 'sprout' : null;
+  const coachKind = advice && (advice.action.t === 'MeldRun' || advice.action.t === 'MeldSet') ? kindOf(advice.action) : null;
 
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
   } else if (v.phase === 'ACT') {
-    for (const k of kindsAvailable(v, legal, sel)) {
+    // Sprouting needs no button: tapping a card picks it. Say so while nothing is picked.
+    if (!anySel && legal.some((a) => a.t === 'Sprout')) {
+      const note = document.createElement('p');
+      note.className = 'step-note';
+      note.textContent = 'Pick a card to sprout';
+      moves.append(note);
+    }
+    for (const k of moveButtons(v, legal, sel)) {
       const on = sel.kind === k.kind;
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         session!.tapKind(k.kind);
         render();
       });
+      b.dataset.kind = k.kind;
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
