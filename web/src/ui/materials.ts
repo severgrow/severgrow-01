@@ -11,7 +11,9 @@
 // <defs>; per tile there are only a few plain shapes (no per-tile filters).
 import type { MaterialLook, MaterialName } from '../logic/materials.js';
 import { grassBlades, grassFlowers, lavaCracks, rockPebbles, strengthLift, tileVariant } from '../logic/materials.js';
+import { GRASS_VARIANTS, LAVA_VARIANTS, PHOTO_SPAN, lavaLevel } from '../logic/photo.js';
 import type { ThemeStyle } from '../logic/themes.js';
+import { photoUrl } from './photo.js';
 import { S, centerOf, cornerPts, el, hash, hexPath, noiseTile } from './geom.js';
 import type { Attrs } from './geom.js';
 
@@ -77,6 +79,21 @@ const lit = (c: DrawCtx, d: string, rim = c.look.rim) =>
 /** A soft contact shadow, offset down-right by the lift. */
 const contact = (c: DrawCtx, d: string, lift: number, opacity: number) =>
   el('path', { d, class: 'contact', transform: `translate(${f(lift * 0.5)} ${f(lift)})`, style: `opacity:${opacity.toFixed(2)}` }, c.parent);
+
+/**
+ * The photo-like image for a tile (Normal detail, once painted), centred on the hex and
+ * scaled to its radius; returns false when there is none yet (then the vector look draws).
+ */
+const photo = (c: DrawCtx, kind: 'grass' | 'lava', R: number, level = 0) => {
+  if (!c.look.textures) return false;
+  const n = kind === 'grass' ? GRASS_VARIANTS : LAVA_VARIANTS;
+  const url = photoUrl(kind, Math.floor(hash(`${c.key}:photo`) * n), level);
+  if (!url) return false;
+  const { x, y } = centerOf(c.key);
+  const w = 2 * PHOTO_SPAN * R;
+  el('image', { href: url, x: f(x - w / 2), y: f(y - w / 2), width: f(w), height: f(w), class: `mat-photo ${kind}` }, c.parent);
+  return true;
+};
 
 // ---------- empty and gold cells ----------
 
@@ -190,6 +207,7 @@ registerMaterial('moss', {
     const v = tileVariant(c.key);
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
+    if (photo(c, 'grass', c.radius)) return;
     el('path', { d, class: 'moss-body', fill: c.url('moss-dome'), style: `opacity:${Math.min(1, s.bright + v.shade).toFixed(2)}` }, c.parent);
     if (c.look.textures) grassDetail(c, c.radius);
     else el('path', { d, class: 'moss-fuzz' }, c.parent);
@@ -202,11 +220,14 @@ registerMaterial('moss', {
     const g = el('g', { class: `moss-root${c.look.motion ? ' breathing' : ''}` }, c.parent);
     const ctx = { ...c, parent: g };
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, g);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'moss-body', fill: c.url('moss-dome') }, g);
-    if (c.look.textures) grassDetail(ctx, R);
+    const pic = photo(ctx, 'grass', R);
+    if (!pic) {
+      el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'moss-body', fill: c.url('moss-dome') }, g);
+      if (c.look.textures) grassDetail(ctx, R);
+    }
     el('circle', { cx: f(x), cy: f(y), r: f(R * 0.55), class: 'root-glow', fill: c.url('moss-glow') }, g);
     el('circle', { cx: f(x), cy: f(y), r: f(R * 0.3), class: 'root-core moss' }, g);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, g);
+    if (!pic) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, g);
   },
   // cut off: the moss dries out, grey-brown and flat
   scar: (c) => {
@@ -240,6 +261,7 @@ registerMaterial('fire', {
     const s = strengthLift(c.strength, c.maxRank);
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
+    if (photo(c, 'lava', c.radius, lavaLevel(c.strength))) return;
     el('path', { d, class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
     if (c.look.textures) el('path', { d, class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
     el('path', { d, class: 'lava-rim', fill: c.url('lava-rim'), style: `opacity:${(0.55 + 0.45 * s.bright * (c.strength / Math.max(1, c.maxRank))).toFixed(2)}` }, c.parent);
@@ -251,12 +273,15 @@ registerMaterial('fire', {
     const { x, y } = centerOf(c.key);
     const R = S * 0.88;
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, c.parent);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
-    if (c.look.textures) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-rim', fill: c.url('lava-rim') }, c.parent);
-    cracks(c, R, c.maxRank);
+    const pic = photo(c, 'lava', R, 2);
+    if (!pic) {
+      el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
+      if (c.look.textures) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
+      el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-rim', fill: c.url('lava-rim') }, c.parent);
+      cracks(c, R, c.maxRank);
+    }
     el('circle', { cx: f(x), cy: f(y), r: f(R * 0.3), class: 'root-core fire' }, c.parent);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, c.parent);
+    if (!pic) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, c.parent);
   },
   // cut off: the fire burns out to dark grey ash
   scar: (c) => {

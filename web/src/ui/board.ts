@@ -355,6 +355,7 @@ export class BoardView {
         el('circle', { cx: x, cy: y, r, class: 'mark-ink' }, g);
         break;
       case 'ring':
+        el('circle', { cx: x, cy: y, r: r + 0.4, class: 'mark-halo' }, g);
         el('circle', { cx: x, cy: y, r: r + 0.4, class: 'mark-line' }, g);
         break;
       case 'pip':

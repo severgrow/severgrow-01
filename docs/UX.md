@@ -65,8 +65,8 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
 
 | Material | What it is | Detail |
 | --- | --- | --- |
-| **Grass** (my tiles) | a dense lawn of fine green blades in three shades, a soft fringe of blades poking past the edge, and on some tiles a tiny dandelion or seed puff | the blades over the number stay short; my ring marker stays; my root is a bigger mound with a soft inner glow that breathes slowly |
-| **Lava** (the bot's tiles) | dark, rough cooled crust split by molten cracks that well up wide at the edge and narrow inward, with a glow seeping up around the rim (coral-red to orange-red, never amber); a stronger tile has more cracks | light numbers with a dark halo on the crust; cracks never cross the number or the marker; the diamond marker stays; the root is a cracked mound with a molten core |
+| **Grass** (my tiles) | photo-like: a dense, fluffy ball of thousands of fine blades, darker at the base and sunlit at the tips, leaning out at the edge so neighbouring tiles blend, lit from the top-left like a dome; now and then a tiny dandelion or seed puff | the number has a soft light halo (and the middle of the dome is a little calmer); my ring marker has one too; my root is the same grass with a soft glowing core that breathes slowly |
+| **Lava** (the bot's tiles) | photo-like: lumpy dark rock lit from the top-left, split by molten cracks and pools that glow brighter toward the edge (coral-red to orange-red, never amber); stronger tiles (4-6, 7-9) are more molten | light numbers with a dark halo on the rock; nothing molten under the number or the marker (tested pixel by pixel); the diamond marker stays; the root is the most molten, with a hot core |
 | **Rock** | dark, slightly warm grey-brown stone with smaller stones lying on it ("rocky rocks"), grain, hairline cracks, small chips and flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
 | **Empty** | a shallow soil pocket with a soft inner shadow | |
 | **Gold** | warm amber with a fine weave, a faint metallic sheen and the "2" badge | |
@@ -87,6 +87,10 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
   only the rim and shadow). Reduce motion stops the lava glow, the flowing links and the breathing.
 - **Cards** get no materials: only a slightly thicker edge, a soft shadow in the fan, and a
   deeper one when picked. **Buttons** are slightly raised and press down softly.
+- **Photo-like, painted in code:** the grass and lava pictures are painted pixel by pixel
+  once (seeded noise and thousands of blades, `web/src/logic/photo.ts`; no downloaded
+  images), in small slices in the background after the page opens. Until they are ready,
+  and in Low detail and Ink, the board uses the simpler drawn look.
 - **Built once:** gradients and one small noise texture (a 64×64 canvas, made once) are
   shared by the whole board; each tile is a handful of plain shapes, with no per-tile filters.
 - **Registry:** `web/src/ui/materials.ts` registers each material (moss = grass, fire = lava, rock, empty,

@@ -493,7 +493,7 @@ const big = bigCutDemo();
   const { page, errors } = await openPage('soil', 'phone', { speed: 'fast', materialDetail: 'low' }, demo.state);
   await page.click('#menu-continue');
   for (let t = 0; t < 2; t++) await playTurn(page);
-  const textures = await page.locator('pattern[id$="-noise"], .mat-grain, .moss-detail, .rock-facet, .rock-crack, .grass-blade, .pebble').count();
+  const textures = await page.locator('pattern[id$="-noise"], .mat-grain, .moss-detail, .rock-facet, .rock-crack, .grass-blade, .pebble, .mat-photo').count();
   const rims = await page.locator('.l-tiles .lit').count();
   check('material ADVERSARIAL 5: Low detail mid-game draws no textures, keeps rim and shadow', textures === 0 && rims > 0 && (await boardTiles(page)) === (await stateTiles(page)) && errors.length === 0, `${textures} textured parts`);
   await page.close();
