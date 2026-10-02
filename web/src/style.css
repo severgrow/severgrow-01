@@ -2279,11 +2279,8 @@ svg.usable .hex-cell {
   opacity: 0.38;
 }
 .moss-tuft {
-  fill: none;
-  stroke: var(--m-mossTuft);
-  stroke-width: 0.6;
-  stroke-linecap: round;
-  opacity: 0.45;
+  fill: var(--m-mossTuft);
+  opacity: 0.5;
 }
 .moss-fuzz {
   fill: none;
@@ -2318,13 +2315,14 @@ svg.usable .hex-cell {
 .lava-seams.pulsing {
   animation: lava-pulse 5.5s ease-in-out infinite;
 }
+/* The pulse fades the seams a little (opacity only: cheap, no filters per frame). */
 @keyframes lava-pulse {
   0%,
   100% {
-    filter: brightness(1);
+    opacity: 1;
   }
   50% {
-    filter: brightness(1.25);
+    opacity: 0.72;
   }
 }
 .lava-seams.root .seam-glow {

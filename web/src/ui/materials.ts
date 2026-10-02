@@ -155,8 +155,11 @@ const mossDetail = (c: DrawCtx, R: number, turn: number) => {
     const r = R * (0.12 + t.size);
     el('circle', { cx: f(cx + 0.6), cy: f(cy + 0.9), r: f(r), class: 'moss-gap' }, g);
     el('circle', { cx: f(cx), cy: f(cy), r: f(r), class: 'moss-clump' }, g);
-    // a tiny tuft on every other clump
-    if (i % 2 === 0) el('path', { d: `M${f(cx - r * 0.15)},${f(cy - r * 0.1)}l${f(-r * 0.12)},${f(-r * 0.35)}M${f(cx + r * 0.15)},${f(cy - r * 0.1)}l${f(r * 0.1)},${f(-r * 0.32)}`, class: 'moss-tuft' }, g);
+    // tiny tufts: two soft light specks on the top-left of every other clump (fuzz, not marks)
+    if (i % 2 === 0) {
+      el('circle', { cx: f(cx - r * 0.3), cy: f(cy - r * 0.35), r: f(r * 0.16), class: 'moss-tuft' }, g);
+      el('circle', { cx: f(cx + r * 0.05), cy: f(cy - r * 0.5), r: f(r * 0.11), class: 'moss-tuft' }, g);
+    }
   }
   if (c.look.textures) el('path', { d: hexPath(c.key, R, c.shape), class: 'mat-grain', fill: c.url('noise') }, c.parent);
 };
