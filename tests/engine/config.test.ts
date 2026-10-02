@@ -16,12 +16,16 @@ describe('DEFAULT_CONFIG', () => {
       rotStep: 8,
       forbidRedundantDiscard: true,
       allowHyphaOneBend: false,
-      fruitPerPlayer: 0,
+      fruitPerPlayer: 1,
       rootsScore: false,
       maxRank: 9,
       sproutsPerTurn: 1,
-      guaranteeOpeningMeld: false,
       maxTurnsPerPlayer: 30,
+      unbiasedShuffle: true,
+      allowStrengthen: true,
+      strengthenLimitPerGame: 2, // chosen by simulation (SPEC 11.3)
+      fruitSacrifice: 3,
+      fruitOnlyWhenBehind: false,
       rotEnabled: false,
       knockEnabled: false,
     });

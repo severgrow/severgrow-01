@@ -1,20 +1,27 @@
 // Helpers for the server-core tests: real games played by real bots.
 import { apply, newGame, viewFor } from '../../src/engine/index.js';
-import type { Action, State } from '../../src/engine/index.js';
+import type { Action, RulesConfig, State } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
+import type { LevelChooser } from '../../src/bots/versions.js';
 
 /**
  * Plays a full game: the human (player 0) is played by `humanLevel`, the bot (player 1)
  * by `botLevel` with the exact seeding the server uses. Returns the actions and the end.
  */
-export const playLogged = (seed: number, botLevel: Level, humanLevel: Level = 9): { actions: Action[]; end: State } => {
-  let s = newGame(seed);
+export const playLogged = (
+  seed: number,
+  botLevel: Level,
+  humanLevel: Level = 9,
+  rules: Partial<RulesConfig> = {},
+  choose: LevelChooser = chooseLevelAction,
+): { actions: Action[]; end: State } => {
+  let s = newGame(seed, rules);
   const actions: Action[] = [];
   while (s.phase !== 'GAME_OVER') {
     const level = s.actor === 0 ? humanLevel : botLevel;
     // The human side uses a different seed stream so it never mirrors the bot.
-    const a = chooseLevelAction(viewFor(s, s.actor), level, botSeed(s.seed, s.actor === 0 ? 100 + level : level, s.turnNumber, s.history?.length ?? 0));
+    const a = choose(viewFor(s, s.actor), level, botSeed(s.seed, s.actor === 0 ? 100 + level : level, s.turnNumber, s.history?.length ?? 0));
     actions.push(a);
     s = apply(s, a);
   }
@@ -22,9 +29,9 @@ export const playLogged = (seed: number, botLevel: Level, humanLevel: Level = 9)
 };
 
 /** The first seed from `from` where the human wins against `botLevel`. */
-export const winningGame = (botLevel: Level, from = 1, humanLevel: Level = 9) => {
+export const winningGame = (botLevel: Level, from = 1, humanLevel: Level = 9, rules: Partial<RulesConfig> = {}, choose: LevelChooser = chooseLevelAction) => {
   for (let seed = from; seed < from + 500; seed++) {
-    const g = playLogged(seed, botLevel, humanLevel);
+    const g = playLogged(seed, botLevel, humanLevel, rules, choose);
     if (g.end.result?.winner === 0) return { seed, ...g };
   }
   throw new Error('no winning game found');

@@ -55,6 +55,7 @@ export type IllegalActionCode =
   | 'FRUIT_TARGET_NOT_ENEMY'
   | 'FRUIT_TARGET_ROOT'
   | 'FRUIT_TARGET_NOT_ADJACENT'
+  | 'FRUIT_NOT_BEHIND'
   // turn flow
   | 'GAME_OVER'
   | 'WRONG_PHASE'
@@ -62,19 +63,11 @@ export type IllegalActionCode =
   | 'DECK_EMPTY'
   | 'DISCARD_EMPTY'
   | 'SPROUT_LIMIT'
+  | 'STRENGTHEN_LIMIT'
   | 'KNOCK_DISABLED'
   | 'REDUNDANT_DISCARD'
   | 'KNOCK_TOO_MUCH_DEADWOOD'
   | 'NOT_ROT_CANDIDATE';
-
-/** Thrown by `newGame` when no opening deal gives both hands a combo (v0.4). */
-export class DealError extends Error {
-  readonly code = 'NO_OPENING_COMBO' as const;
-  constructor(message: string) {
-    super(`NO_OPENING_COMBO: ${message}`);
-    this.name = 'DealError';
-  }
-}
 
 /** Thrown by `apply` for any illegal action. `code` is stable; the message is not. */
 export class IllegalActionError extends Error {

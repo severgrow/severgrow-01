@@ -1,6 +1,6 @@
 // Part 3 adversarial tests for the v0.4 one game. Written to break it; never weakened.
 import { describe, expect, it } from 'vitest';
-import { DealError, apply, dealOpening, legalActions, newGame, resolveConfig, viewFor } from '../../src/engine/index.js';
+import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Card, State, Suit } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { fixture } from '../helpers.js';
@@ -33,17 +33,6 @@ describe('v0.4 adversarial', () => {
     expect(n.board['1,-1']).toEqual({ owner: 1, strength: 2 }); // near half stays
     for (const k of ['-1,0', '-2,0', '-3,0']) expect(n.board[k]).toBeNull(); // far half withers
     expect(n.lastResolution!.severed).toEqual([{ player: 1, coords: [{ q: -3, r: 0 }, { q: -2, r: 0 }, { q: -1, r: 0 }] }]);
-  });
-
-  it('ADV-3: a redeal that never finds a combo stops at 200 with a typed error', () => {
-    expect(() => dealOpening(1, resolveConfig({ guaranteeOpeningMeld: true }), () => false)).toThrow(DealError);
-    // A real config where combos are impossible: 1 card per hand is not allowed (handSize >= 3),
-    // so use the injectable check; the error must name the cause.
-    try {
-      dealOpening(1, resolveConfig({ guaranteeOpeningMeld: true }), () => false);
-    } catch (e) {
-      expect((e as DealError).message).toMatch(/200/);
-    }
   });
 
   it('ADV-4: a tile with the top number (maxRank) cannot be replaced by any move', () => {

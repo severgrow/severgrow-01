@@ -14,6 +14,8 @@ export type Step =
   | { k: 'grow'; style: 'line' | 'bloom' | 'sprout'; player: Player; tiles: GrowTile[] }
   | { k: 'sever'; player: Player; by: Player; keys: string[]; origin: string }
   | { k: 'remove'; reason: 'fruit' | 'rot'; keys: string[] }
+  | { k: 'strengthen'; player: Player; key: string; from: number; to: number }
+  | { k: 'fruit'; player: Player; sacrifice: string[]; target: string }
   | { k: 'discard'; player: Player; card: Card }
   | { k: 'strangle'; loser: Player }
   | { k: 'turn'; player: Player; final: boolean }
@@ -54,10 +56,12 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
         steps.push({ k: 'grow', style: e.t === 'MeldRun' ? 'line' : e.t === 'MeldSet' ? 'bloom' : 'sprout', player: e.player, tiles });
         break;
       }
+      case 'Strengthen':
+        steps.push({ k: 'strengthen', player: e.player, key: coordKey(e.coord), from: e.oldStrength, to: e.newStrength });
+        break;
       case 'Fruit': {
-        const keys = [...e.sacrifice, e.target].map(coordKey);
         hits.push(coordKey(e.target));
-        steps.push({ k: 'remove', reason: 'fruit', keys });
+        steps.push({ k: 'fruit', player: e.player, sacrifice: e.sacrifice.map(coordKey), target: coordKey(e.target) });
         break;
       }
       case 'Rot':
@@ -107,6 +111,15 @@ export const applyStep = (board: Board, s: Step): Board => {
     case 'remove': {
       const next = { ...board };
       for (const k of s.keys) next[k] = null;
+      return next;
+    }
+    case 'strengthen': {
+      const t = board[s.key];
+      return t ? { ...board, [s.key]: { ...t, strength: s.to } } : board;
+    }
+    case 'fruit': {
+      const next = { ...board };
+      for (const k of [...s.sacrifice, s.target]) next[k] = null;
       return next;
     }
     case 'sync':
@@ -162,6 +175,10 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
     }
     case 'strangle':
       return s.loser === viewer ? 'Your root is surrounded!' : "The bot's root is surrounded!";
+    case 'strengthen':
+      return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `The bot strengthened a ${s.from} to a ${s.to}`;
+    case 'fruit':
+      return s.player === viewer ? 'Fruited! Their tile is gone' : 'The bot used its Fruit!';
     case 'discard':
       return s.player === viewer ? null : `The bot threw away ${cardName(s.card)}`;
     case 'draw':

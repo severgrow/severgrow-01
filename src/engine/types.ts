@@ -32,10 +32,18 @@ export type RulesConfig = {
   maxRank: number;
   /** v0.4: Sprout moves allowed per turn (0 = off). */
   sproutsPerTurn: number;
-  /** v0.4: redeal until both opening hands hold a combo. */
-  guaranteeOpeningMeld: boolean;
   /** v0.4: the game ends after this many turns each (0 = no limit). */
   maxTurnsPerPlayer: number;
+  /** v0.5: random integers by rejection sampling (false only for earlier rules versions). */
+  unbiasedShuffle: boolean;
+  /** v0.5: a Sprout may raise one of my own weaker tiles (Strengthen). */
+  allowStrengthen: boolean;
+  /** v0.5: Strengthens per player per game; -1 = no limit. */
+  strengthenLimitPerGame: number;
+  /** v0.5: own tiles given up by a Fruit. */
+  fruitSacrifice: number;
+  /** v0.5: Fruit only while behind on score (simulation option). */
+  fruitOnlyWhenBehind: boolean;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
@@ -69,6 +77,8 @@ export type ResolutionSummary = {
   strangled?: Player;
   /** v0.4: the hex a Sprout claimed. */
   sprout?: Coord;
+  /** v0.5: a Sprout that strengthened my own tile. */
+  strengthen?: { coord: Coord; from: number; to: number };
 };
 
 export type Action =
@@ -87,6 +97,7 @@ export type Event =
   | { t: 'Draw'; player: Player; from: 'deck' | 'discard'; card?: number }
   | { t: 'MeldRun' | 'MeldSet'; player: Player; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; player: Player; card: number; coord: Coord }
+  | { t: 'Strengthen'; player: Player; card: number; coord: Coord; oldStrength: number; newStrength: number }
   | {
       t: 'Overgrow';
       player: Player;
@@ -124,6 +135,8 @@ export type State = {
   phase: Phase;
   drawnFromDiscard: number | null;
   fruitUsed: [number, number];
+  /** v0.5: Strengthens used per player this game. */
+  strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
   rotPick: RotPickState | null;
   /** Increments per player-turn, starts at 1. */
@@ -133,8 +146,6 @@ export type State = {
   history?: Event[];
   /** v0.4: Sprouts played this turn. */
   sproutsThisTurn: number;
-  /** v0.4: which deal attempt was used (debugging the opening guarantee). */
-  dealAttempt: number;
 };
 
 export type View = {
@@ -151,6 +162,7 @@ export type View = {
   phase: Phase;
   drawnFromDiscard: number | null;
   fruitUsed: [number, number];
+  strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
   rotPick: RotPickState | null;
   turnNumber: number;

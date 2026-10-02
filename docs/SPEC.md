@@ -1,4 +1,4 @@
-# SEVERGROW: Engine Spec v0.4 (one game)
+# SEVERGROW: Engine Spec v0.5 (one game)
 
 > **Grow a living network. Keep it connected. Cut theirs.**
 
@@ -12,15 +12,43 @@ default (see the appendix).
 
 ## Changelog
 
-**v0.4: one game** (this version)
+**v0.5: Fruit back, Strengthen, a provably fair deal** (this version; rules version
+`v0.5-fruit-strengthen`, bot version `bots-v0.6`)
+- **Why.** A top-rank tile cannot be replaced by a Sprout or a combo, and the bots used them
+  as permanent blockers. Fruit is the answer to a blocker; Strengthen lets a player protect
+  a key tile. Both make high cards stronger, so the deal must be provably fair.
+- **Fruit is back, on by default** (section 7.8; it leaves the parked rules). Once per player
+  per game (`fruitPerPlayer`), during the Grow step: give up `fruitSacrifice` (3) of your own
+  connected non-root tiles to remove one enemy non-root tile next to them, **whatever its
+  strength**. Then the normal cut check for both players, then Strangle. Option
+  `fruitOnlyWhenBehind` (off; simulation only).
+- **Strengthen (new Sprout variant, section 7.4).** A Sprout may target one of your own
+  non-root tiles when the card is **strictly higher** than the tile: the tile stays and takes
+  the card's number. It uses the turn's Sprout. Options `allowStrengthen` and
+  `strengthenLimitPerGame` (-1 = no limit). It scores nothing by itself, never changes
+  connections, and does not protect from a cut or from Fruit.
+- **A fully random, provably fair deal (section 5).** The deck holds the same number of cards
+  of every rank; it is shuffled once with an unbiased Fisher-Yates driven by the seeded PRNG,
+  and dealt from the top. Random integers now use rejection sampling, so there is no modulo
+  bias (`unbiasedShuffle`). Nothing is reordered, balanced or limited. The old guaranteed
+  opening combo (`guaranteeOpeningMeld`, its redeal loop, `DealError` and `dealAttempt`) is
+  **removed** from the code, config, tests and this spec.
+- **Versions.** `RULES_VERSIONS` keeps the previous rules (`v0.4-defaults-2`: no Fruit, no
+  Strengthen, the old random-integer method) and `BOT_VERSIONS` keeps the previous bots
+  (`bots-v0.5`), so tickets and recorded games from before still verify.
+- **Defaults chosen by simulation:** see section 11.3.
+
+**v0.4: one game**
 - **One game, no modes.** "Classic" and "Lite" are merged. The page has one New game button.
 - **Sprout (new move).** Spend one card to grow one tile next to your network (section 7).
 - **Plain random deal.** The deck is shuffled once from the game seed and dealt as it falls.
-  The optional opening-combo guarantee (section 5) is **off** by default since v0.4-defaults-2.
+  (An optional opening-combo redeal existed in early v0.4; it was switched off in
+  v0.4-defaults-2 and removed in v0.5.)
 - **Card range.** Cards run 1..`maxRank` (5 to 9). Simulation chose **9** as the default
   (section 11.1); smaller values make games too short once Sprout is on.
-- **Parked rules.** Rot, Knock (with its final turn) and Fruit are off by default
+- **Parked rules.** Rot, Knock (with its final turn) and Fruit were off by default
   (`rotEnabled`, `knockEnabled`, `fruitPerPlayer`). Their code and tests remain (appendix A).
+  Fruit came back in v0.5.
 - **The turn ends by itself** after the discard when Rot and Knock are off: no Continue step.
 - **Simple ending.** The game ends when the deck can no longer refill a hand; higher score
   wins; **a tie goes to Player 2**. Strangle still wins at once.
@@ -52,8 +80,11 @@ default (see the appendix).
 2. **Act:** play any combos you hold, and up to `sproutsPerTurn` Sprouts.
    - **Hypha** (3+ cards of one suit in a row): a straight line of tiles, strength rising outward.
    - **Bloom** (3-4 cards of one number, different suits): a connected clump, all that strength.
-   - **Sprout** (any one card): one tile with that card's number.
+   - **Sprout** (any one card): one tile with that card's number. **Strengthen** is a Sprout on
+     one of your own tiles with a strictly higher card: the tile takes the card's number.
    - New tiles must touch your network. They may replace an enemy tile only if **strictly stronger**.
+   - **Fruit** (once per game): give up 3 of your own connected tiles to remove one enemy tile
+     next to them, whatever its strength.
 3. **Discard** one card (skipped if your hand is empty).
 4. **Sever** removes every tile no longer joined to its root, **Strangle** is checked, and you
    **refill** to `handSize`. The turn passes.
@@ -91,8 +122,13 @@ type RulesConfig = {
   maxRank: number;              // 9: cards 1..maxRank, 5 to 9 (chosen by simulation, 11.1)
   copiesPerCard: number;        // 2 (chosen by simulation, 11.1)
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
-  guaranteeOpeningMeld: boolean;// false (plain random deal; see 11.1)
   maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
+  unbiasedShuffle: boolean;     // true (v0.5): random integers by rejection sampling
+  allowStrengthen: boolean;     // v0.5, default set by simulation (11.3)
+  strengthenLimitPerGame: number; // v0.5, -1 = no limit; default set by simulation (11.3)
+  fruitPerPlayer: number;       // v0.5: 1 (Fruit uses per player per game; 0 = off)
+  fruitSacrifice: number;       // v0.5: 3 (own tiles given up per Fruit)
+  fruitOnlyWhenBehind: boolean; // v0.5: false (simulation only)
   rockCount: number;            // 4 (even)
   richCount: number;            // 5 (odd: centre + pairs)
   forbidRedundantDiscard: boolean; // true
@@ -105,7 +141,6 @@ type RulesConfig = {
   knockEnabled: boolean;        // false
   knockDeadwood: number;        // 10
   knockGivesFinalTurn: boolean; // true
-  fruitPerPlayer: number;       // 0
 };
 ```
 
@@ -115,9 +150,15 @@ known keys only, and a deck large enough to deal both hands, flip a starting dis
 still leave at least one card to draw** (`4 * maxRank * copiesPerCard >= 2 * handSize + 2`).
 
 **legacyV03** (test-only, never in the page): `maxRank 9, copiesPerCard 2, sproutsPerTurn 0,
-guaranteeOpeningMeld false, maxTurnsPerPlayer 0, rotEnabled true, knockEnabled true, fruitPerPlayer 1`. Replaying
+maxTurnsPerPlayer 0, rotEnabled true, knockEnabled true, fruitPerPlayer 1, allowStrengthen false,
+unbiasedShuffle false`. Replaying
 the recorded v0.3.1 games with it gives byte-identical states and events (state fields and
-config keys added in v0.4 excluded).
+config keys added in v0.4 or later excluded).
+
+**Rules versions** (`src/engine/versions.ts`): `RULES_VERSIONS` maps a version name to the config
+overrides that reproduce it; `CURRENT_RULES_VERSION` is the page's. `v0.4-defaults-2` =
+`fruitPerPlayer 0, allowStrengthen false, unbiasedShuffle false`. A world-map ticket stores its
+`rulesVersion` and `botVersion`; verification replays it with exactly those.
 
 ---
 
@@ -144,11 +185,15 @@ to a root. Rock is impassable. Gold tiles score 2.
 **Setup (`newGame`):** terrain, cards, seeded shuffle, deal `handSize` to P1 then P2, flip one
 card to start the discard pile, place both roots, P1 to `DRAW`, turn 1.
 
-**Guaranteed opening combo** (`guaranteeOpeningMeld`, off by default): if either hand holds no combo (a run or
-set of 3), the deal is redone from the seed plus an attempt counter (attempt 0 is the plain
-deal). After **200** failed attempts `newGame` throws `DealError` (`NO_OPENING_COMBO`). Every card
-appears exactly once; the same seed always gives the same deal. `state.dealAttempt` records the
-attempt used.
+**A fully random, fair deal (v0.5).** The deck holds exactly `copiesPerCard` cards of every
+(suit, rank), so every rank has the same count. It is shuffled **once** with Fisher-Yates driven
+by the game seed's deck stream, and hands are dealt from the top; draws come off the top in
+order. Nothing is reordered, redealt, balanced or limited: any hand is possible, including
+several top cards or none. Random integers in `[0, n)` use rejection sampling on the PRNG's
+32-bit output (Lemire's multiply-and-reject), so every value is exactly equally likely
+(`unbiasedShuffle`; the old floor-multiply method is kept for earlier rules versions). Cards are
+conserved: every card is always in exactly one place (a hand, the deck, the discard pile, or
+played). There is no reshuffle of the discard pile.
 
 ---
 
@@ -214,6 +259,15 @@ at least one touching the network; every tile gets that rank.
   enemy non-root tile; no rock, off-board, root or own tile.
 - At most `sproutsPerTurn` per turn (`SPROUT_LIMIT`); legal only in `ACT`.
 - Sever, Strangle and scoring apply as usual. Not offered when it has no legal target (edge d).
+- **Strengthen (v0.5, `allowStrengthen`).** `coord` may instead be one of the mover's **own
+  non-root** tiles when the card's rank is **strictly higher** than its strength: the tile stays
+  and its strength becomes the rank. No adjacency is needed. It is a Sprout (it uses the turn's
+  Sprout). Equal or lower: `NOT_STRONGER`; the root: `ROOT_IMMUNE`; switched off: `OWN_TILE`;
+  over `strengthenLimitPerGame` (-1 = no limit; counted per player in `strengthenUsed`):
+  `STRENGTHEN_LIMIT`. Scoring is unchanged, connections are unchanged (no cut can follow), and
+  Fruit ignores strength. Event `Strengthen { player, card, coord, oldStrength, newStrength }`
+  (instead of `Sprout`); resolution `strengthen: { coord, from, to }`. In `legalActions` it is a
+  `Sprout` like any other (one card per suit/rank, board order).
 
 ### 7.5 Replacing ("overgrowth")
 `new.strength > old.strength` replaces the enemy tile. Equal is blocked; roots are immune. A
@@ -228,6 +282,20 @@ first in events. Idempotent.
 A root is strangled when all six neighbours are off-board, rock or enemy tiles **and** at least
 one is an enemy tile. One strangled root: its owner loses at once (`strangle`). Both: draw
 (`double_strangle`, which cannot occur through normal moves).
+
+### 7.8 Fruit (`Fruit { sacrifice, target }`), back in v0.5
+- At most `fruitPerPlayer` uses per player per game (`FRUIT_EXHAUSTED`); legal only in `ACT`.
+- `sacrifice`: exactly `fruitSacrifice` distinct own non-root tiles, connected to each other
+  (`FRUIT_SACRIFICE_COUNT`, `DUPLICATE_HEX`, `FRUIT_SACRIFICE_NOT_OWN`, `FRUIT_SACRIFICE_ROOT`,
+  `FRUIT_SACRIFICE_NOT_CONNECTED`).
+- `target`: an enemy non-root tile adjacent to at least one sacrificed tile
+  (`FRUIT_TARGET_NOT_ENEMY`, `FRUIT_TARGET_ROOT`, `FRUIT_TARGET_NOT_ADJACENT`). Its strength is
+  ignored, so a top-rank tile can be removed.
+- With `fruitOnlyWhenBehind`, only while the mover's score is lower (`FRUIT_NOT_BEHIND`).
+- Resolution: remove the sacrifice and the target; Sever for **both** players (the mover's own
+  network may be cut; that is allowed and public); then Strangle. Atomic. Event `Fruit`, then
+  the `Sever` events; resolution `fruit: { sacrifice, target }`. In `legalActions`, sacrifices are
+  listed in board order, each with every legal target.
 
 ---
 
@@ -249,11 +317,11 @@ type GameResult = { winner: Player | null; reason: EndReason; undercut?: boolean
 ## 9. Types and API
 
 `State` (plain JSON): `seed, config, board, terrain, hands, deck, discard, turnPlayer, actor,
-phase, drawnFromDiscard, fruitUsed, finalTurn, rotPick, turnNumber, result, lastResolution,
-history, sproutsThisTurn, dealAttempt`.
+phase, drawnFromDiscard, fruitUsed, strengthenUsed, finalTurn, rotPick, turnNumber, result,
+lastResolution, history, sproutsThisTurn`.
 
 `View`: the player's own hand, opponent hand count, public discard, deck count, the phase and
-turn fields (including `sproutsThisTurn`), both scores, own deadwood, result, last resolution.
+turn fields (including `sproutsThisTurn`, `fruitUsed`, `strengthenUsed`), both scores, own deadwood, result, last resolution.
 Never the opponent's hand or the deck order.
 
 ```ts
@@ -262,24 +330,25 @@ type Action =
   | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
   | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
+  | { t: 'Fruit'; sacrifice: Coord[]; target: Coord }
   | { t: 'EndAct' }
   | { t: 'Discard'; card: number }
   // parked (appendix A):
-  | { t: 'Fruit'; sacrifice: Coord[]; target: Coord }
   | { t: 'Knock' } | { t: 'Continue' } | { t: 'RotPick'; coord: Coord };
 ```
 
-Events (`state.history`): `Draw, MeldRun, MeldSet, Sprout, Overgrow, Discard, Sever, Strangle,
-GameEnd`, plus the parked `Fruit, Knock, FinalTurnStart, RotCount, Rot, RotPick`. A deck draw
+Events (`state.history`): `Draw, MeldRun, MeldSet, Sprout, Strengthen, Overgrow, Fruit, Discard,
+Sever, Strangle, GameEnd`, plus the parked `Knock, FinalTurnStart, RotCount, Rot, RotPick`. A deck draw
 hides its card in the opponent's `eventsFor`. `ResolutionSummary` lists `placed, overgrown,
-rotted, severed`, and optionally `sprout, fruit, strangled`.
+rotted, severed`, and optionally `sprout, strengthen, fruit, strangled`.
 
 API: `newGame, legalActions(view), legalActionsForState, apply, applyAs, viewFor, score,
-deadwood, bestMeldPartition, replay, eventsFor, dealOpening`.
+deadwood, bestMeldPartition, replay, eventsFor, dealOpening, RULES_VERSIONS`.
 
 Illegal actions throw and leave the input untouched (codes include `WRONG_PHASE, NOT_ACTOR,
 CARD_NOT_IN_HAND, NOT_ADJACENT, OWN_TILE, ROCK, OFF_BOARD, ROOT_IMMUNE, NOT_STRONGER,
-SPROUT_LIMIT, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER, KNOCK_DISABLED, ...`).
+SPROUT_LIMIT, STRENGTHEN_LIMIT, FRUIT_NOT_BEHIND, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER,
+KNOCK_DISABLED, ...`).
 
 ---
 
@@ -288,11 +357,16 @@ SPROUT_LIMIT, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER, KNOCK_DISABLED, ...`).
 - Every rule has unit tests, written first. Parked-rule tests run with the rules switched on.
 - **Property games** check after every action: no tile on rock or off-board; every non-root tile
   connected (except mid-Rot); roots intact; strengths 1..`maxRank`; every card exactly once (in a
-  hand, the deck, the discard pile, or played); `apply` never mutates; a finished game accepts
+  hand, the deck, the discard pile, or played), so every rank keeps its count; `apply` never mutates; a finished game accepts
   nothing; every listed legal action is accepted; at most 60 player-turns for GreedyBot games and
   150 for RandomBot games.
 - **Determinism:** seed + action log replayed twice gives byte-identical state and events.
-- **Golden games:** final-state hashes of 5 full games on the default config.
+- **Golden games:** final-state hashes of 5 full games on the default config, and the v0.4 golden
+  games replayed byte-for-byte on `RULES_VERSIONS['v0.4-defaults-2']` with the frozen `bots-v0.5`.
+- **Fairness (v0.5):** the same seed gives the same deal in two separate runs; 100,000+ shuffles of
+  a small deck put each card in each position equally often (within a stated tolerance);
+  `randomInt` is exactly uniform (checked exhaustively on a small generator); conservation of
+  every rank through whole games.
 - **legacyV03** replays the recorded v0.3.1 games byte-for-byte.
 
 ---
@@ -306,6 +380,10 @@ SPROUT_LIMIT, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER, KNOCK_DISABLED, ...`).
   `npm run play` (terminal), `npm run replay -- <seed> <log.json>`.
 
 ### 11.1 How the defaults were chosen (v0.4 Part 4)
+
+> History. The "guarantee" column below is the old opening-combo redeal, switched off in
+> v0.4-defaults-2 and **removed in v0.5**. The table is kept only as the record of how
+> `maxRank`, Sprout and `copiesPerCard` were chosen.
 
 `npm run grid` played **1,000 GreedyBot-vs-GreedyBot games per setting** for every mix of
 `maxRank` {9, 8, 7, 6} x Sprout {off, on} x guaranteed opening combo {off, on} x
@@ -363,6 +441,52 @@ not shuffled, so the default is now a plain random deal: shuffle once, deal, dra
 from 50.7% to 54.5% (just over the 54% target), games run 9.0 turns per player, and Strangle
 ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1.
 
+### 11.3 Fruit, Strengthen and fairness defaults (v0.5)
+
+`src/sim/v05.ts` (run with `src/sim/v05-stage.sh`) plays level-7 vs level-7 games (the full
+evaluation for Strengthen and Fruit, `docs/BOT-TACTICS.md`) with swapped starts on matched seeds,
+and records every metric below. The baseline and Stage A first ran 2,000 games per setting; on the
+owner's request the later settings ran **800** (a win rate is then accurate to about ±3.5%).
+
+Metrics, per setting: share of games with a Fruit, its mean turn, the Fruit user's win rate; the
+comeback rate (behind at the midpoint, winning at the end) and the leader's win rate; games
+decided by Fruit (the winner's Fruit swing was at least the final margin); Strengthen use and
+whether the side that strengthened more won; overgrow + cut actions per game; games with no
+overgrow, cut or Fruit in the last 8 player-turns; games ending with a player holding >30% of
+their tiles at top rank; games where a top-rank tile blocked something and one was later
+removed; turns 1-5 with no legal combo or Sprout and no tile placed; game length; first-player
+wins; Strangle; "reflexive" Fruit (in a player's first 3 turns) and "forgotten" Fruit (available
+but never used).
+
+| Setting | Games | Fruit games | Fruit mean turn | Fruit user wins | Comeback | Leader wins | Decided by Fruit | Strengthen games | Strengthen/game | More-strengthen side wins | Overgrow+cut/game | Quiet last 8 | >30% top-rank | Blocker removed | Stuck early | Turns/player | P1 wins | Strangle | Reflexive | Forgotten |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline (no Fruit, no Strengthen) | 2000 | 0% | - | - | 34.5% | 65.5% | 0% | 0% | 0 | - | 19.2 | 0.0% | 21.9% | 51.2% | 0% | 9.09 | 54.4% | 8.1% | - | - |
+| A1 Fruit 1, give up 3 | 2000 | 62.0% | 13.6 | 47.1% | 34.6% | 65.4% | 5.2% | 0% | 0 | - | 18.4 | 0.1% | 11.7% | 68.5% | 0% | 9.07 | 55.4% | 7.1% | 2.0% | 65.1% |
+| A2 Fruit 2, give up 3 | 2000 | 62.0% | 13.7 | 47.4% | 34.5% | 65.5% | 5.2% | 0% | 0 | - | 18.3 | 0.1% | 11.1% | 68.8% | 0% | 9.07 | 55.6% | 7.1% | 2.0% | 65.7% |
+| A3 Fruit 1, give up 2 | 2000 | 87.5% | 12.8 | 44.8% | 35.6% | 64.4% | 7.0% | 0% | 0 | - | 18.4 | 0.1% | 11.6% | 73.9% | 0% | 9.06 | 54.7% | 6.4% | 4.6% | 42.4% |
+| A4 Fruit 1, give up 4 | 800 | 41.3% | 14.4 | 54.5% | 31.3% | 68.7% | 3.8% | 0% | 0 | - | 18.8 | 0.0% | 15.5% | 64.8% | 0% | 9.04 | 56.3% | 7.8% | 0.9% | 77.7% |
+| A5 Fruit 1, only when behind | 800 | 36.0% | 13.8 | 20.5% | 35.4% | 64.6% | 4.0% | 0% | 0 | - | 18.8 | 0.0% | 17.3% | 61.3% | 0% | 9.02 | 55.8% | 7.8% | 1.7% | 77.6% |
+| B1 + Strengthen, limit 2 | 800 | 71.0% | 13.6 | 48.5% | 34.4% | 65.6% | 3.0% | 88.8% | 1.95 | 53.9% | 16.5 | 0.0% | 20.3% | 74.4% | 0% | 9.14 | 56.8% | 3.8% | 2.3% | 57.9% |
+| B2 + Strengthen, limit 4 | 800 | 71.5% | 13.6 | 46.9% | 34.0% | 66.0% | 3.8% | 88.8% | 2.12 | 53.7% | 16.4 | 0.0% | 21.3% | 74.2% | 0% | 9.14 | 55.8% | 3.5% | 2.3% | 58.1% |
+| B3 + Strengthen, no limit | 800 | 71.5% | 13.6 | 46.9% | 34.0% | 66.0% | 3.8% | 88.8% | 2.12 | 53.7% | 16.4 | 0.0% | 21.3% | 74.2% | 0% | 9.14 | 55.8% | 3.5% | 2.3% | 58.1% |
+
+**Stage A choice: one Fruit per player, giving up 3, at any time.** It is the only setting that
+meets every Fruit target (used in 40-80% of games, after turn 5 on average, the user winning
+45-65%). A second Fruit is almost never used (A2 = A1). Giving up 2 makes it too easy (87.5% of
+games, the user winning under 45%); giving up 4 or "only when behind" make it rare, and "only
+when behind" turns it into a losing player's last try (the user wins 20.5%).
+
+**Stage B choice: Strengthen on, limit 2 per game.** Limits 2, 4 and none play almost the same
+(the bots rarely strengthen more than twice); 2 is slightly the best on top-rank turtling. It
+fails two targets, reported honestly: Strengthen is used in 89% of games (target 30-70%), and
+the share of games ending with a player holding over 30% of their tiles at top rank rises back
+to about 20% (target 10% or less; without Strengthen, Fruit alone brought it to 11.7%). A fix
+is proposed to the owner (not added): Strengthen may not raise a tile to the top rank.
+
+Fairness (Part 1): 200,000 opening hands per deck: 3+ top cards in **5.20%** of hands with 56
+cards (exact 5.25%) and **2.64%** with 72 cards (exact 2.62%); none at all in 31.90% / 42.46%
+(exact 31.75% / 42.17%). `npx tsx src/sim/deal-stats.ts`.
+
 ### 11.2 Bot levels (page only)
 
 `src/bots/levels.ts` gives the page three levels; all read only their own `View` and are
@@ -403,6 +527,5 @@ On Continue, `rotCount(dw) = 0` if `dw <= rotThreshold`, else `1 + floor((dw - r
 rotStep)`, measured on the kept hand. That many of the player's weakest border tiles rot; ties at
 the boundary are picked by the opponent in `ROT_PICK`. Then Sever and Strangle.
 
-### A.5 Fruit (`fruitPerPlayer > 0`)
-Once per allowed use: sacrifice 3 connected own non-root tiles to remove one adjacent enemy
-non-root tile of any strength; then Sever and Strangle.
+### A.5 Fruit
+No longer parked: back in v0.5 and on by default (section 7.8).

@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { guideTarget } from '../src/logic/guide.js';
+import type { GuideTarget } from '../src/logic/guide.js';
 import { EMPTY_SEL, isBoardAction, kindOf, pendingAction, tapCard, tapHex, tapKind } from '../src/logic/interaction.js';
 import type { Sel } from '../src/logic/interaction.js';
+import { FRUIT_START, fruitAction, tapFruit } from '../src/logic/fruitflow.js';
+import type { FruitFlow } from '../src/logic/fruitflow.js';
 import { playGame } from './ui-helpers.js';
 
 /** Follows the arrows like a player would; returns the pending move after at most 12 taps. */
@@ -11,12 +14,15 @@ const follow = (s: State, goal: Action): { sel: Sel; taps: number; done: boolean
   const v = viewFor(s, 0);
   const legal = legalActions(v);
   let sel: Sel = EMPTY_SEL;
+  let flow: FruitFlow | null = null;
   let applied = 0;
   for (let taps = 0; taps < 12 && applied < 3; taps++) {
-    const t = guideTarget(v, legal, sel, goal)!;
-    if (t.kind === 'confirm') return { sel, taps, done: JSON.stringify(pendingAction(v, legal, sel)) === JSON.stringify(goal) };
+    const t: GuideTarget = guideTarget(v, legal, sel, goal, flow)!;
+    if (t.kind === 'confirm') return { sel, taps, done: JSON.stringify(flow ? fruitAction(legal, flow) : pendingAction(v, legal, sel)) === JSON.stringify(goal) };
     if (t.kind === 'card') sel = tapCard(v, legal, sel, t.id);
+    else if (t.kind === 'hex' && flow) flow = tapFruit(v, legal, flow, t.key).flow;
     else if (t.kind === 'hex') sel = tapHex(v, legal, sel, t.key);
+    else if (t.kind === 'kind' && t.move === 'fruit') flow = FRUIT_START;
     else if (t.kind === 'other') {
       sel = { ...sel, option: t.option }; // applied by the page itself, not a tap
       taps--;
@@ -48,7 +54,8 @@ describe('coach arrows (show where to tap)', () => {
         const r = follow(s, goal);
         expect(r.done, JSON.stringify(goal)).toBe(true);
         // Sprout: card, then hex. Line or clump: its button, a card, then a hex. Throw: the card.
-        expect(r.taps).toBeLessThanOrEqual(!isBoardAction(goal) ? 1 : kindOf(goal) === 'sprout' ? 2 : 3);
+        // Fruit: its button, the 3 tiles to give up, then the target.
+        expect(r.taps).toBeLessThanOrEqual(!isBoardAction(goal) ? 1 : kindOf(goal) === 'sprout' ? 2 : goal.t === 'Fruit' ? 1 + goal.sacrifice.length + 1 : 3);
         checked++;
       }
     }

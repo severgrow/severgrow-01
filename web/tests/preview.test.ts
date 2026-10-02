@@ -28,6 +28,13 @@ describe('move preview', () => {
       const frozen = JSON.stringify(v);
       for (const a of legalActions(v).filter(boardMove)) {
         const p = previewMove(v, a)!;
+        if (a.t === 'Sprout' && v.board[coordKey(a.coord)]?.owner === v.player) {
+          // v0.5 Strengthen: no new tile; the ghost shows the new number on my own tile
+          expect(p.placed).toBe(0);
+          expect(p.ghosts).toEqual([{ key: coordKey(a.coord), strength: v.hand.find((c) => c.id === a.card)!.rank, replaces: false }]);
+          expect(p.chip).toBe(`Strengthen ${v.board[coordKey(a.coord)]!.strength} → ${p.ghosts[0]!.strength}`);
+          continue;
+        }
         expect(p.ghosts.map((g) => g.key).sort()).toEqual(moveHexes(a).map(coordKey).sort());
         const sim = simulate(v, a)!;
         expect(p.placed).toBe(sim.placed);

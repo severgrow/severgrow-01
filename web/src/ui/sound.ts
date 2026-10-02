@@ -86,6 +86,11 @@ export class Sound {
     pitches.forEach((m, i) => this.tone(this.base * m, 0.16, { gain: 0.09, delay: (i * stepMs) / 1000 }));
   }
   /** Bright chime for a gold hex. */
+  /** The turn banner's two soft tones (multiples of the base pitch). */
+  turn(notes: readonly number[], gain: number, ms: number) {
+    notes.forEach((m, i) => this.tone(this.base * m, ms / 1000, { wave: 'sine', gain, delay: (i * ms) / 2000, attack: 0.03 }));
+  }
+
   chime(delay = 0) {
     this.tone(this.base * 4, 0.5, { wave: 'sine', gain: 0.09, delay });
     this.tone(this.base * 6, 0.4, { wave: 'sine', gain: 0.05, delay: delay + 0.03 });

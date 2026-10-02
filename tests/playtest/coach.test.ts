@@ -48,7 +48,8 @@ describe('coach: suggestions', () => {
         const adv = coachAdvice(input(v))!;
         expect(adv).not.toBeNull();
         expect(legalActions(v).map(key)).toContain(key(adv.action));
-        if (core) expect(['Knock', 'Continue', 'Fruit', 'RotPick']).not.toContain(adv.action.t);
+        // v0.5: Fruit is part of the one game; the parked rules (Knock, Rot) never show up
+        if (core) expect(['Knock', 'Continue', 'RotPick']).not.toContain(adv.action.t);
       }
     }
   }, 300_000);
@@ -158,8 +159,15 @@ describe('coach: tactic tips and words', () => {
     }
   });
 
-  it('with the parked rules off it never mentions Rot, Knock, Fruit or leftover points', () => {
-    const bad = /\brot\b|rotted|knock|fruit|deadwood|leftover/i;
+  it('with the parked rules off it never mentions Rot, Knock or leftover points; with Fruit off, never Fruit', () => {
+    const bad = /\brot\b|rotted|knock|deadwood|leftover/i;
+    for (const s of humanStates({ fruitPerPlayer: 0 }, 100)) {
+      const v = viewFor(s, 0);
+      for (let choice = 0; choice < 3; choice++) {
+        const adv = coachAdvice(input(v, { taught: TIP_ORDER.slice(0, s.turnNumber % TIP_ORDER.length) }), choice)!;
+        for (const t of texts(adv)) expect(t).not.toMatch(/fruit/i);
+      }
+    }
     for (const s of humanStates({}, 300)) {
       const v = viewFor(s, 0);
       for (let choice = 0; choice < 3; choice++) {

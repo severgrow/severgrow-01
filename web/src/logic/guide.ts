@@ -5,6 +5,8 @@ import { moveCards, moveHexes } from '../../../src/playtest/names.js';
 import { coordKey } from '../../../src/engine/index.js';
 import { isBoardAction, kindOf, options, pendingAction, selFor } from './interaction.js';
 import type { Sel } from './interaction.js';
+import { fruitAction } from './fruitflow.js';
+import type { FruitFlow } from './fruitflow.js';
 
 export type GuideTarget =
   | { kind: 'card'; id: number }
@@ -20,9 +22,22 @@ export type GuideTarget =
 
 const same = (a: Action | null, b: Action) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
-/** The next tap towards `goal`, or null if `goal` is not a legal move right now. */
-export const guideTarget = (v: View, legal: readonly Action[], sel: Sel, goal: Action): GuideTarget | null => {
+/**
+ * The next tap towards `goal`, or null if `goal` is not a legal move right now. A Fruit is
+ * guided through its own flow (`flow`): the Fruit button, each tile to give up, the target,
+ * then Confirm.
+ */
+export const guideTarget = (v: View, legal: readonly Action[], sel: Sel, goal: Action, flow: FruitFlow | null = null): GuideTarget | null => {
   if (!legal.some((a) => same(a, goal))) return null;
+  if (goal.t === 'Fruit') {
+    if (!flow) return { kind: 'kind', move: 'fruit' };
+    const want = goal.sacrifice.map(coordKey);
+    if (flow.picks.some((k) => !want.includes(k))) return { kind: 'cancel' };
+    if (flow.step === 1) return { kind: 'hex', key: want.find((k) => !flow.picks.includes(k))! };
+    if (flow.step === 2) return { kind: 'hex', key: coordKey(goal.target) };
+    return same(fruitAction(legal, flow), goal) ? { kind: 'confirm' } : { kind: 'cancel' };
+  }
+  if (flow) return { kind: 'cancel' };
   if (goal.t === 'Draw') return { kind: goal.from };
   if (goal.t === 'EndAct') return { kind: 'end' };
   const pending = pendingAction(v, legal, sel);

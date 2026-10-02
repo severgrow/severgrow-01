@@ -25,3 +25,4 @@ export * from './view.js';
 export * from './legalActions.js';
 export * from './events.js';
 export * from './replay.js';
+export * from './versions.js';

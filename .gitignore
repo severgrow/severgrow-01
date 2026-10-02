@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 dist/
 coverage/
 sim-results.json
@@ -6,3 +6,8 @@ web/dist/
 property-failure.json
 sweep-results.json
 grid-out/
+sim-v05/
+ladder-v05/
+ladder-v05.log
+ladder-v05b/
+ladder-v05b.log

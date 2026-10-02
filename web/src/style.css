@@ -2629,3 +2629,300 @@ svg.usable .hex-cell {
   opacity: 0;
   transition: opacity 0.35s;
 }
+
+/* =================================================================
+   v0.5: three kinds of Sprout target, Strengthen, and the Fruit flow.
+   Kinds differ by shape and symbol, not colour alone: grow = a plain ring,
+   replace = a dashed ring with ⇆, strengthen = a double ring with +.
+   ================================================================= */
+.target.kind-replace {
+  stroke-dasharray: 6 3;
+}
+.target.kind-strengthen {
+  stroke-width: 3.4;
+  paint-order: stroke;
+}
+.mark-badge circle {
+  fill: var(--c-surface);
+  stroke: var(--c-you);
+  stroke-width: 1.4;
+}
+.mark-badge text {
+  fill: var(--c-text);
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-family: var(--font);
+  pointer-events: none;
+}
+.mark-badge.strengthen circle {
+  fill: var(--c-you);
+}
+.mark-badge.strengthen text {
+  fill: var(--c-bg);
+  font-size: 11px;
+}
+.mark-badge.replace circle {
+  stroke-dasharray: 2 1.5;
+}
+.mark-badge.fruit circle,
+.mark-badge.fruit-x circle {
+  fill: var(--c-accent);
+  stroke: var(--c-bg);
+}
+.mark-badge.fruit text,
+.mark-badge.fruit-x text {
+  fill: var(--c-accentInk, var(--c-bg));
+}
+.mark-badge {
+  pointer-events: none;
+}
+/* Fruit: tiles that can be given up glow; picked ones wear a number; the target a cross. */
+.target.fruit-valid {
+  stroke: var(--c-accent);
+}
+.fruit-picked {
+  fill: color-mix(in srgb, var(--c-bg) 45%, transparent);
+  stroke: var(--c-accent);
+  stroke-width: 2.6;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.fruit-target {
+  fill: none;
+  stroke: var(--c-danger);
+  stroke-width: 3;
+  pointer-events: none;
+}
+/* The Fruit button and the flow's progress line */
+.btn.fruit {
+  border-color: var(--c-accent);
+}
+.btn.fruit.off {
+  opacity: 0.55;
+  cursor: default;
+}
+.fruit-why {
+  font-size: 0.8rem;
+  color: var(--c-muted);
+  align-self: center;
+  max-width: 11em;
+  line-height: 1.2;
+}
+.fruit-steps {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: fs;
+  font-size: 0.82rem;
+  color: var(--c-muted);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fruit-steps li {
+  counter-increment: fs;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  white-space: nowrap;
+}
+.fruit-steps li::before {
+  content: counter(fs) ' ';
+  font-weight: 700;
+}
+.fruit-steps li.now {
+  color: var(--c-text);
+  border-color: var(--c-accent);
+}
+.fruit-steps li.done {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+.fruit-count {
+  font-weight: var(--w-num);
+  font-size: 1rem;
+  padding: 2px 8px;
+  align-self: center;
+}
+.warn.note {
+  color: var(--c-muted);
+}
+/* first-time tip card */
+.first-tip {
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  border: 1.5px solid var(--c-accent);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.first-tip p {
+  margin: 4px 0 6px;
+}
+/* Strengthen: a thin ring expanding; Fruit: spores streaming to the target */
+.fx-ring {
+  fill: none;
+  stroke: var(--c-you);
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.fx-ring.big {
+  stroke: var(--c-gold, var(--c-accent));
+  stroke-width: 2.4;
+}
+.fx-spore {
+  fill: var(--m-mossTuft, var(--c-you));
+}
+
+/* =================================================================
+   Material pass 2: the world-space material, the top-rank finish, the number plate.
+   ================================================================= */
+.world-fill,
+.world-prev {
+  stroke: none;
+}
+/* the grid stays readable: a thin line along every tile's edge */
+.tile-edge {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.32);
+  stroke-width: 0.7;
+}
+/* the top rank: a double rim (reads without colour), a soft outer glow, a slow shimmer */
+.top-rim {
+  fill: none;
+  stroke-linejoin: round;
+}
+.top-rim.outer {
+  stroke-width: 1.7;
+}
+.top-rim.inner {
+  stroke-width: 0.8;
+}
+.top-rim.moss {
+  stroke: #e9fff2;
+}
+.top-rim.lava {
+  stroke: #ffb3a0;
+}
+.top-glow {
+  pointer-events: none;
+}
+.top-shimmer {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-dasharray: 0.12 0.88;
+  animation: top-shimmer 5.5s linear infinite;
+}
+.top-shimmer.moss {
+  stroke: #ffffff;
+}
+.top-shimmer.lava {
+  stroke: #ffd6c8;
+}
+@keyframes top-shimmer {
+  0% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
+  }
+  10% {
+    stroke-opacity: 0.85;
+  }
+  45% {
+    stroke-opacity: 0.85;
+  }
+  55%,
+  100% {
+    stroke-dashoffset: -1;
+    stroke-opacity: 0;
+  }
+}
+.reduce-motion .top-shimmer {
+  display: none;
+}
+.tile-num.world {
+  paint-order: normal;
+  stroke: none;
+}
+.num-plate {
+  pointer-events: none;
+}
+
+/* ---- Material pass 2: the turn pill, its sweep, the faint edge wash ---- */
+.turn-pill {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-size: 1.3rem;
+  font-weight: var(--w-num);
+  white-space: nowrap;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--c-bg) 88%, transparent);
+  border: 2px solid currentColor;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+.turn-pill.you { color: var(--c-you); }
+.turn-pill.bot { color: var(--c-bot); }
+.turn-pill .tp-mark {
+  width: 12px;
+  height: 12px;
+  border: 2.5px solid currentColor;
+  border-radius: 50%;
+}
+.turn-pill.bot .tp-mark {
+  border: 0;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg) scale(0.9);
+}
+/* one thin highlight passing once along the pill while it holds */
+.turn-pill.sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, currentColor 35%, white) 50%, transparent 65%);
+  opacity: 0.35;
+  transform: translateX(-120%);
+  animation: tp-sweep 650ms ease-out forwards;
+}
+@keyframes tp-sweep { to { transform: translateX(120%); } }
+.turn-pill .tp-dots i {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: tp-dot 1.2s infinite ease-in-out both;
+}
+.turn-pill .tp-dots i:nth-child(2) { animation-delay: 0.15s; }
+.turn-pill .tp-dots i:nth-child(3) { animation-delay: 0.3s; }
+.turn-pill.fade-only .tp-dots i { animation: none; opacity: 0.7; }
+@keyframes tp-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.edge-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: 18px;
+}
+.edge-wash.you { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-you) 30%, transparent); }
+.edge-wash.bot { box-shadow: inset 0 0 26px color-mix(in srgb, var(--c-bot) 30%, transparent); }
+/* the header capsule cross-fades between "Your turn" and "Bot's turn" */
+.turn { transition: border-color 300ms ease, background-color 300ms ease; }
+.turn b, .turn small { transition: color 300ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .turn-pill.sweep::after, .turn-pill .tp-dots i { animation: none; }
+}

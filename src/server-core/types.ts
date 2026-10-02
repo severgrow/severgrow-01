@@ -6,6 +6,8 @@ export type Ticket = {
   seed: number;
   level: Level;
   rulesVersion: string;
+  /** v0.5: the bot version the game is played against (tickets from before default to bots-v0.5). */
+  botVersion?: string;
   issuedAt: number;
   expiresAt: number;
   used: boolean;

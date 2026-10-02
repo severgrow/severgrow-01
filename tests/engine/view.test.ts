@@ -28,6 +28,7 @@ describe('viewFor (spec 4 hidden information)', () => {
         'rotPick',
         'turnNumber',
         'sproutsThisTurn',
+        'strengthenUsed',
         'score',
         'opponentScore',
         'myDeadwood',

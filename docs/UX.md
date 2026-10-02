@@ -99,6 +99,53 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
 - **Material lab:** open the page with `?lab=1` (add `&detail=low` for Low) to see every
   material in every palette.
 
+## Strength in the material (material pass 2)
+
+A tile's strength shows in the material itself, not only in its number.
+- **Vigour** `t = (strength - 1) / (maxRank - 1)`: 0 for a 1, 1 for the top rank (the same
+  for 7- and 9-rank decks). Every look setting follows `t` smoothly (`web/src/logic/vigour.ts`).
+- **Moss:** a 1 is patchy, mostly bare soil with short pale blades; as `t` rises the blades get
+  taller and denser, the soil closes up, small red, yellow and white flowers appear, and
+  from about `t = 0.6` roots show between the clumps; the green deepens.
+- **Lava:** a 1 is dark cooled crust with about 3% molten showing; a top-rank tile is about 95%
+  molten. Plates shrink, cracks widen, the glow grows. Red-orange only, never yellow or
+  amber (amber means gold hexes). A test checks every colour.
+- **Top rank:** from `t = 0.85` a double rim (outer contour + inner line) and a soft glow, so
+  it reads without colour; a slow shimmer runs along the rim (off with Reduce motion).
+- **Seamless neighbours:** the texture is painted in board (world) coordinates, so grass,
+  soil, cracks and plates run on from tile to tile. Between two tiles of the same owner,
+  `t` blends over about a third of a tile across the shared border, so a 1 beside a 9 has
+  no seam. Moss and lava never blend into each other. Hex edges stay drawn.
+- **Numbers:** a soft round plate behind the digit (light under moss, dark under lava) keeps
+  every number at WCAG AA contrast over the worst texture pixel, in every palette.
+- **Legend** (How to play): "A bushier tile or hotter lava means a stronger tile."
+- **How it is drawn:** one offscreen canvas holds the whole board's material
+  (`web/src/logic/worldpaint.ts`, pure and deterministic: the same board always gives the
+  same pixels). Every moss and lava tile is filled with it through an SVG pattern. After a
+  move only the changed tiles are repainted, plus the area they can reach in their
+  neighbours, in thin slices of rows so a frame is never held up; the new picture
+  cross-fades in on the changed tiles. A test proves no pixel outside that area changes.
+- **Low:** Settings → Material detail → Low paints fewer blades and no flowers or roots. A
+  device that needs more than 2.5 s of work for a full paint switches to Low by itself.
+  Without a canvas, tiles keep their plain fill.
+- **Lab:** `?lab=1` shows the 1-9 ramp for moss and lava, and a board of mixed strengths
+  where moss meets lava, in every palette (`&detail=low` for Low).
+
+## The turn pill
+
+At the start of each turn a pill says **Your turn** (circle) or **Bot's turn** (diamond):
+250 ms in (fade and a 6 px slide), 700 ms hold with one thin highlight sweeping across it,
+250 ms out. The header capsule cross-fades to the new side, a faint wash of that side's
+colour shows along the board's edge, and two soft tones play (a gentle rise for you, a
+lower settle for the bot; only with Sound on). During the bot's turn quiet dots show
+until its first move appears, and only while it is really still choosing.
+- Follows Animation speed; **Skip** hides it at once; **Reduce motion** gives a plain quick
+  fade (no slide, sweep or wash); **Effects: Low** gives a plain pill (no sweep or wash).
+- A new turn always replaces the old pill; nothing stacks.
+- No countdowns, no flashing, no urgency: it only says whose turn it is.
+- Logic: `web/src/logic/turnbanner.ts` (a pure state machine, tested without timers);
+  drawing: `web/src/ui/turnpill.ts`.
+
 ## Gold hexes and board marks
 
 - **Gold hex:** warm amber with a fine diagonal weave, a soft shimmer, and a small
@@ -150,6 +197,59 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
   thrown card shows its number and suit. In the Draw step both glow softly and say
   "Tap to draw" / "Tap to take"; in the Grow and Throw steps they are dimmed and
   cannot be tapped. (There are no separate "Draw a card" buttons any more.)
+
+## Strengthen and Fruit (v0.5)
+
+**Three kinds of Sprout target.** When a card is picked, every hex it can go on glows, and each
+says what it does by its shape and a symbol, not by colour alone:
+
+| Target | Looks like | Means |
+| --- | --- | --- |
+| Grow on an empty hex | a plain ring | a new tile with the card's number |
+| Replace an enemy tile | a dashed ring with a small ⇆ badge | the bot's weaker tile becomes mine |
+| Strengthen my tile | a thick ring with a small + badge | my own weaker tile takes the card's number |
+
+The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, replace a bot
+tile (⇆), strengthen your tile (+)"). Growing and replacing still play at once (Undo takes them
+back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
+but harder for the bot to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
+
+**The Fruit button** sits in the move row only when Fruit is on: "Fruit · 1 left", or "Fruit ·
+Used". When it cannot be used it is dimmed with a one-line reason: "Needs 3 connected tiles",
+"No enemy tile next to them" (or "Only while you are behind" with that option).
+
+**The guided flow** (a progress line "1 Pick 3 · 2 Pick target · 3 Confirm", with Undo and Cancel
+at every step):
+1. *Pick 3 of your tiles to give up.* Only tiles that can still lead to a Fruit glow; picked ones
+   carry 1, 2, 3; a counter shows 0/3. Wrong taps are gently refused with a short caption ("Your
+   root can't be given up", "Pick 3 of your own tiles", "Pick tiles that touch each other").
+2. *Pick a tile to remove.* The bot tiles next to the three glow, 9s included; the first time,
+   "Fruit ignores strength: even a 9 can go."
+3. *Preview and confirm.* A plain-words chip: "You lose 3. They lose 1, plus 4 cut off. Net: -3
+   for you, -5 for them." Warnings when it would cut off my own tiles ("Careful: this cuts off 2
+   of your tiles") or leave my root easy to surround. The tiles that would be cut are marked.
+
+A Fruit can be undone like any other growing move this turn (it reveals no hidden card).
+
+**Animations** (through the animation queue and the effects tiers, from engine events; the board
+is always right even when skipped):
+- *Strengthen:* a quick level-up pulse, a thin ring expanding outward, the number ticking up, a
+  small solid thud; to the top rank, a bigger gold ring and a few sparks (Medium tier).
+- *Fruit:* the three tiles burst into spore puffs, the spores stream to the target, the target
+  shatters, then any cut uses the normal cut effect. A Big moment: hit-stop, thud, a "Fruited!"
+  banner, light vibration.
+- Reduce motion, Sound, Vibration and Effects intensity apply as everywhere else.
+
+**First-time tips.** The first time Fruit can be used, and the first time a Strengthen target
+shows, a small card explains it (dismiss with "Got it"; remembered in this browser). Both can be
+opened again from "How to play", which also explains each with an example. The 3-line summary at
+the top is unchanged.
+
+**The coach** mentions Fruit or Strengthen only when one of them is among its best few moves
+right now, and its "Show me" arrow walks through the Fruit flow (button, the 3 tiles, the
+target, Confirm).
+
+Screenshots (390 px wide): `docs/screens/fruit-strengthen/`.
 
 ## Playing against the bot
 

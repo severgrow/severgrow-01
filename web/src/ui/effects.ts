@@ -159,5 +159,32 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.4)`, opacity: 0 }], { duration: 400 * f, easing: 'ease-in', fill: 'forwards' }), d, 0);
   }
 
-  return { flash, sparks, spark, drift, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  /** Strengthen: a thin ring expanding outward from a tile (bigger shine for a top rank). */
+  const ring = (key: string, f: number, big: boolean) => {
+    const { x, y } = centerOf(key);
+    const c = el('circle', { cx: x, cy: y, r: S * 0.55, class: `fx-ring${big ? ' big' : ''}` }, board.fx);
+    const a = anim(c, [{ transform: 'scale(0.6)', opacity: 0.95 }, { transform: `scale(${big ? 2.1 : 1.6})`, opacity: 0 }], { duration: 620 * f, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' } as KeyframeAnimationOptions);
+    removeAfter(a, c, 700 * f);
+  };
+  /** Fruit: spore puffs stream from each given-up tile to the target. */
+  const stream = (from: readonly string[], to: string, f: number, n: number) => {
+    const t = centerOf(to);
+    const k = particles.take(n);
+    for (let i = 0; i < k; i++) {
+      const s = centerOf(from[i % from.length]!);
+      const c = el('circle', { cx: s.x, cy: s.y, r: 2.2, class: 'fx-spore' }, board.fx);
+      const bend = ((i % 3) - 1) * S * 0.5;
+      const a = anim(
+        c,
+        [
+          { transform: 'translate(0,0) scale(1)', opacity: 0 },
+          { transform: `translate(${(t.x - s.x) / 2 + bend}px,${(t.y - s.y) / 2 - S * 0.4}px) scale(1.4)`, opacity: 0.95, offset: 0.45 },
+          { transform: `translate(${t.x - s.x}px,${t.y - s.y}px) scale(0.6)`, opacity: 0 },
+        ],
+        { duration: (560 + (i % 4) * 60) * f, delay: i * 18 * f, easing: 'ease-in-out', fill: 'forwards' },
+      );
+      particle(c, a, 900 * f);
+    }
+  };
+  return { flash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
 };

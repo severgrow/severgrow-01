@@ -21,7 +21,8 @@ export const moveTier = (steps: readonly Step[], isGold: (key: string) => boolea
       else if (n >= 3 || s.tiles.some((t) => t.replaced || isGold(t.key))) up('medium');
       else up('small');
     } else if (s.k === 'sever') up(s.keys.length >= 4 ? 'big' : 'medium');
-    else if (s.k === 'strangle') up('big');
+    else if (s.k === 'strangle' || s.k === 'fruit') up('big');
+    else if (s.k === 'strengthen') up(s.to >= 9 ? 'medium' : 'small');
   }
   return tier;
 };
@@ -29,6 +30,7 @@ export const moveTier = (steps: readonly Step[], isGold: (key: string) => boolea
 /** A short banner for big moments only, or null. */
 export const tierBanner = (steps: readonly Step[]): string | null => {
   if (steps.some((s) => s.k === 'strangle')) return 'Strangled!';
+  if (steps.some((s) => s.k === 'fruit')) return 'Fruited!';
   const cut = Math.max(0, ...steps.map((s) => (s.k === 'sever' ? s.keys.length : 0)));
   if (cut >= 4) return `Cut off ${cut}!`;
   if (steps.some((s) => s.k === 'grow' && s.tiles.length >= 5)) return 'Big grow!';

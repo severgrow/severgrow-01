@@ -4,6 +4,7 @@ import type { IllegalActionCode } from './errors.js';
 import type { BoardCtx } from './overgrow.js';
 import { assertCoord } from './placement.js';
 import { removeTiles } from './rot.js';
+import { score } from './scoring.js';
 import type { Coord, Player, Tile } from './types.js';
 
 export type FruitPlan = { sacrifice: Coord[]; target: Coord };
@@ -22,9 +23,9 @@ const fail = (code: IllegalActionCode, msg: string): never => {
 };
 
 /**
- * Validates a Fruit (spec 10): uses left; exactly 3 distinct, connected, own non-root
- * tiles; target an enemy non-root tile adjacent to a sacrificed tile. Target strength
- * is ignored. Returns normalised coords; changes nothing.
+ * Validates a Fruit (spec 7.8): uses left; (with fruitOnlyWhenBehind) behind on score;
+ * exactly fruitSacrifice distinct, connected, own non-root tiles; target an enemy non-root
+ * tile adjacent to a sacrificed tile. Target strength is ignored. Changes nothing.
  */
 export const planFruit = (
   ctx: BoardCtx,
@@ -35,10 +36,14 @@ export const planFruit = (
 ): FruitPlan => {
   if (used >= ctx.config.fruitPerPlayer) fail('FRUIT_EXHAUSTED', 'no Fruit uses left');
   if (!Array.isArray(sacrifice)) fail('MALFORMED_ACTION', 'sacrifice must be an array');
-  if (sacrifice.length !== 3) fail('FRUIT_SACRIFICE_COUNT', 'Fruit sacrifices exactly 3 tiles');
+  const need = ctx.config.fruitSacrifice ?? 3;
+  if (ctx.config.fruitOnlyWhenBehind && score(ctx, player) >= score(ctx, player === 0 ? 1 : 0)) {
+    fail('FRUIT_NOT_BEHIND', 'Fruit is only allowed while behind');
+  }
+  if (sacrifice.length !== need) fail('FRUIT_SACRIFICE_COUNT', `Fruit sacrifices exactly ${need} tiles`);
   const sac = sacrifice.map(assertCoord);
   const t = assertCoord(target);
-  if (new Set(sac.map(coordKey)).size !== 3) fail('DUPLICATE_HEX', 'sacrifice hexes must be distinct');
+  if (new Set(sac.map(coordKey)).size !== need) fail('DUPLICATE_HEX', 'sacrifice hexes must be distinct');
   for (const c of sac) {
     const tile = ctx.board[coordKey(c)];
     if (!tile || tile.owner !== player) fail('FRUIT_SACRIFICE_NOT_OWN', `${coordKey(c)} is not your tile`);
