@@ -144,7 +144,7 @@ describe('the world painter', () => {
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
 
-  it('ADVERSARIAL 2: after one tile changes, every pixel beyond REACH of it is exactly as before (repainting only that area leaves nothing stale)', () => {
+  it('ADVERSARIAL 5: after one tile changes, every pixel beyond REACH of it is exactly as before (repainting only that area leaves nothing stale)', () => {
     // a ring of full-strength moss (long roots and blades) around the centre, and lava beside it
     const ring = ['1,0', '1,-1', '0,-1', '-1,0', '-1,1', '0,1'];
     const before = board([...ring.map((k) => [k, { owner: 0, t: 1 }] as [string, PaintTile]), ['2,0', { owner: 1, t: 0.6 }], ['2,-1', { owner: 1, t: 1 }]]);
