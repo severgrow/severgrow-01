@@ -129,6 +129,10 @@ const quickScore = (v: View, a: Action): number => {
   return (sim.wins ? 1000 : 0) + sim.points + 0.5 * sim.botCut - 0.5 * sim.myLoss;
 };
 
+/** `moves` ordered best first by the same quick score as the options list (stable). */
+export const bestFirst = (v: View, moves: readonly Action[]): Action[] =>
+  moves.map((a, i) => ({ a, i, s: quickScore(v, a) })).sort((x, y) => y.s - x.s || x.i - y.i).map((x) => x.a);
+
 /** Every move that fits what is picked, best first (only once a hex is picked). */
 export const options = (v: View, legal: readonly Action[], sel: Sel): Action[] => {
   if (sel.hex === null) return [];
