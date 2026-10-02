@@ -89,8 +89,11 @@ export const wnoise = (x: number, y: number, scale = 12): number => {
   const fy = y / scale;
   const ix = Math.floor(fx);
   const iy = Math.floor(fy);
-  const ux = (fx - ix) * (fx - ix) * (3 - 2 * (fx - ix));
-  const uy = (fy - iy) * (fy - iy) * (3 - 2 * (fy - iy));
+  // quintic easing: no visible grid creases
+  const tx = fx - ix;
+  const ty = fy - iy;
+  const ux = tx * tx * tx * (tx * (tx * 6 - 15) + 10);
+  const uy = ty * ty * ty * (ty * (ty * 6 - 15) + 10);
   const a = hash2(ix, iy);
   const b = hash2(ix + 1, iy);
   const c = hash2(ix, iy + 1);
@@ -104,7 +107,11 @@ export const wfbm = (x: number, y: number, scale = 24, octaves = 4): number => {
   let amp = 0.5;
   let norm = 0;
   for (let o = 0; o < octaves; o++) {
-    s += wnoise(x + o * 37.1, y - o * 19.7, scale / 2 ** o) * amp;
+    // each octave turned by a different angle, so no grid lines up from one to the next
+    const a = 0.7 + o * 1.13;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    s += wnoise(x * ca - y * sa + o * 37.1, x * sa + y * ca - o * 19.7, scale / 2 ** o) * amp;
     norm += amp;
     amp *= 0.5;
   }
