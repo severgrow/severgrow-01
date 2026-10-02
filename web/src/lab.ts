@@ -8,10 +8,12 @@ import { THEMES, THEME_IDS, cssVars } from './logic/themes.js';
 import { MATERIAL_TOKENS, materialLook, materialsOf } from './logic/materials.js';
 import type { Detail } from './logic/materials.js';
 import { BoardView, NO_OVERLAY } from './ui/board.js';
+import { warmPhotosNow } from './ui/photo.js';
 
 const k = (q: number, r: number) => coordKey({ q, r });
 
 export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
+  if (detail === 'normal') warmPhotosNow();
   const page = document.createElement('main');
   page.className = 'lab';
   page.innerHTML = `<h1>Material lab</h1><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains (dried grass, cooled lava). Detail: ${detail}.</p>`;

@@ -41,6 +41,7 @@ import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, shakeFrames } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
+import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 
 const HUMAN: Player = 0;
@@ -124,6 +125,7 @@ function applyTheme() {
   root.style.setProperty('--m-rim', String(lk.rim));
   root.classList.toggle('mat-textures', lk.textures);
   root.classList.toggle('mat-motion', lk.motion);
+  if (lk.textures) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
@@ -1587,6 +1589,11 @@ document.addEventListener('keydown', (e) => {
 };
 
 fillIcons();
+// once the photo-like grass and lava are painted (in the background), redraw the board with them
+onPhotosReady(() => {
+  lastBoard = null;
+  if (!busy()) render();
+});
 sound.enabled = settings.sound;
 sound.musicOn = settings.music;
 applyTheme();

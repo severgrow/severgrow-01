@@ -2539,3 +2539,26 @@ svg.usable .hex-cell {
 .veins.bot .vein {
   stroke: var(--m-fire);
 }
+
+/* Photo-like grass and lava (painted once in code). The number on grass gets a soft light
+   halo, so it stays readable over the blades; the marker ring gets one too. */
+.mat-photo {
+  pointer-events: none;
+}
+.tile.mat-moss .tile-num {
+  paint-order: stroke;
+  stroke: var(--m-mossTop);
+  stroke-width: 2.6px;
+  stroke-opacity: 0.85;
+  stroke-linejoin: round;
+}
+.mark-halo {
+  display: none;
+  fill: none;
+  stroke: var(--m-mossTop);
+  stroke-width: 2.6;
+  stroke-opacity: 0.85;
+}
+.mat-textures .tile.mat-moss .mark-halo {
+  display: inline;
+}
