@@ -227,14 +227,15 @@ describe('no Confirm for a clear choice (Undo can take it back)', () => {
   const v = viewFor(s, 0);
   const legal = legalActions(v);
 
-  it('a card and a spot that allow exactly one move: it plays at once', () => {
+  it('a card and a spot that allow exactly one move: it plays at once (a Strengthen waits for Confirm, v0.5)', () => {
     let checked = 0;
     for (const c of v.hand) {
       const sel = tapCard(v, legal, EMPTY_SEL, c.id);
       for (const hex of targetHexes(v, legal, sel)) {
         const picked = { ...sel, hex };
         const opts = options(v, legal, picked);
-        if (opts.length === 1) {
+        if (opts.length === 1 && v.board[hex]?.owner === v.player) expect(playNow(v, legal, picked)).toBeNull();
+        else if (opts.length === 1) {
           expect(playNow(v, legal, picked)).toEqual(opts[0]);
           checked++;
         } else expect(playNow(v, legal, picked)).toBeNull();

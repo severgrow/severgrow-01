@@ -36,6 +36,12 @@ export type Overlay = {
   pulse: Spot | null;
   /** Show the bot's fragile links flickering ("Bot's weak links" is on). */
   botFragile: boolean;
+  /** v0.5: what each target does: grow on empty, replace a bot tile (⇆), strengthen mine (+). */
+  targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen'>;
+  /** v0.5 Fruit flow: tiles that can be picked, tiles picked so far (in order), the target. */
+  fruitValid?: string[];
+  fruitPicked?: string[];
+  fruitTarget?: string | null;
 };
 export const NO_OVERLAY: Overlay = {
   targets: null,
@@ -252,7 +258,25 @@ export class BoardView {
         if (o.targets.has(key) || key === o.selectedHex) continue;
         el('path', { d: hexPath(key, S - 1.2, st.tileShape), class: 'dim' }, over);
       }
-      for (const key of o.targets) el('path', { d: hexPath(key, S - 3, st.tileShape), class: 'target', 'data-key': key }, over);
+      for (const key of o.targets) {
+        const kind = o.targetKinds?.[key] ?? 'grow';
+        el('path', { d: hexPath(key, S - 3, st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
+        // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
+        if (kind !== 'grow') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
+      }
+    }
+    if (o.fruitValid?.length || o.fruitPicked?.length || o.fruitTarget) {
+      const lit = new Set([...(o.fruitValid ?? []), ...(o.fruitPicked ?? []), ...(o.fruitTarget ? [o.fruitTarget] : [])]);
+      for (const key of this.keys) if (!lit.has(key)) el('path', { d: hexPath(key, S - 1.2, st.tileShape), class: 'dim' }, over);
+      for (const key of o.fruitValid ?? []) el('path', { d: hexPath(key, S - 3, st.tileShape), class: 'target fruit-valid', 'data-key': key }, over);
+      (o.fruitPicked ?? []).forEach((key, i) => {
+        el('path', { d: hexPath(key, S - 2, st.tileShape), class: 'fruit-picked', 'data-key': key }, over);
+        this.markBadge(over, key, String(i + 1), 'fruit');
+      });
+      if (o.fruitTarget) {
+        el('path', { d: hexPath(o.fruitTarget, S - 2, st.tileShape), class: 'fruit-target', 'data-key': o.fruitTarget }, over);
+        this.markBadge(over, o.fruitTarget, '×', 'fruit-x');
+      }
     }
     for (const key of o.cutKeys) el('path', { d: hexPath(key, S * 0.7, st.tileShape), class: 'will-cut' }, over);
     for (const g of o.ghosts) {
@@ -273,6 +297,14 @@ export class BoardView {
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
     if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, st.tileShape), class: 'focus' }, over);
     this.svg.classList.toggle('usable', o.usable);
+  }
+
+  /** A small round badge with a symbol at the top-right of a hex (target kinds, Fruit picks). */
+  private markBadge(parent: SVGGElement, key: string, text: string, cls: string) {
+    const { x, y } = centerOf(key);
+    const g = el('g', { class: `mark-badge ${cls}` }, parent);
+    el('circle', { cx: x + S * 0.48, cy: y - S * 0.5, r: 6.2 }, g);
+    el('text', { x: x + S * 0.48, y: y - S * 0.5 + 0.5 }, g).textContent = text;
   }
 
   private vein(g: SVGGElement, a: string, b: string, owner: Player, kind: 'live' | 'fragile' | 'loose', width: number, opacity: number, grow: boolean) {

@@ -17,6 +17,8 @@ export type Preview = {
   points: number;
   chip: string;
   warning: string | null;
+  /** v0.5: a short line under the chip (Strengthen: what it does and does not do). */
+  note?: string;
 };
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -41,6 +43,21 @@ export const previewMove = (v: View, a: Action): Preview | null => {
         ? planSet(v, p, v.hand, a.cards, a.hexes)
         : planSprout(v, p, v.hand, a.card, a.coord);
   const sim = simulate(v, a)!;
+  if (plan.strengthen) {
+    const t = plan.tiles[0]!;
+    return {
+      ghosts: [{ key: coordKey(t.coord), strength: t.strength, replaces: false }],
+      placed: 0,
+      replaced: 0,
+      cuts: 0,
+      cutKeys: [],
+      wins: false,
+      points: 0,
+      chip: `Strengthen ${plan.strengthen.from} → ${t.strength}`,
+      warning: null,
+      note: 'No points, but harder for the bot to replace. It does not stop a cut or Fruit.',
+    };
+  }
   const ghosts = plan.tiles.map((t) => {
     const key = coordKey(t.coord);
     return { key, strength: t.strength, replaces: v.board[key]?.owner === opp };

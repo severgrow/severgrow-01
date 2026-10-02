@@ -46,14 +46,41 @@ const sameCard = (v: View, a: number, b: number) => {
 };
 
 type Skip = 'card' | 'hex' | 'kind' | null;
+// Fruit has its own guided flow (fruitflow.ts), so card and hex picking never offer it.
 const matching = (v: View, legal: readonly Action[], sel: Sel, skip: Skip = null): Action[] =>
   legal.filter(
     (a) =>
       isBoardAction(a) &&
+      a.t !== 'Fruit' &&
       (skip === 'card' || sel.card === null || moveCards(a).some((id) => sameCard(v, sel.card!, id))) &&
       (skip === 'hex' || sel.hex === null || touchesHex(a, sel.hex)) &&
       (skip === 'kind' || sel.kind === null || kindOf(a) === sel.kind),
   );
+
+/** v0.5: the three kinds of Sprout target, each with its own words (not colour alone). */
+export type TargetKind = 'grow' | 'replace' | 'strengthen';
+export const TARGET_LABEL: Record<TargetKind, string> = {
+  grow: 'Grow on an empty hex',
+  replace: 'Replace an enemy tile',
+  strengthen: 'Strengthen my tile',
+};
+
+/** What a Sprout does to its hex: grow on empty, replace an enemy tile, or strengthen mine. */
+export const sproutKind = (v: View, a: Action): TargetKind | null => {
+  if (a.t !== 'Sprout') return null;
+  const t = v.board[coordKey(a.coord)];
+  return !t ? 'grow' : t.owner === v.player ? 'strengthen' : 'replace';
+};
+
+/** Each target hex and its kind (for any growing move: an empty hex grows, an enemy tile is replaced). */
+export const targetKinds = (v: View, legal: readonly Action[], sel: Sel): Map<string, TargetKind> => {
+  const out = new Map<string, TargetKind>();
+  for (const key of targetHexes(v, legal, sel)) {
+    const t = v.board[key];
+    out.set(key, !t ? 'grow' : t.owner === v.player ? 'strengthen' : 'replace');
+  }
+  return out;
+};
 
 /** Hexes worth tapping now: every hex the picked card (and kind) can grow on. */
 export const targetHexes = (v: View, legal: readonly Action[], sel: Sel): Set<string> =>
@@ -129,7 +156,8 @@ export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | n
   // (so a stray or double tap on the board can never play a move by itself).
   if (sel.hex === null || sel.card === null) return null;
   const opts = options(v, legal, sel);
-  return opts.length === 1 ? opts[0]! : null;
+  // A Strengthen always shows its preview ("Strengthen 5 → 9") and waits for Confirm.
+  return opts.length === 1 && sproutKind(v, opts[0]!) !== 'strengthen' ? opts[0]! : null;
 };
 
 /** The selection that makes `a` the pending move (for the coach's "Show me"). */
