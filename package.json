@@ -21,7 +21,7 @@
     "play": "tsx src/cli/play-cli.ts",
     "replay": "tsx src/cli/replay-cli.ts",
     "grid": "tsx src/sim/grid.ts",
-    "e2e": "tsx web/e2e/smoke.ts && tsx web/e2e/polish3.ts && tsx web/e2e/monkey.ts --steps=200",
+    "e2e": "tsx web/e2e/smoke.ts && tsx web/e2e/polish3.ts && tsx web/e2e/seed-ab.ts && tsx web/e2e/monkey.ts --steps=200",
     "ladder": "tsx src/sim/ladder.ts",
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",

@@ -4,10 +4,12 @@ import { IllegalActionError } from './errors.js';
 import type { IllegalActionCode } from './errors.js';
 import { validateRun, validateSet, takeCards } from './melds.js';
 import { claimBlocker } from './overgrow.js';
+import { rulesetOf, sproutStrength } from './ruleset.js';
 import type { BoardCtx } from './overgrow.js';
 import type { Card, Coord, Player, Tile } from './types.js';
 
-export type PlannedTile = { coord: Coord; strength: number };
+/** `seed`: a Seed tile (Seed ruleset), marked on the board until it is strengthened. */
+export type PlannedTile = { coord: Coord; strength: number; seed?: true };
 
 /** A fully validated meld, ready for applyPlacement. `strengthen`: a Sprout on my own tile (v0.5). */
 export type Placement = { player: Player; cards: Card[]; tiles: PlannedTile[]; strengthen?: { from: number } };
@@ -124,7 +126,8 @@ export const planSprout = (ctx: BoardCtx, player: Player, hand: readonly Card[],
     return { player, cards: [card!], tiles: [{ coord: c, strength: card!.rank }], strengthen: { from: own.strength } };
   }
   if (!touchesNetwork(ctx.board, player, c)) throw new IllegalActionError('NOT_ADJACENT', 'a sprout must touch your network');
-  const tiles = [{ coord: c, strength: card!.rank }];
+  // Seed ruleset: the tile is worth 1 whatever the card (the card is still used up).
+  const tiles: PlannedTile[] = [rulesetOf(ctx.config) === 'seed' ? { coord: c, strength: sproutStrength(ctx.config, card!.rank), seed: true } : { coord: c, strength: card!.rank }];
   assertClaims(ctx, player, tiles);
   return { player, cards: [card!], tiles };
 };
@@ -136,11 +139,11 @@ export const applyPlacement = (
 ): { board: Record<string, Tile | null>; placed: Coord[]; overgrown: OvergrowInfo[] } => {
   const next = { ...board };
   const overgrown: OvergrowInfo[] = [];
-  for (const { coord, strength } of placement.tiles) {
+  for (const { coord, strength, seed } of placement.tiles) {
     const key = coordKey(coord);
     const old = next[key];
     if (old && old.owner !== placement.player) overgrown.push({ coord: { ...coord }, oldOwner: old.owner, oldStrength: old.strength, newStrength: strength });
-    next[key] = { owner: placement.player, strength };
+    next[key] = seed ? { owner: placement.player, strength, seed } : { owner: placement.player, strength };
   }
   return { board: next, placed: placement.tiles.map((t) => ({ ...t.coord })), overgrown };
 };

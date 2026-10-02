@@ -2,6 +2,7 @@ export * from './types.js';
 export * from './constants.js';
 export * from './errors.js';
 export * from './config.js';
+export * from './ruleset.js';
 export * from './board.js';
 export * from './prng.js';
 export * from './terrain.js';

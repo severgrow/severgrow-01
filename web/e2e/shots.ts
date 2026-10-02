@@ -113,7 +113,7 @@ for (const id of THEME_IDS) {
   await page.goto(BASE);
   await page.waitForTimeout(300);
   await shot(page, 'menu');
-  await page.click('#menu-play');
+  await page.click('#menu-sprout');
   await page.waitForTimeout(300);
   await shot(page, 'levels');
   await page.close();

@@ -4,15 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0e11" />
-    <meta name="description" content="Severgrow: grow your network, keep it joined to your root, cut your opponent's links." />
-    <title>Severgrow</title>
+    <meta name="description" content="Severor: grow your network, keep it joined to your root, cut your opponent's links." />
+    <title>Severor</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230d0e11%27/%3E%3Cpolygon points=%2716,5 25,10 25,22 16,27 7,22 7,10%27 fill=%27none%27 stroke=%27%234df0b4%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%273.5%27 fill=%27%234df0b4%27/%3E%3C/svg%3E" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Severgrow" />
+    <meta name="apple-mobile-web-app-title" content="Severor" />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
@@ -23,12 +23,15 @@
     <section id="menu" class="screen menu" aria-label="Main menu">
       <div class="menu-inner">
         <div id="logo" class="logo" aria-hidden="true"></div>
-        <h1 class="title">Severgrow</h1>
+        <h1 class="title">Severor</h1>
         <p class="tagline">Grow your network. Keep it joined to your root. Cut your opponent's links.</p>
         <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
-          <button id="menu-play" class="btn primary big" type="button">Play</button>
+          <div class="menu-versions" role="group" aria-label="Pick a version to play">
+            <button id="menu-sprout" class="btn primary big version-btn" type="button" aria-label="Sprout version: a single card grows a tile of its number"><span class="vb-name">Sprout version</span><span class="vb-sub">Tile = card's number</span></button>
+            <button id="menu-seed" class="btn primary big version-btn" type="button" aria-label="Seed version: a single card plants a seed worth 1, strengthen it later"><span class="vb-name">Seed version</span><span class="vb-sub">Every tile starts at 1</span></button>
+          </div>
           <button id="menu-tutorial" class="btn ghost" type="button">Tutorial game</button>
           <div class="menu-row">
             <button id="menu-howto" class="btn ghost" type="button">How to play</button>
@@ -45,6 +48,7 @@
         <header class="levels-head">
           <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
           <h2>Pick a level</h2>
+          <span id="levels-version" class="version-chip"></span>
         </header>
         <div id="level-grid" class="level-grid"></div>
         <p class="muted small levels-note">7 is the classic opponent.</p>
@@ -69,6 +73,7 @@
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
       <div class="steps-row">
+        <span id="version-chip" class="version-chip" title="The version you are playing"></span>
         <ol id="steps" class="steps" aria-label="Your turn, step by step">
           <li data-step="DRAW"><span class="n">1</span>Draw</li>
           <li data-step="ACT"><span class="n">2</span>Grow</li>
