@@ -151,6 +151,59 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
   "Tap to draw" / "Tap to take"; in the Grow and Throw steps they are dimmed and
   cannot be tapped. (There are no separate "Draw a card" buttons any more.)
 
+## Strengthen and Fruit (v0.5)
+
+**Three kinds of Sprout target.** When a card is picked, every hex it can go on glows, and each
+says what it does by its shape and a symbol, not by colour alone:
+
+| Target | Looks like | Means |
+| --- | --- | --- |
+| Grow on an empty hex | a plain ring | a new tile with the card's number |
+| Replace an enemy tile | a dashed ring with a small ⇆ badge | the bot's weaker tile becomes mine |
+| Strengthen my tile | a thick ring with a small + badge | my own weaker tile takes the card's number |
+
+The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, replace a bot
+tile (⇆), strengthen your tile (+)"). Growing and replacing still play at once (Undo takes them
+back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
+but harder for the bot to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
+
+**The Fruit button** sits in the move row only when Fruit is on: "Fruit · 1 left", or "Fruit ·
+Used". When it cannot be used it is dimmed with a one-line reason: "Needs 3 connected tiles",
+"No enemy tile next to them" (or "Only while you are behind" with that option).
+
+**The guided flow** (a progress line "1 Pick 3 · 2 Pick target · 3 Confirm", with Undo and Cancel
+at every step):
+1. *Pick 3 of your tiles to give up.* Only tiles that can still lead to a Fruit glow; picked ones
+   carry 1, 2, 3; a counter shows 0/3. Wrong taps are gently refused with a short caption ("Your
+   root can't be given up", "Pick 3 of your own tiles", "Pick tiles that touch each other").
+2. *Pick a tile to remove.* The bot tiles next to the three glow, 9s included; the first time,
+   "Fruit ignores strength: even a 9 can go."
+3. *Preview and confirm.* A plain-words chip: "You lose 3. They lose 1, plus 4 cut off. Net: -3
+   for you, -5 for them." Warnings when it would cut off my own tiles ("Careful: this cuts off 2
+   of your tiles") or leave my root easy to surround. The tiles that would be cut are marked.
+
+A Fruit can be undone like any other growing move this turn (it reveals no hidden card).
+
+**Animations** (through the animation queue and the effects tiers, from engine events; the board
+is always right even when skipped):
+- *Strengthen:* a quick level-up pulse, a thin ring expanding outward, the number ticking up, a
+  small solid thud; to the top rank, a bigger gold ring and a few sparks (Medium tier).
+- *Fruit:* the three tiles burst into spore puffs, the spores stream to the target, the target
+  shatters, then any cut uses the normal cut effect. A Big moment: hit-stop, thud, a "Fruited!"
+  banner, light vibration.
+- Reduce motion, Sound, Vibration and Effects intensity apply as everywhere else.
+
+**First-time tips.** The first time Fruit can be used, and the first time a Strengthen target
+shows, a small card explains it (dismiss with "Got it"; remembered in this browser). Both can be
+opened again from "How to play", which also explains each with an example. The 3-line summary at
+the top is unchanged.
+
+**The coach** mentions Fruit or Strengthen only when one of them is among its best few moves
+right now, and its "Show me" arrow walks through the Fruit flow (button, the 3 tiles, the
+target, Confirm).
+
+Screenshots (390 px wide): `docs/screens/fruit-strengthen/`.
+
 ## Playing against the bot
 
 - **Bot level**: **Play** opens a 3×3 screen of levels 1-9. Each shows its number, a

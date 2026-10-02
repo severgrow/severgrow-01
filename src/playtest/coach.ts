@@ -22,6 +22,7 @@ export type TipId =
   | 'combos'
   | 'sprout'
   | 'strength'
+  | 'strengthen'
   | 'gold'
   | 'connection'
   | 'cutting'
@@ -38,6 +39,7 @@ export const TIP_ORDER: readonly TipId[] = [
   'combos',
   'sprout',
   'strength',
+  'strengthen',
   'gold',
   'connection',
   'cutting',
@@ -169,10 +171,17 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
     fits: ({ v }) => v.phase === 'KNOCK',
     text: ({ v, say }) => `Leftovers of ${v.config.knockDeadwood} or less? You can ${say('knock')}: the bot gets one last turn.`,
   },
+  // v0.5: Fruit and Strengthen are mentioned only when they matter: one of the best few
+  // moves right now, and a good one.
   fruit: {
     active: ({ v }) => fruitOn(v),
-    fits: ({ ranked }) => ranked.some((r) => r.facts.kind === 'fruit'),
-    text: () => 'Fruit, once per game: give up 3 tiles to destroy one touching bot tile.',
+    fits: ({ ranked }) => ranked.slice(0, 3).some((r) => r.facts.kind === 'fruit' && r.score > 0),
+    text: ({ v }) => `Fruit, once per game: give up ${v.config.fruitSacrifice} tiles to remove one touching bot tile, even a ${v.config.maxRank}.`,
+  },
+  strengthen: {
+    active: ({ v }) => v.config.allowStrengthen && v.config.sproutsPerTurn > 0,
+    fits: ({ ranked }) => ranked.slice(0, 3).some((r) => r.facts.kind === 'strengthen' && r.score > 0),
+    text: () => 'Strengthen: a higher card on your own tile makes it harder to replace (no points).',
   },
   strangle: {
     active: () => true,
@@ -321,6 +330,7 @@ const BULLETS: Record<TipId, string> = {
   leftovers: 'Keep your leftover cards low to avoid rot.',
   knock: 'Knock only when you are clearly ahead.',
   fruit: 'Save Fruit for a bot tile you cannot replace.',
+  strengthen: 'Strengthen the tile that holds many others up.',
   strangle: "Surround the bot's root to win at once.",
   planning: 'Before a big move, check what the bot could cut.',
 };
@@ -338,11 +348,12 @@ const SUMMARY_PRIORITY: readonly TipId[] = [
   'leftovers',
   'knock',
   'fruit',
+  'strengthen',
 ];
 /** The goodbye message at COACH_STEPS: three things the player used (only rules that are on). */
 export const coachSummary = (taught: readonly TipId[], config: View['config']): { title: string; bullets: string[] } => {
   const allowed = (id: TipId) =>
-    (id !== 'leftovers' || config.rotEnabled) && (id !== 'knock' || config.knockEnabled) && (id !== 'fruit' || config.fruitPerPlayer > 0);
+    (id !== 'leftovers' || config.rotEnabled) && (id !== 'knock' || config.knockEnabled) && (id !== 'fruit' || config.fruitPerPlayer > 0) && (id !== 'strengthen' || config.allowStrengthen);
   const used = SUMMARY_PRIORITY.filter((id) => taught.includes(id) && allowed(id));
   const fill = (['connection', 'cutting', 'combos', 'goal'] as TipId[]).filter((id) => !used.includes(id));
   return {
