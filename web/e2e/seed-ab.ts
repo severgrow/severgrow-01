@@ -57,11 +57,11 @@ const playOneCard = async (page: Page, cardId: number, hex: string) => {
 };
 
 type Version = 'sprout' | 'seed';
-type Report = { turns: number; mine: { card: number; rank: number; hex: string; strength: number; seedMark: boolean }[]; strengthened: { hex: string; from: number; to: number; seedMarkAfter: boolean; domSeedAfter: boolean } | null; leaks: string[]; domMismatch: string[]; chip: string; resultShown: boolean; goSub: string; replayKept: boolean | null };
+type Report = { turns: number; mine: { card: number; rank: number; hex: string; strength: number; seedMark: boolean }[]; strengthened: { hex: string; from: number; to: number; seedMarkAfter: boolean; domSeedAfter: boolean } | null; leaks: string[]; domMismatch: string[]; chip: string; resultShown: boolean; goSub: string; replayKept: boolean | null; freshMax: number; freshBad: string[]; goVersion: string; goMoves: string; chipTip: string };
 
 /** Plays one complete game through the page; the human seeds/sprouts every turn it can. */
 const playGame = async (page: Page, version: Version): Promise<Report> => {
-  const r: Report = { turns: 0, mine: [], strengthened: null, leaks: [], domMismatch: [], chip: '', resultShown: false, goSub: '', replayKept: null };
+  const r: Report = { turns: 0, mine: [], strengthened: null, leaks: [], domMismatch: [], chip: '', resultShown: false, goSub: '', replayKept: null, freshMax: 0, freshBad: [], goVersion: '', goMoves: '', chipTip: '' };
   const wrong = version === 'seed' ? /sprout/i : /\bseeds?\b/i;
   for (let guard = 0; guard < 400; guard++) {
     await idle(page);
@@ -86,6 +86,16 @@ const playGame = async (page: Page, version: Version): Promise<Report> => {
     }
     if (s.phase === 'DRAW') {
       r.turns++;
+      // UX pass: what the opponent changed last turn is marked, only on its own tiles
+      const fresh = (await page.evaluate(`(() => { const st = window.__severgrow.state(); return [...document.querySelectorAll('.l-over .fresh-mark')].map((e) => { const k = e.getAttribute('data-key'); return [k, st.board[k] ? st.board[k].owner : -1]; }); })()`)) as [string, number][];
+      r.freshMax = Math.max(r.freshMax, fresh.length);
+      for (const [k, o] of fresh) if (o !== 1) r.freshBad.push(k);
+      // UX pass: the version label explains the version when tapped
+      if (r.turns === 2) {
+        await page.click('#version-chip');
+        await page.waitForTimeout(150);
+        r.chipTip = (await page.textContent('#captions')) ?? '';
+      }
       // replay the opponent's last turn once (seeds must stay seeds during the replay)
       if (r.turns === 4 && version === 'seed' && (await page.locator('#tool-replay:visible').count())) {
         await page.click('#tool-replay');
@@ -155,6 +165,8 @@ const playGame = async (page: Page, version: Version): Promise<Report> => {
   await page.waitForTimeout(500);
   r.resultShown = await page.locator('#gameover:visible').count().then((n) => n > 0);
   r.goSub = (await page.textContent('#go-sub')) ?? '';
+  r.goVersion = (await page.textContent('#go-version')) ?? '';
+  r.goMoves = (await page.textContent('#go-moves')) ?? '';
   await shot(page, `${version}-game-over`);
   return r;
 };
@@ -208,6 +220,10 @@ check('Seed version: the page draws exactly the seeds the state has (both sides)
 check('Seed version: the words never say "sprout"', seed.leaks.length === 0, seed.leaks.slice(0, 2).join(' | '));
 check('Seed version: the label says "Seed version" (in play and on the result)', /seed version/i.test(seed.chip) && /Seed version/.test(seed.goSub), `${seed.chip} / ${seed.goSub}`);
 check("Seed version: replaying the opponent's turn keeps seeds drawn as seeds", seed.replayKept !== false, String(seed.replayKept));
+// ---- the UX pass ----
+check("UX: the opponent's last-turn changes are marked at the start of my turn, only on its tiles", seed.freshMax + sprout.freshMax > 0 && seed.freshBad.length + sprout.freshBad.length === 0, `max ${sprout.freshMax}/${seed.freshMax}, bad ${[...sprout.freshBad, ...seed.freshBad].join(' ')}`);
+check('UX: tapping the version label explains the version', /Sprout version: a single card/.test(sprout.chipTip) && /Seed version: a single card plants a seed/.test(seed.chipTip), `${sprout.chipTip} | ${seed.chipTip}`);
+check('UX: the result screen offers the other version and says what I did', sprout.goVersion === 'Try the Seed version' && seed.goVersion === 'Try the Sprout version' && /^You (sprouted|strengthened)/.test(sprout.goMoves) && /^You (planted \d+ seeds?|strengthened)/.test(seed.goMoves), `${sprout.goVersion}: ${sprout.goMoves} | ${seed.goVersion}: ${seed.goMoves}`);
 
 // ---- a saved Seed game continues as Seed ----
 await page.click('#go-menu');
@@ -220,12 +236,14 @@ await page.click('#hud-menu');
 await page.click('#gm-main');
 await page.waitForTimeout(200);
 const cont = (await page.textContent('#menu-continue')) ?? '';
+const record = (await page.textContent('#menu-stats')) ?? '';
+check('UX: the menu shows the record in each version played', /Sprout version: won \d of 1/.test(record) && /Seed version: won \d of 1/.test(record), record.replace(/\n/g, ' / '));
 await page.reload();
 await page.waitForTimeout(300);
 await page.click('#menu-continue');
 await idle(page);
 const s3 = (await getState(page))!;
-check('a saved Seed game continues as a Seed game after a reload', /Seed version/.test(cont) && s3.config.ruleset === 'seed' && ((await page.textContent('#version-chip')) ?? '').includes('Seed'), cont);
+check('a saved Seed game continues as a Seed game after a reload (Continue says where: version, level, turn)', /Seed version · Level 1 · turn 1/.test(cont) && s3.config.ruleset === 'seed' && ((await page.textContent('#version-chip')) ?? '').includes('Seed'), cont);
 // narrow phones: the version label (and everything else in the game screen) stays on screen
 const widths: string[] = [];
 for (const w of [320, 360, 375]) {

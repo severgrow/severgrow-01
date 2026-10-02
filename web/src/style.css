@@ -3262,3 +3262,89 @@ svg.usable .hex-cell {
   opacity: 0.72;
   white-space: normal;
 }
+
+/* ---- UX pass ---- */
+/* scars fade over their two turns, so old ones never look like tiles */
+.scar-g.age-1 {
+  opacity: 0.6;
+}
+.scar-g.age-2 {
+  opacity: 0.3;
+}
+/* the tiles fade in with their landscape (never the plain look first) */
+.board .l-tiles,
+.board .l-veins {
+  transition: opacity 320ms ease-out;
+}
+.board.warming .l-tiles,
+.board.warming .l-veins {
+  opacity: 0;
+}
+/* a gold badge on a tile: smaller, nudged into the corner */
+.gold-badge.on-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: translate(2.5px, -1px) scale(0.78);
+}
+/* the seed's number on a small dark plate, readable on every palette */
+.seed-num-plate {
+  fill: rgba(0, 0, 0, 0.42);
+}
+/* what the opponent changed last turn: a small spark at the top of the hex */
+.fresh-halo {
+  fill: color-mix(in srgb, var(--c-bot) 30%, transparent);
+}
+.fresh-dot {
+  fill: var(--c-bot);
+  stroke: var(--c-bg);
+  stroke-width: 0.8;
+}
+.fresh-mark {
+  pointer-events: none;
+}
+.fresh-mark.arrive {
+  animation: fresh-in 700ms ease-out both;
+}
+@keyframes fresh-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+.reduce-motion .fresh-mark.arrive {
+  animation: none;
+}
+/* the turn pill: one line underneath, always */
+.turn small {
+  white-space: nowrap;
+}
+/* the deck running low: its count turns amber */
+.pile.low .pile-count,
+#deck.low .pile-count {
+  background: var(--c-gold);
+  color: var(--c-goldInk);
+}
+/* taller phones: bigger cards (easier to tap, less empty space) */
+@media (max-width: 600px) and (min-height: 760px) {
+  :root {
+    --cw: clamp(54px, 15vw, 72px);
+  }
+}
+
+/* the menu's record: overall, then each version, on its own line */
+#menu-stats {
+  white-space: pre-line;
+}
+/* the corner buttons' names, shown at the start of the first games */
+.board-wrap.show-labels .chip.corner .chip-label {
+  display: inline;
+  font-size: 0.72rem;
+}
+/* the version label is a button: tap it for one line about the version */
+button.version-chip {
+  font: inherit;
+  font-size: 0.68rem;
+  background: none;
+  cursor: pointer;
+  min-height: 28px;
+}

@@ -73,7 +73,7 @@
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
       <div class="steps-row">
-        <span id="version-chip" class="version-chip" title="The version you are playing"></span>
+        <button id="version-chip" class="version-chip" type="button" title="The version you are playing"></button>
         <ol id="steps" class="steps" aria-label="Your turn, step by step">
           <li data-step="DRAW"><span class="n">1</span>Draw</li>
           <li data-step="ACT"><span class="n">2</span>Grow</li>
@@ -96,7 +96,7 @@
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
           <button id="tool-weak" class="chip corner tl" type="button" aria-pressed="false" aria-label="Your weak spots"><span class="i" data-icon="shield"></span><span class="chip-label">Your weak spots</span></button>
           <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false" aria-label="Your opponent's weak links"><span class="i" data-icon="target"></span><span class="chip-label">Opponent's weak links</span></button>
-          <button id="tool-replay" class="chip corner bl" type="button" aria-label="Replay your opponent's last turn" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
+          <button id="tool-replay" class="chip corner bl" type="button" aria-label="Replay your opponent's last turn" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span><span class="chip-label">Replay</span></button>
           <button id="tool-skip" class="chip corner br" type="button" hidden aria-label="Skip the animation" title="Skip the animation"><span class="i" data-icon="skip"></span></button>
         </div>
 
@@ -231,10 +231,12 @@
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
         <p id="go-break" class="muted small"></p>
+        <p id="go-moves" class="muted small" hidden></p>
         <ul id="go-highlights" class="highlights"></ul>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
+          <button id="go-version" class="btn ghost" type="button"></button>
           <button id="go-board" class="btn ghost" type="button">See the board</button>
           <button id="go-menu" class="btn link" type="button">Back to menu</button>
           <p id="go-stats" class="muted small stats-line"></p>

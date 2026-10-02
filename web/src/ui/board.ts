@@ -37,7 +37,10 @@ export type Overlay = {
   opps: Spot[];
   coachHexes: string[];
   focusKey: string | null;
-  scars: { key: string; owner: Player }[];
+  /** what cut-off tiles leave; `age` in turns (0 = this turn): older scars are fainter */
+  scars: { key: string; owner: Player; age?: number }[];
+  /** UX pass: hexes the opponent changed on its last turn (shown until I change the board) */
+  fresh?: string[];
   usable: boolean;
   /** My most dangerous weak spot, pulsing gently with its "-4" (a setting). */
   pulse: Spot | null;
@@ -247,8 +250,13 @@ export class BoardView {
         el('stop', { offset: 0.62, 'stop-color': col, 'stop-opacity': 0.92 }, gr);
         el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
       }
+      // UX pass: the tiles fade in with their landscape, never the plain look first
+      svg.classList.add('warming');
+      const warm = () => svg.classList.remove('warming');
+      setTimeout(warm, 1500);
       this.world.onFirst = () => {
         if (this.lastRender) this.render(...this.lastRender);
+        warm();
       };
     }
     svg.style.setProperty("--m-depth", `${look.depth}px`);
@@ -370,8 +378,9 @@ export class BoardView {
 
     for (const s of o.scars) {
       if (board[s.key]) continue;
-      // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's)
-      drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(scars, s.key));
+      // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's), fading over two turns
+      const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
+      drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(g, s.key));
     }
 
     // Veins: thick, glowing links back to the root. Thickness and brightness follow how
@@ -400,6 +409,8 @@ export class BoardView {
       this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
     }
     this.drawGlows(board);
+    // UX pass: a gold "2" on a hex that holds a tile sits smaller, in the corner, clear of the owner mark
+    for (const b of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) b.classList.toggle('on-tile', !!board[b.dataset.key ?? b.getAttribute('data-key') ?? '']);
 
     // ---- overlays ----
     if (o.targets) {
@@ -445,6 +456,14 @@ export class BoardView {
     if (o.pulse && !o.weak.some((w) => w.key === o.pulse!.key)) this.badge(over, o.pulse.key, `−${o.pulse.loss}`, 'weak pulse');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
     if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, st.tileShape), class: 'focus' }, over);
+    // UX pass: what the opponent changed last turn: a small spark at the top of each hex
+    for (const key of o.fresh ?? []) {
+      if (!board[key]) continue;
+      const { x, y } = centerOf(key);
+      const g = el('g', { class: `fresh-mark${this.look.motion ? ' arrive' : ''}`, 'data-key': key }, over);
+      el('circle', { cx: x, cy: y - S * 0.7, r: 4.2, class: 'fresh-halo' }, g);
+      el('circle', { cx: x, cy: y - S * 0.7, r: 2.2, class: 'fresh-dot' }, g);
+    }
     this.svg.classList.toggle('usable', o.usable);
   }
 
@@ -553,6 +572,7 @@ export class BoardView {
       el('circle', { cx: tip.x, cy: tip.y - S * 0.05, r: S * 0.035, class: 'seed-spark-core' }, seed);
     }
     el('path', { d, class: 'tile-edge' }, g);
+    el('circle', { cx: sx, cy: sy, r: S * 0.19, class: 'seed-num-plate' }, g);
     el('text', { x: sx, y: sy + 0.5, class: 'num tile-num seed-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * 0.62, t.owner === 0 ? this.style.youMark : this.style.botMark);
   }

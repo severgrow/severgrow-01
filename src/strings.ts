@@ -58,6 +58,8 @@ export type MoveWords = {
   oppDid: (card: string, hex: string) => string;
   /** the move list */
   suggest: (hex: string, card: string) => string;
+  /** one line explaining this version (tapping the version label) */
+  explain: string;
 };
 
 export const MOVE_WORDS: Readonly<Record<'sprout' | 'seed', MoveWords>> = Object.freeze({
@@ -77,6 +79,7 @@ export const MOVE_WORDS: Readonly<Record<'sprout' | 'seed', MoveWords>> = Object
     youDid: (hex: string) => `You sprouted one tile at ${hex}`,
     oppDid: (card: string, hex: string) => `${OPP.The} sprouted a ${card} at ${hex}`,
     suggest: (hex: string, card: string) => `Sprout one tile at ${hex} with the ${card}`,
+    explain: 'Sprout version: a single card grows one tile of its own number.',
   }),
   seed: Object.freeze({
     Name: 'Seed',
@@ -94,6 +97,7 @@ export const MOVE_WORDS: Readonly<Record<'sprout' | 'seed', MoveWords>> = Object
     youDid: (hex: string) => `You planted a seed at ${hex}`,
     oppDid: (card: string, hex: string) => `${OPP.The} planted a seed (with a ${card}) at ${hex}`,
     suggest: (hex: string, card: string) => `Plant a seed at ${hex} with the ${card}`,
+    explain: 'Seed version: a single card plants a seed worth 1. Strengthen it later with a higher card.',
   }),
 });
 

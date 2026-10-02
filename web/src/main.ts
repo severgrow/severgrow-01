@@ -44,12 +44,12 @@ import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
 import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
-import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
+import { STATS_KEY, parseStats, recordResult, statsLine, versionLine } from './logic/stats.js';
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
 import { LEVEL_ICONS } from './ui/levelIcons.js';
-import { describe, resultReason, resultTitle } from './logic/log.js';
+import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
 import { pileStates } from './logic/piles.js';
@@ -229,7 +229,13 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
     const canContinue = !!saved && saved.state.phase !== 'GAME_OVER';
     $('menu-continue').hidden = !canContinue;
-    $('menu-continue').textContent = canContinue ? `Continue · ${versionLabel(saved!.state.config)}` : 'Continue';
+    // where I left off: the version, the level and the turn
+    if (canContinue) {
+      const s = saved!.state;
+      const turnNo = Math.ceil(s.turnNumber / 2);
+      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">${versionLabel(s.config)} · Level ${saved!.level} · turn ${turnNo}</span>`;
+      $('menu-continue').classList.add('version-btn');
+    } else $('menu-continue').textContent = 'Continue';
     for (const r of ['sprout', 'seed']) {
       $(`menu-${r}`).classList.toggle('primary', !canContinue);
       $(`menu-${r}`).classList.toggle('ghost', canContinue);
@@ -245,7 +251,8 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
         $(`menu-${r}`).classList.add('ghost');
       }
     }
-    $('menu-stats').textContent = statsLine(stats);
+    // the overall record, then (Seed A/B test) the record in each version played
+    $('menu-stats').textContent = [statsLine(stats), versionLine(stats)].filter(Boolean).join('\n');
   }
   $('gameover').hidden = true;
   render();
@@ -413,8 +420,20 @@ function startGame(seed: number, level: Level = settings.level, ruleset: Ruleset
   const state = newGame(seed, RULESETS[ruleset]);
   log = [`New game (${versionLabel(state.config)}) against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
+  revealToolLabels();
   save();
   announceTurn(HUMAN);
+}
+
+/** UX pass: the corner buttons' names show for a few seconds at the start of the first 3 games. */
+const TOOL_LABELS_KEY = 'severgrow.toollabels';
+function revealToolLabels() {
+  const n = Number(store.get(TOOL_LABELS_KEY) ?? 0) || 0;
+  if (n >= 3) return;
+  store.set(TOOL_LABELS_KEY, String(n + 1));
+  const wrap = $('board-wrap');
+  wrap.classList.add('show-labels');
+  setTimeout(() => wrap.classList.remove('show-labels'), 5000);
 }
 
 function continueGame() {
@@ -444,7 +463,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER') {
-      stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
+      stats = recordResult(stats, p.after.result, HUMAN, gameLevel, rulesetOf(p.after.config));
       store.set(STATS_KEY, JSON.stringify(stats));
     }
   }
@@ -1059,7 +1078,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Turn ${turnNo}${each > 0 ? `/${each}` : ''} · Level ${gameLevel}</small>`;
   // The tip shows only when the ? is tapped; it closes again after each move.
   $('hint').textContent = hintText(session.view);
   $('hint').hidden = !hintOpen || !$('hint').textContent;
@@ -1131,9 +1150,33 @@ function hintText(v: View): string {
   }
 }
 
+/**
+ * UX pass: the hexes the opponent grew on or strengthened on its last turn, shown at the start
+ * of my turn until I change the board (an undo back to that board shows them again).
+ */
+let freshTurn = -1;
+let freshBoard: State['board'] | null = null;
+function freshKeys(): string[] {
+  if (!session || busy()) return [];
+  const st = session.state;
+  if (st.turnPlayer !== HUMAN || st.phase === 'GAME_OVER') return [];
+  if (st.turnNumber !== freshTurn) {
+    freshTurn = st.turnNumber;
+    freshBoard = st.board;
+  }
+  if (st.board !== freshBoard) return [];
+  const keys = new Set<string>();
+  for (const p of session.lastTurnOf(BOT))
+    for (const s of p.steps) {
+      if (s.k === 'grow') for (const t of s.tiles) keys.add(t.key);
+      if (s.k === 'strengthen') keys.add(s.key);
+    }
+  return [...keys].filter((k) => st.board[k]?.owner === BOT).sort();
+}
+
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
-  let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner }) => ({ key, owner })), focusKey };
+  let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age }) => ({ key, owner, age })), focusKey, fresh: freshKeys() };
   if (myTurn() && !busy()) {
     const sel = session.sel;
     const pending = session.pending;
@@ -1226,7 +1269,11 @@ function renderTooltip(v: View) {
   const gold = terrain === 'rich';
   let html: string;
   if (terrain === 'rock') html = `<b>${name} · Rock</b><span>Nothing can grow here.</span>`;
-  else if (!t) html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>`;
+  else if (!t) {
+    const scar = scars.find((s) => s.key === key);
+    const cut = scar ? `<span class="muted">${scar.owner === HUMAN ? 'Your' : OPP.Label} tile here was cut off ${scar.age === 0 ? 'this turn' : scar.age === 1 ? 'a turn ago' : 'two turns ago'}.</span>` : '';
+    html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>${cut}`;
+  }
   else {
     const mine = t.owner === HUMAN;
     const who = mine ? 'Your' : OPP.Label;
@@ -1511,6 +1558,10 @@ function renderPiles(v: View, advice: Advice | null) {
   t.className = `pile-top${top ? ` card s${top.suit}` : ' empty'}`;
   t.innerHTML = top ? cardFace(top) : '';
   $('deck-count').textContent = String(v.deckCount);
+  // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
+  const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
+  $('deck').classList.toggle('low', low);
+  $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
   $('discard-count').textContent = String(v.discard.length);
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
@@ -1578,6 +1629,13 @@ function renderGameOver() {
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   $('go-reason').textContent = resultReason(r, HUMAN);
+  // UX pass: what I did with the one-card move, and (A/B test) a quick switch to the other version
+  const moves = moveSummary(st.history ?? [], HUMAN, st.config);
+  $('go-moves').textContent = moves ?? '';
+  $('go-moves').hidden = !moves;
+  const otherVersion: Ruleset = rulesetOf(st.config) === 'seed' ? 'sprout' : 'seed';
+  $('go-version').textContent = `Try the ${MOVE_WORDS[otherVersion].Name} version`;
+  $('go-version').dataset.ruleset = otherVersion;
   const part = (p: Player) => {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
@@ -2060,6 +2118,10 @@ bind('tool-skip', () => {
 });
 bind('tool-replay', () => replayBotTurn());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
+bind('go-version', () => startGame(randomSeed(), gameLevel, ($('go-version').dataset.ruleset as Ruleset | undefined) ?? 'seed'));
+bind('version-chip', () => {
+  if (session) caption(moveWords(session.state.config).explain, null, 'info');
+});
 bind('go-board', () => {
   gameOverDismissed = true;
   render();
