@@ -60,11 +60,11 @@ describe('events (spec 12, step 18)', () => {
     }
   });
 
-  it('the core game records Sprout events and never Rot or Knock events', () => {
+  it('the core game records Sprout events and never Rot or Knock events (Fruit is core since v0.5)', () => {
     const seen = new Set<string>();
     for (let seed = 1; seed <= 30; seed++) for (const e of playLog(seed).states.at(-1)!.history!) seen.add(e.t);
     expect(seen).toContain('Sprout');
-    for (const t of ['RotCount', 'Rot', 'RotPick', 'Knock', 'FinalTurnStart', 'Fruit']) expect(seen).not.toContain(t);
+    for (const t of ['RotCount', 'Rot', 'RotPick', 'Knock', 'FinalTurnStart']) expect(seen).not.toContain(t);
   });
 
   it('a finished game ends with exactly one GameEnd event carrying the result', () => {
@@ -107,6 +107,7 @@ describe('events (spec 12, step 18)', () => {
             e.hexes.forEach((h, j) => (board[coordKey(h)] = { owner: p, strength: e.t === 'MeldSet' ? ranks[0]! : ranks[j]! }));
           }
           if (e.t === 'Sprout') board[coordKey(e.coord)] = { owner: p, strength: cards.get(e.card)!.rank };
+          if (e.t === 'Strengthen') board[coordKey(e.coord)] = { owner: p, strength: e.newStrength };
           if (e.t === 'Fruit') for (const c of [...e.sacrifice, e.target]) board[coordKey(c)] = null;
           if (e.t === 'Rot' || e.t === 'Sever') for (const c of e.coords) board[coordKey(c)] = null;
           if (e.t === 'RotPick') board[coordKey(e.coord)] = null;

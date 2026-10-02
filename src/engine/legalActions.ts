@@ -3,7 +3,7 @@ import { DIRECTIONS, MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { IllegalActionError } from './errors.js';
 import { planFruit } from './fruit.js';
 import { claimBlocker } from './overgrow.js';
-import { planRun, touchesNetwork } from './placement.js';
+import { planRun, strengthenBlocker, touchesNetwork } from './placement.js';
 import type { Action, Card, Coord, State, View } from './types.js';
 import { viewFor } from './view.js';
 
@@ -109,22 +109,28 @@ const actActions = (v: View): Action[] => {
     }
   }
 
-  // Sprout (v0.4): one card, one tile next to the network; one card per suit/rank.
+  // Sprout (v0.4): one card, one tile next to the network; one card per suit/rank. v0.5
+  // Strengthen is a Sprout on my own weaker non-root tile, listed in the same board order.
   if (v.sproutsThisTurn < v.config.sproutsPerTurn) {
+    const startKeys = new Set(starts.map(coordKey));
+    const used = (v.strengthenUsed ?? [0, 0])[p];
     for (const card of [...reps.values()].sort((x, y) => x.id - y.id)) {
-      for (const coord of starts) {
-        if (claimBlocker(v, p, coord, card.rank) === null) out.push({ t: 'Sprout', card: card.id, coord });
+      for (const coord of board) {
+        const own = v.board[coordKey(coord)]?.owner === p;
+        if (own ? v.config.allowStrengthen && strengthenBlocker(v, p, coord, card.rank, used) === null : startKeys.has(coordKey(coord)) && claimBlocker(v, p, coord, card.rank) === null) {
+          out.push({ t: 'Sprout', card: card.id, coord });
+        }
       }
     }
   }
 
-  // Fruit: connected own non-root trios and an adjacent enemy non-root target.
-  if (v.fruitUsed[p] < v.config.fruitPerPlayer) {
+  // Fruit: connected groups of my own non-root tiles and an adjacent enemy non-root target.
+  if (v.fruitUsed[p] < v.config.fruitPerPlayer && (!v.config.fruitOnlyWhenBehind || v.score < v.opponentScore)) {
     const mine = board.filter((c) => {
       const t = v.board[coordKey(c)];
       return t !== null && t !== undefined && t.owner === p && !t.root;
     });
-    for (const sacrifice of connectedSubsets(mine, 3)) {
+    for (const sacrifice of connectedSubsets(mine, v.config.fruitSacrifice ?? 3)) {
       const targets = board.filter((t) => sacrifice.some((s) => allNeighbors(s).some((n) => coordKey(n) === coordKey(t))));
       for (const target of targets) {
         if (legal(() => planFruit(v, p, v.fruitUsed[p], sacrifice, target))) out.push({ t: 'Fruit', sacrifice, target });

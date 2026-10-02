@@ -47,8 +47,8 @@ describe('newGame', () => {
     expect(l.deck).toHaveLength(72 - 15);
   });
 
-  it('the dealt cards come from the shuffle of the attempt that was used (v0.4)', () => {
-    const shuffled = shuffleDeck(createCards(s.config), 42, s.dealAttempt);
+  it('the dealt cards come from the one shuffle of the game seed', () => {
+    const shuffled = shuffleDeck(createCards(s.config), 42);
     expect(s.hands[0]).toEqual(shuffled.slice(0, 7));
     expect(s.deck).toEqual(shuffled.slice(15));
     expect(s.deck).toHaveLength(4 * s.config.maxRank * 2 - 15);

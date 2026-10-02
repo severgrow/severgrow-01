@@ -23,6 +23,7 @@ export const viewFor = (state: State, player: Player): View => ({
   phase: state.phase,
   drawnFromDiscard: state.drawnFromDiscard,
   fruitUsed: [...state.fruitUsed],
+  strengthenUsed: [...(state.strengthenUsed ?? [0, 0])] as [number, number],
   finalTurn: copy(state.finalTurn),
   rotPick: copy(state.rotPick),
   turnNumber: state.turnNumber,

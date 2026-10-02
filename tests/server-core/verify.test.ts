@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { legalActions, viewFor, newGame, apply } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { DEFAULT_WORLD_CONFIG, RULES_VERSION, finishGame, issueTicket, newAccount, verifyGame } from '../../src/server-core/index.js';
+import { RULES_VERSIONS } from '../../src/engine/index.js';
+import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { BOT_VERSION, DEFAULT_WORLD_CONFIG, RULES_VERSION, finishGame, issueTicket, newAccount, verifyGame } from '../../src/server-core/index.js';
 import type { Ticket } from '../../src/server-core/index.js';
 import { losingGame, winningGame } from './helpers.js';
 
@@ -12,7 +14,30 @@ const ticketFor = (seed: number, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9, now =
 describe('tickets', () => {
   it('a ticket carries the server-chosen seed, the level, the rules version and expires in 2 hours', () => {
     const t = ticketFor(42, 5, 1000);
-    expect(t).toMatchObject({ id: 't-42-5', playerId: 'p1', seed: 42, level: 5, rulesVersion: RULES_VERSION, expiresAt: 1000 + 2 * H, used: false });
+    expect(t).toMatchObject({ id: 't-42-5', playerId: 'p1', seed: 42, level: 5, rulesVersion: RULES_VERSION, botVersion: BOT_VERSION, expiresAt: 1000 + 2 * H, used: false });
+    expect(RULES_VERSION).toBe('v0.5-fruit-strengthen');
+    expect(BOT_VERSION).toBe(CURRENT_BOT_VERSION);
+  });
+});
+
+describe('versions: earlier games still verify with the rules and bots they were played with', () => {
+  it('a ticket from before v0.5 (rules v0.4-defaults-2, bots-v0.5, no botVersion stored) still verifies', () => {
+    const old = winningGame(3, 1, 9, RULES_VERSIONS['v0.4-defaults-2'], BOT_VERSIONS['bots-v0.5']);
+    const { botVersion: _b, ...t } = issueTicket({ id: 'old', playerId: 'p1', seed: old.seed, level: 3, now: 1_000_000 }, { ...DEFAULT_WORLD_CONFIG, rulesVersion: 'v0.4-defaults-2', botVersion: 'bots-v0.5' });
+    expect(verifyGame(t, old.actions, 2_000_000)).toEqual({ ok: true, scores: old.end.result!.scores });
+  });
+
+  it('rejects unknown rules or bot versions', () => {
+    const t = ticketFor(1, 4);
+    expect(verifyGame({ ...t, rulesVersion: 'v9.9' }, [], 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/rules/) });
+    expect(verifyGame({ ...t, botVersion: 'bots-v9' }, [], 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/bot version/) });
+  });
+
+  it('the seed only ever comes from the ticket: the moves cannot choose or change it', () => {
+    // verifyGame takes (ticket, actions); a log played on another seed fails on the stored one
+    const other = winningGame(4, 30);
+    const t = ticketFor(other.seed + 1, 4);
+    expect(verifyGame(t, other.actions, 2_000_000).ok).toBe(false);
   });
 });
 

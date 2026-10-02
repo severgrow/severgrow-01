@@ -17,12 +17,16 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rotStep: 8,
   forbidRedundantDiscard: true,
   allowHyphaOneBend: false,
-  fruitPerPlayer: 0,
+  fruitPerPlayer: 1,
   rootsScore: false,
   maxRank: 9,
   sproutsPerTurn: 1,
-  guaranteeOpeningMeld: false,
   maxTurnsPerPlayer: 30,
+  unbiasedShuffle: true,
+  allowStrengthen: true,
+  strengthenLimitPerGame: -1,
+  fruitSacrifice: 3,
+  fruitOnlyWhenBehind: false,
   rotEnabled: false,
   knockEnabled: false,
 });
@@ -44,6 +48,8 @@ const NUMBER_MIN: Record<string, number> = {
   maxRank: MIN_MAX_RANK,
   sproutsPerTurn: 0,
   maxTurnsPerPlayer: 0,
+  strengthenLimitPerGame: -1,
+  fruitSacrifice: 1,
 };
 
 const BOOLEAN_KEYS = [
@@ -51,7 +57,9 @@ const BOOLEAN_KEYS = [
   'forbidRedundantDiscard',
   'allowHyphaOneBend',
   'rootsScore',
-  'guaranteeOpeningMeld',
+  'unbiasedShuffle',
+  'allowStrengthen',
+  'fruitOnlyWhenBehind',
   'rotEnabled',
   'knockEnabled',
 ] as const;

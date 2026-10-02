@@ -4,12 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   ConfigError,
   DEFAULT_CONFIG,
-  DealError,
   IllegalActionError,
   apply,
   bestMeldPartition,
   createCards,
-  dealOpening,
   legalActions,
   newGame,
   replay,
@@ -89,10 +87,9 @@ describe('v0.4 config', () => {
       copiesPerCard: 2,
       handSize: 7,
       sproutsPerTurn: 1,
-      guaranteeOpeningMeld: false,
       rotEnabled: false,
       knockEnabled: false,
-      fruitPerPlayer: 0,
+      fruitPerPlayer: 1, // v0.5: Fruit is back
       maxTurnsPerPlayer: 30,
     });
   });
@@ -129,27 +126,12 @@ describe('v0.4 config', () => {
   });
 });
 
-describe('guaranteed opening combo', () => {
-  it('both hands hold a combo, every card appears once, same seed same deal (1,000 seeds)', () => {
-    const all = createCards(resolveConfig()).map((x) => x.id);
-    for (let seed = 1; seed <= 1000; seed++) {
-      const g = newGame(seed, { guaranteeOpeningMeld: true });
-      expect(hasCombo(g.hands[0])).toBe(true);
-      expect(hasCombo(g.hands[1])).toBe(true);
-      const ids = [...g.hands[0], ...g.hands[1], ...g.deck, ...g.discard].map((x) => x.id).sort((a, b) => a - b);
-      expect(ids).toEqual(all);
-      expect(g.dealAttempt).toBeGreaterThanOrEqual(0);
-      expect(g.dealAttempt).toBeLessThan(200);
-      if (seed <= 50) expect(JSON.stringify(newGame(seed, { guaranteeOpeningMeld: true }))).toBe(JSON.stringify(g));
-    }
-  });
-
-  it('the default deal is a plain shuffle: no redeals, so a hand with no combo is possible (1,000 seeds)', () => {
+describe('the deal (the opening-combo guarantee was removed in v0.5)', () => {
+  it('the default deal is a plain shuffle: a hand with no combo is possible (1,000 seeds)', () => {
     let noCombo = 0;
     for (let seed = 1; seed <= 1000; seed++) {
       const g = newGame(seed);
-      expect(g.dealAttempt).toBe(0);
-      const shuffled = shuffleDeck(createCards(g.config), seed, 0);
+      const shuffled = shuffleDeck(createCards(g.config), seed);
       expect(g.hands[0]).toEqual(shuffled.slice(0, 7));
       expect(g.hands[1]).toEqual(shuffled.slice(7, 14));
       expect(g.discard).toEqual([shuffled[14]]);
@@ -158,26 +140,6 @@ describe('guaranteed opening combo', () => {
     }
     // Nothing is fixed up: plenty of real deals start without a combo in one hand.
     expect(noCombo).toBeGreaterThan(100);
-  });
-
-  it('without the guarantee the first deal is used', () => {
-    expect(newGame(7, { guaranteeOpeningMeld: false }).dealAttempt).toBe(0);
-  });
-
-  it('gives up after 200 attempts with a clear typed error', () => {
-    let tries = 0;
-    let err: unknown;
-    try {
-      dealOpening(5, resolveConfig({ guaranteeOpeningMeld: true }), () => {
-        tries++;
-        return false;
-      });
-    } catch (e) {
-      err = e;
-    }
-    expect(err).toBeInstanceOf(DealError);
-    expect((err as DealError).code).toBe('NO_OPENING_COMBO');
-    expect(tries).toBe(200);
   });
 });
 
@@ -210,7 +172,10 @@ describe('Sprout', () => {
     illegal(makeState({ hands: hand, rock: ['-1,1'] }), sprout(five, -1, 1), 'ROCK');
     illegal(makeState({ hands: hand, tiles: { '-2,3': [0, 1] } }), sprout(five, -2, 4), 'OFF_BOARD');
     illegal(makeState({ hands: hand, tiles: { '1,-1': [0, 1], '0,0': [0, 1], '-1,1': [0, 1] } }), sprout(five, 2, -2), 'ROOT_IMMUNE');
-    illegal(makeState({ hands: hand, tiles: { '-1,1': [0, 1] } }), sprout(five, -1, 1), 'OWN_TILE');
+    // v0.5: my own tile is a Strengthen when the card is higher; equal is refused, and with
+    // Strengthen switched off my own tile is never a target
+    illegal(makeState({ hands: hand, tiles: { '-1,1': [0, 5] } }), sprout(five, -1, 1), 'NOT_STRONGER');
+    illegal(makeState({ hands: hand, config: { allowStrengthen: false }, tiles: { '-1,1': [0, 1] } }), sprout(five, -1, 1), 'OWN_TILE');
   });
 
   it('replaces only a strictly weaker enemy tile', () => {
@@ -399,7 +364,7 @@ describe('turn limit (v0.4)', () => {
   });
 
   it('the recorded stall (seed 122, both players swapping discards) now ends', () => {
-    let g = newGame(122, { maxRank: 9, sproutsPerTurn: 0, guaranteeOpeningMeld: false, copiesPerCard: 3 });
+    let g = newGame(122, { maxRank: 9, sproutsPerTurn: 0, copiesPerCard: 3, fruitPerPlayer: 0, allowStrengthen: false });
     for (let i = 0; i < 5000 && g.phase !== 'GAME_OVER'; i++) g = apply(g, GreedyBot.chooseAction(viewFor(g, g.actor)));
     expect(g.phase).toBe('GAME_OVER');
     expect(g.result!.reason).toBe('turn_limit');
@@ -414,8 +379,8 @@ describe('legacyV03 reproduces v0.3.1 byte-for-byte', () => {
         : v,
     );
   const hash = (x: unknown) => createHash('sha256').update(canonical(x)).digest('hex');
-  const NEW_STATE_KEYS = ['sproutsThisTurn', 'dealAttempt'];
-  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'guaranteeOpeningMeld', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer'];
+  const NEW_STATE_KEYS = ['sproutsThisTurn', 'dealAttempt', 'strengthenUsed'];
+  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer', 'unbiasedShuffle', 'allowStrengthen', 'strengthenLimitPerGame', 'fruitSacrifice', 'fruitOnlyWhenBehind'];
   const toV03 = (s: State) => {
     const { history: _h, ...rest } = s;
     const out: Record<string, unknown> = { ...rest };

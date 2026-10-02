@@ -58,6 +58,12 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       break;
     }
     case 'Sprout': {
+      if (res?.strengthen) {
+        const st = res.strengthen;
+        out.push({ t: 'Strengthen', player: p, card: a.card, coord: { ...st.coord }, oldStrength: st.from, newStrength: st.to });
+        out.push(...settleEvents(before, after, p, false));
+        break;
+      }
       out.push({ t: 'Sprout', player: p, card: a.card, coord: { ...res!.sprout! } });
       for (const c of res?.overgrown ?? []) {
         const old = before.board[coordKey(c)]!;

@@ -56,10 +56,19 @@ const meld = (s: State, placement: Placement): State => {
 const sprout = (s: State, cardId: number, coord: unknown): State => {
   const p = s.turnPlayer;
   if (s.sproutsThisTurn >= s.config.sproutsPerTurn) fail('SPROUT_LIMIT', `at most ${s.config.sproutsPerTurn} sprout(s) per turn`);
-  const plan = planSprout(s, p, s.hands[p], cardId, coord as never);
+  const used = s.strengthenUsed ?? [0, 0];
+  const plan = planSprout(s, p, s.hands[p], cardId, coord as never, used[p]);
   const out = applyPlacement(s.board, plan);
-  const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord), sprout: { ...out.placed[0]! } };
   const hand = s.hands[p].filter((c) => c.id !== cardId);
+  if (plan.strengthen) {
+    // v0.5 Strengthen: the tile stays, only its number rises; connections cannot change.
+    const strengthenUsed: [number, number] = [...used];
+    strengthenUsed[p]++;
+    const t = plan.tiles[0]!;
+    const res = { ...emptyResolution(), strengthen: { coord: { ...t.coord }, from: plan.strengthen.from, to: t.strength } };
+    return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand), sproutsThisTurn: s.sproutsThisTurn + 1, strengthenUsed }, p, res);
+  }
+  const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord), sprout: { ...out.placed[0]! } };
   return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand), sproutsThisTurn: s.sproutsThisTurn + 1 }, p, res);
 };
 
