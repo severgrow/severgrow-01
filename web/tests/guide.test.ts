@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { guideTarget } from '../src/logic/guide.js';
-import { EMPTY_SEL, isBoardAction, pendingAction, tapCard, tapHex } from '../src/logic/interaction.js';
+import { EMPTY_SEL, isBoardAction, kindOf, pendingAction, tapCard, tapHex, tapKind } from '../src/logic/interaction.js';
 import type { Sel } from '../src/logic/interaction.js';
 import { playGame } from './ui-helpers.js';
 
@@ -22,6 +22,7 @@ const follow = (s: State, goal: Action): { sel: Sel; taps: number; done: boolean
       taps--;
       applied++;
     }
+    else if (t.kind === 'kind') sel = tapKind(sel, t.move);
     else if (t.kind === 'cancel') sel = EMPTY_SEL;
     else return { sel, taps, done: false };
   }
@@ -46,20 +47,27 @@ describe('coach arrows (show where to tap)', () => {
       for (const goal of legalActions(v).filter((a) => isBoardAction(a) || a.t === 'Discard')) {
         const r = follow(s, goal);
         expect(r.done, JSON.stringify(goal)).toBe(true);
-        expect(r.taps).toBeLessThanOrEqual(isBoardAction(goal) ? 2 : 1); // card, then hex
+        // Sprout: card, then hex. Line or clump: its button, a card, then a hex. Throw: the card.
+        expect(r.taps).toBeLessThanOrEqual(!isBoardAction(goal) ? 1 : kindOf(goal) === 'sprout' ? 2 : 3);
         checked++;
       }
     }
     expect(checked).toBeGreaterThan(100);
   }, 300_000);
 
-  it('the first arrow of a board move points at one of its cards', () => {
-    const s = states.find((x) => x.phase === 'ACT' && legalActions(viewFor(x, 0)).some(isBoardAction))!;
-    const v = viewFor(s, 0);
-    const legal = legalActions(v);
-    const goal = legal.find(isBoardAction)!;
-    const t = guideTarget(v, legal, EMPTY_SEL, goal)!;
-    expect(t.kind).toBe('card');
+  it('the first arrow points at a card for a sprout, and at the line or clump button for a combo', () => {
+    let both = 0;
+    for (const s of states.filter((x) => x.phase === 'ACT')) {
+      const v = viewFor(s, 0);
+      const legal = legalActions(v);
+      const sprout = legal.find((a) => a.t === 'Sprout');
+      const combo = legal.find((a) => a.t === 'MeldRun' || a.t === 'MeldSet');
+      if (!sprout || !combo) continue;
+      expect(guideTarget(v, legal, EMPTY_SEL, sprout)!.kind).toBe('card');
+      expect(guideTarget(v, legal, EMPTY_SEL, combo)).toEqual({ kind: 'kind', move: kindOf(combo) });
+      both++;
+    }
+    expect(both).toBeGreaterThan(0);
   });
 
   it('simple moves point at their button or pile', () => {

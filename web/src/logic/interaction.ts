@@ -81,6 +81,10 @@ export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { k
     .sort((a, b) => KIND_ORDER(a.kind) - KIND_ORDER(b.kind) || a.kind.localeCompare(b.kind, 'en', { numeric: true }));
 };
 
+/** The move buttons above the hand: lines and clumps only. Sprouting needs no button,
+ *  because tapping a card picks Sprout by default. */
+export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout');
+
 /** A quick "how good is it" score, so the best option is offered first. */
 const quickScore = (v: View, a: Action): number => {
   const sim = simulate(v, a);
@@ -105,6 +109,19 @@ export const pendingAction = (v: View, legal: readonly Action[], sel: Sel): Acti
   return opts.length ? opts[sel.option % opts.length]! : null;
 };
 
+/**
+ * The move to play straight away, or null. A picked spot that allows exactly one move
+ * plays at once (no Confirm: Undo can take it back). With several different moves on
+ * that spot, the preview stays so the player can pick ("Other way" / "Change card").
+ */
+export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
+  // Only a picked card plus a spot plays at once. A spot tapped on its own just previews
+  // (so a stray or double tap on the board can never play a move by itself).
+  if (sel.hex === null || sel.card === null) return null;
+  const opts = options(v, legal, sel);
+  return opts.length === 1 ? opts[0]! : null;
+};
+
 /** The selection that makes `a` the pending move (for the coach's "Show me"). */
 export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
   const ids = moveCards(a);
@@ -116,11 +133,17 @@ export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
 
 // ---------- taps ----------
 
+/**
+ * Tapping a card. In the Grow step a card picks Sprout by default (only its sprout spots
+ * glow), unless a line or clump was chosen first or a hex was tapped first. Tapping the
+ * same card again clears it.
+ */
 export const tapCard = (v: View, legal: readonly Action[], sel: Sel, id: number): Sel => {
-  if (sel.card === id) return { ...sel, card: null, option: 0 };
+  if (sel.card === id) return { ...sel, card: null, kind: sel.kind === 'sprout' ? null : sel.kind, option: 0 };
   const next: Sel = { ...sel, card: id, option: 0 };
   if (next.kind !== null && matching(v, legal, { ...next, hex: null }).length === 0) next.kind = null;
   if (next.hex !== null && matching(v, legal, next).length === 0) next.hex = null;
+  if (next.kind === null && next.hex === null && matching(v, legal, { ...next, kind: 'sprout' }).length > 0) next.kind = 'sprout';
   return next;
 };
 

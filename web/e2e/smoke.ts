@@ -10,6 +10,8 @@ import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
+import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
+import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
 const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
@@ -72,9 +74,28 @@ const newGame = async (page: Page, level = 7) => {
   await page.click(`#level-grid [data-level="${level}"]`);
 };
 
-/** Picks a target hex for the selected card, unless the card already previewed its only spot. */
+/** Picks the demo move's card: a line or clump needs its button first (a card tap alone picks Sprout). */
+type Pick = { action: CutDemo['action']; card: number; hex: string; option: number };
+const pickCard = async (page: Page, d: Pick) => {
+  if (d.action.t === 'MeldRun' || d.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(d.action)}"]`);
+  await page.click(`#hand [data-card="${d.card}"]`);
+};
+
+/** Picks the demo's card, hex and option, then confirms (does not wait). */
+const startMove = async (page: Page, d: Pick) => {
+  const before = (await getState(page))!.history?.length ?? 0;
+  await pickCard(page, d);
+  if (((await getState(page))!.history?.length ?? 0) > before) return; // the card's only spot: played at once
+  if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
+  if (await page.locator('#confirm-play').isVisible()) {
+    for (let i = 0; i < d.option; i++) await page.click('#confirm-other');
+    await page.click('#confirm-play');
+  }
+};
+/** Picks a target hex for the selected card (a clear choice then plays at once; several ways show a preview). */
 const pickTarget = async (page: Page) => {
   if (await page.locator('#confirm-play').isVisible()) return true;
+  if (await isBusy(page)) return true; // the card's only spot already played
   const t = page.locator('.l-over .target').first();
   if ((await t.count()) === 0) return false;
   await tapHex(page, (await t.getAttribute('data-key'))!);
@@ -128,6 +149,7 @@ const playTurn = async (page: Page) => {
       const t = (await page.getAttribute('#guide-arrow', 'data-target'))!;
       if (t.startsWith('card:')) await page.click(`#hand [data-card="${t.slice(5)}"]`);
       else if (t.startsWith('hex:')) await tapHex(page, t.slice(4));
+      else if (t.startsWith('kind:')) await page.click(`#moves [data-kind="${t.slice(5)}"]`);
       else await page.click({ confirm: '#confirm-play', deck: '#deck', discard: '#discard', end: '#moves .end', cancel: '#confirm-cancel', button: '#moves .btn.primary' }[t]!);
       if (((await getState(page))!.history?.length ?? 0) > before) break;
     }
@@ -170,7 +192,7 @@ const playTurn = async (page: Page) => {
   if ((await card.count()) > 0) {
     await card.click();
     if (await pickTarget(page)) {
-      await page.click('#confirm-play');
+      if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
       await idle(page);
       await page.click('#moves .undo');
       undone = (await stateJson(page)) === before && (await boardTiles(page)) === (await stateTiles(page));
@@ -206,16 +228,18 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', {}, demo.state);
     await page.click('#menu-continue');
-    const cards = page.locator('#hand .card.playable');
-    await cards.nth(0).click();
-    const t = page.locator('.l-over .target').first();
-    await tapHex(page, (await t.getAttribute('data-key'))!);
-    const hadPreview = (await page.locator('.l-over .ghost').count()) > 0;
-    await page.click('#confirm-cancel');
+    // Two cards with several spots each, so picking one shows targets and plays nothing.
+    const dv = viewFor(demo.state, 0);
+    const dl = legalActions(dv);
+    const many = dv.hand.filter((c) => targetHexes(dv, dl, tapCard(dv, dl, EMPTY_SEL, c.id)).size >= 2).map((c) => c.id);
+    await page.click(`#hand [data-card="${many[0]}"]`);
+    const hadTargets = (await page.locator('.l-over .target').count()) >= 2;
+    await page.click('#moves .cancel');
     const cleared = (await page.locator('.l-over .ghost, .l-over .target, #hand .card.lifted').count()) === 0;
-    await cards.nth(1).click();
+    await page.click(`#hand [data-card="${many.find((id) => id !== many[0]) ?? many[0]}"]`);
     const lifted = await page.locator('#hand .card.lifted').count();
     const before = JSON.stringify(demo.state);
+    const hadPreview = hadTargets && many.length >= 2;
     check(`${theme}: ADVERSARIAL 1 tap card, cancel, tap another`, hadPreview && cleared && lifted === 1 && (await stateJson(page)) === before);
     await page.close();
   }
@@ -228,19 +252,29 @@ for (const theme of THEMES) {
     await page.mouse.move(1, 1); // no hover tooltip in the picture
     await page.waitForTimeout(300);
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
-    await page.click(`#hand [data-card="${demo.card}"]`);
-    if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
-    for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
-    await page.mouse.move(1, 1);
-    const chip = await page.textContent('#confirm-chip');
-    check(`${theme} ${size}: preview chip shows the cut`, !!chip && chip.includes(`cuts ${demo.cuts}`), chip ?? '');
-    if (dir) await page.screenshot({ path: `${dir}/${size}-preview.jpg`, quality: 82 });
     const histBefore = ((await getState(page))!.history?.length ?? 0);
-    await page.dblclick('#confirm-play'); // ADVERSARIAL 2: a double tap plays once
+    await pickCard(page, demo);
+    // A clear choice plays at once (no Confirm); a double tap on the spot must still play once.
+    if (((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {
+      const box = await page.locator(`.hex-cell[data-key="${demo.hex}"] path.hex`).boundingBox();
+      const dv = viewFor(demo.state, 0);
+      const dl = legalActions(dv);
+      const sel = { ...tapCard(dv, dl, demo.action.t === 'Sprout' ? EMPTY_SEL : { ...EMPTY_SEL, kind: kindOf(demo.action) }, demo.card), hex: demo.hex };
+      // One move on that spot: a double tap must play it once. Several: one tap shows the choice.
+      if (options(dv, dl, sel).length === 1) await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2); // ADVERSARIAL 2
+      else await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    }
+    if (await page.locator('#confirm-play').isVisible()) {
+      for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
+      const chip = await page.textContent('#confirm-chip');
+      check(`${theme} ${size}: preview chip shows the cut`, !!chip && chip.includes(`cuts ${demo.cuts}`), chip ?? '');
+      await page.dblclick('#confirm-play'); // ADVERSARIAL 2
+    }
+    await page.mouse.move(1, 1);
     const histAfter = ((await getState(page))!.history?.length ?? 0);
     const s = await getState(page);
     const playedOnce = histAfter > histBefore && s!.hands[0].length === demo.state.hands[0].length - (demo.action.t === 'Sprout' ? 1 : (demo.action as { cards: number[] }).cards.length);
-    if (size === 'phone') check(`${theme}: ADVERSARIAL 2 double tap on Confirm plays once`, playedOnce);
+    if (size === 'phone') check(`${theme}: ADVERSARIAL 2 a double tap plays the move once, with no Confirm needed`, playedOnce);
     if (dir) {
       await page.waitForSelector('.float', { timeout: 4000 }).catch(() => {});
       await page.waitForTimeout(250);
@@ -262,10 +296,7 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', { speed: 'slow' }, demo.state);
     await page.click('#menu-continue');
-    await page.click(`#hand [data-card="${demo.card}"]`);
-    if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, demo.hex); // a one-spot card previews by itself
-    for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
-    await page.click('#confirm-play');
+    await startMove(page, demo);
     await page.waitForTimeout(400); // mid-animation
     const midBusy = await isBusy(page);
     await page.click('#hud-menu');
@@ -293,7 +324,7 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', {}, demo.state);
     await page.click('#menu-continue');
-    await page.click(`#hand [data-card="${demo.card}"]`);
+    await pickCard(page, demo);
     const before = await stateJson(page);
     await page.click('#hud-menu');
     await page.click('#gm-settings');
@@ -338,13 +369,6 @@ for (const id of THEME_IDS) {
 
 // --- juice: the 6 adversarial checks, frame rate and particles ---
 const particleInfo = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: Hook }).__severgrow.particles());
-/** Picks the demo's card, hex and option, then confirms (does not wait). */
-const startMove = async (page: Page, d: CutDemo) => {
-  await page.click(`#hand [data-card="${d.card}"]`);
-  if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
-  for (let i = 0; i < d.option; i++) await page.click('#confirm-other');
-  await page.click('#confirm-play');
-};
 const settled = async (page: Page) => {
   await idle(page, 20000);
   await page.waitForTimeout(200);

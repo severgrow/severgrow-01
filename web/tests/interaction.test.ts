@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, selFor, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -101,8 +101,9 @@ describe('the game session', () => {
     expect(ses.pending).toBeNull();
     const other = c2 ?? ses.view.hand.find((c) => c.id !== c1!.id)!;
     ses.tapCard(other.id);
-    expect(ses.sel).toEqual({ ...EMPTY_SEL, card: other.id });
-    expect(targetHexes(ses.view, ses.legal, ses.sel)).toEqual(targetHexes(ses.view, ses.legal, { ...EMPTY_SEL, card: other.id }));
+    const fresh = tapCard(ses.view, ses.legal, EMPTY_SEL, other.id); // exactly as if it were the first tap
+    expect(ses.sel).toEqual(fresh);
+    expect(targetHexes(ses.view, ses.legal, ses.sel)).toEqual(targetHexes(ses.view, ses.legal, fresh));
     expect(ses.state).toBe(s); // nothing was played
   });
 
@@ -178,5 +179,83 @@ describe('undo (take back a move in your own turn)', () => {
     const ses = new Session(d);
     ses.play({ t: 'Draw', from: 'deck' });
     expect(ses.canUndo).toBe(false); // the new card has been seen
+  });
+});
+
+describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one tile" button)', () => {
+  const s = actState(3);
+  const v = viewFor(s, 0);
+  const legal = legalActions(v);
+  const canSprout = (id: number) => legal.some((a) => a.t === 'Sprout' && v.hand.some((c) => c.id === a.card && c.suit === v.hand.find((h) => h.id === id)!.suit && c.rank === v.hand.find((h) => h.id === id)!.rank));
+
+  it('tapping a card that can sprout picks Sprout: only its sprout spots glow', () => {
+    const card = v.hand.find((c) => canSprout(c.id))!;
+    const sel = tapCard(v, legal, EMPTY_SEL, card.id);
+    expect(sel.kind).toBe('sprout');
+    const same = (id: number) => v.hand.find((c) => c.id === id)!;
+    const sprouts = new Set(legal.filter((a) => a.t === 'Sprout' && same(a.card).suit === card.suit && same(a.card).rank === card.rank).flatMap((a) => moveHexes(a).map(coordKey)));
+    expect(sprouts.size).toBeGreaterThan(0);
+    expect(targetHexes(v, legal, sel)).toEqual(sprouts);
+  });
+
+  it('a chosen line or clump is kept; a hex picked first is kept (it shows the best move there)', () => {
+    const kinds = kindsAvailable(v, legal, EMPTY_SEL).map((k) => k.kind).filter((k) => k !== 'sprout');
+    expect(kinds.length).toBeGreaterThan(0);
+    const withKind = tapKind(EMPTY_SEL, kinds[0]!);
+    const line = legal.find((a) => kindOf(a) === kinds[0])!;
+    expect(tapCard(v, legal, withKind, moveCards(line)[0]!).kind).toBe(kinds[0]);
+    const hexFirst = { ...EMPTY_SEL, hex: coordKey(moveHexes(line)[0]!) };
+    expect(tapCard(v, legal, hexFirst, moveCards(line)[0]!).kind).toBeNull();
+  });
+
+  it('tapping the same card again clears it, Sprout included', () => {
+    const card = v.hand.find((c) => canSprout(c.id))!;
+    const sel = tapCard(v, legal, tapCard(v, legal, EMPTY_SEL, card.id), card.id);
+    expect(sel).toMatchObject({ card: null, kind: null });
+  });
+
+  it('the move buttons no longer offer "Sprout one tile" (lines and clumps stay)', () => {
+    expect(kindsAvailable(v, legal, EMPTY_SEL).some((k) => k.kind === 'sprout')).toBe(true); // still a kind of move
+    const shown = moveButtons(v, legal, EMPTY_SEL).map((k) => k.kind);
+    expect(shown).not.toContain('sprout');
+    expect(shown.length).toBeGreaterThan(0);
+  });
+});
+
+describe('no Confirm for a clear choice (Undo can take it back)', () => {
+  const s = actState(3);
+  const v = viewFor(s, 0);
+  const legal = legalActions(v);
+
+  it('a card and a spot that allow exactly one move: it plays at once', () => {
+    let checked = 0;
+    for (const c of v.hand) {
+      const sel = tapCard(v, legal, EMPTY_SEL, c.id);
+      for (const hex of targetHexes(v, legal, sel)) {
+        const picked = { ...sel, hex };
+        const opts = options(v, legal, picked);
+        if (opts.length === 1) {
+          expect(playNow(v, legal, picked)).toEqual(opts[0]);
+          checked++;
+        } else expect(playNow(v, legal, picked)).toBeNull();
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('more than one different move on that spot: no auto-play, the preview offers "Other way"', () => {
+    const multi = [...new Set(legal.filter(isBoardAction).flatMap((a) => moveHexes(a).map(coordKey)))].find((h) => options(v, legal, { ...EMPTY_SEL, hex: h }).length > 1)!;
+    expect(multi).toBeDefined();
+    expect(playNow(v, legal, { ...EMPTY_SEL, hex: multi })).toBeNull();
+  });
+
+  it('nothing plays without a spot', () => {
+    for (const c of v.hand) expect(playNow(v, legal, tapCard(v, legal, EMPTY_SEL, c.id))).toBeNull();
+  });
+
+  it('ADVERSARIAL: a spot tapped with no card picked never plays (so a double tap cannot play twice)', () => {
+    for (const h of new Set(legal.filter(isBoardAction).flatMap((a) => moveHexes(a).map(coordKey)))) {
+      expect(playNow(v, legal, { ...EMPTY_SEL, hex: h })).toBeNull();
+    }
   });
 });

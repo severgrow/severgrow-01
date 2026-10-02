@@ -2043,3 +2043,97 @@ svg.usable .hex-cell {
 .reduce-motion .hand.idle-hint .card.playable {
   animation: none;
 }
+
+/* =================================================================
+   Consistent controls: one shape and three heights for every button.
+   - Buttons (main, plain, small, move buttons, chips, settings choices) are pills.
+   - Icon-only buttons (menu, history, back, "?", close) are circles.
+   - Cards, panels, sheets and level tiles keep rounded rectangles (they are not buttons).
+   Heights: big 56px, normal 44px, compact 36px; the step labels and their "?" are 32px.
+   ================================================================= */
+:root {
+  --pill: 999px;
+  --h-big: 56px;
+  --h-btn: 44px;
+  --h-compact: 36px;
+  --h-tag: 32px;
+}
+.btn,
+.btn.primary,
+.btn.ghost,
+.btn.link,
+.moves .btn {
+  border-radius: var(--pill);
+  min-height: var(--h-btn);
+  font-size: 0.95rem;
+  padding: 0 18px;
+}
+.btn.big {
+  min-height: var(--h-big);
+  font-size: 1.15rem;
+  padding: 0 28px;
+}
+.btn.small {
+  min-height: var(--h-compact);
+  font-size: 0.88rem;
+  padding: 0 14px;
+}
+.icon-only {
+  width: var(--h-btn);
+  height: var(--h-btn);
+  border-radius: 50%;
+}
+.icon-only.small {
+  width: var(--h-compact);
+  height: var(--h-compact);
+}
+.chip,
+.chip.corner {
+  min-height: var(--h-btn);
+  min-width: var(--h-btn);
+  border-radius: var(--pill);
+  justify-content: center;
+}
+.seg {
+  border-radius: var(--pill);
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  min-height: var(--h-compact);
+  border-radius: var(--pill);
+  padding: 0 12px;
+}
+.steps li {
+  min-height: var(--h-tag);
+  border-radius: var(--pill);
+}
+.help-btn {
+  width: var(--h-tag);
+  height: var(--h-tag);
+  margin-top: 0;
+  border-radius: 50%;
+}
+.steps-row {
+  align-items: center;
+}
+/* A hint in the moves row ("Pick a card to sprout", "Tap a card to throw it") is bold
+   text pointing down at the hand, never shaped like a button. */
+.step-note {
+  border: 0 !important;
+  background: none !important;
+  padding: 0 4px;
+  min-height: 0;
+  color: var(--c-text);
+  font-size: 1rem;
+}
+.step-note::after {
+  content: ' ↓';
+  color: var(--c-muted);
+}
+.help-btn {
+  display: inline-grid;
+  place-items: center;
+  padding: 2px 0 0; /* the font's "?" sits high: nudge it to the optical centre */
+  line-height: 1;
+}
