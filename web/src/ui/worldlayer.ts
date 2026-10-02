@@ -1,0 +1,153 @@
+// Material pass 2: the material layer as one world-space picture of the whole board, shown
+// through an SVG pattern that every moss and lava tile is filled with, so the texture runs on
+// from tile to tile. Painted once, then only the areas that changed (a tile placed, replaced,
+// strengthened or cut off) are repainted, in small slices so a frame is never held up. When
+// a repaint lands, the tiles that changed cross-fade from their old look to the new one.
+import { paintRect, rectFor } from '../logic/worldpaint.js';
+import type { PaintTile, Rect } from '../logic/worldpaint.js';
+import type { ThemeId } from '../logic/themes.js';
+import { S } from '../logic/vigour.js';
+import { el } from './geom.js';
+
+type Box = { x0: number; y0: number; w: number; h: number };
+const same = (a: PaintTile | undefined, b: PaintTile | undefined) => !!a && !!b && a.owner === b.owner && Math.abs(a.t - b.t) < 1e-6 && !!a.dead === !!b.dead && !!a.root === !!b.root;
+const NB: readonly [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+
+export class WorldLayer {
+  private canvas: HTMLCanvasElement | null = null;
+  private g: CanvasRenderingContext2D | null = null;
+  private image: SVGImageElement;
+  private prevImage: SVGImageElement;
+  private tiles = new Map<string, PaintTile>();
+  private queue: Rect[] = [];
+  private changed = new Set<string>();
+  private running = false;
+  private url: string | null = null;
+  private palette: ThemeId = 'soil';
+  private detail: 'low' | 'normal' = 'normal';
+  /** ms the last full repaint took (for the performance report) */
+  lastPaintMs = 0;
+  /** called when new pixels are on screen, with the hexes that changed (for the cross-fade) */
+  onSwap: (keys: string[]) => void = () => {};
+  /** called once, when the first picture is ready (the board redraws its tiles with it) */
+  onFirst: () => void = () => {};
+
+  constructor(
+    defs: SVGDefsElement,
+    readonly patternId: string,
+    readonly prevId: string,
+    private box: Box,
+    private scale: number,
+  ) {
+    const mk = (id: string) => {
+      const p = el('pattern', { id, patternUnits: 'userSpaceOnUse', x: box.x0, y: box.y0, width: box.w, height: box.h }, defs);
+      // (inside a pattern, positions count from the pattern's own corner)
+      return el('image', { x: 0, y: 0, width: box.w, height: box.h, preserveAspectRatio: 'none' }, p);
+    };
+    this.image = mk(patternId);
+    this.prevImage = mk(prevId);
+    try {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(box.w * scale);
+      c.height = Math.ceil(box.h * scale);
+      const g = c.getContext('2d');
+      if (g) {
+        this.canvas = c;
+        this.g = g;
+      }
+    } catch {
+      /* no canvas (tests): tiles keep their plain fill */
+    }
+  }
+
+  get ready(): boolean {
+    return this.url !== null;
+  }
+
+  /** The tiles to show now; repaints whatever differs from last time (and the blend band around it). */
+  sync(tiles: ReadonlyMap<string, PaintTile>, palette: ThemeId, detail: 'low' | 'normal') {
+    if (!this.g) return;
+    const full = palette !== this.palette || detail !== this.detail || this.url === null;
+    this.palette = palette;
+    this.detail = detail;
+    const dirty = new Set<string>();
+    const keys = new Set([...tiles.keys(), ...this.tiles.keys()]);
+    for (const k of keys) {
+      if (full || !same(tiles.get(k), this.tiles.get(k))) {
+        dirty.add(k);
+        // its neighbours blend with it, and blades may lean across: repaint them too
+        const [q, r] = k.split(',').map(Number) as [number, number];
+        for (const [dq, dr] of NB) dirty.add(`${q + dq},${r + dr}`);
+      }
+    }
+    this.tiles = new Map(tiles);
+    if (dirty.size === 0) return;
+    for (const k of dirty) if (!full) this.changed.add(k);
+    if (full) {
+      // whole board, in horizontal bands
+      const band = Math.max(8, Math.floor(40 / this.scale));
+      for (let y = 0; y < this.box.h; y += band) {
+        this.queue.push(this.snap({ x0: this.box.x0, y0: this.box.y0 + y, w: this.box.w, h: Math.min(band, this.box.h - y) }));
+      }
+    } else {
+      for (const k of dirty) {
+        const r = rectFor([k], this.scale, S * 0.15);
+        this.queue.push(r);
+      }
+    }
+    this.pump();
+  }
+
+  /** Snaps a world box to whole canvas pixels. */
+  private snap(b: Box): Rect {
+    const px0 = Math.floor((b.x0 - this.box.x0) * this.scale);
+    const py0 = Math.floor((b.y0 - this.box.y0) * this.scale);
+    const px1 = Math.ceil((b.x0 + b.w - this.box.x0) * this.scale);
+    const py1 = Math.ceil((b.y0 + b.h - this.box.y0) * this.scale);
+    return { x0: this.box.x0 + px0 / this.scale, y0: this.box.y0 + py0 / this.scale, w: px1 - px0, h: py1 - py0, scale: this.scale };
+  }
+
+  private pump() {
+    if (this.running) return;
+    this.running = true;
+    const started = performance.now();
+    const step = () => {
+      const r = this.queue.shift();
+      if (!r) {
+        this.running = false;
+        this.lastPaintMs = performance.now() - started;
+        this.publish();
+        return;
+      }
+      const s = this.snap({ x0: r.x0, y0: r.y0, w: r.w / r.scale, h: r.h / r.scale });
+      const px = Math.round((s.x0 - this.box.x0) * this.scale);
+      const py = Math.round((s.y0 - this.box.y0) * this.scale);
+      const w = Math.min(s.w, this.canvas!.width - px);
+      const h = Math.min(s.h, this.canvas!.height - py);
+      if (w > 0 && h > 0) {
+        const data = paintRect({ tiles: this.tiles, palette: this.palette, detail: this.detail }, { ...s, w, h });
+        this.g!.putImageData(new ImageData(new Uint8ClampedArray(data), w, h), Math.max(0, px), Math.max(0, py));
+      }
+      setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
+  }
+
+  /** Swaps the new pixels in (the old picture stays as the "previous" pattern for a cross-fade). */
+  private publish() {
+    this.canvas!.toBlob((blob) => {
+      if (!blob) return;
+      const next = URL.createObjectURL(blob);
+      const old = this.url;
+      if (old) this.prevImage.setAttribute('href', old);
+      this.image.setAttribute('href', next);
+      this.url = next;
+      const keys = [...this.changed];
+      this.changed.clear();
+      if (!old) this.onFirst();
+      else this.onSwap(keys);
+      // free the old picture once the cross-fade is over
+      if (old) setTimeout(() => URL.revokeObjectURL(old), 1500);
+    });
+  }
+}

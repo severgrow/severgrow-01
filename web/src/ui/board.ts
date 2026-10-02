@@ -11,6 +11,10 @@ import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
 import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
+import { WorldLayer } from './worldlayer.js';
+import type { PaintTile } from '../logic/worldpaint.js';
+import { contour, numberStyle, vigour } from '../logic/vigour.js';
+import type { ThemeId } from '../logic/themes.js';
 import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
 
@@ -75,6 +79,9 @@ export class BoardView {
   private pressed: string | null = null;
   private longPressed = false;
   private look: MaterialLook = FULL_LOOK;
+  /** Material pass 2: the world-space material picture (null without a canvas). */
+  private world: WorldLayer | null = null;
+  private paletteId: ThemeId = 'soil';
   /** Ids are unique per board, so several boards (the material lab) can share a page. */
   private readonly uid = `b${++boardCount}`;
   private id = (name: string) => `${this.uid}-${name}`;
@@ -86,7 +93,8 @@ export class BoardView {
   ) {}
 
   /** Builds the static parts (terrain) for a game and theme. */
-  setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK) {
+  setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK, paletteId: ThemeId = 'soil') {
+    this.paletteId = paletteId;
     this.config = config;
     this.style = style;
     this.look = look;
@@ -122,6 +130,31 @@ export class BoardView {
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
 
     materialDefs(defs, this.id, look);
+    // Material pass 2: one world-space picture for every moss and lava tile (seamless).
+    {
+      const vb = svg.viewBox.baseVal;
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      this.world = new WorldLayer(defs, this.id('world'), this.id('world-prev'), { x0: vb.x, y0: vb.y, w: vb.width, h: vb.height }, Math.min(2.4, Math.max(1, dpr * 0.95)));
+      this.world.onSwap = (keys) => this.crossFade(keys);
+      // the number plate: a soft round disc behind the digit
+      for (const kind of ['moss', 'lava'] as const) {
+        const col = numberStyle(kind, 1, paletteId).plate;
+        const gr = el('radialGradient', { id: this.id(`plate-${kind}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
+        el('stop', { offset: 0, 'stop-color': col, 'stop-opacity': 1 }, gr);
+        el('stop', { offset: 0.62, 'stop-color': col, 'stop-opacity': 0.92 }, gr);
+        el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
+      }
+      // the top-rank glow: a soft round sprite (a gradient, not a live filter)
+      for (const [kind, col] of [['moss', '#d8ffe6'], ['lava', '#ff8a6a']] as const) {
+        const gr = el('radialGradient', { id: this.id(`top-glow-${kind}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
+        el('stop', { offset: 0.55, 'stop-color': col, 'stop-opacity': 0.55 }, gr);
+        el('stop', { offset: 0.8, 'stop-color': col, 'stop-opacity': 0.22 }, gr);
+        el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
+      }
+      this.world.onFirst = () => {
+        if (this.lastRender) this.render(...this.lastRender);
+      };
+    }
     svg.style.setProperty("--m-depth", `${look.depth}px`);
     svg.style.setProperty("--m-shadow", String(look.shadow));
 
@@ -210,8 +243,16 @@ export class BoardView {
   }
 
   /** Redraws the networks and overlays for `board`. */
+  private lastRender: [Record<string, Tile | null>, Overlay] | null = null;
+
   render(board: Record<string, Tile | null>, o: Overlay) {
+    this.lastRender = [board, o];
     const { veins, tiles, over, scars } = this.layers;
+    if (this.world) {
+      const paint = new Map<string, PaintTile>();
+      for (const [k, t] of Object.entries(board)) if (t && !t.root) paint.set(k, { owner: t.owner, t: vigour(t.strength, this.config.maxRank) });
+      this.world.sync(paint, this.paletteId, this.look.textures ? 'normal' : 'low');
+    }
     veins.replaceChildren();
     tiles.replaceChildren();
     over.replaceChildren();
@@ -379,11 +420,48 @@ export class BoardView {
       return g;
     }
     const k = tileScale(t.strength, maxRank);
+    if (this.world?.ready) {
+      // Material pass 2: the shared landscape, the full hex, the strength in the material itself.
+      const tt = vigour(t.strength, maxRank);
+      const d = hexPath(key, S * 0.995, st.tileShape);
+      const c = contour(tt);
+      const kind = t.owner === 0 ? 'moss' : 'lava';
+      if (c > 0) el('circle', { cx: x, cy: y, r: S * 1.18, class: `top-glow ${kind}`, fill: this.url(`top-glow-${kind}`), style: `opacity:${(0.9 * c).toFixed(2)}` }, g);
+      el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
+      el('path', { d, class: 'tile-edge' }, g);
+      if (c > 0) {
+        // the top rank: a double rim (an outer contour and an inner line) that reads without colour
+        el('path', { d: hexPath(key, S * 0.95, st.tileShape), class: `top-rim outer ${kind}`, style: `opacity:${c.toFixed(2)}` }, g);
+        el('path', { d: hexPath(key, S * 0.83, st.tileShape), class: `top-rim inner ${kind}`, style: `opacity:${(0.85 * c).toFixed(2)}` }, g);
+        if (this.look.motion) el('path', { d: hexPath(key, S * 0.95, st.tileShape), class: `top-shimmer ${kind}`, pathLength: 1, style: `opacity:${c.toFixed(2)};animation-delay:${(-hash(key) * 5).toFixed(2)}s` }, g);
+      }
+      const ns = numberStyle(kind, tt, this.paletteId);
+      el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
+      el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
+      this.mark(g, x, y + S * 0.52, t.owner === 0 ? st.youMark : st.botMark);
+      return g;
+    }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
     el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
+  }
+
+  /** New material pixels landed: the changed tiles fade from their old look to the new one. */
+  private crossFade(keys: string[]) {
+    if (!this.look.motion) return;
+    for (const k of keys) {
+      const g = this.tileEls.get(k);
+      const fill = g?.querySelector('.world-fill');
+      if (!g || !fill) continue;
+      const old = fill.cloneNode() as SVGPathElement;
+      old.setAttribute('fill', this.url('world-prev'));
+      old.classList.add('world-prev');
+      fill.after(old);
+      const a = old.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: 'ease-out', fill: 'forwards' });
+      a.onfinish = () => old.remove();
+    }
   }
 
   private mark(g: SVGGElement, x: number, y: number, kind: string) {

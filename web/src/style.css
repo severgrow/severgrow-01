@@ -2778,3 +2778,77 @@ svg.usable .hex-cell {
 .fx-spore {
   fill: var(--m-mossTuft, var(--c-you));
 }
+
+/* =================================================================
+   Material pass 2: the world-space material, the top-rank finish, the number plate.
+   ================================================================= */
+.world-fill,
+.world-prev {
+  stroke: none;
+}
+/* the grid stays readable: a thin line along every tile's edge */
+.tile-edge {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.32);
+  stroke-width: 0.7;
+}
+/* the top rank: a double rim (reads without colour), a soft outer glow, a slow shimmer */
+.top-rim {
+  fill: none;
+  stroke-linejoin: round;
+}
+.top-rim.outer {
+  stroke-width: 1.7;
+}
+.top-rim.inner {
+  stroke-width: 0.8;
+}
+.top-rim.moss {
+  stroke: #e9fff2;
+}
+.top-rim.lava {
+  stroke: #ffb3a0;
+}
+.top-glow {
+  pointer-events: none;
+}
+.top-shimmer {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-dasharray: 0.12 0.88;
+  animation: top-shimmer 5.5s linear infinite;
+}
+.top-shimmer.moss {
+  stroke: #ffffff;
+}
+.top-shimmer.lava {
+  stroke: #ffd6c8;
+}
+@keyframes top-shimmer {
+  0% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
+  }
+  10% {
+    stroke-opacity: 0.85;
+  }
+  45% {
+    stroke-opacity: 0.85;
+  }
+  55%,
+  100% {
+    stroke-dashoffset: -1;
+    stroke-opacity: 0;
+  }
+}
+.reduce-motion .top-shimmer {
+  display: none;
+}
+.tile-num.world {
+  paint-order: normal;
+  stroke: none;
+}
+.num-plate {
+  pointer-events: none;
+}
