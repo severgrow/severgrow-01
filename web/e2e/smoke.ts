@@ -503,6 +503,8 @@ const big = bigCutDemo();
 
 // Frame rate during a big cut, with the CPU slowed 4x (about a mid-range phone).
 // Every step has a time limit, so a stuck page fails this check instead of hanging the run.
+// (The timer is cleared when the check finishes, so it can never fire later as a false failure.)
+let juiceTimer: ReturnType<typeof setTimeout> | undefined;
 await Promise.race([
   (async () => {
   const { page, errors } = await openPage('soil', 'phone', { speed: 'normal', effects: 'normal' }, big.state);
@@ -525,13 +527,14 @@ await Promise.race([
   check('juice: frame rate measured during a big cut, particles under the cap', errors.length === 0 && p.peak <= 60);
   await page.close();
   })(),
-  new Promise<void>((resolve) =>
-    setTimeout(() => {
+  new Promise<void>((resolve) => {
+    juiceTimer = setTimeout(() => {
       check('juice: frame rate measured during a big cut, particles under the cap', false, 'timed out after 90 s');
       resolve();
-    }, 90_000),
-  ),
+    }, 90_000);
+  }),
 ]);
+clearTimeout(juiceTimer);
 
 // Polish pass 3: the word "bot" never reaches the player. Scans visible text, aria-labels,
 // alt and title text, the page title and description, in every state the page can reach.
@@ -590,8 +593,8 @@ const botWords = (page: Page): Promise<string[]> =>
     await page.waitForTimeout(150);
     await scan(page, 'card picked');
   }
-  // the opponent's turn (pill, captions), the history, then play to the end
-  for (let t = 0; t < 40; t++) {
+  // the opponent's turn (pill, captions), the history and the game menu, over a few turns
+  for (let t = 0; t < 3; t++) {
     const s = await getState(page);
     if (!s || s.phase === 'GAME_OVER') break;
     if (t === 1) {
@@ -611,11 +614,18 @@ const botWords = (page: Page): Promise<string[]> =>
       await page.locator('#sheet-menu [data-close]').click().catch(() => {});
     }
   }
-  await idle(page, 30000).catch(() => {});
-  if ((await getState(page))?.phase === 'GAME_OVER') await scan(page, 'game over');
-  else found.push('(the scan game did not reach game over)');
-  check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
   await page.close();
+  // the game-over screen: from the player's last draw of a whole game, a few taps to the end
+  const { page: endPage } = await openPage('soil', 'phone', { speed: 'skip' }, end);
+  await endPage.click('#menu-continue');
+  for (let t = 0; t < 6 && (await getState(endPage))?.phase !== 'GAME_OVER'; t++) {
+    await playTurn(endPage);
+    await idle(endPage, 30000).catch(() => {});
+  }
+  if ((await getState(endPage))?.phase === 'GAME_OVER') await scan(endPage, 'game over');
+  else found.push('(the scan did not reach game over)');
+  await endPage.close();
+  check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
 }
 
 await browser.close();
