@@ -88,7 +88,7 @@ for (const [name, vp] of [['phone', PHONE], ['desktop', DESKTOP]] as const) {
   const frames = await page.evaluate(() => (window as unknown as { __fps: number[] }).__fps.slice(5));
   const sorted = [...frames].sort((a, b) => a - b);
   const mean = frames.reduce((a, b) => a + b, 0) / frames.length;
-  report.frames = { count: frames.length, meanFps: Math.round(1000 / mean), p95ms: Math.round(sorted[Math.floor(sorted.length * 0.95)]! * 10) / 10, worstMs: Math.round(sorted[sorted.length - 1]!) };
+  report.frames = { count: frames.length, meanFps: Math.round(1000 / mean), p95ms: Math.round(sorted[Math.floor(sorted.length * 0.95)]! * 10) / 10, worstMs: Math.round(sorted[sorted.length - 1]!), over20ms: frames.filter((f) => f > 20).length, over50ms: frames.filter((f) => f > 50).length };
   report.partials = await page.evaluate(() => (window as unknown as W).__severgrow.world());
   report.heapMB = await page.evaluate(() => Math.round(((performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0) / 1e5) / 10);
   await page.close();
