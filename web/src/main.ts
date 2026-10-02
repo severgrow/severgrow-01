@@ -11,9 +11,34 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindOf, moveButtons, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitAction, fruitChange, fruitNext, fruitOffer, fruitPickable, fruitPreview, fruitUndo, hexTapIntent, showTopTip, startFruit, tapFruit } from './logic/fruitflow.js';
 import type { FruitOffer } from './logic/fruitflow.js';
+import {
+  DESK_IDLE,
+  clumpEnter,
+  clumpGhost,
+  clumpHexes,
+  clumpMatch,
+  clumpProblem,
+  clumpTap,
+  comboFor,
+  confirmMovesFor,
+  deskClick,
+  deskHover,
+  deskShape,
+  drawStarts,
+  hexAtPoint,
+  hexesAlong,
+  keyStep,
+  lineArrows,
+  lineEnds,
+  lineGhost,
+  onlyPlacement,
+  pixelOf,
+  snapDir,
+} from './logic/draw.js';
+import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
@@ -240,6 +265,7 @@ function renderHowTo() {
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? ' Once per turn you can <b>sprout</b> one tile with any single card.' : ''}</p>`,
+    `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
     `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
       ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
@@ -310,6 +336,11 @@ function syncSettingsForm() {
   segmented('glow-seg', GLOW_SETTINGS, settings.topGlow, cap, (g) => {
     settings.topGlow = g;
     render();
+  });
+  // "Confirm moves" for drawn lines and clumps: Auto follows the device (touch on, mouse off)
+  const cm = settings.confirmDraw === null ? 'auto' : settings.confirmDraw ? 'on' : 'off';
+  segmented('confirm-seg', ['auto', 'on', 'off'] as const, cm, (x) => (x === 'auto' ? `Auto (${finePointer() ? 'off' : 'on'} here)` : cap(x)), (x) => {
+    settings.confirmDraw = x === 'auto' ? null : x === 'on';
   });
 }
 
@@ -887,7 +918,17 @@ function render() {
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
+  const combo = drawCombo();
+  if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
+  // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
+  if (combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle') {
+    const only = onlyPlacement(combo);
+    if (only) session.preset(only);
+  }
+  board.setDrawing(!!combo && !session.presetMove, drawHandlers);
   renderBoard(v, advice);
+  if (combo) paintDraw();
+  else $('draw-info').hidden = true;
   renderControls(v, advice);
   renderHand(v, advice);
   renderPiles(v, advice);
@@ -914,10 +955,10 @@ function renderGuide(advice: Advice | null) {
     guideGoal = null;
     return;
   }
-  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow, cardPinned ? inspectKey : null);
-  if (t?.kind === 'other') {
-    // Right card and hex: switch straight to the coach's way of growing there.
-    session.sel = { ...session.sel, option: t.option };
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow, cardPinned ? inspectKey : null, session.pending);
+  if (t?.kind === 'preset') {
+    // A line or clump: the coach shows its placement on the board, ready to confirm.
+    session.preset(guideGoal);
     render();
     return;
   }
@@ -1035,7 +1076,12 @@ function hintText(v: View): string {
         return `Fruit: these ${n} tiles cut off the fewest of yours. Next, or Change.`;
       }
       if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
-      if (session.pending) return 'More than one way to grow here: pick one, then Confirm (or tap the spot again).';
+      if (session.pending && drawCombo()) return 'Confirm to place it, or draw it again.';
+      if (session.pending) return 'Confirm, or tap the spot again.';
+      {
+        const dc = drawCombo();
+        if (dc) return finePointer() ? `Click where your ${dc.kind} starts, then click where it ends. Esc cancels.` : dc.kind === 'line' ? 'Drag across the board to draw your line.' : `Drag over ${dc.n} hexes to draw your clump.`;
+      }
       if (sel.card !== null) {
         const kinds = new Set(targetKinds(v, session.legal, sel).values());
         if (kinds.size === 0) return "That card can't grow anywhere now.";
@@ -1067,7 +1113,7 @@ function renderBoard(v: View, advice: Advice | null) {
     const pending = session.pending;
     const pv = pending ? previewMove(v, pending) : null;
     const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
-    const kinds = !pending && (sel.card !== null || sel.kind !== null) ? targetKinds(v, session.legal, sel) : null;
+    const kinds = !pending && (sel.card !== null || sel.kind !== null) && !drawCombo() ? targetKinds(v, session.legal, sel) : null;
     o = {
       ...o,
       targets: !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null,
@@ -1078,6 +1124,8 @@ function renderBoard(v: View, advice: Advice | null) {
       coachHexes: advice && !anySel ? advice.hexes.map(coordKey) : [],
       usable: true,
     };
+    const dc = drawCombo();
+    if (dc && !pending) o = { ...o, targets: dc.kind === 'line' ? drawStarts(dc) : clumpHexes(dc), selectedHex: null, coachHexes: [] };
     if (fruitFlow && v.phase === 'ACT') {
       const fa = fruitAction(session.legal, fruitFlow);
       const pv = fa ? fruitPreview(v, fa) : null;
@@ -1261,6 +1309,32 @@ function renderControls(v: View, advice: Advice | null) {
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
     }
   }
+  const dc = drawCombo();
+  if (dc && !pending) {
+    const note = document.createElement('p');
+    note.className = 'step-note draw-note';
+    note.textContent = finePointer()
+      ? `Click where your ${dc.kind} starts, then click to finish (or drag)`
+      : dc.kind === 'line' ? 'Drag across the board to draw your line' : 'Drag over hexes to draw your clump';
+    moves.append(note);
+    if (dc.kind === 'clump' && draw.shape.length > 0) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+  }
+  if (dc && settings.placementList) {
+    // an opt-in accessibility list: step through every legal placement of this combo
+    const all = dc.actions;
+    const i = Math.max(0, all.findIndex((a) => JSON.stringify(a) === JSON.stringify(pending)));
+    const step = (d: number) => {
+      const k = pending ? (i + d + all.length) % all.length : d > 0 ? 0 : all.length - 1;
+      session!.preset(all[k]!);
+      render();
+    };
+    moves.append(button('◀', 'ghost list-prev', () => step(-1), 'Previous placement'));
+    const lab = document.createElement('span');
+    lab.className = 'list-pos';
+    lab.textContent = pending ? `Placement ${i + 1} of ${all.length}` : `${all.length} placements`;
+    moves.append(lab);
+    moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
+  }
   if (anySel && !pending) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
   if (session.canUndo && !anySel) moves.append(button('Undo', 'ghost undo', () => undoMove(), 'Undo your last move'));
 
@@ -1278,11 +1352,6 @@ function renderControls(v: View, advice: Advice | null) {
     const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
     info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
-    const opts = options(v, legal, sel);
-    const n = opts.length;
-    const other = $('confirm-other');
-    other.hidden = n < 2;
-    other.textContent = `${optionsLabel(opts)} ${(sel.option % Math.max(n, 1)) + 1}/${n}`;
     $('confirm').hidden = false;
   }
 }
@@ -1337,7 +1406,6 @@ function renderFruitFlow(v: View) {
     warn.hidden = pv.warnings.length === 0;
     warn.textContent = pv.warnings.join(' ');
     warn.classList.remove('note');
-    $('confirm-other').hidden = true;
     $('confirm').hidden = false;
   }
 }
@@ -1350,13 +1418,15 @@ function renderFirstTip(v: View) {
     return;
   }
   if (!tipOpen && myTurn() && !busy() && v.phase === 'ACT') {
-    if (showTopTip(v, !!tipsSeen.fruit)) tipOpen = 'fruit';
+    if (!tipsSeen.draw && drawCombo()) tipOpen = 'draw';
+    else if (showTopTip(v, !!tipsSeen.fruit)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
   card.hidden = !tipOpen;
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
+  $('first-tip-demo').hidden = tipOpen !== 'draw';
 }
 
 function showTip(id: FirstTip) {
@@ -1527,6 +1597,8 @@ function undoMove() {
 }
 
 function cancelSel() {
+  draw = { ...DRAW0 };
+  board.ghost(null);
   fruitFlow = null;
   fruitMsg = null;
   session?.cancel();
@@ -1560,6 +1632,201 @@ function onCardTap(id: number) {
   render();
   maybeAutoPlay();
 }
+
+// ---------- drawing a line or clump (polish pass 3) ----------
+
+type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string };
+type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number };
+const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null, list: -1, others: 0 };
+let draw: DrawUi = { ...DRAW0 };
+let drawFrame = 0;
+const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+
+/** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
+function drawCombo(): Combo | null {
+  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT' || fruitFlow) return null;
+  return comboFor(session.view, session.legal, session.sel);
+}
+
+/** The ghost of the shape being drawn right now (null when nothing is drawn). */
+function drawGhostNow(c: Combo): DrawGhost | null {
+  const v = session!.view;
+  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk);
+  if (c.kind === 'line') {
+    const start = draw.shape[0];
+    if (!start) return null;
+    if (draw.dir === null) return { tiles: [], action: null, reason: null };
+    return lineGhost(v, c, start, draw.dir);
+  }
+  return draw.shape.length ? clumpGhost(v, c, draw.shape) : null;
+}
+
+/** Repaints only the ghost layer and the info card (no full board redraw), once per frame. */
+function paintDraw() {
+  cancelAnimationFrame(drawFrame);
+  drawFrame = requestAnimationFrame(() => {
+    const c = drawCombo();
+    if (!c || !session) return;
+    const g = session.presetMove ? null : drawGhostNow(c);
+    const lineStart = c.kind === 'line' ? (draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]) : undefined;
+    const showArrows = lineStart && (draw.desk.phase === 'live' ? draw.desk.hover === draw.desk.start : draw.dir === null);
+    board.ghost(g || showArrows ? {
+      tiles: g?.tiles ?? [],
+      blocked: !!g && !g.action && g.tiles.length > 0,
+      arrows: showArrows ? { from: lineStart!, dirs: lineArrows(c, lineStart!) } : null,
+      cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
+    } : null);
+    renderDrawInfo(c, g);
+  });
+}
+
+/** The info card above the board: the counter, the result chip or why not, in plain words (also read out). */
+function renderDrawInfo(c: Combo, g: DrawGhost | null) {
+  const box = $('draw-info');
+  const v = session!.view;
+  let text = '';
+  if (session!.presetMove) text = '';
+  else if (g?.action) {
+    const pv = previewMove(v, g.action);
+    text = `${c.kind === 'clump' ? `${c.n}/${c.n} · ` : ''}${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+  } else if (c.kind === 'clump' && draw.shape.length) text = clumpProblem(v, c, draw.shape) ?? '';
+  else if (g?.reason) text = g.reason;
+  else if (draw.msg) text = draw.msg;
+  box.textContent = text;
+  box.hidden = !text;
+  const n = c.kind === 'clump' ? draw.shape.length : g?.tiles.length ?? 0;
+  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : c.kind === 'clump' && n ? `${n} of ${c.n} hexes chosen` : '';
+}
+
+/** A soft rising tick and a light haptic for each hex added (Sound and Vibration toggles). */
+function drawTick(i: number) {
+  if (settings.sound) sound.grow([pitchLadder(i + 1, 0)[i]!], 0);
+  vibrate(settings.vibration, 6);
+}
+
+function cancelDraw(msg: string | null = null) {
+  draw = { ...DRAW0, msg };
+  board.ghost(null);
+  render();
+}
+
+/** A finished shape: placed at once, or shown with Confirm (the "Confirm moves" setting). */
+function finishDraw(a: Meld) {
+  draw = { ...DRAW0 };
+  board.ghost(null);
+  if (confirmMovesFor(settings.confirmDraw, finePointer())) {
+    session!.preset(a);
+    render();
+  } else humanPlay(a);
+}
+
+/** A tap or click on a hex while drawing (no drag): the two-click machine, or clump tapping. */
+function drawTap(c: Combo, key: string, type: string) {
+  const v = session!.view;
+  if (c.kind === 'line' || (type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
+    const r = deskClick(draw.desk, key, v, c);
+    if (r.finish) return finishDraw(r.finish);
+    // a tap on another legal start begins again from there
+    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && (c.kind === 'line' ? lineEnds(c) : clumpHexes(c)).has(key) && !deskShape(v, c, r.desk).action) {
+      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [], dir: null };
+    } else draw = { ...draw, desk: r.desk, shape: [], dir: null };
+    if (r.desk.phase === 'live' && draw.desk.phase === 'live') drawTick(0);
+    paintDraw();
+    return;
+  }
+  const next = clumpTap(draw.shape, key, c);
+  if (next.length > draw.shape.length) drawTick(next.length - 1);
+  draw = { ...draw, shape: next, msg: null };
+  const m = clumpMatch(c, next);
+  if (m) return finishDraw(m);
+  paintDraw();
+}
+
+const drawHandlers = {
+  down(p: Pt, e: PointerEvent) {
+    const c = drawCombo();
+    if (!c || !session) return;
+    if (e.button === 2) return cancelDraw();
+    // a second finger (a pinch, a scroll) cancels the drawing
+    if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
+    session.preset(null);
+    const keys = new Set(board.boardKeys);
+    const key = hexAtPoint(p.x, p.y, keys);
+    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType };
+    if (e.pointerType === 'mouse' && draw.desk.phase === 'live') return; // the click finishes on release
+    if (!key) return;
+    if (c.kind === 'line') {
+      if (lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
+    } else if (!draw.shape.includes(key)) {
+      const next = clumpEnter(draw.shape, key, c);
+      if (next.length > draw.shape.length) drawTick(next.length - 1);
+      draw = { ...draw, shape: next, msg: null };
+    }
+    paintDraw();
+  },
+  move(p: Pt, e: PointerEvent) {
+    const c = drawCombo();
+    if (!c) return;
+    const keys = new Set(board.boardKeys);
+    if (!draw.ptr) {
+      // the mouse hovering after a first click: the live shape follows it
+      if (draw.desk.phase === 'live') {
+        const k = hexAtPoint(p.x, p.y, keys);
+        if (k && k !== draw.desk.hover) {
+          draw = { ...draw, desk: deskHover(draw.desk, k) };
+          paintDraw();
+        }
+      }
+      return;
+    }
+    if (e.pointerId !== draw.ptr.id) return;
+    const ptr = draw.ptr;
+    if (Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) ptr.moved = true;
+    const entered = hexesAlong(ptr.last, p, keys);
+    ptr.last = p;
+    if (!ptr.moved) return;
+    if (c.kind === 'line' && draw.shape[0]) {
+      const o = pixelOf(draw.shape[0]);
+      const dir = snapDir(p.x - o.x, p.y - o.y, draw.dir);
+      if (dir !== draw.dir) {
+        draw = { ...draw, dir };
+        if (dir !== null) drawTick(c.n - 1);
+      }
+    } else if (c.kind === 'clump') {
+      let shape = draw.shape;
+      for (const k of entered) {
+        const next = clumpEnter(shape, k, c);
+        if (next.length > shape.length) drawTick(next.length - 1);
+        shape = next;
+      }
+      draw = { ...draw, shape };
+    }
+    paintDraw();
+  },
+  up(p: Pt, e: PointerEvent, inside: boolean) {
+    const c = drawCombo();
+    const ptr = draw.ptr;
+    if (!c || !ptr || ptr.id !== e.pointerId) return;
+    draw.ptr = null;
+    if (!ptr.moved) {
+      if (ptr.downKey) drawTap(c, ptr.downKey, ptr.type);
+      return;
+    }
+    // lifting the finger outside the board: nothing is placed
+    if (!inside) return cancelDraw('Drawing cancelled');
+    const g = drawGhostNow(c);
+    if (g?.action) return finishDraw(g.action);
+    if (c.kind === 'line') {
+      if (draw.dir !== null) board.shake(settings.reduceMotion);
+      draw = { ...draw, shape: [], dir: null, msg: g?.reason ?? null };
+    } else if (draw.shape.length === c.n) draw = { ...draw, msg: clumpProblem(session!.view, c, draw.shape) };
+    paintDraw();
+    void p;
+  },
+  cancel() {
+    if (draw.ptr || draw.shape.length || draw.desk.phase === 'live') cancelDraw();
+  },
+};
 
 function onHexTap(key: string) {
   sound.unlock();
@@ -1715,10 +1982,6 @@ bind('first-tip-ok', () => {
   tipOpen = null;
   render();
 });
-bind('confirm-other', () => {
-  session?.nextOption();
-  render();
-});
 bind('deck', () => {
   if (busy()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'deck') : undefined;
@@ -1811,6 +2074,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
     else if (busy()) fastForward();
+    // Esc first stops the shape being drawn; again, it cancels the line or clump
+    else if (drawCombo() && (draw.shape.length || draw.desk.phase === 'live' || draw.ptr)) cancelDraw();
     else cancelSel();
     return;
   }
@@ -1825,18 +2090,29 @@ document.addEventListener('keydown', (e) => {
   if (dir) {
     e.preventDefault();
     const keys = board.boardKeys;
-    const cur = parseKey(focusKey ?? keys[Math.floor(keys.length / 2)]!);
-    const [dq, dr] = dir;
-    // Up and down alternate between the two hexes above (or below) to stay in a column.
-    const shift = dr === 0 ? 0 : dr < 0 ? (cur.r % 2 === 0 ? 1 : 0) : cur.r % 2 === 0 ? 0 : -1;
-    const next = coordKey({ q: cur.q + dq + shift, r: cur.r + dr });
-    focusKey = keys.includes(next) ? next : coordKey(cur);
-    inspectKey = focusKey;
+    focusKey = keyStep(focusKey ?? keys[Math.floor(keys.length / 2)]!, e.key, new Set(keys));
+    void dir;
+    const dc = drawCombo();
+    if (dc && draw.desk.phase === 'live') {
+      draw = { ...draw, desk: deskHover(draw.desk, focusKey) };
+      paintDraw();
+    }
+    inspectKey = dc ? null : focusKey;
     render();
     $('board').setAttribute('aria-label', `Board: ${describeHex(focusKey)}`);
+  } else if ((e.key === 'Enter' || e.key === ' ') && session.presetMove && drawCombo()) {
+    e.preventDefault();
+    humanPlay(session.presetMove);
   } else if ((e.key === 'Enter' || e.key === ' ') && focusKey) {
     e.preventDefault();
-    onHexTap(focusKey);
+    const dc = drawCombo();
+    if (dc) drawTap(dc, focusKey, 'keyboard');
+    else onHexTap(focusKey);
+  } else if (e.key === 'Backspace' && drawCombo()) {
+    e.preventDefault();
+    if (draw.desk.phase === 'live') draw = { ...draw, desk: DESK_IDLE };
+    else draw = { ...draw, shape: draw.shape.slice(0, -1) };
+    paintDraw();
   }
 });
 

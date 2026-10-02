@@ -34,6 +34,10 @@ export type Settings = {
   effects: Effects; // how big the satisfying effects are
   materialDetail: Detail; // Low: flat shapes with only the rim and shadow
   topGlow: GlowSetting; // the slight glow on top-rank tiles
+  /** Confirm a drawn line or clump before it is placed: null = this device's default (on for touch, off with a mouse) */
+  confirmDraw: boolean | null;
+  /** an opt-in step-through list of the legal placements while drawing (accessibility) */
+  placementList: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
   effects: 'normal',
   materialDetail: 'normal',
   topGlow: 'subtle',
+  confirmDraw: null,
+  placementList: false,
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -73,7 +79,8 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (GLOW_SETTINGS.includes(s.topGlow as GlowSetting)) out.topGlow = s.topGlow as GlowSetting;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse'] as const) {
+  if (typeof s.confirmDraw === 'boolean' || s.confirmDraw === null) out.confirmDraw = s.confirmDraw as boolean | null;
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   return out;

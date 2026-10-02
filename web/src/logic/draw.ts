@@ -299,13 +299,18 @@ export const deskClick = (d: Desk, key: string, v: View, combo: Combo): { desk: 
 /** "Confirm moves": the player's choice, else on for touch and off with a mouse (pointer: fine). */
 export const confirmMovesFor = (setting: boolean | null, pointerFine: boolean): boolean => setting ?? !pointerFine;
 
-const ARROWS: Record<string, Coord> = { ArrowRight: { q: 1, r: 0 }, ArrowLeft: { q: -1, r: 0 }, ArrowUp: { q: 0, r: -1 }, ArrowDown: { q: 0, r: 1 } };
+const ARROWS: Record<string, [number, number]> = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
-/** The cursor hex after an arrow key (it stays on the board). */
+/**
+ * The cursor hex after an arrow key (it stays on the board). Up and Down alternate between
+ * the two hexes above (or below), so the cursor stays in a column (as the board always did).
+ */
 export const keyStep = (cursor: string, key: string, keys: ReadonlySet<string>): string => {
   const d = ARROWS[key];
   if (!d) return cursor;
-  const c = parseKey(cursor);
-  const next = coordKey({ q: c.q + d.q, r: c.r + d.r });
+  const cur = parseKey(cursor);
+  const [dq, dr] = d;
+  const shift = dr === 0 ? 0 : dr < 0 ? (cur.r % 2 === 0 ? 1 : 0) : cur.r % 2 === 0 ? 0 : -1;
+  const next = coordKey({ q: cur.q + dq + shift, r: cur.r + dr });
   return keys.has(next) ? next : cursor;
 };

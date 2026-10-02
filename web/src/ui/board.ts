@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
+import { DIRECTIONS, allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -74,11 +74,30 @@ export type BoardHandlers = {
   hold?: (key: string) => void;
 };
 
+/** Pointer events in board units while drawing (one code path for touch, mouse and pen). */
+export type DrawHandlers = {
+  down: (p: { x: number; y: number }, e: PointerEvent) => void;
+  move: (p: { x: number; y: number }, e: PointerEvent) => void;
+  up: (p: { x: number; y: number }, e: PointerEvent, inside: boolean) => void;
+  cancel: () => void;
+};
+
+/** What the drawing ghost shows: tiles (with numbers; "can't" style when not ok), direction arrows, a cursor. */
+export type GhostView = {
+  tiles: { key: string; strength: number; ok: boolean }[];
+  blocked: boolean;
+  arrows: { from: string; dirs: number[] } | null;
+  cursor: string | null;
+};
+
 export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
   private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'marks' | 'over' | 'fx', SVGGElement>;
+  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'marks' | 'over' | 'draw' | 'fx', SVGGElement>;
+  /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
+  private drawing = false;
+  private drawHandlers: DrawHandlers | null = null;
   /** Polish pass 3: the top-rank glow settings (and a strength multiplier, for the lab's comparison). */
   private glowOpts: GlowOpts = { setting: 'subtle', effects: 'normal', reduceMotion: false };
   private glowScale = 1;
@@ -101,7 +120,79 @@ export class BoardView {
   constructor(
     readonly svg: SVGSVGElement,
     private handlers: BoardHandlers,
-  ) {}
+  ) {
+    // drawing: the board itself listens, so a drag can run across hexes and gaps
+    const at = (e: PointerEvent) => {
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return { x: 0, y: 0 };
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      return { x: p.x, y: p.y };
+    };
+    const inside = (e: PointerEvent) => {
+      const r = svg.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    };
+    svg.addEventListener('pointerdown', (e) => {
+      if (!this.drawing || !this.drawHandlers) return;
+      if (e.pointerType !== 'mouse') svg.setPointerCapture?.(e.pointerId);
+      this.drawHandlers.down(at(e), e);
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.move(at(e), e);
+    });
+    svg.addEventListener('pointerup', (e) => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.up(at(e), e, inside(e));
+    });
+    svg.addEventListener('pointercancel', () => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.cancel();
+    });
+    svg.addEventListener('contextmenu', (e) => {
+      if (!this.drawing || !this.drawHandlers) return;
+      e.preventDefault();
+      this.drawHandlers.cancel();
+    });
+  }
+
+  /** Drawing mode on or off. While on, the board takes the pointer (no pinch or scroll starts a drawing). */
+  setDrawing(on: boolean, h: DrawHandlers | null) {
+    this.drawing = on;
+    this.drawHandlers = on ? h : null;
+    this.svg.classList.toggle('drawing', on);
+    if (!on) this.layers?.draw.replaceChildren();
+  }
+
+  /** Draws the drawing ghost on its own layer (nothing else is redrawn). */
+  ghost(g: GhostView | null) {
+    const layer = this.layers.draw;
+    layer.replaceChildren();
+    if (!g) return;
+    const st = this.style;
+    const maxRank = this.config.maxRank;
+    for (const t of g.tiles) {
+      const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
+      el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
+      const { x, y } = centerOf(t.key);
+      el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
+    }
+    if (g.arrows) {
+      const c = centerOf(g.arrows.from);
+      for (const d of g.arrows.dirs) {
+        const nb = DIRECTIONS[d]!;
+        const n = centerOf(coordKey({ q: parseKey(g.arrows.from).q + nb.q, r: parseKey(g.arrows.from).r + nb.r }));
+        const ang = (Math.atan2(n.y - c.y, n.x - c.x) * 180) / Math.PI;
+        const ax = c.x + (n.x - c.x) * 0.62;
+        const ay = c.y + (n.y - c.y) * 0.62;
+        el('path', { d: 'M-5,-5 L3,0 L-5,5', class: 'draw-arrow', transform: `translate(${ax.toFixed(1)},${ay.toFixed(1)}) rotate(${ang.toFixed(0)})`, 'data-dir': d }, layer);
+      }
+    }
+    if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
+  }
+
+  /** A small shake of the ghost: lifting the finger on a blocked line does nothing else. */
+  shake(reduceMotion: boolean) {
+    if (reduceMotion) return;
+    this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });
+  }
 
   /** Builds the static parts (terrain) for a game and theme. */
   setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK, paletteId: ThemeId = 'soil') {
@@ -191,6 +282,7 @@ export class BoardView {
       veins: el('g', { class: 'l-veins' }, svg),
       marks: el('g', { class: 'l-marks' }, svg),
       over: el('g', { class: 'l-over' }, svg),
+      draw: el('g', { class: 'l-draw' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
     for (const key of this.keys) {
@@ -217,6 +309,7 @@ export class BoardView {
 
   private bindHex(g: SVGGElement, key: string) {
     g.addEventListener('pointerdown', (e) => {
+      if (this.drawing) return;
       this.pressed = key;
       this.longPressed = false;
       clearTimeout(this.pressTimer);
@@ -230,6 +323,7 @@ export class BoardView {
     });
     g.addEventListener('pointerup', () => {
       clearTimeout(this.pressTimer);
+      if (this.drawing) return;
       if (this.pressed === key && !this.longPressed) this.handlers.tap(key);
       if (this.longPressed && !this.handlers.hold) setTimeout(() => this.handlers.inspect(null), 1600);
       this.pressed = null;
@@ -240,7 +334,7 @@ export class BoardView {
       if (e.pointerType === 'mouse') this.handlers.inspect(null);
     });
     g.addEventListener('pointerenter', (e) => {
-      if (e.pointerType === 'mouse') this.handlers.inspect(key);
+      if (e.pointerType === 'mouse' && !this.drawing) this.handlers.inspect(key);
     });
   }
 

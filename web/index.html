@@ -83,6 +83,8 @@
         <div class="board-wrap" id="board-wrap">
           <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." tabindex="0"></svg>
           <div id="captions" class="captions" aria-live="polite"></div>
+          <div id="draw-info" class="draw-info" hidden></div>
+          <div id="draw-live" class="sr-only" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
@@ -120,6 +122,7 @@
           <div id="first-tip" class="first-tip" role="note" hidden>
             <b id="first-tip-title"></b>
             <p id="first-tip-text"></p>
+            <div id="first-tip-demo" class="draw-demo" aria-hidden="true" hidden><i></i><i></i><i></i><span class="finger"></span></div>
             <button id="first-tip-ok" class="btn ghost small" type="button">Got it</button>
           </div>
           <div id="confirm" class="confirm" hidden>
@@ -129,7 +132,6 @@
             </div>
             <div class="confirm-buttons">
               <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
-              <button id="confirm-other" class="btn ghost small" type="button" hidden>Other way</button>
               <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
               <button id="confirm-play" class="btn primary" type="button">Confirm</button>
             </div>
@@ -186,6 +188,8 @@
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
         <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
         <h3>Playing</h3>
+        <div class="row"><span>Confirm moves</span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row"><span>Placement list (step through the places a line or clump can go)</span><input type="checkbox" data-setting="placementList" /></label>
         <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
         <label class="row"><span>Pulse my weakest link</span><input type="checkbox" data-setting="weakPulse" /></label>
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>

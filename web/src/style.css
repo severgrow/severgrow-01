@@ -2953,3 +2953,125 @@ svg.usable .hex-cell {
   color: var(--c-text);
   align-self: center;
 }
+
+/* ---- polish pass 3: drawing a line or clump ---- */
+.board.drawing {
+  touch-action: none; /* no pinch or scroll starts while drawing */
+  cursor: crosshair;
+}
+.draw-ghost .ghost-tile {
+  stroke-dasharray: none;
+}
+.draw-ghost.cant .ghost-tile {
+  fill: var(--c-muted);
+  fill-opacity: 0.25;
+  stroke: var(--c-bad, #e25b4b);
+  stroke-dasharray: 3 3;
+}
+.draw-ghost.cant .ghost-num {
+  opacity: 0.55;
+}
+.draw-ghost.blocked:not(.cant) .ghost-tile {
+  fill-opacity: 0.22;
+}
+.draw-arrow {
+  fill: none;
+  stroke: var(--c-text);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.draw-cursor {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 2.2;
+}
+/* the counter and result chip sit above the board, never under the finger */
+.draw-info {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  border: 1px solid var(--c-line);
+  font-size: 0.85rem;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+}
+.list-pos {
+  font-size: 0.85rem;
+  align-self: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* polish pass 3: the drawing hint has no "look down at your hand" arrow */
+.step-note.draw-note::after {
+  content: none;
+}
+/* the one-time drawing tip: a ghost finger sliding over a mini strip of hexes */
+.draw-demo {
+  position: relative;
+  display: flex;
+  gap: 3px;
+  height: 30px;
+  margin: 4px 0 6px;
+}
+.draw-demo i {
+  width: 26px;
+  height: 30px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: color-mix(in srgb, var(--c-you) 35%, transparent);
+  animation: demo-fill 2.4s infinite;
+}
+.draw-demo i:nth-child(2) {
+  animation-delay: 0.35s;
+}
+.draw-demo i:nth-child(3) {
+  animation-delay: 0.7s;
+}
+.draw-demo .finger {
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-text) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-text) 18%, transparent);
+  animation: demo-finger 2.4s infinite ease-in-out;
+}
+@keyframes demo-finger {
+  0%, 10% { transform: translateX(0); opacity: 0; }
+  20% { opacity: 1; }
+  60% { transform: translateX(58px); opacity: 1; }
+  80%, 100% { transform: translateX(58px); opacity: 0; }
+}
+@keyframes demo-fill {
+  0%, 15% { background: color-mix(in srgb, var(--c-you) 25%, transparent); }
+  35%, 75% { background: color-mix(in srgb, var(--c-you) 75%, transparent); }
+  100% { background: color-mix(in srgb, var(--c-you) 25%, transparent); }
+}
+.reduce-motion .draw-demo i,
+.reduce-motion .draw-demo .finger {
+  animation: none;
+}
+.reduce-motion .draw-demo .finger {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .draw-demo i, .draw-demo .finger { animation: none; }
+}

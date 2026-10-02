@@ -316,12 +316,14 @@ describe('settings and keyboard', () => {
     expect(confirmMovesFor(false, false)).toBe(false);
   });
 
-  it('arrow keys move a cursor hex and stay on the board', () => {
+  it('arrow keys move a cursor hex in a column (Up and Down zig-zag, as the board always did) and stay on the board', () => {
     const board = keys(stateWith({}, RUN));
     expect(keyStep('0,0', 'ArrowRight', board)).toBe('1,0');
     expect(keyStep('0,0', 'ArrowLeft', board)).toBe('-1,0');
-    expect(keyStep('0,0', 'ArrowUp', board)).toBe('0,-1');
+    expect(keyStep('0,0', 'ArrowUp', board)).toBe('1,-1');
+    expect(keyStep('1,-1', 'ArrowUp', board)).toBe('1,-2');
     expect(keyStep('0,0', 'ArrowDown', board)).toBe('0,1');
+    expect(keyStep('0,1', 'ArrowDown', board)).toBe('-1,2');
     expect(keyStep('3,0', 'ArrowRight', board)).toBe('3,0');
   });
 

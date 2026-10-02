@@ -61,8 +61,10 @@ describe('first-time tips (remembered in the browser)', () => {
     let seen = parseTips(null);
     expect(seen.fruit).toBe(false);
     seen = markTip(seen, 'fruit');
-    expect(parseTips(JSON.stringify(seen))).toEqual({ fruit: true, strengthen: false });
-    expect(parseTips('{oops')).toEqual({ fruit: false, strengthen: false });
+    expect(parseTips(JSON.stringify(seen))).toEqual({ fruit: true, strengthen: false, draw: false });
+    expect(parseTips('{oops')).toEqual({ fruit: false, strengthen: false, draw: false });
+    // polish pass 3: the drawing tip, in the words the How to play sheet uses too
+    expect(TIPS.draw.text).toBe('Drag over hexes to draw your clump or line. On a computer, click to start and click to finish.');
   });
 });
 

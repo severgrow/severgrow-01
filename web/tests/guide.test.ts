@@ -11,6 +11,7 @@ import { playGame } from './ui-helpers.js';
 
 /** Follows the arrows like a player would; returns the pending move after at most 12 taps. */
 const follow = (s: State, goal: Action): { sel: Sel; taps: number; done: boolean } => {
+  let preset: Action | null = null;
   const v = viewFor(s, 0);
   const legal = legalActions(v);
   let sel: Sel = EMPTY_SEL;
@@ -18,8 +19,8 @@ const follow = (s: State, goal: Action): { sel: Sel; taps: number; done: boolean
   let card: string | null = null; // the open tile card
   let applied = 0;
   for (let taps = 0; taps < 12 && applied < 3; taps++) {
-    const t: GuideTarget = guideTarget(v, legal, sel, goal, flow, card)!;
-    if (t.kind === 'confirm') return { sel, taps, done: JSON.stringify(flow ? fruitAction(legal, flow) : pendingAction(v, legal, sel)) === JSON.stringify(goal) };
+    const t: GuideTarget = guideTarget(v, legal, sel, goal, flow, card, preset ?? pendingAction(v, legal, sel))!;
+    if (t.kind === 'confirm') return { sel, taps, done: JSON.stringify(flow ? fruitAction(legal, flow) : (preset ?? pendingAction(v, legal, sel))) === JSON.stringify(goal) };
     if (t.kind === 'card') sel = tapCard(v, legal, sel, t.id);
     else if (t.kind === 'hex' && flow) flow = tapFruit(v, legal, flow, t.key).flow;
     else if (t.kind === 'hex' && hexTapIntent(v, legal, sel, t.key) === 'tilecard') card = t.key;
@@ -27,13 +28,16 @@ const follow = (s: State, goal: Action): { sel: Sel; taps: number; done: boolean
     else if (t.kind === 'fruit') flow = startFruit(v, legal, card!);
     else if (t.kind === 'change') flow = fruitChange(flow!);
     else if (t.kind === 'next') flow = fruitNext(legal, flow!);
-    else if (t.kind === 'other') {
-      sel = { ...sel, option: t.option }; // applied by the page itself, not a tap
+    else if (t.kind === 'preset') {
+      preset = goal; // the page shows the coach's placement itself, not a tap
       taps--;
       applied++;
     }
     else if (t.kind === 'kind') sel = tapKind(sel, t.move);
-    else if (t.kind === 'cancel') sel = EMPTY_SEL;
+    else if (t.kind === 'cancel') {
+      sel = EMPTY_SEL;
+      preset = null;
+    }
     else return { sel, taps, done: false };
   }
   return { sel, taps: 12, done: false };
@@ -57,10 +61,10 @@ describe('coach arrows (show where to tap)', () => {
       for (const goal of legalActions(v).filter((a) => isBoardAction(a) || a.t === 'Discard')) {
         const r = follow(s, goal);
         expect(r.done, JSON.stringify(goal)).toBe(true);
-        // Sprout: card, then hex. Line or clump: its button, a card, then a hex. Throw: the card.
+        // Sprout: card, then hex. Line or clump: its button (then the coach shows the placement). Throw: the card.
         // Fruit: the target (its tile card opens), "Fruit this tile", Change and 3 tiles only when
         // the suggestion differs, then Next.
-        expect(r.taps).toBeLessThanOrEqual(!isBoardAction(goal) ? 1 : kindOf(goal) === 'sprout' ? 2 : goal.t === 'Fruit' ? 4 + goal.sacrifice.length : 3);
+        expect(r.taps).toBeLessThanOrEqual(!isBoardAction(goal) ? 1 : kindOf(goal) === 'sprout' ? 2 : goal.t === 'Fruit' ? 4 + goal.sacrifice.length : 1);
         checked++;
       }
     }

@@ -2,13 +2,18 @@
 // remembered in the browser. They can be opened again from the "How to play" sheet.
 import { OPP } from '../../../src/strings.js';
 export const TIPS_KEY = 'severgrow.tips.v1';
-export type TipId = 'fruit' | 'strengthen';
+export type TipId = 'fruit' | 'strengthen' | 'draw';
 export type TipsSeen = Record<TipId, boolean>;
 
 export const TIPS: Record<TipId, { title: string; text: string }> = {
   strengthen: {
     title: 'Strengthen',
     text: `A higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit.`,
+  },
+  draw: {
+    // shown the first time drawing a line or clump starts (polish pass 3), with a small animated finger
+    title: 'Draw it on the board',
+    text: 'Drag over hexes to draw your clump or line. On a computer, click to start and click to finish.',
   },
   fruit: {
     title: 'Fruit (once per game)',
@@ -21,9 +26,9 @@ export const TIPS: Record<TipId, { title: string; text: string }> = {
 export const parseTips = (raw: string | null): TipsSeen => {
   try {
     const o = raw ? (JSON.parse(raw) as Partial<TipsSeen>) : {};
-    return { fruit: o.fruit === true, strengthen: o.strengthen === true };
+    return { fruit: o.fruit === true, strengthen: o.strengthen === true, draw: o.draw === true };
   } catch {
-    return { fruit: false, strengthen: false };
+    return { fruit: false, strengthen: false, draw: false };
   }
 };
 
