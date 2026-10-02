@@ -18,24 +18,32 @@ export type GuideTarget =
   | { kind: 'discard' }
   | { kind: 'end' }
   | { kind: 'button' }
-  | { kind: 'kind'; move: string };
+  | { kind: 'kind'; move: string }
+  /** polish pass 3: "Fruit this tile" in the tile card, then Change / Next in the Fruit flow */
+  | { kind: 'fruit' }
+  | { kind: 'change' }
+  | { kind: 'next' };
 
 const same = (a: Action | null, b: Action) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * The next tap towards `goal`, or null if `goal` is not a legal move right now. A Fruit is
- * guided through its own flow (`flow`): the Fruit button, each tile to give up, the target,
- * then Confirm.
+ * guided through its own flow (`flow`, polish pass 3): the target (its tile card opens,
+ * `card`), "Fruit this tile", then Change and the tiles only if the suggested set differs,
+ * Next, and Confirm.
  */
-export const guideTarget = (v: View, legal: readonly Action[], sel: Sel, goal: Action, flow: FruitFlow | null = null): GuideTarget | null => {
+export const guideTarget = (v: View, legal: readonly Action[], sel: Sel, goal: Action, flow: FruitFlow | null = null, card: string | null = null): GuideTarget | null => {
   if (!legal.some((a) => same(a, goal))) return null;
   if (goal.t === 'Fruit') {
-    if (!flow) return { kind: 'kind', move: 'fruit' };
+    const target = coordKey(goal.target);
+    if (!flow) return card === target ? { kind: 'fruit' } : { kind: 'hex', key: target };
+    if (flow.target !== target) return { kind: 'cancel' };
     const want = goal.sacrifice.map(coordKey);
-    if (flow.picks.some((k) => !want.includes(k))) return { kind: 'cancel' };
-    if (flow.step === 1) return { kind: 'hex', key: want.find((k) => !flow.picks.includes(k))! };
-    if (flow.step === 2) return { kind: 'hex', key: coordKey(goal.target) };
-    return same(fruitAction(legal, flow), goal) ? { kind: 'confirm' } : { kind: 'cancel' };
+    const right = flow.picks.length === want.length && want.every((k) => flow.picks.includes(k));
+    if (flow.step === 2) return same(fruitAction(legal, flow), goal) ? { kind: 'confirm' } : { kind: 'cancel' };
+    if (!flow.changing) return right ? { kind: 'next' } : { kind: 'change' };
+    const wrong = flow.picks.find((k) => !want.includes(k));
+    return { kind: 'hex', key: wrong ?? want.find((k) => !flow.picks.includes(k))! };
   }
   if (flow) return { kind: 'cancel' };
   if (goal.t === 'Draw') return { kind: goal.from };

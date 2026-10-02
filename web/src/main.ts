@@ -12,7 +12,8 @@ import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
 import { growControls, isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
-import { FRUIT_START, fruitAction, fruitButton, fruitPickable, fruitPreview, fruitUndo, tapFruit } from './logic/fruitflow.js';
+import { fruitAction, fruitChange, fruitNext, fruitOffer, fruitPickable, fruitPreview, fruitUndo, hexTapIntent, showTopTip, startFruit, tapFruit } from './logic/fruitflow.js';
+import type { FruitOffer } from './logic/fruitflow.js';
 import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
@@ -86,6 +87,8 @@ const SEEN_KEY = 'severgrow.seen';
 /** v0.5: the Fruit flow while it is open (null otherwise), and its last gentle refusal. */
 let fruitFlow: FruitFlow | null = null;
 let fruitMsg: string | null = null;
+/** Polish pass 3: the tile card stays open (pinned) after a tap or long-press, so its buttons can be used. */
+let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
 let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
@@ -118,7 +121,7 @@ let pumping = false;
 let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
-const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k) });
+const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k), hold: (k) => pinCard(k) });
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -242,7 +245,7 @@ function renderHowTo() {
       ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((cfg?.fruitPerPlayer ?? 1) > 0
-      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
+      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. To use it, tap an ${OPP.noun} tile and choose “Fruit this tile”: the game suggests which of your tiles to give up, and you can change them. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
     `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
@@ -911,7 +914,7 @@ function renderGuide(advice: Advice | null) {
     guideGoal = null;
     return;
   }
-  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow);
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow, cardPinned ? inspectKey : null);
   if (t?.kind === 'other') {
     // Right card and hex: switch straight to the coach's way of growing there.
     session.sel = { ...session.sel, option: t.option };
@@ -956,6 +959,15 @@ function renderGuide(advice: Advice | null) {
       break;
     case 'kind':
       rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
+      break;
+    case 'fruit':
+      rect = above(document.querySelector('#tooltip .tc-fruit'));
+      break;
+    case 'change':
+      rect = above(document.querySelector('#moves .fruit-change'));
+      break;
+    case 'next':
+      rect = above(document.querySelector('#moves .fruit-next'));
       break;
   }
   if (!rect) return;
@@ -1017,9 +1029,10 @@ function hintText(v: View): string {
     case 'ACT': {
       if (fruitFlow) {
         if (fruitMsg) return fruitMsg;
-        if (fruitFlow.step === 1) return `Fruit, step 1: pick ${v.config.fruitSacrifice} of your tiles that touch each other, to give up (${fruitFlow.counter}).`;
-        if (fruitFlow.step === 2) return fruitFlow.note ? `Fruit, step 2: pick ${OPP.theirs} tile to remove. ${fruitFlow.note}` : `Fruit, step 2: pick ${OPP.theirs} tile to remove.`;
-        return 'Fruit, step 3: check the result, then Confirm.';
+        const n = v.config.fruitSacrifice;
+        if (fruitFlow.step === 2) return 'Fruit: check the result, then Confirm.';
+        if (fruitFlow.changing) return `Fruit: tap ${n} of your tiles that touch each other, at least one next to the tile you remove (${fruitFlow.picks.length}/${n}).`;
+        return `Fruit: these ${n} tiles cut off the fewest of yours. Next, or Change.`;
       }
       if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
       if (session.pending) return 'More than one way to grow here: pick one, then Confirm (or tap the spot again).';
@@ -1075,8 +1088,9 @@ function renderBoard(v: View, advice: Advice | null) {
         coachHexes: [],
         selectedHex: null,
         cutKeys: pv ? [...pv.ownCut, ...pv.theirCut] : [],
-        fruitValid: fruitFlow.step < 3 ? [...fruitPickable(v, session.legal, fruitFlow)] : [],
+        fruitValid: [...fruitPickable(v, session.legal, fruitFlow)],
         fruitPicked: fruitFlow.picks,
+        fruitSoft: !fruitFlow.changing,
         fruitTarget: fruitFlow.target,
       };
     }
@@ -1150,10 +1164,17 @@ function renderTooltip(v: View) {
       html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
     }
   }
+  // Polish pass 3: in my Grow step, an opponent tile's card offers Fruit (a button, or a line saying why not yet)
+  const offer: FruitOffer = cardPinned && myTurn() ? fruitOffer(v, session.legal, key) : null;
+  if (offer?.kind === 'action') html += `${offer.note ? `<span class="tc-note">${offer.note}</span>` : ''}<button type="button" class="btn primary small tc-fruit" data-fruit="${key}">${offer.label}</button>`;
+  else if (offer?.kind === 'info') html += `<span class="tc-info">${offer.text}</span>`;
   tip.innerHTML = html;
   tip.hidden = false;
+  tip.classList.toggle('pinned', cardPinned);
   const p = boardWrapPoint(key);
   const wrap = $('board-wrap').getBoundingClientRect();
+  tip.setAttribute('role', cardPinned ? 'dialog' : 'tooltip');
+  tip.setAttribute('aria-label', `Tile card: ${name}`);
   const w = Math.min(250, wrap.width - 16);
   tip.style.width = `${w}px`;
   tip.style.left = `${Math.min(Math.max(p.x - w / 2, 8), wrap.width - w - 8)}px`;
@@ -1229,29 +1250,6 @@ function renderControls(v: View, advice: Advice | null) {
     if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
     if (end && !pending && grow.skipLink && !anySel) moves.append(button('Skip sprout', `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), 'Skip the sprout and throw a card'));
-    // Fruit (once per game): only shown when Fruit is on; disabled with a one-line reason.
-    const fb = fruitButton(v, legal);
-    if (fb.show && !anySel && !pending) {
-      const b = button(fb.used ? 'Fruit · Used' : `Fruit · ${fb.left} left`, `fruit${fb.enabled ? '' : ' off'}${advice?.action.t === 'Fruit' ? ' coach-glow' : ''}`, () => {
-        if (!fb.enabled) return;
-        fruitFlow = FRUIT_START;
-        fruitMsg = null;
-        session!.cancel();
-        render();
-      }, fb.enabled ? `Use your Fruit: give up 3 tiles to remove one ${OPP.noun} tile` : `Fruit: ${fb.reason}`);
-      b.dataset.kind = 'fruit';
-      if (!fb.enabled) {
-        b.setAttribute('aria-disabled', 'true');
-        b.title = fb.reason ?? '';
-      }
-      moves.append(b);
-      if (!fb.enabled && !fb.used && fb.reason) {
-        const why = document.createElement('span');
-        why.className = 'fruit-why';
-        why.textContent = fb.reason;
-        moves.append(why);
-      }
-    }
   } else if (v.phase === 'DISCARD') {
     const note = document.createElement('p');
     note.className = 'step-note';
@@ -1274,6 +1272,12 @@ function renderControls(v: View, advice: Advice | null) {
     warn.hidden = !pv?.warning && !pv?.note;
     warn.textContent = pv?.warning ?? pv?.note ?? '';
     warn.classList.toggle('note', !pv?.warning && !!pv?.note);
+    // Polish pass 3: previewing a Sprout onto an opponent tile? A small "i" opens its tile card,
+    // so Fruit stays reachable while a card is picked.
+    const info = $('confirm-info');
+    const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
+    info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
+    if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
     const opts = options(v, legal, sel);
     const n = opts.length;
     const other = $('confirm-other');
@@ -1283,36 +1287,48 @@ function renderControls(v: View, advice: Advice | null) {
   }
 }
 
-/** The Fruit flow: a progress line, a counter or note, Undo and Cancel; step 3 previews and confirms. */
+/**
+ * The Fruit flow (polish pass 3, target first). Step 1: the suggested tiles, "Give up these
+ * 3 tiles", with Change and Next (or, while changing, a counter). Step 2: the plain-words
+ * preview and Confirm. Undo and Cancel at every step.
+ */
 function renderFruitFlow(v: View) {
   if (!session || !fruitFlow) return;
+  const f = fruitFlow;
   const moves = $('moves');
+  const n = v.config.fruitSacrifice;
   const steps = document.createElement('ol');
   steps.className = 'fruit-steps';
-  ['Pick 3', 'Pick target', 'Confirm'].forEach((t, i) => {
+  [`Give up ${n} tiles`, 'Confirm'].forEach((t, i) => {
     const li = document.createElement('li');
-    li.textContent = i === 0 ? `Pick ${v.config.fruitSacrifice}` : t;
-    if (i + 1 === fruitFlow!.step) li.className = 'now';
-    else if (i + 1 < fruitFlow!.step) li.className = 'done';
+    li.textContent = t;
+    li.className = i + 1 === f.step ? 'now' : i + 1 < f.step ? 'done' : '';
     steps.append(li);
   });
   moves.append(steps);
-  if (fruitFlow.step === 1) {
+  const redo = (next: typeof f) => {
+    fruitFlow = next;
+    fruitMsg = null;
+    render();
+  };
+  if (f.step === 1 && f.changing) {
     const c = document.createElement('span');
     c.className = 'fruit-count';
-    c.textContent = fruitFlow.counter;
-    c.setAttribute('aria-label', `${fruitFlow.counter} tiles picked`);
+    c.textContent = `${f.picks.length}/${n}`;
+    c.setAttribute('aria-label', `${f.picks.length} of ${n} tiles picked`);
     moves.append(c);
+  } else if (f.step === 1) {
+    const what = document.createElement('span');
+    what.className = 'fruit-give';
+    what.textContent = `Give up these ${n} tiles`;
+    moves.append(what);
+    moves.append(button('Change', 'ghost fruit-change', () => redo(fruitChange(f)), `Pick other tiles to give up`));
+    moves.append(button('Next', 'primary fruit-next', () => redo(fruitNext(session!.legal, f)), 'See what this Fruit does'));
   }
-  if (fruitFlow.step > 1 || fruitFlow.picks.length > 0) {
-    moves.append(button('Undo', 'ghost undo', () => {
-      fruitFlow = fruitUndo(fruitFlow!);
-      fruitMsg = null;
-      render();
-    }, 'Undo the last Fruit pick'));
-  }
-  moves.append(button('Cancel', 'ghost cancel', () => cancelSel(), 'Cancel the Fruit'));
-  const fa = fruitAction(session.legal, fruitFlow);
+  if (f.step === 2 || (f.changing && (f.picks.length > 0 || f.before.length > 0))) moves.append(button('Undo', 'ghost undo', () => redo(fruitUndo(f)), 'Undo the last Fruit step'));
+  // (at step 2 the preview bar has its own Cancel)
+  if (f.step === 1) moves.append(button('Cancel', 'ghost cancel', () => cancelSel(), 'Cancel the Fruit'));
+  const fa = fruitAction(session.legal, f);
   if (fa) {
     const pv = fruitPreview(v, fa);
     $('confirm-chip').textContent = pv.chip;
@@ -1334,7 +1350,7 @@ function renderFirstTip(v: View) {
     return;
   }
   if (!tipOpen && myTurn() && !busy() && v.phase === 'ACT') {
-    if (!tipsSeen.fruit && fruitButton(v, session.legal).enabled) tipOpen = 'fruit';
+    if (showTopTip(v, !!tipsSeen.fruit)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
   card.hidden = !tipOpen;
@@ -1515,6 +1531,7 @@ function cancelSel() {
   fruitMsg = null;
   session?.cancel();
   inspectKey = null;
+  cardPinned = false;
   render();
 }
 
@@ -1549,8 +1566,7 @@ function onHexTap(key: string) {
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn() || (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK')) {
-    inspectKey = inspectKey === key ? null : key;
-    render();
+    pinCard(inspectKey === key && cardPinned ? null : key);
     return;
   }
   sound.click();
@@ -1559,10 +1575,18 @@ function onHexTap(key: string) {
     fruitFlow = r.flow;
     fruitMsg = r.refused;
     inspectKey = null;
+    cardPinned = false;
     if (r.refused) caption(r.refused, key, 'info');
     render();
     return;
   }
+  // Polish pass 3: an opponent tile the picked card cannot take (or any opponent tile with
+  // nothing picked) opens its tile card, which offers Fruit. The picked card stays picked.
+  if (session.view.phase === 'ACT' && hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard') {
+    pinCard(inspectKey === key && cardPinned ? null : key);
+    return;
+  }
+  cardPinned = false;
   // Tapping the previewed hex again plays the move (same as Confirm).
   if (session.sel.hex === key && session.pending) return humanPlay(session.pending);
   session.tapHex(key);
@@ -1572,9 +1596,30 @@ function onHexTap(key: string) {
 }
 
 function onInspect(key: string | null) {
-  // no tile tooltips over the board while the Fruit flow is picking tiles
+  // hovering never moves a pinned tile card; no tile cards while the Fruit flow is picking tiles
+  if (cardPinned) return;
   inspectKey = fruitFlow ? null : key;
   if (session) renderTooltip(session.view);
+}
+
+/** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
+function pinCard(key: string | null) {
+  if (fruitFlow) key = null;
+  inspectKey = key;
+  cardPinned = key !== null;
+  render();
+}
+
+/** "Fruit this tile" in the tile card: step 1 with the suggested tiles. */
+function startFruitOn(key: string) {
+  if (!session) return;
+  sound.click();
+  session.cancel();
+  fruitFlow = startFruit(session.view, session.legal, key);
+  fruitMsg = null;
+  inspectKey = null;
+  cardPinned = false;
+  render();
 }
 
 function replayBotTurn() {
@@ -1654,6 +1699,14 @@ bind('confirm-play', () => {
   if (a) humanPlay(a);
 });
 bind('confirm-cancel', () => cancelSel());
+bind('confirm-info', () => {
+  const k = $('confirm-info').dataset.key;
+  if (k) pinCard(k);
+});
+$('tooltip').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-fruit]');
+  if (b) startFruitOn(b.dataset.fruit!);
+});
 bind('first-tip-ok', () => {
   if (tipOpen) {
     tipsSeen = markTip(tipsSeen, tipOpen);

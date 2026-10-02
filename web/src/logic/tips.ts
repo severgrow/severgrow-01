@@ -12,7 +12,8 @@ export const TIPS: Record<TipId, { title: string; text: string }> = {
   },
   fruit: {
     title: 'Fruit (once per game)',
-    text: `Give up 3 of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength: even a 9. Anything cut off from a root goes too, on both sides.`,
+    // shown the first time an opponent top-rank tile appears while my Fruit is unused (polish pass 3)
+    text: 'Tip: tap it. Fruit can remove tiles no card can beat.',
   },
 };
 

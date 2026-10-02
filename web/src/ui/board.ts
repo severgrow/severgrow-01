@@ -45,6 +45,8 @@ export type Overlay = {
   botFragile: boolean;
   /** v0.5: what each target does: grow on empty, replace a bot tile (⇆), strengthen mine (+). */
   targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen'>;
+  /** polish pass 3: the picked tiles are the game's suggestion (soft "−" markers, not numbers) */
+  fruitSoft?: boolean;
   /** v0.5 Fruit flow: tiles that can be picked, tiles picked so far (in order), the target. */
   fruitValid?: string[];
   fruitPicked?: string[];
@@ -68,6 +70,8 @@ export const NO_OVERLAY: Overlay = {
 export type BoardHandlers = {
   tap: (key: string) => void;
   inspect: (key: string | null) => void;
+  /** a long-press on touch (opens and pins the tile card); falls back to a brief inspect */
+  hold?: (key: string) => void;
 };
 
 export class BoardView {
@@ -219,14 +223,15 @@ export class BoardView {
       if (e.pointerType !== 'mouse') {
         this.pressTimer = setTimeout(() => {
           this.longPressed = true;
-          this.handlers.inspect(key);
+          if (this.handlers.hold) this.handlers.hold(key);
+          else this.handlers.inspect(key);
         }, 450);
       }
     });
     g.addEventListener('pointerup', () => {
       clearTimeout(this.pressTimer);
       if (this.pressed === key && !this.longPressed) this.handlers.tap(key);
-      if (this.longPressed) setTimeout(() => this.handlers.inspect(null), 1600);
+      if (this.longPressed && !this.handlers.hold) setTimeout(() => this.handlers.inspect(null), 1600);
       this.pressed = null;
     });
     g.addEventListener('pointercancel', () => clearTimeout(this.pressTimer));
@@ -319,7 +324,7 @@ export class BoardView {
       for (const key of o.fruitValid ?? []) el('path', { d: hexPath(key, S - 3, st.tileShape), class: 'target fruit-valid', 'data-key': key }, over);
       (o.fruitPicked ?? []).forEach((key, i) => {
         el('path', { d: hexPath(key, S - 2, st.tileShape), class: 'fruit-picked', 'data-key': key }, over);
-        this.markBadge(over, key, String(i + 1), 'fruit');
+        this.markBadge(over, key, o.fruitSoft ? '−' : String(i + 1), 'fruit');
       });
       if (o.fruitTarget) {
         el('path', { d: hexPath(o.fruitTarget, S - 2, st.tileShape), class: 'fruit-target', 'data-key': o.fruitTarget }, over);

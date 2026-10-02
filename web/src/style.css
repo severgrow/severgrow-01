@@ -1054,6 +1054,7 @@ svg.usable .hex-cell {
 .tooltip {
   position: absolute;
   z-index: 3;
+  box-sizing: border-box;
   padding: 10px 12px;
   border-radius: var(--radius);
   background: var(--c-surface);
@@ -2739,7 +2740,6 @@ svg.usable .hex-cell {
 }
 .fruit-steps li.done {
   opacity: 0.6;
-  text-decoration: line-through;
 }
 .fruit-count {
   font-weight: var(--w-num);
@@ -2918,4 +2918,38 @@ svg.usable .hex-cell {
 .lab-board.small {
   width: 100%;
   height: auto;
+}
+
+/* ---- polish pass 3: the tile card offers Fruit ---- */
+.tooltip.pinned {
+  pointer-events: auto;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.35);
+}
+.tooltip .tc-note {
+  color: var(--c-text);
+  font-weight: 600;
+  margin-top: 4px;
+}
+.tooltip .tc-info {
+  margin-top: 4px;
+  font-style: italic;
+}
+.tooltip .tc-fruit {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+.btn.small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+.icon-info {
+  min-width: 36px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+.fruit-give {
+  font-size: 0.85rem;
+  color: var(--c-text);
+  align-self: center;
 }
