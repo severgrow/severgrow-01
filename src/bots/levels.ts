@@ -58,7 +58,7 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   7: { ...base }, // GreedyBot (v0.5: with the full Strengthen and Fruit evaluation)
   // 8: keeps its strong cards and combos when throwing (level 7's weak spot), but still
   //    slips now and then (v0.5 ladder: 0.45 slipped too often, 57.4% vs 7; 0.15 gives
-  //    68.8% vs 7 and still loses to 9, 35.7%; docs/LADDER.md).
+  //    68.4% vs 7 and still loses to 9, 35.7%; docs/LADDER.md).
   8: { ...base, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 },
   // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
   //    and imagines 6 possible opponent hands to judge their best reply.
