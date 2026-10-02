@@ -161,7 +161,7 @@ export class WorldLayer {
 
   /** Swaps the new pixels in (the old picture stays as the "previous" pattern for a cross-fade). */
   private publish() {
-    const land = (next: string, revoke: boolean) => {
+    const land = (next: string) => {
       const old = this.url;
       if (old) this.prevImage.setAttribute('href', old);
       this.image.setAttribute('href', next);
@@ -171,19 +171,19 @@ export class WorldLayer {
       if (!old) this.onFirst();
       else this.onSwap(keys);
       // free the old picture once the cross-fade is over
-      if (old && revoke && old.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 1500);
+      if (old?.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(old), 1500);
     };
     // Some browsers (iPhone Safari with a large canvas) hand back no blob: fall back to a data URL,
     // so the material still appears instead of the board quietly keeping the older tile look.
     const viaDataUrl = () => {
       try {
-        land(this.canvas!.toDataURL('image/png'), false);
+        land(this.canvas!.toDataURL('image/png'));
       } catch {
         /* no picture: tiles keep their plain look */
       }
     };
     try {
-      this.canvas!.toBlob((blob) => (blob ? land(URL.createObjectURL(blob), true) : viaDataUrl()));
+      this.canvas!.toBlob((blob) => (blob ? land(URL.createObjectURL(blob)) : viaDataUrl()));
     } catch {
       viaDataUrl();
     }

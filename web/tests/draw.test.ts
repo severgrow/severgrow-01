@@ -336,3 +336,15 @@ describe('settings and keyboard', () => {
     expect(S).toBe(30);
   });
 });
+
+describe('review fixes (polish pass 3 follow-up)', () => {
+  it("a line over the opponent's root says the root is in the way (not the start rule)", () => {
+    // their root is at (2,-2); from (2,0) going up (dir 2) the line runs (2,0),(2,-1),(2,-2)
+    const s = stateWith({ '1,1': [0, 2], '1,0': [0, 2], '2,1': [0, 2] }, RUN);
+    const { v, combo } = comboOf(s, 'line-3');
+    const g = lineGhost(v, combo, '2,0', 2);
+    expect(g.action).toBeNull();
+    expect(g.reason).toBe('A root is in the way');
+    expect(g.tiles.find((t) => t.key === '2,-2')!.ok).toBe(false);
+  });
+});

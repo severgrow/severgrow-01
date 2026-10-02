@@ -153,7 +153,7 @@ export const pendingAction = (v: View, legal: readonly Action[], sel: Sel): Acti
 /**
  * The move to play straight away, or null. A picked spot that allows exactly one move
  * plays at once (no Confirm: Undo can take it back). With several different moves on
- * that spot, the preview stays so the player can pick ("Other way" / "Change card").
+ * that spot, the preview stays (another card, or a line or clump button, picks another move).
  */
 export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
   // Only a picked card plus a spot plays at once. A spot tapped on its own just previews
@@ -196,11 +196,3 @@ export const tapHex = (v: View, legal: readonly Action[], sel: Sel, key: string)
 };
 
 export const tapKind = (sel: Sel, kind: string): Sel => (sel.kind === kind ? { ...sel, kind: null, option: 0 } : { ...sel, kind, option: 0 });
-
-/** The label of the button that switches between options: say what actually changes. */
-export const optionsLabel = (opts: readonly Action[]): string => {
-  const place = (a: Action) => moveHexes(a).map(coordKey).sort().join('|');
-  const samePlace = opts.every((a) => place(a) === place(opts[0]!));
-  if (!samePlace) return 'Other way';
-  return opts.every((a) => moveCards(a).length === 1) ? 'Change card' : 'Change cards';
-};

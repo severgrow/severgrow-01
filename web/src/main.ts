@@ -921,11 +921,11 @@ function render() {
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
   // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
-  if (combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle') {
+  if (combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle' && !draw.redraw) {
     const only = onlyPlacement(combo);
     if (only) session.preset(only);
   }
-  board.setDrawing(!!combo && !session.presetMove, drawHandlers);
+  board.setDrawing(!!combo, drawHandlers);
   renderBoard(v, advice);
   if (combo) paintDraw();
   else $('draw-info').hidden = true;
@@ -1077,6 +1077,7 @@ function hintText(v: View): string {
       }
       if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
       if (session.pending && drawCombo()) return 'Confirm to place it, or draw it again.';
+      if (session.pending && sel.card === null && sel.kind === null) return 'Confirm, or tap the spot again. For another move here, tap a card or a line or clump button.';
       if (session.pending) return 'Confirm, or tap the spot again.';
       {
         const dc = drawCombo();
@@ -1636,16 +1637,19 @@ function onCardTap(id: number) {
 // ---------- drawing a line or clump (polish pass 3) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
-type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number };
+type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number; redraw?: boolean };
 const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null, list: -1, others: 0 };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
 /** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
+let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
   if (!session || !myTurn() || busy() || session.view.phase !== 'ACT' || fruitFlow) return null;
-  return comboFor(session.view, session.legal, session.sel);
+  // worked out once per position and selection (it scores every placement), not on every pointer move
+  if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
+  return comboMemo.combo;
 }
 
 /** The ghost of the shape being drawn right now (null when nothing is drawn). */
@@ -1749,11 +1753,17 @@ const drawHandlers = {
     if (e.button === 2) return cancelDraw();
     // a second finger (a pinch, a scroll) cancels the drawing
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
-    session.preset(null);
+    if (session.presetMove) {
+      // drawing again over a waiting preview: the preview goes (and the one-placement shortcut
+      // does not bring it straight back while this drawing is on)
+      session.preset(null);
+      draw = { ...draw, redraw: true };
+      render();
+    }
     const keys = new Set(board.boardKeys);
     const key = hexAtPoint(p.x, p.y, keys);
     draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
-    if (e.pointerType === 'mouse' && draw.desk.phase === 'live') return; // the click finishes on release
+    if (draw.desk.phase === 'live') return; // a live two-click shape finishes where the pointer is released
     if (!key) return;
     if (c.kind === 'line' && lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
     // a clump hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
@@ -1763,17 +1773,17 @@ const drawHandlers = {
     const c = drawCombo();
     if (!c) return;
     const keys = new Set(board.boardKeys);
-    if (!draw.ptr) {
-      // the mouse hovering after a first click: the live shape follows it
-      if (draw.desk.phase === 'live') {
-        const k = hexAtPoint(p.x, p.y, keys);
-        if (k && k !== draw.desk.hover) {
-          draw = { ...draw, desk: deskHover(draw.desk, k) };
-          paintDraw();
-        }
+    // after a first click (or tap) the live shape follows the pointer, button held or not
+    if (draw.desk.phase === 'live') {
+      const k = hexAtPoint(p.x, p.y, keys);
+      if (k && k !== draw.desk.hover) {
+        draw = { ...draw, desk: deskHover(draw.desk, k) };
+        paintDraw();
       }
+      if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
       return;
     }
+    if (!draw.ptr) return;
     if (e.pointerId !== draw.ptr.id) return;
     const ptr = draw.ptr;
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
@@ -1824,6 +1834,11 @@ const drawHandlers = {
     }
     // lifting the finger outside the board: nothing is placed
     if (!inside) return cancelDraw('Drawing cancelled');
+    // a live two-click shape dragged and released: it finishes where it was released
+    if (draw.desk.phase === 'live') {
+      const k = hexAtPoint(p.x, p.y, new Set(board.boardKeys)) ?? draw.desk.hover;
+      return drawTap(c, k, ptr.type);
+    }
     const g = drawGhostNow(c);
     if (g?.action) return finishDraw(g.action);
     if (c.kind === 'line') {
@@ -1831,7 +1846,6 @@ const drawHandlers = {
       draw = { ...draw, shape: [], dir: null, msg: g?.reason ?? null };
     } else if (draw.shape.length === c.n) draw = { ...draw, msg: clumpProblem(session!.view, c, draw.shape) };
     paintDraw();
-    void p;
   },
   cancel() {
     if (draw.ptr || draw.shape.length || draw.desk.phase === 'live') cancelDraw();
@@ -2101,7 +2115,6 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     const keys = board.boardKeys;
     focusKey = keyStep(focusKey ?? keys[Math.floor(keys.length / 2)]!, e.key, new Set(keys));
-    void dir;
     const dc = drawCombo();
     if (dc && draw.desk.phase === 'live') {
       draw = { ...draw, desk: deskHover(draw.desk, focusKey) };
