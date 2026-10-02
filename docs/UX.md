@@ -73,14 +73,15 @@ noise); the whole polish pass adds about 5 kB to the page after compression.
 
 - **Tap a card:** every hex it can grow on glows; the rest dims. **Tap a glowing
   hex:** ghost tiles show exactly where the tiles will grow, with a result chip like
-  "+3 tiles, replaces 1, cuts 4". Then **Confirm**, or tap the same hex again. If the same card and hex allow
+  "+3 tiles, replaces 1, cuts 4". **No Confirm for a clear choice:** when the spot allows
+  just one move it plays at once (Undo takes it back until you draw or throw). If the same card and hex allow
   more than one move, the next button shows the next one: **Change card** when only the card differs, **Other way** when the tiles would land elsewhere.
 - **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
 - **Sprout is the default.** In the Grow step the bar says "Pick a card to sprout":
-  tapping a card shows only where it can sprout. A card with one spot previews at once,
-  and one more tap on that spot plays it.
+  tapping a card shows only where it can sprout, and tapping a spot plays it. A card with
+  only one spot plays with that single tap.
 - **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one, then a
   card, to see where that combo can grow. Tapping a hex first still shows the best move
   there of any kind.
@@ -190,9 +191,14 @@ and **Test vibration** buttons.
 ## Settings (saved in this browser only)
 
 Colours (Soil, Moss night, Ink), Sound, Music, Vibration, Reduce motion, Animation
-speed (Slow, Normal, Fast, Off), Effects (Low, Normal, High), Confirm moves (on:
-preview then Confirm; off: a tap on a hex plays at once), Show weak spots, Pulse my
-weakest link, Large text, Coach.
+speed (Slow, Normal, Fast, Off), Effects (Low, Normal, High), Show weak spots, Pulse my
+weakest link, Large text, Coach. (The old "Confirm moves" setting is gone: clear choices
+play at once and Undo takes them back.)
+
+**Controls:** every button is a pill and every icon-only button is a circle, in three
+heights (big 56 px, normal 44 px, compact 36 px; step labels and their "?" 32 px). Cards,
+panels and level tiles are rounded rectangles. Hints like "Pick a card to sprout ↓" are
+plain bold text, never shaped like buttons.
 
 ## Accessibility
 

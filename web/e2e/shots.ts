@@ -62,6 +62,17 @@ for (const id of THEME_IDS) {
   await shot(page, 'veins-weak-links');
   await page.close();
 }
+// The Settings sheet (buttons and choices).
+{
+  const page = await open({ palette: 'soil', speed: 'skip' }, demo.state);
+  await page.click('#hud-menu');
+  await page.waitForTimeout(250);
+  await shot(page, 'game-menu');
+  await page.click('#gm-settings');
+  await page.waitForTimeout(250);
+  await shot(page, 'settings');
+  await page.close();
+}
 // A gold hex with and without a tile.
 {
   const page = await open({ palette: 'soil', speed: 'skip' }, gold.state);
@@ -74,7 +85,7 @@ for (const id of THEME_IDS) {
 }
 // A frame in the middle of a big cut.
 {
-  const page = await open({ palette: 'soil', speed: 'slow', confirmMoves: true }, demo.state);
+  const page = await open({ palette: 'soil', speed: 'slow' }, demo.state);
   if (demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(demo.action)}"]`).catch(() => {});
   await page.click(`#hand [data-card="${demo.card}"]`).catch(() => {});
   if (!(await page.locator('#confirm-play').isVisible())) {

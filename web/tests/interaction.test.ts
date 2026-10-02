@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, moveButtons, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -219,5 +219,37 @@ describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one
     const shown = moveButtons(v, legal, EMPTY_SEL).map((k) => k.kind);
     expect(shown).not.toContain('sprout');
     expect(shown.length).toBeGreaterThan(0);
+  });
+});
+
+describe('no Confirm for a clear choice (Undo can take it back)', () => {
+  const s = actState(3);
+  const v = viewFor(s, 0);
+  const legal = legalActions(v);
+
+  it('a card and a spot that allow exactly one move: it plays at once', () => {
+    let checked = 0;
+    for (const c of v.hand) {
+      const sel = tapCard(v, legal, EMPTY_SEL, c.id);
+      for (const hex of targetHexes(v, legal, sel)) {
+        const picked = { ...sel, hex };
+        const opts = options(v, legal, picked);
+        if (opts.length === 1) {
+          expect(playNow(v, legal, picked)).toEqual(opts[0]);
+          checked++;
+        } else expect(playNow(v, legal, picked)).toBeNull();
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('more than one different move on that spot: no auto-play, the preview offers "Other way"', () => {
+    const multi = [...new Set(legal.filter(isBoardAction).flatMap((a) => moveHexes(a).map(coordKey)))].find((h) => options(v, legal, { ...EMPTY_SEL, hex: h }).length > 1)!;
+    expect(multi).toBeDefined();
+    expect(playNow(v, legal, { ...EMPTY_SEL, hex: multi })).toBeNull();
+  });
+
+  it('nothing plays without a spot', () => {
+    for (const c of v.hand) expect(playNow(v, legal, tapCard(v, legal, EMPTY_SEL, c.id))).toBeNull();
   });
 });

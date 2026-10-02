@@ -22,7 +22,6 @@ export type Settings = {
   vibration: boolean;
   reduceMotion: boolean;
   speed: Speed;
-  confirmMoves: boolean;
   weakSpots: boolean;
   largeText: boolean;
   coach: boolean;
@@ -38,7 +37,6 @@ export const DEFAULT_SETTINGS: Settings = {
   vibration: true,
   reduceMotion: false,
   speed: 'normal',
-  confirmMoves: true,
   weakSpots: false,
   largeText: false,
   coach: true,
@@ -65,7 +63,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (EFFECTS.includes(s.effects as Effects)) out.effects = s.effects as Effects;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'confirmMoves', 'weakSpots', 'largeText', 'coach', 'weakPulse'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   return out;

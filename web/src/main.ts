@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { isBoardAction, kindOf, moveButtons, options, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
+import { isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
 import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -898,7 +898,7 @@ function hintText(v: View): string {
     case 'DRAW':
       return `Draw a card: tap the deck or the throw pile.${low}`;
     case 'ACT': {
-      if (session.pending) return settings.confirmMoves ? 'Check the preview, then Confirm.' : '';
+      if (session.pending) return 'More than one way to grow here: pick one, then Confirm (or tap the spot again).';
       if (sel.card !== null) return targetHexes(v, session.legal, sel).size ? (sel.kind === 'sprout' ? 'Tap a glowing hex to sprout there.' : 'Tap a glowing hex to grow there.') : "That card can't grow anywhere now.";
       if (sel.kind !== null) return 'Tap a glowing hex.';
       if (sel.hex !== null) return 'Nothing grows there right now.';
@@ -1250,11 +1250,11 @@ function cancelSel() {
   render();
 }
 
-/** With "Confirm moves" off, a complete choice plays at once. */
+/** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
-  if (!session || settings.confirmMoves) return;
-  const a = session.pending;
-  if (a && (a.t === 'Discard' || session.sel.hex !== null)) humanPlay(a);
+  if (!session || !myTurn() || busy()) return;
+  const a = playNow(session.view, session.legal, session.sel);
+  if (a) humanPlay(a);
 }
 
 function onCardTap(id: number) {
@@ -1267,7 +1267,7 @@ function onCardTap(id: number) {
   inspectKey = null;
   // Throw step: tapping a card throws it (no extra confirm).
   if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard') return humanPlay(session.pending);
-  // A card with just one place to grow shows its preview at once (no hex tap needed).
+  // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
   if (session.sel.card !== null && session.sel.hex === null) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
     if (only.length === 1) session.tapHex(only[0]!);

@@ -109,6 +109,17 @@ export const pendingAction = (v: View, legal: readonly Action[], sel: Sel): Acti
   return opts.length ? opts[sel.option % opts.length]! : null;
 };
 
+/**
+ * The move to play straight away, or null. A picked spot that allows exactly one move
+ * plays at once (no Confirm: Undo can take it back). With several different moves on
+ * that spot, the preview stays so the player can pick ("Other way" / "Change card").
+ */
+export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
+  if (sel.hex === null) return null;
+  const opts = options(v, legal, sel);
+  return opts.length === 1 ? opts[0]! : null;
+};
+
 /** The selection that makes `a` the pending move (for the coach's "Show me"). */
 export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
   const ids = moveCards(a);
