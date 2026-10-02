@@ -252,4 +252,10 @@ describe('no Confirm for a clear choice (Undo can take it back)', () => {
   it('nothing plays without a spot', () => {
     for (const c of v.hand) expect(playNow(v, legal, tapCard(v, legal, EMPTY_SEL, c.id))).toBeNull();
   });
+
+  it('ADVERSARIAL: a spot tapped with no card picked never plays (so a double tap cannot play twice)', () => {
+    for (const h of new Set(legal.filter(isBoardAction).flatMap((a) => moveHexes(a).map(coordKey)))) {
+      expect(playNow(v, legal, { ...EMPTY_SEL, hex: h })).toBeNull();
+    }
+  });
 });

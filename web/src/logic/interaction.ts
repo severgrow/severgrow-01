@@ -115,7 +115,9 @@ export const pendingAction = (v: View, legal: readonly Action[], sel: Sel): Acti
  * that spot, the preview stays so the player can pick ("Other way" / "Change card").
  */
 export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
-  if (sel.hex === null) return null;
+  // Only a picked card plus a spot plays at once. A spot tapped on its own just previews
+  // (so a stray or double tap on the board can never play a move by itself).
+  if (sel.hex === null || sel.card === null) return null;
   const opts = options(v, legal, sel);
   return opts.length === 1 ? opts[0]! : null;
 };
