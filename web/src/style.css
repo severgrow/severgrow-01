@@ -3247,3 +3247,18 @@ svg.usable .hex-cell {
     display: none;
   }
 }
+
+/* the version buttons: the name, and a small line saying what it means */
+.version-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.15;
+}
+.version-btn .vb-sub {
+  font-size: 0.72rem;
+  font-weight: var(--w-text);
+  opacity: 0.72;
+  white-space: normal;
+}

@@ -273,7 +273,7 @@ function renderHowTo() {
   $('howto-body').innerHTML = [
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? words.howto : ''}</p>`,
+    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? (cfg ? words.howto : `${MOVE_WORDS.sprout.howto} <i>In the Seed version</i> that card plants a seed worth <b>1</b> instead, whatever its number; strengthen it later with a higher card.`) : ''}</p>`,
     `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
     `<p><b>Strength:</b> a tile is as strong as its card${seedGame ? ' (a seed is always 1)' : ''}. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
