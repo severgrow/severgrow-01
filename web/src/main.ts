@@ -1635,7 +1635,7 @@ function onCardTap(id: number) {
 
 // ---------- drawing a line or clump (polish pass 3) ----------
 
-type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string };
+type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
 type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number };
 const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null, list: -1, others: 0 };
 let draw: DrawUi = { ...DRAW0 };
@@ -1752,16 +1752,11 @@ const drawHandlers = {
     session.preset(null);
     const keys = new Set(board.boardKeys);
     const key = hexAtPoint(p.x, p.y, keys);
-    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType };
+    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
     if (e.pointerType === 'mouse' && draw.desk.phase === 'live') return; // the click finishes on release
     if (!key) return;
-    if (c.kind === 'line') {
-      if (lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
-    } else if (!draw.shape.includes(key)) {
-      const next = clumpEnter(draw.shape, key, c);
-      if (next.length > draw.shape.length) drawTick(next.length - 1);
-      draw = { ...draw, shape: next, msg: null };
-    }
+    if (c.kind === 'line' && lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
+    // a clump hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
     paintDraw();
   },
   move(p: Pt, e: PointerEvent) {
@@ -1781,8 +1776,23 @@ const drawHandlers = {
     }
     if (e.pointerId !== draw.ptr.id) return;
     const ptr = draw.ptr;
-    if (Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) ptr.moved = true;
-    const entered = hexesAlong(ptr.last, p, keys);
+    if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
+      ptr.moved = true;
+      // a drag on a clump begins with the hex it started on
+      if (c.kind === 'clump' && ptr.downKey && !draw.shape.includes(ptr.downKey)) {
+        const next = clumpEnter(draw.shape, ptr.downKey, c);
+        if (next.length > draw.shape.length) drawTick(next.length - 1);
+        draw = { ...draw, shape: next, msg: null };
+      }
+    }
+    // only hexes the finger moves INTO count (not the one it is already on): so starting a
+    // new stroke on a hex of the shape never reads as "dragging back"
+    const entered: string[] = [];
+    for (const k of hexesAlong(ptr.last, p, keys)) {
+      if (k === ptr.cur) continue;
+      entered.push(k);
+      ptr.cur = k;
+    }
     ptr.last = p;
     if (!ptr.moved) return;
     if (c.kind === 'line' && draw.shape[0]) {

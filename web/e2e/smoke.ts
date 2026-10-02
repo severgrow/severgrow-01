@@ -11,6 +11,7 @@ import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
 import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
+import { drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
@@ -81,16 +82,16 @@ const pickCard = async (page: Page, d: Pick) => {
   await page.click(`#hand [data-card="${d.card}"]`);
 };
 
-/** Picks the demo's card, hex and option, then confirms (does not wait). */
+/** Picks the demo's card, then its spot (a line or clump is drawn on the board), then confirms (does not wait). */
 const startMove = async (page: Page, d: Pick) => {
   const before = (await getState(page))!.history?.length ?? 0;
   await pickCard(page, d);
   if (((await getState(page))!.history?.length ?? 0) > before) return; // the card's only spot: played at once
-  if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
-  if (await page.locator('#confirm-play').isVisible()) {
-    for (let i = 0; i < d.option; i++) await page.click('#confirm-other');
-    await page.click('#confirm-play');
-  }
+  const meld = d.action.t === 'MeldRun' || d.action.t === 'MeldSet';
+  if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, d.action);
+  else if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
+  if (((await getState(page))!.history?.length ?? 0) > before) return; // a drawn move with Confirm moves off: placed at once
+  if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
 };
 /** Picks a target hex for the selected card (a clear choice then plays at once; several ways show a preview). */
 const pickTarget = async (page: Page) => {
@@ -246,7 +247,7 @@ for (const theme of THEMES) {
 
   // --- adversarial 2 + the cut, previews and screenshots ---
   for (const size of ['phone', 'desktop'] as const) {
-    const { page, errors } = await openPage(theme, size, { speed: 'normal' }, demo.state);
+    const { page, errors } = await openPage(theme, size, { speed: 'normal', confirmDraw: true }, demo.state);
     if (dir) await page.screenshot({ path: `${dir}/${size}-menu.jpg`, quality: 82 });
     await page.click('#menu-continue');
     await page.mouse.move(1, 1); // no hover tooltip in the picture
@@ -254,8 +255,10 @@ for (const theme of THEMES) {
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
     const histBefore = ((await getState(page))!.history?.length ?? 0);
     await pickCard(page, demo);
+    const meld = demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet';
+    if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, demo.action);
     // A clear choice plays at once (no Confirm); a double tap on the spot must still play once.
-    if (((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {
+    if (!meld && ((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {
       const box = await page.locator(`.hex-cell[data-key="${demo.hex}"] path.hex`).boundingBox();
       const dv = viewFor(demo.state, 0);
       const dl = legalActions(dv);
@@ -265,7 +268,6 @@ for (const theme of THEMES) {
       else await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
     }
     if (await page.locator('#confirm-play').isVisible()) {
-      for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
       const chip = await page.textContent('#confirm-chip');
       check(`${theme} ${size}: preview chip shows the cut`, !!chip && chip.includes(`cuts ${demo.cuts}`), chip ?? '');
       await page.dblclick('#confirm-play'); // ADVERSARIAL 2
@@ -534,20 +536,22 @@ await Promise.race([
 // Polish pass 3: the word "bot" never reaches the player. Scans visible text, aria-labels,
 // alt and title text, the page title and description, in every state the page can reach.
 const BOT_ALLOWLIST: readonly string[] = []; // intentional exceptions: none
-const botWords = (page: Page) =>
-  page.evaluate((allow) => {
-    const re = /\bbots?\b/i;
-    const found: string[] = [];
-    const push = (where: string, t: string | null | undefined) => {
-      if (t && re.test(t) && !allow.some((a) => t.includes(a))) found.push(`${where}: ${t.trim().slice(0, 80)}`);
+// (a plain string: tsx would wrap a named function in a helper the page does not have)
+const botWords = (page: Page): Promise<string[]> =>
+  page.evaluate(`(() => {
+    const allow = ${JSON.stringify(BOT_ALLOWLIST)};
+    const re = /\\bbots?\\b/i;
+    const found = [];
+    const push = (where, t) => {
+      if (t && re.test(t) && !allow.some((a) => t.includes(a))) found.push(where + ': ' + t.trim().slice(0, 80));
     };
     push('text', document.body.innerText);
     push('title', document.title);
-    push('description', document.querySelector('meta[name="description"]')?.getAttribute('content'));
+    push('description', (document.querySelector('meta[name="description"]') || { getAttribute: () => '' }).getAttribute('content'));
     for (const el of document.querySelectorAll('[aria-label],[alt],[title],[placeholder]'))
       for (const a of ['aria-label', 'alt', 'title', 'placeholder']) push(a, el.getAttribute(a));
     return found;
-  }, BOT_ALLOWLIST as string[]);
+  })()`);
 {
   const found: string[] = [];
   const scan = async (page: Page, where: string) => found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));

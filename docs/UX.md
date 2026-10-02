@@ -110,8 +110,16 @@ A tile's strength shows in the material itself, not only in its number.
 - **Lava:** a 1 is dark cooled crust with about 3% molten showing; a top-rank tile is about 95%
   molten. Plates shrink, cracks widen, the glow grows. Red-orange only, never yellow or
   amber (amber means gold hexes). A test checks every colour.
-- **Top rank:** from `t = 0.85` a double rim (outer contour + inner line) and a soft glow, so
-  it reads without colour; a slow shimmer runs along the rim (off with Reduce motion).
+- **Top rank (polish pass 3):** only a slight glow: a faint halo hugging the hex, a pale mint for
+  moss and a soft pink-orange for lava (never amber or yellow), about a quarter of the old glow's
+  strength, a small blur (7% of the hex width). No outline of any kind: the old contour, double
+  rim and shimmer are gone. Tiles just under the top (t from 0.9) get a whisper of it; nothing
+  below. Still by default; at Effects High only, an almost invisible slow breathing (4% over 6
+  seconds; none with Reduce motion). Effects Low, or Settings → **Top-rank glow: Off**, turns it
+  off (default Subtle). It is a pre-rendered picture (one per material and tile shape), drawn
+  above the tiles and outside the hex only, so it never covers a number. A tile that reaches the
+  top rank (a Strengthen) fades its glow in over half a second. The strength itself reads from
+  the number and the material (bushiest moss, fully molten lava).
 - **Seamless neighbours:** the texture is painted in board (world) coordinates, so grass,
   soil, cracks and plates run on from tile to tile. Between two tiles of the same owner,
   `t` blends over about a third of a tile across the shared border, so a 1 beside a 9 has
@@ -133,7 +141,8 @@ A tile's strength shows in the material itself, not only in its number.
 
 ## The turn pill
 
-At the start of each turn a pill says **Your turn** (circle) or **Bot's turn** (diamond):
+At the start of each turn a pill (at the top edge of the board area, never over tiles) says
+**Your turn** (circle) or **Opponent's turn** (diamond):
 250 ms in (fade and a 6 px slide), 700 ms hold with one thin highlight sweeping across it,
 250 ms out. The header capsule cross-fades to the new side, a faint wash of that side's
 colour shows along the board's edge, and two soft tones play (a gentle rise for you, a
@@ -163,8 +172,7 @@ until its first move appears, and only while it is really still choosing.
 - **Tap a card:** every hex it can grow on glows; the rest dims. **Tap a glowing
   hex:** ghost tiles show exactly where the tiles will grow, with a result chip like
   "+3 tiles, replaces 1, cuts 4". **No Confirm for a clear choice:** when the spot allows
-  just one move it plays at once (Undo takes it back until you draw or throw). If the same card and hex allow
-  more than one move, the next button shows the next one: **Change card** when only the card differs, **Other way** when the tiles would land elsewhere.
+  just one move it plays at once (Undo takes it back until you draw or throw).
 - **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
@@ -174,10 +182,11 @@ until its first move appears, and only while it is really still choosing.
   sprouted; a small **Skip sprout** link stays, because sprouting is optional in the rules.
   After the sprout the game goes on to "Tap a card to throw it" by itself (or shows "Throw a
   card" when a line or clump is still possible).
-- **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one, then a
-  card, to see where that combo can grow. Tapping a hex first still shows the best move
-  there of any kind.
-- **Cancel** always clears your choice. Esc does the same on a keyboard.
+- **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one (a card too, if you
+  want particular cards), then **draw it on the board** (see "Drawing a line or clump" below).
+  There is no "Other way" button any more.
+- **Cancel** always clears your choice. Esc does the same on a keyboard (while drawing, Esc first
+  clears the shape, then the choice).
 - **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
   **?** button next to them; tap it to read the tip, tap again to hide it.
 - **Throw:** when it is time to throw, the hint says "Tap a card to throw it" and one
@@ -188,11 +197,12 @@ until its first move appears, and only while it is really still choosing.
   weakest link" turns it off).
 - **Weak spots** (the icon at top-left of the board; its name shows when switched on): your tiles whose loss would cut off the
   most, with a number like "−4". Before you confirm a move that leaves a bigger
-  weak spot, the confirm bar warns: "The bot could cut 5 of your tiles."
-- **Bot's weak links** (the icon at top-right): the bot's tiles you could cut, with how many
-  tiles it would lose; the bot's fragile veins flicker too.
-- **Hold a tile** (or hover with a mouse): strength, owner, gold or not, and what
-  losing it would cost.
+  weak spot, the confirm bar warns: "Your opponent could cut 5 of your tiles."
+- **Opponent's weak links** (the icon at top-right): your opponent's tiles you could cut, with
+  how many tiles they would lose; their fragile veins flicker too.
+- **The tile card**: hover a tile with a mouse to see it; tap a tile (or hold it on a touch
+  screen) and it stays open: strength, owner, gold or not, and what losing it would cost. On an
+  opponent tile it offers Fruit (below). Tap the tile again, tap elsewhere or press Esc to close.
 - **Deck and throw pile** sit side by side, each with a label and a count; the top
   thrown card shows its number and suit. In the Draw step both glow softly and say
   "Tap to draw" / "Tap to take"; in the Grow and Throw steps they are dimmed and
@@ -206,28 +216,42 @@ says what it does by its shape and a symbol, not by colour alone:
 | Target | Looks like | Means |
 | --- | --- | --- |
 | Grow on an empty hex | a plain ring | a new tile with the card's number |
-| Replace an enemy tile | a dashed ring with a small ⇆ badge | the bot's weaker tile becomes mine |
+| Replace an enemy tile | a dashed ring with a small ⇆ badge | the opponent's weaker tile becomes mine |
 | Strengthen my tile | a thick ring with a small + badge | my own weaker tile takes the card's number |
 
-The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, replace a bot
-tile (⇆), strengthen your tile (+)"). Growing and replacing still play at once (Undo takes them
+The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, replace an
+opponent tile (⇆), strengthen your tile (+)"). Growing and replacing still play at once (Undo takes them
 back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
-but harder for the bot to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
+but harder for your opponent to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
 
-**The Fruit button** sits in the move row only when Fruit is on: "Fruit · 1 left", or "Fruit ·
-Used". When it cannot be used it is dimmed with a one-line reason: "Needs 3 connected tiles",
-"No enemy tile next to them" (or "Only while you are behind" with that option).
+**Fruit is used by tapping an opponent tile** (polish pass 3; there is no Fruit button in the move
+row any more: the row only shows what you can do right now). In your Grow step, while your Fruit
+is unused, the tile card of any opponent tile except their root shows:
+- **"Fruit this tile"** when you have a legal set of tiles to give up for it (Fruit ignores
+  strength); on a top-rank tile it adds "No card can replace this. Fruit can."
+- an information line when it is not possible yet: "Fruit could remove this. You need 3 connected
+  tiles next to it." (no button);
+- nothing at all once your Fruit is used, or when Fruit is off.
 
-**The guided flow** (a progress line "1 Pick 3 · 2 Pick target · 3 Confirm", with Undo and Cancel
-at every step):
-1. *Pick 3 of your tiles to give up.* Only tiles that can still lead to a Fruit glow; picked ones
-   carry 1, 2, 3; a counter shows 0/3. Wrong taps are gently refused with a short caption ("Your
-   root can't be given up", "Pick 3 of your own tiles", "Pick tiles that touch each other").
-2. *Pick a tile to remove.* The bot tiles next to the three glow, 9s included; the first time,
-   "Fruit ignores strength: even a 9 can go."
-3. *Preview and confirm.* A plain-words chip: "You lose 3. They lose 1, plus 4 cut off. Net: -3
-   for you, -5 for them." Warnings when it would cut off my own tiles ("Careful: this cuts off 2
-   of your tiles") or leave my root easy to surround. The tiles that would be cut are marked.
+A tap on an opponent tile that the picked card can take previews the Sprout as before; one it
+cannot take (an opponent 9, say) opens the tile card instead, keeping the card picked. While a
+Sprout onto an opponent tile is previewed, a small **i** button (or holding the tile) opens its
+tile card, so Fruit is always reachable.
+
+**The flow, target first** (a progress line "1 Give up 3 tiles · 2 Confirm"; Undo and Cancel at
+every step):
+1. *The game suggests the 3 tiles to give up*: among every legal set (3 connected tiles of yours,
+   not your root, at least one next to the target) the one that cuts off the fewest of your own
+   tiles, then the lowest total strength, then a fixed order. They carry a soft "−" marker;
+   "Give up these 3 tiles", with **Change** and **Next**. **Change** lets you pick another set:
+   the tiles that still lead to a legal set glow, wrong taps get a one-line reason ("Your root
+   can't be given up", "Pick 3 of your own tiles", "Pick tiles that touch each other").
+2. *Preview and confirm.* A plain-words chip: "You give up 3. They lose 1, plus 4 cut off. Net: -3
+   for you, -5 for them." Warnings when it would cut off your own tiles ("Careful: this cuts off 2
+   of your tiles") or leave your root easy to surround. The tiles that would be cut are marked.
+
+A one-time tip, the first time an opponent top-rank tile appears while you still have Fruit: "Tip:
+tap it. Fruit can remove tiles no card can beat." (re-open it from How to play).
 
 A Fruit can be undone like any other growing move this turn (it reveals no hidden card).
 
@@ -251,7 +275,60 @@ target, Confirm).
 
 Screenshots (390 px wide): `docs/screens/fruit-strengthen/`.
 
-## Playing against the bot
+## Drawing a line or clump (polish pass 3)
+
+After choosing "Grow a line of N" or "Grow a clump of N" you draw it on the board; "Other way" is
+gone. Touch, mouse and pen share one code path (pointer events).
+- **The board shows where to start**: for a line, the hexes next to your network that have at least
+  one legal direction; for a clump, every legal hex. The rest dims. A hint says "Drag across the
+  board to draw your line" / "Drag over hexes to draw your clump" ("Click where your line starts,
+  then click to finish" with a mouse). Cancel is always there.
+- **One place only?** It shows straight away as a ready preview with Confirm.
+- **A line**: touch a start and drag. As soon as the drag clearly points along one of the 6
+  directions (a small dead zone, a little hysteresis so it does not flicker), the ghost shows all
+  N tiles with their numbers rising from the start. Moving the finger turns it. A blocked part
+  (rock, your own tile, a stronger tile, the edge) shows in a "can't" style with the reason above
+  the board; lifting there only gives a small shake. Touching just the start shows arrows for the
+  legal directions. Starting at the far end and dragging back works too; if both ends touch your
+  network, the end where your finger started is the start.
+- **A clump**: touch any legal hex and drag; each new legal hex that touches the shape (any hex of
+  it, so a Y or a triangle is possible) is added; others are skipped without breaking the drag;
+  moving back onto the previous hex removes the last one; a counter shows "2/3". Tapping hexes
+  works too (tap the last one to remove it). Lifting early keeps the shape ("2/3: keep going,
+  from any hex of the shape") with a Clear button; a full shape that does not touch your tiles
+  says "Your clump needs to touch your tiles".
+- **Fast fingers**: every hex the finger's path crosses between two pointer events is added, in
+  order; the hit area is a little smaller than each hex so corners never slip into a neighbour.
+  The counter and the result chip sit in a small card above the board, never under the finger.
+  Each added hex gives a light haptic tick and a soft rising note (Vibration and Sound toggles).
+  Lifting the finger outside the board, or a second finger, cancels; pinch and scroll are blocked
+  only while drawing.
+- **On release** (or the second click): with **Confirm moves** on, the result chip appears with
+  Confirm and Cancel; with it off, the move is placed at once. Settings → Confirm moves: **Auto**
+  (on for touch screens, off with a mouse), On, Off.
+- **With a mouse**: click a start; the shape follows the mouse (a line snaps to the nearest
+  direction; a clump grows from the start towards the pointer along the shortest legal path, then
+  the nearest legal hexes, always the same for the same pointer), with the result chip live;
+  click again to finish. Esc or right-click cancels. Dragging with the mouse works like a finger.
+- **Keyboard**: Tab to the board, arrows move a cursor hex, Enter starts or adds, Backspace removes
+  the last hex, Esc cancels, Enter on a ready shape confirms. A screen reader hears "2 of 3 hexes
+  chosen" and the result chip.
+- **Placement list** (Settings, off by default): an opt-in step-through list of every legal
+  placement for the chosen combo, for anyone who prefers not to draw.
+- **First time**: a small tip with a looping ghost finger on a mini hex strip ("Drag over hexes to
+  draw your clump or line. On a computer, click to start and click to finish."), re-openable from
+  How to play; no animation with Reduce motion.
+- **The coach's "Show me"**: points at the line or clump button, then shows its placement on the
+  board, ready to confirm.
+
+## Words
+
+The player always reads **Opponent** ("Opponent's turn", "Your opponent could cut 3 of your
+tiles"), never "bot". The word lives in one place, `OPPONENT_LABEL` in `src/strings.ts`, with
+ready-made phrases (`OPP`); a unit test scans the HTML and every built message, and the browser
+test scans the live page in every state. Code names (`src/bots/`, `botVersion`, CSS classes) stay.
+
+## Playing against the opponent
 
 - **Bot level**: **Play** opens a 3×3 screen of levels 1-9. Each shows its number, a
   small nature icon that grows with the level (seedling, sprig, clover, moss, fern, ivy,
