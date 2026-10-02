@@ -111,3 +111,20 @@ export const tripleDemo = () =>
 
 /** A big cut (4 or more bot tiles). */
 export const bigCutDemo = () => findMove((v, a) => (previewMove(v, a)?.cuts ?? 0) >= 4);
+
+/** The start of a bot turn in which the bot grows over one of the player's tiles (moss becomes lava). */
+export const botReplace = (): { state: State; keys: string[] } => {
+  for (let seed = 1; seed <= 200; seed++) {
+    let start: State | null = null;
+    let found: { state: State; keys: string[] } | null = null;
+    playGame(seed, ({ before, after }) => {
+      if (found) return;
+      if (before.actor === 1 && before.phase === 'DRAW') start = before;
+      if (before.actor !== 1 || !start) return;
+      const keys = Object.keys(after.board).filter((k) => before.board[k]?.owner === 0 && after.board[k]?.owner === 1);
+      if (keys.length > 0) found = { state: start, keys };
+    });
+    if (found) return found;
+  }
+  throw new Error('no bot replace found');
+};

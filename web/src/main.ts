@@ -30,9 +30,11 @@ import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
 import type { Settings } from './logic/settings.js';
 import { THEMES, THEME_IDS, cssVars, resolveColors, themeOf } from './logic/themes.js';
+import { DETAILS, MATERIAL_TOKENS, materialLook, materialsOf } from './logic/materials.js';
 
 /** The one look (Ink and glow colours, organic shapes). */
 const theme = () => themeOf(settings.palette);
+const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
@@ -115,12 +117,19 @@ function applyTheme() {
   const root = document.documentElement;
   root.dataset.theme = t.id;
   for (const [k, v] of Object.entries(cssVars(t))) root.style.setProperty(k, v);
+  const mat = materialsOf(t.id);
+  for (const k of MATERIAL_TOKENS) root.style.setProperty(`--m-${k}`, mat.colors[k]);
+  const lk = look();
+  root.style.setProperty('--m-intensity', String(lk.intensity));
+  root.style.setProperty('--m-rim', String(lk.rim));
+  root.classList.toggle('mat-textures', lk.textures);
+  root.classList.toggle('mat-motion', lk.motion);
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
-  if (session) board.setup(session.state.config, session.state.terrain, t.style);
+  if (session) board.setup(session.state.config, session.state.terrain, t.style, look());
   lastBoard = null;
   drawLogo();
   render();
@@ -255,6 +264,10 @@ function syncSettingsForm() {
   segmented('effects-seg', EFFECTS, settings.effects, cap, (e) => {
     settings.effects = e;
   });
+  segmented('detail-seg', DETAILS, settings.materialDetail, cap, (d) => {
+    settings.materialDetail = d;
+    applyTheme();
+  });
 }
 
 const cap = (w: string) => w[0]!.toUpperCase() + w.slice(1);
@@ -299,7 +312,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, theme().style);
+  board.setup(state.config, state.terrain, theme().style, look());
   lastBoard = null;
   showScreen('game');
   scheduleBot();
@@ -1551,6 +1564,11 @@ fillIcons();
 sound.enabled = settings.sound;
 sound.musicOn = settings.music;
 applyTheme();
-const urlSeed = Number(new URLSearchParams(location.search).get('seed'));
-if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
+const params = new URLSearchParams(location.search);
+const urlSeed = Number(params.get('seed'));
+if (params.get('lab') === '1') {
+  // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
+  for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
+  void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
+} else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');

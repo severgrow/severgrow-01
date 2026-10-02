@@ -20,8 +20,8 @@ export const COLOR_TOKENS = [
   'muted', // labels and hints
   'line', // hex outlines
   'hexFill', // empty hexes (shallow soil pockets)
-  'rock', // rock hexes (cool blue-grey stone)
-  'rockEdge', // light facets on rock
+  'rock', // rock hexes (dark, slightly warm grey-brown stone)
+  'rockEdge', // the top-left facet on rock
   'gold', // gold hexes (amber) and their badge
   'goldInk', // the "2" on the gold badge
   'you', // your tiles and veins (mint)
@@ -141,8 +141,8 @@ export const THEMES: Record<ThemeId, Theme> = {
       muted: '#b5ab90',
       line: '#4b4434',
       hexFill: '#26231a',
-      rock: '#647383',
-      rockEdge: '#a9b6c4',
+      rock: '#58524a',
+      rockEdge: '#776f64',
       accent: '#efe5cb',
       accentInk: '#1b1912',
       danger: '#fff4dc',
@@ -162,8 +162,8 @@ export const THEMES: Record<ThemeId, Theme> = {
       muted: '#a8b1a2',
       line: '#2f3f37',
       hexFill: '#15211c',
-      rock: '#5c6b7b',
-      rockEdge: '#a3b1c0',
+      rock: '#55524b',
+      rockEdge: '#736d64',
       accent: '#ebe3cc',
       accentInk: '#0d1613',
       danger: '#fff4dc',
@@ -183,8 +183,8 @@ export const THEMES: Record<ThemeId, Theme> = {
       muted: '#a39f97',
       line: '#35363c',
       hexFill: '#17181c',
-      rock: '#58626e',
-      rockEdge: '#9ea8b4',
+      rock: '#55514c',
+      rockEdge: '#6f6a63',
       accent: '#ebe6da',
       accentInk: '#0d0e11',
       danger: '#fff4dc',

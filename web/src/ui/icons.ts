@@ -16,13 +16,16 @@ export const ICONS: Record<string, string> = {
   sound: wrap('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>'),
 };
 
-/** Suit symbols for the cards: Moss (leaf), Ash (flake), Dew (drop), Ember (flame). */
-export const SUIT_SVG: readonly string[] = [
-  wrap('<path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z" fill="currentColor" fill-opacity=".25"/><path d="M5 19L14 10"/>'),
-  wrap('<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M12 3l-2 2.5M12 3l2 2.5M12 21l-2-2.5M12 21l2-2.5"/>'),
-  wrap('<path d="M12 3c4 5 6.5 8.3 6.5 11.3a6.5 6.5 0 0 1-13 0C5.5 11.3 8 8 12 3z" fill="currentColor" fill-opacity=".25"/>'),
-  wrap('<path d="M12 21c-4 0-6.5-2.7-6.5-6.2 0-3.6 3-5.5 3.6-9.8 2.8 1.6 3.2 4.4 2.9 6 1.2-.6 1.9-1.9 2-3.2 2.6 2.1 4.5 4.4 4.5 7.2 0 3.4-2.5 6-6.5 6z" fill="currentColor" fill-opacity=".25"/>'),
+/** The inner drawings of the suit symbols (24x24): Moss (leaf), Ash (flake), Dew (drop), Ember (flame). */
+export const SUIT_BODY: readonly string[] = [
+  '<path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z" fill="currentColor" fill-opacity=".25"/><path d="M5 19L14 10"/>',
+  '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M12 3l-2 2.5M12 3l2 2.5M12 21l-2-2.5M12 21l2-2.5"/>',
+  '<path d="M12 3c4 5 6.5 8.3 6.5 11.3a6.5 6.5 0 0 1-13 0C5.5 11.3 8 8 12 3z" fill="currentColor" fill-opacity=".25"/>',
+  '<path d="M12 21c-4 0-6.5-2.7-6.5-6.2 0-3.6 3-5.5 3.6-9.8 2.8 1.6 3.2 4.4 2.9 6 1.2-.6 1.9-1.9 2-3.2 2.6 2.1 4.5 4.4 4.5 7.2 0 3.4-2.5 6-6.5 6z" fill="currentColor" fill-opacity=".25"/>',
 ];
+
+/** Suit symbols as plain line icons. */
+export const SUIT_SVG: readonly string[] = SUIT_BODY.map((b) => wrap(b));
 
 /** Fills every <span class="i" data-icon="..."> placeholder in the page. */
 export const fillIcons = (root: ParentNode = document) => {

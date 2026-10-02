@@ -16,7 +16,13 @@ describe('settings (saved in the browser)', () => {
       palette: 'soil',
       weakPulse: true,
       effects: 'normal',
+      materialDetail: 'normal',
     });
+  });
+
+  it('Material detail (Low, Normal) is remembered; anything else falls back to Normal', () => {
+    expect(parseSettings(JSON.stringify({ materialDetail: 'low' })).materialDetail).toBe('low');
+    expect(parseSettings(JSON.stringify({ materialDetail: 'ultra' })).materialDetail).toBe('normal');
   });
 
   it('palette, weak-link pulse and effects intensity are remembered; bad values fall back', () => {
