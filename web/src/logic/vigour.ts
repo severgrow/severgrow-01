@@ -71,10 +71,6 @@ export const richness = (m: 'moss' | 'lava', t: number): number => {
   return l.molten * 2 + l.glow + l.crack * 4 + (1 - l.plate);
 };
 
-/** The top-rank finish (contour, outer glow, shimmer): 0 below t = 0.85, 1 at the top. */
-export const CONTOUR_START = 0.85;
-export const contour = (t: number): number => (t < CONTOUR_START ? 0 : smooth(CONTOUR_START, 1, t));
-
 // ---------- world-position noise (stable: a hash of the position, never random) ----------
 
 const hash2 = (ix: number, iy: number): number => {

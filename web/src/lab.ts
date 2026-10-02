@@ -11,6 +11,7 @@ import { MATERIAL_TOKENS, materialLook, materialsOf } from './logic/materials.js
 import type { Detail } from './logic/materials.js';
 import { BoardView, NO_OVERLAY } from './ui/board.js';
 import { warmPhotosNow } from './ui/photo.js';
+import { GLOW_CAP, OLD_GLOW_OPACITY } from './logic/topglow.js';
 
 const k = (q: number, r: number) => coordKey({ q, r });
 
@@ -58,6 +59,14 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
       return [coordKey(c), { owner: (x < 0 ? 0 : 1) as Player, strength }];
     }),
   );
+  // the glow comparison board: a moss 9 and a lava 9, each among lower tiles of both sides
+  const small = { ...config, boardRadius: 2 };
+  const smallTerrain: Record<string, Terrain> = Object.fromEntries(allCoords(2).map((c) => [coordKey(c), 'normal' as Terrain]));
+  const tops: Record<string, Tile | null> = Object.fromEntries(allCoords(2).map((c) => [coordKey(c), null]));
+  for (const [key, owner, strength] of [
+    [k(-1, 0), 0, 9], [k(-2, 0), 0, 6], [k(-1, -1), 0, 3], [k(-2, 1), 0, 8], [k(-1, 1), 0, 5],
+    [k(1, 0), 1, 9], [k(2, 0), 1, 7], [k(1, -1), 1, 4], [k(2, -1), 1, 8], [k(0, 1), 1, 2], [k(0, 0), 0, 7],
+  ] as const) tops[key] = { owner, strength };
   for (const id of THEME_IDS) {
     const t = THEMES[id];
     const sec = document.createElement('section');
@@ -83,6 +92,24 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     const nb = new BoardView(svg2, { tap: () => {}, inspect: () => {} });
     nb.setup(config, allNormal, t.style, look, id);
     nb.render(mixed, NO_OVERLAY);
+    // polish pass 3: top-rank tiles (moss and lava 9s among mixed neighbours) with the old
+    // glow strength, the new one, and none
+    const row = document.createElement('div');
+    row.className = 'lab-glow-row';
+    sec.appendChild(row);
+    for (const [label, scale, setting] of [['Old glow strength', OLD_GLOW_OPACITY / GLOW_CAP, 'subtle'], ['New: subtle', 1, 'subtle'], ['No glow', 1, 'off']] as const) {
+      const fig = document.createElement('figure');
+      const cap = document.createElement('figcaption');
+      cap.textContent = label;
+      const s3 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      s3.classList.add('lab-board', 'small');
+      fig.append(s3, cap);
+      row.appendChild(fig);
+      const gv = new BoardView(s3, { tap: () => {}, inspect: () => {} });
+      gv.setup(small, smallTerrain, t.style, look, id);
+      gv.setGlow({ setting, effects: 'normal', reduceMotion }, scale);
+      gv.render(tops, NO_OVERLAY);
+    }
   }
   document.body.appendChild(page);
 };

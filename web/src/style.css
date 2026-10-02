@@ -2792,58 +2792,30 @@ svg.usable .hex-cell {
   stroke: rgba(0, 0, 0, 0.32);
   stroke-width: 0.7;
 }
-/* the top rank: a double rim (reads without colour), a soft outer glow, a slow shimmer */
-.top-rim {
-  fill: none;
-  stroke-linejoin: round;
-}
-.top-rim.outer {
-  stroke-width: 1.7;
-}
-.top-rim.inner {
-  stroke-width: 0.8;
-}
-.top-rim.moss {
-  stroke: #e9fff2;
-}
-.top-rim.lava {
-  stroke: #ffb3a0;
-}
+/* polish pass 3: the top rank's only finish is a faint pre-rendered halo (no outline) */
 .top-glow {
   pointer-events: none;
+  opacity: var(--op, 0.2);
 }
-.top-shimmer {
-  fill: none;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-dasharray: 0.12 0.88;
-  animation: top-shimmer 5.5s linear infinite;
+.top-glow.glow-in {
+  animation: glow-in 500ms ease-out both;
 }
-.top-shimmer.moss {
-  stroke: #ffffff;
-}
-.top-shimmer.lava {
-  stroke: #ffd6c8;
-}
-@keyframes top-shimmer {
-  0% {
-    stroke-dashoffset: 0;
-    stroke-opacity: 0;
-  }
-  10% {
-    stroke-opacity: 0.85;
-  }
-  45% {
-    stroke-opacity: 0.85;
-  }
-  55%,
-  100% {
-    stroke-dashoffset: -1;
-    stroke-opacity: 0;
+@keyframes glow-in {
+  from {
+    opacity: 0;
   }
 }
-.reduce-motion .top-shimmer {
-  display: none;
+/* Effects: High only: an almost imperceptible, very slow breathing */
+.top-glow.breathe {
+  animation: glow-breathe var(--breathe-ms, 6000ms) ease-in-out infinite alternate;
+}
+@keyframes glow-breathe {
+  to {
+    opacity: calc(var(--op, 0.2) * var(--breathe, 0.96));
+  }
+}
+.reduce-motion .top-glow {
+  animation: none;
 }
 .tile-num.world {
   paint-order: normal;
@@ -2926,4 +2898,24 @@ svg.usable .hex-cell {
 .turn b, .turn small { transition: color 300ms ease; }
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.sweep::after, .turn-pill .tp-dots i { animation: none; }
+}
+
+/* polish pass 3: the lab's glow comparison row */
+.lab-glow-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.lab-glow-row figure {
+  margin: 0;
+}
+.lab-glow-row figcaption {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+.lab-board.small {
+  width: 100%;
+  height: auto;
 }

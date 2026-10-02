@@ -17,6 +17,7 @@ describe('settings (saved in the browser)', () => {
       weakPulse: true,
       effects: 'normal',
       materialDetail: 'normal',
+      topGlow: 'subtle', // polish pass 3: the slight top-rank glow
     });
   });
 

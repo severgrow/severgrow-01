@@ -32,6 +32,7 @@ import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { GLOW_SETTINGS } from './logic/topglow.js';
 import type { Settings } from './logic/settings.js';
 import { THEMES, THEME_IDS, cssVars, resolveColors, themeOf } from './logic/themes.js';
 import { DETAILS, MATERIAL_TOKENS, materialLook, materialsOf } from './logic/materials.js';
@@ -151,7 +152,7 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
-  if (session) board.setup(session.state.config, session.state.terrain, t.style, look());
+  if (session) board.setup(session.state.config, session.state.terrain, t.style, look(), t.id);
   lastBoard = null;
   drawLogo();
   render();
@@ -302,6 +303,10 @@ function syncSettingsForm() {
     settings.materialDetail = d;
     applyTheme();
   });
+  segmented('glow-seg', GLOW_SETTINGS, settings.topGlow, cap, (g) => {
+    settings.topGlow = g;
+    render();
+  });
 }
 
 const cap = (w: string) => w[0]!.toUpperCase() + w.slice(1);
@@ -346,7 +351,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, theme().style, look());
+  board.setup(state.config, state.terrain, theme().style, look(), theme().id);
   lastBoard = null;
   showScreen('game');
   scheduleBot();
@@ -860,7 +865,18 @@ function armIdle() {
   }, 8000);
 }
 
+/** Polish pass 3: hands the top-rank glow its settings when they change. */
+let glowKey = '';
+function syncGlow() {
+  const o = { setting: settings.topGlow, effects: settings.effects, reduceMotion: settings.reduceMotion };
+  const k = JSON.stringify(o);
+  if (k === glowKey) return;
+  glowKey = k;
+  board.setGlow(o);
+}
+
 function render() {
+  syncGlow();
   if (!session || $('game').hidden) return;
   armIdle();
   const v = session.view;
