@@ -26,8 +26,9 @@ export const glowSprite = (color: string, blur: number, shape: ThemeStyle['tileS
       g.shadowColor = color;
       g.shadowBlur = blurUnits * RES;
       g.fillStyle = color;
-      g.fill(path);
-      g.fill(path); // twice: a fuller halo close to the edge, still soft further out
+      // several passes: a halo full enough near the edge to notice on a second look (its
+      // overall strength is still capped by the glow's opacity), soft further out
+      for (let i = 0; i < 4; i++) g.fill(path);
       g.shadowBlur = 0;
       g.globalCompositeOperation = 'destination-out';
       g.fill(path);
