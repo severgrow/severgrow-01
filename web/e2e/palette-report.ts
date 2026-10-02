@@ -17,7 +17,7 @@ for (const id of THEME_IDS) {
 // Materials: numbers on every material, and the two players under colour-blind simulation.
 import { materialsOf } from '../src/logic/materials.js';
 import { deltaE, simulate } from '../src/logic/colorcheck.js';
-console.log('\n| Palette | Number on moss (dark ink) | Number on lava (light ink) | "2" on gold | Moss vs lava crust: normal / deut / prot / trit | Moss vs lava seam: normal / deut / prot / trit |');
+console.log('\n| Palette | Number on moss (dark ink) | Number on lava (light ink) | "2" on gold | Grass vs lava edge: normal / deut / prot / trit | Grass vs molten crack: normal / deut / prot / trit |');
 console.log('| --- | --- | --- | --- | --- | --- |');
 for (const id of THEME_IDS) {
   const c = resolveColors(THEMES[id]);
@@ -25,7 +25,7 @@ for (const id of THEME_IDS) {
   const kinds = ['normal', ...CVD_KINDS] as const;
   const d = (a: string, b: string) => kinds.map((k) => (k === 'normal' ? deltaE(a, b) : deltaE(simulate(a, k), simulate(b, k))).toFixed(0)).join(' / ');
   const minMoss = Math.min(contrast(c.youInk, m.moss), contrast(c.youInk, m.mossTop));
-  const minLava = Math.min(contrast(m.lavaInk, m.lavaCrust), contrast(m.lavaInk, m.lavaCrustLight));
-  console.log(`| ${THEMES[id].name} | ${pass(minMoss, 4.5)} | ${pass(minLava, 4.5)} | ${pass(contrast(c.goldInk, c.gold), 4.5)} | ${d(m.moss, m.lavaCrust)} | ${d(m.moss, m.lavaSeam)} |`);
+  const minLava = Math.min(contrast(m.fireInk, m.fireCrust), contrast(m.fireInk, m.fireDeep));
+  console.log(`| ${THEMES[id].name} | ${pass(minMoss, 4.5)} | ${pass(minLava, 4.5)} | ${pass(contrast(c.goldInk, c.gold), 4.5)} | ${d(m.moss, m.fireDeep)} | ${d(m.moss, m.fire)} |`);
 }
-console.log('Markers: you = ring, bot = diamond (shape). Materials: moss cushion vs dark cracked crust (texture and lightness).');
+console.log('Markers: you = ring, bot = diamond (shape). Materials: grass lawn vs dark cracked crust (texture and lightness).');

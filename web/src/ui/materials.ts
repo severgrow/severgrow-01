@@ -1,6 +1,6 @@
 // The material registry: how each board material is drawn, in "lowkey 3D". One light
 // from the top-left: a thin bright rim on the top-left edge, a soft darker edge on the
-// bottom-right, a soft contact shadow, a slight inner shade. Matte; only lava glows.
+// bottom-right, a soft contact shadow, a slight inner shade. Matte; only fire glows.
 //
 // Each material registers up to four parts: `cell` (terrain under everything), `tile`
 // (a player's tile), `root` and `scar` (what a cut-off tile leaves). The board asks the
@@ -10,7 +10,7 @@
 // Everything costly is built once: gradients and the noise pattern live in the board's
 // <defs>; per tile there are only a few plain shapes (no per-tile filters).
 import type { MaterialLook, MaterialName } from '../logic/materials.js';
-import { lavaSeams, mossTufts, strengthLift, tileVariant } from '../logic/materials.js';
+import { grassBlades, grassFlowers, lavaCracks, rockPebbles, strengthLift, tileVariant } from '../logic/materials.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import { S, centerOf, cornerPts, el, hash, hexPath, noiseTile } from './geom.js';
 import type { Attrs } from './geom.js';
@@ -58,8 +58,9 @@ export const materialDefs = (defs: SVGDefsElement, id: (name: string) => string,
   lin('sheen', [[0, 'st-sheen', 0], [0.42, 'st-sheen', 0], [0.5, 'st-sheen', 0.22 * L.intensity + 0.05], [0.58, 'st-sheen', 0], [1, 'st-sheen', 0]]);
   // moss: a soft cushion, lighter on top, darker at the edges
   rad('moss-dome', [[0, 'st-moss-top', 1], [0.6, 'st-moss', 1], [1, 'st-moss-deep', 1]], { cx: 0.42, cy: 0.38, r: 0.72 });
-  // lava: the glow under a root, hottest in the middle
-  rad('lava-core', [[0, 'st-lava-hot', 0.9], [0.45, 'st-lava-seam', 0.45], [1, 'st-lava-seam', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
+  // lava: dark crust, a little lighter top-left; molten glow seeping up around the edge
+  rad('lava-crust', [[0, 'st-crust-light', 1], [1, 'st-crust', 1]], { cx: 0.38, cy: 0.32, r: 0.8 });
+  rad('lava-rim', [[0, 'st-fire-deep', 0], [0.7, 'st-fire-deep', 0], [0.9, 'st-fire', 0.4], [1, 'st-fire-hot', 0.9]], { cx: 0.5, cy: 0.5, r: 0.5 });
   rad('moss-glow', [[0, 'st-moss-top', 0.85], [1, 'st-moss-top', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
   if (L.textures && noiseTile()) {
     const n = el('pattern', { id: id('noise'), width: 32, height: 32, patternUnits: 'userSpaceOnUse' }, defs);
@@ -137,29 +138,48 @@ registerMaterial('rock', {
         el('path', { d: `M${f(cx - 2.2)},${f(cy)}L${f(cx + 2.2)},${f(cy + 0.6)}L${f(cx + (x - cx) * 0.12)},${f(cy + (y - cy) * 0.12)}Z`, class: 'rock-chip' }, c.parent);
       }
     }
+    if (L.cracks) {
+      // smaller stones lying on the rock: each with a dark shadow, a body and a light top-left edge
+      const R = size;
+      for (const [i, p] of rockPebbles(c.key).entries()) {
+        const px = x + p.x * R;
+        const py = y + p.y * R;
+        const pts = Array.from({ length: p.sides }, (_, j) => {
+          const a = ((p.turn + (j * 360) / p.sides) * Math.PI) / 180;
+          const rr = p.size * R * (0.78 + 0.22 * h(20 + i * 7 + j));
+          return [px + Math.cos(a) * rr, py + Math.sin(a) * rr * 0.82] as const;
+        });
+        const dd = `M${pts.map(([a, b]) => `${f(a)},${f(b)}`).join('L')}Z`;
+        el('path', { d: dd, class: 'pebble-shadow', transform: 'translate(0.9 1.3)' }, c.parent);
+        el('path', { d: dd, class: `pebble ${i % 3 === 0 ? 'light' : i % 3 === 1 ? 'mid' : 'dark'}` }, c.parent);
+        // the light catches the top-left edges
+        const top = pts.filter(([a, b]) => a - px + (b - py) < 0);
+        if (top.length > 1) el('path', { d: `M${top.map(([a, b]) => `${f(a)},${f(b)}`).join('L')}`, class: 'pebble-rim' }, c.parent);
+      }
+    }
     lit(c, d, L.rim + 0.1);
   },
 });
 
 // ---------- moss: my tiles ----------
 
-/** Clumps and tufts on a moss cushion of radius R (textured detail only). */
-const mossDetail = (c: DrawCtx, R: number, turn: number) => {
+/** Grass (textured detail only): a dense lawn of fine blades, a fuzzy fringe, a few tiny flowers. */
+const grassDetail = (c: DrawCtx, R: number) => {
   const { x, y } = centerOf(c.key);
-  const g = el('g', { class: 'moss-detail', transform: `rotate(${turn} ${f(x)} ${f(y)})` }, c.parent);
-  // soft clumps around the rim, lighter on top; the middle stays calm for the number
-  for (const [i, t] of mossTufts(c.key).entries()) {
-    // kept inside the hex: centres at most ~0.62 R out, radius at most ~0.23 R
-    const cx = x + t.x * R * 0.72;
-    const cy = y + t.y * R * 0.72;
-    const r = R * (0.12 + t.size);
-    el('circle', { cx: f(cx + 0.6), cy: f(cy + 0.9), r: f(r), class: 'moss-gap' }, g);
-    el('circle', { cx: f(cx), cy: f(cy), r: f(r), class: 'moss-clump' }, g);
-    // tiny tufts: two soft light specks on the top-left of every other clump (fuzz, not marks)
-    if (i % 2 === 0) {
-      el('circle', { cx: f(cx - r * 0.3), cy: f(cy - r * 0.35), r: f(r * 0.16), class: 'moss-tuft' }, g);
-      el('circle', { cx: f(cx + r * 0.05), cy: f(cy - r * 0.5), r: f(r * 0.11), class: 'moss-tuft' }, g);
-    }
+  const g = el('g', { class: 'moss-detail' }, c.parent);
+  const tones = ['', '', ''];
+  for (const b of grassBlades(c.key)) {
+    const bx = x + b.x * R;
+    const by = y + b.y * R;
+    const L = b.len * R;
+    const tx = bx + Math.sin(b.angle) * L;
+    const ty = by - Math.cos(b.angle) * L;
+    const bend = b.angle * L * 0.35;
+    tones[b.tone] += `M${f(bx)},${f(by)}Q${f((bx + tx) / 2 - bend)},${f((by + ty) / 2)} ${f(tx)},${f(ty)}`;
+  }
+  tones.forEach((d, i) => el('path', { d, class: `grass-blade t${i}` }, g));
+  for (const fl of grassFlowers(c.key)) {
+    el('circle', { cx: f(x + fl.x * R), cy: f(y + fl.y * R), r: fl.kind === 'bloom' ? 1.1 : 1.3, class: `grass-flower ${fl.kind}` }, g);
   }
   if (c.look.textures) el('path', { d: hexPath(c.key, R, c.shape), class: 'mat-grain', fill: c.url('noise') }, c.parent);
 };
@@ -171,8 +191,8 @@ registerMaterial('moss', {
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
     el('path', { d, class: 'moss-body', fill: c.url('moss-dome'), style: `opacity:${Math.min(1, s.bright + v.shade).toFixed(2)}` }, c.parent);
-    if (c.look.textures) mossDetail(c, c.radius, v.turn);
-    el('path', { d, class: 'moss-fuzz' }, c.parent);
+    if (c.look.textures) grassDetail(c, c.radius);
+    else el('path', { d, class: 'moss-fuzz' }, c.parent);
     lit(c, d, c.look.rim * (s.rim / 0.45));
   },
   // a bigger raised moss mound with a soft inner glow; it breathes slowly
@@ -183,7 +203,7 @@ registerMaterial('moss', {
     const ctx = { ...c, parent: g };
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, g);
     el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'moss-body', fill: c.url('moss-dome') }, g);
-    if (c.look.textures) mossDetail(ctx, R, tileVariant(c.key).turn);
+    if (c.look.textures) grassDetail(ctx, R);
     el('circle', { cx: f(x), cy: f(y), r: f(R * 0.55), class: 'root-glow', fill: c.url('moss-glow') }, g);
     el('circle', { cx: f(x), cy: f(y), r: f(R * 0.3), class: 'root-core moss' }, g);
     el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, g);
@@ -196,52 +216,49 @@ registerMaterial('moss', {
 
 // ---------- lava: the bot's tiles ----------
 
-/** The tile's seams as SVG paths (not turned: their places already vary per tile, and the number area stays clear). */
-const seamPaths = (c: DrawCtx, R: number) => {
+/** The glowing cracks: a soft glow (textured detail only), the molten line and its bright thread. */
+const cracks = (c: DrawCtx, R: number, strength: number) => {
   const { x, y } = centerOf(c.key);
-  return lavaSeams(c.key, c.strength).map((line) => line.map((p, i) => `${i ? 'L' : 'M'}${f(x + p.x * R)},${f(y + p.y * R)}`).join(''));
+  const list = lavaCracks(c.key, strength);
+  const line = (pts: { x: number; y: number }[]) => (pts.length < 2 ? '' : 'M' + pts.map((p) => `${f(x + p.x * R)},${f(y + p.y * R)}`).join('L'));
+  // wide where the molten rock wells up at the edge, narrowing as it runs inward
+  const wide = list.map((k) => line(k.points.slice(0, 3))).join('');
+  const thin = list.map((k) => line(k.points.slice(2))).join('');
+  const w = (list.reduce((n, k) => n + k.width, 0) / list.length) * R;
+  const g = el('g', { class: `lava-cracks${c.look.motion ? ' glowing' : ''}`, style: `animation-delay:${(-hash(c.key) * 4).toFixed(2)}s` }, c.parent);
+  for (const [d, k] of [[wide, 1], [thin, 0.5]] as const) {
+    if (!d) continue;
+    if (c.look.textures) el('path', { d, class: 'lava-glow', 'stroke-width': f(w * k * 2.4) }, g);
+    el('path', { d, class: 'lava-melt', 'stroke-width': f(w * k) }, g);
+    el('path', { d, class: 'lava-thread', 'stroke-width': f(Math.max(0.5, w * k * 0.4)) }, g);
+  }
 };
 
-registerMaterial('lava', {
+registerMaterial('fire', {
+  // lava: a dark rough crust split by glowing cracks, molten light seeping up around the edge
   tile: (c) => {
     const s = strengthLift(c.strength, c.maxRank);
-    const v = tileVariant(c.key);
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
-    el('path', { d, class: 'lava-crust' }, c.parent);
-    if (c.look.textures) {
-      el('path', { d, class: 'mat-grain', fill: c.url('noise') }, c.parent);
-      // lighter crust plates on the top-left
-      const { x, y } = centerOf(c.key);
-      const R = c.radius;
-      el('path', { d: `M${f(x - R * 0.7)},${f(y - R * 0.1)}L${f(x - R * 0.35)},${f(y - R * 0.62)}L${f(x + R * 0.1)},${f(y - R * 0.7)}L${f(x - R * 0.2)},${f(y - R * 0.45)}Z`, class: 'lava-plate', style: `opacity:${(0.55 + v.shade * 4).toFixed(2)}` }, c.parent);
-    }
-    const g = el('g', { class: `lava-seams${c.look.motion ? ' pulsing' : ''}`, style: `animation-delay:${(-hash(c.key) * 5).toFixed(2)}s;opacity:${(0.75 + 0.25 * s.bright).toFixed(2)}` }, c.parent);
-    for (const p of seamPaths(c, c.radius)) {
-      el('path', { d: p, class: 'seam-glow' }, g);
-      el('path', { d: p, class: 'seam' }, g);
-    }
+    el('path', { d, class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
+    if (c.look.textures) el('path', { d, class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
+    el('path', { d, class: 'lava-rim', fill: c.url('lava-rim'), style: `opacity:${(0.55 + 0.45 * s.bright * (c.strength / Math.max(1, c.maxRank))).toFixed(2)}` }, c.parent);
+    cracks(c, c.radius, c.strength);
     lit(c, d, c.look.rim * (s.rim / 0.45));
   },
-  // a bigger raised lava core with a brighter seam glow
+  // a bigger raised mound of crust, cracked all round, with a molten core
   root: (c) => {
     const { x, y } = centerOf(c.key);
     const R = S * 0.88;
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, c.parent);
-    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-crust' }, c.parent);
-    if (c.look.textures) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'mat-grain', fill: c.url('noise') }, c.parent);
-    const g = el('g', { class: `lava-seams root${c.look.motion ? ' pulsing' : ''}` }, c.parent);
-    el('circle', { cx: f(x), cy: f(y), r: f(R * 0.62), class: 'root-glow', fill: c.url('lava-core') }, g);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + hash(`${c.key}:rs${i}`) * 0.5;
-      const p = `M${f(x + Math.cos(a) * R * 0.35)},${f(y + Math.sin(a) * R * 0.35)}L${f(x + Math.cos(a + 0.15) * R * 0.65)},${f(y + Math.sin(a + 0.15) * R * 0.65)}L${f(x + Math.cos(a) * R * 0.9)},${f(y + Math.sin(a) * R * 0.9)}`;
-      el('path', { d: p, class: 'seam-glow' }, g);
-      el('path', { d: p, class: 'seam' }, g);
-    }
-    el('circle', { cx: f(x), cy: f(y), r: f(R * 0.3), class: 'root-core lava' }, c.parent);
+    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
+    if (c.look.textures) el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
+    el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-rim', fill: c.url('lava-rim') }, c.parent);
+    cracks(c, R, c.maxRank);
+    el('circle', { cx: f(x), cy: f(y), r: f(R * 0.3), class: 'root-core fire' }, c.parent);
     el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lit', fill: c.url('lit'), stroke: c.url('rim') }, c.parent);
   },
-  // cut off: the lava cools, the glow fades and the crust turns dark grey ash
+  // cut off: the fire burns out to dark grey ash
   scar: (c) => {
     const d = hexPath(c.key, S * 0.66, c.shape);
     el('path', { d, class: 'scar cooled', 'data-key': c.key }, c.parent);

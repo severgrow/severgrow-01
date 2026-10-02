@@ -9,7 +9,7 @@ export const FULL_LOOK: MaterialLook = { intensity: 1, textures: true, facets: t
 let noiseUrl: string | null = null;
 /**
  * A small grey noise tile (64x64), drawn once on a canvas and reused by every textured
- * thing (rock grain, moss and lava crust). Deterministic: the same specks every time.
+ * thing (rock grain, moss and fire). Deterministic: the same specks every time.
  */
 export const noiseTile = (): string => {
   if (noiseUrl !== null) return noiseUrl;
