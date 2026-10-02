@@ -134,7 +134,8 @@ export class BoardView {
     };
     svg.addEventListener('pointerdown', (e) => {
       if (!this.drawing || !this.drawHandlers) return;
-      if (e.pointerType !== 'mouse') svg.setPointerCapture?.(e.pointerId);
+      // capture every pointer (the mouse too), so a release outside the board still arrives
+      svg.setPointerCapture?.(e.pointerId);
       this.drawHandlers.down(at(e), e);
     });
     svg.addEventListener('pointermove', (e) => {

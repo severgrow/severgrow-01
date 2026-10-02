@@ -169,7 +169,7 @@ export const lineGhost = (v: View, combo: Combo, start: string, dir: number): Gh
   let reason: string | null = null;
   const tiles = ks.map((key, i) => {
     const t = v.board[key];
-    const why = v.terrain[key] === 'rock' ? 'Rock is in the way' : t && t.owner === v.player ? 'Your own tile is in the way' : t && t.strength >= ranks[i]! ? 'A stronger tile is in the way' : null;
+    const why = v.terrain[key] === 'rock' ? 'Rock is in the way' : t?.root ? 'A root is in the way' : t && t.owner === v.player ? 'Your own tile is in the way' : t && t.strength >= ranks[i]! ? 'A stronger tile is in the way' : null;
     reason ??= why;
     return { key, strength: ranks[i]!, ok: why === null };
   });

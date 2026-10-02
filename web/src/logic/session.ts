@@ -67,9 +67,6 @@ export class Session {
     this.drawn = null;
     this.sel = tapKind(this.sel, kind);
   }
-  nextOption() {
-    this.sel = { ...this.sel, option: this.sel.option + 1 };
-  }
   cancel() {
     this.drawn = null;
     this.sel = EMPTY_SEL;

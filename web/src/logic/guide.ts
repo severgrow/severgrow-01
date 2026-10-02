@@ -3,7 +3,7 @@
 import type { Action, View } from '../../../src/engine/index.js';
 import { moveCards, moveHexes } from '../../../src/playtest/names.js';
 import { coordKey } from '../../../src/engine/index.js';
-import { isBoardAction, kindOf, options, pendingAction, selFor } from './interaction.js';
+import { isBoardAction, kindOf, pendingAction, selFor } from './interaction.js';
 import type { Sel } from './interaction.js';
 import { fruitAction } from './fruitflow.js';
 import type { FruitFlow } from './fruitflow.js';
@@ -45,6 +45,8 @@ export const guideTarget = (
   if (!legal.some((a) => same(a, goal))) return null;
   if (goal.t === 'Fruit') {
     const target = coordKey(goal.target);
+    // a picked card first goes (else the tap on the target could preview a Sprout there)
+    if (!flow && (sel.card !== null || sel.kind !== null || sel.hex !== null)) return { kind: 'cancel' };
     if (!flow) return card === target ? { kind: 'fruit' } : { kind: 'hex', key: target };
     if (flow.target !== target) return { kind: 'cancel' };
     const want = goal.sacrifice.map(coordKey);
@@ -91,6 +93,5 @@ export const guideTarget = (
   const hexes = moveHexes(goal).map(coordKey);
   if (sel.hex === null || !hexes.includes(sel.hex)) return { kind: 'hex', key: want.hex! };
   // Right card and hex but another move is pending there: start again
-  void options;
   return { kind: 'cancel' };
 };

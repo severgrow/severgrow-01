@@ -144,23 +144,8 @@ describe('the game session', () => {
   });
 });
 
-import { optionsLabel } from '../src/logic/interaction.js';
-
-describe('the "other option" button says what changes', () => {
-  const S = (card: number, q = 0, r = 0): Action => ({ t: 'Sprout', card, coord: { q, r } });
-  const set = (cards: number[], hexes: [number, number][]): Action => ({ t: 'MeldSet', cards, hexes: hexes.map(([q, r]) => ({ q, r })) });
-
-  it('Sprout on one hex with different cards: "Change card"', () => {
-    expect(optionsLabel([S(1), S(2), S(3)])).toBe('Change card');
-  });
-  it('same hexes, different cards (a clump): "Change cards"', () => {
-    expect(optionsLabel([set([1, 2, 3], [[0, 0], [1, 0], [0, 1]]), set([4, 5, 6], [[0, 1], [1, 0], [0, 0]])])).toBe('Change cards');
-  });
-  it('tiles land in different places: "Other way"', () => {
-    expect(optionsLabel([set([1, 2, 3], [[0, 0], [1, 0], [0, 1]]), set([1, 2, 3], [[0, 0], [-1, 0], [0, -1]])])).toBe('Other way');
-    expect(optionsLabel([S(1, 0, 0), S(1, 1, 0)])).toBe('Other way');
-  });
-});
+// (The "Other way" / "Change card" button and its label were removed in polish pass 3: lines
+// and clumps are drawn on the board instead; see draw.test.ts.)
 
 describe('undo (take back a move in your own turn)', () => {
   it('undoes board moves back to the start of the turn, but never past a draw', () => {

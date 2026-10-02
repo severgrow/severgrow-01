@@ -385,6 +385,58 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
 }
 
 // =====================================================================================
+// Review fixes (follow-up): mixed tap-then-drag, press-drag-release, redrawing over a preview
+// =====================================================================================
+{
+  // touch: tap the start (arrows show), then drag from it to the far end: the line is drawn
+  const s = stateWith({}, RUN);
+  const { page } = await open(s, { touch: true });
+  await pick(page, 'line-3');
+  await tTap(page, await hexCenter(page, '-1,1'));
+  await tDrag(page, ['-1,1', '1,1']);
+  check('review fix: tap the start, then drag: the line is still drawn', await page.locator('#confirm').isVisible());
+  await page.close();
+}
+{
+  // desktop: click the start, hover one hex, then press there, drag on and release: it ends where released
+  const s = stateWith({}, RUN);
+  const { page } = await open(s, { width: 1280, height: 800, settings: { confirmDraw: true } });
+  await pick(page, 'line-3');
+  const a = await hexCenter(page, '-1,1');
+  const mid = await hexCenter(page, '-1,0');
+  const b = await hexCenter(page, '1,1');
+  await page.mouse.click(a.x, a.y);
+  await page.mouse.move(mid.x, mid.y, { steps: 3 });
+  await page.mouse.down();
+  await page.mouse.move(b.x, b.y, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  const chip = (await page.textContent('#confirm-chip')) ?? '';
+  await page.click('#confirm-play');
+  await page.waitForTimeout(300);
+  const board = (await st(page)).board;
+  check('review fix: desktop press-drag-release finishes where the button is released', board['1,1']?.strength === 5 && board['-1,0']?.owner !== 0, chip);
+  await page.close();
+}
+{
+  // a drawn line waits for Confirm; drawing again elsewhere replaces it (never a hidden tap move)
+  const s = stateWith({}, RUN);
+  const { page } = await open(s, { touch: true });
+  const h = await histLen(page);
+  await pick(page, 'line-3');
+  await tDrag(page, ['-1,1', '1,1']);
+  await tTap(page, await hexCenter(page, '-1,1'));
+  await tTap(page, await hexCenter(page, '-1,1'));
+  const nothingPlayed = (await histLen(page)) === h;
+  await tDrag(page, ['-1,1', '-1,-1']);
+  await page.click('#confirm-play');
+  await page.waitForTimeout(300);
+  const b = (await st(page)).board;
+  check('review fix: redrawing over a waiting preview never plays a hidden move; the new line is placed', nothingPlayed && b['-1,-1']?.strength === 5);
+  await page.close();
+}
+
+// =====================================================================================
 // Tapping only (no dragging): every placement is still possible
 // =====================================================================================
 {
@@ -438,6 +490,21 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
   await page.click('#moves .fruit-next');
   const chip = (await page.textContent('#confirm-chip')) ?? '';
   check('Fruit from the tile card: the note, 3 suggested tiles, a plain-words preview', /No card can replace this\. Fruit can\./.test(card) && soft === 3 && /You give up 3/.test(chip) && errors.length === 0, chip);
+  await page.close();
+}
+{
+  // a sideways swipe across the board (not drawing) must never be taken as the browser's "go back"
+  const { page, errors } = await open(newGame(11) as State, { touch: true });
+  const cdp = await page.context().newCDPSession(page);
+  const urls: string[] = [];
+  for (const [x0, x1] of [[60, 330], [330, 60]] as const) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: 280 }] });
+    for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * i) / 8, y: 280 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(600);
+    urls.push(page.url());
+  }
+  check('a sideways swipe on the board stays in the game (no swipe-back)', urls.every((u) => u === BASE) && errors.length === 0, urls.join(' '));
   await page.close();
 }
 

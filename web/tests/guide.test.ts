@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { guideTarget } from '../src/logic/guide.js';
 import type { GuideTarget } from '../src/logic/guide.js';
@@ -99,5 +99,19 @@ describe('coach arrows (show where to tap)', () => {
     const s = states[0]!;
     const v = viewFor(s, 0);
     expect(guideTarget(v, legalActions(v), EMPTY_SEL, { t: 'Draw', from: 'deck' })).toBeNull();
+  });
+});
+
+describe('coach arrow for a Fruit while a card is picked (review fix)', () => {
+  it('clears the picked card first, so the tap on the target can never become a Sprout', async () => {
+    const { fruitOnTop } = await import('../e2e/polish3-positions.js');
+    const top = fruitOnTop();
+    const v = viewFor(top.state, 0);
+    const legal = legalActions(v);
+    const goal = legal.find((a) => a.t === 'Fruit')!;
+    const card = v.hand[0]!.id;
+    const sel = tapCard(v, legal, EMPTY_SEL, card);
+    expect(guideTarget(v, legal, sel, goal)).toEqual({ kind: 'cancel' });
+    expect(guideTarget(v, legal, EMPTY_SEL, goal)).toEqual({ kind: 'hex', key: coordKey((goal as Extract<Action, { t: 'Fruit' }>).target) });
   });
 });

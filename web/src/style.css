@@ -39,6 +39,11 @@ body {
   height: 100%;
   margin: 0;
 }
+/* Chrome reads this from the root, not the body: without it a sideways swipe on the board is
+   taken as "go back" and leaves the game (found by the monkey test). */
+html {
+  overscroll-behavior: none;
+}
 body {
   background: var(--c-bg);
   color: var(--c-text);
@@ -3084,4 +3089,20 @@ svg.usable .hex-cell {
 }
 .turn .dots {
   margin-left: 1px;
+}
+
+/* touch targets of at least 44 px for the polish pass 3 controls */
+.icon-info {
+  min-width: 44px;
+  min-height: 44px;
+}
+.tooltip .tc-fruit {
+  min-height: 44px;
+  padding: 8px 18px;
+}
+.draw-clear,
+.list-prev,
+.list-next {
+  min-width: 44px;
+  min-height: 44px;
 }
