@@ -10,7 +10,7 @@ import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
-import { EMPTY_SEL, kindOf, tapCard, targetHexes } from '../src/logic/interaction.js';
+import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
@@ -257,7 +257,12 @@ for (const theme of THEMES) {
     // A clear choice plays at once (no Confirm); a double tap on the spot must still play once.
     if (((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {
       const box = await page.locator(`.hex-cell[data-key="${demo.hex}"] path.hex`).boundingBox();
-      await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2); // ADVERSARIAL 2
+      const dv = viewFor(demo.state, 0);
+      const dl = legalActions(dv);
+      const sel = { ...tapCard(dv, dl, demo.action.t === 'Sprout' ? EMPTY_SEL : { ...EMPTY_SEL, kind: kindOf(demo.action) }, demo.card), hex: demo.hex };
+      // One move on that spot: a double tap must play it once. Several: one tap shows the choice.
+      if (options(dv, dl, sel).length === 1) await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2); // ADVERSARIAL 2
+      else await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
     }
     if (await page.locator('#confirm-play').isVisible()) {
       for (let i = 0; i < demo.option; i++) await page.click('#confirm-other');
