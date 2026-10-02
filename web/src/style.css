@@ -3075,3 +3075,13 @@ svg.usable .hex-cell {
 @media (prefers-reduced-motion: reduce) {
   .draw-demo i, .draw-demo .finger { animation: none; }
 }
+/* polish pass 3: "Opponent's turn" stays on one line in the header capsule */
+.turn b {
+  white-space: nowrap;
+}
+.turn.bot b {
+  font-size: 0.82rem;
+}
+.turn .dots {
+  margin-left: 1px;
+}
