@@ -24,7 +24,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   maxTurnsPerPlayer: 30,
   unbiasedShuffle: true,
   allowStrengthen: true,
-  strengthenLimitPerGame: -1,
+  strengthenLimitPerGame: 2,
   fruitSacrifice: 3,
   fruitOnlyWhenBehind: false,
   rotEnabled: false,

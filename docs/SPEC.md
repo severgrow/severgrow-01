@@ -443,7 +443,49 @@ ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1
 
 ### 11.3 Fruit, Strengthen and fairness defaults (v0.5)
 
-*Filled in from the simulations of this task (Stage A, Stage B and the final confirmation).*
+`src/sim/v05.ts` (run with `src/sim/v05-stage.sh`) plays level-7 vs level-7 games (the full
+evaluation for Strengthen and Fruit, `docs/BOT-TACTICS.md`) with swapped starts on matched seeds,
+and records every metric below. The baseline and Stage A first ran 2,000 games per setting; on the
+owner's request the later settings ran **800** (a win rate is then accurate to about ±3.5%).
+
+Metrics, per setting: share of games with a Fruit, its mean turn, the Fruit user's win rate; the
+comeback rate (behind at the midpoint, winning at the end) and the leader's win rate; games
+decided by Fruit (the winner's Fruit swing was at least the final margin); Strengthen use and
+whether the side that strengthened more won; overgrow + cut actions per game; games with no
+overgrow, cut or Fruit in the last 8 player-turns; games ending with a player holding >30% of
+their tiles at top rank; games where a top-rank tile blocked something and one was later
+removed; turns 1-5 with no legal combo or Sprout and no tile placed; game length; first-player
+wins; Strangle; "reflexive" Fruit (in a player's first 3 turns) and "forgotten" Fruit (available
+but never used).
+
+| Setting | Games | Fruit games | Fruit mean turn | Fruit user wins | Comeback | Leader wins | Decided by Fruit | Strengthen games | Strengthen/game | More-strengthen side wins | Overgrow+cut/game | Quiet last 8 | >30% top-rank | Blocker removed | Stuck early | Turns/player | P1 wins | Strangle | Reflexive | Forgotten |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| baseline (no Fruit, no Strengthen) | 2000 | 0% | - | - | 34.5% | 65.5% | 0% | 0% | 0 | - | 19.2 | 0.0% | 21.9% | 51.2% | 0% | 9.09 | 54.4% | 8.1% | - | - |
+| A1 Fruit 1, give up 3 | 2000 | 62.0% | 13.6 | 47.1% | 34.6% | 65.4% | 5.2% | 0% | 0 | - | 18.4 | 0.1% | 11.7% | 68.5% | 0% | 9.07 | 55.4% | 7.1% | 2.0% | 65.1% |
+| A2 Fruit 2, give up 3 | 2000 | 62.0% | 13.7 | 47.4% | 34.5% | 65.5% | 5.2% | 0% | 0 | - | 18.3 | 0.1% | 11.1% | 68.8% | 0% | 9.07 | 55.6% | 7.1% | 2.0% | 65.7% |
+| A3 Fruit 1, give up 2 | 2000 | 87.5% | 12.8 | 44.8% | 35.6% | 64.4% | 7.0% | 0% | 0 | - | 18.4 | 0.1% | 11.6% | 73.9% | 0% | 9.06 | 54.7% | 6.4% | 4.6% | 42.4% |
+| A4 Fruit 1, give up 4 | 800 | 41.3% | 14.4 | 54.5% | 31.3% | 68.7% | 3.8% | 0% | 0 | - | 18.8 | 0.0% | 15.5% | 64.8% | 0% | 9.04 | 56.3% | 7.8% | 0.9% | 77.7% |
+| A5 Fruit 1, only when behind | 800 | 36.0% | 13.8 | 20.5% | 35.4% | 64.6% | 4.0% | 0% | 0 | - | 18.8 | 0.0% | 17.3% | 61.3% | 0% | 9.02 | 55.8% | 7.8% | 1.7% | 77.6% |
+| B1 + Strengthen, limit 2 | 800 | 71.0% | 13.6 | 48.5% | 34.4% | 65.6% | 3.0% | 88.8% | 1.95 | 53.9% | 16.5 | 0.0% | 20.3% | 74.4% | 0% | 9.14 | 56.8% | 3.8% | 2.3% | 57.9% |
+| B2 + Strengthen, limit 4 | 800 | 71.5% | 13.6 | 46.9% | 34.0% | 66.0% | 3.8% | 88.8% | 2.12 | 53.7% | 16.4 | 0.0% | 21.3% | 74.2% | 0% | 9.14 | 55.8% | 3.5% | 2.3% | 58.1% |
+| B3 + Strengthen, no limit | 800 | 71.5% | 13.6 | 46.9% | 34.0% | 66.0% | 3.8% | 88.8% | 2.12 | 53.7% | 16.4 | 0.0% | 21.3% | 74.2% | 0% | 9.14 | 55.8% | 3.5% | 2.3% | 58.1% |
+
+**Stage A choice: one Fruit per player, giving up 3, at any time.** It is the only setting that
+meets every Fruit target (used in 40-80% of games, after turn 5 on average, the user winning
+45-65%). A second Fruit is almost never used (A2 = A1). Giving up 2 makes it too easy (87.5% of
+games, the user winning under 45%); giving up 4 or "only when behind" make it rare, and "only
+when behind" turns it into a losing player's last try (the user wins 20.5%).
+
+**Stage B choice: Strengthen on, limit 2 per game.** Limits 2, 4 and none play almost the same
+(the bots rarely strengthen more than twice); 2 is slightly the best on top-rank turtling. It
+fails two targets, reported honestly: Strengthen is used in 89% of games (target 30-70%), and
+the share of games ending with a player holding over 30% of their tiles at top rank rises back
+to about 20% (target 10% or less; without Strengthen, Fruit alone brought it to 11.7%). A fix
+is proposed to the owner (not added): Strengthen may not raise a tile to the top rank.
+
+Fairness (Part 1): 200,000 opening hands per deck: 3+ top cards in **5.20%** of hands with 56
+cards (exact 5.25%) and **2.64%** with 72 cards (exact 2.62%); none at all in 31.90% / 42.46%
+(exact 31.75% / 42.17%). `npx tsx src/sim/deal-stats.ts`.
 
 ### 11.2 Bot levels (page only)
 

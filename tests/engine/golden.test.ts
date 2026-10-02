@@ -7,10 +7,12 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, RULES_VERSIONS, apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { GreedyBot as GreedyV05 } from '../../src/bots/v05/GreedyBot.js';
+import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { stateHash } from '../hash.js';
 
 type Golden = { seed: number; actions: Action[]; stateHash: string; historyHash: string };
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/golden-v04.json', import.meta.url), 'utf8')) as { games: Golden[] };
+const v05 = JSON.parse(readFileSync(new URL('../fixtures/golden-v05.json', import.meta.url), 'utf8')) as { games: Golden[] };
 
 const V05_CONFIG_KEYS = ['unbiasedShuffle', 'allowStrengthen', 'strengthenLimitPerGame', 'fruitSacrifice', 'fruitOnlyWhenBehind'];
 const asV04 = (s: State) => {
@@ -21,11 +23,28 @@ const asV04 = (s: State) => {
 };
 
 describe('golden games', () => {
-  it('the card and Sprout defaults are the ones chosen in Part 4 (cards 1-9, Sprout on, 2 copies)', () => {
-    expect(DEFAULT_CONFIG).toMatchObject({ maxRank: 9, sproutsPerTurn: 1, copiesPerCard: 2 });
+  it('the defaults: cards 1-9, Sprout on, 2 copies (v0.4); Fruit 1 per game giving up 3, Strengthen on with a limit of 2 (v0.5, chosen by simulation)', () => {
+    expect(DEFAULT_CONFIG).toMatchObject({ maxRank: 9, sproutsPerTurn: 1, copiesPerCard: 2, fruitPerPlayer: 1, fruitSacrifice: 3, fruitOnlyWhenBehind: false, allowStrengthen: true, strengthenLimitPerGame: 2, unbiasedShuffle: true });
   });
 
-  it('has 5 recorded v0.4 games', () => expect(fixture.games.map((g) => g.seed)).toEqual([1, 2, 3, 4, 5]));
+  it('has 5 recorded v0.4 games and 8 v0.5 games', () => {
+    expect(fixture.games.map((g) => g.seed)).toEqual([1, 2, 3, 4, 5]);
+    expect(v05.games.map((g) => g.seed)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  for (const g of v05.games) {
+    it(`v0.5 seed ${g.seed}: the default rules replay byte-identically, and GreedyBot picks the same moves`, () => {
+      let s: State = newGame(g.seed);
+      for (const a of g.actions) {
+        expect(GreedyBot.chooseAction(viewFor(s, s.actor))).toEqual(a);
+        s = apply(s, a);
+      }
+      expect(s.phase).toBe('GAME_OVER');
+      const { history, ...rest } = s;
+      expect(stateHash(rest)).toBe(g.stateHash);
+      expect(stateHash(history)).toBe(g.historyHash);
+    });
+  }
 
   for (const g of fixture.games) {
     it(`v0.4 seed ${g.seed}: on rules v0.4-defaults-2 the replay is byte-identical, and the frozen bot picks the same moves`, () => {

@@ -23,7 +23,7 @@ describe('DEFAULT_CONFIG', () => {
       maxTurnsPerPlayer: 30,
       unbiasedShuffle: true,
       allowStrengthen: true,
-      strengthenLimitPerGame: -1,
+      strengthenLimitPerGame: 2, // chosen by simulation (SPEC 11.3)
       fruitSacrifice: 3,
       fruitOnlyWhenBehind: false,
       rotEnabled: false,
