@@ -15,6 +15,8 @@ const same = (a: PaintTile | undefined, b: PaintTile | undefined) => !!a && !!b 
 export const REACH = BLEND / 2 + S * 0.4 + 1;
 /** Canvas rows per slice of work (about 10k pixels: a few ms). */
 const BAND_PX = 16;
+/** A full paint taking longer than this (work only) switches the layer to Low detail. */
+export const SLOW_FULL_MS = 2500;
 
 export class WorldLayer {
   private canvas: HTMLCanvasElement | null = null;
@@ -33,6 +35,8 @@ export class WorldLayer {
   /** for the performance report: how long each full and each partial repaint took (ms, work only) */
   readonly stats = { full: [] as number[], partial: [] as number[], canvasBytes: 0 };
   private fullPending = false;
+  /** set when a full paint was too slow on this device: from then on, Low detail */
+  slowDevice = false;
   private workMs = 0;
   /** called when new pixels are on screen, with the hexes that changed (for the cross-fade) */
   onSwap: (keys: string[]) => void = () => {};
@@ -75,6 +79,7 @@ export class WorldLayer {
   /** The tiles to show now; repaints whatever differs from last time (and the blend band around it). */
   sync(tiles: ReadonlyMap<string, PaintTile>, palette: ThemeId, detail: 'low' | 'normal') {
     if (!this.g) return;
+    if (this.slowDevice) detail = 'low';
     const full = palette !== this.palette || detail !== this.detail || this.url === null;
     this.palette = palette;
     this.detail = detail;
@@ -125,6 +130,15 @@ export class WorldLayer {
         this.running = false;
         this.lastPaintMs = this.workMs;
         (this.fullPending ? this.stats.full : this.stats.partial).push(Math.round(this.workMs * 10) / 10);
+        // the Low fallback: a slow device gets the lighter texture (fewer blades, no flowers
+        // or roots) from the next repaint on
+        if (this.fullPending && this.detail === 'normal' && this.workMs > SLOW_FULL_MS) {
+          this.slowDevice = true;
+          this.fullPending = false;
+          this.publish();
+          this.sync(this.tiles, this.palette, 'low');
+          return;
+        }
         this.fullPending = false;
         this.publish();
         return;
