@@ -441,6 +441,19 @@ not shuffled, so the default is now a plain random deal: shuffle once, deal, dra
 from 50.7% to 54.5% (just over the 54% target), games run 9.0 turns per player, and Strangle
 ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1.
 
+### 11.2 Bot levels (page only)
+
+`src/bots/levels.ts` gives the page nine levels (bots-v0.6). All read only their own `View`,
+are pure and deterministic (same view, level and seed, same move), and count search in
+iterations, never time. Level 7 is GreedyBot; levels 1-6 add sloppiness to it; level 8 throws
+better; level 9 plans its turn and imagines the opponent's reply. Each level judges
+Strengthen and Fruit at its own skill (`docs/BOT-TACTICS.md`).
+
+Ladder (800 games per pairing, starts swapped; `docs/LADDER.md`): every level beats the one
+below in 64-72% of games (target 58%), level 9 beats level 7 in 76.8% (target 65%), and
+level 7 beats level 1 in 99.6% (target 95%). Level 8 was retuned to get there (it slipped
+too often: 57.4% against level 7, now 68.4%).
+
 ### 11.3 Fruit, Strengthen and fairness defaults (v0.5)
 
 `src/sim/v05.ts` (run with `src/sim/v05-stage.sh`) plays level-7 vs level-7 games (the full
@@ -487,17 +500,6 @@ Fairness (Part 1): 200,000 opening hands per deck: 3+ top cards in **5.20%** of 
 cards (exact 5.25%) and **2.64%** with 72 cards (exact 2.62%); none at all in 31.90% / 42.46%
 (exact 31.75% / 42.17%). `npx tsx src/sim/deal-stats.ts`.
 
-### 11.2 Bot levels (page only)
-
-`src/bots/levels.ts` gives the page three levels; all read only their own `View` and are
-deterministic.
-- **Normal** is GreedyBot unchanged (the golden games and the 11.1 grid still hold).
-- **Easy** plays the best move half the time and otherwise the 2nd or 3rd best. A test
-  checks it loses to Normal in most games.
-- **Hard** plans its whole turn. For its 6 best growing moves it also weighs the best
-  move it could play right after, and picks the best pair. Tuned weights alone did not
-  help: 8 variants scored 47-50.5% against Normal over 400 games each. The look-ahead won
-  **55% (220/400)** against Normal, with about +2 points per game.
 
 ---
 
