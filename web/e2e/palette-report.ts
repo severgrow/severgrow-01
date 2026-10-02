@@ -25,7 +25,7 @@ for (const id of THEME_IDS) {
   const kinds = ['normal', ...CVD_KINDS] as const;
   const d = (a: string, b: string) => kinds.map((k) => (k === 'normal' ? deltaE(a, b) : deltaE(simulate(a, k), simulate(b, k))).toFixed(0)).join(' / ');
   const minMoss = Math.min(contrast(c.youInk, m.moss), contrast(c.youInk, m.mossTop));
-  const minLava = Math.min(contrast(m.lavaInk, m.lavaCrust), contrast(m.lavaInk, m.lavaCrustLight));
-  console.log(`| ${THEMES[id].name} | ${pass(minMoss, 4.5)} | ${pass(minLava, 4.5)} | ${pass(contrast(c.goldInk, c.gold), 4.5)} | ${d(m.moss, m.lavaCrust)} | ${d(m.moss, m.lavaSeam)} |`);
+  const minLava = Math.min(contrast(m.fireInk, m.fireDeep), contrast(m.fireInk, m.fireTip));
+  console.log(`| ${THEMES[id].name} | ${pass(minMoss, 4.5)} | ${pass(minLava, 4.5)} | ${pass(contrast(c.goldInk, c.gold), 4.5)} | ${d(m.moss, m.fireDeep)} | ${d(m.moss, m.fire)} |`);
 }
 console.log('Markers: you = ring, bot = diamond (shape). Materials: moss cushion vs dark cracked crust (texture and lightness).');

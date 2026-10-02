@@ -287,12 +287,20 @@ export class BoardView {
     const nx = -(B.y - A.y) / (S * SQ3);
     const ny = (B.x - A.x) / (S * SQ3);
     const c = { x: (p.x + q.x) / 2 + nx * bend, y: (p.y + q.y) / 2 + ny * bend };
+    const d = `M${p.x.toFixed(1)},${p.y.toFixed(1)}Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`;
+    // My mycelium threads are the stronger ones: thicker, with a dark green casing so they
+    // read clearly on the mint moss. The bot's fissures are a little thinner.
+    const w = st.veinWidth * width * (owner === 0 ? 1.45 : 0.85);
+    if (owner === 0 && kind !== 'loose') {
+      const casing = el('path', { d, class: `vein-casing ${kind}${grow ? ' grow-in' : ''}`, 'stroke-width': (w + 2.4).toFixed(2), 'stroke-opacity': (opacity * 0.85).toFixed(2), pathLength: 1 }, g);
+      this.veinEls.push({ a, b, owner, el: casing });
+    }
     const e = el(
       'path',
       {
-        d: `M${p.x.toFixed(1)},${p.y.toFixed(1)}Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`,
+        d,
         class: `vein ${kind}${grow ? ' grow-in' : ''}`,
-        'stroke-width': (st.veinWidth * width).toFixed(2),
+        'stroke-width': w.toFixed(2),
         'stroke-opacity': opacity.toFixed(2),
         pathLength: 1,
       },

@@ -758,25 +758,25 @@ svg.usable .hex-cell {
   fill: var(--c-muted);
   transition: fill 0.25s;
 }
-/* While a cut plays: the moss dries and the lava cools (only on the tiles being cut). */
+/* While a cut plays: the moss dries and the fire burns out (only on the tiles being cut). */
 .tile.withering.mat-moss {
   filter: saturate(0.15) sepia(0.35) brightness(0.8);
   transition: filter 0.35s;
 }
-.tile.withering .lava-seams {
+.tile.withering.mat-fire {
+  filter: grayscale(1) brightness(0.45);
+  transition: filter 0.35s;
+}
+.tile.withering .flames {
   opacity: 0 !important;
   transition: opacity 0.35s;
-}
-.tile.withering .lava-crust {
-  fill: var(--m-lavaAsh);
-  transition: fill 0.35s;
 }
 .vein {
   fill: none;
   stroke-linecap: round;
 }
 .veins.you .vein {
-  stroke: color-mix(in srgb, var(--c-you) 45%, #fff);
+  stroke: color-mix(in srgb, var(--c-you) 70%, #fff);
 }
 .veins.bot .vein {
   stroke: color-mix(in srgb, var(--c-bot) 45%, #fff);
@@ -823,7 +823,7 @@ svg.usable .hex-cell {
 .scar {
   stroke-width: 1;
 }
-/* Cut off: my moss dries out (grey-brown, flat); the bot's lava cools (dark grey ash, no glow). */
+/* Cut off: my moss dries out (grey-brown, flat); the bot's fire burns out (dark grey ash, no glow). */
 .scar.dried {
   fill: var(--m-mossDry);
   fill-opacity: 0.55;
@@ -832,9 +832,9 @@ svg.usable .hex-cell {
   stroke-dasharray: 1.5 2.5;
 }
 .scar.cooled {
-  fill: var(--m-lavaAsh);
+  fill: var(--m-fireAsh);
   fill-opacity: 0.6;
-  stroke: color-mix(in srgb, var(--m-lavaAsh) 60%, #000);
+  stroke: color-mix(in srgb, var(--m-fireAsh) 60%, #000);
   stroke-opacity: 0.7;
 }
 .scar-crack {
@@ -2245,7 +2245,7 @@ svg.usable .hex-cell {
 }
 
 /* =================================================================
-   Board materials: moss (me), lava (the bot), rock, empty, gold.
+   Board materials: grass-like moss (me), fire (the bot), rock, empty, gold.
    ================================================================= */
 .st-moss {
   stop-color: var(--m-moss);
@@ -2256,11 +2256,17 @@ svg.usable .hex-cell {
 .st-moss-deep {
   stop-color: var(--m-mossDeep);
 }
-.st-lava-seam {
-  stop-color: var(--m-lavaSeam);
+.st-fire-deep {
+  stop-color: var(--m-fireDeep);
 }
-.st-lava-hot {
-  stop-color: var(--m-lavaSeamHot);
+.st-fire {
+  stop-color: var(--m-fire);
+}
+.st-fire-hot {
+  stop-color: var(--m-fireHot);
+}
+.st-fire-tip {
+  stop-color: var(--m-fireTip);
 }
 .mat-grain {
   opacity: calc(0.22 * var(--m-intensity, 1));
@@ -2274,13 +2280,16 @@ svg.usable .hex-cell {
   fill: var(--m-mossDeep);
   opacity: 0.55;
 }
-.moss-clump {
-  fill: var(--m-mossTop);
-  opacity: 0.38;
+.grass-blade {
+  fill: none;
+  stroke: var(--m-mossTuft);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  opacity: 0.75;
 }
-.moss-tuft {
-  fill: var(--m-mossTuft);
-  opacity: 0.5;
+.grass-blade.dark {
+  stroke: var(--m-mossDeep);
+  opacity: 0.55;
 }
 .moss-fuzz {
   fill: none;
@@ -2290,61 +2299,80 @@ svg.usable .hex-cell {
   stroke-linecap: round;
   opacity: calc(0.25 + 0.35 * var(--m-intensity, 1));
 }
-/* lava: dark cracked basalt with thin glowing seams (the only glow) */
-.lava-crust {
-  fill: var(--m-lavaCrust);
+/* fire: burning all over (the only glow), flame tongues flicker gently */
+.flame {
+  fill: var(--m-fireHot);
+  opacity: 0.9;
 }
-.lava-plate {
-  fill: var(--m-lavaCrustLight);
+.flames.back .flame {
+  fill: var(--m-fire);
 }
-.seam-glow {
-  fill: none;
-  stroke: var(--m-lavaSeam);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.32;
+.flames.back .flame-tip {
+  fill: var(--m-fireHot);
 }
-.seam {
-  fill: none;
-  stroke: var(--m-lavaSeamHot);
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.flame-tip {
+  fill: var(--m-fireTip);
+  opacity: 0.85;
 }
-.lava-seams.pulsing {
-  animation: lava-pulse 5.5s ease-in-out infinite;
+.flames.flicker {
+  animation: flicker-fire 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
 }
-/* The pulse fades the seams a little (opacity only: cheap, no filters per frame). */
-@keyframes lava-pulse {
+@keyframes flicker-fire {
   0%,
   100% {
+    transform: scaleY(1);
     opacity: 1;
   }
-  50% {
-    opacity: 0.72;
+  35% {
+    transform: scaleY(1.07);
+    opacity: 0.88;
+  }
+  70% {
+    transform: scaleY(0.95);
+    opacity: 1;
   }
 }
-.lava-seams.root .seam-glow {
-  stroke-width: 4;
-  opacity: 0.45;
+.fire-grain {
+  opacity: calc(0.12 * var(--m-intensity, 1));
 }
-/* Numbers and markers on lava: light ink on the dark crust, with a crust-coloured halo. */
-.tile.mat-lava .tile-num {
-  fill: var(--m-lavaInk);
+/* Numbers and markers on fire: dark ink on the bright fire, with a soft light halo. */
+.tile.mat-fire .tile-num {
+  fill: var(--m-fireInk);
   paint-order: stroke;
-  stroke: var(--m-lavaCrust);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-}
-.tile.mat-lava .mark-ink {
-  fill: var(--m-lavaInk);
-}
-.tile.mat-moss .tile-num {
-  paint-order: stroke;
-  stroke: var(--m-mossTop);
+  stroke: var(--m-fireTip);
   stroke-width: 2px;
   stroke-opacity: 0.6;
+  stroke-linejoin: round;
+}
+.tile.mat-fire .mark-ink {
+  fill: var(--m-fireInk);
+}
+/* rock: smaller stones lying on top */
+.pebble-shadow {
+  fill: #000;
+  opacity: 0.4;
+}
+.pebble {
+  stroke: var(--m-rockDark);
+  stroke-width: 0.5;
+}
+.pebble.light {
+  fill: var(--m-rockLight);
+}
+.pebble.mid {
+  fill: color-mix(in srgb, var(--m-rock) 70%, var(--m-rockLight));
+}
+.pebble.dark {
+  fill: color-mix(in srgb, var(--m-rock) 80%, var(--m-rockDark));
+}
+.pebble-rim {
+  fill: none;
+  stroke: var(--m-rimLight);
+  stroke-opacity: calc(0.25 + 0.2 * var(--m-intensity, 1));
+  stroke-width: 0.7;
+  stroke-linecap: round;
 }
 /* roots */
 .root-core.moss {
@@ -2352,9 +2380,9 @@ svg.usable .hex-cell {
   stroke: var(--m-mossTop);
   stroke-width: 1.5;
 }
-.root-core.lava {
-  fill: var(--m-lavaCrust);
-  stroke: var(--m-lavaSeamHot);
+.root-core.fire {
+  fill: var(--m-fireDeep);
+  stroke: var(--m-fireTip);
   stroke-width: 1.5;
 }
 .moss-root.breathing {
@@ -2368,12 +2396,12 @@ svg.usable .hex-cell {
   }
 }
 .reduce-motion .moss-root.breathing,
-.reduce-motion .lava-seams.pulsing {
+.reduce-motion .flames.flicker {
   animation: none;
 }
 /* bot veins: glowing fissures in coral-red */
 .veins.bot .vein {
-  stroke: color-mix(in srgb, var(--m-lavaSeam) 80%, #fff);
+  stroke: color-mix(in srgb, var(--m-fire) 80%, #fff);
 }
 /* The moss detail turns around its tile's centre (given in the transform itself),
    not around its own box like the rest of a tile's parts. */
@@ -2410,4 +2438,18 @@ svg.usable .hex-cell {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* My veins' casing: a dark green edge under the bright thread, so it reads on the moss. */
+.vein-casing {
+  fill: none;
+  stroke: var(--m-mossDeep);
+  stroke-linecap: round;
+}
+.vein-casing.grow-in {
+  stroke-dasharray: 1;
+  animation: draw-on calc(0.32s * var(--anim, 1)) ease-out both;
+}
+.reduce-motion .vein-casing.grow-in {
+  animation: none;
 }

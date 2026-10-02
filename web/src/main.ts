@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, targetHexes, usableCards } from './logic/interaction.js';
 import { endgameNote, scoreBreakdown } from './logic/endgame.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -1045,8 +1045,9 @@ function renderControls(v: View, advice: Advice | null) {
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
   } else if (v.phase === 'ACT') {
-    // Sprouting needs no button: tapping a card picks it. Say so while nothing is picked.
-    if (!anySel && legal.some((a) => a.t === 'Sprout')) {
+    // Sprout first: tapping a card picks it. Say so while nothing is picked.
+    const grow = growControls(legal);
+    if (!anySel && grow.sproutNote) {
       const note = document.createElement('p');
       note.className = 'step-note';
       note.textContent = 'Pick a card to sprout';
@@ -1065,7 +1066,9 @@ function renderControls(v: View, advice: Advice | null) {
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
     const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
-    if (end && !pending) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+    // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
+    if (end && !pending && grow.skipLink && !anySel) moves.append(button('Skip sprout', `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), 'Skip the sprout and throw a card'));
   } else if (v.phase === 'DISCARD') {
     const note = document.createElement('p');
     note.className = 'step-note';

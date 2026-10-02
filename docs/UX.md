@@ -65,9 +65,9 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is la
 
 | Material | What it is | Detail |
 | --- | --- | --- |
-| **Moss** (my tiles) | a living mint cushion: soft clumps, tiny tufts, a fuzzy edge, lighter on top, darker in the gaps | my ring marker stays next to the number; my root is a bigger mound with a soft inner glow that breathes slowly |
-| **Lava** (the bot's tiles) | dark cracked basalt crust with thin glowing seams in coral-red to orange-red (never amber) | a very slow pulse; light numbers with a crust halo; the diamond marker stays; the root is a lava core with brighter seams |
-| **Rock** | dark, slightly warm grey-brown stone: fine grain, hairline cracks, small chips, two or three flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
+| **Moss** (my tiles) | fluffy, grass-like mint moss: little tufts of soft blades of uneven length, a fuzzy edge, lighter on top, darker in the gaps | my ring marker stays next to the number; my root is a bigger mound with a soft inner glow that breathes slowly |
+| **Fire** (the bot's tiles) | burning all over: a hot orange-red core, deep red edges, flame tongues licking up and a back row of tall flames rising above the tile, flickering gently (coral-red to orange-red, never amber) | dark numbers with a light halo on the bright fire; the diamond marker stays; the root burns hardest, with a crown of flames |
+| **Rock** | dark, slightly warm grey-brown stone with smaller stones lying on it ("rocky rocks"), grain, hairline cracks, small chips and flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
 | **Empty** | a shallow soil pocket with a soft inner shadow | |
 | **Gold** | warm amber with a fine weave, a faint metallic sheen and the "2" badge | |
 
@@ -75,13 +75,15 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is la
   shadow) and brighter; the number stays crisp.
 - **No stamped look:** each tile's tufts, seams and crust plates vary a little, always from
   a hash of its position (the same tile always looks the same; no randomness).
-- **Cut off:** my moss dries out (grey-brown, flat); the bot's lava cools (the glow fades,
-  the crust turns dark grey ash). The same shows in the dried and cooled marks left behind.
-- **Readability first:** seams never cross the number or the marker (tested on every tile
-  position and strength); textures stay low-contrast.
+- **Cut off:** my moss dries out (grey-brown, flat); the bot's fire burns out (the flames
+  go, dark grey ash is left). The same shows in the marks left behind.
+- **Readability first:** flame tongues never cover the number or the marker (tested on every
+  tile position and strength); textures stay low-contrast.
+- **Veins:** mine are the stronger ones: thick mint threads with a dark green edge; the bot's
+  fire fissures are a little thinner.
 - **Palettes:** full in Soil, a little lighter in Moss night, minimal in Ink (flat shapes
   with a thin rim and shadow). Settings → **Material detail: Low, Normal** (Low is flat with
-  only the rim and shadow). Reduce motion stops the pulse and the breathing.
+  only the rim and shadow). Reduce motion stops the flicker and the breathing.
 - **Cards** get no materials: only a slightly thicker edge, a soft shadow in the fan, and a
   deeper one when picked. **Buttons** are slightly raised and press down softly.
 - **Built once:** gradients and one small noise texture (a 64×64 canvas, made once) are
@@ -113,9 +115,12 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is la
 - **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
   previewed.
-- **Sprout is the default.** In the Grow step the bar says "Pick a card to sprout":
-  tapping a card shows only where it can sprout, and tapping a spot plays it. A card with
-  only one spot plays with that single tap.
+- **Sprout first, then throw.** In the Grow step the bar says "Pick a card to sprout": tapping
+  a card shows only where it can sprout, and tapping a spot plays it (a card with only one
+  spot plays with that single tap). There is no "Throw a card" button until you have
+  sprouted; a small **Skip sprout** link stays, because sprouting is optional in the rules.
+  After the sprout the game goes on to "Tap a card to throw it" by itself (or shows "Throw a
+  card" when a line or clump is still possible).
 - **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one, then a
   card, to see where that combo can grow. Tapping a hex first still shows the best move
   there of any kind.

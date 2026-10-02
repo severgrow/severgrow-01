@@ -1,6 +1,6 @@
-// Board materials for the "lowkey 3D" look: moss for my tiles, lava for the bot's,
+// Board materials for the "lowkey 3D" look: grass-like moss for my tiles, fire for the bot's,
 // real rock, soil-pocket empty hexes and gold. One light from the top-left, matte by
-// default; the only glow allowed is the lava seams. Pure data and decisions (tested);
+// default; the only glow allowed is the fire. Pure data and decisions (tested);
 // web/src/ui/materials/ draws them.
 //
 // Every tile varies a little (tuft spots, seam paths, a small turn), always derived from
@@ -9,12 +9,12 @@ import type { Terrain, Tile } from '../../../src/engine/index.js';
 import type { ThemeId } from './themes.js';
 
 /** The materials the board can draw. A new one (e.g. "wild" for a world map) adds a name here and a drawer in ui/materials. */
-export const MATERIAL_NAMES = ['moss', 'lava', 'rock', 'empty', 'gold'] as const;
+export const MATERIAL_NAMES = ['moss', 'fire', 'rock', 'empty', 'gold'] as const;
 export type MaterialName = (typeof MATERIAL_NAMES)[number];
 
 /** Which material a hex shows. */
 export const materialFor = (tile: Pick<Tile, 'owner'> & Partial<Tile> | null | undefined, terrain: Terrain): MaterialName => {
-  if (tile) return tile.owner === 0 ? 'moss' : 'lava';
+  if (tile) return tile.owner === 0 ? 'moss' : 'fire';
   return terrain === 'rock' ? 'rock' : terrain === 'rich' ? 'gold' : 'empty';
 };
 
@@ -27,12 +27,12 @@ export const MATERIAL_TOKENS = [
   'mossTop', // the lighter tops of the clumps
   'mossTuft', // tiny tufts
   'mossDry', // cut off: dried, grey-brown and flat
-  'lavaCrust', // lava: dark cracked basalt crust
-  'lavaCrustLight', // the crust's lighter top plates
-  'lavaSeam', // glowing seams, the bot's coral-red
-  'lavaSeamHot', // the seams' hot core, orange-red (never amber)
-  'lavaAsh', // cut off: cooled to dark grey ash
-  'lavaInk', // numbers and the marker on lava (light on dark)
+  'fireDeep', // fire: the deep red at its edges
+  'fire', // the burning body, the bot's coral-red
+  'fireHot', // the hot core and flame tongues, orange-red (never amber)
+  'fireTip', // the bright tips of the flames (a pale peach, never yellow)
+  'fireAsh', // cut off: burnt out to dark grey ash
+  'fireInk', // numbers and the marker on fire (dark on bright)
   'rock', // stone body: dark, slightly warm grey-brown
   'rockDark', // crevices and the thick raised edge
   'rockLight', // the top-left facet
@@ -52,12 +52,12 @@ const SHARED = {
   mossTop: '#86e8c0',
   mossTuft: '#c2f6dd',
   mossDry: '#756b5b',
-  lavaCrust: '#2a201e',
-  lavaCrustLight: '#433530',
-  lavaSeam: '#ff5640',
-  lavaSeamHot: '#ff8a5c',
-  lavaAsh: '#4b4846',
-  lavaInk: '#fff0e8',
+  fireDeep: '#8e1f13',
+  fire: '#ff5a3a',
+  fireHot: '#ff7f45',
+  fireTip: '#ffb08a',
+  fireAsh: '#4b4846',
+  fireInk: '#1c0805',
   goldSheen: '#fff1c4',
 } as const;
 
@@ -76,8 +76,8 @@ export type MaterialLook = {
   intensity: number;
   textures: boolean; // grain, tufts, crust plates
   facets: boolean; // rock's flat top planes
-  cracks: boolean; // rock cracks and chips, lava crust cracks
-  motion: boolean; // the lava pulse and the moss root's breathing
+  cracks: boolean; // rock cracks, chips and pebbles
+  motion: boolean; // the flames' flicker and the moss root's breathing
   depth: number; // px of raise for rock and roots, 1 to 3
   rim: number; // opacity of the top-left rim light
   shadow: number; // opacity of contact shadows
@@ -138,46 +138,57 @@ export const inClearZone = (x: number, y: number) => Math.abs(x) <= CLEAR_ZONE.h
 export type Pt = { x: number; y: number };
 const polar = (a: number, r: number): Pt => ({ x: r2(Math.cos(a) * r), y: r2(Math.sin(a) * r) });
 
-/** Moss tufts: six small tufts around the cushion, placed from the tile's hash. */
+/** Moss tufts: nine small grass tufts around the cushion, placed from the tile's hash. */
 export const mossTufts = (key: string): { x: number; y: number; size: number }[] =>
-  Array.from({ length: 6 }, (_, i) => {
-    const a = ((i + unit(`${key}:ta${i}`) * 0.7) / 6) * Math.PI * 2;
+  Array.from({ length: 9 }, (_, i) => {
+    const a = ((i + unit(`${key}:ta${i}`) * 0.7) / 9) * Math.PI * 2;
     const p = polar(a, 0.55 + 0.3 * unit(`${key}:tr${i}`));
     return { ...p, size: r2(0.06 + 0.05 * unit(`${key}:ts${i}`)) };
   });
 
+/** A flame tongue at (x, y) (its base), `size` wide and 1.8 x size tall, leaning a little. */
+export type Flame = { x: number; y: number; size: number; lean: number };
+/** The box a flame covers (it rises upward from its base). */
+export const flameBox = (f: Flame) => ({ x0: f.x - f.size / 2 - Math.abs(f.lean) * f.size, x1: f.x + f.size / 2 + Math.abs(f.lean) * f.size, y0: f.y - f.size * 1.8, y1: f.y });
+const boxHitsZone = (b: ReturnType<typeof flameBox>) => b.x1 >= -CLEAR_ZONE.halfWidth && b.x0 <= CLEAR_ZONE.halfWidth && b.y1 >= CLEAR_ZONE.top && b.y0 <= CLEAR_ZONE.bottom;
+
 /**
- * Lava seams: a few short glowing cracks that run around the rim of the crust (more for
- * a stronger tile), placed from the tile's hash, and always outside the clear zone.
+ * Fire: flame tongues licking up around the tile (more on a stronger tile), placed from the
+ * tile's hash, never over the number or the marker.
  */
-export const lavaSeams = (key: string, strength: number): Pt[][] => {
-  const n = 2 + (strength >= 4 ? 1 : 0) + (strength >= 7 ? 1 : 0);
-  const base = unit(`${key}:sb`) * Math.PI * 2;
-  const seams: Pt[][] = [];
+export const flameTongues = (key: string, strength: number): Flame[] => {
+  const n = 6 + Math.floor((Math.max(1, strength) - 1) / 2);
+  const base = unit(`${key}:fb`) * Math.PI * 2;
+  const out: Flame[] = [];
   for (let i = 0; i < n; i++) {
-    const a0 = base + (i / n) * Math.PI * 2 + (unit(`${key}:sa${i}`) - 0.5) * 0.5;
-    const steps = 3;
-    let line: { a: number; r: number }[] = [];
-    for (let j = 0; j < steps; j++) {
-      const a = a0 + j * (0.22 + 0.12 * unit(`${key}:sd${i}:${j}`));
-      const r = 0.58 + 0.26 * unit(`${key}:sr${i}:${j}`);
-      line.push({ a, r });
-    }
-    // Keep the number and the marker clear: push any part that comes near them out to the rim.
-    const pts = () => line.map((p) => polar(p.a, p.r));
-    const crosses = () => {
-      const p = pts();
-      if (p.some((q) => inClearZone(q.x, q.y))) return true;
-      for (let k = 1; k < p.length; k++) {
-        for (let j = 1; j < 20; j++) {
-          const t = j / 20;
-          if (inClearZone(p[k - 1]!.x + (p[k]!.x - p[k - 1]!.x) * t, p[k - 1]!.y + (p[k]!.y - p[k - 1]!.y) * t)) return true;
-        }
+    const size = r2(0.22 + 0.12 * unit(`${key}:fs${i}`));
+    const lean = r2((unit(`${key}:fl${i}`) - 0.5) * 0.5);
+    let a = base + (i / n) * Math.PI * 2 + (unit(`${key}:fa${i}`) - 0.5) * 0.5;
+    let r = 0.62 + 0.22 * unit(`${key}:fr${i}`);
+    let fl: Flame | null = null;
+    for (let t = 0; t < 8 && !fl; t++) {
+      const cand = { ...polar(a, r), size, lean };
+      if (!boxHitsZone(flameBox(cand))) fl = cand;
+      else {
+        r = 0.84;
+        a += (t % 2 ? -1 : 1) * 0.3 * (t + 1);
       }
-      return false;
-    };
-    if (crosses()) line = line.map((p) => ({ ...p, r: 0.84 }));
-    seams.push(pts());
+    }
+    if (fl) out.push(fl);
   }
-  return seams;
+  // always at least three: fall back to the sides and the top, which never touch the number
+  const spare: Flame[] = [{ x: -0.7, y: 0.2, size: 0.16, lean: 0 }, { x: 0.7, y: 0.2, size: 0.16, lean: 0 }, { x: 0, y: -0.62, size: 0.16, lean: 0 }];
+  for (const f of spare) if (out.length < 3) out.push(f);
+  return out;
+};
+
+/** Rock: a few smaller stones lying on the rock ("rocky rocks"), each with its own size, shape and turn. */
+export const rockPebbles = (key: string): { x: number; y: number; size: number; sides: number; turn: number }[] => {
+  const n = 4 + Math.floor(unit(`${key}:pn`) * 4);
+  return Array.from({ length: n }, (_, i) => {
+    const size = r2(0.09 + 0.14 * unit(`${key}:ps${i}`));
+    const a = ((i + unit(`${key}:pa${i}`) * 0.8) / n) * Math.PI * 2;
+    const r = Math.min(0.15 + 0.5 * unit(`${key}:pr${i}`), 0.86 - size - 0.001);
+    return { ...polar(a, r), size, sides: 5 + Math.floor(unit(`${key}:pk${i}`) * 3), turn: r2(unit(`${key}:pt${i}`) * 360) };
+  });
 };

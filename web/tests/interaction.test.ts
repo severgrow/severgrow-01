@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, growControls, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -257,5 +257,24 @@ describe('no Confirm for a clear choice (Undo can take it back)', () => {
     for (const h of new Set(legal.filter(isBoardAction).flatMap((a) => moveHexes(a).map(coordKey)))) {
       expect(playNow(v, legal, { ...EMPTY_SEL, hex: h })).toBeNull();
     }
+  });
+});
+
+describe('Grow step: sprout first, then throw (a small "Skip sprout" link keeps the rules as they are)', () => {
+  const sprout: Action = { t: 'Sprout', card: 1, coord: { q: 0, r: 0 } };
+  const line: Action = { t: 'MeldRun', cards: [1, 2, 3], hexes: [] } as unknown as Action;
+  const end: Action = { t: 'EndAct' };
+
+  it('while a sprout is possible: "Pick a card to sprout", no Throw button, a small Skip link', () => {
+    expect(growControls([sprout, end])).toEqual({ sproutNote: true, throwButton: false, skipLink: true });
+    expect(growControls([sprout, line, end])).toEqual({ sproutNote: true, throwButton: false, skipLink: true });
+  });
+
+  it('after the sprout (only combos left): the Throw button is back as "done"', () => {
+    expect(growControls([line, end])).toEqual({ sproutNote: false, throwButton: true, skipLink: false });
+  });
+
+  it('nothing to grow: no controls (the game moves to Throw by itself)', () => {
+    expect(growControls([end])).toEqual({ sproutNote: false, throwButton: true, skipLink: false });
   });
 });

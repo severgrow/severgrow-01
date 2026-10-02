@@ -85,6 +85,16 @@ export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { k
  *  because tapping a card picks Sprout by default. */
 export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout');
 
+/**
+ * What the Grow step offers. While a sprout is possible the player sprouts first: the bar
+ * says "Pick a card to sprout", there is no Throw button, only a small "Skip sprout" link
+ * (sprouting stays optional in the rules). After the sprout, "Throw a card" means "done".
+ */
+export const growControls = (legal: readonly Action[]) => {
+  const canSprout = legal.some((a) => a.t === 'Sprout');
+  return { sproutNote: canSprout, throwButton: !canSprout, skipLink: canSprout };
+};
+
 /** A quick "how good is it" score, so the best option is offered first. */
 const quickScore = (v: View, a: Action): number => {
   const sim = simulate(v, a);

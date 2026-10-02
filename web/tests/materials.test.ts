@@ -4,8 +4,10 @@ import {
   CLEAR_ZONE,
   MATERIAL_NAMES,
   MATERIAL_TOKENS,
+  flameBox,
+  flameTongues,
   inClearZone,
-  lavaSeams,
+  rockPebbles,
   materialFor,
   materialLook,
   materialsOf,
@@ -29,9 +31,9 @@ describe('material tokens and the registry', () => {
   });
 
   it('the registry names the board materials (a new one can be added later)', () => {
-    expect([...MATERIAL_NAMES].sort()).toEqual(['empty', 'gold', 'lava', 'moss', 'rock']);
+    expect([...MATERIAL_NAMES].sort()).toEqual(['empty', 'fire', 'gold', 'moss', 'rock']);
     expect(materialFor({ owner: 0, strength: 3 }, 'normal')).toBe('moss');
-    expect(materialFor({ owner: 1, strength: 3 }, 'rich')).toBe('lava');
+    expect(materialFor({ owner: 1, strength: 3 }, 'rich')).toBe('fire');
     expect(materialFor(null, 'rock')).toBe('rock');
     expect(materialFor(null, 'rich')).toBe('gold');
     expect(materialFor(null, 'normal')).toBe('empty');
@@ -82,7 +84,8 @@ describe('per-tile variation (no stamped look, no flicker)', () => {
   it('the same coordinate always gives the same result', () => {
     for (const k of KEYS) {
       expect(tileVariant(k)).toEqual(tileVariant(k));
-      expect(lavaSeams(k, 5)).toEqual(lavaSeams(k, 5));
+      expect(flameTongues(k, 5)).toEqual(flameTongues(k, 5));
+      expect(rockPebbles(k)).toEqual(rockPebbles(k));
       expect(mossTufts(k)).toEqual(mossTufts(k));
     }
   });
@@ -92,7 +95,8 @@ describe('per-tile variation (no stamped look, no flicker)', () => {
     for (const k of KEYS.slice(0, 20)) {
       for (const d of DIRECTIONS) {
         const n = coordKey(addCoord(parseKey(k), d));
-        expect(JSON.stringify(lavaSeams(n, 5))).not.toBe(JSON.stringify(lavaSeams(k, 5)));
+        expect(JSON.stringify(flameTongues(n, 5))).not.toBe(JSON.stringify(flameTongues(k, 5)));
+        expect(JSON.stringify(rockPebbles(n))).not.toBe(JSON.stringify(rockPebbles(k)));
         expect(JSON.stringify(mossTufts(n))).not.toBe(JSON.stringify(mossTufts(k)));
         pairs++;
       }
@@ -110,18 +114,34 @@ describe('per-tile variation (no stamped look, no flicker)', () => {
 });
 
 describe('legibility', () => {
-  it('ADVERSARIAL 1: lava seams never cross the number or the marker, even at strength 9', () => {
+  it('ADVERSARIAL 1: flame tongues never cover the number or the marker, even at strength 9', () => {
     for (const k of KEYS) {
-      for (let s = 1; s <= 9; s++) {
-        for (const line of lavaSeams(k, s)) {
-          for (let i = 1; i < line.length; i++) {
-            const [a, b] = [line[i - 1]!, line[i]!];
-            for (let t = 0; t <= 1; t += 0.1) expect(inClearZone(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t), `${k} s${s}`).toBe(false);
+      for (let st = 1; st <= 9; st++) {
+        const flames = flameTongues(k, st);
+        expect(flames.length).toBeGreaterThanOrEqual(3);
+        for (const fl of flames) {
+          const b = flameBox(fl);
+          for (let i = 0; i <= 10; i++) {
+            for (let j = 0; j <= 10; j++) {
+              const x = b.x0 + ((b.x1 - b.x0) * i) / 10;
+              const y = b.y0 + ((b.y1 - b.y0) * j) / 10;
+              expect(inClearZone(x, y), `${k} s${st}`).toBe(false);
+            }
           }
         }
       }
     }
     expect(CLEAR_ZONE.halfWidth).toBeGreaterThanOrEqual(0.35);
+  });
+
+  it('rock carries a few smaller stones of different sizes, all inside the hex', () => {
+    for (const k of KEYS) {
+      const ps = rockPebbles(k);
+      expect(ps.length).toBeGreaterThanOrEqual(4);
+      expect(ps.length).toBeLessThanOrEqual(7);
+      expect(new Set(ps.map((p) => p.size)).size).toBeGreaterThan(1);
+      for (const p of ps) expect(Math.hypot(p.x, p.y) + p.size).toBeLessThanOrEqual(0.86);
+    }
   });
 
   it('numbers stay readable: dark ink on light moss, light ink on dark crust, in every palette', () => {
@@ -130,16 +150,17 @@ describe('legibility', () => {
       const m = materialsOf(id).colors;
       expect(contrast(c.youInk, m.moss), `${id} moss`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(c.youInk, m.mossTop), `${id} moss top`).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(m.lavaInk, m.lavaCrust), `${id} lava`).toBeGreaterThanOrEqual(7);
-      expect(contrast(m.lavaInk, m.lavaCrustLight), `${id} lava light crust`).toBeGreaterThanOrEqual(4.5);
+      // fire burns bright, so its numbers are dark: readable on the hot core and the flames
+      expect(contrast(m.fireInk, m.fire), `${id} fire`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(m.fireInk, m.fireHot), `${id} fire hot`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it('lava glows coral-red to orange-red, never yellow or amber (amber is gold)', () => {
+  it('fire burns coral-red to orange-red, never yellow or amber (amber is gold)', () => {
     for (const id of THEME_IDS) {
       const c = resolveColors(THEMES[id]);
       const m = materialsOf(id).colors;
-      for (const seam of [m.lavaSeam, m.lavaSeamHot]) {
+      for (const seam of [m.fire, m.fireHot, m.fireTip]) {
         expect(deltaE(seam, c.gold), seam).toBeGreaterThan(30);
         const [r, g, b] = [1, 3, 5].map((i) => parseInt(seam.slice(i, i + 2), 16)) as [number, number, number];
         const hue = (Math.atan2(Math.sqrt(3) * (g - b), 2 * r - g - b) * 180) / Math.PI;
@@ -148,16 +169,16 @@ describe('legibility', () => {
     }
   });
 
-  it('rock is stone, not ice; cut-off moss dries grey-brown and lava cools to ash', () => {
+  it('rock is stone, not ice; cut-off moss dries grey-brown and fire burns out to ash', () => {
     for (const id of THEME_IDS) {
       const c = resolveColors(THEMES[id]);
       const m = materialsOf(id).colors;
       const [r, , b] = [1, 3, 5].map((i) => parseInt(m.rock.slice(i, i + 2), 16));
       expect(b!).toBeLessThanOrEqual(r! + 4);
       expect(deltaE(m.rock, c.hexFill)).toBeGreaterThan(15);
-      for (const p of [m.moss, m.lavaCrust]) expect(deltaE(m.rock, p)).toBeGreaterThan(12);
+      for (const p of [m.moss, m.fireDeep]) expect(deltaE(m.rock, p)).toBeGreaterThan(12);
       expect(deltaE(m.mossDry, m.moss)).toBeGreaterThan(30);
-      expect(deltaE(m.lavaAsh, m.lavaSeam)).toBeGreaterThan(40);
+      expect(deltaE(m.fireAsh, m.fire)).toBeGreaterThan(40);
     }
   });
 
@@ -166,9 +187,9 @@ describe('legibility', () => {
       const m = materialsOf(id).colors;
       for (const kind of ['normal', ...CVD_KINDS] as const) {
         const sim = (x: string) => (kind === 'normal' ? x : simulate(x, kind));
-        // the moss cushion against the lava crust, and against its glowing seams
-        expect(deltaE(sim(m.moss), sim(m.lavaCrust)), `${id} ${kind}`).toBeGreaterThan(30);
-        expect(deltaE(sim(m.moss), sim(m.lavaSeam)), `${id} ${kind} seam`).toBeGreaterThanOrEqual(12);
+        // the moss against the fire's deep red edges, and against its bright flames
+        expect(deltaE(sim(m.moss), sim(m.fireDeep)), `${id} ${kind}`).toBeGreaterThan(30);
+        expect(deltaE(sim(m.moss), sim(m.fire)), `${id} ${kind} seam`).toBeGreaterThanOrEqual(12);
       }
     }
   });
