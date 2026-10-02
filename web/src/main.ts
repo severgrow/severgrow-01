@@ -1637,8 +1637,8 @@ function onCardTap(id: number) {
 // ---------- drawing a line or clump (polish pass 3) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
-type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number; redraw?: boolean };
-const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null, list: -1, others: 0 };
+type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean };
+const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;

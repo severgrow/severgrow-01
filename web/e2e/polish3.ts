@@ -492,6 +492,21 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
   check('Fruit from the tile card: the note, 3 suggested tiles, a plain-words preview', /No card can replace this\. Fruit can\./.test(card) && soft === 3 && /You give up 3/.test(chip) && errors.length === 0, chip);
   await page.close();
 }
+{
+  // a sideways swipe across the board (not drawing) must never be taken as the browser's "go back"
+  const { page, errors } = await open(newGame(11) as State, { touch: true });
+  const cdp = await page.context().newCDPSession(page);
+  const urls: string[] = [];
+  for (const [x0, x1] of [[60, 330], [330, 60]] as const) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: 280 }] });
+    for (let i = 1; i <= 8; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + ((x1 - x0) * i) / 8, y: 280 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(600);
+    urls.push(page.url());
+  }
+  check('a sideways swipe on the board stays in the game (no swipe-back)', urls.every((u) => u === BASE) && errors.length === 0, urls.join(' '));
+  await page.close();
+}
 
 await browser.close();
 await new Promise<void>((r) => server.httpServer.close(() => r()));
