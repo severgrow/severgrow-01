@@ -4,14 +4,14 @@ import {
   CLEAR_ZONE,
   MATERIAL_NAMES,
   MATERIAL_TOKENS,
-  flameBox,
-  flameTongues,
+  grassBlades,
+  grassFlowers,
   inClearZone,
+  lavaCracks,
   rockPebbles,
   materialFor,
   materialLook,
   materialsOf,
-  mossTufts,
   strengthLift,
   tileVariant,
 } from '../src/logic/materials.js';
@@ -84,9 +84,10 @@ describe('per-tile variation (no stamped look, no flicker)', () => {
   it('the same coordinate always gives the same result', () => {
     for (const k of KEYS) {
       expect(tileVariant(k)).toEqual(tileVariant(k));
-      expect(flameTongues(k, 5)).toEqual(flameTongues(k, 5));
+      expect(lavaCracks(k, 5)).toEqual(lavaCracks(k, 5));
+      expect(grassBlades(k)).toEqual(grassBlades(k));
+      expect(grassFlowers(k)).toEqual(grassFlowers(k));
       expect(rockPebbles(k)).toEqual(rockPebbles(k));
-      expect(mossTufts(k)).toEqual(mossTufts(k));
     }
   });
 
@@ -95,43 +96,78 @@ describe('per-tile variation (no stamped look, no flicker)', () => {
     for (const k of KEYS.slice(0, 20)) {
       for (const d of DIRECTIONS) {
         const n = coordKey(addCoord(parseKey(k), d));
-        expect(JSON.stringify(flameTongues(n, 5))).not.toBe(JSON.stringify(flameTongues(k, 5)));
+        expect(JSON.stringify(lavaCracks(n, 5))).not.toBe(JSON.stringify(lavaCracks(k, 5)));
+        expect(JSON.stringify(grassBlades(n))).not.toBe(JSON.stringify(grassBlades(k)));
         expect(JSON.stringify(rockPebbles(n))).not.toBe(JSON.stringify(rockPebbles(k)));
-        expect(JSON.stringify(mossTufts(n))).not.toBe(JSON.stringify(mossTufts(k)));
         pairs++;
       }
     }
     expect(pairs).toBe(120);
   });
 
-  it('the variation is subtle: small turns, tufts and seams stay in the rim area', () => {
+  it('the variation is subtle: small turns', () => {
     for (const k of KEYS) {
       const v = tileVariant(k);
       expect(Math.abs(v.turn)).toBeLessThanOrEqual(8);
-      for (const t of mossTufts(k)) expect(Math.hypot(t.x, t.y)).toBeLessThanOrEqual(0.95);
     }
   });
 });
 
 describe('legibility', () => {
-  it('ADVERSARIAL 1: flame tongues never cover the number or the marker, even at strength 9', () => {
+  it('ADVERSARIAL 1: the glowing lava cracks never cross the number or the marker, even at strength 9', () => {
     for (const k of KEYS) {
       for (let st = 1; st <= 9; st++) {
-        const flames = flameTongues(k, st);
-        expect(flames.length).toBeGreaterThanOrEqual(3);
-        for (const fl of flames) {
-          const b = flameBox(fl);
-          for (let i = 0; i <= 10; i++) {
-            for (let j = 0; j <= 10; j++) {
-              const x = b.x0 + ((b.x1 - b.x0) * i) / 10;
-              const y = b.y0 + ((b.y1 - b.y0) * j) / 10;
+        const cracks = lavaCracks(k, st);
+        expect(cracks.length).toBeGreaterThanOrEqual(3);
+        for (const c of cracks) {
+          expect(c.points.length).toBeGreaterThanOrEqual(2);
+          for (let i = 1; i < c.points.length; i++) {
+            const a = c.points[i - 1]!;
+            const b = c.points[i]!;
+            for (let t = 0; t <= 20; t++) {
+              const x = a.x + ((b.x - a.x) * t) / 20;
+              const y = a.y + ((b.y - a.y) * t) / 20;
               expect(inClearZone(x, y), `${k} s${st}`).toBe(false);
+              expect(Math.hypot(x, y), 'inside the hex').toBeLessThanOrEqual(0.84);
             }
           }
         }
       }
     }
     expect(CLEAR_ZONE.halfWidth).toBeGreaterThanOrEqual(0.35);
+  });
+
+  it('a stronger lava tile glows more (more cracks), never less', () => {
+    for (const k of KEYS) {
+      const glow = (st: number) => lavaCracks(k, st).reduce((n, c) => n + c.points.length, 0);
+      for (let st = 2; st <= 9; st++) expect(glow(st)).toBeGreaterThanOrEqual(glow(st - 1));
+      expect(glow(9)).toBeGreaterThan(glow(1));
+    }
+  });
+
+  it('grass: dense fine blades, a fuzzy edge, short and calm over the number', () => {
+    for (const k of KEYS) {
+      const bl = grassBlades(k);
+      expect(bl.length).toBeGreaterThanOrEqual(50);
+      expect(bl.length).toBeLessThanOrEqual(110);
+      // some blades poke out past the edge (the fuzzy outline), but not far
+      expect(bl.some((b) => Math.hypot(b.x + Math.sin(b.angle) * b.len, b.y - Math.cos(b.angle) * b.len) > 0.9)).toBe(true);
+      for (const b of bl) {
+        const tip = { x: b.x + Math.sin(b.angle) * b.len, y: b.y - Math.cos(b.angle) * b.len };
+        expect(Math.hypot(tip.x, tip.y)).toBeLessThanOrEqual(1.12);
+        if (inClearZone(b.x, b.y) || inClearZone(tip.x, tip.y)) expect(b.len, k).toBeLessThanOrEqual(0.12);
+      }
+      const fl = grassFlowers(k);
+      expect(fl.length).toBeLessThanOrEqual(4);
+      for (const f of fl) {
+        expect(inClearZone(f.x, f.y)).toBe(false);
+        expect(Math.hypot(f.x, f.y)).toBeLessThanOrEqual(0.78);
+      }
+    }
+    // a field of tiles has a few flowers here and there, not on every tile
+    const withFlowers = KEYS.filter((k) => grassFlowers(k).length > 0).length;
+    expect(withFlowers).toBeGreaterThan(KEYS.length * 0.3);
+    expect(withFlowers).toBeLessThan(KEYS.length);
   });
 
   it('rock carries a few smaller stones of different sizes, all inside the hex', () => {
@@ -150,9 +186,9 @@ describe('legibility', () => {
       const m = materialsOf(id).colors;
       expect(contrast(c.youInk, m.moss), `${id} moss`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(c.youInk, m.mossTop), `${id} moss top`).toBeGreaterThanOrEqual(4.5);
-      // fire burns bright, so its numbers are dark: readable on the hot core and the flames
-      expect(contrast(m.fireInk, m.fire), `${id} fire`).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(m.fireInk, m.fireHot), `${id} fire hot`).toBeGreaterThanOrEqual(4.5);
+      // lava is dark crust with glowing cracks (never under the number), so its numbers are light
+      expect(contrast(m.fireInk, m.fireCrust), `${id} lava crust`).toBeGreaterThanOrEqual(7);
+      expect(contrast(m.fireInk, m.fireDeep), `${id} lava edge`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -176,7 +212,7 @@ describe('legibility', () => {
       const [r, , b] = [1, 3, 5].map((i) => parseInt(m.rock.slice(i, i + 2), 16));
       expect(b!).toBeLessThanOrEqual(r! + 4);
       expect(deltaE(m.rock, c.hexFill)).toBeGreaterThan(15);
-      for (const p of [m.moss, m.fireDeep]) expect(deltaE(m.rock, p)).toBeGreaterThan(12);
+      for (const p of [m.moss, m.fireDeep, m.fireCrust]) expect(deltaE(m.rock, p)).toBeGreaterThan(12);
       expect(deltaE(m.mossDry, m.moss)).toBeGreaterThan(30);
       expect(deltaE(m.fireAsh, m.fire)).toBeGreaterThan(40);
     }

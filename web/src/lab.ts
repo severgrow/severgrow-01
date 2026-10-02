@@ -1,7 +1,7 @@
 // The material lab (dev only, open the page with ?lab=1): every board material in every
 // palette, drawn by the real board code, so the look can be judged quickly on a phone.
-// Rows: moss strengths 1-9, fire strengths 1-9, both roots, rock, an empty hex, a gold
-// hex (empty and under a tile), and a cut-off chain for each side (dried moss, burnt-out fire).
+// Rows: grass strengths 1-9, lava strengths 1-9, both roots, rock, an empty hex, a gold
+// hex (empty and under a tile), and a cut-off chain for each side (dried grass, cooled lava).
 import { allCoords, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../src/engine/index.js';
 import { THEMES, THEME_IDS, cssVars } from './logic/themes.js';
@@ -14,7 +14,7 @@ const k = (q: number, r: number) => coordKey({ q, r });
 export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
   const page = document.createElement('main');
   page.className = 'lab';
-  page.innerHTML = `<h1>Material lab</h1><p class="muted small">Moss 1-9 · fire 1-9 · roots, rock, empty, gold · cut-off chains (dried moss, burnt-out fire). Detail: ${detail}.</p>`;
+  page.innerHTML = `<h1>Material lab</h1><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains (dried grass, cooled lava). Detail: ${detail}.</p>`;
   const R = 5;
   const config = { ...newGame(1).config, boardRadius: R };
   const terrain: Record<string, Terrain> = Object.fromEntries(allCoords(R).map((c) => [coordKey(c), 'normal' as Terrain]));

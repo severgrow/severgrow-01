@@ -30,7 +30,7 @@ shapes; only the colours and the background change. All colours are design token
 
 | Palette | Background | Feel |
 | --- | --- | --- |
-| **Soil** (default) | very dark warm olive-brown `#1b1912` | a fine soil grain, a soft vignette, a few slow drifting spores; empty hexes are shallow soil pockets |
+| **Soil** (default) | neutral coal grey `#18191a` | a fine soil grain, a soft vignette, a few slow drifting spores; empty hexes are shallow soil pockets |
 | **Moss night** | cool green-black `#0d1613` | a soft green glow pooled under the board |
 | **Ink** | near-black paper `#0d0e11` | flat, no texture |
 
@@ -44,7 +44,7 @@ AA needs 4.5; colour distance is CIE delta E, 12 or more counts as clearly diffe
 
 | Palette | Text on page | Hints on page | Button text | Suit numbers on cards (lowest) | Closest pair, normal vision | Deuteranopia | Protanopia | Tritanopia |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Soil | 14.4 PASS | 7.7 PASS | 14.0 PASS | 5.1 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
+| Soil | 14.8 PASS | 7.4 PASS | 14.0 PASS | 5.1 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
 | Moss night | 14.9 PASS | 8.3 PASS | 14.4 PASS | 5.4 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
 | Ink | 15.9 PASS | 7.3 PASS | 15.5 PASS | 5.8 PASS | 38 (bot / ember) PASS | 17 (ash / dew) PASS | 17 (bot / ember) PASS | 19 (moss / ash) PASS |
 
@@ -61,34 +61,35 @@ noise); the whole polish pass adds about 5 kB to the page after compression.
 
 One light for the whole game, from the top-left. Every raised thing gets a thin bright
 rim on its top-left edge, a soft darker edge on the bottom-right, a soft contact shadow
-and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is fire.
+and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is the lava.
 
 | Material | What it is | Detail |
 | --- | --- | --- |
-| **Moss** (my tiles) | fluffy, grass-like mint moss: little tufts of soft blades of uneven length, a fuzzy edge, lighter on top, darker in the gaps | my ring marker stays next to the number; my root is a bigger mound with a soft inner glow that breathes slowly |
-| **Fire** (the bot's tiles) | burning all over: a hot orange-red core, deep red edges, flame tongues licking up and a back row of tall flames rising above the tile, flickering gently (coral-red to orange-red, never amber) | dark numbers with a light halo on the bright fire; the diamond marker stays; the root burns hardest, with a crown of flames |
+| **Grass** (my tiles) | a dense lawn of fine green blades in three shades, a soft fringe of blades poking past the edge, and on some tiles a tiny dandelion or seed puff | the blades over the number stay short; my ring marker stays; my root is a bigger mound with a soft inner glow that breathes slowly |
+| **Lava** (the bot's tiles) | dark, rough cooled crust split by molten cracks that well up wide at the edge and narrow inward, with a glow seeping up around the rim (coral-red to orange-red, never amber); a stronger tile has more cracks | light numbers with a dark halo on the crust; cracks never cross the number or the marker; the diamond marker stays; the root is a cracked mound with a molten core |
 | **Rock** | dark, slightly warm grey-brown stone with smaller stones lying on it ("rocky rocks"), grain, hairline cracks, small chips and flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
 | **Empty** | a shallow soil pocket with a soft inner shadow | |
 | **Gold** | warm amber with a fine weave, a faint metallic sheen and the "2" badge | |
 
 - **Strength reads as height:** a stronger tile sits a little higher (more rim light and
   shadow) and brighter; the number stays crisp.
-- **No stamped look:** each tile's tufts, seams and crust plates vary a little, always from
+- **No stamped look:** each tile's blades, flowers and cracks vary a little, always from
   a hash of its position (the same tile always looks the same; no randomness).
-- **Cut off:** my moss dries out (grey-brown, flat); the bot's fire burns out (the flames
-  go, dark grey ash is left). The same shows in the marks left behind.
-- **Readability first:** flame tongues never cover the number or the marker (tested on every
-  tile position and strength); textures stay low-contrast.
-- **Veins:** mine are the stronger ones: thick mint threads with a dark green edge; the bot's
-  fire fissures are a little thinner.
+- **Cut off:** my grass dries out (grey-brown, flat); the bot's lava cools (the glow goes,
+  dark grey ash is left). The same shows in the marks left behind.
+- **Readability first:** lava cracks never cross the number or the marker and grass blades
+  stay short there (tested on every tile position and strength); textures stay low-contrast.
+- **Links grow organically:** mine are vines (a gently wavy green stem with a dark edge, a
+  thin tendril twisting along it and two small leaves); the bot's are a thinner stream of
+  lava with a dark crust edge and a hot core that slowly flows (still under Reduce motion).
 - **Palettes:** full in Soil, a little lighter in Moss night, minimal in Ink (flat shapes
   with a thin rim and shadow). Settings → **Material detail: Low, Normal** (Low is flat with
-  only the rim and shadow). Reduce motion stops the flicker and the breathing.
+  only the rim and shadow). Reduce motion stops the lava glow, the flowing links and the breathing.
 - **Cards** get no materials: only a slightly thicker edge, a soft shadow in the fan, and a
   deeper one when picked. **Buttons** are slightly raised and press down softly.
 - **Built once:** gradients and one small noise texture (a 64×64 canvas, made once) are
   shared by the whole board; each tile is a handful of plain shapes, with no per-tile filters.
-- **Registry:** `web/src/ui/materials.ts` registers each material (moss, fire, rock, empty,
+- **Registry:** `web/src/ui/materials.ts` registers each material (moss = grass, fire = lava, rock, empty,
   gold); a new one (for example "wild" for a world map) is one more registration.
 - **Material lab:** open the page with `?lab=1` (add `&detail=low` for Low) to see every
   material in every palette.
