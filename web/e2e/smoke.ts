@@ -10,7 +10,8 @@ import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
-import { kindOf } from '../src/logic/interaction.js';
+import { EMPTY_SEL, kindOf, tapCard, targetHexes } from '../src/logic/interaction.js';
+import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
 const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
@@ -227,16 +228,18 @@ for (const theme of THEMES) {
   {
     const { page } = await openPage(theme, 'phone', {}, demo.state);
     await page.click('#menu-continue');
-    const cards = page.locator('#hand .card.playable');
-    await cards.nth(0).click();
-    const t = page.locator('.l-over .target').first();
-    await tapHex(page, (await t.getAttribute('data-key'))!);
-    const hadPreview = (await page.locator('.l-over .ghost').count()) > 0;
-    await page.click('#confirm-cancel');
+    // Two cards with several spots each, so picking one shows targets and plays nothing.
+    const dv = viewFor(demo.state, 0);
+    const dl = legalActions(dv);
+    const many = dv.hand.filter((c) => targetHexes(dv, dl, tapCard(dv, dl, EMPTY_SEL, c.id)).size >= 2).map((c) => c.id);
+    await page.click(`#hand [data-card="${many[0]}"]`);
+    const hadTargets = (await page.locator('.l-over .target').count()) >= 2;
+    await page.click('#moves .cancel');
     const cleared = (await page.locator('.l-over .ghost, .l-over .target, #hand .card.lifted').count()) === 0;
-    await cards.nth(1).click();
+    await page.click(`#hand [data-card="${many.find((id) => id !== many[0]) ?? many[0]}"]`);
     const lifted = await page.locator('#hand .card.lifted').count();
     const before = JSON.stringify(demo.state);
+    const hadPreview = hadTargets && many.length >= 2;
     check(`${theme}: ADVERSARIAL 1 tap card, cancel, tap another`, hadPreview && cleared && lifted === 1 && (await stateJson(page)) === before);
     await page.close();
   }
