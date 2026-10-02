@@ -443,3 +443,28 @@ plain bold text, never shaped like buttons.
 - `web/src/main.ts` ties it together; `web/src/style.css` holds the looks.
 - `web/e2e/smoke.ts` plays the page in a real browser and saves the
   screenshots in `docs/screens/`.
+
+## UX pass (after the Seed A/B test)
+
+Fifteen small changes to the look and feel; no rule changes.
+
+1. **Turn pill on one line**: "Turn 6/30 · Level 8" (it used to wrap "Level / 8").
+2. **Scars fade**: what a cut-off tile leaves is drawn fainter each turn (100%, 60%, 30%), and the
+   tile card of that hex says whose tile was cut off and when.
+3. **Gold badge on a tile**: smaller and nudged into the corner, clear of the owner mark.
+4. **Seed number**: on a small dark plate, readable on every palette.
+5. **What the opponent just did**: a small spark at the top of each hex it grew on or strengthened
+   on its last turn, shown at the start of my turn until I change the board.
+6. **Bigger cards on tall phones** (760px+ high): easier to tap, less empty space.
+7. **Lab page**: shows a seed of each side and the three scar ages.
+8. **No flash of the plain tile look**: the tiles fade in with their landscape texture.
+9. **Corner buttons named**: "Your weak spots", "Opponent's weak links" and "Replay" show their
+   names for 5 seconds at the start of the first 3 games.
+10. **Deck running low**: its count turns amber at 5 cards or fewer (the game ends when it runs out).
+11. **Record per version** on the menu: "Sprout version: won 3 of 5 · Seed version: won 1 of 2".
+12. **"Try the other version"** on the result screen starts the same level in the other version.
+13. **The version label is a button**: tapping it explains the version in one line.
+14. **What you did with the move** on the result screen: "You planted 6 seeds and strengthened 4 tiles."
+15. **Continue says where you left off**: version, level and turn.
+
+Checked by `web/e2e/seed-ab.ts` (25 checks) and unit tests (stats per version, move summary).

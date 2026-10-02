@@ -1,7 +1,7 @@
 // Plain sentences for the history list and the result line. Never reveals the bot's
 // hidden cards (it only names cards the bot has already shown by playing them).
 import { viewFor } from '../../../src/engine/index.js';
-import type { Action, Coord, GameResult, Player, State } from '../../../src/engine/index.js';
+import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
 import { OPP, moveWords } from '../../../src/strings.js';
 
@@ -73,4 +73,16 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'RotPick':
       return `${OPP.The} chose your tile at ${hn(a.coord)} to rot`;
   }
+};
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** UX pass (result screen): what I did with the one-card move this game, or null if nothing. */
+export const moveSummary = (history: readonly Event[], me: Player, config: { ruleset?: string }): string | null => {
+  const grown = history.filter((e) => e.t === 'Sprout' && e.player === me).length;
+  const strong = history.filter((e) => e.t === 'Strengthen' && e.player === me).length;
+  const parts: string[] = [];
+  if (grown) parts.push(config.ruleset === 'seed' ? `planted ${count(grown, 'seed', 'seeds')}` : `sprouted ${count(grown, 'tile', 'tiles')}`);
+  if (strong) parts.push(`strengthened ${count(strong, 'tile', 'tiles')}`);
+  return parts.length ? `You ${parts.join(' and ')}.` : null;
 };
