@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0e11" />
-    <meta name="description" content="Severgrow: grow your network, keep it joined to your root, cut the bot's links." />
+    <meta name="description" content="Severgrow: grow your network, keep it joined to your root, cut your opponent's links." />
     <title>Severgrow</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230d0e11%27/%3E%3Cpolygon points=%2716,5 25,10 25,22 16,27 7,22 7,10%27 fill=%27none%27 stroke=%27%234df0b4%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%273.5%27 fill=%27%234df0b4%27/%3E%3C/svg%3E" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -24,7 +24,7 @@
       <div class="menu-inner">
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">Severgrow</h1>
-        <p class="tagline">Grow your network. Keep it joined to your root. Cut the bot's links.</p>
+        <p class="tagline">Grow your network. Keep it joined to your root. Cut your opponent's links.</p>
         <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
@@ -47,7 +47,7 @@
           <h2>Pick a level</h2>
         </header>
         <div id="level-grid" class="level-grid"></div>
-        <p class="muted small levels-note">7 is the classic bot.</p>
+        <p class="muted small levels-note">7 is the classic opponent.</p>
       </div>
     </section>
 
@@ -62,8 +62,8 @@
         </div>
         <div id="turn" class="turn" aria-live="polite"></div>
         <div class="score bot">
-          <b id="score-bot" class="num" aria-label="Bot score">0</b>
-          <span class="who">Bot</span>
+          <b id="score-bot" class="num" aria-label="Opponent score">0</b>
+          <span class="who" data-short="opp">Opponent</span>
           <span class="mark bot" aria-hidden="true"></span>
         </div>
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
@@ -83,13 +83,15 @@
         <div class="board-wrap" id="board-wrap">
           <svg id="board" class="board" role="group" aria-label="Board. Use the arrow keys to move, Enter to choose." tabindex="0"></svg>
           <div id="captions" class="captions" aria-live="polite"></div>
+          <div id="draw-info" class="draw-info" hidden></div>
+          <div id="draw-live" class="sr-only" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
           <button id="tool-weak" class="chip corner tl" type="button" aria-pressed="false" aria-label="Your weak spots"><span class="i" data-icon="shield"></span><span class="chip-label">Your weak spots</span></button>
-          <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false" aria-label="The bot's weak links"><span class="i" data-icon="target"></span><span class="chip-label">Bot's weak links</span></button>
-          <button id="tool-replay" class="chip corner bl" type="button" aria-label="Replay the bot's last turn" title="Replay the bot's last turn"><span class="i" data-icon="replay"></span></button>
+          <button id="tool-targets" class="chip corner tr" type="button" aria-pressed="false" aria-label="Your opponent's weak links"><span class="i" data-icon="target"></span><span class="chip-label">Opponent's weak links</span></button>
+          <button id="tool-replay" class="chip corner bl" type="button" aria-label="Replay your opponent's last turn" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
           <button id="tool-skip" class="chip corner br" type="button" hidden aria-label="Skip the animation" title="Skip the animation"><span class="i" data-icon="skip"></span></button>
         </div>
 
@@ -120,6 +122,7 @@
           <div id="first-tip" class="first-tip" role="note" hidden>
             <b id="first-tip-title"></b>
             <p id="first-tip-text"></p>
+            <div id="first-tip-demo" class="draw-demo" aria-hidden="true" hidden><i></i><i></i><i></i><span class="finger"></span></div>
             <button id="first-tip-ok" class="btn ghost small" type="button">Got it</button>
           </div>
           <div id="confirm" class="confirm" hidden>
@@ -128,7 +131,7 @@
               <span id="confirm-warn" class="warn" hidden></span>
             </div>
             <div class="confirm-buttons">
-              <button id="confirm-other" class="btn ghost small" type="button" hidden>Other way</button>
+              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
               <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
               <button id="confirm-play" class="btn primary" type="button">Confirm</button>
             </div>
@@ -170,6 +173,7 @@
         <h3>Look</h3>
         <div class="row"><span>Colours</span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
         <div class="row"><span>Material detail</span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
+        <div class="row"><span>Top-rank glow</span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
         <h3>Sound and feel</h3>
         <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
         <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
@@ -184,6 +188,8 @@
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
         <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
         <h3>Playing</h3>
+        <div class="row"><span>Confirm moves</span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row"><span>Placement list (step through the places a line or clump can go)</span><input type="checkbox" data-setting="placementList" /></label>
         <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
         <label class="row"><span>Pulse my weakest link</span><input type="checkbox" data-setting="weakPulse" /></label>
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>

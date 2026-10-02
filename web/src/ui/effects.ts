@@ -121,7 +121,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   function banner(text: string, tone?: 'you' | 'bot' | 'big') {
     const b = $('banner');
     b.textContent = text;
-    b.className = `banner ${tone ?? (text.startsWith('Bot') ? 'bot' : 'you')}`;
+    b.className = `banner ${tone ?? 'you'}`;
     const f = Math.max(timeScale(), 0.5);
     anim(
       b,

@@ -69,7 +69,7 @@ describe('animation queue from engine events', () => {
         const d = s.keys.map((k) => hexDistance(parseKey(k), parseKey(s.origin)));
         for (let i = 1; i < d.length; i++) expect(d[i]).toBeGreaterThanOrEqual(d[i - 1]!);
         expect(captionFor(s, 0)).toBe(
-          s.player === 1 ? `You cut off ${s.keys.length} bot tile${s.keys.length === 1 ? '' : 's'}!` : `The bot cut off ${s.keys.length} of your tiles`,
+          s.player === 1 ? `You cut off ${s.keys.length} opponent tile${s.keys.length === 1 ? '' : 's'}!` : `Your opponent cut off ${s.keys.length} of your tiles`,
         );
       }
     }

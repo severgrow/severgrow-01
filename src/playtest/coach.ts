@@ -8,6 +8,7 @@ import { rankActions } from '../bots/GreedyBot.js';
 import type { MoveFacts, Scored } from '../bots/GreedyBot.js';
 import { threats } from '../bots/evaluate.js';
 import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.js';
+import { OPP } from '../strings.js';
 
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
@@ -143,7 +144,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   strength: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.taken > 0),
-    text: ({ say }) => `A higher ${say('strength')} replaces a weaker bot tile. Equal can't.`,
+    text: ({ say }) => `A higher ${say('strength')} replaces a weaker ${OPP.noun} tile. Equal can't.`,
   },
   gold: {
     active: () => true,
@@ -159,7 +160,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   cutting: {
     active: () => true,
     fits: ({ v, ranked }) => boardFacts(ranked).some((m) => m.botCut > 0) || threats(v, other(v.player)).length > 0,
-    text: ({ say }) => `Take a bot ${say('weak spot')} and everything behind it ${say('withers')}.`,
+    text: ({ say }) => `Take an ${OPP.noun} ${say('weak spot')} and everything behind it ${say('withers')}.`,
   },
   leftovers: {
     active: ({ v }) => rotOn(v),
@@ -169,14 +170,14 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   knock: {
     active: ({ v }) => knockOn(v),
     fits: ({ v }) => v.phase === 'KNOCK',
-    text: ({ v, say }) => `Leftovers of ${v.config.knockDeadwood} or less? You can ${say('knock')}: the bot gets one last turn.`,
+    text: ({ v, say }) => `Leftovers of ${v.config.knockDeadwood} or less? You can ${say('knock')}: ${OPP.the} gets one last turn.`,
   },
   // v0.5: Fruit and Strengthen are mentioned only when they matter: one of the best few
   // moves right now, and a good one.
   fruit: {
     active: ({ v }) => fruitOn(v),
     fits: ({ ranked }) => ranked.slice(0, 3).some((r) => r.facts.kind === 'fruit' && r.score > 0),
-    text: ({ v }) => `Fruit, once per game: give up ${v.config.fruitSacrifice} tiles to remove one touching bot tile, even a ${v.config.maxRank}.`,
+    text: ({ v }) => `Fruit, once per game: give up ${v.config.fruitSacrifice} tiles to remove one touching ${OPP.noun} tile, even a ${v.config.maxRank}.`,
   },
   strengthen: {
     active: ({ v }) => v.config.allowStrengthen && v.config.sproutsPerTurn > 0,
@@ -190,12 +191,12 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
       const near = Object.entries(v.board).some(([k, t]) => t?.owner === v.player && hexDistance(parseKey(k), target) <= 2);
       return near || boardFacts(ranked).some((m) => m.wins);
     },
-    text: ({ say }) => `Win at once: ${say('strangle')} the bot's root.`,
+    text: ({ say }) => `Win at once: ${say('strangle')} ${OPP.theirs} root.`,
   },
   planning: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.exposureAfter > m.exposureBefore),
-    text: () => 'Before a big move, check what the bot could cut back.',
+    text: () => `Before a big move, check what ${OPP.the} could cut back.`,
   },
 };
 
@@ -209,19 +210,19 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : `${n} 
 const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   const { say, v } = c;
   const reasons: string[] = [];
-  if (m.wins) reasons.push(`This surrounds the bot's root, so you win right away.`);
-  if (isFruit) reasons.push(`Giving up 3 of your tiles destroys a bot tile you could not replace.`);
-  if (m.botCut > 0) reasons.push(`This cuts the bot's link and removes ${m.taken + m.botCut} of its tiles.`);
+  if (m.wins) reasons.push(`This surrounds ${OPP.theirs} root, so you win right away.`);
+  if (isFruit) reasons.push(`Giving up 3 of your tiles destroys an ${OPP.noun} tile you could not replace.`);
+  if (m.botCut > 0) reasons.push(`This cuts ${OPP.theirs} link and removes ${m.taken + m.botCut} of their tiles.`);
   if (m.exposureAfter < m.exposureBefore) reasons.push(`This fixes a ${say('weak spot')} in your network.`);
-  if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This replaces ${plural(m.taken, 'a weaker bot tile', 'weaker bot tiles')}.`);
+  if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This replaces ${plural(m.taken, `a weaker ${OPP.noun} tile`, `weaker ${OPP.noun} tiles`)}.`);
   if (m.onRich > 0) {
     reasons.push(m.onRich === 1 ? `This ${say('gold hex')} is worth 2 points.` : `These ${m.onRich} gold hexes are worth 2 points each.`);
   }
-  if (m.placed > 0) reasons.push(m.toward ? `This grows ${m.placed} tiles toward the bot's root.` : `This grows ${m.placed} new tiles for you.`);
+  if (m.placed > 0) reasons.push(m.toward ? `This grows ${m.placed} tiles toward ${OPP.theirs} root.` : `This grows ${m.placed} new tiles for you.`);
   const why = reasons.slice(0, 2);
   if (m.exposureAfter > m.exposureBefore && m.weakSpot) {
     const spot = hexName(parseKey(m.weakSpot), v.config.boardRadius);
-    why.splice(1, 1, `Watch out: if the bot cuts at ${spot}, you lose ${m.exposureAfter} tiles.`);
+    why.splice(1, 1, `Watch out: if ${OPP.the} cuts at ${spot}, you lose ${m.exposureAfter} tiles.`);
   }
   return why;
 };
@@ -238,7 +239,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
         ? [`A Sprout grows one tile for you with a single card, so your ${say('combo')} cards stay in your hand.`, ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
     case 'strengthen':
-      return [`Strengthen your ${f.from} to a ${f.to}: the bot is much less likely to have a card that can replace it. It scores no points itself, and it does not stop a cut${v.config.fruitPerPlayer > 0 ? ' or Fruit' : ''}.`];
+      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitPerPlayer > 0 ? ' or Fruit' : ''}.`];
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
@@ -262,12 +263,12 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       if (!f.meldsAvailable) return [`You have no ${say('combo')} left to play. Keep collecting matching cards.`];
       const bestMeld = boardFacts(ranked).find(() => true);
       if (bestMeld && bestMeld.exposureAfter > bestMeld.exposureBefore) {
-        return [`Your ${say('combo')} would leave a ${say('weak spot')} the bot could cut. Keep it for a better moment.`];
+        return [`Your ${say('combo')} would leave a ${say('weak spot')} ${OPP.the} could cut. Keep it for a better moment.`];
       }
       return [`Your ${say('combo')} would not help much right now. Keep it for later.`];
     }
     case 'knock':
-      return [`You lead by ${f.lead} points and the bot has no big cut on you, so knocking now should win.`];
+      return [`You lead by ${f.lead} points and ${OPP.the} has no big cut on you, so knocking now should win.`];
     case 'continue': {
       if (!rotOn(v) && !knockOn(v)) return ['End your turn and refill your hand.'];
       const rc = rotCount(v.myDeadwood, v.config);
@@ -278,8 +279,8 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
     }
     case 'rotPick':
       return f.botLoss > 1
-        ? [`Removing this tile also cuts off ${f.botLoss - 1} more bot tiles.`]
-        : ['These bot tiles are all equally weak, so any of them is fine.'];
+        ? [`Removing this tile also cuts off ${f.botLoss - 1} more ${OPP.noun} tiles.`]
+        : [`These ${OPP.noun} tiles are all equally weak, so any of them is fine.`];
   }
 };
 
@@ -323,16 +324,16 @@ const BULLETS: Record<TipId, string> = {
   draw: 'Take from the throw pile only if it makes a combo.',
   combos: 'Cards of one suit in a row grow lines; same numbers grow clumps.',
   sprout: 'No combo? Sprout one card as one tile.',
-  strength: 'A stronger tile can replace a weaker bot tile.',
+  strength: `A stronger tile can replace a weaker ${OPP.noun} tile.`,
   gold: 'Gold hexes are worth 2 points.',
   connection: 'Protect weak spots that hold up many tiles.',
-  cutting: "Cut the bot's weak spots to make its tiles wither.",
+  cutting: `Cut ${OPP.theirs} weak spots to make their tiles wither.`,
   leftovers: 'Keep your leftover cards low to avoid rot.',
   knock: 'Knock only when you are clearly ahead.',
-  fruit: 'Save Fruit for a bot tile you cannot replace.',
+  fruit: `Save Fruit for an ${OPP.noun} tile you cannot replace.`,
   strengthen: 'Strengthen the tile that holds many others up.',
-  strangle: "Surround the bot's root to win at once.",
-  planning: 'Before a big move, check what the bot could cut.',
+  strangle: `Surround ${OPP.theirs} root to win at once.`,
+  planning: `Before a big move, check what ${OPP.the} could cut.`,
 };
 const SUMMARY_PRIORITY: readonly TipId[] = [
   'connection',

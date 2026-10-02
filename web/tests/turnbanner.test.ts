@@ -28,7 +28,7 @@ describe('the turn banner', () => {
 
   it("the bot's turn: a diamond, and quiet thinking dots until its first move appears (never faked)", () => {
     let s = showTurn(HIDDEN, 1, normal);
-    expect(bannerView(s)).toMatchObject({ label: "Bot's turn", marker: 'diamond', thinking: true });
+    expect(bannerView(s)).toMatchObject({ label: "Opponent's turn", marker: 'diamond', thinking: true });
     s = run(s, 5000);
     // the pill has gone, but the dots stay (beside where it was) while the bot is still thinking
     expect(bannerView(s)).toMatchObject({ visible: false, thinking: true });
@@ -57,7 +57,7 @@ describe('the turn banner', () => {
     s = run(s, 100);
     s = botMoved(s);
     s = showTurn(s, 1, normal); // the bot again (e.g. replay or a second turn)
-    expect(bannerView(s)).toMatchObject({ label: "Bot's turn", phase: 'in', thinking: true });
+    expect(bannerView(s)).toMatchObject({ label: "Opponent's turn", phase: 'in', thinking: true });
     s = showTurn(s, 0, normal);
     expect(bannerView(s)).toMatchObject({ label: 'Your turn', thinking: false });
     // interrupted at any point, the view is always a valid state

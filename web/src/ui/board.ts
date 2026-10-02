@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
+import { DIRECTIONS, allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -13,7 +13,10 @@ import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './ge
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
 import type { PaintTile } from '../logic/worldpaint.js';
-import { contour, numberStyle, vigour } from '../logic/vigour.js';
+import { numberStyle, vigour } from '../logic/vigour.js';
+import { topGlow } from '../logic/topglow.js';
+import type { GlowOpts } from '../logic/topglow.js';
+import { glowSprite } from './glowsprite.js';
 import type { ThemeId } from '../logic/themes.js';
 import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
@@ -42,6 +45,8 @@ export type Overlay = {
   botFragile: boolean;
   /** v0.5: what each target does: grow on empty, replace a bot tile (⇆), strengthen mine (+). */
   targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen'>;
+  /** polish pass 3: the picked tiles are the game's suggestion (soft "−" markers, not numbers) */
+  fruitSoft?: boolean;
   /** v0.5 Fruit flow: tiles that can be picked, tiles picked so far (in order), the target. */
   fruitValid?: string[];
   fruitPicked?: string[];
@@ -65,13 +70,38 @@ export const NO_OVERLAY: Overlay = {
 export type BoardHandlers = {
   tap: (key: string) => void;
   inspect: (key: string | null) => void;
+  /** a long-press on touch (opens and pins the tile card); falls back to a brief inspect */
+  hold?: (key: string) => void;
+};
+
+/** Pointer events in board units while drawing (one code path for touch, mouse and pen). */
+export type DrawHandlers = {
+  down: (p: { x: number; y: number }, e: PointerEvent) => void;
+  move: (p: { x: number; y: number }, e: PointerEvent) => void;
+  up: (p: { x: number; y: number }, e: PointerEvent, inside: boolean) => void;
+  cancel: () => void;
+};
+
+/** What the drawing ghost shows: tiles (with numbers; "can't" style when not ok), direction arrows, a cursor. */
+export type GhostView = {
+  tiles: { key: string; strength: number; ok: boolean }[];
+  blocked: boolean;
+  arrows: { from: string; dirs: number[] } | null;
+  cursor: string | null;
 };
 
 export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
   private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'marks' | 'over' | 'fx', SVGGElement>;
+  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'marks' | 'over' | 'draw' | 'fx', SVGGElement>;
+  /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
+  private drawing = false;
+  private drawHandlers: DrawHandlers | null = null;
+  /** Polish pass 3: the top-rank glow settings (and a strength multiplier, for the lab's comparison). */
+  private glowOpts: GlowOpts = { setting: 'subtle', effects: 'normal', reduceMotion: false };
+  private glowScale = 1;
+  private glowKeys: Set<string> | null = null;
   private tileEls = new Map<string, SVGGElement>();
   private veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
   private shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
@@ -90,7 +120,79 @@ export class BoardView {
   constructor(
     readonly svg: SVGSVGElement,
     private handlers: BoardHandlers,
-  ) {}
+  ) {
+    // drawing: the board itself listens, so a drag can run across hexes and gaps
+    const at = (e: PointerEvent) => {
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return { x: 0, y: 0 };
+      const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+      return { x: p.x, y: p.y };
+    };
+    const inside = (e: PointerEvent) => {
+      const r = svg.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+    };
+    svg.addEventListener('pointerdown', (e) => {
+      if (!this.drawing || !this.drawHandlers) return;
+      if (e.pointerType !== 'mouse') svg.setPointerCapture?.(e.pointerId);
+      this.drawHandlers.down(at(e), e);
+    });
+    svg.addEventListener('pointermove', (e) => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.move(at(e), e);
+    });
+    svg.addEventListener('pointerup', (e) => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.up(at(e), e, inside(e));
+    });
+    svg.addEventListener('pointercancel', () => {
+      if (this.drawing && this.drawHandlers) this.drawHandlers.cancel();
+    });
+    svg.addEventListener('contextmenu', (e) => {
+      if (!this.drawing || !this.drawHandlers) return;
+      e.preventDefault();
+      this.drawHandlers.cancel();
+    });
+  }
+
+  /** Drawing mode on or off. While on, the board takes the pointer (no pinch or scroll starts a drawing). */
+  setDrawing(on: boolean, h: DrawHandlers | null) {
+    this.drawing = on;
+    this.drawHandlers = on ? h : null;
+    this.svg.classList.toggle('drawing', on);
+    if (!on) this.layers?.draw.replaceChildren();
+  }
+
+  /** Draws the drawing ghost on its own layer (nothing else is redrawn). */
+  ghost(g: GhostView | null) {
+    const layer = this.layers.draw;
+    layer.replaceChildren();
+    if (!g) return;
+    const st = this.style;
+    const maxRank = this.config.maxRank;
+    for (const t of g.tiles) {
+      const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
+      el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
+      const { x, y } = centerOf(t.key);
+      el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
+    }
+    if (g.arrows) {
+      const c = centerOf(g.arrows.from);
+      for (const d of g.arrows.dirs) {
+        const nb = DIRECTIONS[d]!;
+        const n = centerOf(coordKey({ q: parseKey(g.arrows.from).q + nb.q, r: parseKey(g.arrows.from).r + nb.r }));
+        const ang = (Math.atan2(n.y - c.y, n.x - c.x) * 180) / Math.PI;
+        const ax = c.x + (n.x - c.x) * 0.62;
+        const ay = c.y + (n.y - c.y) * 0.62;
+        el('path', { d: 'M-5,-5 L3,0 L-5,5', class: 'draw-arrow', transform: `translate(${ax.toFixed(1)},${ay.toFixed(1)}) rotate(${ang.toFixed(0)})`, 'data-dir': d }, layer);
+      }
+    }
+    if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
+  }
+
+  /** A small shake of the ghost: lifting the finger on a blocked line does nothing else. */
+  shake(reduceMotion: boolean) {
+    if (reduceMotion) return;
+    this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });
+  }
 
   /** Builds the static parts (terrain) for a game and theme. */
   setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK, paletteId: ThemeId = 'soil') {
@@ -144,13 +246,6 @@ export class BoardView {
         el('stop', { offset: 0.62, 'stop-color': col, 'stop-opacity': 0.92 }, gr);
         el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
       }
-      // the top-rank glow: a soft round sprite (a gradient, not a live filter)
-      for (const [kind, col] of [['moss', '#d8ffe6'], ['lava', '#ff5a2e']] as const) {
-        const gr = el('radialGradient', { id: this.id(`top-glow-${kind}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
-        el('stop', { offset: 0.55, 'stop-color': col, 'stop-opacity': 0.55 }, gr);
-        el('stop', { offset: 0.8, 'stop-color': col, 'stop-opacity': 0.22 }, gr);
-        el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
-      }
       this.world.onFirst = () => {
         if (this.lastRender) this.render(...this.lastRender);
       };
@@ -183,9 +278,11 @@ export class BoardView {
       base: el('g', { class: 'l-base' }, svg),
       scars: el('g', { class: 'l-scars' }, svg),
       tiles: el('g', { class: 'l-tiles' }, svg),
+      glow: el('g', { class: 'l-glow' }, svg),
       veins: el('g', { class: 'l-veins' }, svg),
       marks: el('g', { class: 'l-marks' }, svg),
       over: el('g', { class: 'l-over' }, svg),
+      draw: el('g', { class: 'l-draw' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
     for (const key of this.keys) {
@@ -212,20 +309,23 @@ export class BoardView {
 
   private bindHex(g: SVGGElement, key: string) {
     g.addEventListener('pointerdown', (e) => {
+      if (this.drawing) return;
       this.pressed = key;
       this.longPressed = false;
       clearTimeout(this.pressTimer);
       if (e.pointerType !== 'mouse') {
         this.pressTimer = setTimeout(() => {
           this.longPressed = true;
-          this.handlers.inspect(key);
+          if (this.handlers.hold) this.handlers.hold(key);
+          else this.handlers.inspect(key);
         }, 450);
       }
     });
     g.addEventListener('pointerup', () => {
       clearTimeout(this.pressTimer);
+      if (this.drawing) return;
       if (this.pressed === key && !this.longPressed) this.handlers.tap(key);
-      if (this.longPressed) setTimeout(() => this.handlers.inspect(null), 1600);
+      if (this.longPressed && !this.handlers.hold) setTimeout(() => this.handlers.inspect(null), 1600);
       this.pressed = null;
     });
     g.addEventListener('pointercancel', () => clearTimeout(this.pressTimer));
@@ -234,7 +334,7 @@ export class BoardView {
       if (e.pointerType === 'mouse') this.handlers.inspect(null);
     });
     g.addEventListener('pointerenter', (e) => {
-      if (e.pointerType === 'mouse') this.handlers.inspect(key);
+      if (e.pointerType === 'mouse' && !this.drawing) this.handlers.inspect(key);
     });
   }
 
@@ -297,6 +397,7 @@ export class BoardView {
       if (!t) continue;
       this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
     }
+    this.drawGlows(board);
 
     // ---- overlays ----
     if (o.targets) {
@@ -317,7 +418,7 @@ export class BoardView {
       for (const key of o.fruitValid ?? []) el('path', { d: hexPath(key, S - 3, st.tileShape), class: 'target fruit-valid', 'data-key': key }, over);
       (o.fruitPicked ?? []).forEach((key, i) => {
         el('path', { d: hexPath(key, S - 2, st.tileShape), class: 'fruit-picked', 'data-key': key }, over);
-        this.markBadge(over, key, String(i + 1), 'fruit');
+        this.markBadge(over, key, o.fruitSoft ? '−' : String(i + 1), 'fruit');
       });
       if (o.fruitTarget) {
         el('path', { d: hexPath(o.fruitTarget, S - 2, st.tileShape), class: 'fruit-target', 'data-key': o.fruitTarget }, over);
@@ -429,17 +530,9 @@ export class BoardView {
       // Material pass 2: the shared landscape, the full hex, the strength in the material itself.
       const tt = vigour(t.strength, maxRank);
       const d = hexPath(key, S * 0.995, st.tileShape);
-      const c = contour(tt);
       const kind = t.owner === 0 ? 'moss' : 'lava';
-      if (c > 0) el('circle', { cx: x, cy: y, r: S * 1.18, class: `top-glow ${kind}`, fill: this.url(`top-glow-${kind}`), style: `opacity:${(0.9 * c).toFixed(2)}` }, g);
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
-      if (c > 0) {
-        // the top rank: a double rim (an outer contour and an inner line) that reads without colour
-        el('path', { d: hexPath(key, S * 0.95, st.tileShape), class: `top-rim outer ${kind}`, style: `opacity:${c.toFixed(2)}` }, g);
-        el('path', { d: hexPath(key, S * 0.83, st.tileShape), class: `top-rim inner ${kind}`, style: `opacity:${(0.85 * c).toFixed(2)}` }, g);
-        if (this.look.motion) el('path', { d: hexPath(key, S * 0.95, st.tileShape), class: `top-shimmer ${kind}`, pathLength: 1, style: `opacity:${c.toFixed(2)};animation-delay:${(-hash(key) * 5).toFixed(2)}s` }, g);
-      }
       const ns = numberStyle(kind, tt, this.paletteId);
       el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
       el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
@@ -451,6 +544,41 @@ export class BoardView {
     el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
+  }
+
+  /** Changes the top-rank glow (settings), redrawing it; `scale` is only for the lab's comparison rows. */
+  setGlow(o: GlowOpts, scale = 1) {
+    this.glowOpts = o;
+    this.glowScale = scale;
+    if (this.lastRender) this.drawGlows(this.lastRender[0]);
+  }
+
+  /** The slight glow on top-rank tiles: a faint pre-rendered halo, above the tiles, under everything else. */
+  private drawGlows(board: Record<string, Tile | null>) {
+    const layer = this.layers.glow;
+    layer.replaceChildren();
+    const now = new Set<string>();
+    for (const key of this.keys) {
+      const t = board[key];
+      if (!t || t.root) continue;
+      const kind = t.owner === 0 ? 'moss' : 'lava';
+      const glow = topGlow(vigour(t.strength, this.config.maxRank), kind, this.glowOpts);
+      if (!glow) continue;
+      const sprite = glowSprite(glow.color, glow.blur, this.style.tileShape);
+      if (!sprite) continue;
+      now.add(key);
+      const { x, y } = centerOf(key);
+      const e = sprite.extent;
+      const img = el('image', { href: sprite.url, x: x - e, y: y - e, width: e * 2, height: e * 2, class: `top-glow ${kind}`, 'data-key': key, style: `--op:${Math.min(1, glow.opacity * this.glowScale).toFixed(3)}` }, layer);
+      // newly at the top (a Strengthen, or a tile grown at the top rank): fade in, nothing else
+      if (this.glowKeys && !this.glowKeys.has(key)) img.classList.add('glow-in');
+      if (glow.breathe) {
+        img.classList.add('breathe');
+        img.style.setProperty('--breathe', String(1 - glow.breathe.amount));
+        img.style.setProperty('--breathe-ms', `${glow.breathe.periodMs}ms`);
+      }
+    }
+    this.glowKeys = now;
   }
 
   /** New material pixels landed: the changed tiles fade from their old look to the new one. */

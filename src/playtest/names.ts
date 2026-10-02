@@ -4,6 +4,7 @@ import type { Action, Card, Coord, Player, View } from '../engine/index.js';
 import { simulate } from '../bots/evaluate.js';
 import type { Simulation } from '../bots/evaluate.js';
 import { hexName } from './names-core.js';
+import { OPP } from '../strings.js';
 
 export { hexName };
 
@@ -14,8 +15,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const effects = (sim: Simulation): string => {
   const parts: string[] = [];
-  if (sim.taken > 0) parts.push(`taking ${plural(sim.taken, 'bot tile')}`);
-  if (sim.botCut > 0) parts.push(sim.taken > 0 ? `cutting off ${sim.botCut} more` : `cutting off ${plural(sim.botCut, 'bot tile')}`);
+  if (sim.taken > 0) parts.push(`taking ${plural(sim.taken, `${OPP.noun} tile`)}`);
+  if (sim.botCut > 0) parts.push(sim.taken > 0 ? `cutting off ${sim.botCut} more` : `cutting off ${plural(sim.botCut, `${OPP.noun} tile`)}`);
   return parts.length ? `, ${parts.join(' and ')}` : '';
 };
 
@@ -40,7 +41,7 @@ export const moveSentence = (v: View, a: Action): string => {
       const tip = { q: a.start.q + d.q * (a.cards.length - 1), r: a.start.r + d.r * (a.cards.length - 1) };
       const before = hexDistance(a.start, target);
       const after = hexDistance(tip, target);
-      const way = after < before ? 'toward the bot' : after > before ? 'away from the bot' : 'sideways';
+      const way = after < before ? `toward ${OPP.the}` : after > before ? `away from ${OPP.the}` : 'sideways';
       return `Grow a line of ${a.cards.length} tiles from ${hn(a.start)} ${way}${effects(sim)}${pointsText(sim)}`;
     }
     case 'MeldSet': {
@@ -56,18 +57,18 @@ export const moveSentence = (v: View, a: Action): string => {
     case 'Fruit': {
       const sim = simulate(v, a)!;
       const more = sim.botCut > 0 ? `, cutting off ${sim.botCut} more` : '';
-      return `Give up 3 of your tiles to destroy the bot tile at ${hn(a.target)}${more}${pointsText(sim)}`;
+      return `Give up 3 of your tiles to destroy ${OPP.theirs} tile at ${hn(a.target)}${more}${pointsText(sim)}`;
     }
     case 'EndAct':
       return "I'm done playing cards";
     case 'Discard':
       return `Throw ${cardName(v.hand.find((c) => c.id === a.card)!)}`;
     case 'Knock':
-      return 'Knock: the bot gets one last turn, then the higher score wins';
+      return `Knock: ${OPP.the} gets one last turn, then the higher score wins`;
     case 'Continue':
       return 'End my turn';
     case 'RotPick':
-      return `Let the bot's tile at ${hn(a.coord)} rot`;
+      return `Let ${OPP.theirs} tile at ${hn(a.coord)} rot`;
   }
 };
 

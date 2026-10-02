@@ -4,6 +4,7 @@
 import { coordKey, planRun, planSet, planSprout } from '../../../src/engine/index.js';
 import type { Action, Player, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
+import { OPP } from '../../../src/strings.js';
 
 export type Ghost = { key: string; strength: number; replaces: boolean };
 export type Preview = {
@@ -55,7 +56,7 @@ export const previewMove = (v: View, a: Action): Preview | null => {
       points: 0,
       chip: `Strengthen ${plan.strengthen.from} → ${t.strength}`,
       warning: null,
-      note: 'No points, but harder for the bot to replace. It does not stop a cut or Fruit.',
+      note: `No points, but harder for ${OPP.the} to replace. It does not stop a cut or Fruit.`,
     };
   }
   const ghosts = plan.tiles.map((t) => {
@@ -73,6 +74,6 @@ export const previewMove = (v: View, a: Action): Preview | null => {
     cutKeys,
     points: sim.points,
     chip: chipText({ ...core, points: sim.points }),
-    warning: after > before && !sim.wins ? `The bot could cut ${after} of your tiles.` : null,
+    warning: after > before && !sim.wins ? `${OPP.The} could cut ${after} of your tiles.` : null,
   };
 };

@@ -17,6 +17,9 @@ describe('settings (saved in the browser)', () => {
       weakPulse: true,
       effects: 'normal',
       materialDetail: 'normal',
+      topGlow: 'subtle', // polish pass 3: the slight top-rank glow
+      confirmDraw: null, // polish pass 3: "Confirm moves" for drawn lines and clumps; the device decides (touch on, mouse off)
+      placementList: false, // polish pass 3: opt-in list of placements while drawing
     });
   });
 

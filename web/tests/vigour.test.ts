@@ -1,8 +1,6 @@
 // Material pass 2: strength shows in the material. Pure logic, written before the code.
 import { describe, expect, it } from 'vitest';
 import {
-  CONTOUR_START,
-  contour,
   fieldT,
   lavaLook,
   lavaPalette,
@@ -67,16 +65,6 @@ describe('every look parameter moves one way with t', () => {
     }
   });
 
-  it('the top-rank contour is 0 below t = 0.85 and 1 at the top, rising in between', () => {
-    expect(CONTOUR_START).toBe(0.85);
-    for (const t of T) if (t < 0.85) expect(contour(t)).toBe(0);
-    expect(contour(1)).toBe(1);
-    expect(contour(0.92)).toBeGreaterThan(0);
-    expect(contour(0.92)).toBeLessThan(1);
-  });
-});
-
-describe('one landscape: world-position noise and smooth blending', () => {
   it('the same world position always gives the same value; nearby positions differ smoothly', () => {
     for (let i = 0; i < 200; i++) {
       const x = i * 7.31 - 300;

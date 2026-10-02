@@ -11,8 +11,34 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, options, playNow, optionsLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
-import { FRUIT_START, fruitAction, fruitButton, fruitPickable, fruitPreview, fruitUndo, tapFruit } from './logic/fruitflow.js';
+import { growControls, isBoardAction, kindOf, moveButtons, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { fruitAction, fruitChange, fruitNext, fruitOffer, fruitPickable, fruitPreview, fruitUndo, hexTapIntent, showTopTip, startFruit, tapFruit } from './logic/fruitflow.js';
+import type { FruitOffer } from './logic/fruitflow.js';
+import {
+  DESK_IDLE,
+  clumpEnter,
+  clumpGhost,
+  clumpHexes,
+  clumpMatch,
+  clumpProblem,
+  clumpTap,
+  comboFor,
+  confirmMovesFor,
+  deskClick,
+  deskHover,
+  deskShape,
+  drawStarts,
+  hexAtPoint,
+  hexesAlong,
+  keyStep,
+  lineArrows,
+  lineEnds,
+  lineGhost,
+  onlyPlacement,
+  pixelOf,
+  snapDir,
+} from './logic/draw.js';
+import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
@@ -32,6 +58,7 @@ import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { GLOW_SETTINGS } from './logic/topglow.js';
 import type { Settings } from './logic/settings.js';
 import { THEMES, THEME_IDS, cssVars, resolveColors, themeOf } from './logic/themes.js';
 import { DETAILS, MATERIAL_TOKENS, materialLook, materialsOf } from './logic/materials.js';
@@ -49,6 +76,7 @@ import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
+import { OPP } from '../../src/strings.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -84,6 +112,8 @@ const SEEN_KEY = 'severgrow.seen';
 /** v0.5: the Fruit flow while it is open (null otherwise), and its last gentle refusal. */
 let fruitFlow: FruitFlow | null = null;
 let fruitMsg: string | null = null;
+/** Polish pass 3: the tile card stays open (pinned) after a tap or long-press, so its buttons can be used. */
+let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
 let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
@@ -116,7 +146,7 @@ let pumping = false;
 let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
-const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k) });
+const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k), hold: (k) => pinCard(k) });
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -151,7 +181,7 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
-  if (session) board.setup(session.state.config, session.state.terrain, t.style, look());
+  if (session) board.setup(session.state.config, session.state.terrain, t.style, look(), t.id);
   lastBoard = null;
   drawLogo();
   render();
@@ -232,19 +262,20 @@ function renderHowTo() {
   const sprout = (cfg?.sproutsPerTurn ?? 1) > 0;
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
-    '<p><b>Goal:</b> have more points than the bot at the end. Each tile scores 1 point, or 2 on a gold hex.</p>',
+    `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? ' Once per turn you can <b>sprout</b> one tile with any single card.' : ''}</p>`,
-    '<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker bot tile.</p>',
+    `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
+    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
-      ? ['<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for the bot to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to the bot; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>']
+      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or Fruit. <i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i> <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((cfg?.fruitPerPlayer ?? 1) > 0
-      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one bot tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. <i>Example: a bot 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
+      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. To use it, tap an ${OPP.noun} tile and choose “Fruit this tile”: the game suggests which of your tiles to give up, and you can change them. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
-    "<p><b>Win early:</b> surround the bot's root so it can't grow.</p>",
-    `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to the bot.</p>`,
+    `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
+    `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
@@ -265,7 +296,7 @@ function renderLevelGrid() {
       const wins = stats.winsByLevel[lv - 1] ?? 0;
       b.className = `level-tile${settings.level === lv ? ' on' : ''}${lv === 7 ? ' classic' : ''}`;
       b.dataset.level = String(lv);
-      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? ', the classic bot' : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
+      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? `, the classic ${OPP.noun}` : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
       b.innerHTML = `<span class="lt-num num">${lv}</span>${wins ? `<span class="lt-wins num">${wins}</span>` : ''}<span class="lt-icon">${LEVEL_ICONS[lv]}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span>`;
       b.addEventListener('click', () => {
         sound.unlock();
@@ -301,6 +332,15 @@ function syncSettingsForm() {
   segmented('detail-seg', DETAILS, settings.materialDetail, cap, (d) => {
     settings.materialDetail = d;
     applyTheme();
+  });
+  segmented('glow-seg', GLOW_SETTINGS, settings.topGlow, cap, (g) => {
+    settings.topGlow = g;
+    render();
+  });
+  // "Confirm moves" for drawn lines and clumps: Auto follows the device (touch on, mouse off)
+  const cm = settings.confirmDraw === null ? 'auto' : settings.confirmDraw ? 'on' : 'off';
+  segmented('confirm-seg', ['auto', 'on', 'off'] as const, cm, (x) => (x === 'auto' ? `Auto (${finePointer() ? 'off' : 'on'} here)` : cap(x)), (x) => {
+    settings.confirmDraw = x === 'auto' ? null : x === 'on';
   });
 }
 
@@ -346,7 +386,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   focusKey = null;
   gameOverDismissed = false;
   botBusy = false;
-  board.setup(state.config, state.terrain, theme().style, look());
+  board.setup(state.config, state.terrain, theme().style, look(), theme().id);
   lastBoard = null;
   showScreen('game');
   scheduleBot();
@@ -860,14 +900,35 @@ function armIdle() {
   }, 8000);
 }
 
+/** Polish pass 3: hands the top-rank glow its settings when they change. */
+let glowKey = '';
+function syncGlow() {
+  const o = { setting: settings.topGlow, effects: settings.effects, reduceMotion: settings.reduceMotion };
+  const k = JSON.stringify(o);
+  if (k === glowKey) return;
+  glowKey = k;
+  board.setGlow(o);
+}
+
 function render() {
+  syncGlow();
   if (!session || $('game').hidden) return;
   armIdle();
   const v = session.view;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
+  const combo = drawCombo();
+  if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
+  // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
+  if (combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle') {
+    const only = onlyPlacement(combo);
+    if (only) session.preset(only);
+  }
+  board.setDrawing(!!combo && !session.presetMove, drawHandlers);
   renderBoard(v, advice);
+  if (combo) paintDraw();
+  else $('draw-info').hidden = true;
   renderControls(v, advice);
   renderHand(v, advice);
   renderPiles(v, advice);
@@ -894,10 +955,10 @@ function renderGuide(advice: Advice | null) {
     guideGoal = null;
     return;
   }
-  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow);
-  if (t?.kind === 'other') {
-    // Right card and hex: switch straight to the coach's way of growing there.
-    session.sel = { ...session.sel, option: t.option };
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow, cardPinned ? inspectKey : null, session.pending);
+  if (t?.kind === 'preset') {
+    // A line or clump: the coach shows its placement on the board, ready to confirm.
+    session.preset(guideGoal);
     render();
     return;
   }
@@ -940,6 +1001,15 @@ function renderGuide(advice: Advice | null) {
     case 'kind':
       rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
       break;
+    case 'fruit':
+      rect = above(document.querySelector('#tooltip .tc-fruit'));
+      break;
+    case 'change':
+      rect = above(document.querySelector('#moves .fruit-change'));
+      break;
+    case 'next':
+      rect = above(document.querySelector('#moves .fruit-next'));
+      break;
   }
   if (!rect) return;
   arrow.hidden = false;
@@ -964,7 +1034,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
   // The tip shows only when the ? is tapped; it closes again after each move.
   $('hint').textContent = hintText(session.view);
   $('hint').hidden = !hintOpen || !$('hint').textContent;
@@ -990,7 +1060,7 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 function hintText(v: View): string {
   if (!session) return '';
   if (v.phase === 'GAME_OVER') return busy() ? '' : 'Game over.';
-  if (v.actor !== HUMAN) return busy() ? 'Watch the bot’s move…' : 'The bot is thinking…';
+  if (v.actor !== HUMAN) return busy() ? `Watch ${OPP.theirs} move…` : `${OPP.The} is thinking…`;
   if (busy()) return '';
   const low = v.deckCount <= 3 ? ` ${v.deckCount === 0 ? 'The deck is empty.' : `Only ${plural(v.deckCount, 'card')} left.`}` : '';
   const sel = session.sel;
@@ -1000,17 +1070,23 @@ function hintText(v: View): string {
     case 'ACT': {
       if (fruitFlow) {
         if (fruitMsg) return fruitMsg;
-        if (fruitFlow.step === 1) return `Fruit, step 1: pick ${v.config.fruitSacrifice} of your tiles that touch each other, to give up (${fruitFlow.counter}).`;
-        if (fruitFlow.step === 2) return fruitFlow.note ? `Fruit, step 2: pick the bot tile to remove. ${fruitFlow.note}` : 'Fruit, step 2: pick the bot tile to remove.';
-        return 'Fruit, step 3: check the result, then Confirm.';
+        const n = v.config.fruitSacrifice;
+        if (fruitFlow.step === 2) return 'Fruit: check the result, then Confirm.';
+        if (fruitFlow.changing) return `Fruit: tap ${n} of your tiles that touch each other, at least one next to the tile you remove (${fruitFlow.picks.length}/${n}).`;
+        return `Fruit: these ${n} tiles cut off the fewest of yours. Next, or Change.`;
       }
       if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
-      if (session.pending) return 'More than one way to grow here: pick one, then Confirm (or tap the spot again).';
+      if (session.pending && drawCombo()) return 'Confirm to place it, or draw it again.';
+      if (session.pending) return 'Confirm, or tap the spot again.';
+      {
+        const dc = drawCombo();
+        if (dc) return finePointer() ? `Click where your ${dc.kind} starts, then click where it ends. Esc cancels.` : dc.kind === 'line' ? 'Drag across the board to draw your line.' : `Drag over ${dc.n} hexes to draw your clump.`;
+      }
       if (sel.card !== null) {
         const kinds = new Set(targetKinds(v, session.legal, sel).values());
         if (kinds.size === 0) return "That card can't grow anywhere now.";
         if (sel.kind !== 'sprout') return 'Tap a glowing hex to grow there.';
-        const parts = [kinds.has('grow') ? 'grow on an empty hex' : null, kinds.has('replace') ? 'replace a bot tile (⇆)' : null, kinds.has('strengthen') ? 'strengthen your tile (+)' : null].filter(Boolean);
+        const parts = [kinds.has('grow') ? 'grow on an empty hex' : null, kinds.has('replace') ? `replace an ${OPP.noun} tile (⇆)` : null, kinds.has('strengthen') ? 'strengthen your tile (+)' : null].filter(Boolean);
         return `Tap a glowing hex: ${parts.join(', ')}.`;
       }
       if (sel.kind !== null) return 'Tap a glowing hex.';
@@ -1023,7 +1099,7 @@ function hintText(v: View): string {
     case 'KNOCK':
       return 'Knock to end the game soon, or end your turn.';
     case 'ROT_PICK':
-      return 'Tap the bot tile that rots.';
+      return `Tap ${OPP.theirs} tile that rots.`;
     default:
       return '';
   }
@@ -1037,7 +1113,7 @@ function renderBoard(v: View, advice: Advice | null) {
     const pending = session.pending;
     const pv = pending ? previewMove(v, pending) : null;
     const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
-    const kinds = !pending && (sel.card !== null || sel.kind !== null) ? targetKinds(v, session.legal, sel) : null;
+    const kinds = !pending && (sel.card !== null || sel.kind !== null) && !drawCombo() ? targetKinds(v, session.legal, sel) : null;
     o = {
       ...o,
       targets: !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null,
@@ -1048,6 +1124,8 @@ function renderBoard(v: View, advice: Advice | null) {
       coachHexes: advice && !anySel ? advice.hexes.map(coordKey) : [],
       usable: true,
     };
+    const dc = drawCombo();
+    if (dc && !pending) o = { ...o, targets: dc.kind === 'line' ? drawStarts(dc) : clumpHexes(dc), selectedHex: null, coachHexes: [] };
     if (fruitFlow && v.phase === 'ACT') {
       const fa = fruitAction(session.legal, fruitFlow);
       const pv = fa ? fruitPreview(v, fa) : null;
@@ -1058,8 +1136,9 @@ function renderBoard(v: View, advice: Advice | null) {
         coachHexes: [],
         selectedHex: null,
         cutKeys: pv ? [...pv.ownCut, ...pv.theirCut] : [],
-        fruitValid: fruitFlow.step < 3 ? [...fruitPickable(v, session.legal, fruitFlow)] : [],
+        fruitValid: [...fruitPickable(v, session.legal, fruitFlow)],
         fruitPicked: fruitFlow.picks,
+        fruitSoft: !fruitFlow.changing,
         fruitTarget: fruitFlow.target,
       };
     }
@@ -1124,19 +1203,26 @@ function renderTooltip(v: View) {
   else if (!t) html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>`;
   else {
     const mine = t.owner === HUMAN;
-    const who = mine ? 'Your' : "Bot's";
+    const who = mine ? 'Your' : OPP.Label;
     if (t.root) html = `<b>${name} · ${who} root</b><span>It can never be taken.</span>`;
     else {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
-      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : 'the bot loses'} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'its'} root. ${lose}</span>`;
+      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
     }
   }
+  // Polish pass 3: in my Grow step, an opponent tile's card offers Fruit (a button, or a line saying why not yet)
+  const offer: FruitOffer = cardPinned && myTurn() ? fruitOffer(v, session.legal, key) : null;
+  if (offer?.kind === 'action') html += `${offer.note ? `<span class="tc-note">${offer.note}</span>` : ''}<button type="button" class="btn primary small tc-fruit" data-fruit="${key}">${offer.label}</button>`;
+  else if (offer?.kind === 'info') html += `<span class="tc-info">${offer.text}</span>`;
   tip.innerHTML = html;
   tip.hidden = false;
+  tip.classList.toggle('pinned', cardPinned);
   const p = boardWrapPoint(key);
   const wrap = $('board-wrap').getBoundingClientRect();
+  tip.setAttribute('role', cardPinned ? 'dialog' : 'tooltip');
+  tip.setAttribute('aria-label', `Tile card: ${name}`);
   const w = Math.min(250, wrap.width - 16);
   tip.style.width = `${w}px`;
   tip.style.left = `${Math.min(Math.max(p.x - w / 2, 8), wrap.width - w - 8)}px`;
@@ -1212,29 +1298,6 @@ function renderControls(v: View, advice: Advice | null) {
     if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
     if (end && !pending && grow.skipLink && !anySel) moves.append(button('Skip sprout', `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), 'Skip the sprout and throw a card'));
-    // Fruit (once per game): only shown when Fruit is on; disabled with a one-line reason.
-    const fb = fruitButton(v, legal);
-    if (fb.show && !anySel && !pending) {
-      const b = button(fb.used ? 'Fruit · Used' : `Fruit · ${fb.left} left`, `fruit${fb.enabled ? '' : ' off'}${advice?.action.t === 'Fruit' ? ' coach-glow' : ''}`, () => {
-        if (!fb.enabled) return;
-        fruitFlow = FRUIT_START;
-        fruitMsg = null;
-        session!.cancel();
-        render();
-      }, fb.enabled ? 'Use your Fruit: give up 3 tiles to remove one bot tile' : `Fruit: ${fb.reason}`);
-      b.dataset.kind = 'fruit';
-      if (!fb.enabled) {
-        b.setAttribute('aria-disabled', 'true');
-        b.title = fb.reason ?? '';
-      }
-      moves.append(b);
-      if (!fb.enabled && !fb.used && fb.reason) {
-        const why = document.createElement('span');
-        why.className = 'fruit-why';
-        why.textContent = fb.reason;
-        moves.append(why);
-      }
-    }
   } else if (v.phase === 'DISCARD') {
     const note = document.createElement('p');
     note.className = 'step-note';
@@ -1245,6 +1308,32 @@ function renderControls(v: View, advice: Advice | null) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
     }
+  }
+  const dc = drawCombo();
+  if (dc && !pending) {
+    const note = document.createElement('p');
+    note.className = 'step-note draw-note';
+    note.textContent = finePointer()
+      ? `Click where your ${dc.kind} starts, then click to finish (or drag)`
+      : dc.kind === 'line' ? 'Drag across the board to draw your line' : 'Drag over hexes to draw your clump';
+    moves.append(note);
+    if (dc.kind === 'clump' && draw.shape.length > 0) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+  }
+  if (dc && settings.placementList) {
+    // an opt-in accessibility list: step through every legal placement of this combo
+    const all = dc.actions;
+    const i = Math.max(0, all.findIndex((a) => JSON.stringify(a) === JSON.stringify(pending)));
+    const step = (d: number) => {
+      const k = pending ? (i + d + all.length) % all.length : d > 0 ? 0 : all.length - 1;
+      session!.preset(all[k]!);
+      render();
+    };
+    moves.append(button('◀', 'ghost list-prev', () => step(-1), 'Previous placement'));
+    const lab = document.createElement('span');
+    lab.className = 'list-pos';
+    lab.textContent = pending ? `Placement ${i + 1} of ${all.length}` : `${all.length} placements`;
+    moves.append(lab);
+    moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
   if (anySel && !pending) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
   if (session.canUndo && !anySel) moves.append(button('Undo', 'ghost undo', () => undoMove(), 'Undo your last move'));
@@ -1257,45 +1346,58 @@ function renderControls(v: View, advice: Advice | null) {
     warn.hidden = !pv?.warning && !pv?.note;
     warn.textContent = pv?.warning ?? pv?.note ?? '';
     warn.classList.toggle('note', !pv?.warning && !!pv?.note);
-    const opts = options(v, legal, sel);
-    const n = opts.length;
-    const other = $('confirm-other');
-    other.hidden = n < 2;
-    other.textContent = `${optionsLabel(opts)} ${(sel.option % Math.max(n, 1)) + 1}/${n}`;
+    // Polish pass 3: previewing a Sprout onto an opponent tile? A small "i" opens its tile card,
+    // so Fruit stays reachable while a card is picked.
+    const info = $('confirm-info');
+    const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
+    info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
+    if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
     $('confirm').hidden = false;
   }
 }
 
-/** The Fruit flow: a progress line, a counter or note, Undo and Cancel; step 3 previews and confirms. */
+/**
+ * The Fruit flow (polish pass 3, target first). Step 1: the suggested tiles, "Give up these
+ * 3 tiles", with Change and Next (or, while changing, a counter). Step 2: the plain-words
+ * preview and Confirm. Undo and Cancel at every step.
+ */
 function renderFruitFlow(v: View) {
   if (!session || !fruitFlow) return;
+  const f = fruitFlow;
   const moves = $('moves');
+  const n = v.config.fruitSacrifice;
   const steps = document.createElement('ol');
   steps.className = 'fruit-steps';
-  ['Pick 3', 'Pick target', 'Confirm'].forEach((t, i) => {
+  [`Give up ${n} tiles`, 'Confirm'].forEach((t, i) => {
     const li = document.createElement('li');
-    li.textContent = i === 0 ? `Pick ${v.config.fruitSacrifice}` : t;
-    if (i + 1 === fruitFlow!.step) li.className = 'now';
-    else if (i + 1 < fruitFlow!.step) li.className = 'done';
+    li.textContent = t;
+    li.className = i + 1 === f.step ? 'now' : i + 1 < f.step ? 'done' : '';
     steps.append(li);
   });
   moves.append(steps);
-  if (fruitFlow.step === 1) {
+  const redo = (next: typeof f) => {
+    fruitFlow = next;
+    fruitMsg = null;
+    render();
+  };
+  if (f.step === 1 && f.changing) {
     const c = document.createElement('span');
     c.className = 'fruit-count';
-    c.textContent = fruitFlow.counter;
-    c.setAttribute('aria-label', `${fruitFlow.counter} tiles picked`);
+    c.textContent = `${f.picks.length}/${n}`;
+    c.setAttribute('aria-label', `${f.picks.length} of ${n} tiles picked`);
     moves.append(c);
+  } else if (f.step === 1) {
+    const what = document.createElement('span');
+    what.className = 'fruit-give';
+    what.textContent = `Give up these ${n} tiles`;
+    moves.append(what);
+    moves.append(button('Change', 'ghost fruit-change', () => redo(fruitChange(f)), `Pick other tiles to give up`));
+    moves.append(button('Next', 'primary fruit-next', () => redo(fruitNext(session!.legal, f)), 'See what this Fruit does'));
   }
-  if (fruitFlow.step > 1 || fruitFlow.picks.length > 0) {
-    moves.append(button('Undo', 'ghost undo', () => {
-      fruitFlow = fruitUndo(fruitFlow!);
-      fruitMsg = null;
-      render();
-    }, 'Undo the last Fruit pick'));
-  }
-  moves.append(button('Cancel', 'ghost cancel', () => cancelSel(), 'Cancel the Fruit'));
-  const fa = fruitAction(session.legal, fruitFlow);
+  if (f.step === 2 || (f.changing && (f.picks.length > 0 || f.before.length > 0))) moves.append(button('Undo', 'ghost undo', () => redo(fruitUndo(f)), 'Undo the last Fruit step'));
+  // (at step 2 the preview bar has its own Cancel)
+  if (f.step === 1) moves.append(button('Cancel', 'ghost cancel', () => cancelSel(), 'Cancel the Fruit'));
+  const fa = fruitAction(session.legal, f);
   if (fa) {
     const pv = fruitPreview(v, fa);
     $('confirm-chip').textContent = pv.chip;
@@ -1304,7 +1406,6 @@ function renderFruitFlow(v: View) {
     warn.hidden = pv.warnings.length === 0;
     warn.textContent = pv.warnings.join(' ');
     warn.classList.remove('note');
-    $('confirm-other').hidden = true;
     $('confirm').hidden = false;
   }
 }
@@ -1317,13 +1418,15 @@ function renderFirstTip(v: View) {
     return;
   }
   if (!tipOpen && myTurn() && !busy() && v.phase === 'ACT') {
-    if (!tipsSeen.fruit && fruitButton(v, session.legal).enabled) tipOpen = 'fruit';
+    if (!tipsSeen.draw && drawCombo()) tipOpen = 'draw';
+    else if (showTopTip(v, !!tipsSeen.fruit)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
   card.hidden = !tipOpen;
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
+  $('first-tip-demo').hidden = tipOpen !== 'draw';
 }
 
 function showTip(id: FirstTip) {
@@ -1452,7 +1555,7 @@ function renderGameOver() {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
   };
-  $('go-break').textContent = `You: ${part(HUMAN)} · Bot: ${part(BOT)}`;
+  $('go-break').textContent = `You: ${part(HUMAN)} · ${OPP.label}: ${part(BOT)}`;
   $('go-stats').textContent = statsLine(stats);
   $('go-highlights').replaceChildren(
     ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
@@ -1494,10 +1597,13 @@ function undoMove() {
 }
 
 function cancelSel() {
+  draw = { ...DRAW0 };
+  board.ghost(null);
   fruitFlow = null;
   fruitMsg = null;
   session?.cancel();
   inspectKey = null;
+  cardPinned = false;
   render();
 }
 
@@ -1527,13 +1633,217 @@ function onCardTap(id: number) {
   maybeAutoPlay();
 }
 
+// ---------- drawing a line or clump (polish pass 3) ----------
+
+type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
+type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; list: number; others: number };
+const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null, list: -1, others: 0 };
+let draw: DrawUi = { ...DRAW0 };
+let drawFrame = 0;
+const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+
+/** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
+function drawCombo(): Combo | null {
+  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT' || fruitFlow) return null;
+  return comboFor(session.view, session.legal, session.sel);
+}
+
+/** The ghost of the shape being drawn right now (null when nothing is drawn). */
+function drawGhostNow(c: Combo): DrawGhost | null {
+  const v = session!.view;
+  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk);
+  if (c.kind === 'line') {
+    const start = draw.shape[0];
+    if (!start) return null;
+    if (draw.dir === null) return { tiles: [], action: null, reason: null };
+    return lineGhost(v, c, start, draw.dir);
+  }
+  return draw.shape.length ? clumpGhost(v, c, draw.shape) : null;
+}
+
+/** Repaints only the ghost layer and the info card (no full board redraw), once per frame. */
+function paintDraw() {
+  cancelAnimationFrame(drawFrame);
+  drawFrame = requestAnimationFrame(() => {
+    const c = drawCombo();
+    if (!c || !session) return;
+    const g = session.presetMove ? null : drawGhostNow(c);
+    const lineStart = c.kind === 'line' ? (draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]) : undefined;
+    const showArrows = lineStart && (draw.desk.phase === 'live' ? draw.desk.hover === draw.desk.start : draw.dir === null);
+    board.ghost(g || showArrows ? {
+      tiles: g?.tiles ?? [],
+      blocked: !!g && !g.action && g.tiles.length > 0,
+      arrows: showArrows ? { from: lineStart!, dirs: lineArrows(c, lineStart!) } : null,
+      cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
+    } : null);
+    renderDrawInfo(c, g);
+  });
+}
+
+/** The info card above the board: the counter, the result chip or why not, in plain words (also read out). */
+function renderDrawInfo(c: Combo, g: DrawGhost | null) {
+  const box = $('draw-info');
+  const v = session!.view;
+  let text = '';
+  if (session!.presetMove) text = '';
+  else if (g?.action) {
+    const pv = previewMove(v, g.action);
+    text = `${c.kind === 'clump' ? `${c.n}/${c.n} · ` : ''}${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+  } else if (c.kind === 'clump' && draw.shape.length) text = clumpProblem(v, c, draw.shape) ?? '';
+  else if (g?.reason) text = g.reason;
+  else if (draw.msg) text = draw.msg;
+  box.textContent = text;
+  box.hidden = !text;
+  const n = c.kind === 'clump' ? draw.shape.length : g?.tiles.length ?? 0;
+  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : c.kind === 'clump' && n ? `${n} of ${c.n} hexes chosen` : '';
+}
+
+/** A soft rising tick and a light haptic for each hex added (Sound and Vibration toggles). */
+function drawTick(i: number) {
+  if (settings.sound) sound.grow([pitchLadder(i + 1, 0)[i]!], 0);
+  vibrate(settings.vibration, 6);
+}
+
+function cancelDraw(msg: string | null = null) {
+  draw = { ...DRAW0, msg };
+  board.ghost(null);
+  render();
+}
+
+/** A finished shape: placed at once, or shown with Confirm (the "Confirm moves" setting). */
+function finishDraw(a: Meld) {
+  draw = { ...DRAW0 };
+  board.ghost(null);
+  if (confirmMovesFor(settings.confirmDraw, finePointer())) {
+    session!.preset(a);
+    render();
+  } else humanPlay(a);
+}
+
+/** A tap or click on a hex while drawing (no drag): the two-click machine, or clump tapping. */
+function drawTap(c: Combo, key: string, type: string) {
+  const v = session!.view;
+  if (c.kind === 'line' || (type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
+    const r = deskClick(draw.desk, key, v, c);
+    if (r.finish) return finishDraw(r.finish);
+    // a tap on another legal start begins again from there
+    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && (c.kind === 'line' ? lineEnds(c) : clumpHexes(c)).has(key) && !deskShape(v, c, r.desk).action) {
+      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [], dir: null };
+    } else draw = { ...draw, desk: r.desk, shape: [], dir: null };
+    if (r.desk.phase === 'live' && draw.desk.phase === 'live') drawTick(0);
+    paintDraw();
+    return;
+  }
+  const next = clumpTap(draw.shape, key, c);
+  if (next.length > draw.shape.length) drawTick(next.length - 1);
+  draw = { ...draw, shape: next, msg: null };
+  const m = clumpMatch(c, next);
+  if (m) return finishDraw(m);
+  paintDraw();
+}
+
+const drawHandlers = {
+  down(p: Pt, e: PointerEvent) {
+    const c = drawCombo();
+    if (!c || !session) return;
+    if (e.button === 2) return cancelDraw();
+    // a second finger (a pinch, a scroll) cancels the drawing
+    if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
+    session.preset(null);
+    const keys = new Set(board.boardKeys);
+    const key = hexAtPoint(p.x, p.y, keys);
+    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
+    if (e.pointerType === 'mouse' && draw.desk.phase === 'live') return; // the click finishes on release
+    if (!key) return;
+    if (c.kind === 'line' && lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
+    // a clump hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
+    paintDraw();
+  },
+  move(p: Pt, e: PointerEvent) {
+    const c = drawCombo();
+    if (!c) return;
+    const keys = new Set(board.boardKeys);
+    if (!draw.ptr) {
+      // the mouse hovering after a first click: the live shape follows it
+      if (draw.desk.phase === 'live') {
+        const k = hexAtPoint(p.x, p.y, keys);
+        if (k && k !== draw.desk.hover) {
+          draw = { ...draw, desk: deskHover(draw.desk, k) };
+          paintDraw();
+        }
+      }
+      return;
+    }
+    if (e.pointerId !== draw.ptr.id) return;
+    const ptr = draw.ptr;
+    if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
+      ptr.moved = true;
+      // a drag on a clump begins with the hex it started on
+      if (c.kind === 'clump' && ptr.downKey && !draw.shape.includes(ptr.downKey)) {
+        const next = clumpEnter(draw.shape, ptr.downKey, c);
+        if (next.length > draw.shape.length) drawTick(next.length - 1);
+        draw = { ...draw, shape: next, msg: null };
+      }
+    }
+    // only hexes the finger moves INTO count (not the one it is already on): so starting a
+    // new stroke on a hex of the shape never reads as "dragging back"
+    const entered: string[] = [];
+    for (const k of hexesAlong(ptr.last, p, keys)) {
+      if (k === ptr.cur) continue;
+      entered.push(k);
+      ptr.cur = k;
+    }
+    ptr.last = p;
+    if (!ptr.moved) return;
+    if (c.kind === 'line' && draw.shape[0]) {
+      const o = pixelOf(draw.shape[0]);
+      const dir = snapDir(p.x - o.x, p.y - o.y, draw.dir);
+      if (dir !== draw.dir) {
+        draw = { ...draw, dir };
+        if (dir !== null) drawTick(c.n - 1);
+      }
+    } else if (c.kind === 'clump') {
+      let shape = draw.shape;
+      for (const k of entered) {
+        const next = clumpEnter(shape, k, c);
+        if (next.length > shape.length) drawTick(next.length - 1);
+        shape = next;
+      }
+      draw = { ...draw, shape };
+    }
+    paintDraw();
+  },
+  up(p: Pt, e: PointerEvent, inside: boolean) {
+    const c = drawCombo();
+    const ptr = draw.ptr;
+    if (!c || !ptr || ptr.id !== e.pointerId) return;
+    draw.ptr = null;
+    if (!ptr.moved) {
+      if (ptr.downKey) drawTap(c, ptr.downKey, ptr.type);
+      return;
+    }
+    // lifting the finger outside the board: nothing is placed
+    if (!inside) return cancelDraw('Drawing cancelled');
+    const g = drawGhostNow(c);
+    if (g?.action) return finishDraw(g.action);
+    if (c.kind === 'line') {
+      if (draw.dir !== null) board.shake(settings.reduceMotion);
+      draw = { ...draw, shape: [], dir: null, msg: g?.reason ?? null };
+    } else if (draw.shape.length === c.n) draw = { ...draw, msg: clumpProblem(session!.view, c, draw.shape) };
+    paintDraw();
+    void p;
+  },
+  cancel() {
+    if (draw.ptr || draw.shape.length || draw.desk.phase === 'live') cancelDraw();
+  },
+};
+
 function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn() || (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK')) {
-    inspectKey = inspectKey === key ? null : key;
-    render();
+    pinCard(inspectKey === key && cardPinned ? null : key);
     return;
   }
   sound.click();
@@ -1542,10 +1852,18 @@ function onHexTap(key: string) {
     fruitFlow = r.flow;
     fruitMsg = r.refused;
     inspectKey = null;
+    cardPinned = false;
     if (r.refused) caption(r.refused, key, 'info');
     render();
     return;
   }
+  // Polish pass 3: an opponent tile the picked card cannot take (or any opponent tile with
+  // nothing picked) opens its tile card, which offers Fruit. The picked card stays picked.
+  if (session.view.phase === 'ACT' && hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard') {
+    pinCard(inspectKey === key && cardPinned ? null : key);
+    return;
+  }
+  cardPinned = false;
   // Tapping the previewed hex again plays the move (same as Confirm).
   if (session.sel.hex === key && session.pending) return humanPlay(session.pending);
   session.tapHex(key);
@@ -1555,9 +1873,30 @@ function onHexTap(key: string) {
 }
 
 function onInspect(key: string | null) {
-  // no tile tooltips over the board while the Fruit flow is picking tiles
+  // hovering never moves a pinned tile card; no tile cards while the Fruit flow is picking tiles
+  if (cardPinned) return;
   inspectKey = fruitFlow ? null : key;
   if (session) renderTooltip(session.view);
+}
+
+/** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
+function pinCard(key: string | null) {
+  if (fruitFlow) key = null;
+  inspectKey = key;
+  cardPinned = key !== null;
+  render();
+}
+
+/** "Fruit this tile" in the tile card: step 1 with the suggested tiles. */
+function startFruitOn(key: string) {
+  if (!session) return;
+  sound.click();
+  session.cancel();
+  fruitFlow = startFruit(session.view, session.legal, key);
+  fruitMsg = null;
+  inspectKey = null;
+  cardPinned = false;
+  render();
 }
 
 function replayBotTurn() {
@@ -1571,7 +1910,7 @@ function replayBotTurn() {
   for (const p of turn) queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && !(s.k === 'draw' && s.player === HUMAN)));
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
-  banner('Replay: bot’s turn');
+  banner(`Replay: ${OPP.Label} turn`, 'bot');
   render();
   void pump();
 }
@@ -1637,16 +1976,20 @@ bind('confirm-play', () => {
   if (a) humanPlay(a);
 });
 bind('confirm-cancel', () => cancelSel());
+bind('confirm-info', () => {
+  const k = $('confirm-info').dataset.key;
+  if (k) pinCard(k);
+});
+$('tooltip').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-fruit]');
+  if (b) startFruitOn(b.dataset.fruit!);
+});
 bind('first-tip-ok', () => {
   if (tipOpen) {
     tipsSeen = markTip(tipsSeen, tipOpen);
     store.set(TIPS_KEY, JSON.stringify(tipsSeen));
   }
   tipOpen = null;
-  render();
-});
-bind('confirm-other', () => {
-  session?.nextOption();
   render();
 });
 bind('deck', () => {
@@ -1741,6 +2084,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
     else if (busy()) fastForward();
+    // Esc first stops the shape being drawn; again, it cancels the line or clump
+    else if (drawCombo() && (draw.shape.length || draw.desk.phase === 'live' || draw.ptr)) cancelDraw();
     else cancelSel();
     return;
   }
@@ -1755,18 +2100,29 @@ document.addEventListener('keydown', (e) => {
   if (dir) {
     e.preventDefault();
     const keys = board.boardKeys;
-    const cur = parseKey(focusKey ?? keys[Math.floor(keys.length / 2)]!);
-    const [dq, dr] = dir;
-    // Up and down alternate between the two hexes above (or below) to stay in a column.
-    const shift = dr === 0 ? 0 : dr < 0 ? (cur.r % 2 === 0 ? 1 : 0) : cur.r % 2 === 0 ? 0 : -1;
-    const next = coordKey({ q: cur.q + dq + shift, r: cur.r + dr });
-    focusKey = keys.includes(next) ? next : coordKey(cur);
-    inspectKey = focusKey;
+    focusKey = keyStep(focusKey ?? keys[Math.floor(keys.length / 2)]!, e.key, new Set(keys));
+    void dir;
+    const dc = drawCombo();
+    if (dc && draw.desk.phase === 'live') {
+      draw = { ...draw, desk: deskHover(draw.desk, focusKey) };
+      paintDraw();
+    }
+    inspectKey = dc ? null : focusKey;
     render();
     $('board').setAttribute('aria-label', `Board: ${describeHex(focusKey)}`);
+  } else if ((e.key === 'Enter' || e.key === ' ') && session.presetMove && drawCombo()) {
+    e.preventDefault();
+    humanPlay(session.presetMove);
   } else if ((e.key === 'Enter' || e.key === ' ') && focusKey) {
     e.preventDefault();
-    onHexTap(focusKey);
+    const dc = drawCombo();
+    if (dc) drawTap(dc, focusKey, 'keyboard');
+    else onHexTap(focusKey);
+  } else if (e.key === 'Backspace' && drawCombo()) {
+    e.preventDefault();
+    if (draw.desk.phase === 'live') draw = { ...draw, desk: DESK_IDLE };
+    else draw = { ...draw, shape: draw.shape.slice(0, -1) };
+    paintDraw();
   }
 });
 
@@ -1776,7 +2132,7 @@ function describeHex(key: string) {
   const name = hexName(parseKey(key), v.config.boardRadius);
   if (v.terrain[key] === 'rock') return `${name}, rock`;
   if (!t) return `${name}, empty${v.terrain[key] === 'rich' ? ' gold hex' : ''}`;
-  return `${name}, ${t.owner === HUMAN ? 'your' : 'bot'} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
+  return `${name}, ${t.owner === HUMAN ? 'your' : OPP.noun} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
 }
 
 // In the background, finish animations at once: on return the board is simply current.

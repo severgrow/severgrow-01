@@ -1,12 +1,13 @@
 // Three highlights for the game-over screen, computed from the game's event history.
 import type { Event, Player } from '../../../src/engine/index.js';
+import { OPP } from '../../../src/strings.js';
 
 export type Highlight = { title: string; by: Player | null; value: number; text: string };
 
 const tiles = (n: number) => `${n} tile${n === 1 ? '' : 's'}`;
 
 export const gameHighlights = (history: readonly Event[], viewer: Player): Highlight[] => {
-  const who = (p: Player) => (p === viewer ? 'You' : 'The bot');
+  const who = (p: Player) => (p === viewer ? 'You' : OPP.The);
   let cut = { by: null as Player | null, n: 0 };
   let move = { by: null as Player | null, n: 0 };
   let grow = { by: null as Player | null, n: 0 };
@@ -37,7 +38,7 @@ export const gameHighlights = (history: readonly Event[], viewer: Player): Highl
       title: 'Biggest cut',
       by: cut.by,
       value: cut.n,
-      text: cut.by === null ? 'No cuts this game' : cut.by === viewer ? `You cut off ${cut.n} bot ${cut.n === 1 ? 'tile' : 'tiles'}` : `The bot cut off ${cut.n} of your tiles`,
+      text: cut.by === null ? 'No cuts this game' : cut.by === viewer ? `You cut off ${cut.n} ${OPP.noun} ${cut.n === 1 ? 'tile' : 'tiles'}` : `${OPP.The} cut off ${cut.n} of your tiles`,
     },
     { title: 'Biggest single move', by: move.by, value: move.n, text: move.by === null ? 'No moves' : `${who(move.by)} changed ${tiles(move.n)} in one move` },
     { title: 'Most tiles at once', by: grow.by, value: grow.n, text: grow.by === null ? 'No tiles grown' : `${who(grow.by)} grew ${tiles(grow.n)} at once` },

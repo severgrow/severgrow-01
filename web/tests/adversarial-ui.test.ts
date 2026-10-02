@@ -71,7 +71,7 @@ describe('adversarial UI tests', () => {
       const steps = s.lastTurnOf(1).at(-1)!.steps;
       const sever = steps.find((x) => x.k === 'sever' && x.player === 0)!;
       expect(sever.k === 'sever' && sever.keys.length).toBe(n);
-      expect(captionFor(sever, 0)).toBe(`The bot cut off ${n} of your tiles`);
+      expect(captionFor(sever, 0)).toBe(`Your opponent cut off ${n} of your tiles`);
       // Halfway through the animation, the cut tiles are still shown; after it, they are gone.
       expect(queue.pending).toBe(steps.length);
       while (queue.pending > 0 && queue.next() !== sever) {

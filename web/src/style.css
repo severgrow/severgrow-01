@@ -1054,6 +1054,7 @@ svg.usable .hex-cell {
 .tooltip {
   position: absolute;
   z-index: 3;
+  box-sizing: border-box;
   padding: 10px 12px;
   border-radius: var(--radius);
   background: var(--c-surface);
@@ -2739,7 +2740,6 @@ svg.usable .hex-cell {
 }
 .fruit-steps li.done {
   opacity: 0.6;
-  text-decoration: line-through;
 }
 .fruit-count {
   font-weight: var(--w-num);
@@ -2792,58 +2792,30 @@ svg.usable .hex-cell {
   stroke: rgba(0, 0, 0, 0.32);
   stroke-width: 0.7;
 }
-/* the top rank: a double rim (reads without colour), a soft outer glow, a slow shimmer */
-.top-rim {
-  fill: none;
-  stroke-linejoin: round;
-}
-.top-rim.outer {
-  stroke-width: 1.7;
-}
-.top-rim.inner {
-  stroke-width: 0.8;
-}
-.top-rim.moss {
-  stroke: #e9fff2;
-}
-.top-rim.lava {
-  stroke: #ffb3a0;
-}
+/* polish pass 3: the top rank's only finish is a faint pre-rendered halo (no outline) */
 .top-glow {
   pointer-events: none;
+  opacity: var(--op, 0.2);
 }
-.top-shimmer {
-  fill: none;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-dasharray: 0.12 0.88;
-  animation: top-shimmer 5.5s linear infinite;
+.top-glow.glow-in {
+  animation: glow-in 500ms ease-out both;
 }
-.top-shimmer.moss {
-  stroke: #ffffff;
-}
-.top-shimmer.lava {
-  stroke: #ffd6c8;
-}
-@keyframes top-shimmer {
-  0% {
-    stroke-dashoffset: 0;
-    stroke-opacity: 0;
-  }
-  10% {
-    stroke-opacity: 0.85;
-  }
-  45% {
-    stroke-opacity: 0.85;
-  }
-  55%,
-  100% {
-    stroke-dashoffset: -1;
-    stroke-opacity: 0;
+@keyframes glow-in {
+  from {
+    opacity: 0;
   }
 }
-.reduce-motion .top-shimmer {
-  display: none;
+/* Effects: High only: an almost imperceptible, very slow breathing */
+.top-glow.breathe {
+  animation: glow-breathe var(--breathe-ms, 6000ms) ease-in-out infinite alternate;
+}
+@keyframes glow-breathe {
+  to {
+    opacity: calc(var(--op, 0.2) * var(--breathe, 0.96));
+  }
+}
+.reduce-motion .top-glow {
+  animation: none;
 }
 .tile-num.world {
   paint-order: normal;
@@ -2926,4 +2898,190 @@ svg.usable .hex-cell {
 .turn b, .turn small { transition: color 300ms ease; }
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.sweep::after, .turn-pill .tp-dots i { animation: none; }
+}
+
+/* polish pass 3: the lab's glow comparison row */
+.lab-glow-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.lab-glow-row figure {
+  margin: 0;
+}
+.lab-glow-row figcaption {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--c-muted);
+}
+.lab-board.small {
+  width: 100%;
+  height: auto;
+}
+
+/* ---- polish pass 3: the tile card offers Fruit ---- */
+.tooltip.pinned {
+  pointer-events: auto;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.35);
+}
+.tooltip .tc-note {
+  color: var(--c-text);
+  font-weight: 600;
+  margin-top: 4px;
+}
+.tooltip .tc-info {
+  margin-top: 4px;
+  font-style: italic;
+}
+.tooltip .tc-fruit {
+  margin-top: 8px;
+  align-self: flex-start;
+}
+.btn.small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+.icon-info {
+  min-width: 36px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+.fruit-give {
+  font-size: 0.85rem;
+  color: var(--c-text);
+  align-self: center;
+}
+
+/* ---- polish pass 3: drawing a line or clump ---- */
+.board.drawing {
+  touch-action: none; /* no pinch or scroll starts while drawing */
+  cursor: crosshair;
+}
+.draw-ghost .ghost-tile {
+  stroke-dasharray: none;
+}
+.draw-ghost.cant .ghost-tile {
+  fill: var(--c-muted);
+  fill-opacity: 0.25;
+  stroke: var(--c-bad, #e25b4b);
+  stroke-dasharray: 3 3;
+}
+.draw-ghost.cant .ghost-num {
+  opacity: 0.55;
+}
+.draw-ghost.blocked:not(.cant) .ghost-tile {
+  fill-opacity: 0.22;
+}
+.draw-arrow {
+  fill: none;
+  stroke: var(--c-text);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.draw-cursor {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 2.2;
+}
+/* the counter and result chip sit above the board, never under the finger */
+.draw-info {
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  border: 1px solid var(--c-line);
+  font-size: 0.85rem;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+}
+.list-pos {
+  font-size: 0.85rem;
+  align-self: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* polish pass 3: the drawing hint has no "look down at your hand" arrow */
+.step-note.draw-note::after {
+  content: none;
+}
+/* the one-time drawing tip: a ghost finger sliding over a mini strip of hexes */
+.draw-demo {
+  position: relative;
+  display: flex;
+  gap: 3px;
+  height: 30px;
+  margin: 4px 0 6px;
+}
+.draw-demo i {
+  width: 26px;
+  height: 30px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  background: color-mix(in srgb, var(--c-you) 35%, transparent);
+  animation: demo-fill 2.4s infinite;
+}
+.draw-demo i:nth-child(2) {
+  animation-delay: 0.35s;
+}
+.draw-demo i:nth-child(3) {
+  animation-delay: 0.7s;
+}
+.draw-demo .finger {
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c-text) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-text) 18%, transparent);
+  animation: demo-finger 2.4s infinite ease-in-out;
+}
+@keyframes demo-finger {
+  0%, 10% { transform: translateX(0); opacity: 0; }
+  20% { opacity: 1; }
+  60% { transform: translateX(58px); opacity: 1; }
+  80%, 100% { transform: translateX(58px); opacity: 0; }
+}
+@keyframes demo-fill {
+  0%, 15% { background: color-mix(in srgb, var(--c-you) 25%, transparent); }
+  35%, 75% { background: color-mix(in srgb, var(--c-you) 75%, transparent); }
+  100% { background: color-mix(in srgb, var(--c-you) 25%, transparent); }
+}
+.reduce-motion .draw-demo i,
+.reduce-motion .draw-demo .finger {
+  animation: none;
+}
+.reduce-motion .draw-demo .finger {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .draw-demo i, .draw-demo .finger { animation: none; }
+}
+/* polish pass 3: "Opponent's turn" stays on one line in the header capsule */
+.turn b {
+  white-space: nowrap;
+}
+.turn.bot b {
+  font-size: 0.82rem;
+}
+.turn .dots {
+  margin-left: 1px;
 }

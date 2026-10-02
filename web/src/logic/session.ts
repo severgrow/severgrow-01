@@ -18,6 +18,8 @@ export class Session {
   /** States before each take-back-able move of the player's current turn (see undo). */
   private undoStack: State[] = [];
   private cache: { state: State; view: View; legal: Action[] } | null = null;
+  /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
+  private drawn: Action | null = null;
 
   constructor(
     public state: State,
@@ -41,22 +43,35 @@ export class Session {
     return this.memo.legal;
   }
   get pending(): Action | null {
+    if (this.drawn && this.legal.some((a) => same(a, this.drawn!))) return this.drawn;
     return this.legal.length ? pendingAction(this.view, this.legal, this.sel) : null;
   }
 
+  /** A drawn placement to preview and confirm (null clears it). Only a legal move is kept. */
+  preset(a: Action | null) {
+    this.drawn = a && this.legal.some((x) => same(x, a)) ? a : null;
+  }
+  get presetMove(): Action | null {
+    return this.drawn;
+  }
+
   tapCard(id: number) {
+    this.drawn = null;
     this.sel = tapCard(this.view, this.legal, this.sel, id);
   }
   tapHex(key: string) {
+    this.drawn = null;
     this.sel = tapHex(this.view, this.legal, this.sel, key);
   }
   tapKind(kind: string) {
+    this.drawn = null;
     this.sel = tapKind(this.sel, kind);
   }
   nextOption() {
     this.sel = { ...this.sel, option: this.sel.option + 1 };
   }
   cancel() {
+    this.drawn = null;
     this.sel = EMPTY_SEL;
   }
 
@@ -80,6 +95,7 @@ export class Session {
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
     this.sel = EMPTY_SEL;
+    this.drawn = null;
     const last = this.turns.at(-1);
     if (last && last.player === s.turnPlayer && last.plays.at(-1)!.after === s) last.plays.push(played);
     else this.turns.push({ player: s.turnPlayer, plays: [played] });
@@ -97,6 +113,7 @@ export class Session {
     if (!this.canUndo) return false;
     this.state = this.undoStack.pop()!;
     this.sel = EMPTY_SEL;
+    this.drawn = null;
     const last = this.turns.at(-1);
     if (last && last.player === this.viewer) last.plays.pop();
     return true;
