@@ -2857,7 +2857,8 @@ svg.usable .hex-cell {
 .turn-pill {
   position: absolute;
   left: 50%;
-  top: 34%;
+  /* at the top edge of the board area: never over tiles or the bot's captions */
+  top: 8px;
   z-index: 2;
   display: flex;
   align-items: center;
