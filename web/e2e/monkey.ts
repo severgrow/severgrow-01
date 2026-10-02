@@ -4,7 +4,7 @@
 // game state passes the engine's own invariants (no tile on rock or off the board, roots in
 // place, strengths 1-9, every tile joined to its root, no card in two places), and when the
 // page is idle the board shows exactly the tiles the state has. Games that end start again.
-//   npx tsx web/e2e/monkey.ts [--steps=400] [--seed=7] [--only=phone|desktop]   (MONKEY_TRACE=1 prints each step)
+//   npx tsx web/e2e/monkey.ts [--steps=400] [--seed=7] [--only=phone|desktop] [--version=seed]   (MONKEY_TRACE=1 prints each step)
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
 import { chromium } from 'playwright-core';
 import type { CDPSession, Page } from 'playwright-core';
@@ -17,6 +17,7 @@ const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`
 const STEPS = Number(arg('steps') ?? 400);
 const SEED = Number(arg('seed') ?? 7);
 const ONLY = arg('only'); // 'phone' or 'desktop'
+const VERSION = arg('version') === 'seed' ? 'seed' : 'sprout'; // which version of the Seed A/B test to play
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4191, strictPort: true }, logLevel: 'silent' });
 const BASE = 'http://localhost:4191/';
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
@@ -72,7 +73,7 @@ const run = async (name: string, touch: boolean, seed: number) => {
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip' }));
   });
   await page.goto(BASE);
-  await page.click('#menu-sprout');
+  await page.click(`#menu-${VERSION}`);
   await page.click('#level-grid [data-level="3"]');
   const cdp: CDPSession | null = touch ? await page.context().newCDPSession(page) : null;
   const touchAt = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
@@ -196,7 +197,7 @@ const run = async (name: string, touch: boolean, seed: number) => {
   }
   const s = (await hook(page)).state;
   moves += s?.history?.length ?? 0;
-  console.log(`${name}: ${STEPS} random actions (${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}); ${games} games finished; ${moves} moves played`);
+  console.log(`${name} (${VERSION}): ${STEPS} random actions (${Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(', ')}); ${games} games finished; ${moves} moves played`);
   await page.close();
   return moves;
 };
