@@ -2453,3 +2453,27 @@ svg.usable .hex-cell {
 .reduce-motion .vein-casing.grow-in {
   animation: none;
 }
+
+/* The four corner buttons sit on the corners of the board itself (set by placeCorners),
+   all the same round icon buttons; their names show only when switched on. */
+.corner.tl {
+  top: var(--b-top, 0);
+  left: var(--b-left, 0);
+}
+.corner.tr {
+  top: var(--b-top, 0);
+  right: var(--b-right, 0);
+}
+.corner.bl {
+  bottom: var(--b-bottom, 0);
+  left: var(--b-left, 0);
+}
+.corner.br {
+  bottom: var(--b-bottom, 0);
+  right: var(--b-right, 0);
+}
+#tool-replay,
+#tool-skip {
+  width: var(--h-btn);
+  padding: 0;
+}

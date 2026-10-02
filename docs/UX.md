@@ -61,7 +61,7 @@ noise); the whole polish pass adds about 5 kB to the page after compression.
 
 One light for the whole game, from the top-left. Every raised thing gets a thin bright
 rim on its top-left edge, a soft darker edge on the bottom-right, a soft contact shadow
-and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is lava.
+and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is fire.
 
 | Material | What it is | Detail |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is la
   deeper one when picked. **Buttons** are slightly raised and press down softly.
 - **Built once:** gradients and one small noise texture (a 64×64 canvas, made once) are
   shared by the whole board; each tile is a handful of plain shapes, with no per-tile filters.
-- **Registry:** `web/src/ui/materials.ts` registers each material (moss, lava, rock, empty,
+- **Registry:** `web/src/ui/materials.ts` registers each material (moss, fire, rock, empty,
   gold); a new one (for example "wild" for a world map) is one more registration.
 - **Material lab:** open the page with `?lab=1` (add `&detail=low` for Low) to see every
   material in every palette.

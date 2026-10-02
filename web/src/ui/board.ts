@@ -216,7 +216,7 @@ export class BoardView {
 
     for (const s of o.scars) {
       if (board[s.key]) continue;
-      // what a cut-off tile leaves: dried moss (mine) or cooled lava ash (the bot's)
+      // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's)
       drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(scars, s.key));
     }
 
@@ -321,7 +321,7 @@ export class BoardView {
       return g;
     }
     const k = tileScale(t.strength, maxRank);
-    // The material (moss or lava) with its lowkey depth; then the number and marker, crisp on top.
+    // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
     el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
