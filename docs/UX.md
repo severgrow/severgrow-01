@@ -99,6 +99,53 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
 - **Material lab:** open the page with `?lab=1` (add `&detail=low` for Low) to see every
   material in every palette.
 
+## Strength in the material (material pass 2)
+
+A tile's strength shows in the material itself, not only in its number.
+- **Vigour** `t = (strength - 1) / (maxRank - 1)`: 0 for a 1, 1 for the top rank (the same
+  for 7- and 9-rank decks). Every look setting follows `t` smoothly (`web/src/logic/vigour.ts`).
+- **Moss:** a 1 is patchy, mostly bare soil with short pale blades; as `t` rises the blades get
+  taller and denser, the soil closes up, small red, yellow and white flowers appear, and
+  from about `t = 0.6` roots show between the clumps; the green deepens.
+- **Lava:** a 1 is dark cooled crust with about 3% molten showing; a top-rank tile is about 95%
+  molten. Plates shrink, cracks widen, the glow grows. Red-orange only, never yellow or
+  amber (amber means gold hexes). A test checks every colour.
+- **Top rank:** from `t = 0.85` a double rim (outer contour + inner line) and a soft glow, so
+  it reads without colour; a slow shimmer runs along the rim (off with Reduce motion).
+- **Seamless neighbours:** the texture is painted in board (world) coordinates, so grass,
+  soil, cracks and plates run on from tile to tile. Between two tiles of the same owner,
+  `t` blends over about a third of a tile across the shared border, so a 1 beside a 9 has
+  no seam. Moss and lava never blend into each other. Hex edges stay drawn.
+- **Numbers:** a soft round plate behind the digit (light under moss, dark under lava) keeps
+  every number at WCAG AA contrast over the worst texture pixel, in every palette.
+- **Legend** (How to play): "A bushier tile or hotter lava means a stronger tile."
+- **How it is drawn:** one offscreen canvas holds the whole board's material
+  (`web/src/logic/worldpaint.ts`, pure and deterministic: the same board always gives the
+  same pixels). Every moss and lava tile is filled with it through an SVG pattern. After a
+  move only the changed tiles are repainted, plus the area they can reach in their
+  neighbours, in thin slices of rows so a frame is never held up; the new picture
+  cross-fades in on the changed tiles. A test proves no pixel outside that area changes.
+- **Low:** Settings → Material detail → Low paints fewer blades and no flowers or roots. A
+  device that needs more than 2.5 s of work for a full paint switches to Low by itself.
+  Without a canvas, tiles keep their plain fill.
+- **Lab:** `?lab=1` shows the 1-9 ramp for moss and lava, and a board of mixed strengths
+  where moss meets lava, in every palette (`&detail=low` for Low).
+
+## The turn pill
+
+At the start of each turn a pill says **Your turn** (circle) or **Bot's turn** (diamond):
+250 ms in (fade and a 6 px slide), 700 ms hold with one thin highlight sweeping across it,
+250 ms out. The header capsule cross-fades to the new side, a faint wash of that side's
+colour shows along the board's edge, and two soft tones play (a gentle rise for you, a
+lower settle for the bot; only with Sound on). During the bot's turn quiet dots show
+until its first move appears, and only while it is really still choosing.
+- Follows Animation speed; **Skip** hides it at once; **Reduce motion** gives a plain quick
+  fade (no slide, sweep or wash); **Effects: Low** gives a plain pill (no sweep or wash).
+- A new turn always replaces the old pill; nothing stacks.
+- No countdowns, no flashing, no urgency: it only says whose turn it is.
+- Logic: `web/src/logic/turnbanner.ts` (a pure state machine, tested without timers);
+  drawing: `web/src/ui/turnpill.ts`.
+
 ## Gold hexes and board marks
 
 - **Gold hex:** warm amber with a fine diagonal weave, a soft shimmer, and a small
