@@ -2,6 +2,7 @@ import { coordKey, isOnBoard, rootCoord } from './board.js';
 import { CENTRE, MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { ConfigError } from './errors.js';
 import { eligibleTerrainPairs, rootZone } from './terrain.js';
+import { RULESET_NAMES } from './ruleset.js';
 import type { RulesConfig } from './types.js';
 
 export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
@@ -65,10 +66,13 @@ const BOOLEAN_KEYS = [
 ] as const;
 
 
+/** Keys that may be absent from a config (the default is then implied). */
+const OPTIONAL_KEYS = new Set(['ruleset']);
+
 /** Merges overrides onto the defaults and validates. Throws ConfigError. */
 export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig => {
   for (const key of Object.keys(overrides)) {
-    if (!(key in DEFAULT_CONFIG)) throw new ConfigError('UNKNOWN_KEY', `unknown config key "${key}"`);
+    if (!(key in DEFAULT_CONFIG) && !OPTIONAL_KEYS.has(key)) throw new ConfigError('UNKNOWN_KEY', `unknown config key "${key}"`);
   }
   const c: RulesConfig = { ...DEFAULT_CONFIG, ...overrides };
 
@@ -82,6 +86,9 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     if (typeof c[key] !== 'boolean') throw new ConfigError('INVALID_BOOLEAN', `${key} must be a boolean`);
   }
   if (c.maxRank > MAX_RANK) throw new ConfigError('INVALID_NUMBER', `maxRank must be ${MIN_MAX_RANK}-${MAX_RANK}, got ${c.maxRank}`);
+  if ('ruleset' in c && !RULESET_NAMES.includes(c.ruleset as never)) {
+    throw new ConfigError('INVALID_RULESET', `ruleset must be ${RULESET_NAMES.map((r) => `'${r}'`).join(' or ')}`);
+  }
   if (c.rootStyle !== 'ring2' && c.rootStyle !== 'corner') {
     throw new ConfigError('INVALID_ROOT_STYLE', `rootStyle must be 'ring2' or 'corner'`);
   }

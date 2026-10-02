@@ -12,6 +12,18 @@ default (see the appendix).
 
 ## Changelog
 
+**Seed A/B test** (rules versions `v0.5-fruit-strengthen` = Sprout, unchanged, and `v0.5-seed`)
+- **Why.** The owner wants to play both one-card moves side by side and pick one. Nothing
+  else changes; both rulesets are the same game.
+- **`ruleset` config key** (`'sprout' | 'seed'`, section 3). Absent means Sprout, so every
+  Sprout game, save, recording and golden fixture is byte-identical to before. `RULESETS`
+  holds each ruleset's overrides; `rulesetOf(config)` reads it.
+- **Seed (section 7.4.1).** The Sprout move, but the new tile is always worth **1** whatever
+  the card; the card is used up. A Seed tile carries `seed: true` until it is strengthened.
+- **Strengthen in Seed** is unchanged (a strictly higher card on my own non-root tile, and it
+  shares the turn's one Seed), except that it has **no per-game limit** (owner's choice), so
+  any Seed can later be grown.
+
 **v0.5: Fruit back, Strengthen, a provably fair deal** (this version; rules version
 `v0.5-fruit-strengthen`, bot version `bots-v0.6`)
 - **Why.** A top-rank tile cannot be replaced by a Sprout or a combo, and the bots used them
@@ -135,6 +147,7 @@ type RulesConfig = {
   rootsScore: boolean;          // false
   allowHyphaOneBend: boolean;   // false (not implemented)
   // Parked rules (appendix A), all off by default:
+  ruleset?: 'sprout' | 'seed';  // absent = 'sprout' (Seed A/B test, section 7.4.1)
   rotEnabled: boolean;          // false
   rotThreshold: number;         // 20
   rotStep: number;              // 8
@@ -268,6 +281,19 @@ at least one touching the network; every tile gets that rank.
   Fruit ignores strength. Event `Strengthen { player, card, coord, oldStrength, newStrength }`
   (instead of `Sprout`); resolution `strengthen: { coord, from, to }`. In `legalActions` it is a
   `Sprout` like any other (one card per suit/rank, board order).
+
+### 7.4.1 Seed (ruleset `seed`, the A/B test)
+With `ruleset: 'seed'` (overrides `RULESETS.seed` = `{ ruleset: 'seed', strengthenLimitPerGame: -1 }`,
+rules version `v0.5-seed`) the `Sprout` action is played as a **Seed**:
+- One card from hand is used up; the new tile has strength **1** (`SEED_STRENGTH`) whatever the
+  card's rank, and is written `{ owner, strength: 1, seed: true }`.
+- Placement is the Sprout's: `coord` touches the mover's network (root counts), no rock,
+  off-board, root or own tile. As 1 is never strictly stronger, a Seed never replaces an enemy
+  tile (`NOT_STRONGER`); it only claims empty hexes.
+- Strengthen is the same move on my own tile (section 7.4), sharing the turn's one Seed. A
+  strengthened tile is written without the `seed` mark. There is no per-game limit.
+- Everything else (combos, Fruit, Sever, Strangle, scoring, ending, events) is unchanged. The
+  event is still `Sprout`; the bots play it through the same `legalActions`.
 
 ### 7.5 Replacing ("overgrowth")
 `new.strength > old.strength` replaces the enemy tile. Equal is blocked; roots are immune. A

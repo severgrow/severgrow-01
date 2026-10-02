@@ -78,6 +78,10 @@ export const checkState = (
   for (const [key, t] of Object.entries(s.board)) {
     if (t && !t.root && (!Number.isInteger(t.strength) || t.strength < 1 || t.strength > 9)) fail(4, `strength ${t.strength} at ${key}`);
   }
+  // 4b. Seed marks: only in the Seed ruleset, only on non-root tiles worth exactly 1.
+  for (const [key, t] of Object.entries(s.board)) {
+    if (t?.seed && (s.config.ruleset !== 'seed' || t.root || t.strength !== 1)) fail(4, `bad seed mark at ${key}`);
+  }
 
   // 2. Every non-root tile connected to its root (Sever waits until all Rot picks are done).
   if (s.phase !== 'ROT_PICK') {
