@@ -2,7 +2,10 @@ name: Deploy web game
 
 # Builds web/ and publishes it to GitHub Pages whenever the default branch changes.
 on:
+  # main only: a run started by a push to any other branch would still join the "pages"
+  # group below and cancel a deploy of main that is in progress
   push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
