@@ -47,6 +47,8 @@ import { anim, cardFace, createEffects, shakeFrames } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
 import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
+import { TurnPill } from './ui/turnpill.js';
+import { bannerOpts, turnTone } from './logic/turnbanner.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -115,6 +117,14 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k) });
+/** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
+const pill = new TurnPill($('turn-pill'), $('edge-wash'));
+const announceTurn = (player: Player, label?: string) => {
+  const o = bannerOpts(settings);
+  pill.show(player, o, label);
+  const tone = turnTone(player, o);
+  if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
+};
 const { flash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
@@ -236,6 +246,7 @@ function renderHowTo() {
     "<p><b>Win early:</b> surround the bot's root so it can't grow.</p>",
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to the bot.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
+    '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
   ].join('');
 }
@@ -347,7 +358,7 @@ function startGame(seed: number, level: Level = settings.level) {
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(newGame(seed), null);
   save();
-  banner('Your turn');
+  announceTurn(HUMAN);
 }
 
 function continueGame() {
@@ -434,6 +445,7 @@ function scheduleBot() {
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
+    pill.botMoved();
     if (my !== epoch || !session) return;
     const p = session.play(action, BOT);
     botBusy = false;
@@ -442,6 +454,8 @@ function scheduleBot() {
   })();
 }
 let thinking = false;
+/** Which side the header capsule last showed (for its cross-fade). */
+let lastTurnKey = '';
 /** Whether the ? tip is open. */
 let hintOpen = false;
 /** The bot level of the game being played (kept with the saved game). */
@@ -777,7 +791,7 @@ async function playStep(step: Step, my: number) {
     }
     case 'turn': {
       if (!show()) return;
-      banner(step.player === HUMAN ? (step.final ? 'Your last turn' : 'Your turn') : "Bot's turn");
+      announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
       // My turn starts: a soft glow passes over my hand.
       if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
       await wait(320 * f, my);
@@ -945,6 +959,9 @@ function renderHud() {
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
   const each = st.config.maxTurnsPerPlayer;
   const turnNo = Math.min(Math.ceil(st.turnNumber / 2), each > 0 ? each : Infinity);
+  const turnKey = over ? 'over' : `${st.turnPlayer}`;
+  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' });
+  lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? 'Bot thinking<span class="dots"><i></i><i></i><i></i></span>' : "Bot's turn"}</b><small>Turn ${turnNo}${each > 0 ? ` of ${each}` : ''} · Level ${gameLevel}</small>`;
@@ -1651,7 +1668,10 @@ bind('tool-targets', () => {
   showOpps = !showOpps;
   render();
 });
-bind('tool-skip', () => fastForward());
+bind('tool-skip', () => {
+  pill.skip();
+  fastForward();
+});
 bind('tool-replay', () => replayBotTurn());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {
@@ -1799,6 +1819,7 @@ document.addEventListener('keydown', (e) => {
   settings: () => ({ ...settings }),
   busy: () => busy(),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
+  world: () => board.worldStats,
 };
 
 fillIcons();

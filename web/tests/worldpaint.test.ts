@@ -4,7 +4,10 @@
 import { describe, expect, it } from 'vitest';
 import { paintRect, rectFor } from '../src/logic/worldpaint.js';
 import type { PaintTile } from '../src/logic/worldpaint.js';
-import { S, centreOf, vigour } from '../src/logic/vigour.js';
+import { BLEND, S, centreOf, vigour } from '../src/logic/vigour.js';
+
+/** Mirrors REACH in ui/worldlayer.ts (that file needs a browser canvas, so it is not imported). */
+const REACH = BLEND / 2 + S * 0.4 + 1;
 
 const board = (entries: [string, PaintTile][]) => new Map(entries);
 const inp = (tiles: Map<string, PaintTile>) => ({ tiles, palette: 'soil' as const, detail: 'normal' as const });
@@ -139,5 +142,36 @@ describe('the world painter', () => {
     const a = paintRect(inp(board([['0,0', { owner: 1, t: vigour(7, 7) }]])), rectFor(['0,0'], 1, 0));
     const b = paintRect(inp(board([['0,0', { owner: 1, t: vigour(9, 9) }]])), rectFor(['0,0'], 1, 0));
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  });
+
+  it('ADVERSARIAL 2: after one tile changes, every pixel beyond REACH of it is exactly as before (repainting only that area leaves nothing stale)', () => {
+    // a ring of full-strength moss (long roots and blades) around the centre, and lava beside it
+    const ring = ['1,0', '1,-1', '0,-1', '-1,0', '-1,1', '0,1'];
+    const before = board([...ring.map((k) => [k, { owner: 0, t: 1 }] as [string, PaintTile]), ['2,0', { owner: 1, t: 0.6 }], ['2,-1', { owner: 1, t: 1 }]]);
+    const cases: [string, Map<string, PaintTile>][] = [
+      ['a new tile in the middle', new Map([...before, ['0,0', { owner: 0, t: 1 }]])],
+      ['a neighbour strengthened', new Map([...before, ['1,0', { owner: 0, t: 0.2 }]])],
+      ['a lava tile cooled', new Map([...before, ['2,0', { owner: 1, t: 0.6, dead: true }]])],
+      ['a tile removed', new Map([...before].filter(([k]) => k !== '0,1'))],
+    ];
+    const all = rectFor([...before.keys(), '0,0', '2,0', '2,-1'], 1, 0);
+    const a = paintRect(inp(before), all);
+    for (const [name, after] of cases) {
+      const changedKey = [...new Set([...before.keys(), ...after.keys()])].find((k) => JSON.stringify(before.get(k)) !== JSON.stringify(after.get(k)))!;
+      const zone = rectFor([changedKey], 1, REACH);
+      const b = paintRect(inp(after), all);
+      let differs = 0;
+      let inside = 0;
+      for (let y = 0; y < all.h; y++)
+        for (let x = 0; x < all.w; x++) {
+          const wx = all.x0 + x + 0.5;
+          const wy = all.y0 + y + 0.5;
+          const same = px(a, all.w, x, y).join() === px(b, all.w, x, y).join();
+          if (wx >= zone.x0 && wx < zone.x0 + zone.w && wy >= zone.y0 && wy < zone.y0 + zone.h) inside += same ? 0 : 1;
+          else if (!same) differs++;
+        }
+      expect(differs, name).toBe(0);
+      expect(inside, `${name}: the change shows`).toBeGreaterThan(50);
+    }
   });
 });

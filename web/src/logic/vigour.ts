@@ -201,7 +201,7 @@ export const mossPalette = (t: number, id: ThemeId): string[] => {
 
 /**
  * The colours the lava texture uses at t: dull cooled crust at t = 0, glowing molten rock
- * at t = 1. Red-orange family only; the hottest parts are a pale pink-orange, never yellow.
+ * at t = 1. Red-orange family only; the hottest parts are a bright red-orange, never yellow.
  */
 export const lavaPalette = (t: number, id: ThemeId): string[] => {
   const m = materialsOf(id).colors;
@@ -210,7 +210,7 @@ export const lavaPalette = (t: number, id: ThemeId): string[] => {
     mix('#4a4140', '#3c2a26', t), // crust, lit side
     mix('#5a2018', m.fireDeep, t), // a dull glow deep in the cracks / the cooler molten
     mix('#7a2a1c', m.fire, t), // molten
-    mix('#8a3424', '#ffb7a0', t), // the hottest highlight (pale pink-orange)
+    mix('#8a3424', '#ff7f4f', t), // the hottest highlight (bright red-orange)
   ];
 };
 

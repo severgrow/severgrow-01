@@ -145,7 +145,7 @@ export class BoardView {
         el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }, gr);
       }
       // the top-rank glow: a soft round sprite (a gradient, not a live filter)
-      for (const [kind, col] of [['moss', '#d8ffe6'], ['lava', '#ff8a6a']] as const) {
+      for (const [kind, col] of [['moss', '#d8ffe6'], ['lava', '#ff5a2e']] as const) {
         const gr = el('radialGradient', { id: this.id(`top-glow-${kind}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
         el('stop', { offset: 0.55, 'stop-color': col, 'stop-opacity': 0.55 }, gr);
         el('stop', { offset: 0.8, 'stop-color': col, 'stop-opacity': 0.22 }, gr);
@@ -236,6 +236,11 @@ export class BoardView {
     g.addEventListener('pointerenter', (e) => {
       if (e.pointerType === 'mouse') this.handlers.inspect(key);
     });
+  }
+
+  /** Material pass 2: repaint timings and canvas size (for the performance report). */
+  get worldStats() {
+    return this.world?.stats ?? null;
   }
 
   get boardKeys() {

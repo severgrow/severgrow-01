@@ -3,8 +3,10 @@
 import { describe, expect, it } from 'vitest';
 import { BANNER_MS, bannerView, botMoved, showTurn, tick, HIDDEN } from '../src/logic/turnbanner.js';
 import type { BannerOpts } from '../src/logic/turnbanner.js';
+import { bannerOpts, turnTone } from '../src/logic/turnbanner.js';
+import { DEFAULT_SETTINGS } from '../src/logic/settings.js';
 
-const normal: BannerOpts = { speed: 1, reduceMotion: false, skip: false };
+const normal: BannerOpts = { speed: 1, reduceMotion: false, skip: false, effects: 'normal' };
 const run = (s: ReturnType<typeof showTurn>, ms: number, step = 16) => {
   for (let t = 0; t < ms; t += step) s = tick(s, step);
   return s;
@@ -71,5 +73,36 @@ describe('the turn banner', () => {
     const v = bannerView(run(showTurn(HIDDEN, 0, normal), 400));
     expect(Object.keys(v)).not.toContain('countdown');
     expect(v.flash).toBe(false);
+  });
+
+  it('a faint edge wash on the side whose turn it is; Low effects: a plain pill (no sweep, no wash)', () => {
+    const held = run(showTurn(HIDDEN, 1, normal), 400);
+    expect(bannerView(held).wash).toBe('bot');
+    expect(bannerView(run(showTurn(HIDDEN, 0, normal), 400)).wash).toBe('you');
+    const low = run(showTurn(HIDDEN, 0, { ...normal, effects: 'low' }), 400);
+    expect(bannerView(low)).toMatchObject({ visible: true, sweep: false, wash: null });
+    expect(bannerView(run(showTurn(HIDDEN, 0, { ...normal, reduceMotion: true }), 200)).wash).toBe(null);
+    expect(bannerView(HIDDEN).wash).toBe(null);
+  });
+
+  it('the settings map onto the banner: speed, Skip, Reduce motion, effects', () => {
+    expect(bannerOpts(DEFAULT_SETTINGS)).toEqual({ speed: 1, reduceMotion: false, skip: false, effects: 'normal' });
+    expect(bannerOpts({ ...DEFAULT_SETTINGS, speed: 'slow' }).speed).toBe(1.6);
+    expect(bannerOpts({ ...DEFAULT_SETTINGS, speed: 'skip' }).skip).toBe(true);
+    expect(bannerOpts({ ...DEFAULT_SETTINGS, reduceMotion: true }).reduceMotion).toBe(true);
+    expect(bannerOpts({ ...DEFAULT_SETTINGS, effects: 'low' }).effects).toBe('low');
+  });
+
+  it('two soft tones: a gentle rise for my turn, a lower settle for the bot; quiet, short, none when skipped', () => {
+    const me = turnTone(0, normal)!;
+    const bot = turnTone(1, normal)!;
+    expect(me.notes[1]!).toBeGreaterThan(me.notes[0]!);
+    expect(bot.notes[1]!).toBeLessThan(bot.notes[0]!);
+    expect(Math.max(...bot.notes)).toBeLessThan(Math.max(...me.notes));
+    for (const t of [me, bot]) {
+      expect(t.gain).toBeLessThanOrEqual(0.06);
+      expect(t.ms).toBeLessThanOrEqual(400);
+    }
+    expect(turnTone(0, { ...normal, skip: true })).toBe(null);
   });
 });

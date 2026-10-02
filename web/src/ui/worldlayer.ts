@@ -6,12 +6,15 @@
 import { paintRect, rectFor } from '../logic/worldpaint.js';
 import type { PaintTile, Rect } from '../logic/worldpaint.js';
 import type { ThemeId } from '../logic/themes.js';
-import { S } from '../logic/vigour.js';
+import { BLEND, S } from '../logic/vigour.js';
 import { el } from './geom.js';
 
 type Box = { x0: number; y0: number; w: number; h: number };
 const same = (a: PaintTile | undefined, b: PaintTile | undefined) => !!a && !!b && a.owner === b.owner && Math.abs(a.t - b.t) < 1e-6 && !!a.dead === !!b.dead && !!a.root === !!b.root;
-const NB: readonly [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+/** How far a tile's look reaches into its neighbours, board units (see sync). */
+export const REACH = BLEND / 2 + S * 0.4 + 1;
+/** Canvas rows per slice of work (about 10k pixels: a few ms). */
+const BAND_PX = 16;
 
 export class WorldLayer {
   private canvas: HTMLCanvasElement | null = null;
@@ -27,6 +30,10 @@ export class WorldLayer {
   private detail: 'low' | 'normal' = 'normal';
   /** ms the last full repaint took (for the performance report) */
   lastPaintMs = 0;
+  /** for the performance report: how long each full and each partial repaint took (ms, work only) */
+  readonly stats = { full: [] as number[], partial: [] as number[], canvasBytes: 0 };
+  private fullPending = false;
+  private workMs = 0;
   /** called when new pixels are on screen, with the hexes that changed (for the cross-fade) */
   onSwap: (keys: string[]) => void = () => {};
   /** called once, when the first picture is ready (the board redraws its tiles with it) */
@@ -53,6 +60,7 @@ export class WorldLayer {
       const g = c.getContext('2d');
       if (g) {
         this.canvas = c;
+        this.stats.canvasBytes = c.width * c.height * 4;
         this.g = g;
       }
     } catch {
@@ -70,32 +78,32 @@ export class WorldLayer {
     const full = palette !== this.palette || detail !== this.detail || this.url === null;
     this.palette = palette;
     this.detail = detail;
-    const dirty = new Set<string>();
+    // Only the changed tiles are repainted, with a margin that covers everything they can
+    // affect in their neighbours: the blend band (BLEND / 2) plus the longest root or blade
+    // anchored inside it (0.4 of a tile). Outside that, every pixel is exactly as before.
+    const changed: string[] = [];
     const keys = new Set([...tiles.keys(), ...this.tiles.keys()]);
-    for (const k of keys) {
-      if (full || !same(tiles.get(k), this.tiles.get(k))) {
-        dirty.add(k);
-        // its neighbours blend with it, and blades may lean across: repaint them too
-        const [q, r] = k.split(',').map(Number) as [number, number];
-        for (const [dq, dr] of NB) dirty.add(`${q + dq},${r + dr}`);
-      }
-    }
+    for (const k of keys) if (full || !same(tiles.get(k), this.tiles.get(k))) changed.push(k);
     this.tiles = new Map(tiles);
-    if (dirty.size === 0) return;
-    for (const k of dirty) if (!full) this.changed.add(k);
+    if (changed.length === 0) return;
     if (full) {
-      // whole board, in horizontal bands
-      const band = Math.max(8, Math.floor(40 / this.scale));
-      for (let y = 0; y < this.box.h; y += band) {
-        this.queue.push(this.snap({ x0: this.box.x0, y0: this.box.y0 + y, w: this.box.w, h: Math.min(band, this.box.h - y) }));
-      }
+      this.fullPending = true;
+      this.queueBands({ x0: this.box.x0, y0: this.box.y0, w: this.box.w, h: this.box.h });
     } else {
-      for (const k of dirty) {
-        const r = rectFor([k], this.scale, S * 0.15);
-        this.queue.push(r);
-      }
+      for (const k of changed) this.changed.add(k);
+      // one box around all of them when they sit close together (a cut chain), else one each
+      const one = rectFor(changed, 1, REACH);
+      const each = changed.map((k) => rectFor([k], 1, REACH));
+      const area = (x: Rect) => x.w * x.h;
+      for (const x of area(one) <= each.reduce((s, e) => s + area(e), 0) ? [one] : each) this.queueBands(x);
     }
     this.pump();
+  }
+
+  /** Queues a world box as thin bands of canvas rows, so no single slice holds up a frame. */
+  private queueBands(b: Box) {
+    const band = BAND_PX / this.scale;
+    for (let y = 0; y < b.h; y += band) this.queue.push(this.snap({ x0: b.x0, y0: b.y0 + y, w: b.w, h: Math.min(band, b.h - y) }));
   }
 
   /** Snaps a world box to whole canvas pixels. */
@@ -110,12 +118,14 @@ export class WorldLayer {
   private pump() {
     if (this.running) return;
     this.running = true;
-    const started = performance.now();
+    this.workMs = 0;
     const step = () => {
       const r = this.queue.shift();
       if (!r) {
         this.running = false;
-        this.lastPaintMs = performance.now() - started;
+        this.lastPaintMs = this.workMs;
+        (this.fullPending ? this.stats.full : this.stats.partial).push(Math.round(this.workMs * 10) / 10);
+        this.fullPending = false;
         this.publish();
         return;
       }
@@ -124,10 +134,12 @@ export class WorldLayer {
       const py = Math.round((s.y0 - this.box.y0) * this.scale);
       const w = Math.min(s.w, this.canvas!.width - px);
       const h = Math.min(s.h, this.canvas!.height - py);
+      const t0 = performance.now();
       if (w > 0 && h > 0) {
         const data = paintRect({ tiles: this.tiles, palette: this.palette, detail: this.detail }, { ...s, w, h });
         this.g!.putImageData(new ImageData(new Uint8ClampedArray(data), w, h), Math.max(0, px), Math.max(0, py));
       }
+      this.workMs += performance.now() - t0;
       setTimeout(step, 0);
     };
     setTimeout(step, 0);

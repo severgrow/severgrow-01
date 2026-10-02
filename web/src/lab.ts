@@ -2,6 +2,8 @@
 // palette, drawn by the real board code, so the look can be judged quickly on a phone.
 // Rows: grass strengths 1-9, lava strengths 1-9, both roots, rock, an empty hex, a gold
 // hex (empty and under a tile), and a cut-off chain for each side (dried grass, cooled lava).
+// Material pass 2: the 1-9 rows are the strength ramp strips; a second board per palette
+// shows neighbours of mixed strengths blending, and moss meeting lava.
 import { allCoords, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../src/engine/index.js';
 import { THEMES, THEME_IDS, cssVars } from './logic/themes.js';
@@ -45,6 +47,17 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     ...[-4, -3, -2].map((q) => ({ key: k(q, 0), owner: 0 as Player })),
     ...[2, 3, 4].map((q) => ({ key: k(q, 0), owner: 1 as Player })),
   ];
+  // the neighbours board: strengths from a fixed pattern (never random), moss on the left
+  // half, lava on the right, so the two meet down the middle
+  const allNormal: Record<string, Terrain> = Object.fromEntries(allCoords(R).map((c) => [coordKey(c), 'normal' as Terrain]));
+  const mixed: Record<string, Tile | null> = Object.fromEntries(
+    allCoords(R).map((c) => {
+      const x = c.q + c.r / 2;
+      if (Math.abs(x) > 4.5 || Math.abs(c.r) > 4) return [coordKey(c), null];
+      const strength = 1 + (((c.q * 7 + c.r * 3) % 9) + 9) % 9;
+      return [coordKey(c), { owner: (x < 0 ? 0 : 1) as Player, strength }];
+    }),
+  );
   for (const id of THEME_IDS) {
     const t = THEMES[id];
     const sec = document.createElement('section');
@@ -61,8 +74,15 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     sec.appendChild(svg);
     page.appendChild(sec);
     const view = new BoardView(svg, { tap: () => {}, inspect: () => {} });
-    view.setup(config, terrain, t.style, look);
+    view.setup(config, terrain, t.style, look, id);
     view.render(board, { ...NO_OVERLAY, scars });
+    // neighbours: a patch of mixed strengths for each side, touching along the middle
+    const svg2 = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg2.classList.add('lab-board');
+    sec.appendChild(svg2);
+    const nb = new BoardView(svg2, { tap: () => {}, inspect: () => {} });
+    nb.setup(config, allNormal, t.style, look, id);
+    nb.render(mixed, NO_OVERLAY);
   }
   document.body.appendChild(page);
 };
