@@ -294,6 +294,15 @@ rules version `v0.5-seed`) the `Sprout` action is played as a **Seed**:
   strengthened tile is written without the `seed` mark. There is no per-game limit.
 - Everything else (combos, Fruit, Sever, Strangle, scoring, ending, events) is unchanged. The
   event is still `Sprout`; the bots play it through the same `legalActions`.
+- Bots need no Seed code: they rank the legal moves by simulating them with the engine, so a
+  Seed is valued as the 1-tile it makes (GreedyBot still counts the card's number as what an
+  empty-hex move spends, so it seeds with low cards first). First look, level 7 vs level 7,
+  150 games each: Sprout 15.9 sprouts and 3.9 Strengthens per game, total score 19.9, P1 wins
+  55.3%; Seed 12.7 seeds and 9.7 Strengthens, total score 24.3, P1 wins 56.0%; game length the
+  same (18 turns).
+- The page: the menu offers "Sprout version" and "Seed version"; a seed is drawn as a small
+  seed in turned soil until it is strengthened; every player-facing word comes from
+  `MOVE_WORDS` (`src/strings.ts`), and the Sprout version's text is unchanged.
 
 ### 7.5 Replacing ("overgrowth")
 `new.strength > old.strength` replaces the enemy tile. Equal is blocked; roots are immune. A
