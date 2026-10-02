@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hexDistance, isAdjacent, parseKey } from '../../src/engine/index.js';
-import type { Tile } from '../../src/engine/index.js';
+import { RULESETS, apply, coordKey, hexDistance, isAdjacent, legalActions, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import type { Action, Tile } from '../../src/engine/index.js';
 import { AnimQueue, applyStep, buildSteps, captionFor } from '../src/logic/anim.js';
 import type { Step } from '../src/logic/anim.js';
 import { playGame } from './ui-helpers.js';
@@ -111,5 +111,31 @@ describe('animation queue from engine events', () => {
     const first = q.peek();
     expect(q.board).toBe(p.before.board);
     expect(q.next()).toBe(first);
+  });
+});
+
+describe('Seed A/B test: the shown board keeps the seed mark right during animations', () => {
+  it('planting a seed shows a seed at once (not a plain 1 until the end of the move)', () => {
+    const g = newGame(4, RULESETS.seed);
+    const s = apply(g, legalActions(viewFor(g, 0)).find((a) => a.t === 'Draw')!);
+    const seed = legalActions(viewFor(s, 0)).find((a) => a.t === 'Sprout')! as Extract<Action, { t: 'Sprout' }>;
+    const after = apply(s, seed);
+    const grow = buildSteps(s, seed, after, 0).find((x) => x.k === 'grow')!;
+    expect(applyStep(s.board, grow)[coordKey(seed.coord)]).toEqual({ owner: 0, strength: 1, seed: true });
+  });
+
+  it('strengthening a seed drops the seed look at the strengthen step', () => {
+    const g = newGame(4, RULESETS.seed);
+    const board = { ...g.board, '-1,1': { owner: 0 as const, strength: 1, seed: true as const } };
+    const shown = applyStep(board, { k: 'strengthen', player: 0, key: '-1,1', from: 1, to: 8 });
+    expect(shown['-1,1']).toEqual({ owner: 0, strength: 8 });
+  });
+
+  it('Sprout games: grow steps never add a seed mark', () => {
+    const g = newGame(4);
+    const s = apply(g, legalActions(viewFor(g, 0)).find((a) => a.t === 'Draw')!);
+    const sp = legalActions(viewFor(s, 0)).find((a) => a.t === 'Sprout')!;
+    const grow = buildSteps(s, sp, apply(s, sp), 0).find((x) => x.k === 'grow')!;
+    for (const t of Object.values(applyStep(s.board, grow))) expect(t && 'seed' in t).toBeFalsy();
   });
 });

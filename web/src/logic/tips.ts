@@ -1,6 +1,6 @@
 // First-time tips for Fruit and Strengthen (v0.5): each shows once, until dismissed, and is
 // remembered in the browser. They can be opened again from the "How to play" sheet.
-import { OPP } from '../../../src/strings.js';
+import { OPP, moveWords } from '../../../src/strings.js';
 export const TIPS_KEY = 'severgrow.tips.v1';
 export type TipId = 'fruit' | 'strengthen' | 'draw';
 export type TipsSeen = Record<TipId, boolean>;
@@ -21,6 +21,10 @@ export const TIPS: Record<TipId, { title: string; text: string }> = {
     text: 'Tip: tap it. Fruit can remove tiles no card can beat.',
   },
 };
+
+/** A tip's text for this game's version (the Strengthen tip names the Sprout or the Seed). */
+export const tipText = (id: TipId, config: { ruleset?: string }): string =>
+  id === 'strengthen' ? TIPS.strengthen.text.replace('your sprout for the turn', `your ${moveWords(config).name} for the turn`) : TIPS[id].text;
 
 /** What the browser remembers; anything unreadable counts as "nothing seen yet". */
 export const parseTips = (raw: string | null): TipsSeen => {

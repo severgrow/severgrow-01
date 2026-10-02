@@ -72,7 +72,7 @@ const run = async (name: string, touch: boolean, seed: number) => {
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip' }));
   });
   await page.goto(BASE);
-  await page.click('#menu-play');
+  await page.click('#menu-sprout');
   await page.click('#level-grid [data-level="3"]');
   const cdp: CDPSession | null = touch ? await page.context().newCDPSession(page) : null;
   const touchAt = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>

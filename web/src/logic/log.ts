@@ -3,7 +3,7 @@
 import { viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { OPP } from '../../../src/strings.js';
+import { OPP, moveWords } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -46,7 +46,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
   if (before.actor === me) {
     if (a.t === 'MeldRun') return `You grew a line of ${a.cards.length}${tail}`;
     if (a.t === 'MeldSet') return `You grew a clump of ${a.cards.length}${tail}`;
-    if (a.t === 'Sprout') return `You sprouted one tile at ${hn(a.coord)}${tail}`;
+    if (a.t === 'Sprout') return `${moveWords(before.config).youDid(hn(a.coord))}${tail}`;
     return `You: ${moveSentence(viewFor(before, me), a)}`;
   }
   const hand = before.hands[before.actor];
@@ -59,7 +59,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'MeldSet':
       return `${OPP.The} grew a clump of ${a.cards.length} (${a.cards.map(name).join(', ')})${tail}`;
     case 'Sprout':
-      return `${OPP.The} sprouted a ${name(a.card)} at ${hn(a.coord)}${tail}`;
+      return `${moveWords(before.config).oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':
       return `${OPP.The} finished playing cards`;
     case 'Discard':

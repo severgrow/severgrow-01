@@ -305,6 +305,8 @@ button {
   display: grid;
   /* scores, turn steps, end-of-game note, hint, then the board and controls */
   grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  /* never wider than the screen: the score bar's one-line capsule used to push it to ~398px */
+  grid-template-columns: minmax(0, 1fr);
 }
 .hud {
   border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
@@ -3105,4 +3107,143 @@ svg.usable .hex-cell {
 .list-next {
   min-width: 44px;
   min-height: 44px;
+}
+
+/* ---- Seed ruleset (A/B test): a tile placed by a Seed is a small planted seed ---- */
+/* the seed's tilt is an SVG rotate() around its own centre: keep the board's coordinates */
+.tile .seed,
+.tile .seed * {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+/* freshly turned soil, warm and dark, with a hint of the owner's colour */
+.seed-ground.you {
+  fill: color-mix(in srgb, var(--c-you) 16%, #2b2219);
+}
+.seed-ground.bot {
+  fill: color-mix(in srgb, var(--c-bot) 16%, #2b2219);
+}
+.seed-ground.you {
+  stroke: color-mix(in srgb, var(--c-you) 70%, transparent);
+  stroke-width: 1.6;
+}
+.seed-ground.bot {
+  stroke: color-mix(in srgb, var(--c-bot) 70%, transparent);
+  stroke-width: 1.6;
+}
+.seed-soil {
+  stroke: none;
+}
+.seed-furrow {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.28);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+.seed-shadow {
+  fill: rgba(0, 0, 0, 0.3);
+}
+.seed-husk {
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 0.8;
+}
+.seed-seam {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.32);
+  stroke-width: 0.8;
+}
+.seed-shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.seed-shoot {
+  fill: none;
+  stroke: var(--c-you);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.seed-leaf {
+  fill: var(--c-you);
+}
+.seed-spark {
+  fill: var(--c-bot);
+  opacity: 0.55;
+}
+.seed-spark.pulsing {
+  animation: seed-wake 2.8s ease-in-out infinite alternate;
+}
+.seed-spark-core {
+  fill: #fff3c4;
+}
+@keyframes seed-wake {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 0.75;
+  }
+}
+.reduce-motion .seed-spark.pulsing {
+  animation: none;
+}
+.seed-num {
+  font-size: 12.5px;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 2px;
+  fill: #fff !important;
+}
+
+/* ---- Seed A/B test: the two version buttons and the quiet "which version" label ---- */
+.menu-versions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+.menu-versions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: 10px;
+}
+.version-chip {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.version-chip:empty {
+  display: none;
+}
+.steps-row .version-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 430px) {
+  .steps-row .version-chip .vc-rest {
+    display: none;
+  }
+  .steps-row .version-chip {
+    padding: 2px 6px;
+  }
+}
+.levels-head .version-chip {
+  margin-left: auto;
+}
+
+/* narrow phones (under ~385px, e.g. 375px iPhone SE / mini, 360px Android): the score bar
+   drops the "You" / "Opponent" words (the marks, colours and aria-labels still say whose score
+   it is), so the history button stays on screen */
+@media (max-width: 385px) {
+  .hud .score .who {
+    display: none;
+  }
 }

@@ -1,13 +1,13 @@
 // Shared helpers for the UI logic tests: real positions from bot-vs-bot play.
 import { DIRECTIONS, addCoord, apply, coordKey, isOnBoard, newGame, rootCoord, viewFor } from '../../src/engine/index.js';
-import type { Action, Coord, Player, State, Tile } from '../../src/engine/index.js';
+import type { Action, Coord, Player, RulesConfig, State, Tile } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 
 export type Played = { before: State; action: Action; after: State };
 
 /** Plays GreedyBot vs GreedyBot from `seed`, calling `each` after every action. */
-export const playGame = (seed: number, each?: (p: Played) => void, maxActions = 5000): State => {
-  let s = newGame(seed);
+export const playGame = (seed: number, each?: (p: Played) => void, maxActions = 5000, config?: Partial<RulesConfig>): State => {
+  let s = newGame(seed, config);
   for (let i = 0; i < maxActions && s.phase !== 'GAME_OVER'; i++) {
     const action = GreedyBot.chooseAction(viewFor(s, s.actor));
     const after = apply(s, action);

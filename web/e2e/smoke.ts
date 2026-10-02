@@ -71,7 +71,7 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
 
 /** Play → level screen → the given level (default 7): starts a new game. */
 const newGame = async (page: Page, level = 7) => {
-  await page.click('#menu-play');
+  await page.click('#menu-sprout');
   await page.click(`#level-grid [data-level="${level}"]`);
 };
 
@@ -569,7 +569,7 @@ const botWords = (page: Page): Promise<string[]> =>
   await page.waitForTimeout(200);
   await scan(page, 'settings');
   await page.locator('#sheet-settings [data-close]').click().catch(() => {});
-  await page.click('#menu-play');
+  await page.click('#menu-sprout');
   await page.waitForTimeout(200);
   await scan(page, 'level picker');
   await page.click('#level-grid [data-level="7"]');
