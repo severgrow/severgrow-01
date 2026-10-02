@@ -9,7 +9,7 @@ import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
-import { FULL_LOOK, S, SQ3, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
+import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
@@ -279,35 +279,55 @@ export class BoardView {
     const A = centerOf(a);
     const B = centerOf(b);
     const st = this.style;
-    const from = 0.22;
+    const from = 0.2;
     const p = { x: A.x + (B.x - A.x) * from, y: A.y + (B.y - A.y) * from };
     const q = { x: A.x + (B.x - A.x) * (1 - from), y: A.y + (B.y - A.y) * (1 - from) };
-    // a gently curved vein (organic shapes)
-    const bend = st.tileShape === 'organic' ? (hash(a + b) - 0.5) * 9 : 0;
-    const nx = -(B.y - A.y) / (S * SQ3);
-    const ny = (B.x - A.x) / (S * SQ3);
-    const c = { x: (p.x + q.x) / 2 + nx * bend, y: (p.y + q.y) / 2 + ny * bend };
-    const d = `M${p.x.toFixed(1)},${p.y.toFixed(1)}Q${c.x.toFixed(1)},${c.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`;
-    // My mycelium threads are the stronger ones: thicker, with a dark green casing so they
-    // read clearly on the mint moss. The bot's fissures are a little thinner.
-    const w = st.veinWidth * width * (owner === 0 ? 1.45 : 0.85);
-    if (owner === 0 && kind !== 'loose') {
-      const casing = el('path', { d, class: `vein-casing ${kind}${grow ? ' grow-in' : ''}`, 'stroke-width': (w + 2.4).toFixed(2), 'stroke-opacity': (opacity * 0.85).toFixed(2), pathLength: 1 }, g);
-      this.veinEls.push({ a, b, owner, el: casing });
+    // An organic S-curve between the tiles (the same for this pair every time, from a hash).
+    const len = Math.hypot(B.x - A.x, B.y - A.y) || 1;
+    const nx = -(B.y - A.y) / len;
+    const ny = (B.x - A.x) / len;
+    const amp = st.tileShape === 'organic' ? 2.5 + hash(a + b) * 3.5 : 0;
+    const side = hash(b + a) > 0.5 ? 1 : -1;
+    const at = (t: number, k: number) => ({ x: p.x + (q.x - p.x) * t + nx * k, y: p.y + (q.y - p.y) * t + ny * k });
+    const curve = (k: number) => {
+      const c1 = at(1 / 3, k);
+      const c2 = at(2 / 3, -k);
+      return `M${p.x.toFixed(1)},${p.y.toFixed(1)}C${c1.x.toFixed(1)},${c1.y.toFixed(1)} ${c2.x.toFixed(1)},${c2.y.toFixed(1)} ${q.x.toFixed(1)},${q.y.toFixed(1)}`;
+    };
+    const d = curve(amp * side);
+    // My links are the stronger ones: a vine. The bot's: a thinner stream of flowing lava.
+    const w = st.veinWidth * width * (owner === 0 ? 1.1 : 0.75);
+    const add = (attrs: Record<string, string | number>) => {
+      const e = el('path', { pathLength: 1, ...attrs }, g);
+      this.veinEls.push({ a, b, owner, el: e });
+      return e;
+    };
+    const growCls = grow ? ' grow-in' : '';
+    if (kind !== 'loose') {
+      add({ d, class: `${owner === 0 ? 'vein-casing' : 'lava-casing'} ${kind}${growCls}`, 'stroke-width': (w + 1.8).toFixed(2), 'stroke-opacity': (opacity * 0.85).toFixed(2) });
     }
-    const e = el(
-      'path',
-      {
-        d,
-        class: `vein ${kind}${grow ? ' grow-in' : ''}`,
-        'stroke-width': w.toFixed(2),
-        'stroke-opacity': opacity.toFixed(2),
-        pathLength: 1,
-      },
-      g,
-    );
+    const e = add({ d, class: `vein ${kind}${growCls}`, 'stroke-width': w.toFixed(2), 'stroke-opacity': opacity.toFixed(2) });
     if (kind === 'fragile') e.style.animationDelay = `${(-hash(a + b) * 3).toFixed(2)}s`;
-    this.veinEls.push({ a, b, owner, el: e });
+    if (kind === 'loose' || !this.look.textures) return;
+    if (owner === 0) {
+      // a thinner tendril twisting along the vine, and two small leaves
+      add({ d: curve(-amp * side * 0.8), class: `vine-tendril${growCls}`, 'stroke-width': Math.max(0.6, w * 0.35).toFixed(2) });
+      let leaves = '';
+      for (const [t, sgn] of [[0.36, 1], [0.66, -1]] as const) {
+        const m = at(t, amp * side * (t < 0.5 ? 0.45 : -0.45));
+        const ang = Math.atan2(q.y - p.y, q.x - p.x) + sgn * 0.9;
+        const L = 5.5;
+        const tip = { x: m.x + Math.cos(ang) * L, y: m.y + Math.sin(ang) * L };
+        const ox = -Math.sin(ang) * 1.9;
+        const oy = Math.cos(ang) * 1.9;
+        leaves += `M${m.x.toFixed(1)},${m.y.toFixed(1)}Q${((m.x + tip.x) / 2 + ox).toFixed(1)},${((m.y + tip.y) / 2 + oy).toFixed(1)} ${tip.x.toFixed(1)},${tip.y.toFixed(1)}Q${((m.x + tip.x) / 2 - ox).toFixed(1)},${((m.y + tip.y) / 2 - oy).toFixed(1)} ${m.x.toFixed(1)},${m.y.toFixed(1)}Z`;
+      }
+      const lf = el('path', { d: leaves, class: 'vine-leaf' }, g);
+      this.veinEls.push({ a, b, owner, el: lf });
+    } else {
+      // the hot core of the lava stream, slowly flowing toward the newer tile
+      add({ d, class: `lava-core${this.look.motion ? ' flowing' : ''}`, 'stroke-width': Math.max(0.6, w * 0.38).toFixed(2), style: `animation-delay:${(-hash(a + b) * 4).toFixed(2)}s` });
+    }
   }
 
   private drawTile(parent: SVGGElement, key: string, t: Tile, maxRank: number): SVGGElement {

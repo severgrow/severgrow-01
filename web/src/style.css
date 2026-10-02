@@ -2283,13 +2283,13 @@ svg.usable .hex-cell {
 .grass-blade {
   fill: none;
   stroke: var(--m-mossTuft);
-  stroke-width: 0.9;
+  stroke-width: 0.7;
   stroke-linecap: round;
-  opacity: 0.75;
+  opacity: 0.5;
 }
 .grass-blade.dark {
   stroke: var(--m-mossDeep);
-  opacity: 0.55;
+  opacity: 0.38;
 }
 .moss-fuzz {
   fill: none;
@@ -2302,7 +2302,7 @@ svg.usable .hex-cell {
 /* fire: burning all over (the only glow), flame tongues flicker gently */
 .flame {
   fill: var(--m-fireHot);
-  opacity: 0.9;
+  opacity: 0.72;
 }
 .flames.back .flame {
   fill: var(--m-fire);
@@ -2312,7 +2312,7 @@ svg.usable .hex-cell {
 }
 .flame-tip {
   fill: var(--m-fireTip);
-  opacity: 0.85;
+  opacity: 0.5;
 }
 .flames.flicker {
   animation: flicker-fire 1.8s ease-in-out infinite;
@@ -2326,11 +2326,11 @@ svg.usable .hex-cell {
     opacity: 1;
   }
   35% {
-    transform: scaleY(1.07);
-    opacity: 0.88;
+    transform: scaleY(1.04);
+    opacity: 0.92;
   }
   70% {
-    transform: scaleY(0.95);
+    transform: scaleY(0.97);
     opacity: 1;
   }
 }
@@ -2476,4 +2476,52 @@ svg.usable .hex-cell {
 #tool-skip {
   width: var(--h-btn);
   padding: 0;
+}
+
+/* ---------- organic links ---------- */
+/* Mine: a vine (a dark green casing, the bright stem, a twisting tendril, small leaves). */
+.vine-tendril {
+  fill: none;
+  stroke: var(--m-mossDeep);
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.vine-leaf {
+  fill: var(--m-moss);
+  stroke: var(--m-mossDeep);
+  stroke-width: 0.6;
+}
+/* The bot's: a stream of lava (a dark crust edge, the coral flow, a slowly moving hot core). */
+.lava-casing {
+  fill: none;
+  stroke: var(--m-fireDeep);
+  stroke-linecap: round;
+}
+.lava-core {
+  fill: none;
+  stroke: var(--m-fireTip);
+  stroke-linecap: round;
+  stroke-dasharray: 0.18 0.12;
+  opacity: 0.8;
+}
+.lava-core.flowing {
+  animation: lava-flow 3.2s linear infinite;
+}
+@keyframes lava-flow {
+  to {
+    stroke-dashoffset: -0.6;
+  }
+}
+.lava-casing.grow-in,
+.vine-tendril.grow-in {
+  stroke-dasharray: 1;
+  animation: draw-on calc(0.32s * var(--anim, 1)) ease-out both;
+}
+.reduce-motion .lava-core.flowing,
+.reduce-motion .lava-casing.grow-in,
+.reduce-motion .vine-tendril.grow-in {
+  animation: none;
+}
+.veins.bot .vein {
+  stroke: var(--m-fire);
 }

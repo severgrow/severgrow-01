@@ -157,11 +157,11 @@ const boxHitsZone = (b: ReturnType<typeof flameBox>) => b.x1 >= -CLEAR_ZONE.half
  * tile's hash, never over the number or the marker.
  */
 export const flameTongues = (key: string, strength: number): Flame[] => {
-  const n = 6 + Math.floor((Math.max(1, strength) - 1) / 2);
+  const n = 4 + Math.floor((Math.max(1, strength) - 1) / 3);
   const base = unit(`${key}:fb`) * Math.PI * 2;
   const out: Flame[] = [];
   for (let i = 0; i < n; i++) {
-    const size = r2(0.22 + 0.12 * unit(`${key}:fs${i}`));
+    const size = r2(0.16 + 0.08 * unit(`${key}:fs${i}`));
     const lean = r2((unit(`${key}:fl${i}`) - 0.5) * 0.5);
     let a = base + (i / n) * Math.PI * 2 + (unit(`${key}:fa${i}`) - 0.5) * 0.5;
     let r = 0.62 + 0.22 * unit(`${key}:fr${i}`);

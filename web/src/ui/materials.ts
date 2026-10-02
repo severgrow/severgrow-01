@@ -175,16 +175,16 @@ const mossDetail = (c: DrawCtx, R: number, turn: number) => {
   for (const [i, t] of mossTufts(c.key).entries()) {
     const bx = x + t.x * R * 0.74;
     const by = y + t.y * R * 0.74;
-    const len = R * (0.24 + t.size * 1.5);
+    const len = R * (0.2 + t.size * 1.1);
     shade += `M${f(bx - len * 0.35)},${f(by + 0.6)}a${f(len * 0.35)},${f(len * 0.14)} 0 1 0 ${f(len * 0.7)},0a${f(len * 0.35)},${f(len * 0.14)} 0 1 0 ${f(-len * 0.7)},0`;
-    // seven soft blades fanning upward, alternately darker and lighter, of uneven length
-    for (let b = 0; b < 7; b++) {
-      const spread = (b - 3) * 0.24 + (((i * 7 + b * 3) % 5) - 2) * 0.05;
+    // five soft blades fanning upward, alternately darker and lighter, of uneven length
+    for (let b = 0; b < 5; b++) {
+      const spread = (b - 2) * 0.26 + (((i * 7 + b * 3) % 5) - 2) * 0.05;
       const blade = len * (0.75 + 0.25 * (((i + b) * 37) % 7) / 6);
       const tipX = bx + Math.sin(spread) * blade;
       const tipY = by - Math.cos(spread) * blade;
       const bend = (b % 2 ? 1 : -1) * blade * 0.18;
-      const seg = `M${f(bx + (b - 3) * 0.45)},${f(by)}Q${f((bx + tipX) / 2 + bend)},${f((by + tipY) / 2)} ${f(tipX)},${f(tipY)}`;
+      const seg = `M${f(bx + (b - 2) * 0.45)},${f(by)}Q${f((bx + tipX) / 2 + bend)},${f((by + tipY) / 2)} ${f(tipX)},${f(tipY)}`;
       if (b % 2) dark += seg;
       else light += seg;
     }
@@ -256,8 +256,8 @@ registerMaterial('fire', {
     // a back row of tall flames rising above the tile: it is burning, not glowing
     const back: Flame[] = [-0.42, -0.08, 0.3].map((bx, i) => ({
       x: bx + (hash(`${c.key}:bk${i}`) - 0.5) * 0.12,
-      y: -0.45,
-      size: 0.34 + 0.14 * hash(`${c.key}:bs${i}`) + 0.02 * c.strength,
+      y: -0.38,
+      size: 0.22 + 0.08 * hash(`${c.key}:bs${i}`) + 0.01 * c.strength,
       lean: (hash(`${c.key}:bl${i}`) - 0.5) * 0.6,
     }));
     flames(c, back, c.radius, ' back');
@@ -272,7 +272,7 @@ registerMaterial('fire', {
     const R = S * 0.88;
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, c.parent);
     // the root burns hardest: a crown of tall flames behind the core
-    const crown: Flame[] = [-0.55, -0.2, 0.15, 0.5].map((bx, i) => ({ x: bx, y: -0.62 + Math.abs(bx) * 0.35, size: 0.55 + 0.15 * hash(`${c.key}:cr${i}`), lean: (hash(`${c.key}:cl${i}`) - 0.5) * 0.5 }));
+    const crown: Flame[] = [-0.55, -0.2, 0.15, 0.5].map((bx, i) => ({ x: bx, y: -0.62 + Math.abs(bx) * 0.35, size: 0.38 + 0.1 * hash(`${c.key}:cr${i}`), lean: (hash(`${c.key}:cl${i}`) - 0.5) * 0.5 }));
     flames(c, crown, R, ' back');
     el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'fire-body', fill: c.url('fire-core') }, c.parent);
     const ring: Flame[] = Array.from({ length: 8 }, (_, i) => {
