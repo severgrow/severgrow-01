@@ -5,8 +5,10 @@
 import { bestMeldPartition, createCards, legalActions, mulberry32, score } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import { simulate } from './evaluate.js';
-import { GreedyBot, WEIGHTS, rankActions } from './GreedyBot.js';
+import { WEIGHTS, rankActions } from './GreedyBot.js';
 import type { Scored, Weights } from './GreedyBot.js';
+import { isStrengthen } from './tactics.js';
+import type { Tier } from './tactics.js';
 
 export const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export type Level = (typeof LEVELS)[number];
@@ -32,27 +34,34 @@ export type LevelConfig = {
   lookahead: 0 | 1;
   /** Determinized search: imagined opponent hands per candidate move (0 = none). */
   searchIterations: number;
+  /** v0.5: how well it judges Strengthen and Fruit (tactics.ts tiers 0-4). */
+  strengthenTier: Tier;
+  fruitTier: Tier;
+  /** v0.5: chance per Grow step of a whim: a random Strengthen or Fruit, good or not. */
+  whimRate: number;
 };
 
-const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0 } as const;
+const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
 
 /** Tuned with the ladder simulation (docs/LADDER.md). */
 export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   // 1-6: one "sloppiness" dial k (0 = level 7, 1 = careless) sets mistakes, laziness and
   // how little it cares about danger. k = 0.95, 0.85, 0.72, 0.55, 0.40, 0.15.
-  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015 },
-  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045 },
-  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084 },
-  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135 },
-  5: { ...base, mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18 },
-  6: { ...base, mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255 },
-  7: { ...base }, // the original GreedyBot, unchanged
+  // v0.5 Strengthen/Fruit: 1-2 ignore them but act on a rare whim; 3-4 simple rules;
+  // 5-6 weigh exposure and net swing; 7-8 full evaluation; 9 also the opponent's Fruit.
+  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015, strengthenTier: 0, fruitTier: 0, whimRate: 0.03 },
+  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045, strengthenTier: 0, fruitTier: 0, whimRate: 0.03 },
+  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084, strengthenTier: 1, fruitTier: 1 },
+  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135, strengthenTier: 1, fruitTier: 1 },
+  5: { ...base, mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18, strengthenTier: 2, fruitTier: 2 },
+  6: { ...base, mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255, strengthenTier: 2, fruitTier: 2 },
+  7: { ...base }, // GreedyBot (v0.5: with the full Strengthen and Fruit evaluation)
   // 8: keeps its strong cards and combos when throwing (level 7's weak spot), but still
   //    slips now and then.
   8: { ...base, discardStyle: 'keepHigh', mistakeRate: 0.45, topN: 3 },
   // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
   //    and imagines 6 possible opponent hands to judge their best reply.
-  9: { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3 },
+  9: { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
 };
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */
@@ -90,8 +99,8 @@ const viewAfter = (v: View, a: Action): View | null => {
 };
 
 /** The best follow-up growing move's score in a view (0 if none is worth it). */
-const bestFollowUp = (v: View, weights: Weights): number => {
-  const next = rankActions(v, { allowKnock: false, weights }).find((x) => growing(x.action));
+const bestFollowUp = (v: View, weights: Weights, c: LevelConfig): number => {
+  const next = rankActions(v, { allowKnock: false, weights, strengthenTier: c.strengthenTier, fruitTier: c.fruitTier }).find((x) => growing(x.action));
   return Math.max(0, next?.score ?? 0);
 };
 
@@ -160,24 +169,43 @@ const usefulness = (c: Card, unseen: readonly Card[]): number =>
 
 const CANDIDATES = 6;
 
+/** A bot decision, with a short plain-words reason for Strengthen and Fruit (debug only). */
+export type Decision = { action: Action; reason?: string };
+
 /** The level's move. Same (view, level, seed) -> same action. */
-export const chooseLevelAction = (v: View, level: Level, seed: number): Action => {
+export const chooseLevelAction = (v: View, level: Level, seed: number): Action => decideLevelAction(v, level, seed).action;
+
+/** The level's move and why (the reason is for debugging and simulation reports only). */
+export const decideLevelAction = (v: View, level: Level, seed: number): Decision => {
   if (level === 7) {
-    if (legalActions(v).length === 0) throw new Error('Level 7 bot: no legal actions');
-    return GreedyBot.chooseAction(v); // the original bot, exactly
+    const best = rankActions(v)[0];
+    if (!best) throw new Error('Level 7 bot: no legal actions');
+    return withReason(best); // GreedyBot's choice, exactly
   }
-  return chooseWithConfig(v, LEVEL_CONFIGS[level], seed);
+  return decideWithConfig(v, LEVEL_CONFIGS[level], seed);
 };
 
+const withReason = (s: Scored): Decision =>
+  s.facts.kind === 'strengthen' || s.facts.kind === 'fruit' ? { action: s.action, reason: s.facts.reason ?? '' } : { action: s.action };
+
 /** A move for any knob settings (used by the levels and by the ladder's tuning runs). */
-export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action => {
+export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action => decideWithConfig(v, c, seed).action;
+
+export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decision => {
   const legal = legalActions(v);
   if (legal.length === 0) throw new Error('Bot: no legal actions');
-  if (legal.length === 1) return legal[0]!;
+  if (legal.length === 1) return { action: legal[0]! };
 
   const weights = { ...WEIGHTS, exposure: c.dangerWeight, pressure: c.pressureWeight };
   const rng = mulberry32(seed);
-  let ranked: Scored[] = rankActions(v, { weights });
+  // Levels 1-2: now and then a whim - a random Strengthen or Fruit, whether it helps or not.
+  // (Its own random stream, so the rest of the bot's choices are not shifted by it.)
+  const whim = mulberry32(seed ^ 0x5bd1e995);
+  if (c.whimRate > 0 && v.phase === 'ACT' && whim() < c.whimRate) {
+    const odd = legal.filter((a) => a.t === 'Fruit' || isStrengthen(v, a));
+    if (odd.length > 0) return { action: odd[Math.floor(whim() * odd.length)]!, reason: 'a whim (levels 1-2 sometimes waste it)' };
+  }
+  let ranked: Scored[] = rankActions(v, { weights, strengthenTier: c.strengthenTier, fruitTier: c.fruitTier });
 
   // Look one move further inside its own turn, and (level 9) at the opponent's reply.
   if ((c.lookahead > 0 || c.searchIterations > 0) && v.phase === 'ACT' && ranked[0]!.score < WEIGHTS.win / 2) {
@@ -186,7 +214,7 @@ export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action 
     const value = new Map<Scored, number>();
     for (const r of ranked.filter((x) => growing(x.action)).slice(0, CANDIDATES)) {
       const after = viewAfter(v, r.action);
-      let val = r.score + (after && c.lookahead > 0 ? 0.9 * bestFollowUp(after, weights) : 0);
+      let val = r.score + (after && c.lookahead > 0 ? 0.9 * bestFollowUp(after, weights, c) : 0);
       if (after && c.searchIterations > 0) {
         let dmg = 0;
         for (let i = 0; i < c.searchIterations; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)));
@@ -218,7 +246,7 @@ export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action 
     const unseen = c.cardDenial ? unseenCards(v) : [];
     const cost = (a: Extract<Action, { t: 'Discard' }>) =>
       (loose.has(a.card) ? 0 : 100) + rankOf(a) * 2 + (c.cardDenial ? usefulness(v.hand.find((h) => h.id === a.card)!, unseen) * 0.5 : 0);
-    if (options.length > 0) return options.reduce((x, y) => (cost(y) < cost(x) ? y : x));
+    if (options.length > 0) return { action: options.reduce((x, y) => (cost(y) < cost(x) ? y : x)) };
   }
 
   // Card denial: among discards about as good as the best, give away the least useful card.
@@ -229,20 +257,20 @@ export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action 
     if (close.length > 1) {
       const card = (r: Scored) => v.hand.find((h) => h.id === (r.action as { card: number }).card)!;
       const best = close.reduce((a, b) => (usefulness(card(b), unseen) < usefulness(card(a), unseen) ? b : a));
-      return best.action;
+      return { action: best.action };
     }
   }
 
   // Laziness: sometimes stop growing even though it could.
   if (c.skipGrowth > 0 && v.phase === 'ACT' && rng() < c.skipGrowth) {
     const stop = legal.find((a) => a.t === 'EndAct');
-    if (stop) return stop;
+    if (stop) return { action: stop };
   }
 
   // Mistakes: sometimes settle for one of the next-best moves.
   if (c.mistakeRate > 0 && ranked.length > 1 && rng() < c.mistakeRate) {
     const n = Math.min(c.topN, ranked.length);
-    if (n > 1) return ranked[1 + Math.floor(rng() * (n - 1))]!.action;
+    if (n > 1) return withReason(ranked[1 + Math.floor(rng() * (n - 1))]!);
   }
-  return ranked[0]!.action;
+  return withReason(ranked[0]!);
 };

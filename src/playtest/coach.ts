@@ -228,6 +228,8 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       return f.move.placed > 0 && !f.move.taken && !f.move.botCut && !f.move.onRich && !f.move.wins
         ? [`A Sprout grows one tile for you with a single card, so your ${say('combo')} cards stay in your hand.`, ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
+    case 'strengthen':
+      return [`Strengthen your ${f.from} to a ${f.to}: the bot is much less likely to have a card that can replace it. It scores no points itself, and it does not stop a cut${v.config.fruitPerPlayer > 0 ? ' or Fruit' : ''}.`];
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {

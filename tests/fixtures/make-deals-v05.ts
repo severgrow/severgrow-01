@@ -9,5 +9,8 @@ const deals = Array.from({ length: 20 }, (_, i) => {
   const g = newGame(i + 1);
   return stateHash({ hands: g.hands, deck: g.deck, discard: g.discard, terrain: g.terrain });
 });
-writeFileSync(new URL('./deals-v05.json', import.meta.url), JSON.stringify({ rules: 'v0.5-fruit-strengthen', deals }, null, 1) + '\n');
-console.log('wrote', deals.length, 'deals');
+if (process.argv.includes('--print')) console.log(JSON.stringify(deals));
+else {
+  writeFileSync(new URL('./deals-v05.json', import.meta.url), JSON.stringify({ rules: 'v0.5-fruit-strengthen', deals }, null, 1) + '\n');
+  console.log('wrote', deals.length, 'deals');
+}
