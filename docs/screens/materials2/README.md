@@ -20,7 +20,7 @@ Chromium, device pixel ratio 2). Phone = 390x844, desktop = 1280x800.
 | Frame rate during a full bot turn at Normal speed | **60 fps** average; 95% of frames within 16.7 ms; 1 of 344 frames over 20 ms; worst 33 ms |
 | Full board paint (first open, palette or detail change) | ~645 ms of work, split into slices of 16 canvas rows (a few ms each), so frames keep coming; tiles show their plain look until it lands |
 | Repaint after a move (only the changed tiles and the area they can reach) | ~42 ms of work, in the same thin slices (was 110 ms before the repaint area was narrowed) |
-| Memory | Canvas 2.3 MB (1086 x 528 board units at 1.9 px each, 4 bytes per pixel) plus one PNG of it; JS heap 7.6 MB |
+| Memory | Canvas 2.3 MB (about 574,000 pixels at 4 bytes each, the whole board at 1.9 px per board unit) plus one PNG of it; JS heap 7.6 MB |
 | Size | Page JS +16.4 KB (+6.0 KB gzipped), CSS +2.5 KB (+0.55 KB gzipped) |
 | Low fallback | Settings → Material detail: Low (fewer blades, no flowers or roots); a device whose full paint takes over 2.5 s of work switches to Low by itself |
 
