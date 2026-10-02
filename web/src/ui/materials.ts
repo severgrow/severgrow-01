@@ -11,7 +11,7 @@
 // <defs>; per tile there are only a few plain shapes (no per-tile filters).
 import type { MaterialLook, MaterialName } from '../logic/materials.js';
 import { grassBlades, grassFlowers, lavaCracks, rockPebbles, strengthLift, tileVariant } from '../logic/materials.js';
-import { GRASS_VARIANTS, LAVA_VARIANTS, PHOTO_SPAN, lavaLevel } from '../logic/photo.js';
+import { GRASS_VARIANTS, LAVA_VARIANTS, PHOTO_SPAN, grassLevel, lavaLevel } from '../logic/photo.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import { photoUrl } from './photo.js';
 import { S, centerOf, cornerPts, el, hash, hexPath, noiseTile } from './geom.js';
@@ -63,6 +63,7 @@ export const materialDefs = (defs: SVGDefsElement, id: (name: string) => string,
   // lava: dark crust, a little lighter top-left; molten glow seeping up around the edge
   rad('lava-crust', [[0, 'st-crust-light', 1], [1, 'st-crust', 1]], { cx: 0.38, cy: 0.32, r: 0.8 });
   rad('lava-rim', [[0, 'st-fire-deep', 0], [0.7, 'st-fire-deep', 0], [0.9, 'st-fire', 0.4], [1, 'st-fire-hot', 0.9]], { cx: 0.5, cy: 0.5, r: 0.5 });
+  rad('smoke', [[0, 'st-smoke', 0.5], [0.6, 'st-smoke', 0.18], [1, 'st-smoke', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
   rad('moss-glow', [[0, 'st-moss-top', 0.85], [1, 'st-moss-top', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
   if (L.textures && noiseTile()) {
     const n = el('pattern', { id: id('noise'), width: 32, height: 32, patternUnits: 'userSpaceOnUse' }, defs);
@@ -207,7 +208,8 @@ registerMaterial('moss', {
     const v = tileVariant(c.key);
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
-    if (photo(c, 'grass', c.radius)) return;
+    // grass fills the whole hex whatever its strength, so neighbours overlap into one lawn
+    if (photo(c, 'grass', S, grassLevel(c.strength))) return;
     el('path', { d, class: 'moss-body', fill: c.url('moss-dome'), style: `opacity:${Math.min(1, s.bright + v.shade).toFixed(2)}` }, c.parent);
     if (c.look.textures) grassDetail(c, c.radius);
     else el('path', { d, class: 'moss-fuzz' }, c.parent);
@@ -220,7 +222,7 @@ registerMaterial('moss', {
     const g = el('g', { class: `moss-root${c.look.motion ? ' breathing' : ''}` }, c.parent);
     const ctx = { ...c, parent: g };
     el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, g);
-    const pic = photo(ctx, 'grass', R);
+    const pic = photo(ctx, 'grass', R, 2);
     if (!pic) {
       el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'moss-body', fill: c.url('moss-dome') }, g);
       if (c.look.textures) grassDetail(ctx, R);
@@ -255,13 +257,34 @@ const cracks = (c: DrawCtx, R: number, strength: number) => {
   }
 };
 
+/** A few soft smoke puffs rising from the top of a burning tile (still, under Reduce motion). */
+const smoke = (c: DrawCtx, R: number) => {
+  const { x, y } = centerOf(c.key);
+  const g = el('g', { class: `smoke${c.look.motion ? ' rising' : ''}` }, c.parent);
+  for (let i = 0; i < 3; i++) {
+    const h = hash(`${c.key}:sm${i}`);
+    el('circle', {
+      cx: f(x + (i - 1) * R * 0.45 + (h - 0.5) * R * 0.2),
+      cy: f(y - R * (0.72 + 0.1 * h)),
+      r: f(R * (0.32 + 0.12 * h)),
+      fill: c.url('smoke'),
+      class: 'puff',
+      style: `animation-delay:${(-(h * 5 + i * 1.7)).toFixed(2)}s`,
+    }, g);
+  }
+};
+
 registerMaterial('fire', {
   // lava: a dark rough crust split by glowing cracks, molten light seeping up around the edge
   tile: (c) => {
     const s = strengthLift(c.strength, c.maxRank);
     const d = hexPath(c.key, c.radius, c.shape);
     contact(c, d, s.lift, c.look.shadow * (s.shadow / 0.55));
-    if (photo(c, 'lava', c.radius, lavaLevel(c.strength))) return;
+    if (photo(c, 'lava', c.radius, lavaLevel(c.strength))) {
+      // 7-9 burns hard enough to smoke: soft grey puffs drifting up from the top edge
+      if (lavaLevel(c.strength) === 2) smoke(c, c.radius);
+      return;
+    }
     el('path', { d, class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);
     if (c.look.textures) el('path', { d, class: 'mat-grain lava-grain', fill: c.url('noise') }, c.parent);
     el('path', { d, class: 'lava-rim', fill: c.url('lava-rim'), style: `opacity:${(0.55 + 0.45 * s.bright * (c.strength / Math.max(1, c.maxRank))).toFixed(2)}` }, c.parent);

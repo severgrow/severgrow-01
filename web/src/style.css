@@ -2505,25 +2505,58 @@ svg.usable .hex-cell {
   stroke: var(--m-mossDeep);
   stroke-width: 0.6;
 }
-/* The bot's: a stream of lava (a dark crust edge, the coral flow, a slowly moving hot core). */
+/* The bot's: a stream of lava. Crusted dark banks, the molten flow, bright streaks racing
+   along it and dark crust pieces drifting slower on top, over a softly pulsing heat glow. */
 .lava-casing {
   fill: none;
-  stroke: var(--m-fireDeep);
+  stroke: var(--m-fireCrust);
   stroke-linecap: round;
 }
-.lava-core {
+.veins.bot .vein {
+  stroke: var(--m-fireHot);
+}
+.lava-heat {
+  fill: none;
+  stroke: var(--m-fire);
+  stroke-linecap: round;
+  opacity: 0.22;
+}
+.lava-heat.pulsing {
+  animation: lava-heat 3.6s ease-in-out infinite;
+}
+@keyframes lava-heat {
+  50% {
+    opacity: 0.1;
+  }
+}
+.lava-streaks {
   fill: none;
   stroke: var(--m-fireTip);
   stroke-linecap: round;
-  stroke-dasharray: 0.18 0.12;
-  opacity: 0.8;
+  stroke-dasharray: 0.05 0.09 0.02 0.06 0.08 0.14 0.03 0.07;
+  opacity: 0.9;
 }
-.lava-core.flowing {
-  animation: lava-flow 3.2s linear infinite;
+.lava-streaks.flowing {
+  animation: lava-streaks 2.4s linear infinite;
 }
-@keyframes lava-flow {
+@keyframes lava-streaks {
   to {
-    stroke-dashoffset: -0.6;
+    stroke-dashoffset: -0.54;
+  }
+}
+.lava-rafts {
+  fill: none;
+  stroke: var(--m-fireCrust);
+  stroke-linecap: round;
+  stroke-dasharray: 0.03 0.27 0.05 0.31;
+  opacity: 0.7;
+}
+.lava-rafts.flowing {
+  animation: lava-rafts 7.5s linear infinite;
+}
+@keyframes lava-rafts {
+  to {
+    stroke-dashoffset: -0.66;
   }
 }
 .lava-casing.grow-in,
@@ -2531,13 +2564,12 @@ svg.usable .hex-cell {
   stroke-dasharray: 1;
   animation: draw-on calc(0.32s * var(--anim, 1)) ease-out both;
 }
-.reduce-motion .lava-core.flowing,
+.reduce-motion .lava-streaks.flowing,
+.reduce-motion .lava-rafts.flowing,
+.reduce-motion .lava-heat.pulsing,
 .reduce-motion .lava-casing.grow-in,
 .reduce-motion .vine-tendril.grow-in {
   animation: none;
-}
-.veins.bot .vein {
-  stroke: var(--m-fire);
 }
 
 /* Photo-like grass and lava (painted once in code). The number on grass gets a soft light
@@ -2561,4 +2593,39 @@ svg.usable .hex-cell {
 }
 .mat-textures .tile.mat-moss .mark-halo {
   display: inline;
+}
+.st-smoke {
+  stop-color: #8c8684;
+}
+/* Smoke over the strongest lava: puffs rise, swell and fade (transform and opacity only). */
+.smoke {
+  pointer-events: none;
+}
+.smoke .puff {
+  opacity: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.smoke.rising .puff {
+  animation: smoke-rise 5.5s ease-out infinite;
+}
+@keyframes smoke-rise {
+  0% {
+    transform: translateY(6px) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-16px) scale(1.5);
+    opacity: 0;
+  }
+}
+.reduce-motion .smoke.rising .puff {
+  animation: none;
+}
+.tile.withering .smoke {
+  opacity: 0;
+  transition: opacity 0.35s;
 }

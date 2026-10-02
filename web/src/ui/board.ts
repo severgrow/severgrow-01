@@ -296,7 +296,7 @@ export class BoardView {
     };
     const d = curve(amp * side);
     // My links are the stronger ones: a vine. The bot's: a thinner stream of flowing lava.
-    const w = st.veinWidth * width * (owner === 0 ? 1.1 : 0.75);
+    const w = st.veinWidth * width * (owner === 0 ? 1.1 : 0.95);
     const add = (attrs: Record<string, string | number>) => {
       const e = el('path', { pathLength: 1, ...attrs }, g);
       this.veinEls.push({ a, b, owner, el: e });
@@ -304,7 +304,9 @@ export class BoardView {
     };
     const growCls = grow ? ' grow-in' : '';
     if (kind !== 'loose') {
-      add({ d, class: `${owner === 0 ? 'vein-casing' : 'lava-casing'} ${kind}${growCls}`, 'stroke-width': (w + 1.8).toFixed(2), 'stroke-opacity': (opacity * 0.85).toFixed(2) });
+      // the bot's lava gets a soft heat glow under its crusted banks
+      if (owner === 1 && this.look.textures) add({ d, class: `lava-heat${this.look.motion ? ' pulsing' : ''}`, 'stroke-width': (w * 3).toFixed(2), style: `animation-delay:${(-hash(a + b) * 3).toFixed(2)}s` });
+      add({ d, class: `${owner === 0 ? 'vein-casing' : 'lava-casing'} ${kind}${growCls}`, 'stroke-width': (w + (owner === 0 ? 1.8 : 2.4)).toFixed(2), 'stroke-opacity': (opacity * 0.85).toFixed(2) });
     }
     const e = add({ d, class: `vein ${kind}${growCls}`, 'stroke-width': w.toFixed(2), 'stroke-opacity': opacity.toFixed(2) });
     if (kind === 'fragile') e.style.animationDelay = `${(-hash(a + b) * 3).toFixed(2)}s`;
@@ -325,8 +327,12 @@ export class BoardView {
       const lf = el('path', { d: leaves, class: 'vine-leaf' }, g);
       this.veinEls.push({ a, b, owner, el: lf });
     } else {
-      // the hot core of the lava stream, slowly flowing toward the newer tile
-      add({ d, class: `lava-core${this.look.motion ? ' flowing' : ''}`, 'stroke-width': Math.max(0.6, w * 0.38).toFixed(2), style: `animation-delay:${(-hash(a + b) * 4).toFixed(2)}s` });
+      // a real lava stream: bright streaks racing along the molten middle, and dark crust
+      // pieces drifting slower on top (two irregular patterns at two speeds read as flow)
+      const flow = this.look.motion ? ' flowing' : '';
+      const delay = `animation-delay:${(-hash(a + b) * 6).toFixed(2)}s`;
+      add({ d, class: `lava-streaks${flow}`, 'stroke-width': Math.max(0.6, w * 0.4).toFixed(2), style: delay });
+      add({ d, class: `lava-rafts${flow}`, 'stroke-width': Math.max(0.8, w * 0.7).toFixed(2), style: delay });
     }
   }
 

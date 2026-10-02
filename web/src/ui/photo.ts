@@ -3,7 +3,7 @@
 // runs in small slices in the background after the page shows; until an image is ready
 // the board draws its plain vector look, and listeners are told when all are ready.
 import { materialsOf } from '../logic/materials.js';
-import { GRASS_VARIANTS, LAVA_VARIANTS, grassImage, lavaImages } from '../logic/photo.js';
+import { GRASS_LEVELS, GRASS_VARIANTS, LAVA_VARIANTS, grassImage, lavaImages } from '../logic/photo.js';
 
 /** Pixels per side: sharp at phone size (a tile is about 60 CSS px, x3 on dense screens). */
 const SIZE = 176;
@@ -30,7 +30,11 @@ const toUrl = (px: Uint8ClampedArray): string => {
 
 const jobs = (): (() => void)[] => [
   ...Array.from({ length: LAVA_VARIANTS }, (_, v) => () => lavaImages(SIZE, v, COLORS).forEach((px, lv) => urls.set(key('lava', v, lv), toUrl(px)))),
-  ...Array.from({ length: GRASS_VARIANTS }, (_, v) => () => void urls.set(key('grass', v), toUrl(grassImage(SIZE, v, COLORS)))),
+  ...Array.from({ length: GRASS_VARIANTS * GRASS_LEVELS }, (_, i) => {
+    const v = i % GRASS_VARIANTS;
+    const lv = Math.floor(i / GRASS_VARIANTS);
+    return () => void urls.set(key('grass', v, lv), toUrl(grassImage(SIZE, v, lv, COLORS)));
+  }),
 ];
 
 const done = (ok: boolean) => {

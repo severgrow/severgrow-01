@@ -1,4 +1,4 @@
-// Photo-like materials, painted in code (no downloaded images): a dense, fluffy grass ball
+// Photo-like materials, painted in code (no downloaded images): a dense, flat lawn
 // for my tiles and lumpy lava rock with molten cracks for the bot's. Each is painted once,
 // pixel by pixel, as a small square image of one tile; the board then shows it per tile.
 // Pure and deterministic (seeded noise, no randomness): the same variant always gives the
@@ -10,11 +10,13 @@ import { CLEAR_ZONE, inClearZone } from './materials.js';
 import type { MaterialToken } from './materials.js';
 
 export const PHOTO_SPAN = 1.2;
-export const GRASS_VARIANTS = 6;
+export const GRASS_VARIANTS = 4;
+export const GRASS_LEVELS = 3;
 export const LAVA_VARIANTS = 4;
 export const LAVA_LEVELS = 3;
-/** Glow level for a strength: 1-3 low, 4-6 middle, 7-9 high. */
+/** Look level for a strength: 1-3 low, 4-6 middle, 7-9 high. */
 export const lavaLevel = (strength: number) => Math.min(LAVA_LEVELS - 1, Math.max(0, Math.floor((strength - 1) / 3)));
+export const grassLevel = lavaLevel;
 
 type Colors = Record<MaterialToken, string>;
 type RGB = [number, number, number];
@@ -148,8 +150,12 @@ export const lavaImages = (size: number, variant: number, c: Colors): Uint8Clamp
       const r = Math.min(1, Math.hypot(x, y));
       H[j * W + i] = 0.28 * (1 - r * r) + 0.16 * rock(x * 2.6 + 11, y * 2.6 + 5) + 0.05 * fine(x * 9 + 3, y * 9 + 7);
     }
-  const crackW = [0.12, 0.15, 0.18];
-  const poolT = [0.57, 0.54, 0.51];
+  // 1-3: dried, cooled lava with faint embers; 4-6: glowing cracks; 7-9: burning
+  const crackW = [0.08, 0.15, 0.24];
+  const poolT = [0.62, 0.54, 0.44];
+  const glowCap = [0.13, 1, 1];
+  const cooled = [0.22, 0, 0];
+  const glows = Array.from({ length: LAVA_LEVELS }, () => new Float32Array(size * size));
   pixelLoop(size, (x, y, k) => {
     const hd = hexDist(x, y) + (wobble(x * 5, y * 5) - 0.5) * 0.03;
     const alpha = smooth(1.0, 0.975, hd);
@@ -172,7 +178,8 @@ export const lavaImages = (size: number, variant: number, c: Colors): Uint8Clamp
     const ridge = 1 - Math.abs(2 * vein(x * 1.7 + 2, y * 1.7 + 9) - 1);
     const pv = pool(x * 2.2 + 4, y * 2.2 + 1);
     const edge = 0.45 + 0.55 * smooth(0.3, 0.92, hd);
-    const fade = smooth(0.02, 0.14, zoneDist(x, y));
+    // keep the number's area clear, with a ragged natural edge (never inside the zone itself)
+    const fade = smooth(0.06, 0.26, zoneDist(x, y) + 0.1 * (wobble(x * 6 + 2, y * 6 + 5) - 0.5));
     const low = smooth(0.75, 0.4, cavity * 0.5 + 0.5 * smooth(0.05, 0.4, h));
     const spot = 0.4 + wobble(x * 3 + 9, y * 3) * 0.9;
     for (let lv = 0; lv < LAVA_LEVELS; lv++) {
@@ -180,13 +187,17 @@ export const lavaImages = (size: number, variant: number, c: Colors): Uint8Clamp
       const pt = poolT[lv]!;
       const crack = smooth(1 - cw, 1 - cw * 0.25, ridge);
       const pl = smooth(pt, pt + 0.08, pv);
-      let glow = Math.max(crack, pl) * edge * low * fade;
+      // burning lava (7-9) spills further in and over the lumps too
+      let glow = Math.max(crack, pl) * (lv === 2 ? Math.max(edge, 0.75) : edge) * (lv === 2 ? Math.max(low, 0.55) : low) * fade;
       // a broken, patchy glow seeping up along the very edge
-      glow = Math.max(glow, smooth(0.93, 1.0, hd) * smooth(0.55, 0.95, spot) * (0.45 + 0.15 * lv) * fade);
-      // heat tints the crust around the molten parts
-      const warm = Math.max(smooth(1 - cw * 3, 1, ridge), smooth(pt - 0.1, pt + 0.05, pv)) * edge * fade;
-      let col = mix(base, deepC, warm * 0.35);
-      if (glow > 0.02) col = mix(col, hot(clamp01(glow * 1.1)), smooth(0.02, 0.45, glow));
+      glow = Math.max(glow, smooth(0.93, 1.0, hd) * smooth(0.55, 0.95, spot) * [0.08, 0.6, 0.75][lv]! * fade);
+      glow = Math.min(glow, glowCap[lv]!);
+      glows[lv]![pi] = glow;
+      // heat tints the crust around the molten parts (barely, once it has cooled)
+      const warm = Math.max(smooth(1 - cw * 3, 1, ridge), smooth(pt - 0.1, pt + 0.05, pv)) * edge * fade * (lv === 0 ? 0.4 : 1);
+      // cooled lava is greyer and dustier
+      let col = mix(mix(base, scale(grey, 0.3 + 0.6 * diffuse), cooled[lv]!), deepC, warm * 0.35);
+      if (glow > 0.02) col = mix(col, hot(clamp01(glow * 1.1)), lv === 0 ? smooth(0.03, 0.13, glow) * 0.5 : smooth(0.02, 0.45, glow));
       const o = outs[lv]!;
       o[k] = col[0];
       o[k + 1] = col[1];
@@ -194,6 +205,51 @@ export const lavaImages = (size: number, variant: number, c: Colors): Uint8Clamp
       o[k + 3] = Math.round(alpha * 255);
     }
   });
+  // 7-9 burns: small flames licking up from the hottest spots near the edge
+  const rnd = stream(seed + 9);
+  const big = LAVA_LEVELS - 1;
+  const o = outs[big]!;
+  const g = glows[big]!;
+  const tipC = rgb(c.fireTip);
+  const hotC = rgb(c.fireHot);
+  let lit = 0;
+  for (let t = 0; t < 600 && lit < 12; t++) {
+    const fx = (rnd() * 2 - 1) * 0.9;
+    const fy = (rnd() * 2 - 1) * 0.9;
+    const hd = hexDist(fx, fy);
+    const fh = 0.2 + 0.14 * rnd(); // flame height, tile units
+    const fw = 0.06 + 0.04 * rnd();
+    // only on molten spots, and never reaching the number (flames rise up, so check the top too)
+    if (hd < 0.55 || hd > 0.95 || zoneDist(fx, fy) < 0.16 || zoneDist(fx, fy - fh) < 0.16) continue;
+    const gi = Math.floor((fy + PHOTO_SPAN) / step) * size + Math.floor((fx + PHOTO_SPAN) / step);
+    if ((g[gi] ?? 0) < 0.6) continue;
+    lit++;
+    const lean = (rnd() - 0.5) * 0.06;
+    const i0 = Math.floor((fx - fw - 0.05 + PHOTO_SPAN) / step);
+    const i1 = Math.ceil((fx + fw + 0.05 + PHOTO_SPAN) / step);
+    const j0 = Math.floor((fy - fh + PHOTO_SPAN) / step);
+    const j1 = Math.ceil((fy + 0.02 + PHOTO_SPAN) / step);
+    for (let j = Math.max(0, j0); j <= Math.min(size - 1, j1); j++)
+      for (let i = Math.max(0, i0); i <= Math.min(size - 1, i1); i++) {
+        const x = (i + 0.5) * step - PHOTO_SPAN;
+        const y = (j + 0.5) * step - PHOTO_SPAN;
+        const v = clamp01((fy - y) / fh); // 0 at the base, 1 at the tip
+        if (y > fy + 0.01 || v >= 1) continue;
+        // a teardrop: widest low down, tapering to a point that leans a little
+        const half = fw * Math.sin(Math.PI * Math.min(1, 0.25 + v)) * (1 - v * 0.85);
+        const dx = Math.abs(x - fx - lean * v);
+        if (dx > half) continue;
+        const a = smooth(half, half * 0.4, dx) * (1 - v * 0.3);
+        const col = mix(hotC, tipC, smooth(0.1, 0.9, 1 - dx / Math.max(half, 1e-6)) * (1 - v * 0.5));
+        const k = (j * size + i) * 4;
+        const old: RGB = [o[k]!, o[k + 1]!, o[k + 2]!];
+        const m = mix(old, col, a);
+        o[k] = m[0];
+        o[k + 1] = m[1];
+        o[k + 2] = m[2];
+        o[k + 3] = Math.max(o[k + 3]!, Math.round(a * 255));
+      }
+  }
   return outs;
 };
 /** One glow level of a lava variant (see lavaImages). */
@@ -202,12 +258,13 @@ export const lavaImage = (size: number, variant: number, level: number, c: Color
 // ---------- grass ----------
 
 /**
- * A dense, fluffy ball of grass: a dark under-layer, thousands of fine blades drawn back to
- * front (darker at the base, sunlit at the tips), leaning outward at the edge so the outline
- * is soft, a few tiny dandelions and seed puffs, all shaded as a dome lit from the top-left.
- * Over the number the blades are shorter and calmer (the number also has a light halo).
+ * A flat, dense lawn seen from above, like a close photo of grass: a shadowy under-layer,
+ * thousands of fine blades pointing every which way (darker at the base, sunlit yellow-green
+ * at the tips), lighter and darker patches instead of one big highlight, and blades spilling
+ * out past the edge so neighbouring tiles overlap into one lawn. Now and then a tiny yellow
+ * or red flower or a seed puff, never on the number (which also gets a light halo).
  */
-export const grassImage = (size: number, variant: number, c: Colors): Uint8ClampedArray => {
+export const grassImage = (size: number, variant: number, level: number, c: Colors): Uint8ClampedArray => {
   const n = size * size;
   const R = new Float32Array(n);
   const G = new Float32Array(n);
@@ -215,27 +272,24 @@ export const grassImage = (size: number, variant: number, c: Colors): Uint8Clamp
   const A = new Float32Array(n);
   const seed = 5000 + variant * 131;
   const rnd = stream(seed);
-  const clumps = fbm(seed + 1, 4);
+  const extra = stream(seed + 17 + level * 7);
+  const patches = fbm(seed + 1, 4);
+  // 1-3: short, plain lawn; 4-6: fuller, a few flowers and clover; 7-9: bushy, flowers and plants
+  const bushy = [0.75, 1, 1.3][level] ?? 1;
   const deep = rgb(c.mossDeep);
   const base = rgb(c.moss);
   const top = rgb(c.mossTop);
   const tip = rgb(c.mossTuft);
   const px = size / (2 * PHOTO_SPAN); // pixels per tile unit
   const toPx = (u: number) => (u + PHOTO_SPAN) * px - 0.5;
-  const dome = (x: number, y: number) => {
-    const r2 = Math.min(0.98, x * x + y * y);
-    const nz = Math.sqrt(1 - r2);
-    return Math.max(0, x * LIGHT[0] + y * LIGHT[1] + nz * LIGHT[2]);
-  };
-  // the sunlit top of the dome, where the number sits: a soft oval, a little lighter and calmer
-  const calm = (x: number, y: number) => 1 - smooth(0.55, 1.05, Math.hypot(x / 0.5, (y - 0.08) / 0.72));
+  // lighter and darker patches across the lawn (no single highlight, so no bump)
+  const patch = (x: number, y: number) => patches(x * 2.2 + 3, y * 2.2 + 8) - 0.5;
   // the under-layer: shadowy grass between the blades
   pixelLoop(size, (x, y, k) => {
-    const hd = hexDist(x, y);
-    const a = smooth(1.0, 0.96, hd);
+    const a = smooth(1.0, 0.95, hexDist(x, y));
     if (a <= 0) return;
     const i = k / 4;
-    const col = scale(mix(deep, base, 0.1 + 0.35 * clumps(x * 4 + 3, y * 4 + 8) + 0.5 * calm(x, y)), 0.4 + 0.55 * dome(x, y) + 0.25 * calm(x, y));
+    const col = scale(mix(deep, base, 0.3 + 0.5 * patch(x, y) + 0.25 * patches(x * 7 + 1, y * 7 + 2)), 0.88);
     R[i] = col[0];
     G[i] = col[1];
     B[i] = col[2];
@@ -262,29 +316,31 @@ export const grassImage = (size: number, variant: number, c: Colors): Uint8Clamp
     put(ix, iy + 1, (1 - tx) * ty * a, col);
     put(ix + 1, iy + 1, tx * ty * a, col);
   };
-  // blades: placed all over the hex, sorted top to bottom so nearer blades overlap
-  const count = Math.round(size * size * 0.27);
-  const blades: { x: number; y: number; len: number; ang: number; bend: number; hue: number }[] = [];
+  // blades all over the hex, pointing every which way (a lawn seen from above); at the edge
+  // they lean outward and run longer, spilling over onto the neighbours
+  const count = Math.round(size * size * 0.3);
+  const blades: { x: number; y: number; len: number; ang: number; bend: number; hue: number; shade: number }[] = [];
   for (let b = 0; b < count; b++) {
     const x = (rnd() * 2 - 1) * 0.98;
     const y = (rnd() * 2 - 1) * 1.0;
     const hd = hexDist(x, y);
     if (hd > 0.99) continue;
     const outward = Math.atan2(x, -y); // 0 = straight up
-    // upright in the middle, leaning out at the edge (the fluffy outline)
-    const lean = smooth(0.45, 1, hd);
-    const ang = outward * lean * 0.75 + (rnd() - 0.5) * 0.8 * (1 - lean * 0.4);
-    let len = 0.07 + 0.09 * rnd() + 0.08 * lean;
-    if (inClearZone(x, y) || zoneDist(x, y) < 0.08) len *= 0.55;
-    blades.push({ x, y, len, ang, bend: (rnd() - 0.5) * 0.6, hue: rnd() });
+    const edge = smooth(0.6, 1, hd);
+    const any = (rnd() - 0.5) * Math.PI * 2;
+    const ang = any * (1 - edge) + (outward + (rnd() - 0.5) * 1.1) * edge;
+    let len = (0.06 + 0.08 * rnd() + 0.12 * edge * rnd()) * bushy;
+    if (inClearZone(x, y) || zoneDist(x, y) < 0.08) len *= 0.6;
+    blades.push({ x, y, len, ang, bend: (rnd() - 0.5) * 0.7, hue: rnd(), shade: rnd() });
   }
+  // lower blades over higher ones: a little depth, like a photo taken from slightly above
   blades.sort((a, b) => a.y - b.y);
   for (const bl of blades) {
     const sx = Math.sin(bl.ang);
     const cy = -Math.cos(bl.ang);
-    const cl = calm(bl.x, bl.y);
-    const light = 0.42 + 0.68 * dome(bl.x, bl.y) + 0.22 * cl;
-    const tipCol = bl.hue > 0.85 ? mix(top, tip, (bl.hue - 0.85) * 4) : mix(base, top, bl.hue * 1.1);
+    const light = 0.88 + 0.35 * patch(bl.x, bl.y) + (bl.shade - 0.5) * 0.22;
+    // most tips fresh green, some yellow-green (sunlit), a few pale
+    const tipCol = bl.hue > 0.82 ? mix(top, tip, (bl.hue - 0.82) * 5) : mix(base, top, 0.35 + bl.hue * 0.8);
     const steps = Math.max(3, Math.ceil(bl.len * px * 1.4));
     for (let s = 0; s <= steps; s++) {
       const t = s / steps;
@@ -292,37 +348,72 @@ export const grassImage = (size: number, variant: number, c: Colors): Uint8Clamp
       const bx = bl.x + sx * bl.len * t - cy * bl.bend * bl.len * t * t;
       const by = bl.y + cy * bl.len * t + sx * bl.bend * bl.len * t * t;
       if (hexDist(bx, by) > 1.14) break;
-      const col = scale(mix(mix(deep, base, 0.35 + 0.55 * cl), tipCol, t ** 0.7), light);
-      dot(toPx(bx), toPx(by), col, (1 - t * 0.35) * 0.9);
+      const col = scale(mix(mix(deep, base, 0.55), tipCol, t ** 0.7), light);
+      dot(toPx(bx), toPx(by), col, (1 - t * 0.3) * 0.9);
     }
   }
-  // a few tiny dandelions and seed puffs (some tiles have none), never on the number
-  const flowers = Math.floor(rnd() * 4);
+  // a spot for a flower or plant: inside the hex, never on the number
+  const spot = () => {
+    for (let t = 0; t < 30; t++) {
+      const x = (extra() * 2 - 1) * 0.82;
+      const y = (extra() * 2 - 1) * 0.82;
+      if (hexDist(x, y) < 0.85 && zoneDist(x, y) > 0.15) return { x, y };
+    }
+    return null;
+  };
+  // clover and small broad-leaved plants (more on stronger tiles): a deep, bluer green
+  // clover is a cooler, bluer green than grass
+  const leafC: RGB = [28, 108, 80];
+  const leafLight: RGB = [52, 142, 104];
+  const plants = [0, 2, 5][level] ?? 0;
+  for (let q = 0; q < plants; q++) {
+    const sp = spot();
+    if (!sp) continue;
+    const clover = extra() < 0.6;
+    const leaves = clover ? 3 : 5 + Math.floor(extra() * 3);
+    const turn = extra() * Math.PI * 2;
+    for (let l = 0; l < leaves; l++) {
+      const a = turn + (l / leaves) * Math.PI * 2;
+      const len = clover ? 0.055 : 0.08 + 0.04 * extra();
+      const wide = clover ? 0.038 : 0.026;
+      for (let t = 0; t <= 1; t += 0.12) {
+        const cx = sp.x + Math.sin(a) * len * (clover ? 0.9 : t);
+        const cy = sp.y - Math.cos(a) * len * (clover ? 0.9 : t);
+        const r = clover ? wide * px : wide * px * Math.sin(Math.PI * Math.max(0.15, t));
+        for (let rr = 0; rr <= r; rr += 0.5)
+          for (let k = 0; k < 10; k++) dot(toPx(cx) + Math.cos(k * 0.63) * rr, toPx(cy) + Math.sin(k * 0.63) * rr, rr > r * 0.6 ? leafLight : leafC, 0.6);
+        if (clover) break;
+      }
+    }
+  }
+  // now and then a tiny flower: yellow, red or a white seed puff; more on stronger tiles
+  const flowers = Math.max(0, Math.floor(rnd() * 3) - 1 + [0, 1, 4][level]!);
   for (let f = 0; f < flowers; f++) {
     let fx = 0;
     let fy = 0;
     for (let t = 0; t < 20; t++) {
-      fx = (rnd() * 2 - 1) * 0.75;
-      fy = (rnd() * 2 - 1) * 0.75;
-      if (hexDist(fx, fy) < 0.8 && zoneDist(fx, fy) > 0.12) break;
+      fx = (extra() * 2 - 1) * 0.8;
+      fy = (extra() * 2 - 1) * 0.8;
+      if (hexDist(fx, fy) < 0.85 && zoneDist(fx, fy) > 0.12) break;
     }
     if (zoneDist(fx, fy) <= 0.12) continue;
-    const bloom = rnd() < 0.5;
-    const col: RGB = bloom ? [238, 206, 72] : [246, 244, 236];
-    const rad = (bloom ? 0.035 : 0.045) * px;
+    const kind = (variant + f) % 3;
+    const col: RGB = kind === 0 ? [240, 204, 64] : kind === 1 ? [205, 38, 34] : [246, 244, 236];
+    const rad = (kind === 2 ? 0.04 : 0.03) * px;
     for (let a = 0; a < 18; a++) {
       const ang = (a / 18) * Math.PI * 2;
-      for (let rr = 0; rr <= rad; rr += 0.5) dot(toPx(fx) + Math.cos(ang) * rr, toPx(fy) + Math.sin(ang) * rr, col, bloom ? 0.9 : 0.55);
+      for (let rr = 0; rr <= rad; rr += 0.5) dot(toPx(fx) + Math.cos(ang) * rr, toPx(fy) + Math.sin(ang) * rr, col, kind === 2 ? 0.55 : 0.9);
     }
+    // a dark eye in the middle of the petals
+    if (kind < 2) dot(toPx(fx), toPx(fy), kind === 0 ? [150, 110, 20] : [40, 16, 14], 0.8);
   }
   const out = new Uint8ClampedArray(n * 4);
   pixelLoop(size, (x, y, k) => {
     const i = k / 4;
-    const col: RGB = [R[i]!, G[i]!, B[i]!];
     const a = A[i]!;
-    out[k] = col[0];
-    out[k + 1] = col[1];
-    out[k + 2] = col[2];
+    out[k] = R[i]!;
+    out[k + 1] = G[i]!;
+    out[k + 2] = B[i]!;
     out[k + 3] = a < 0.02 || hexDist(x, y) > 1.16 ? 0 : Math.round(Math.min(1, a) * 255);
   });
   return out;

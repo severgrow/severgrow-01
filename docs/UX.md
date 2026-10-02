@@ -65,8 +65,8 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
 
 | Material | What it is | Detail |
 | --- | --- | --- |
-| **Grass** (my tiles) | photo-like: a dense, fluffy ball of thousands of fine blades, darker at the base and sunlit at the tips, leaning out at the edge so neighbouring tiles blend, lit from the top-left like a dome; now and then a tiny dandelion or seed puff | the number has a soft light halo (and the middle of the dome is a little calmer); my ring marker has one too; my root is the same grass with a soft glowing core that breathes slowly |
-| **Lava** (the bot's tiles) | photo-like: lumpy dark rock lit from the top-left, split by molten cracks and pools that glow brighter toward the edge (coral-red to orange-red, never amber); stronger tiles (4-6, 7-9) are more molten | light numbers with a dark halo on the rock; nothing molten under the number or the marker (tested pixel by pixel); the diamond marker stays; the root is the most molten, with a hot core |
+| **Grass** (my tiles) | photo-like: a flat, dense lawn seen from above, thousands of fine blades pointing every which way, darker at the base and sunlit yellow-green at the tips, with lighter and darker patches; every grass tile fills its whole hex and spills over the edge, so neighbouring tiles overlap into one lawn. **By strength:** 1-3 short plain lawn, 4-6 fuller with a few small yellow, red or white flowers and clover, 7-9 bushy with more flowers, clover and small leafy plants | the number has a soft light halo; my ring marker has one too; nothing grows on the number; my root is the lushest grass with a soft glowing core that breathes slowly |
+| **Lava** (the bot's tiles) | photo-like: lumpy dark rock lit from the top-left. **By strength:** 1-3 dried, cooled lava (grey crust, faint dim embers in the cracks), 4-6 glowing molten cracks and pools toward the edge, 7-9 burning: lots of molten lava, small flames licking up and soft smoke rising (coral-red to orange-red, never amber) | light numbers with a dark halo on the rock; nothing molten or burning under the number or the marker (tested pixel by pixel), with a ragged natural edge round that clear area; the diamond marker stays; the root burns hardest |
 | **Rock** | dark, slightly warm grey-brown stone with smaller stones lying on it ("rocky rocks"), grain, hairline cracks, small chips and flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
 | **Empty** | a shallow soil pocket with a soft inner shadow | |
 | **Gold** | warm amber with a fine weave, a faint metallic sheen and the "2" badge | |
@@ -80,8 +80,9 @@ and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is th
 - **Readability first:** lava cracks never cross the number or the marker and grass blades
   stay short there (tested on every tile position and strength); textures stay low-contrast.
 - **Links grow organically:** mine are vines (a gently wavy green stem with a dark edge, a
-  thin tendril twisting along it and two small leaves); the bot's are a thinner stream of
-  lava with a dark crust edge and a hot core that slowly flows (still under Reduce motion).
+  thin tendril twisting along it and two small leaves); the bot's are a stream of lava with
+  crusted dark banks, bright streaks racing along the molten middle, dark crust pieces
+  drifting slower on top and a softly pulsing heat glow (all still under Reduce motion).
 - **Palettes:** full in Soil, a little lighter in Moss night, minimal in Ink (flat shapes
   with a thin rim and shadow). Settings → **Material detail: Low, Normal** (Low is flat with
   only the rim and shadow). Reduce motion stops the lava glow, the flowing links and the breathing.
