@@ -57,6 +57,40 @@ noise); the whole polish pass adds about 5 kB to the page after compression.
 - **Typeface:** Alegreya Sans (text 500, numbers 800), bundled.
 - **Shapes:** soft, slightly uneven hexes; curved veins; rounded cards; pill buttons.
 
+## Materials ("lowkey 3D")
+
+One light for the whole game, from the top-left. Every raised thing gets a thin bright
+rim on its top-left edge, a soft darker edge on the bottom-right, a soft contact shadow
+and a slight inner shade; depth is 1-3 px. Matte everywhere; the only glow is lava.
+
+| Material | What it is | Detail |
+| --- | --- | --- |
+| **Moss** (my tiles) | a living mint cushion: soft clumps, tiny tufts, a fuzzy edge, lighter on top, darker in the gaps | my ring marker stays next to the number; my root is a bigger mound with a soft inner glow that breathes slowly |
+| **Lava** (the bot's tiles) | dark cracked basalt crust with thin glowing seams in coral-red to orange-red (never amber) | a very slow pulse; light numbers with a crust halo; the diamond marker stays; the root is a lava core with brighter seams |
+| **Rock** | dark, slightly warm grey-brown stone: fine grain, hairline cracks, small chips, two or three flat facets | the heaviest thing: a thicker raised edge and a heavier shadow |
+| **Empty** | a shallow soil pocket with a soft inner shadow | |
+| **Gold** | warm amber with a fine weave, a faint metallic sheen and the "2" badge | |
+
+- **Strength reads as height:** a stronger tile sits a little higher (more rim light and
+  shadow) and brighter; the number stays crisp.
+- **No stamped look:** each tile's tufts, seams and crust plates vary a little, always from
+  a hash of its position (the same tile always looks the same; no randomness).
+- **Cut off:** my moss dries out (grey-brown, flat); the bot's lava cools (the glow fades,
+  the crust turns dark grey ash). The same shows in the dried and cooled marks left behind.
+- **Readability first:** seams never cross the number or the marker (tested on every tile
+  position and strength); textures stay low-contrast.
+- **Palettes:** full in Soil, a little lighter in Moss night, minimal in Ink (flat shapes
+  with a thin rim and shadow). Settings → **Material detail: Low, Normal** (Low is flat with
+  only the rim and shadow). Reduce motion stops the pulse and the breathing.
+- **Cards** get no materials: only a slightly thicker edge, a soft shadow in the fan, and a
+  deeper one when picked. **Buttons** are slightly raised and press down softly.
+- **Built once:** gradients and one small noise texture (a 64×64 canvas, made once) are
+  shared by the whole board; each tile is a handful of plain shapes, with no per-tile filters.
+- **Registry:** `web/src/ui/materials.ts` registers each material (moss, lava, rock, empty,
+  gold); a new one (for example "wild" for a world map) is one more registration.
+- **Material lab:** open the page with `?lab=1` (add `&detail=low` for Low) to see every
+  material in every palette.
+
 ## Gold hexes and board marks
 
 - **Gold hex:** warm amber with a fine diagonal weave, a soft shimmer, and a small

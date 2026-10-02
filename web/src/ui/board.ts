@@ -2,62 +2,21 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
+import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
+import type { MaterialLook } from '../logic/materials.js';
+import { FULL_LOOK, S, SQ3, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
+import { drawMaterial, materialDefs } from './materials.js';
+import type { DrawCtx } from './materials.js';
+import { materialFor } from '../logic/materials.js';
 
-const NS = 'http://www.w3.org/2000/svg';
-export const S = 30; // hex radius in board units
-const SQ3 = Math.sqrt(3);
+export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
-type Attrs = Record<string, string | number>;
-export const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = {}, parent?: Element): SVGElementTagNameMap[K] => {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, String(v));
-  parent?.appendChild(e);
-  return e;
-};
-
-export const centerOf = (key: string) => {
-  const c = parseKey(key);
-  return { x: S * SQ3 * (c.q + c.r / 2), y: S * 1.5 * c.r };
-};
-
-const hash = (s: string) => {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return (h >>> 0) / 4294967296;
-};
-
-const cornerPts = (key: string, size: number, jitter = 0) => {
-  const { x, y } = centerOf(key);
-  return Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 180) * (60 * i - 30);
-    const r = size * (1 + (jitter ? (hash(`${key}:${i}`) - 0.5) * jitter : 0));
-    return [x + r * Math.cos(a), y + r * Math.sin(a)] as const;
-  });
-};
-const polyPoints = (pts: readonly (readonly [number, number])[]) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-
-/** A hex outline as a path: straight (flat, chunky) or soft and slightly uneven (organic). */
-const hexPath = (key: string, size: number, shape: ThemeStyle['tileShape']) => {
-  if (shape !== 'organic') return `M${polyPoints(cornerPts(key, size)).replace(/ /g, 'L')}Z`;
-  const pts = cornerPts(key, size, 0.12);
-  const mid = (a: readonly [number, number], b: readonly [number, number], t: number) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  let d = '';
-  for (let i = 0; i < 6; i++) {
-    const p = pts[i]!;
-    const prev = pts[(i + 5) % 6]!;
-    const next = pts[(i + 1) % 6]!;
-    const [ax, ay] = mid(prev, p, 0.78);
-    const [bx, by] = mid(p, next, 0.22);
-    d += `${i === 0 ? 'M' : 'L'}${ax!.toFixed(1)},${ay!.toFixed(1)}Q${p[0].toFixed(1)},${p[1].toFixed(1)} ${bx!.toFixed(1)},${by!.toFixed(1)}`;
-  }
-  return `${d}Z`;
-};
+let boardCount = 0;
 
 /** Tile size grows with strength (1 small ... max rank nearly the full hex). */
 export const tileScale = (strength: number, maxRank: number) => 0.6 + 0.37 * (strength / Math.max(maxRank, 1));
@@ -109,6 +68,11 @@ export class BoardView {
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private pressed: string | null = null;
   private longPressed = false;
+  private look: MaterialLook = FULL_LOOK;
+  /** Ids are unique per board, so several boards (the material lab) can share a page. */
+  private readonly uid = `b${++boardCount}`;
+  private id = (name: string) => `${this.uid}-${name}`;
+  private url = (name: string) => `url(#${this.id(name)})`;
 
   constructor(
     readonly svg: SVGSVGElement,
@@ -116,9 +80,10 @@ export class BoardView {
   ) {}
 
   /** Builds the static parts (terrain) for a game and theme. */
-  setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle) {
+  setup(config: RulesConfig, terrain: Record<string, Terrain>, style: ThemeStyle, look: MaterialLook = FULL_LOOK) {
     this.config = config;
     this.style = style;
+    this.look = look;
     this.shownVeins = new Set();
     const svg = this.svg;
     svg.replaceChildren();
@@ -133,29 +98,26 @@ export class BoardView {
 
     const defs = el('defs', {}, svg);
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
-    const hatch = el('pattern', { id: 'pat-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+    const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 2.2, height: 6, class: 'pat-ink' }, hatch);
-    const grain = el('pattern', { id: 'pat-grain', width: 7, height: 7, patternUnits: 'userSpaceOnUse' }, defs);
+    const grain = el('pattern', { id: this.id('pat-grain'), width: 7, height: 7, patternUnits: 'userSpaceOnUse' }, defs);
     el('circle', { cx: 2, cy: 2, r: 1.2, class: 'pat-ink' }, grain);
     el('circle', { cx: 5.5, cy: 5, r: 0.9, class: 'pat-ink' }, grain);
-    const stripe = el('pattern', { id: 'pat-stripe', width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-30)' }, defs);
+    const stripe = el('pattern', { id: this.id('pat-stripe'), width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-30)' }, defs);
     el('rect', { width: 4, height: 10, class: 'pat-ink' }, stripe);
-    // Stone speckle for rocks and a fine diagonal weave for gold hexes (gold is
-    // recognisable by pattern and its "2" badge, not by colour alone).
-    const stone = el('pattern', { id: 'pat-stone', width: 9, height: 9, patternUnits: 'userSpaceOnUse' }, defs);
-    el('circle', { cx: 2, cy: 3, r: 0.9, class: 'stone-dot' }, stone);
-    el('circle', { cx: 6.5, cy: 7, r: 0.7, class: 'stone-dot' }, stone);
-    el('circle', { cx: 7, cy: 1.5, r: 0.5, class: 'stone-dot light' }, stone);
-    const weave = el('pattern', { id: 'pat-gold', width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+    // A fine diagonal weave for gold hexes (gold is recognisable by pattern and its "2"
+    // badge, not by colour alone).
+    const weave = el('pattern', { id: this.id('pat-gold'), width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 1.1, height: 5, class: 'gold-weave' }, weave);
-    const rockGrad = el('linearGradient', { id: 'grad-rock', x1: 0, y1: 0, x2: 0.3, y2: 1 }, defs);
-    el('stop', { offset: 0, class: 'rock-top' }, rockGrad);
-    el('stop', { offset: 1, class: 'rock-bottom' }, rockGrad);
-    const glow = el('filter', { id: 'glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+    const glow = el('filter', { id: this.id('glow'), x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
     el('feGaussianBlur', { stdDeviation: 2.4, result: 'b' }, glow);
     const merge = el('feMerge', {}, glow);
     el('feMergeNode', { in: 'b' }, merge);
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
+
+    materialDefs(defs, this.id, look);
+    svg.style.setProperty("--m-depth", `${look.depth}px`);
+    svg.style.setProperty("--m-shadow", String(look.shadow));
 
     // The plate: a soft hexagonal tray under the board with a thin frame and corner pins,
     // so the board sits on the table instead of floating.
@@ -191,19 +153,8 @@ export class BoardView {
       const t = terrain[key] ?? 'normal';
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: `hex ${t}` }, g);
-      if (t === 'rock') {
-        // A cool stone with depth: a darker lower edge, speckle, and light/dark facets.
-        const { x, y } = centerOf(key);
-        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-base', transform: 'translate(0 2.5)' }, g);
-        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-body' }, g);
-        el('path', { d: hexPath(key, S * 0.82, style.tileShape), class: 'rock-speckle' }, g);
-        const pts = cornerPts(key, S * 0.62);
-        el('path', { d: `M${pts[4]![0]},${pts[4]![1]}L${x - 3},${y + 2}L${pts[0]![0]},${pts[0]![1]}`, class: 'rock-facet light' }, g);
-        el('path', { d: `M${x - 3},${y + 2}L${pts[2]![0]},${pts[2]![1]}`, class: 'rock-facet dark' }, g);
-      }
+      drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
       if (t === 'rich') {
-        el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: 'gold-weave-fill' }, g);
-        el('path', { d: hexPath(key, S * 0.8, style.tileShape), class: 'gold-sheen', style: `animation-delay:${(-hash(key) * 4).toFixed(2)}s` }, g);
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
         const b = el('g', { class: 'gold-badge', 'data-key': key }, this.layers.marks);
@@ -213,6 +164,11 @@ export class BoardView {
       }
       this.bindHex(g, key);
     }
+  }
+
+  /** What a material drawer needs for one hex. */
+  private ctx(parent: SVGGElement, key: string, radius = S, strength = 1): DrawCtx {
+    return { parent, key, look: this.look, shape: this.style.tileShape, url: this.url, radius, strength, maxRank: this.config.maxRank };
   }
 
   private bindHex(g: SVGGElement, key: string) {
@@ -260,7 +216,8 @@ export class BoardView {
 
     for (const s of o.scars) {
       if (board[s.key]) continue;
-      el('path', { d: hexPath(s.key, S * 0.62, st.tileShape), class: `scar ${s.owner === 0 ? 'you' : 'bot'}` }, scars);
+      // what a cut-off tile leaves: dried moss (mine) or cooled lava ash (the bot's)
+      drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(scars, s.key));
     }
 
     // Veins: thick, glowing links back to the root. Thickness and brightness follow how
@@ -270,7 +227,7 @@ export class BoardView {
     const fresh = this.shownVeins.size > 0; // no draw-on for the very first picture
     for (const p of [0, 1] as const) {
       const g = el('g', { class: `veins ${p === 0 ? 'you' : 'bot'}` }, veins);
-      if (st.glow > 0) g.setAttribute('filter', 'url(#glow)');
+      if (st.glow > 0) g.setAttribute('filter', this.url('glow'));
       for (const e of networkEdges(board, this.config, p)) {
         const fragile = e.fragile && (p === 0 || o.botFragile);
         const id = `${p}:${e.a}|${e.b}`;
@@ -348,24 +305,16 @@ export class BoardView {
   private drawTile(parent: SVGGElement, key: string, t: Tile, maxRank: number): SVGGElement {
     const st = this.style;
     const who = t.owner === 0 ? 'you' : 'bot';
-    const g = el('g', { class: `tile ${who}${t.root ? ' root' : ''}`, 'data-key': key }, parent);
+    const g = el('g', { class: `tile ${who}${t.root ? ' root' : ''} mat-${materialFor(t, 'normal')}`, 'data-key': key }, parent);
     const { x, y } = centerOf(key);
+    const mat = materialFor(t, 'normal');
     if (t.root) {
-      if (st.tileShape === 'chunky') el('circle', { cx: x, cy: y + 4, r: S * 0.8, class: 'side' }, g);
-      el('circle', { cx: x, cy: y, r: S * 0.8, class: 'body' }, g);
-      el('circle', { cx: x, cy: y, r: S * 0.8, class: `pat ${who}` }, g);
-      el('circle', { cx: x, cy: y, r: S * 0.42, class: 'root-core' }, g);
-      el('circle', { cx: x, cy: y, r: S * 0.16, class: 'root-eye' }, g);
-      g.classList.add('pulse');
-      g.style.animationDelay = `${t.owner * -1.3}s`;
+      drawMaterial(mat, 'root', this.ctx(g, key));
       return g;
     }
     const k = tileScale(t.strength, maxRank);
-    const d = hexPath(key, S * k, st.tileShape);
-    if (st.tileShape === 'chunky') el('path', { d, class: 'side', transform: 'translate(0 4)' }, g);
-    el('path', { d, class: 'body', style: `opacity:${(0.62 + 0.38 * (t.strength / maxRank)).toFixed(2)}` }, g);
-    el('path', { d, class: `pat ${who}` }, g);
-    if (st.tileShape === 'chunky') el('path', { d: hexPath(key, S * k * 0.82, st.tileShape), class: 'bevel' }, g);
+    // The material (moss or lava) with its lowkey depth; then the number and marker, crisp on top.
+    drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
     el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
@@ -429,6 +378,3 @@ export class BoardView {
   }
 }
 
-/** A small four-point spark. */
-export const star = (x: number, y: number, r: number) =>
-  `M${x},${y - r}L${x + r * 0.28},${y - r * 0.28}L${x + r},${y}L${x + r * 0.28},${y + r * 0.28}L${x},${y + r}L${x - r * 0.28},${y + r * 0.28}L${x - r},${y}L${x - r * 0.28},${y - r * 0.28}Z`;

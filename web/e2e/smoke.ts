@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import type { State } from '../../src/engine/index.js';
-import { bigCutDemo, botCut, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
+import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
 import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
@@ -444,9 +444,67 @@ const big = bigCutDemo();
   check('juice ADVERSARIAL 6: switching palette mid-animation keeps a correct board', ok && look === 'moss' && errors.length === 0);
   await page.close();
 }
-// Frame rate during a big cut, with the CPU slowed 4x (about a mid-range phone).
+// --- materials: 3 adversarial checks in the browser (1 and 2 are unit tests) ---
 {
+  // (3) a cut with animations skipped mid-way: the cut-off lava must show as cooled ash, nothing glowing left
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'slow' }, big.state);
+  await page.click('#menu-continue');
+  const before = new Set(Object.keys(big.state.board).filter((k) => big.state.board[k]?.owner === 1));
+  await startMove(page, big);
+  await page.waitForTimeout(450);
+  const mid = await isBusy(page);
+  await page.click('#tool-skip');
+  const ok = await settled(page);
+  const s = (await getState(page))!;
+  const cutKeys = [...before].filter((k) => !s.board[k]);
+  const cooled = await page.evaluate((keys) => keys.filter((k) => document.querySelector(`.l-scars .scar.cooled[data-key="${k}"]`)).length, cutKeys);
+  const cooledCount = await page.locator(".l-scars .scar.cooled").count();
+  const glowingOnCut = await page.evaluate((keys) => keys.filter((k) => document.querySelector(`.l-tiles .tile[data-key="${k}"]`)).length, cutKeys);
+  check('material ADVERSARIAL 3: a cut skipped mid-way leaves cooled lava ash, no glow, exact board', mid && ok && cutKeys.length >= 4 && cooledCount === cutKeys.length && cooled === cutKeys.length && glowingOnCut === 0 && errors.length === 0, `${cooledCount}/${cutKeys.length} cooled`);
+  await page.close();
+}
+{
+  // (4) the bot grows over my tile (moss becomes lava) while I switch palette
+  const rep = botReplace();
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'slow' }, rep.state);
+  await page.click('#menu-continue').catch(() => {});
+  await page.waitForFunction(() => (window as unknown as { __severgrow: Hook }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
+  await page.click('#hud-menu');
+  await page.click('#gm-settings');
+  await page.click('#palette-seg [data-value="ink"]');
+  await page.click('#sheet-settings [data-close]');
+  const ok = await settled(page);
+  const s = (await getState(page))!;
+  const wrong = await page.evaluate((board) => {
+    let bad = 0;
+    for (const [k, t] of Object.entries(board)) {
+      const tile = document.querySelector(`.l-tiles .tile[data-key="${k}"]`);
+      if (!t) continue;
+      if (!tile || !tile.classList.contains((t as { owner: number }).owner === 0 ? 'mat-moss' : 'mat-lava')) bad++;
+    }
+    return bad;
+  }, s.board);
+  const nowLava = rep.keys.every((k) => s.board[k]?.owner === 1 || !s.board[k]);
+  check('material ADVERSARIAL 4: moss replaced by lava during a palette switch: every tile shows its owner\'s material', ok && wrong === 0 && nowLava && errors.length === 0 && (await page.evaluate(() => document.documentElement.dataset.theme)) === 'ink', `${wrong} wrong`);
+  await page.close();
+}
+{
+  // (5) Low detail mid-game: flat shapes with rim and shadow, no textures at all
+  const { page, errors } = await openPage('soil', 'phone', { speed: 'fast', materialDetail: 'low' }, demo.state);
+  await page.click('#menu-continue');
+  for (let t = 0; t < 2; t++) await playTurn(page);
+  const textures = await page.locator('pattern[id$="-noise"], .mat-grain, .moss-detail, .rock-facet, .rock-crack, .lava-plate').count();
+  const rims = await page.locator('.l-tiles .lit').count();
+  check('material ADVERSARIAL 5: Low detail mid-game draws no textures, keeps rim and shadow', textures === 0 && rims > 0 && (await boardTiles(page)) === (await stateTiles(page)) && errors.length === 0, `${textures} textured parts`);
+  await page.close();
+}
+
+// Frame rate during a big cut, with the CPU slowed 4x (about a mid-range phone).
+// Every step has a time limit, so a stuck page fails this check instead of hanging the run.
+await Promise.race([
+  (async () => {
   const { page, errors } = await openPage('soil', 'phone', { speed: 'normal', effects: 'normal' }, big.state);
+  page.setDefaultTimeout(20_000);
   const cdp = await page.context().newCDPSession(page);
   await page.click('#menu-continue');
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
@@ -464,7 +522,14 @@ const big = bigCutDemo();
   console.log(`FRAME RATE during a big cut (CPU 4x slower): about ${(1000 / avg).toFixed(0)} fps on average, slowest frame ${worst.toFixed(0)} ms; peak particles ${p.peak}`);
   check('juice: frame rate measured during a big cut, particles under the cap', errors.length === 0 && p.peak <= 60);
   await page.close();
-}
+  })(),
+  new Promise<void>((resolve) =>
+    setTimeout(() => {
+      check('juice: frame rate measured during a big cut, particles under the cap', false, 'timed out after 90 s');
+      resolve();
+    }, 90_000),
+  ),
+]);
 
 await browser.close();
 await new Promise<void>((r) => server.httpServer.close(() => r()));

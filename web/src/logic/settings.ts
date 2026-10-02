@@ -5,6 +5,8 @@ import { LEVELS } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
 import { DEFAULT_THEME, THEME_IDS } from './themes.js';
 import type { ThemeId } from './themes.js';
+import { DETAILS } from './materials.js';
+import type { Detail } from './materials.js';
 
 /** The old Easy / Normal / Hard choice, mapped to the 1-9 levels. */
 const OLD_LEVELS: Record<string, Level> = { easy: 3, normal: 7, hard: 8 };
@@ -28,6 +30,7 @@ export type Settings = {
   palette: ThemeId;
   weakPulse: boolean; // pulse my most dangerous weak link with its "-4"
   effects: Effects; // how big the satisfying effects are
+  materialDetail: Detail; // Low: flat shapes with only the rim and shadow
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -43,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   palette: DEFAULT_THEME,
   weakPulse: true,
   effects: 'normal',
+  materialDetail: 'normal',
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -61,6 +65,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (SPEEDS.includes(s.speed as Speed)) out.speed = s.speed as Speed;
   if (THEME_IDS.includes(s.palette as ThemeId)) out.palette = s.palette as ThemeId;
   if (EFFECTS.includes(s.effects as Effects)) out.effects = s.effects as Effects;
+  if (DETAILS.includes(s.materialDetail as Detail)) out.materialDetail = s.materialDetail as Detail;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse'] as const) {
