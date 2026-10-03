@@ -73,3 +73,22 @@ again at 800 games (the table above). No other level changed. The bots read only
 Details of the Strengthen and Fruit judgement: `docs/BOT-TACTICS.md`. Settings:
 `src/bots/levels.ts`. Earlier bot versions are kept (`src/bots/v05/`, `BOT_VERSIONS`), so old
 tickets replay with the bots they were played against.
+
+## Seed version (A/B test)
+
+The same 10 pairings, 800 games each, in the Seed version (`RULESET=seed bash src/sim/ladder-run.sh ...`).
+All targets pass, 7 vs 6 exactly on the line. Full numbers and the comparison with Sprout:
+[AB-SEED.md](AB-SEED.md).
+
+| Higher level | vs | Games | Higher level wins | Avg score lead | Target | Pass |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2 | 1 | 800 | 67.0% | 5.3 | 58% | yes |
+| 3 | 2 | 800 | 69.5% | 7.0 | 58% | yes |
+| 4 | 3 | 800 | 67.3% | 6.4 | 58% | yes |
+| 5 | 4 | 800 | 59.6% | 3.0 | 58% | yes |
+| 6 | 5 | 800 | 68.4% | 6.4 | 58% | yes |
+| 7 | 6 | 800 | 58.0% | 3.6 | 58% | yes (on the line) |
+| 8 | 7 | 800 | 71.1% | 6.5 | 58% | yes |
+| 9 | 8 | 800 | 59.0% | 3.1 | 58% | yes |
+| 9 | 7 | 800 | 75.3% | 8.4 | 65% | yes |
+| 7 | 1 | 800 | 99.1% | 24.6 | 95% | yes |

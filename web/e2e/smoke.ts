@@ -604,6 +604,13 @@ const botWords = (page: Page): Promise<string[]> =>
     await playTurn(page);
     await idle(page, 30000).catch(() => {});
     if (t === 2) {
+      // a random deal can end early (a Strangle): the result screen then covers the board, so
+      // close it with "See the board" first; History and the menu are still scanned
+      if ((await getState(page))?.phase === 'GAME_OVER') {
+        await idle(page, 30000).catch(() => {});
+        await page.locator('#go-board:visible').click({ timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(200);
+      }
       await page.click('#hud-history');
       await page.waitForTimeout(200);
       await scan(page, 'history');
