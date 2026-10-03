@@ -17,7 +17,7 @@ describe(`property games (${GAMES} RandomBot games, section 15 invariants after 
   }, 600_000);
 
   it('also holds with corner roots and other configs', () => {
-    for (const config of [{ rootStyle: 'corner' as const }, { copiesPerCard: 1 }, { fruitPerPlayer: 2 }, { knockGivesFinalTurn: false }]) {
+    for (const config of [{ rootStyle: 'corner' as const }, { copiesPerCard: 1 }, { fruitCardCount: 6 }, { knockGivesFinalTurn: false }]) {
       for (let seed = 1; seed <= 25; seed++) expect(runPropertyGame(seed, config).state.phase).toBe('GAME_OVER');
     }
   }, 600_000);

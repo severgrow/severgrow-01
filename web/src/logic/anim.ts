@@ -5,7 +5,7 @@
 import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/engine/index.js';
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
-import { OPP } from '../../../src/strings.js';
+import { FRUIT, OPP } from '../../../src/strings.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
@@ -16,7 +16,8 @@ export type Step =
   | { k: 'sever'; player: Player; by: Player; keys: string[]; origin: string }
   | { k: 'remove'; reason: 'fruit' | 'rot'; keys: string[] }
   | { k: 'strengthen'; player: Player; key: string; from: number; to: number }
-  | { k: 'fruit'; player: Player; sacrifice: string[]; target: string }
+  /** v0.6: a Fruit card removes one tile (`strength` before), then the cut follows as its own steps */
+  | { k: 'fruit'; player: Player; card: Card; target: string; strength: number }
   | { k: 'discard'; player: Player; card: Card }
   | { k: 'strangle'; loser: Player }
   | { k: 'turn'; player: Player; final: boolean }
@@ -60,9 +61,9 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
       case 'Strengthen':
         steps.push({ k: 'strengthen', player: e.player, key: coordKey(e.coord), from: e.oldStrength, to: e.newStrength });
         break;
-      case 'Fruit': {
+      case 'FruitCard': {
         hits.push(coordKey(e.target));
-        steps.push({ k: 'fruit', player: e.player, sacrifice: e.sacrifice.map(coordKey), target: coordKey(e.target) });
+        steps.push({ k: 'fruit', player: e.player, card: { id: e.card, suit: null, rank: 0 }, target: coordKey(e.target), strength: e.strength });
         break;
       }
       case 'Rot':
@@ -120,7 +121,7 @@ export const applyStep = (board: Board, s: Step): Board => {
     }
     case 'fruit': {
       const next = { ...board };
-      for (const k of [...s.sacrifice, s.target]) next[k] = null;
+      next[s.target] = null;
       return next;
     }
     case 'sync':
@@ -179,11 +180,12 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
     case 'strengthen':
       return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
     case 'fruit':
-      return s.player === viewer ? 'Fruited! Their tile is gone' : `${OPP.The} used their Fruit!`;
+      return s.player === viewer ? `${FRUIT.banner} Their ${s.strength} is gone` : FRUIT.oppDid(s.strength);
     case 'discard':
       return s.player === viewer ? null : `${OPP.The} threw away ${cardName(s.card)}`;
     case 'draw':
-      return s.player === viewer || s.from === 'deck' ? null : `${OPP.The} took ${cardName(s.card!)}`;
+      if (s.player === viewer || s.from === 'deck') return null;
+      return s.card?.suit === null ? FRUIT.oppTook : `${OPP.The} took ${cardName(s.card!)}`;
     default:
       return null;
   }

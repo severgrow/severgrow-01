@@ -24,7 +24,7 @@ const settleEvents = (before: State, after: State, p: Player, refill: boolean): 
 
 /**
  * The events one action produced (spec 12), derived from the states before and after
- * it. Every board change is covered: placements (MeldRun/MeldSet), Overgrow, Fruit,
+ * it. Every board change is covered: placements (MeldRun/MeldSet), Overgrow, Fruit cards,
  * Rot, RotPick and Sever.
  */
 export const eventsOf = (before: State, a: Action, after: State): Event[] => {
@@ -72,8 +72,8 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       out.push(...settleEvents(before, after, p, false));
       break;
     }
-    case 'Fruit':
-      out.push({ t: 'Fruit', player: p, sacrifice: res!.fruit!.sacrifice.map((c) => ({ ...c })), target: { ...res!.fruit!.target } });
+    case 'PlayFruit':
+      out.push({ t: 'FruitCard', player: p, card: res!.fruit!.card, target: { ...res!.fruit!.target }, strength: res!.fruit!.strength });
       out.push(...settleEvents(before, after, p, false));
       break;
     case 'Discard':

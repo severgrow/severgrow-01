@@ -5,8 +5,6 @@ import { moveCards, moveHexes } from '../../../src/playtest/names.js';
 import { coordKey } from '../../../src/engine/index.js';
 import { isBoardAction, kindOf, pendingAction, selFor } from './interaction.js';
 import type { Sel } from './interaction.js';
-import { fruitAction } from './fruitflow.js';
-import type { FruitFlow } from './fruitflow.js';
 
 export type GuideTarget =
   | { kind: 'card'; id: number }
@@ -19,44 +17,22 @@ export type GuideTarget =
   | { kind: 'discard' }
   | { kind: 'end' }
   | { kind: 'button' }
-  | { kind: 'kind'; move: string }
-  /** polish pass 3: "Fruit this tile" in the tile card, then Change / Next in the Fruit flow */
-  | { kind: 'fruit' }
-  | { kind: 'change' }
-  | { kind: 'next' };
+  | { kind: 'kind'; move: string };
 
 const same = (a: Action | null, b: Action) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * The next tap towards `goal`, or null if `goal` is not a legal move right now. A Fruit is
- * guided through its own flow (`flow`, polish pass 3): the target (its tile card opens,
- * `card`), "Fruit this tile", then Change and the tiles only if the suggested set differs,
- * Next, and Confirm.
+ * The next tap towards `goal`, or null if `goal` is not a legal move right now. A Fruit card
+ * (v0.6) is guided like a Sprout: the card, then its target.
  */
 export const guideTarget = (
   v: View,
   legal: readonly Action[],
   sel: Sel,
   goal: Action,
-  flow: FruitFlow | null = null,
-  card: string | null = null,
   pendingNow: Action | null = pendingAction(v, legal, sel),
 ): GuideTarget | null => {
   if (!legal.some((a) => same(a, goal))) return null;
-  if (goal.t === 'Fruit') {
-    const target = coordKey(goal.target);
-    // a picked card first goes (else the tap on the target could preview a Sprout there)
-    if (!flow && (sel.card !== null || sel.kind !== null || sel.hex !== null)) return { kind: 'cancel' };
-    if (!flow) return card === target ? { kind: 'fruit' } : { kind: 'hex', key: target };
-    if (flow.target !== target) return { kind: 'cancel' };
-    const want = goal.sacrifice.map(coordKey);
-    const right = flow.picks.length === want.length && want.every((k) => flow.picks.includes(k));
-    if (flow.step === 2) return same(fruitAction(legal, flow), goal) ? { kind: 'confirm' } : { kind: 'cancel' };
-    if (!flow.changing) return right ? { kind: 'next' } : { kind: 'change' };
-    const wrong = flow.picks.find((k) => !want.includes(k));
-    return { kind: 'hex', key: wrong ?? want.find((k) => !flow.picks.includes(k))! };
-  }
-  if (flow) return { kind: 'cancel' };
   if (goal.t === 'Draw') return { kind: goal.from };
   if (goal.t === 'EndAct') return { kind: 'end' };
   const pending = pendingNow;
@@ -76,7 +52,7 @@ export const guideTarget = (
     if (sel.card !== null && !goal.cards.some(copyOf(sel.card))) return { kind: 'cancel' };
     return { kind: 'preset' };
   }
-  if (goalKind !== 'sprout' && sel.kind !== goalKind && sel.hex === null) return { kind: 'kind', move: goalKind };
+  if (goalKind !== 'sprout' && goalKind !== 'fruit' && sel.kind !== goalKind && sel.hex === null) return { kind: 'kind', move: goalKind };
   if (sel.kind !== null && sel.kind !== goalKind) return { kind: 'cancel' };
 
   const want = selFor(v, legal, goal);

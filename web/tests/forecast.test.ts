@@ -20,7 +20,7 @@ describe('the forecast matches the engine', () => {
         const opp: Player = me === 0 ? 1 : 0;
         const v = viewFor(after, me);
         const before = JSON.stringify(v);
-        for (const a of legalActions(v).filter((x) => x.t === 'MeldRun' || x.t === 'MeldSet' || x.t === 'Sprout' || x.t === 'Fruit').slice(0, 12)) {
+        for (const a of legalActions(v).filter((x) => x.t === 'MeldRun' || x.t === 'MeldSet' || x.t === 'Sprout' || x.t === 'PlayFruit').slice(0, 12)) {
           const f = forecastMove(v, a)!;
           const real = apply(after, a);
           const mineBefore = new Set(tilesOf(after, me));
@@ -30,7 +30,7 @@ describe('the forecast matches the engine', () => {
           const theirsLost = theirsBefore.filter((k) => real.board[k]?.owner !== opp);
           expect(f.points, JSON.stringify(a)).toBe(score(real, me) - score(after, me));
           expect(f.cutMine).toEqual(lostMine);
-          expect(f.cutTheirs.length + f.replaced + (a.t === 'Fruit' ? 1 : 0)).toBe(theirsLost.length);
+          expect(f.cutTheirs.length + f.replaced + (a.t === 'PlayFruit' ? 1 : 0)).toBe(theirsLost.length);
           for (const k of f.cutTheirs) expect(real.board[k]?.owner).not.toBe(opp);
           checked++;
         }
@@ -121,7 +121,7 @@ describe('the forecast bar: one short plain line per risk', () => {
     expect(lines[1]!.text).toContain('2');
     const fruit = riskLines(f({ kind: 'fruit', cutMine: ['a', 'b', 'c'] }));
     expect(fruit.map((l) => l.reason)).toEqual(['fruit']);
-    expect(fruit[0]!.text).toContain('3');
+    expect(fruit[0]!.text).toContain('Fruit card'); // v0.6: nothing of mine is given up any more
     for (const l of [...lines, ...fruit]) {
       expect(l.icon.length).toBeGreaterThan(0);
       expect(l.text.length).toBeLessThanOrEqual(40);

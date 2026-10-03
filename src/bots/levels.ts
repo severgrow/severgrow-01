@@ -203,7 +203,7 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
   // (Its own random stream, so the rest of the bot's choices are not shifted by it.)
   const whim = mulberry32(seed ^ 0x5bd1e995);
   if (c.whimRate > 0 && v.phase === 'ACT' && whim() < c.whimRate) {
-    const odd = legal.filter((a) => a.t === 'Fruit' || isStrengthen(v, a));
+    const odd = legal.filter((a) => a.t === 'PlayFruit' || isStrengthen(v, a));
     if (odd.length > 0) return { action: odd[Math.floor(whim() * odd.length)]!, reason: 'a whim (levels 1-2 sometimes waste it)' };
   }
   let ranked: Scored[] = rankActions(v, { weights, strengthenTier: c.strengthenTier, fruitTier: c.fruitTier });

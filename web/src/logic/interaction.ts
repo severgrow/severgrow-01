@@ -9,7 +9,7 @@ export type Sel = { card: number | null; hex: string | null; kind: string | null
 export const EMPTY_SEL: Sel = Object.freeze({ card: null, hex: null, kind: null, option: 0 }) as Sel;
 
 export const isBoardAction = (a: Action): boolean =>
-  a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'Fruit' || a.t === 'RotPick';
+  a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit' || a.t === 'RotPick';
 
 /** "line-3", "clump-3", "sprout", "fruit" or "rot"; null for moves that are not on the board. */
 export const kindOf = (a: Action): string | null => {
@@ -20,7 +20,7 @@ export const kindOf = (a: Action): string | null => {
       return `clump-${a.cards.length}`;
     case 'Sprout':
       return 'sprout';
-    case 'Fruit':
+    case 'PlayFruit':
       return 'fruit';
     case 'RotPick':
       return 'rot';
@@ -34,7 +34,7 @@ export const kindLabel = (kind: string): string => {
   if (k === 'line') return `Grow a line of ${n}`;
   if (k === 'clump') return `Grow a clump of ${n}`;
   if (k === 'sprout') return 'Sprout one tile';
-  if (k === 'fruit') return 'Use a fruit';
+  if (k === 'fruit') return 'Use a Fruit card';
   return 'Pick a tile to rot';
 };
 
@@ -46,12 +46,11 @@ const sameCard = (v: View, a: number, b: number) => {
 };
 
 type Skip = 'card' | 'hex' | 'kind' | null;
-// Fruit has its own guided flow (fruitflow.ts), so card and hex picking never offer it.
+// v0.6: a Fruit card is picked and played like any card (card, then its target).
 const matching = (v: View, legal: readonly Action[], sel: Sel, skip: Skip = null): Action[] =>
   legal.filter(
     (a) =>
       isBoardAction(a) &&
-      a.t !== 'Fruit' &&
       (skip === 'card' || sel.card === null || moveCards(a).some((id) => sameCard(v, sel.card!, id))) &&
       (skip === 'hex' || sel.hex === null || touchesHex(a, sel.hex)) &&
       (skip === 'kind' || sel.kind === null || kindOf(a) === sel.kind),

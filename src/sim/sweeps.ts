@@ -28,7 +28,7 @@ export const SWEEPS: Sweep[] = [
     variants: [{ label: 'on', config: { allowHyphaOneBend: true } }],
     skipped: 'not implemented (spec 8.2 defers bend to Milestone C; the engine rejects it)',
   },
-  { name: 'fruitPerPlayer', variants: grid([0, 1, 2], (x) => `${x}`, (fruitPerPlayer) => ({ fruitPerPlayer })) },
+  { name: 'fruitCardCount', variants: grid([0, 2, 4, 6], (x) => `${x}`, (fruitCardCount) => ({ fruitCardCount })) },
 ];
 
 export type SweepResult = { name: string; skipped?: string; rows: { label: string; config: Partial<RulesConfig>; metrics: Metrics }[] };

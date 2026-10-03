@@ -4,12 +4,12 @@ import type { Action, Card, Coord, Player, View } from '../engine/index.js';
 import { simulate } from '../bots/evaluate.js';
 import type { Simulation } from '../bots/evaluate.js';
 import { hexName } from './names-core.js';
-import { OPP, SPROUT } from '../strings.js';
+import { FRUIT, OPP, SPROUT } from '../strings.js';
 
 export { hexName };
 
 export const SUIT_ICONS = ['🌿', '🪨', '💧', '🔥'] as const;
-export const cardName = (c: Card): string => `${SUIT_NAMES[c.suit]} ${c.rank}`;
+export const cardName = (c: Card): string => (c.suit === null ? FRUIT.card : `${SUIT_NAMES[c.suit]} ${c.rank}`);
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -54,10 +54,10 @@ export const moveSentence = (v: View, a: Action): string => {
       const card = v.hand.find((c) => c.id === a.card)!;
       return `${SPROUT.suggest(hn(a.coord), cardName(card))}${effects(sim)}${pointsText(sim)}`;
     }
-    case 'Fruit': {
+    case 'PlayFruit': {
       const sim = simulate(v, a)!;
       const more = sim.botCut > 0 ? `, cutting off ${sim.botCut} more` : '';
-      return `Give up 3 of your tiles to destroy ${OPP.theirs} tile at ${hn(a.target)}${more}${pointsText(sim)}`;
+      return `${FRUIT.suggest(hn(a.target), v.board[coordKey(a.target)]!.strength)}${more}${pointsText(sim)}`;
     }
     case 'EndAct':
       return "I'm done playing cards";
@@ -84,8 +84,8 @@ export const moveHexes = (a: Action): Coord[] => {
       return a.hexes;
     case 'Sprout':
       return [a.coord];
-    case 'Fruit':
-      return [...a.sacrifice, a.target];
+    case 'PlayFruit':
+      return [a.target];
     case 'RotPick':
       return [a.coord];
     default:
@@ -96,7 +96,7 @@ export const moveHexes = (a: Action): Coord[] => {
 /** Card ids a move uses. */
 export const moveCards = (a: Action): number[] => {
   if (a.t === 'MeldRun' || a.t === 'MeldSet') return a.cards;
-  if (a.t === 'Sprout') return [a.card];
+  if (a.t === 'Sprout' || a.t === 'PlayFruit') return [a.card];
   if (a.t === 'Discard') return [a.card];
   return [];
 };

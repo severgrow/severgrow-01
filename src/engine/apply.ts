@@ -2,7 +2,8 @@ import { coordKey } from './board.js';
 import { ACTION_PHASE, assertActionShape } from './actions.js';
 import { deadwood } from './deadwood.js';
 import { IllegalActionError } from './errors.js';
-import { applyFruit, planFruit } from './fruit.js';
+import { isFruitCard } from './cards.js';
+import { planFruitCard } from './fruit.js';
 import { eventsOf } from './events.js';
 import { afterDiscard, emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
 import { applyPlacement, assertCoord, planRun, planSet, planSprout } from './placement.js';
@@ -22,6 +23,13 @@ const setHand = (s: State, p: Player, hand: Card[]): [Card[], Card[]] => {
   return hands;
 };
 
+/** v0.6: the Fruit cards known to be in p's hand can only drop when p's hand loses Fruit cards. */
+const knownAfter = (s: State, p: Player, hand: readonly Card[]): [number, number] => {
+  const known: [number, number] = [...s.fruitKnown];
+  known[p] = Math.min(known[p], hand.filter(isFruitCard).length);
+  return known;
+};
+
 const draw = (s: State, from: 'deck' | 'discard'): State => {
   const p = s.turnPlayer;
   if (from === 'deck') {
@@ -35,8 +43,12 @@ const draw = (s: State, from: 'deck' | 'discard'): State => {
     };
   }
   const card = s.discard.at(-1) ?? fail('DISCARD_EMPTY', 'the discard pile is empty');
+  // v0.6: a Fruit card taken from the throw pile is known to be in this hand
+  const fruitKnown: [number, number] = [...s.fruitKnown];
+  if (isFruitCard(card)) fruitKnown[p]++;
   return {
     ...s,
+    fruitKnown,
     discard: s.discard.slice(0, -1),
     hands: setHand(s, p, [...s.hands[p], card]),
     drawnFromDiscard: card.id,
@@ -81,13 +93,15 @@ const knockEnd = (s: State): State => {
 /** EndAct: go to the discard, or skip it when the hand is empty (v0.4). */
 const endAct = (s: State): State => (s.hands[s.turnPlayer].length === 0 ? afterDiscard(s, knockEnd) : { ...s, phase: 'DISCARD' });
 
-const fruit = (s: State, a: Extract<Action, { t: 'Fruit' }>): State => {
+/** v0.6 PlayFruit: the target goes, the card leaves the game; then cut and Strangle checks. */
+const playFruit = (s: State, a: Extract<Action, { t: 'PlayFruit' }>): State => {
   const p = s.turnPlayer;
-  const plan = planFruit(s, p, s.fruitUsed[p], a.sacrifice, a.target);
-  const fruitUsed: [number, number] = [...s.fruitUsed];
-  fruitUsed[p]++;
-  const res = { ...emptyResolution(), fruit: plan };
-  return severAndStrangle({ ...s, board: applyFruit(s.board, plan), fruitUsed }, p, res);
+  const plan = planFruitCard(s, p, s.hands[p], a.card, a.target);
+  const hand = s.hands[p].filter((c) => c.id !== plan.card.id);
+  const board = removeTiles(s.board, [plan.target]);
+  const res = { ...emptyResolution(), fruit: { card: plan.card.id, target: { ...plan.target }, strength: plan.strength } };
+  const next: State = { ...s, board, hands: setHand(s, p, hand), fruitPlayed: s.fruitPlayed + 1, fruitKnown: knownAfter(s, p, hand) };
+  return severAndStrangle(next, p, res);
 };
 
 const discard = (s: State, cardId: number): State => {
@@ -97,10 +111,12 @@ const discard = (s: State, cardId: number): State => {
   if (s.config.forbidRedundantDiscard && s.drawnFromDiscard === cardId && s.hands[p].length > 1) {
     fail('REDUNDANT_DISCARD', 'cannot discard the card just taken from the discard pile');
   }
+  const hand = s.hands[p].filter((c) => c.id !== cardId);
   const next: State = {
     ...s,
-    hands: setHand(s, p, s.hands[p].filter((c) => c.id !== cardId)),
+    hands: setHand(s, p, hand),
     discard: [...s.discard, card],
+    fruitKnown: knownAfter(s, p, hand),
   };
   return afterDiscard(next, knockEnd);
 };
@@ -173,8 +189,8 @@ const applyRules = (state: State, action: Action): State => {
       return meld(state, planRun(state, p, state.hands[p], a.cards, a.start, a.dir));
     case 'MeldSet':
       return meld(state, planSet(state, p, state.hands[p], a.cards, a.hexes));
-    case 'Fruit':
-      return fruit(state, a);
+    case 'PlayFruit':
+      return playFruit(state, a);
     case 'Sprout':
       return sprout(state, a.card, a.coord);
     case 'EndAct':

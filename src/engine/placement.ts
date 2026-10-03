@@ -116,6 +116,8 @@ export const strengthenBlocker = (ctx: BoardCtx, player: Player, coord: Coord, r
  */
 export const planSprout = (ctx: BoardCtx, player: Player, hand: readonly Card[], cardId: number, coord: Coord, strengthenUsed = 0): Placement => {
   const [card] = takeCards(hand, [cardId]);
+  // v0.6: a Fruit card has no number: it never sprouts or strengthens
+  if (card!.suit === null) throw new IllegalActionError('NOT_A_NUMBER_CARD', 'a Fruit card cannot sprout or strengthen');
   const c = assertCoord(coord);
   const own = ctx.board[coordKey(c)];
   if (own && own.owner === player && isOnBoard(c, ctx.config.boardRadius)) {

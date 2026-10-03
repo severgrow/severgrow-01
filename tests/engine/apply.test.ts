@@ -198,24 +198,24 @@ describe('ACT: melds', () => {
   });
 });
 
-describe('ACT: Fruit', () => {
+describe('ACT: Fruit cards (v0.6)', () => {
   const tiles: Record<string, [Player, number]> = {
     '-1,1': [0, 3],
-    '0,1': [0, 3],
     '0,0': [0, 3],
     '1,0': [1, 9],
     '1,-1': [1, 9],
     '2,0': [1, 4],
   };
-  const fruit: Action = {
-    t: 'Fruit',
-    sacrifice: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: 0, r: 0 }],
-    target: { q: 1, r: 0 },
-  };
+  const fruitCard: Card = { id: 900, suit: null, rank: 0 };
+  const hands: [Card[], Card[]] = [[fruitCard, ...junk(6)], junk(7)];
+  const fruit: Action = { t: 'PlayFruit', card: 900, target: { q: 1, r: 0 } };
 
-  it('resolves, counts the use, and Severs', () => {
-    const n = act(makeState({ phase: 'ACT', tiles }), fruit);
-    expect(n.fruitUsed).toEqual([1, 0]);
+  it('resolves, the card leaves the game, and Severs', () => {
+    const before = makeState({ phase: 'ACT', tiles, hands });
+    const n = act(before, fruit);
+    expect(n.fruitPlayed).toBe(1);
+    expect(n.hands[0]).toHaveLength(6);
+    expect(n.discard).toEqual(before.discard);
     expect(n.board['1,0']).toBeNull();
     expect(n.board['2,0']).toBeNull(); // severed
     expect(n.lastResolution).toEqual({
@@ -223,16 +223,19 @@ describe('ACT: Fruit', () => {
       overgrown: [],
       rotted: [],
       severed: [{ player: 1, coords: [{ q: 2, r: 0 }] }],
-      fruit: { sacrifice: fruit.t === 'Fruit' ? fruit.sacrifice : [], target: { q: 1, r: 0 } },
+      fruit: { card: 900, target: { q: 1, r: 0 }, strength: 9 },
     });
   });
 
-  it('only once per player', () => {
-    illegal(makeState({ phase: 'ACT', tiles, patch: { fruitUsed: [1, 0] } }), fruit, 'FRUIT_EXHAUSTED');
+  it('as many as I hold: no per-turn or per-game limit', () => {
+    const two: [Card[], Card[]] = [[fruitCard, { id: 901, suit: null, rank: 0 }, ...junk(5)], junk(7)];
+    const n = act(act(makeState({ phase: 'ACT', tiles, hands: two }), fruit), { t: 'PlayFruit', card: 901, target: { q: 1, r: -1 } });
+    expect(n.fruitPlayed).toBe(2);
+    expect(n.board['1,-1']).toBeNull();
   });
 
   it('only in ACT', () => {
-    illegal(makeState({ phase: 'DISCARD', tiles }), fruit, 'WRONG_PHASE');
+    illegal(makeState({ phase: 'DISCARD', tiles, hands }), fruit, 'WRONG_PHASE');
   });
 });
 
@@ -567,17 +570,11 @@ describe('general legality', () => {
     illegal(s(run), { ...go(run), start: { q: -2, r: 1 }, dir: 3 }, 'OFF_BOARD');
   });
 
-  it('fruit edge cases via apply', () => {
-    const st = makeState({ phase: 'ACT', tiles: { '-1,1': [0, 3], '0,1': [0, 3], '-3,3': [0, 3], '0,0': [1, 1] } });
-    illegal(
-      st,
-      { t: 'Fruit', sacrifice: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: -3, r: 3 }], target: { q: 0, r: 0 } },
-      'FRUIT_SACRIFICE_NOT_CONNECTED',
-    );
-    illegal(
-      st,
-      { t: 'Fruit', sacrifice: [{ q: -2, r: 2 }, { q: -1, r: 1 }, { q: 0, r: 1 }], target: { q: 0, r: 0 } },
-      'FRUIT_SACRIFICE_ROOT',
-    );
+  it('fruit card edge cases via apply', () => {
+    const st = makeState({ phase: 'ACT', tiles: { '-1,1': [0, 3], '0,0': [1, 1] }, hands: [[{ id: 900, suit: null, rank: 0 }, ...junk(6)], junk(7)] });
+    illegal(st, { t: 'PlayFruit', card: 900, target: { q: 2, r: -2 } }, 'FRUIT_TARGET_ROOT');
+    illegal(st, { t: 'PlayFruit', card: 900, target: { q: -1, r: 1 } }, 'FRUIT_TARGET_NOT_ENEMY');
+    illegal(st, { t: 'PlayFruit', card: st.hands[0][1]!.id, target: { q: 0, r: 0 } }, 'NOT_A_FRUIT_CARD');
   });
+
 });

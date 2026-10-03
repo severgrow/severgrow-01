@@ -34,3 +34,14 @@ export const fillIcons = (root: ParentNode = document) => {
     if (!el.firstChild) el.innerHTML = ICONS[el.dataset.icon!] ?? '';
   }
 };
+
+/**
+ * v0.6 Fruit card: a mushroom cap with spores drifting off it (24x24, line style). Drawn in
+ * the card's own ink; no suit colour.
+ */
+export const FRUIT_SVG = wrap(
+  '<path d="M4 13c0-5 3.6-8.5 8-8.5S20 8 20 13z" fill="currentColor" fill-opacity=".18"/>' +
+    '<path d="M10 13v4.5a2 2 0 0 0 4 0V13"/>' +
+    '<circle cx="9" cy="9.5" r=".9" fill="currentColor"/><circle cx="13.5" cy="8" r=".9" fill="currentColor"/><circle cx="16" cy="11" r=".7" fill="currentColor"/>' +
+    '<circle cx="6" cy="4.5" r=".6" fill="currentColor"/><circle cx="18.5" cy="4" r=".5" fill="currentColor"/><circle cx="20.5" cy="7.5" r=".45" fill="currentColor"/>',
+);

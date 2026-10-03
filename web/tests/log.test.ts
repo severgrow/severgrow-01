@@ -11,7 +11,7 @@ group('history lines', () => {
       expect(line.length).toBeGreaterThan(0);
       if (before.actor !== 1) return;
       const used = new Set<number>(
-        action.t === 'MeldRun' || action.t === 'MeldSet' ? action.cards : action.t === 'Sprout' || action.t === 'Discard' ? [action.card] : [],
+        action.t === 'MeldRun' || action.t === 'MeldSet' ? action.cards : action.t === 'Sprout' || action.t === 'Discard' || action.t === 'PlayFruit' ? [action.card] : [],
       );
       for (const c of after.hands[1]) if (!used.has(c.id) && !before.discard.some((d) => d.id === c.id)) {
         // a held card may share a name with a played copy; only flag names never shown

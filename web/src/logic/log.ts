@@ -1,9 +1,9 @@
 // Plain sentences for the history list and the result line. Never reveals the bot's
 // hidden cards (it only names cards the bot has already shown by playing them).
-import { viewFor } from '../../../src/engine/index.js';
+import { coordKey, viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { OPP, SPROUT } from '../../../src/strings.js';
+import { FRUIT, OPP, SPROUT } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -41,7 +41,7 @@ const resolution = (s: State, me: Player): string => {
 export const describe = (before: State, a: Action, after: State, me: Player): string => {
   const R = before.config.boardRadius;
   const hn = (c: Coord) => hexName(c, R);
-  const placed = a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout';
+  const placed = a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit';
   const tail = placed && after.lastResolution !== before.lastResolution ? resolution(after, me) : '';
   if (before.actor === me) {
     if (a.t === 'MeldRun') return `You grew a line of ${a.cards.length}${tail}`;
@@ -68,8 +68,8 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
       return `${OPP.The} knocked: you get one last turn`;
     case 'Continue':
       return `${OPP.The} ended their turn`;
-    case 'Fruit':
-      return `${OPP.The} used a fruit on ${hn(a.target)}`;
+    case 'PlayFruit':
+      return `${FRUIT.oppDid(before.board[coordKey(a.target)]?.strength ?? 0)} at ${hn(a.target)}${tail}`;
     case 'RotPick':
       return `${OPP.The} chose your tile at ${hn(a.coord)} to rot`;
   }

@@ -32,7 +32,7 @@ const moments = (): HintCtx[] => {
     for (const phase of ['DRAW', 'ACT', 'DISCARD', 'KNOCK', 'ROT_PICK', 'GAME_OVER'])
       for (const myTurn of [true, false]) for (const busy of [true, false]) out.push({ ...b, phase, myTurn, busy });
     for (const deckCount of [0, 1, 2, 3, 4, 40]) for (const canTakeThrow of [true, false]) out.push({ ...b, phase: 'DRAW', deckCount, canTakeThrow });
-    for (const step of [1, 2] as const) for (const changing of [true, false]) out.push({ ...b, fruit: { step, changing, picks: 2, n: 3, msg: null } });
+    for (const firstTime of [true, false]) out.push({ ...b, fruit: { firstTime } });
     for (const pending of ['strengthen', 'drawn', 'board'] as const) out.push({ ...b, pending });
     for (const kind of ['line', 'clump'] as const) for (const fine of [true, false]) out.push({ ...b, drawing: { kind, n: 4, fine } });
     for (const single of [true, false]) for (const grow of [true, false]) for (const replace of [true, false]) for (const strengthen of [true, false]) out.push({ ...b, card: { single, grow, replace, strengthen } });

@@ -1,7 +1,7 @@
 // v0.5 simulation (Fruit, Strengthen, fairness). Bot-vs-bot games with swapped starts,
 // split across processes, one JSON of raw per-game records per part; `--table` prints the
 // metrics per setting.
-//   npx tsx src/sim/v05.ts --name=A-f1 --config='{"fruitPerPlayer":1}' --levels=7,7 --games=2000 --part=0 --parts=4 --dir=sim-v05
+//   npx tsx src/sim/v05.ts --name=A-f1 --config='{"fruitCardCount":4}' --levels=7,7 --games=2000 --part=0 --parts=4 --dir=sim-v05
 //   npx tsx src/sim/v05.ts --table --dir=sim-v05
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { allNeighbors, apply, coordKey, legalActions, newGame, parseKey, score, viewFor } from '../engine/index.js';
@@ -83,7 +83,7 @@ export const playV05 = (seed: number, levels: [Level, Level], aFirst: boolean, c
     const v = viewFor(s, p);
     if (s.phase === 'ACT') {
       const legal = legalActions(v);
-      if (legal.some((a) => a.t === 'Fruit')) rec.fruitAvailable[p] = true;
+      if (legal.some((a) => a.t === 'PlayFruit')) rec.fruitAvailable[p] = true;
       if (!turnCouldGrow.has(s.turnNumber)) turnCouldGrow.set(s.turnNumber, legal.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout'));
     }
     if (s.phase === 'DRAW') {
@@ -114,12 +114,11 @@ export const playV05 = (seed: number, levels: [Level, Level], aFirst: boolean, c
         const kind = loss >= 3 ? 'chokepoint' : loss === 2 ? 'thin link' : before.terrain[key] === 'rich' ? 'gold' : 'other';
         rec.strengthens.push({ seat: e.player, turn, kind, from: e.oldStrength, to: e.newStrength });
       }
-      if (e.t === 'Fruit') {
+      if (e.t === 'FruitCard') {
         activeTurns.add(turn);
-        const tgt = before.board[coordKey(e.target)]!;
         if (blockers.has(coordKey(e.target))) rec.blockerRemoved = true;
         const purposes: string[] = [];
-        if (tgt.strength >= max) purposes.push('top-rank tile');
+        if (e.strength >= max) purposes.push('top-rank tile');
         const enemyCut = events.filter((x) => x.t === 'Sever' && x.player !== e.player).reduce((n, x) => n + (x as { coords: unknown[] }).coords.length, 0);
         const ownCut = events.filter((x) => x.t === 'Sever' && x.player === e.player).reduce((n, x) => n + (x as { coords: unknown[] }).coords.length, 0);
         if (enemyCut >= 3) purposes.push('big cut');

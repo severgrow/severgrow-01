@@ -4417,3 +4417,70 @@ html.final-turns .game::after {
   border-radius: 4px;
   pointer-events: none;
 }
+
+/* ---------- v0.6 Fruit cards ---------- */
+/* Bone-cream face, a mushroom with spores, a small "Fruit" print, a thin pearly edge and a
+   low-key raised look. No suit colour (and no amber, mint or coral). */
+.card.fruit {
+  --card-bg: linear-gradient(160deg, #f4ecdb 0%, #ebe0c8 55%, #e2d5ba 100%);
+  --card-ink: #4a3a2a;
+  background: var(--card-bg);
+  color: var(--card-ink);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -2px 3px rgb(90 70 40 / 0.12), 0 1px 2px rgb(0 0 0 / 0.25);
+  grid-template-rows: 1fr auto;
+  align-items: center;
+}
+.card.fruit::before {
+  /* the thin pearly (iridescent) edge */
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from 210deg, #d9d2ec, #cfe3ea, #efe7cf, #e6d6e8, #d6e6dc, #d9d2ec);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.card.fruit .c-fruit {
+  font-size: calc(var(--ch) * 0.42);
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.card.fruit .c-print {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.pile-top.card.fruit .c-fruit {
+  font-size: calc(var(--ch) * 0.36);
+}
+/* in the hand: a small gap before the Fruit cards, a soft glow when one has a target */
+.hand .card.fruit-gap {
+  margin-left: calc(min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1))) + 6px);
+}
+.hand .card.fruit.fruit-ready {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.35), 0 0 10px 2px color-mix(in srgb, #e9e2f4 55%, transparent);
+}
+.hand .card.fruit.dim {
+  opacity: 0.55;
+}
+.fruit-chip {
+  align-self: center;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  color: var(--c-muted, var(--c-text));
+  background: color-mix(in srgb, var(--c-surface) 85%, transparent);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand .card.fruit.fruit-ready {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 2px #d9d2ec;
+  }
+}

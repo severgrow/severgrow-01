@@ -29,7 +29,7 @@ describe('levels and tiers', () => {
       while (s.phase !== 'GAME_OVER') {
         const lv = s.actor === 0 ? 7 : 9;
         const d = decideLevelAction(viewFor(s, s.actor), lv, botSeed(s.seed, lv, s.turnNumber, s.history!.length));
-        if (d.action.t === 'Fruit' || isStrengthen(viewFor(s, s.actor), d.action)) {
+        if (d.action.t === 'PlayFruit' || isStrengthen(viewFor(s, s.actor), d.action)) {
           seen++;
           expect(d.reason, JSON.stringify(d.action)).toMatch(/\w/);
         }
@@ -46,7 +46,7 @@ describe('levels and tiers', () => {
     for (let seed = 1; seed <= 400; seed++) {
       const a = decideLevelAction(v, 1, seed);
       expect(decideLevelAction(v, 1, seed)).toEqual(a);
-      if (a.action.t === 'Fruit' || isStrengthen(v, a.action)) odd++;
+      if (a.action.t === 'PlayFruit' || isStrengthen(v, a.action)) odd++;
     }
     expect(odd).toBeGreaterThan(0);
     expect(odd).toBeLessThan(60); // rare
@@ -77,13 +77,13 @@ describe('Strengthen judgement', () => {
     const exposed = judgeStrengthen(t, { t: 'Sprout', card: id, coord: { q: 0, r: 0 } }, 3).score;
     const safe = judgeStrengthen(t, { t: 'Sprout', card: id, coord: { q: -3, r: 3 } }, 3).score;
     expect(exposed).toBeGreaterThan(safe);
-    // give them a connected group of 3 next to (0,0) and an unused Fruit: level 9 values it less
+    // their tiles touch (0,0) and Fruit cards are still unseen: level 9 values it less
     const s2 = stateWith({ ...tiles, '0,-1': [1, 2], '1,-2': [1, 2] }, [[0, 9]]);
     const v2 = viewFor(s2, 0);
     const t2 = tacticsCtx(v2);
     const a = { t: 'Sprout' as const, card: v2.hand[0]!.id, coord: { q: 0, r: 0 } };
     expect(judgeStrengthen(t2, a, 4).score).toBeLessThan(judgeStrengthen(t2, a, 3).score);
-    const used = viewFor({ ...s2, fruitUsed: [0, 1] }, 0);
+    const used = { ...viewFor(s2, 0), fruitUnseen: 0 }; // every Fruit card accounted for
     expect(judgeStrengthen(tacticsCtx(used), a, 4).score).toBeCloseTo(judgeStrengthen(tacticsCtx(used), a, 3).score, 5);
   });
 });

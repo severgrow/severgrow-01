@@ -1,5 +1,5 @@
-// v0.5 rules: Strengthen (a Sprout on my own weaker tile), Fruit back on by default with its
-// options, and the removal of the old opening-combo guarantee. Written before the code.
+// v0.5 rules: Strengthen (a Sprout on my own weaker tile) and the removal of the old
+// opening-combo guarantee. (v0.6: the 3-tile Fruit is retired; Fruit cards: fruit.test.ts.)
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_CONFIG,
@@ -20,7 +20,7 @@ import { codeOf, fixture } from '../helpers.js';
  */
 const stateWith = (o: {
   tiles: Record<string, [Player, number]>;
-  hand: [Suit, number][];
+  hand: [Suit | null, number][];
   config?: Partial<RulesConfig>;
   rich?: string[];
   patch?: Partial<State>;
@@ -43,9 +43,8 @@ const json = (x: unknown) => JSON.stringify(x);
 // P1 (root -2,2): a chain (-1,1)=5, (0,1)=3, (0,0)=2. P2 (root 2,-2): (1,-1)=4, (1,0)=9.
 const CHAIN: Record<string, [Player, number]> = { '-1,1': [0, 5], '0,1': [0, 3], '0,0': [0, 2], '1,-1': [1, 4], '1,0': [1, 9] };
 
-describe('v0.5 config: Fruit on, Strengthen on, a fair deal, no opening guarantee', () => {
-  it('has the new keys and no trace of the removed opening-combo guarantee', () => {
-    expect(DEFAULT_CONFIG).toMatchObject({ fruitPerPlayer: 1, fruitSacrifice: 3, fruitOnlyWhenBehind: false });
+describe('config: Strengthen on, a fair deal, no opening guarantee', () => {
+  it('has the Strengthen keys and no trace of the removed opening-combo guarantee', () => {
     expect(typeof DEFAULT_CONFIG.allowStrengthen).toBe('boolean');
     expect(Number.isInteger(DEFAULT_CONFIG.strengthenLimitPerGame)).toBe(true);
     expect('guaranteeOpeningMeld' in DEFAULT_CONFIG).toBe(false);
@@ -56,11 +55,12 @@ describe('v0.5 config: Fruit on, Strengthen on, a fair deal, no opening guarante
     expect(viewFor(g, 0).strengthenUsed).toEqual([0, 0]);
   });
 
-  it('validates the new numbers: strengthenLimitPerGame >= -1, fruitSacrifice >= 1', () => {
+  it('validates the numbers: strengthenLimitPerGame >= -1, fruitCardCount >= 0; the switches are booleans', () => {
     expect(codeOf(() => resolveConfig({ strengthenLimitPerGame: -2 }))).toBe('INVALID_NUMBER');
-    expect(codeOf(() => resolveConfig({ fruitSacrifice: 0 }))).toBe('INVALID_NUMBER');
+    expect(codeOf(() => resolveConfig({ fruitCardCount: -1 }))).toBe('INVALID_NUMBER');
     expect(codeOf(() => resolveConfig({ allowStrengthen: 'yes' as never }))).toBe('INVALID_BOOLEAN');
-    expect(resolveConfig({ strengthenLimitPerGame: -1, fruitSacrifice: 2 }).fruitSacrifice).toBe(2);
+    expect(codeOf(() => resolveConfig({ fruitRootCountsAsTouch: 1 as never }))).toBe('INVALID_BOOLEAN');
+    expect(resolveConfig({ strengthenLimitPerGame: -1, fruitCardCount: 2 }).fruitCardCount).toBe(2);
   });
 });
 
@@ -146,69 +146,16 @@ const order = (k: string) => {
   return (q + 10) * 100 + (r + 10);
 };
 
-describe('Fruit (back, on by default)', () => {
-  // P1: (-1,1) (0,1) (0,0) (1,1) chain from the root; P2: (1,-1)=4, (1,0)=9, (2,0)=4 hanging off (1,0).
-  const tiles: Record<string, [Player, number]> = { '-1,1': [0, 3], '0,1': [0, 3], '0,0': [0, 3], '1,1': [0, 2], '1,-1': [1, 4], '1,0': [1, 9], '2,0': [1, 4] };
-  const trio = [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: 0, r: 0 }];
-  const fruit = (s: State, sacrifice = trio, target = { q: 1, r: 0 }) => apply(s, { t: 'Fruit', sacrifice, target });
+describe('Strengthen and Fruit cards (v0.6)', () => {
+  // P1: (-1,1) (0,1) (0,0) chain from the root; P2: (1,-1)=4, (1,0) next to my (0,0).
+  const tiles: Record<string, [Player, number]> = { '-1,1': [0, 3], '0,1': [0, 3], '0,0': [0, 3], '1,-1': [1, 4], '1,0': [1, 5] };
 
-  it('is on by default: once per player, removes a 9, then cuts both sides and lists it all in order', () => {
-    const s = stateWith({ tiles, hand: [[0, 1]] });
-    const before = json(s);
-    const after = fruit(s);
-    expect(json(s)).toBe(before);
-    for (const k of ['-1,1', '0,1', '0,0', '1,0']) expect(after.board[k]).toBeNull();
-    expect(after.board['2,0']).toBeNull(); // cut off from P2's root
-    expect(after.board['1,1']).toBeNull(); // my own tile, cut off by my own sacrifice
-    expect(after.fruitUsed).toEqual([1, 0]);
-    const ev = after.history!.slice(s.history!.length).map((e) => e.t);
-    expect(ev).toEqual(['Fruit', 'Sever', 'Sever']);
-    expect(after.lastResolution!.fruit).toEqual({ sacrifice: trio, target: { q: 1, r: 0 } });
-    expect(codeOf(() => fruit({ ...after, board: s.board }))).toBe('FRUIT_EXHAUSTED');
-  });
-
-  it('fruitSacrifice sets how many tiles are given up', () => {
-    const two = stateWith({ tiles, hand: [[0, 1]], config: { fruitSacrifice: 2 } });
-    expect(codeOf(() => fruit(two))).toBe('FRUIT_SACRIFICE_COUNT');
-    expect(fruit(two, [{ q: 0, r: 1 }, { q: 0, r: 0 }]).board['1,0']).toBeNull();
-    const four = stateWith({ tiles, hand: [[0, 1]], config: { fruitSacrifice: 4 } });
-    expect(codeOf(() => fruit(four))).toBe('FRUIT_SACRIFICE_COUNT');
-    expect(fruit(four, [...trio, { q: 1, r: 1 }]).board['1,0']).toBeNull();
-    expect(legalActions(viewFor(four, 0)).filter((a) => a.t === 'Fruit').every((a) => (a as { sacrifice: unknown[] }).sacrifice.length === 4)).toBe(true);
-  });
-
-  it('fruitOnlyWhenBehind: refused while level or ahead, allowed when behind', () => {
-    const level = stateWith({ tiles, hand: [[0, 1]], config: { fruitOnlyWhenBehind: true } });
-    expect(score(level, 0)).toBeGreaterThan(score(level, 1));
-    expect(codeOf(() => fruit(level))).toBe('FRUIT_NOT_BEHIND');
-    expect(legalActions(viewFor(level, 0)).some((a) => a.t === 'Fruit')).toBe(false);
-    const behind = stateWith({ tiles: { ...tiles, '2,-1': [1, 2], '3,-1': [1, 2], '2,-3': [1, 2] }, hand: [[0, 1]], config: { fruitOnlyWhenBehind: true } });
-    expect(score(behind, 0)).toBeLessThan(score(behind, 1));
-    expect(fruit(behind).fruitUsed).toEqual([1, 0]);
-  });
-
-  it('only in the Grow step; off with fruitPerPlayer 0', () => {
-    const s = stateWith({ tiles, hand: [[0, 1]], patch: { phase: 'DISCARD' } });
-    expect(codeOf(() => fruit(s))).toBe('WRONG_PHASE');
-    const off = stateWith({ tiles, hand: [[0, 1]], config: { fruitPerPlayer: 0 } });
-    expect(codeOf(() => fruit(off))).toBe('FRUIT_EXHAUSTED');
-    expect(legalActions(viewFor(off, 0)).some((a) => a.t === 'Fruit')).toBe(false);
-  });
-
-  it('a failed Fruit changes nothing (atomic)', () => {
-    const s = stateWith({ tiles, hand: [[0, 1]] });
-    const before = json(s);
-    expect(codeOf(() => fruit(s, [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 1, r: 1 }]))).toBe('FRUIT_SACRIFICE_NOT_CONNECTED');
-    expect(codeOf(() => fruit(s, trio, { q: 2, r: -2 }))).toBe('FRUIT_TARGET_ROOT');
-    expect(codeOf(() => fruit(s, [{ q: -2, r: 2 }, { q: -1, r: 1 }, { q: 0, r: 1 }]))).toBe('FRUIT_SACRIFICE_ROOT');
-    expect(json(s)).toBe(before);
-  });
-
-  it('Strengthen then Fruit on that tile: Fruit ignores strength', () => {
-    const s = stateWith({ tiles: { ...tiles, '1,0': [1, 5] }, hand: [[0, 1]] });
-    // the bot strengthens its 5 to a 9 ...
+  it('Strengthen then a Fruit card on that tile: the Fruit ignores strength (Strengthen is no protection)', () => {
+    const s = stateWith({ tiles, hand: [[null, 0]] });
+    // the opponent strengthens its 5 to a 9 ...
     const bot: State = { ...s, board: { ...s.board, '1,0': { owner: 1, strength: 9 } } };
-    // ... and the 9 still falls to my Fruit
-    expect(fruit(bot).board['1,0']).toBeNull();
+    // ... and the 9 still falls to my Fruit card
+    const fruitId = s.hands[0][0]!.id;
+    expect(apply(bot, { t: 'PlayFruit', card: fruitId, target: { q: 1, r: 0 } }).board['1,0']).toBeNull();
   });
 });

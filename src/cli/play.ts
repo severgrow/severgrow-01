@@ -35,7 +35,7 @@ const statusBlock = (s: State): string => {
     renderBoard(s),
     `Key: YR/BR roots, Y5/B3 tiles with strength, ** gold hex (2 points), ## rock, .. empty`,
     `Score: you ${v.score}, bot ${v.opponentScore}   Deck: ${v.deckCount}   Discard top: ${top ? cardName(top) : '-'}`,
-    `Your hand: ${[...v.hand].sort((a, b) => a.suit - b.suit || a.rank - b.rank).map(cardName).join(', ')}`,
+    `Your hand: ${[...v.hand].sort((a, b) => (a.suit ?? 9) - (b.suit ?? 9) || a.rank - b.rank).map(cardName).join(', ')}`,
     ...(s.config.rotEnabled || s.config.knockEnabled ? [`Leftover (deadwood): ${v.myDeadwood}`] : []),
     last,
   ].join('\n');

@@ -26,7 +26,6 @@ export type RulesConfig = {
   rotStep: number;
   forbidRedundantDiscard: boolean;
   allowHyphaOneBend: boolean;
-  fruitPerPlayer: number;
   rootsScore: boolean;
   /** v0.4: cards run 1..maxRank (5-9). */
   maxRank: number;
@@ -38,16 +37,20 @@ export type RulesConfig = {
   allowStrengthen: boolean;
   /** v0.5: Strengthens per player per game; -1 = no limit. */
   strengthenLimitPerGame: number;
-  /** v0.5: own tiles given up by a Fruit. */
-  fruitSacrifice: number;
-  /** v0.5: Fruit only while behind on score (simulation option). */
-  fruitOnlyWhenBehind: boolean;
+  /** v0.6: Fruit cards in the deck (joker-style: no suit, no number). */
+  fruitCardCount: number;
+  /** v0.6: a Fruit target may be touched by my root, not only by my other tiles. */
+  fruitRootCountsAsTouch: boolean;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
 };
 
-export type Card = { id: number; suit: Suit; rank: number };
+/**
+ * A card. Numbered cards have a suit and a rank 1-9. A v0.6 Fruit card has no suit
+ * (`suit: null`) and no number (`rank: 0`, FRUIT_CARD_RANK): see isFruitCard.
+ */
+export type Card = { id: number; suit: Suit | null; rank: number };
 
 /** Root immunity is encoded by `root: true` (never by Infinity). */
 export type Tile = {
@@ -75,7 +78,8 @@ export type ResolutionSummary = {
   overgrown: Coord[];
   rotted: Coord[];
   severed: { player: Player; coords: Coord[] }[];
-  fruit?: { sacrifice: Coord[]; target: Coord };
+  /** v0.6: a Fruit card removed this tile (its strength before). */
+  fruit?: { card: number; target: Coord; strength: number };
   strangled?: Player;
   /** v0.4: the hex a Sprout claimed. */
   sprout?: Coord;
@@ -88,7 +92,7 @@ export type Action =
   | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
   | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
-  | { t: 'Fruit'; sacrifice: Coord[]; target: Coord }
+  | { t: 'PlayFruit'; card: number; target: Coord }
   | { t: 'EndAct' }
   | { t: 'Discard'; card: number }
   | { t: 'Knock' }
@@ -108,7 +112,7 @@ export type Event =
       oldStrength: number;
       newStrength: number;
     }
-  | { t: 'Fruit'; player: Player; sacrifice: Coord[]; target: Coord }
+  | { t: 'FruitCard'; player: Player; card: number; target: Coord; strength: number }
   | { t: 'Discard'; player: Player; card: number }
   | { t: 'Knock'; player: Player }
   | { t: 'FinalTurnStart'; player: Player }
@@ -136,7 +140,10 @@ export type State = {
   actor: Player;
   phase: Phase;
   drawnFromDiscard: number | null;
-  fruitUsed: [number, number];
+  /** v0.6: Fruit cards played so far (they leave the game). */
+  fruitPlayed: number;
+  /** v0.6: Fruit cards each player holds that the other saw them take from the throw pile. */
+  fruitKnown: [number, number];
   /** v0.5: Strengthens used per player this game. */
   strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
@@ -163,7 +170,10 @@ export type View = {
   actor: Player;
   phase: Phase;
   drawnFromDiscard: number | null;
-  fruitUsed: [number, number];
+  /** v0.6: Fruit cards played so far. */
+  fruitPlayed: number;
+  /** v0.6: Fruit cards I have not seen (not in my hand, not played, not in the throw pile, not known to be in the opponent's hand). */
+  fruitUnseen: number;
   strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
   rotPick: RotPickState | null;

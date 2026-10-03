@@ -17,15 +17,14 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rotStep: 8,
   forbidRedundantDiscard: true,
   allowHyphaOneBend: false,
-  fruitPerPlayer: 1,
   rootsScore: false,
   maxRank: 9,
   sproutsPerTurn: 1,
   maxTurnsPerPlayer: 30,
   allowStrengthen: true,
   strengthenLimitPerGame: 2,
-  fruitSacrifice: 3,
-  fruitOnlyWhenBehind: false,
+  fruitCardCount: 4,
+  fruitRootCountsAsTouch: true,
   rotEnabled: false,
   knockEnabled: false,
 });
@@ -43,12 +42,11 @@ const NUMBER_MIN: Record<string, number> = {
   knockDeadwood: 0,
   rotThreshold: 0,
   rotStep: 1,
-  fruitPerPlayer: 0,
   maxRank: MIN_MAX_RANK,
   sproutsPerTurn: 0,
   maxTurnsPerPlayer: 0,
   strengthenLimitPerGame: -1,
-  fruitSacrifice: 1,
+  fruitCardCount: 0,
 };
 
 const BOOLEAN_KEYS = [
@@ -57,7 +55,7 @@ const BOOLEAN_KEYS = [
   'allowHyphaOneBend',
   'rootsScore',
   'allowStrengthen',
-  'fruitOnlyWhenBehind',
+  'fruitRootCountsAsTouch',
   'rotEnabled',
   'knockEnabled',
 ] as const;
@@ -95,7 +93,7 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     throw new ConfigError('NOT_IMPLEMENTED', 'allowHyphaOneBend is not implemented until Milestone C');
   }
 
-  const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard;
+  const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard + c.fruitCardCount;
   // Two hands, a starting discard, and at least one card left to draw.
   if (deckSize < 2 * c.handSize + 2) {
     throw new ConfigError('DECK_TOO_SMALL', `${deckSize} cards cannot deal two hands of ${c.handSize}, a discard, and leave a card to draw`);

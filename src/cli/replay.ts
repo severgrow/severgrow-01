@@ -11,8 +11,8 @@ const brief = (a: Action): string => {
       return `MeldRun cards ${a.cards.join(',')} from ${a.start.q},${a.start.r} dir ${a.dir}`;
     case 'MeldSet':
       return `MeldSet cards ${a.cards.join(',')} on ${a.hexes.map((h) => `${h.q},${h.r}`).join(' ')}`;
-    case 'Fruit':
-      return `Fruit sacrifice ${a.sacrifice.map((h) => `${h.q},${h.r}`).join(' ')} target ${a.target.q},${a.target.r}`;
+    case 'PlayFruit':
+      return `PlayFruit card ${a.card} on ${a.target.q},${a.target.r}`;
     case 'Discard':
       return `Discard card ${a.card}`;
     case 'RotPick':

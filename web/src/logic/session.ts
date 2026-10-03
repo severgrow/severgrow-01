@@ -87,9 +87,9 @@ export class Session {
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
     if (!legal.some((a) => same(a, action))) return null;
     const after = apply(s, action);
-    // Growing tiles, Strengthen, Fruit (and pressing "Throw a card") reveal nothing new, so the player
+    // Growing tiles, Strengthen, a Fruit card (and pressing "Throw a card") reveal nothing new, so the player
     // may take them back. A draw, a throw or any bot move makes everything before final.
-    if (who === this.viewer && (action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout' || action.t === 'Fruit' || action.t === 'EndAct')) this.undoStack.push(s);
+    if (who === this.viewer && (action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push(s);
     else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;

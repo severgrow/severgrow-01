@@ -9,9 +9,10 @@ import {
 import { LEGACY_V03 } from '../legacy.js';
 
 describe('createCards', () => {
-  it('builds 72 cards by default: 4 suits x ranks 1-9 x 2 copies', () => {
+  it('builds 76 cards by default: 4 suits x ranks 1-9 x 2 copies, then 4 Fruit cards (v0.6)', () => {
     const cards = createCards(resolveConfig(LEGACY_V03));
-    expect(cards).toHaveLength(72);
+    expect(cards).toHaveLength(76);
+    expect(cards.slice(72)).toEqual([72, 73, 74, 75].map((id) => ({ id, suit: null, rank: 0 })));
     for (const suit of [0, 1, 2, 3] as const) {
       for (let rank = 1; rank <= 9; rank++) {
         expect(cards.filter((c) => c.suit === suit && c.rank === rank)).toHaveLength(2);
@@ -21,7 +22,7 @@ describe('createCards', () => {
 
   it('assigns unique, stable ids 0..n-1', () => {
     const a = createCards(resolveConfig(LEGACY_V03));
-    expect(a.map((c) => c.id)).toEqual(Array.from({ length: 72 }, (_, i) => i));
+    expect(a.map((c) => c.id)).toEqual(Array.from({ length: 76 }, (_, i) => i));
     expect(createCards(resolveConfig(LEGACY_V03))).toEqual(a);
   });
 
@@ -34,8 +35,8 @@ describe('createCards', () => {
   });
 
   it('honours copiesPerCard', () => {
-    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 1 }))).toHaveLength(36);
-    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 3 }))).toHaveLength(108);
+    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 1 }))).toHaveLength(36 + 4);
+    expect(createCards(resolveConfig({ ...LEGACY_V03, copiesPerCard: 3 }))).toHaveLength(108 + 4);
   });
 
   it('names the suits Moss, Ash, Dew, Ember', () => {

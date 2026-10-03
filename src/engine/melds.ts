@@ -3,11 +3,17 @@ import type { Card } from './types.js';
 
 const byRank = (cards: readonly Card[]): Card[] => [...cards].sort((a, b) => a.rank - b.rank || a.id - b.id);
 
+/** v0.6: a Fruit card (no suit, no number) is never part of a combo, and never wild. */
+const numbered = (cards: readonly Card[]): void => {
+  if (cards.some((c) => c.suit === null)) throw new IllegalActionError('NOT_A_NUMBER_CARD', 'a Fruit card cannot be in a combo');
+};
+
 /**
  * Validates a run (spec 8.2): 3+ cards, one suit, consecutive ranks, no wraparound.
  * Returns the cards sorted by ascending rank. Throws IllegalActionError.
  */
 export const validateRun = (cards: readonly Card[]): Card[] => {
+  numbered(cards);
   if (cards.length < 3) throw new IllegalActionError('RUN_TOO_SHORT', 'a run needs 3+ cards');
   const sorted = byRank(cards);
   const suit = sorted[0]!.suit;
@@ -25,6 +31,7 @@ export const validateRun = (cards: readonly Card[]): Card[] => {
  * Returns the cards in input order. Throws IllegalActionError.
  */
 export const validateSet = (cards: readonly Card[]): Card[] => {
+  numbered(cards);
   if (cards.length < 3 || cards.length > 4) throw new IllegalActionError('SET_WRONG_SIZE', 'a set is 3 or 4 cards');
   const rank = cards[0]!.rank;
   if (cards.some((c) => c.rank !== rank)) throw new IllegalActionError('SET_MIXED_RANKS', 'a set is one rank');

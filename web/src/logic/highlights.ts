@@ -23,7 +23,7 @@ export const gameHighlights = (history: readonly Event[], viewer: Player): Highl
       const n = e.t === 'Sprout' ? 1 : e.hexes.length;
       current = { by: e.player, n };
       if (n > grow.n) grow = { by: e.player, n };
-    } else if (e.t === 'Fruit') {
+    } else if (e.t === 'FruitCard') {
       close();
       current = { by: e.player, n: 1 };
     } else if (e.t === 'Sever') {

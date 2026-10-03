@@ -27,7 +27,8 @@ describe('newGame', () => {
     expect(s.actor).toBe(0);
     expect(s.turnNumber).toBe(1);
     expect(s.drawnFromDiscard).toBeNull();
-    expect(s.fruitUsed).toEqual([0, 0]);
+    expect(s.fruitPlayed).toBe(0);
+    expect(s.fruitKnown).toEqual([0, 0]);
     expect(s.finalTurn).toBeNull();
     expect(s.rotPick).toBeNull();
     expect(s.result).toBeNull();
@@ -47,14 +48,14 @@ describe('newGame', () => {
     expect(l.hands[1]).toEqual(shuffled.slice(7, 14));
     expect(l.discard).toEqual([shuffled[14]]);
     expect(l.deck).toEqual(shuffled.slice(15));
-    expect(l.deck).toHaveLength(72 - 15);
+    expect(l.deck).toHaveLength(76 - 15);
   });
 
   it('the dealt cards come from the one shuffle of the game seed', () => {
     const shuffled = shuffleDeck(createCards(s.config), 42);
     expect(s.hands[0]).toEqual(shuffled.slice(0, 7));
     expect(s.deck).toEqual(shuffled.slice(15));
-    expect(s.deck).toHaveLength(4 * s.config.maxRank * 2 - 15);
+    expect(s.deck).toHaveLength(4 * s.config.maxRank * 2 + s.config.fruitCardCount - 15);
   });
 
   it('conserves every card exactly once', () => {
@@ -97,7 +98,7 @@ describe('newGame', () => {
     expect(g.hands[0]).toHaveLength(5);
     expect(g.hands[1]).toHaveLength(5);
     expect(g.discard).toHaveLength(1);
-    expect(g.deck).toHaveLength(4 * g.config.maxRank * 1 - 11);
+    expect(g.deck).toHaveLength(4 * g.config.maxRank * 1 + g.config.fruitCardCount - 11);
   });
 
   it('is deterministic: same seed gives byte-identical state', () => {

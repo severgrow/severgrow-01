@@ -16,15 +16,14 @@ describe('DEFAULT_CONFIG', () => {
       rotStep: 8,
       forbidRedundantDiscard: true,
       allowHyphaOneBend: false,
-      fruitPerPlayer: 1,
       rootsScore: false,
       maxRank: 9,
       sproutsPerTurn: 1,
       maxTurnsPerPlayer: 30,
       allowStrengthen: true,
       strengthenLimitPerGame: 2, // chosen by simulation (SPEC 11.3)
-      fruitSacrifice: 3,
-      fruitOnlyWhenBehind: false,
+      fruitCardCount: 4, // v0.6: 4 Fruit cards in the deck
+      fruitRootCountsAsTouch: true, // v0.6: my root counts as touching a Fruit target
       rotEnabled: false,
       knockEnabled: false,
     });
@@ -44,10 +43,10 @@ describe('resolveConfig', () => {
   });
 
   it('applies overrides', () => {
-    const c = resolveConfig({ rootStyle: 'corner', rotThreshold: 18, fruitPerPlayer: 0 });
+    const c = resolveConfig({ rootStyle: 'corner', rotThreshold: 18, fruitCardCount: 0 });
     expect(c.rootStyle).toBe('corner');
     expect(c.rotThreshold).toBe(18);
-    expect(c.fruitPerPlayer).toBe(0);
+    expect(c.fruitCardCount).toBe(0);
     expect(c.handSize).toBe(7);
   });
 
@@ -113,8 +112,8 @@ describe('resolveConfig', () => {
   });
 
   it('rejects a deck too small to deal both hands and flip a discard', () => {
-    // 36 cards with 1 copy; 2 * 18 + 1 = 37 > 36
-    reject({ copiesPerCard: 1, handSize: 18 }, 'DECK_TOO_SMALL');
+    // 36 numbered cards with 1 copy + 4 Fruit cards = 40; 2 * 20 + 1 = 41 > 40
+    reject({ copiesPerCard: 1, handSize: 20 }, 'DECK_TOO_SMALL');
   });
 
   it('rejects a board too small to hold the roots', () => {

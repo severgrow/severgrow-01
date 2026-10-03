@@ -4,7 +4,8 @@ import { SUIT_NAMES } from '../../../src/engine/index.js';
 import type { Card } from '../../../src/engine/index.js';
 import type { BoardView } from './board.js';
 import { S, centerOf, el, star } from './board.js';
-import { SUIT_SVG } from './icons.js';
+import { FRUIT_SVG, SUIT_SVG } from './icons.js';
+import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
@@ -22,8 +23,14 @@ export const removeAfter = (a: Animation | null, node: Element, fallbackMs: numb
   else setTimeout(() => node.remove(), fallbackMs);
 };
 
+/** The class for a card's look: its suit (s0-s3), or `fruit` for a v0.6 Fruit card. */
+export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c.suit}`);
+
+/** A card's face: number and suit, or (a Fruit card) the mushroom and a small "Fruit" print. */
 export const cardFace = (c: Card) =>
-  `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
+  c.suit === null
+    ? `<span class="c-fruit">${FRUIT_SVG}</span><span class="c-print">${FRUIT.print}</span>`
+    : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
 
 export const shakeFrames = (a: number): Keyframe[] => [
   { transform: 'translate(0,0)' },
@@ -143,7 +150,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
 
   function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number) {
     const d = document.createElement('div');
-    d.className = `flyer card s${c.suit}`;
+    d.className = `flyer card ${suitClass(c)}`;
     d.innerHTML = cardFace(c);
     Object.assign(d.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
     document.body.appendChild(d);

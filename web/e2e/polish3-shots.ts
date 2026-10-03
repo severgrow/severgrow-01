@@ -6,11 +6,10 @@ import { chromium } from 'playwright-core';
 import type { CDPSession, Page } from 'playwright-core';
 import { preview } from 'vite';
 import { legalActions, newGame, viewFor } from '../../src/engine/index.js';
-import type { Card, Player, State, Suit } from '../../src/engine/index.js';
+import type { State } from '../../src/engine/index.js';
 import { EMPTY_SEL, tapKind } from '../src/logic/interaction.js';
 import { comboFor } from '../src/logic/draw.js';
-import { fixture } from '../../tests/helpers.js';
-import { clumpChoice, fruitNotYet, fruitOnTop, lineChoice } from './polish3-positions.js';
+import { clumpChoice, fruitOnTop, lineChoice } from './polish3-positions.js';
 import { hexCenter } from './drawing.js';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -23,15 +22,6 @@ const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: tru
 const errors: string[] = [];
 const VPS = { phone: { width: 390, height: 844, touch: true }, desktop: { width: 1280, height: 800, touch: false } } as const;
 type Vp = (typeof VPS)[keyof typeof VPS];
-
-const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number][]): State => {
-  const g = newGame(5);
-  const f = fixture({ tiles });
-  const pool = [...g.hands[0], ...g.hands[1], ...g.deck];
-  const h: Card[] = [];
-  for (const [su, r] of hand) h.push(pool.splice(pool.findIndex((c) => c.suit === su && c.rank === r), 1)[0]!);
-  return { ...g, board: f.board, terrain: f.terrain, hands: [h, pool.splice(0, 7)], deck: pool, phase: 'ACT' };
-};
 
 const open = async (vp: Vp, state: State, settings: Record<string, unknown> = {}) => {
   const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 2, hasTouch: vp.touch, isMobile: vp.touch });
@@ -87,37 +77,12 @@ const tap = async (page: Page, key: string) => {
 };
 
 for (const [name, vp] of Object.entries(VPS)) {
-  // top-rank tiles (the slight glow), the action row with no Fruit button, "Opponent" in the score bar
+  // top-rank tiles (the slight glow); the tile card of a top-rank tile offers "Use Fruit card" (v0.6)
   const top = fruitOnTop();
   let page = await open(vp, top.state);
   await shot(page, `${name}-top-rank-and-action-row`);
   await tap(page, top.target);
   await shot(page, `${name}-tile-card-fruit`);
-  await page.click('#tooltip .tc-fruit');
-  await page.waitForTimeout(250);
-  await shot(page, `${name}-fruit-suggested`);
-  await page.click('#moves .fruit-change');
-  await page.waitForTimeout(250);
-  await shot(page, `${name}-fruit-change`);
-  await page.close();
-
-  // the tile card when Fruit is not possible yet
-  const ny = fruitNotYet();
-  page = await open(vp, ny.state);
-  await tap(page, ny.target);
-  await shot(page, `${name}-tile-card-need-3`);
-  await page.close();
-
-  // a Fruit preview with a warning (the chosen set cuts off one of my own tiles)
-  const warnState = stateWith({ '-1,1': [0, 2], '0,1': [0, 2], '0,0': [0, 2], '1,1': [0, 2], '1,-1': [1, 9], '1,0': [1, 9], '2,0': [1, 3], '3,-1': [1, 3] }, [[0, 1], [0, 5]]);
-  page = await open(vp, warnState);
-  await tap(page, '1,0');
-  await page.click('#tooltip .tc-fruit');
-  await page.click('#moves .fruit-change');
-  for (const k of ['-1,1', '0,0', '0,1']) await tap(page, k);
-  await page.click('#moves .fruit-next');
-  await page.waitForTimeout(250);
-  await shot(page, `${name}-fruit-preview-warning`);
   await page.close();
 
   // a line mid-drag: numbers rising; then a blocked direction

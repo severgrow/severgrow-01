@@ -59,24 +59,14 @@ const enemyNeighbours = (v: View, key: string) => allNeighbors(parseKey(key)).fi
   return !!t && t.owner !== v.player;
 }).length;
 
-/** The opponent could still Fruit this tile: they have a use left and a big enough group next to it. */
+/** The opponent could Fruit this tile: a Fruit card is still unseen and one of their tiles touches it. */
 const fruitableByOpponent = (v: View, key: string): boolean => {
   const o = other(v.player);
-  if (v.fruitUsed[o] >= v.config.fruitPerPlayer) return false;
-  // their non-root tiles in one connected group touching this hex
-  const start = allNeighbors(parseKey(key)).map(coordKey).filter((k) => v.board[k]?.owner === o && !v.board[k]?.root);
-  const seen = new Set<string>(start);
-  const stack = [...start];
-  while (stack.length > 0) {
-    for (const n of allNeighbors(parseKey(stack.pop()!))) {
-      const k = coordKey(n);
-      if (!seen.has(k) && v.board[k]?.owner === o && !v.board[k]?.root) {
-        seen.add(k);
-        stack.push(k);
-      }
-    }
-  }
-  return seen.size >= v.config.fruitSacrifice;
+  if (v.fruitUnseen <= 0) return false;
+  return allNeighbors(parseKey(key)).some((n) => {
+    const t = v.board[coordKey(n)];
+    return !!t && t.owner === o && (!t.root || v.config.fruitRootCountsAsTouch);
+  });
 };
 
 export type TacticsCtx = { v: View; unseen: number[]; loss: Map<string, string[]> };
@@ -147,8 +137,8 @@ export const judgeStrengthen = (t: TacticsCtx, a: Extract<Action, { t: 'Sprout' 
 };
 
 /** A quick look at a Fruit: the board after it, and the plain points swing. */
-export type FruitLook = { a: Extract<Action, { t: 'Fruit' }>; sim: Simulation; net: number };
-export const lookFruit = (v: View, a: Extract<Action, { t: 'Fruit' }>): FruitLook | null => {
+export type FruitLook = { a: Extract<Action, { t: 'PlayFruit' }>; sim: Simulation; net: number };
+export const lookFruit = (v: View, a: Extract<Action, { t: 'PlayFruit' }>): FruitLook | null => {
   const sim = simulate(v, a);
   return sim ? { a, sim, net: sim.botPointsLost + sim.points } : null;
 };
@@ -158,7 +148,6 @@ export const lookFruit = (v: View, a: Extract<Action, { t: 'Fruit' }>): FruitLoo
  * `full` (points, their losses, my exposure and pressure, as for any move).
  */
 export const judgeFruit = (v: View, f: FruitLook, tier: Tier, full: number): Judged => {
-  const sac = v.config.fruitSacrifice;
   const target = v.board[coordKey(f.a.target)]!;
   if (f.sim.wins) return { score: 1000, reason: 'Fruit wins at once (Strangle)' };
   if (tier === 0) return { score: NEVER, reason: 'does not think about Fruit' };
@@ -167,7 +156,7 @@ export const judgeFruit = (v: View, f: FruitLook, tier: Tier, full: number): Jud
       ? { score: f.sim.botPointsLost, reason: `removes ${f.sim.botPointsLost} of their points` }
       : { score: NEVER, reason: 'not a big enough hit' };
   }
-  const ownCut = f.sim.myLoss - sac;
+  const ownCut = f.sim.myLoss;
   if (tier === 2) {
     if (ownCut > 0) return { score: NEVER, reason: `would cut off ${ownCut} of my own tiles` };
     return { score: full - 1, reason: `net ${f.net}` };
