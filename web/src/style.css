@@ -3561,3 +3561,78 @@ html[data-layout='side'] .dock-overlays {
   bottom: auto;
   top: calc(100% + 6px);
 }
+
+/* ---- overhaul item 3: the hand ---- */
+.dock .card {
+  padding: 5px 3px 8px;
+}
+.dock .c-num {
+  font-size: calc(var(--cw) * 0.36);
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.dock .c-suit svg {
+  width: calc(var(--cw) * 0.42);
+  height: calc(var(--cw) * 0.42);
+}
+/* lift with a small spring; others stay legible */
+.dock > .hand .card {
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(var(--dy, 0px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
+}
+.dock > .hand .card.lifted {
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.04);
+}
+.dock > .hand .card.dim {
+  opacity: 0.62;
+  filter: saturate(0.6);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dock > .hand .card:not(.lifted):hover {
+    transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 6px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
+    z-index: 3;
+  }
+}
+/* cards of one combo share a small bracket: a thicker, coloured bottom edge */
+.dock > .hand .card[data-combo] {
+  border-bottom: 3.5px solid var(--combo-c, var(--c-accent));
+}
+.dock > .hand .card[data-combo='1'] {
+  --combo-c: var(--c-gold);
+}
+.dock > .hand .card[data-combo='2'] {
+  --combo-c: var(--c-text);
+}
+.reduce-motion .dock > .hand .card {
+  transition: none;
+  animation: none;
+}
+/* the Sort button: a quiet pill at the hand's top right, never moving anything */
+.hand-sort {
+  position: absolute;
+  right: 12px;
+  bottom: calc(var(--row-hand, 140px) + 8px - 26px);
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-bg);
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  z-index: 3;
+}
+.hand-sort::before {
+  content: '⇅ ';
+}
+.hand-sort::after {
+  content: '';
+  position: absolute;
+  inset: -11px -6px;
+}
+
+/* phones: the board sits just above the toolbar; spare height becomes headroom at the top */
+html[data-layout='stack'] .board-wrap {
+  padding-bottom: 6px;
+}

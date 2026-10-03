@@ -1,3 +1,5 @@
+import { HAND_SORTS } from './hand.js';
+import type { HandSort } from './hand.js';
 // Player settings, saved in the browser. Parsing is forgiving: anything missing or
 // broken falls back to the default, so an old or damaged save never breaks the page.
 
@@ -38,6 +40,8 @@ export type Settings = {
   confirmDraw: boolean | null;
   /** an opt-in step-through list of the legal placements while drawing (accessibility) */
   placementList: boolean;
+  /** overhaul item 3: how the hand is sorted (it always is; the Sort button switches) */
+  handSort: HandSort;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,6 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   topGlow: 'subtle',
   confirmDraw: null,
   placementList: false,
+  handSort: 'suit',
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -79,6 +84,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (GLOW_SETTINGS.includes(s.topGlow as GlowSetting)) out.topGlow = s.topGlow as GlowSetting;
   if (LEVELS.includes(s.level as Level)) out.level = s.level as Level;
   else if (typeof s.level === 'string' && OLD_LEVELS[s.level]) out.level = OLD_LEVELS[s.level]!;
+  if (HAND_SORTS.includes(s.handSort as HandSort)) out.handSort = s.handSort as HandSort;
   if (typeof s.confirmDraw === 'boolean' || s.confirmDraw === null) out.confirmDraw = s.confirmDraw as boolean | null;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;

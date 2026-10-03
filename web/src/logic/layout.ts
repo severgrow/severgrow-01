@@ -18,7 +18,7 @@ export type Layout = {
 };
 
 /** Fixed heights, CSS px (8pt grid). */
-export const HEIGHTS = { hud: 48, steps: 36, race: 8, toolbar: 40, hint: 24, forecast: 56, tableMin: 64, handPad: 34, bottomPad: 8 } as const;
+export const HEIGHTS = { hud: 48, steps: 36, race: 8, toolbar: 40, hint: 24, forecast: 56, tableMin: 72, handPad: 34, bottomPad: 8 } as const;
 /** The largest hand a player can hold (hand size + the drawn card). */
 export const MAX_HAND = 8;
 /** At least this much of every card is visible in a full hand. */
@@ -42,7 +42,7 @@ const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h 
 export const cardSize = (width: number, maxHand = MAX_HAND) => {
   const avail = width - 2 * GUTTER;
   // as wide as the screen allows (up to 76px), but a full hand must show MIN_SLICE per card
-  const w = Math.max(44, Math.min(76, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
+  const w = Math.max(44, Math.min(72, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
   const slice = Math.min(w + 4, Math.floor((avail - w) / (maxHand - 1)));
   return { w, h: Math.round(w * 1.42), slice };
 };

@@ -44,6 +44,7 @@ import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
 import { scoreBreakdown } from './logic/endgame.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
+import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine, versionLine } from './logic/stats.js';
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
@@ -1119,6 +1120,9 @@ function applyLayout() {
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
   const key = `${w}x${h}r${radius}`;
+  // phones: the board sits just above the toolbar (board.setup resets this, so set it every time)
+  const par = document.documentElement.dataset.layout === 'side' ? 'xMidYMid meet' : 'xMidYMax meet';
+  if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
   const l = computeLayout({ w, h, ...safeArea() }, radius);
@@ -1133,6 +1137,8 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
+  board.svg.setAttribute('preserveAspectRatio', l.mode === 'side' ? 'xMidYMid meet' : 'xMidYMax meet');
+
 }
 window.addEventListener('resize', () => applyLayout());
 window.visualViewport?.addEventListener('resize', () => applyLayout());
@@ -1538,7 +1544,11 @@ function renderHand(v: View, advice: Advice | null) {
   const usable = legal.length ? usableCards(v, legal, { ...sel, card: null }) : new Set<number>();
   const picked = new Set(session.pending ? moveCards(session.pending) : []);
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
-  const cards = [...v.hand].sort((a, b) => a.suit - b.suit || a.rank - b.rank || a.id - b.id);
+  const cards = handOrder(v.hand, settings.handSort);
+  // overhaul item 3: cards of the same combo share a small bracket under them
+  const combos = comboGroups(v.hand);
+  // remember where every card was, so a reorder (Sort) slides them into place (FLIP)
+  const before = new Map([...hand.querySelectorAll<HTMLElement>('[data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect().left]));
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
@@ -1561,9 +1571,23 @@ function renderHand(v: View, advice: Advice | null) {
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${lifted ? ', picked' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
+    const g = combos.get(c.id);
+    if (g === undefined) delete b.dataset.combo;
+    else b.dataset.combo = String(g % 3);
     if (hand.children[i] !== b) hand.insertBefore(b, hand.children[i] ?? null);
   });
   for (const b of existing.values()) b.remove();
+  if (!settings.reduceMotion && settings.speed !== 'skip') {
+    for (const b of hand.querySelectorAll<HTMLElement>('[data-card]')) {
+      const was = before.get(Number(b.dataset.card));
+      const dx = was === undefined ? 0 : was - b.getBoundingClientRect().left;
+      if (Math.abs(dx) > 2) anim(b, [{ translate: `${dx}px 0` }, { translate: '0 0' }], { duration: 280 * timeScale(), easing: 'cubic-bezier(.2,.9,.3,1.25)' });
+    }
+  }
+  const sortBtn = $('hand-sort');
+  sortBtn.hidden = n < 2;
+  sortBtn.textContent = settings.handSort === 'suit' ? 'By suit' : 'By number';
+  sortBtn.setAttribute('aria-label', `Cards sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`);
   hand.style.setProperty('--n', String(n));
   hand.classList.toggle('waiting', !myTurn());
 }
@@ -2049,6 +2073,26 @@ for (const r of ['sprout', 'seed'] as const)
   });
 bind('levels-back', () => showScreen('menu'));
 bind('hint-btn', () => sheet('sheet-howto'));
+bind('hand-sort', () => {
+  settings = { ...settings, handSort: nextSort(settings.handSort) };
+  saveSettings();
+  sound.click();
+  render();
+});
+// desktop: a card tilts a few degrees toward the pointer
+$('hand').addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || settings.reduceMotion) return;
+  const card = (e.target as HTMLElement).closest<HTMLElement>('.card');
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  card.style.setProperty('--tilt-x', `${(((e.clientX - r.left) / r.width - 0.5) * 8).toFixed(1)}deg`);
+  card.style.setProperty('--tilt-y', `${(((e.clientY - r.top) / r.height - 0.5) * -6).toFixed(1)}deg`);
+});
+$('hand').addEventListener('pointerout', (e) => {
+  const card = (e.target as HTMLElement).closest<HTMLElement>('.card');
+  card?.style.removeProperty('--tilt-x');
+  card?.style.removeProperty('--tilt-y');
+});
 bind('go-other', () => {
   const lv = Number($('go-other').dataset.level) as Level;
   settings = { ...settings, level: lv };

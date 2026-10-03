@@ -20,6 +20,7 @@ describe('settings (saved in the browser)', () => {
       topGlow: 'subtle', // polish pass 3: the slight top-rank glow
       confirmDraw: null, // polish pass 3: "Confirm moves" for drawn lines and clumps; the device decides (touch on, mouse off)
       placementList: false, // polish pass 3: opt-in list of placements while drawing
+      handSort: 'suit', // UI overhaul: the hand is sorted by suit (Sort switches to by number)
     });
   });
 
@@ -67,5 +68,13 @@ describe('settings (saved in the browser)', () => {
     expect(speedFactor('normal')).toBe(1);
     expect(speedFactor('fast')).toBeLessThan(1);
     expect(speedFactor('skip')).toBe(0);
+  });
+});
+
+describe('UI overhaul: the hand sort is remembered', () => {
+  it('defaults to by suit; keeps "number"; ignores anything else', () => {
+    expect(parseSettings(null).handSort).toBe('suit');
+    expect(parseSettings(JSON.stringify({ handSort: 'number' })).handSort).toBe('number');
+    expect(parseSettings(JSON.stringify({ handSort: 'colour' })).handSort).toBe('suit');
   });
 });
