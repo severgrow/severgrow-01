@@ -34,11 +34,6 @@ export type LevelConfig = {
   discardStyle: 'greedy' | 'keepHigh' | 'value';
   /** bots-v0.7, 'value' discards: what one combo card is worth on top of its number. */
   comboBonus: number;
-  /**
-   * bots-v0.7: take the throw pile's top card (public) when it is worth at least this much to
-   * keep (keepValue); 0 = only when it completes a combo (level 7's rule).
-   */
-  pileDraw: number;
   /** Weight of the imagined opponent reply in level 9's search. */
   replyWeight: number;
   /** 0: one move at a time. 1: also weighs its best follow-up move this turn. */
@@ -52,7 +47,7 @@ export type LevelConfig = {
   whimRate: number;
 };
 
-const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', comboBonus: 0, pileDraw: 0, replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
+const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', comboBonus: 0, replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
 
 /** bots-v0.6 (frozen): levels 8 and 9 kept every combo card and threw the lowest other card. */
 export const V06_LEVEL_8: LevelConfig = { ...base, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 };
@@ -77,7 +72,7 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   8: { ...base, discardStyle: 'value', comboBonus: 1, mistakeRate: 0.15, topN: 3 },
   // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
   //    and imagines 6 possible opponent hands to judge their best reply.
-  9: { ...base, lookahead: 1, discardStyle: 'value', comboBonus: 1, pileDraw: 8, cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
+  9: { ...base, lookahead: 1, discardStyle: 'value', comboBonus: 1, cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
 };
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */
@@ -263,13 +258,6 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       .map((r, i) => ({ r, i, s: value.get(r) ?? (growing(r.action) ? -Infinity : r.score) }))
       .sort((x, y) => y.s - x.s || x.i - y.i)
       .map((x) => x.r);
-  }
-
-  // bots-v0.7: take a strong card from the throw pile (public) instead of a blind draw.
-  if (c.pileDraw > 0 && v.phase === 'DRAW') {
-    const top = v.discard.at(-1);
-    const take = legal.find((a) => a.t === 'Draw' && a.from === 'discard');
-    if (top && take && keepValue([...v.hand, top], top.id, c.comboBonus) >= c.pileDraw) return { action: take };
   }
 
   // bots-v0.7: throw the card worth least to keep (its number, plus what it adds to a combo).
