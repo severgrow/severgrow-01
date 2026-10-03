@@ -40,6 +40,14 @@ const open = async (state: State, o: { w?: number; settings?: Record<string, unk
       localStorage.setItem('severgrow.save.v5', saved as string);
       localStorage.setItem('severgrow.tips.v1', tips as string);
       localStorage.setItem('severgrow.seen', '1');
+      // record every caption as it appears (they replace each other quickly)
+      const w = window as unknown as { __caps: string[] };
+      w.__caps = [];
+      document.addEventListener('DOMContentLoaded', () => {
+        new MutationObserver((ms) => {
+          for (const m of ms) for (const n of m.addedNodes) if (n.textContent) w.__caps.push(n.textContent);
+        }).observe(document.getElementById('captions')!, { childList: true });
+      });
     },
     [
       JSON.stringify({ sound: false, coach: false, speed: 'fast', ...o.settings }),
@@ -181,20 +189,18 @@ const words: string[] = [];
 
 // ---- 5. the opponent plays a Fruit card on my 9 (calmer: a caption, no banner) ----
 {
-  // my 9 at (0,0) holds (0,1)=3; their (1,0)=4 and (1,-1)=6 touch it; they hold a Fruit card
-  const tiles: Record<string, [Player, number]> = { '-1,1': [0, 2], '0,0': [0, 9], '0,1': [0, 3], '1,0': [1, 4], '1,-1': [1, 6] };
+  // late in the game: my 9 at (0,0) holds a chain of four; their 9s touch it; they hold a Fruit card
+  const tiles: Record<string, [Player, number]> = { '-1,1': [0, 2], '0,0': [0, 9], '0,-1': [0, 3], '-1,-1': [0, 3], '-2,0': [0, 3], '-3,1': [0, 3], '1,0': [1, 9], '1,-1': [1, 9] };
   const base = fruitPosition(tiles, [[0, 2], [1, 5]], 0);
   const fruit = [...base.deck, ...base.discard].find(isFruitCard)!;
-  const deck = base.deck.filter((c) => c.id !== fruit.id);
+  const deck = base.deck.filter((c) => c.id !== fruit.id).slice(0, 6); // a few cards left: no reason to hold it
   // their Grow step comes after their draw: they start at DRAW holding the Fruit card
   const state: State = { ...base, deck, hands: [base.hands[0], [fruit, ...base.hands[1].slice(0, 6)]], turnPlayer: 1, actor: 1, phase: 'DRAW' };
   const { page, errors } = await open(state, { settings: { speed: 'normal' } });
-  const caps: string[] = [];
-  for (let i = 0; i < 40; i++) {
-    const t = (await page.textContent('#captions').catch(() => '')) ?? '';
-    if (t && !caps.includes(t)) caps.push(t);
-    if (caps.some((c) => c.includes('Opponent used a Fruit card on your 9'))) break;
+  let caps: string[] = [];
+  for (let i = 0; i < 80 && !caps.some((c) => c.includes('Opponent used a Fruit card on your 9')); i++) {
     await page.waitForTimeout(100);
+    caps = (await page.evaluate('window.__caps')) as string[];
   }
   await shot(page, '11-opponent-fruit-caption');
   await idle(page);

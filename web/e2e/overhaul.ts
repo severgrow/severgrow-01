@@ -89,7 +89,9 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
         total++;
         const a = pending ?? null;
         if (a) {
-          const want = needsConfirm('smart', forecastMove(viewFor(st, 0), a));
+          // a Strengthen always shows its preview first (by design, docs/UX.md); other moves ask by the policy
+          const strengthen = a.t === 'Sprout' && st.board[`${a.coord.q},${a.coord.r}`]?.owner === 0;
+          const want = strengthen || needsConfirm('smart', forecastMove(viewFor(st, 0), a));
           const bar = await page.locator('#confirm').isVisible();
           if (want === bar) agree++;
           else miss.push(`${a.t} want ${want} bar ${bar}`);
