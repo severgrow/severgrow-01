@@ -39,6 +39,8 @@ export type Settings = {
   topGlow: GlowSetting; // the slight glow on top-rank tiles
   /** overhaul item 8, "Confirm moves": Smart asks only for risky moves, Always for every board move, Never for none */
   confirmPolicy: ConfirmMode;
+  /** overhaul Part 3: the decorations (splash, root heartbeat, terrarium menu, spores, last-card moment) */
+  eyeCandy: boolean;
   /** an opt-in step-through list of the legal placements while drawing (accessibility) */
   placementList: boolean;
   /** overhaul item 3: how the hand is sorted (it always is; the Sort button switches) */
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS: Settings = {
   materialDetail: 'normal',
   topGlow: 'subtle',
   confirmPolicy: 'smart',
+  eyeCandy: true,
   placementList: false,
   handSort: 'suit',
 };
@@ -89,7 +92,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList', 'eyeCandy'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   return out;

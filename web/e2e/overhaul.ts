@@ -11,6 +11,7 @@ import { chooseLevelAction } from '../../src/bots/levels.js';
 import { fixture } from '../../tests/helpers.js';
 import { forecastMove, needsConfirm } from '../src/logic/forecast.js';
 import { hexCenter } from './drawing.js';
+import { cutPosition } from './cut-positions.js';
 
 const results: { name: string; ok: boolean }[] = [];
 const check = (name: string, ok: boolean, note = '') => {
@@ -172,6 +173,23 @@ for (const [w, h] of [[360, 640], [390, 844], [430, 932], [768, 1024], [1280, 80
     });
   }));
   check(`${w}x${h}: the coach is clear of the board, the hint fits one line, no sideways scroll`, r.coach && !r.overlap && r.hintFits && !r.sideScroll && errors.length === 0, JSON.stringify(r));
+  await page.close();
+}
+
+// ---- 5. Smoother mode: on a very slow device a big cut switches effects to Low, once, with a note ----
+{
+  const { state, action } = cutPosition(9);
+  const { page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 20 });
+  await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
+  await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  const shown = await page.locator('#smoother').isVisible();
+  const low = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'low';
+  if (shown) await page.click('#smoother-undo');
+  const back = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'normal';
+  check('Smoother mode: slow frames switch effects to Low with a one-time note; Undo puts them back', shown && low && back && errors.length === 0, `note ${shown}, low ${low}, undo ${back}`);
   await page.close();
 }
 

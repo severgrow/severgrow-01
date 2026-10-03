@@ -47,6 +47,8 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
+import { perfStart, perfStep } from './logic/perf.js';
+import { deckMoment, rootDanger, rootRhythm, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
@@ -196,6 +198,8 @@ function applyTheme() {
   if (lk.textures) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
+  // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
+  root.classList.toggle('eye-candy', settings.eyeCandy);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
@@ -223,7 +227,71 @@ function drawSpores(on: boolean) {
   }
 }
 
+/**
+ * Part 3 B: the opening splash: a vein grows from a root to a tile and the game's name appears.
+ * Once per visit, about 1.6s, never blocks a tap (a tap ends it), still with Reduce motion.
+ */
+function showSplash() {
+  let shown = false;
+  try {
+    shown = sessionStorage.getItem('severgrow.splash') === '1';
+    sessionStorage.setItem('severgrow.splash', '1');
+  } catch {
+    shown = true;
+  }
+  const plan = splashPlan({ reduceMotion: settings.reduceMotion, on: settings.eyeCandy, shownThisVisit: shown });
+  if (!plan.show) return;
+  const c = resolveColors(theme());
+  const box = $('splash');
+  box.innerHTML = `<svg viewBox="0 0 220 120" width="260" height="142" aria-hidden="true">
+    <path class="sp-vein" d="M40 92 C 70 92, 80 50, 110 52 S 160 30, 182 30" stroke="${c.you}" stroke-width="5" stroke-linecap="round" fill="none" pathLength="100"/>
+    <circle cx="40" cy="92" r="13" fill="${c.you}"/><circle cx="40" cy="92" r="6" fill="${c.bg}"/>
+    <polygon class="sp-tile" points="182,16 194,23 194,37 182,44 170,37 170,23" fill="${c.you}"/>
+  </svg><p class="sp-name">${GAME_TITLE}</p>`;
+  box.classList.toggle('still', !plan.animated);
+  box.style.setProperty('--sp-ms', `${plan.ms}ms`);
+  box.hidden = false;
+  const end = () => {
+    box.classList.add('out');
+    setTimeout(() => (box.hidden = true), 320);
+    document.removeEventListener('pointerdown', end, true);
+  };
+  document.addEventListener('pointerdown', end, true);
+  setTimeout(end, plan.ms);
+}
+
+/** Part 3 F: the menu's terrarium: a glass dome with a little living board inside (Eye candy). */
+function drawTerrarium() {
+  const box = $('terrarium');
+  if (!settings.eyeCandy) return box.replaceChildren();
+  const c = resolveColors(theme());
+  const hex = (x: number, y: number, r: number, fill: string, cls = '') => {
+    const p = Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i - Math.PI / 2;
+      return `${(x + r * Math.cos(a)).toFixed(1)},${(y + r * Math.sin(a)).toFixed(1)}`;
+    }).join(' ');
+    return `<polygon class="${cls}" points="${p}" fill="${fill}"/>`;
+  };
+  const tiles = [
+    [86, 104, c.you, 'tr-moss'],
+    [104, 104, c.you, 'tr-moss d1'],
+    [95, 89, c.you, 'tr-moss d2'],
+    [122, 104, c.bot, 'tr-lava'],
+    [131, 89, c.bot, 'tr-lava d1'],
+  ] as const;
+  box.innerHTML = `<svg viewBox="0 0 220 140" width="220" height="140" aria-hidden="true">
+    <ellipse cx="110" cy="122" rx="78" ry="10" fill="#000" opacity=".25"/>
+    <path d="M36 118 Q36 22 110 22 Q184 22 184 118 Z" class="tr-glass"/>
+    <rect x="30" y="112" width="160" height="12" rx="6" class="tr-base"/>
+    ${tiles.map(([x, y, f, cls]) => hex(x, y, 9.5, f, cls)).join('')}
+    <path d="M86 104 L95 89 L104 104" stroke="${c.you}" stroke-width="2" fill="none" opacity=".7"/>
+    <circle class="tr-spore" cx="80" cy="70" r="1.6" fill="${c.text}"/><circle class="tr-spore d1" cx="130" cy="60" r="1.3" fill="${c.text}"/><circle class="tr-spore d2" cx="105" cy="48" r="1.2" fill="${c.text}"/>
+    <path d="M52 40 Q70 28 92 27" class="tr-shine"/>
+  </svg>`;
+}
+
 function drawLogo() {
+  drawTerrarium();
   const c = resolveColors(theme());
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
     <g stroke="${c.you}" stroke-width="3" stroke-linecap="round" fill="none">
@@ -413,6 +481,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   pumping = false;
   session = new Session(state, HUMAN);
   finalShown = false;
+  lastDeckSeen = -1;
   goCounted = false;
   replaying = false;
   coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
@@ -437,6 +506,18 @@ function beginSession(state: State, c: CoachProgress | null) {
 let pickedRuleset: Ruleset = 'sprout';
 const currentRuleset = (): Ruleset => (session ? rulesetOf(session.state.config) : pickedRuleset);
 
+/** Part 3 G: the opening deal: the hand flies in from the deck, card by card (Eye candy). */
+function dealIn() {
+  if (!settings.eyeCandy || motion() === 0 || timeScale() === 0) return;
+  requestAnimationFrame(() => {
+    const from = $('deck').getBoundingClientRect();
+    document.querySelectorAll<HTMLElement>('#hand .card').forEach((card, i) => {
+      const r = card.getBoundingClientRect();
+      anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, rotate: '-12deg', opacity: 0 }, { translate: '0 0', rotate: '0deg', opacity: 1 }], { duration: 420 * timeScale(), delay: i * 70 * timeScale(), easing: 'cubic-bezier(.2,.8,.3,1.05)', fill: 'backwards' });
+    });
+  });
+}
+
 function startGame(seed: number, level: Level = settings.level, ruleset: Ruleset = currentRuleset()) {
   store.set(SEEN_KEY, '1');
   gameLevel = level;
@@ -444,6 +525,7 @@ function startGame(seed: number, level: Level = settings.level, ruleset: Ruleset
   const state = newGame(seed, RULESETS[ruleset]);
   log = [`New game (${versionLabel(state.config)}) against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
+  dealIn();
   revealToolLabels();
   save();
   announceTurn(HUMAN);
@@ -678,9 +760,48 @@ async function impact(m: Moment, f: number, my: number) {
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
 }
 
+/**
+ * Part 4: Smoother mode. While moves animate, frame times are watched; under 50 fps for 3
+ * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
+ */
+let perf = perfStart();
+let perfRaf = 0;
+function watchFrames() {
+  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
+  let last = performance.now();
+  const tick = (t: number) => {
+    const r = perfStep(perf, t - last);
+    perf = r.state;
+    last = t;
+    if (r.drop) {
+      perfRaf = 0;
+      return smootherMode();
+    }
+    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
+  };
+  perfRaf = requestAnimationFrame(tick);
+}
+const SMOOTH_KEY = 'severgrow.smoother';
+function smootherMode() {
+  const before = settings.effects;
+  settings = { ...settings, effects: 'low' };
+  saveSettings();
+  store.set(SMOOTH_KEY, '1');
+  const note = $('smoother');
+  note.hidden = false;
+  $('smoother-undo').onclick = () => {
+    settings = { ...settings, effects: before };
+    saveSettings();
+    note.hidden = true;
+    render();
+  };
+  $('smoother-keep').onclick = () => (note.hidden = true);
+}
+
 async function pump() {
   if (pumping) return;
   pumping = true;
+  watchFrames();
   const my = epoch;
   while (queue.pending > 0) {
     if (my !== epoch) return;
@@ -786,6 +907,11 @@ async function playStep(step: Step, my: number) {
       });
       if (mo.tier === 'small' && b.particles > 0) spark(step.tiles[0]!.key, 120 * f, f);
       sound.grow(pitchLadder(step.tiles.length, mo.chain), per || 60);
+      // Part 3 D: a few spores drift home to my root from what I just grew (Eye candy)
+      if (settings.eyeCandy && by === HUMAN && m > 0 && b.particles > 0) {
+        const home = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
+        if (home.length) setTimeout(() => stream(home.map((s) => s.from), board.rootKey(HUMAN), f, Math.min(6, home.length + 2)), last + 380 * f);
+      }
       if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
@@ -1430,6 +1556,18 @@ function renderBoard(v: View, advice: Advice | null) {
   const undoOk = session.canUndo && !busy() && !fruitFlow;
   ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
   $('tool-undo').classList.toggle('ready', undoOk);
+  // Part 3 A: my root breathes; hemmed in, it beats like a heart, and says so (Eye candy)
+  {
+    const danger = rootDanger(v, HUMAN).level;
+    const rt = board.tile(board.rootKey(HUMAN));
+    if (rt) {
+      rt.classList.toggle('root-watch', settings.eyeCandy && danger === 1);
+      rt.classList.toggle('root-danger', settings.eyeCandy && danger === 2);
+      rt.style.setProperty('--beat', `${rootRhythm(danger).ms}ms`);
+    }
+    const warn = $('root-warn');
+    warn.hidden = !(settings.eyeCandy && danger === 2 && v.phase !== 'GAME_OVER');
+  }
   placeCorners();
   renderTooltip(v);
 }
@@ -1778,6 +1916,8 @@ const rememberCardRects = () => {
   cardRects = new Map([...document.querySelectorAll<HTMLElement>('#hand [data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
 };
 
+/** Part 3 C: the deck count last drawn (-1 before a game is shown) */
+let lastDeckSeen = -1;
 /** the biggest the piles have been this game (for the stack thickness) */
 let deckFull = 1;
 
@@ -1793,6 +1933,15 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').classList.toggle('low', low);
   $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
   $('discard-count').textContent = String(v.discard.length);
+  // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
+  const dm = deckMoment(lastDeckSeen, v.deckCount);
+  if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
+    if (dm === 'last') {
+      anim($('deck'), [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-3deg)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 600, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      if (settings.sound) sound.chime();
+    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: 700, easing: 'ease-out' });
+  }
+  lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
   deckFull = Math.max(deckFull, v.deckCount + v.discard.length);
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
@@ -2567,7 +2716,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
       sound.unlock();
       sound.setMusic(settings.music);
     }
-    if (k === 'reduceMotion' || k === 'largeText') applyTheme();
+    if (k === 'reduceMotion' || k === 'largeText' || k === 'eyeCandy') applyTheme();
     else render();
   });
 }
@@ -2688,6 +2837,7 @@ onPhotosReady(() => {
 sound.enabled = settings.sound;
 sound.musicOn = settings.music;
 applyTheme();
+showSplash();
 const params = new URLSearchParams(location.search);
 const urlSeed = Number(params.get('seed'));
 if (params.get('lab') === '1') {
