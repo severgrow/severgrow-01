@@ -4325,3 +4325,198 @@ html.final-turns .game::after {
   opacity: 0;
   pointer-events: none;
 }
+
+/* =================================================================
+   UI overhaul Part 3: eye candy (all behind Settings → Eye candy;
+   quiet with Reduce motion; no flashing anywhere)
+   ================================================================= */
+/* B. the splash: a vein grows from the root to a tile, then the name */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  background: var(--c-bg);
+  pointer-events: none; /* never blocks a tap; any tap ends it */
+  transition: opacity 0.3s ease;
+}
+.splash[hidden] {
+  display: none;
+}
+.splash.out {
+  opacity: 0;
+}
+.splash .sp-vein {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: sp-grow calc(var(--sp-ms, 1600ms) * 0.55) cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
+}
+.splash .sp-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: sp-pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--sp-ms, 1600ms) * 0.55) forwards;
+}
+.splash .sp-name {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: var(--w-num);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--c-text);
+  opacity: 0;
+  animation: sp-fade 0.5s ease calc(var(--sp-ms, 1600ms) * 0.45) forwards;
+}
+.splash.still .sp-vein,
+.splash.still .sp-tile,
+.splash.still .sp-name {
+  animation: none;
+  stroke-dashoffset: 0;
+  transform: none;
+  opacity: 1;
+}
+@keyframes sp-grow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes sp-pop {
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes sp-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+/* F. the terrarium on the menu (the logo steps aside while it shows) */
+.terrarium:empty {
+  display: none;
+}
+.eye-candy .terrarium:not(:empty) + .logo {
+  display: none;
+}
+.terrarium {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.tr-glass {
+  fill: color-mix(in srgb, var(--c-text) 4%, transparent);
+  stroke: color-mix(in srgb, var(--c-text) 30%, transparent);
+  stroke-width: 1.5;
+}
+.tr-base {
+  fill: color-mix(in srgb, var(--c-text) 12%, var(--c-bg));
+}
+.tr-shine {
+  fill: none;
+  stroke: #fff;
+  stroke-opacity: 0.35;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.tr-moss {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: tr-sway 5s ease-in-out infinite;
+}
+.tr-lava {
+  animation: tr-glow 3.6s ease-in-out infinite;
+}
+.tr-spore {
+  opacity: 0.5;
+  animation: tr-float 7s ease-in-out infinite;
+}
+.d1 {
+  animation-delay: -1.7s;
+}
+.d2 {
+  animation-delay: -3.4s;
+}
+@keyframes tr-sway {
+  50% {
+    transform: skewX(-3deg) scaleY(1.03);
+  }
+}
+@keyframes tr-glow {
+  50% {
+    opacity: 0.75;
+  }
+}
+@keyframes tr-float {
+  50% {
+    transform: translate(4px, -10px);
+    opacity: 0.9;
+  }
+}
+.reduce-motion .tr-moss,
+.reduce-motion .tr-lava,
+.reduce-motion .tr-spore {
+  animation: none;
+}
+
+/* A. my root: a heartbeat when hemmed in (a gentle swell, never a flash) */
+.eye-candy .tile.root.root-watch,
+.eye-candy .tile.root.root-danger {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: root-beat var(--beat, 1500ms) ease-in-out infinite;
+}
+@keyframes root-beat {
+  0%,
+  40%,
+  100% {
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(1.07);
+  }
+  24% {
+    transform: scale(1.03);
+  }
+}
+.reduce-motion .tile.root.root-watch,
+.reduce-motion .tile.root.root-danger {
+  animation: none;
+}
+.root-warn {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--c-bg) 85%, transparent);
+  color: var(--c-text);
+  font-size: var(--fs-xs, 0.72rem);
+  pointer-events: none;
+}
+.root-warn[hidden] {
+  display: none;
+}
+.root-warn i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-danger);
+}
+
+/* E. one light for the whole game, from the top left */
+.eye-candy .game::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #fff 6%, transparent), transparent 70%);
+}

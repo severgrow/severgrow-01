@@ -579,3 +579,23 @@ same sequence slower.
   remaining soft rings are at most 35% and at most 3 a second.
 - Frames: `npx tsx web/e2e/cut-filmstrip.ts` saves frames at 0, 100, 220, 400, 700, 1000, 1400
   and 1800ms with a contact sheet per tier and variant (`docs/screens/overhaul/cut/`).
+
+## UI overhaul, Part 3: eye candy
+
+All of it sits behind **Settings → Animations → Eye candy** (on by default), and every moving
+piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/candy.ts`).
+
+- **A. Root life:** your root breathes slowly. When it is hemmed in (4 sides closed, one by the
+  opponent) it beats like a heart; at 5 closed sides (one more and it is strangled) it beats
+  faster and a small "Root in danger" sign appears at the top of the board. The beat is a gentle
+  swell (never a flash, never faster than once every 0.9s).
+- **B. Splash:** once per visit, about 1.6s: a vein grows from a root to a tile and the game's
+  name appears. Any tap ends it; it never blocks a tap. With Reduce motion it is a still picture.
+- **C. Last card:** when the deck goes down to one card it pops once with a soft chime; when it
+  runs out it settles and fades.
+- **D. Spores home:** after you grow tiles, a few spores drift from them back to your root.
+- **E. One light:** a faint warm light from the top left over the whole game, the same light the
+  board's plate and rims use.
+- **F. Terrarium menu:** the menu shows a small glass dome with a living board inside (moss that
+  sways, lava that glows, floating spores).
+- **G. Small details:** at the start of a game the hand is dealt from the deck, card by card.

@@ -16,12 +16,14 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <div id="splash" class="splash" hidden aria-hidden="true"></div>
     <div id="texture" aria-hidden="true"></div>
     <div id="spores" aria-hidden="true"></div>
 
     <!-- ===== Main menu ===== -->
     <section id="menu" class="screen menu" aria-label="Main menu">
       <div class="menu-inner">
+        <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">Severor</h1>
         <p class="tagline">Grow your network. Keep it joined to your root. Cut your opponent's links.</p>
@@ -91,6 +93,7 @@
           <div id="draw-info" class="draw-info" hidden></div>
           <div id="draw-live" class="sr-only" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
+          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i>Root in danger</div>
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
@@ -201,6 +204,7 @@
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
         <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
+        <label class="row"><span>Eye candy (opening splash, root heartbeat, terrarium menu, drifting spores)</span><input type="checkbox" data-setting="eyeCandy" /></label>
         <h3>Playing</h3>
         <div class="row"><span>Confirm moves</span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
         <label class="row"><span>Placement list (step through the places a line or clump can go)</span><input type="checkbox" data-setting="placementList" /></label>

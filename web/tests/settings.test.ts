@@ -21,6 +21,7 @@ describe('settings (saved in the browser)', () => {
       confirmPolicy: 'smart', // UI overhaul item 8: "Confirm moves": Smart asks only for risky moves (replaces the old device-based draw confirm)
       placementList: false, // polish pass 3: opt-in list of placements while drawing
       handSort: 'suit', // UI overhaul: the hand is sorted by suit (Sort switches to by number)
+      eyeCandy: true, // UI overhaul Part 3: the decorations, on by default (Settings can switch them off)
     });
   });
 
@@ -93,5 +94,13 @@ describe('UI overhaul item 8: "Confirm moves: Smart / Always / Never"', () => {
     expect(parseSettings(JSON.stringify({ confirmDraw: true }))).not.toHaveProperty('confirmDraw');
     // a new saved choice wins over the old one
     expect(parseSettings(JSON.stringify({ confirmDraw: true, confirmPolicy: 'never' })).confirmPolicy).toBe('never');
+  });
+});
+
+describe('UI overhaul Part 3: "Eye candy" can be switched off and is remembered', () => {
+  it('on by default; a saved Off stays off; junk falls back to On', () => {
+    expect(parseSettings(null).eyeCandy).toBe(true);
+    expect(parseSettings(JSON.stringify({ eyeCandy: false })).eyeCandy).toBe(false);
+    expect(parseSettings(JSON.stringify({ eyeCandy: 'no' })).eyeCandy).toBe(true);
   });
 });
