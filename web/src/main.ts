@@ -23,7 +23,6 @@ import {
   clumpProblem,
   clumpTap,
   comboFor,
-  confirmMovesFor,
   deskClick,
   deskHover,
   deskShape,
@@ -43,7 +42,11 @@ import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js'
 import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { scoreBreakdown } from './logic/endgame.js';
+import { finalTurns, scoreBreakdown } from './logic/endgame.js';
+import { breakdownOf, raceShare, raceWords } from './logic/race.js';
+import { ambientPlan } from './logic/ambient.js';
+import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
+import { shareCard } from './ui/sharecard.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -55,7 +58,11 @@ import { LEVEL_ICONS } from './ui/levelIcons.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
-import { pileStates } from './logic/piles.js';
+import { hintFor } from './logic/hint.js';
+import type { Hint, HintCtx } from './logic/hint.js';
+import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from './logic/forecast.js';
+import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
+import { pileCountState, pileStates, stackLayers } from './logic/piles.js';
 import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './logic/juice.js';
 import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
@@ -73,13 +80,13 @@ import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
-import { anim, cardFace, createEffects, shakeFrames } from './ui/effects.js';
+import { anim, cardFace, createEffects, removeAfter, shakeFrames } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
 import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { MOVE_WORDS, OPP, moveWords, versionLabel } from '../../src/strings.js';
+import { GAME_TITLE, MOVE_WORDS, OPP, moveWords, versionLabel } from '../../src/strings.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -123,7 +130,11 @@ let tipOpen: FirstTip | null = null;
 if (store.get(SETTINGS_KEY) === null && store.get(COACH_KEY_OLD) === '0') settings = { ...settings, coach: false };
 const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 /** Animation time scale (0 = no animations). */
-const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1);
+/** overhaul item 19: Replay plays the opponent's turn a little slower */
+let replaying = false;
+/** overhaul item 20: after replaying the biggest cut, the result screen comes back */
+let reopenGameOver = false;
+const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1) * (replaying ? 1 / REPLAY_SPEED : 1);
 /** How much things move (0 when reduce motion is on). */
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
 
@@ -184,7 +195,10 @@ function applyTheme() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
   drawSpores(t.style.spores && !settings.reduceMotion);
   sound.tune(t.style.soundBase, t.style.soundWave);
-  if (session) board.setup(session.state.config, session.state.terrain, t.style, look(), t.id);
+  if (session) {
+    board.setup(session.state.config, session.state.terrain, t.style, look(), t.id);
+    lastAmbBoard = null;
+  }
   lastBoard = null;
   drawLogo();
   render();
@@ -320,7 +334,6 @@ function renderLevelGrid() {
       b.innerHTML = `<span class="lt-num num">${lv}</span>${wins ? `<span class="lt-wins num">${wins}</span>` : ''}<span class="lt-icon">${LEVEL_ICONS[lv]}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span>`;
       b.addEventListener('click', () => {
         sound.unlock();
-        sound.click();
         settings = { ...settings, level: lv };
         saveSettings();
         startGame(randomSeed(), lv, pickedRuleset);
@@ -357,10 +370,9 @@ function syncSettingsForm() {
     settings.topGlow = g;
     render();
   });
-  // "Confirm moves" for drawn lines and clumps: Auto follows the device (touch on, mouse off)
-  const cm = settings.confirmDraw === null ? 'auto' : settings.confirmDraw ? 'on' : 'off';
-  segmented('confirm-seg', ['auto', 'on', 'off'] as const, cm, (x) => (x === 'auto' ? `Auto (${finePointer() ? 'off' : 'on'} here)` : cap(x)), (x) => {
-    settings.confirmDraw = x === 'auto' ? null : x === 'on';
+  // "Confirm moves" (overhaul item 8): Smart asks only for risky moves; low-risk moves play at once with Undo
+  segmented('confirm-seg', CONFIRM_MODES, settings.confirmPolicy, (x) => (x === 'smart' ? 'Smart' : cap(x)), (x) => {
+    settings.confirmPolicy = x;
   });
 }
 
@@ -396,6 +408,9 @@ function beginSession(state: State, c: CoachProgress | null) {
   for (const w of [...waiters]) w();
   pumping = false;
   session = new Session(state, HUMAN);
+  finalShown = false;
+  goCounted = false;
+  replaying = false;
   coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
@@ -407,6 +422,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   gameOverDismissed = false;
   botBusy = false;
   board.setup(state.config, state.terrain, theme().style, look(), theme().id);
+  lastAmbBoard = null;
   applyLayout();
   lastBoard = null;
   showScreen('game');
@@ -570,6 +586,8 @@ const flushIdle = () => {
 function fastForward() {
   if (queue.pending === 0 && !pumping) return;
   epoch++;
+  replaying = false;
+  board.focus(null);
   for (const w of [...waiters]) w();
   // Finish our own one-off effects (never the endless CSS decorations like the root pulse).
   for (const a of document.getAnimations()) {
@@ -669,6 +687,12 @@ async function pump() {
   }
   if (my !== epoch) return;
   pumping = false;
+  replaying = false;
+  board.focus(null);
+  if (reopenGameOver) {
+    reopenGameOver = false;
+    gameOverDismissed = false;
+  }
   render();
   flushIdle();
 }
@@ -682,6 +706,18 @@ const hexDist = (a: string, b: string) => {
 async function playStep(step: Step, my: number) {
   const f = timeScale();
   const m = motion();
+  // Overhaul item 19: the opponent's actions: the rest of the board dims a little, and the
+  // view leans 1.5% toward the action (none with Reduce motion)
+  const actor = actorOf(step);
+  const involved = involvedKeys(step);
+  if (actor === BOT && involved.length) {
+    board.focus(involved);
+    if (m > 0) {
+      const n = nudgeToward(involved, 200, 170);
+      const w = $('board-wrap').getBoundingClientRect();
+      anim($('board-wrap'), [{ translate: '0 0' }, { translate: `${(n.x * w.width).toFixed(1)}px ${(n.y * w.height).toFixed(1)}px`, offset: 0.4 }, { translate: '0 0' }], { duration: 900 * f, easing: 'ease-in-out' });
+    }
+  } else if (actor !== null) board.focus(null);
   const show = () => {
     if (my !== epoch) return false;
     queue.next();
@@ -693,11 +729,13 @@ async function playStep(step: Step, my: number) {
     case 'draw': {
       if (!show()) return;
       if (step.player === HUMAN && step.card) {
+        const hp = hapticFor('draw', settings);
+        if (hp) vibrate(true, hp as number | number[]);
         const to = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
         const from = (step.from === 'deck' ? $('deck') : $('discard')).getBoundingClientRect();
         if (to) {
           const r = to.getBoundingClientRect();
-          anim(to, m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', opacity: 0.3 }, { translate: '0 0', scale: '1', opacity: 1 }], { duration: 380 * f, easing: 'cubic-bezier(.2,.8,.2,1)' });
+          anim(to, m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }], { duration: 420 * f, easing: 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.click();
         await wait(240 * f, my);
@@ -723,14 +761,23 @@ async function playStep(step: Step, my: number) {
         const p = centerOf(t.key);
         const delay = step.style === 'line' ? i * per : step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
         last = Math.max(last, delay);
+        const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
         // Squash and stretch: a quick pop that overshoots and settles.
         const frames: Keyframe[] =
           m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
             : step.style === 'sprout'
               ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
-              : [{ transform: 'scale(0.15)', opacity: 0 }, { transform: `scale(${1 + 0.13 * m * pop})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
-        anim(tileEl, frames, { duration: (step.style === 'sprout' ? 460 : 380) * f, delay, easing: 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+              : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
+        anim(tileEl, frames, { duration: (step.style === 'sprout' ? 460 : st.ms) * f, delay, easing: 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+        // overhaul item 17: blades spring up, a puff of spores (mine) as it lands, a heavier tap for the top rank
+        if (m > 0 && !b.fadeOnly) {
+          tileEl?.classList.add('spring');
+          setTimeout(() => tileEl?.classList.remove('spring'), delay + 900 * f);
+          if (b.particles > 0 && by === HUMAN && !t.replaced) drift(t.key, delay + st.ms * 0.55 * f, f, st.heavy ? 3 : 1);
+        }
+        const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
+        if (hp && by === HUMAN && (st.heavy || i === 0)) setTimeout(() => vibrate(true, hp as number | number[]), delay + st.ms * 0.6 * f);
         if (t.replaced) {
           // The bot's tile dissolves into sparks as mine takes its place.
           sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
@@ -744,7 +791,6 @@ async function playStep(step: Step, my: number) {
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
       if (mo.tier === 'big') await impact(mo, f, my);
-      else if (mo.tier === 'small') vibrate(settings.vibration && settings.effects === 'high', 8);
       await wait(last + 420 * f, my);
       return;
     }
@@ -758,8 +804,13 @@ async function playStep(step: Step, my: number) {
       // in a ripple outward from the cut, shedding a few motes; a number floats up.
       flash(step.origin, f, mo.tier === 'big');
       sound.snap(2 ** ((2 * mo.chain) / 12));
-      if (mo.tier === 'big') await impact(mo, f, my);
-      else vibrate(settings.vibration, mine ? 35 : 20);
+      // overhaul item 18: the ambient bed ducks 6 dB for the cut; each size of cut has its own tap
+      sound.duck(900 * Math.max(f, 0.5));
+      const n = step.keys.length;
+      const cutHp = hapticFor(mine ? 'cutMe' : n >= 8 ? 'cutHuge' : n >= 5 ? 'cutBig' : n >= 3 ? 'cutMedium' : 'cutSmall', settings);
+      // the calmer variant when the opponent cuts me: no shake, no thud
+      if (mo.tier === 'big') await impact({ ...mo, budget: { ...mo.budget, vibrate: null, ...(mine ? { shake: 0, thud: false } : {}) } }, f, my);
+      if (cutHp) vibrate(true, cutHp as number | number[]);
       for (const v of board.veinsTouching(keys)) {
         v.classList.add('snapping');
         anim(v, [{ opacity: 1 }, { opacity: 1, offset: 0.15 }, { opacity: 0.2, offset: 0.3 }, { opacity: 0.8, offset: 0.4 }, { opacity: 0 }], { duration: 480 * f, fill: 'forwards' });
@@ -841,6 +892,10 @@ async function playStep(step: Step, my: number) {
     case 'discard': {
       const from = step.player === HUMAN ? cardRects.get(step.card.id) : document.querySelector<HTMLElement>('.score.bot')!.getBoundingClientRect();
       if (from) flyCard(step.card, from, $('discard').getBoundingClientRect(), f);
+      if (step.player === HUMAN) {
+        const hp = hapticFor('throw', settings);
+        if (hp) vibrate(true, hp as number | number[]);
+      }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
       await wait(320 * f, my);
@@ -878,7 +933,10 @@ async function playStep(step: Step, my: number) {
       if (!show()) return;
       const won = step.result.winner === HUMAN;
       sound.fanfare(won);
-      vibrate(settings.vibration, won ? [30, 60, 30, 60, 140] : 70);
+      {
+        const hp = hapticFor(won ? 'win' : 'lose', settings);
+        if (hp) vibrate(true, hp as number | number[]);
+      }
       if (won) {
         // A fuller flourish: soft flashes and a ring of sparks from my root (within the cap).
         for (let i = 0; i < 4; i++) setTimeout(() => flash(board.rootKey(HUMAN), f, false), i * 170 * f);
@@ -894,6 +952,40 @@ async function playStep(step: Step, my: number) {
   }
 }
 
+/** Overhaul item 14: the tug-of-war bar follows the shown scores (so it moves with the count-up). */
+function setRace(s: readonly [number, number]) {
+  const race = $('race');
+  const share = raceShare(s[0], s[1]).toFixed(3);
+  if (race.style.getPropertyValue('--share') !== share) race.style.setProperty('--share', share);
+  race.setAttribute('aria-label', raceWords(s[0], s[1], OPP.Label));
+}
+
+/** Overhaul item 14: tap a score to see what it is made of (tap again or anywhere to close). */
+function showBreakdown(p: Player) {
+  const pop = $('score-pop');
+  if (!session || (!pop.hidden && pop.dataset.p === String(p))) {
+    pop.hidden = true;
+    return;
+  }
+  const b = breakdownOf(session.state, p);
+  pop.dataset.p = String(p);
+  pop.className = `score-pop ${p === HUMAN ? 'you' : 'bot'}`;
+  pop.replaceChildren(
+    Object.assign(document.createElement('b'), { textContent: p === HUMAN ? 'Your score' : `${OPP.Label} score` }),
+    ...b.lines.map((t) => Object.assign(document.createElement('span'), { textContent: t })),
+  );
+  pop.hidden = false;
+}
+
+let lastAmbBoard: State['board'] | null = null;
+let lastAmbKey = '';
+
+/** the result screen's count-up plays once per game */
+let goCounted = false;
+
+/** the final-turns banner shows once per game */
+let finalShown = false;
+
 let scoreRaf = 0;
 function countScores(to: [number, number]) {
   const target: [number, number] = [to[HUMAN], to[BOT]];
@@ -907,6 +999,7 @@ function countScores(to: [number, number]) {
     shownScores = [Math.round(start[0] + (target[0] - start[0]) * k), Math.round(start[1] + (target[1] - start[1]) * k)];
     $('score-you').textContent = String(shownScores[0]);
     $('score-bot').textContent = String(shownScores[1]);
+    setRace(shownScores);
     if (k < 1) scoreRaf = requestAnimationFrame(tick);
   };
   scoreRaf = requestAnimationFrame(tick);
@@ -977,6 +1070,7 @@ function render() {
   if (combo) paintDraw();
   else $('draw-info').hidden = true;
   renderControls(v, advice);
+  $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
   renderCoach(advice);
@@ -1071,7 +1165,17 @@ function renderHud() {
   if (!busy()) shownScores = [session.view.score, session.view.opponentScore];
   $('score-you').textContent = String(shownScores[0]);
   $('score-bot').textContent = String(shownScores[1]);
+  setRace(shownScores);
   const over = st.phase === 'GAME_OVER' && !busy();
+  // Overhaul item 15: the final turns: a calm vignette and a softer ambient sound; one short banner
+  const ft = finalTurns(session.view);
+  const finalOn = ft.final && st.phase !== 'GAME_OVER';
+  document.documentElement.classList.toggle('final-turns', finalOn);
+  sound.setCalm(finalOn);
+  if (finalOn && !finalShown && !busy() && st.actor === HUMAN && ft.banner) {
+    finalShown = true;
+    banner(ft.banner, 'calm');
+  }
   const turn = $('turn');
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
@@ -1082,7 +1186,14 @@ function renderHud() {
     : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
-  if ($('hint').textContent !== hint) $('hint').textContent = hint;
+  const hintEl = $('hint');
+  if (hintEl.dataset.text !== hint.text || hintEl.dataset.arrow !== String(hint.arrow)) {
+    hintEl.dataset.text = hint.text;
+    hintEl.dataset.arrow = String(hint.arrow);
+    const arrow = hint.arrow && hint.text ? `<span class="hint-arrow ${hint.arrow}" aria-hidden="true">${hint.arrow === 'up' ? '▴' : '▾'}</span>` : '';
+    hintEl.innerHTML = `${arrow}<span class="hint-text"></span>`;
+    hintEl.querySelector('.hint-text')!.textContent = hint.text;
+  }
   // The turn as three steps; the current one is lit (only on your turn).
   const steps = $('steps');
   steps.hidden = st.phase === 'GAME_OVER';
@@ -1099,8 +1210,8 @@ function renderHud() {
 const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
 
 /** The dock's one-line hint (overhaul item 13 shortens and sharpens it). */
-function dockHint(v: View): string {
-  return hintText(v);
+function dockHint(v: View): Hint {
+  return session ? hintFor(hintCtx(v)) : { text: '', arrow: null };
 }
 
 // ---------- the layout (overhaul items 1-2): fixed dock, board fits the rest ----------
@@ -1144,53 +1255,30 @@ function applyLayout() {
 window.addEventListener('resize', () => applyLayout());
 window.visualViewport?.addEventListener('resize', () => applyLayout());
 
-function hintText(v: View): string {
-  if (!session) return '';
-  if (v.phase === 'GAME_OVER') return busy() ? '' : 'Game over.';
-  if (v.actor !== HUMAN) return busy() ? `Watch ${OPP.theirs} move…` : `${OPP.The} is thinking…`;
-  if (busy()) return '';
-  const low = v.deckCount <= 3 ? ` ${v.deckCount === 0 ? 'The deck is empty.' : `Only ${plural(v.deckCount, 'card')} left.`}` : '';
-  const sel = session.sel;
-  switch (v.phase) {
-    case 'DRAW':
-      return `Draw a card: tap the deck or the throw pile.${low}`;
-    case 'ACT': {
-      if (fruitFlow) {
-        if (fruitMsg) return fruitMsg;
-        const n = v.config.fruitSacrifice;
-        if (fruitFlow.step === 2) return 'Fruit: check the result, then Confirm.';
-        if (fruitFlow.changing) return `Fruit: tap ${n} of your tiles that touch each other, at least one next to the tile you remove (${fruitFlow.picks.length}/${n}).`;
-        return `Fruit: these ${n} tiles cut off the fewest of yours. Next, or Change.`;
-      }
-      if (session.pending && sproutKind(v, session.pending) === 'strengthen') return 'Strengthen: the tile stays yours and takes the higher number. Confirm or Cancel.';
-      if (session.pending && drawCombo()) return 'Confirm to place it, or draw it again.';
-      if (session.pending && sel.card === null && sel.kind === null) return 'Confirm, or tap the spot again. For another move here, tap a card or a line or clump button.';
-      if (session.pending) return 'Confirm, or tap the spot again.';
-      {
-        const dc = drawCombo();
-        if (dc) return finePointer() ? `Click where your ${dc.kind} starts, then click where it ends. Esc cancels.` : dc.kind === 'line' ? 'Drag across the board to draw your line.' : `Drag over ${dc.n} hexes to draw your clump.`;
-      }
-      if (sel.card !== null) {
-        const kinds = new Set(targetKinds(v, session.legal, sel).values());
-        if (kinds.size === 0) return "That card can't grow anywhere now.";
-        if (sel.kind !== 'sprout') return 'Tap a glowing hex to grow there.';
-        const parts = [kinds.has('grow') ? 'grow on an empty hex' : null, kinds.has('replace') ? `replace an ${OPP.noun} tile (⇆)` : null, kinds.has('strengthen') ? 'strengthen your tile (+)' : null].filter(Boolean);
-        return `Tap a glowing hex: ${parts.join(', ')}.`;
-      }
-      if (sel.kind !== null) return 'Tap a glowing hex.';
-      if (sel.hex !== null) return 'Nothing grows there right now.';
-      if (v.hand.length === 0) return 'No cards left. Tap “End turn”.';
-      return session.legal.some(isBoardAction) ? `${moveWords(v.config).tapHint}, or a line or clump button for a combo. Done? Tap “Throw a card”.` : 'Nothing to grow this time.';
-    }
-    case 'DISCARD':
-      return discardEndsTurn(v) ? 'Last step: discard 1 card. Then your turn ends.' : 'Discard 1 card.';
-    case 'KNOCK':
-      return 'Knock to end the game soon, or end your turn.';
-    case 'ROT_PICK':
-      return `Tap ${OPP.theirs} tile that rots.`;
-    default:
-      return '';
-  }
+/** The moment, summarised for the hint line (overhaul item 13; the wording lives in logic/hint.ts). */
+function hintCtx(v: View): HintCtx {
+  const sel = session!.sel;
+  const pending = session!.pending;
+  const dc = drawCombo();
+  const kinds = sel.card !== null ? new Set(targetKinds(v, session!.legal, sel).values()) : null;
+  return {
+    phase: v.phase,
+    myTurn: v.actor === HUMAN,
+    busy: busy(),
+    words: moveWords(v.config),
+    deckCount: v.deckCount,
+    canTakeThrow: session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'),
+    fruit: fruitFlow ? { step: fruitFlow.step, changing: fruitFlow.changing, picks: fruitFlow.picks.length, n: v.config.fruitSacrifice, msg: fruitMsg } : null,
+    pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
+    drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
+    card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
+    kindPicked: sel.kind !== null,
+    hexWithNoMove: sel.hex !== null,
+    handEmpty: v.hand.length === 0,
+    canSprout: session!.legal.some((a) => a.t === 'Sprout'),
+    canCombo: session!.legal.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet'),
+    throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
+  };
 }
 
 /**
@@ -1217,6 +1305,14 @@ function freshKeys(): string[] {
   return [...keys].filter((k) => st.board[k]?.owner === BOT).sort();
 }
 
+/** Overhaul item 10: a preview's veins and its at-risk "−N" (only when the move makes it worse). */
+function ghostExtras(v: View, pending: Action | null, ghosts: { key: string }[]): Pick<Overlay, 'ghostLinks' | 'atRisk'> {
+  if (!pending || ghosts.length === 0) return {};
+  const f = forecastMove(v, pending);
+  const worse = f?.atRisk && f.atRisk.loss >= 2 && f.atRisk.loss > f.atRiskBefore ? f.atRisk : null;
+  return { ghostLinks: ghostLinks(v.board, v.player, ghosts.map((g) => g.key)), atRisk: worse };
+}
+
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age }) => ({ key, owner, age })), focusKey, fresh: freshKeys() };
@@ -1233,6 +1329,7 @@ function renderBoard(v: View, advice: Advice | null) {
       selectedHex: sel.hex ?? (pending?.t === 'RotPick' ? coordKey(pending.coord) : null),
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
+      ...ghostExtras(v, pending, pv?.ghosts ?? []),
       coachHexes: advice && !anySel ? advice.hexes.map(coordKey) : [],
       usable: true,
     };
@@ -1271,10 +1368,21 @@ function renderBoard(v: View, advice: Advice | null) {
     lastBoard = queue.board;
     lastOverlay = key;
   }
+  // Overhaul item 16: ambient life, quiet while moves animate (so cuts read clearly)
+  const ambKey = busy() ? 'busy' : `${settings.effects}|${settings.reduceMotion}`;
+  if (queue.board !== lastAmbBoard || ambKey !== lastAmbKey) {
+    lastAmbBoard = queue.board;
+    lastAmbKey = ambKey;
+    board.ambient(busy() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
+  }
   $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
   $('tool-targets').setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
   $('tool-replay').hidden = busy() || session.lastTurnOf(BOT).length === 0;
+  // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
+  const undoOk = session.canUndo && !busy() && !fruitFlow;
+  ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
+  $('tool-undo').classList.toggle('ready', undoOk);
   placeCorners();
   renderTooltip(v);
 }
@@ -1358,7 +1466,6 @@ const button = (text: string, cls: string, onClick: () => void, label?: string) 
   if (label) b.setAttribute('aria-label', label);
   b.addEventListener('click', () => {
     sound.unlock();
-    sound.click();
     onClick();
   });
   return b;
@@ -1440,15 +1547,21 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
   if (anySel && !pending) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
-  if (session.canUndo && !anySel) moves.append(button('Undo', 'ghost undo', () => undoMove(), 'Undo your last move'));
 
   if (pending) {
     const pv = previewMove(v, pending);
     $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Discard ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
     $('confirm-play').textContent = pending.t === 'Discard' && discardEndsTurn(v) ? 'Discard & end turn' : pending.t === 'Discard' ? 'Discard' : 'Confirm';
+    // Overhaul item 8: the risks that made this move ask (icons + short lines); else the old note
+    const risks = (() => {
+      const f = forecastMove(v, pending);
+      return f ? riskLines(f) : [];
+    })();
+    renderRisks(risks);
     const warn = $('confirm-warn');
-    warn.hidden = !pv?.warning && !pv?.note;
-    warn.textContent = pv?.warning ?? pv?.note ?? '';
+    const quiet = risks.length > 0 || (!pv?.warning && !pv?.note);
+    warn.hidden = quiet;
+    warn.textContent = quiet ? '' : (pv?.warning ?? pv?.note ?? '');
     warn.classList.toggle('note', !pv?.warning && !!pv?.note);
     // Polish pass 3: previewing a Sprout onto an opponent tile? A small "i" opens its tile card,
     // so Fruit stays reachable while a card is picked.
@@ -1458,6 +1571,24 @@ function renderControls(v: View, advice: Advice | null) {
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
     $('confirm').hidden = false;
   }
+}
+
+/** The forecast bar's risk lines (overhaul item 8): one icon and short line each. */
+function renderRisks(risks: ReturnType<typeof riskLines>) {
+  const box = $('confirm-risks');
+  box.replaceChildren(
+    ...risks.map((r) => {
+      const li = document.createElement('li');
+      li.className = `risk risk-${r.reason}`;
+      const i = document.createElement('span');
+      i.className = 'risk-icon';
+      i.setAttribute('aria-hidden', 'true');
+      i.textContent = r.icon;
+      li.append(i, document.createTextNode(r.text));
+      return li;
+    }),
+  );
+  box.hidden = risks.length === 0;
 }
 
 /**
@@ -1506,6 +1637,7 @@ function renderFruitFlow(v: View) {
     const pv = fruitPreview(v, fa);
     $('confirm-chip').textContent = pv.chip;
     $('confirm-play').textContent = 'Use Fruit';
+    renderRisks([]);
     const warn = $('confirm-warn');
     warn.hidden = pv.warnings.length === 0;
     warn.textContent = pv.warnings.join(' ');
@@ -1599,6 +1731,9 @@ const rememberCardRects = () => {
   cardRects = new Map([...document.querySelectorAll<HTMLElement>('#hand [data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
 };
 
+/** the biggest the piles have been this game (for the stack thickness) */
+let deckFull = 1;
+
 function renderPiles(v: View, advice: Advice | null) {
   const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
   const top = v.discard.at(-1);
@@ -1611,6 +1746,12 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').classList.toggle('low', low);
   $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
   $('discard-count').textContent = String(v.discard.length);
+  // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
+  deckFull = Math.max(deckFull, v.deckCount + v.discard.length);
+  $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
+  $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
+  $('deck').dataset.count = pileCountState(v.deckCount);
+  $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? 'Last card' : 'Deck';
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
     b.disabled = !look.enabled;
@@ -1676,6 +1817,22 @@ function renderGameOver() {
   other.dataset.level = String(target);
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
+  // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
+  if (timeScale() > 0 && !settings.reduceMotion && !goCounted) {
+    goCounted = true;
+    const els = [$('go-score').querySelector('.you')!, $('go-score').querySelector('.bot')!];
+    const to = [r.scores[HUMAN], r.scores[BOT]];
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / 900);
+      const e = 1 - (1 - k) ** 3;
+      els.forEach((el, i) => (el.textContent = String(Math.round(to[i]! * e))));
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  $('go-cut').hidden = !session?.biggestCut;
+  $('go-share').textContent = 'Share';
   $('go-reason').textContent = resultReason(r, HUMAN);
   // UX pass: what I did with the one-card move, and (A/B test) a quick switch to the other version
   const moves = moveSummary(st.history ?? [], HUMAN, st.config);
@@ -1717,7 +1874,30 @@ function renderHistory() {
 function undoMove() {
   if (!session) return;
   fastForward();
+  const before = session.state.board;
   if (!session.undo()) return;
+  // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
+  // with a falling sound and a light double tap. The state itself is restored exactly.
+  const after = session.state.board;
+  const gone = Object.keys(before).filter((k) => before[k] && JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+  const back = Object.keys(after).filter((k) => after[k] && JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+  if (settings.sound) sound.undo(undoPitches(gone.length));
+  const hp = hapticFor('undo', settings);
+  if (hp) vibrate(true, hp as number | number[]);
+  const f = timeScale();
+  if (f > 0 && !settings.reduceMotion) {
+    for (const k of gone) {
+      const el = board.tile(k);
+      if (!el) continue;
+      const ghost = el.cloneNode(true) as SVGGElement;
+      ghost.classList.add('undo-ghost');
+      el.parentNode?.appendChild(ghost);
+      removeAfter(anim(ghost, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.55) translateY(4px)' }], { duration: 260 * f, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' }), ghost, 320 * f);
+    }
+    requestAnimationFrame(() => {
+      for (const k of back) anim(board.tile(k), [{ opacity: 0, transform: 'scale(0.85)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 240 * f, delay: 120 * f, easing: 'ease-out', fill: 'backwards' });
+    });
+  }
   queue.reset(session.state.board);
   const v = session.view;
   shownScores = [v.score, v.opponentScore];
@@ -1744,7 +1924,12 @@ function cancelSel() {
 function maybeAutoPlay() {
   if (!session || !myTurn() || busy()) return;
   const a = playNow(session.view, session.legal, session.sel);
-  if (a) humanPlay(a);
+  if (a && !asksConfirm(a)) humanPlay(a);
+}
+
+/** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
+function asksConfirm(a: Action): boolean {
+  return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
 function onCardTap(id: number) {
@@ -1755,8 +1940,8 @@ function onCardTap(id: number) {
   sound.click();
   session.tapCard(id);
   inspectKey = null;
-  // Throw step: tapping a card throws it (no extra confirm).
-  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard') return humanPlay(session.pending);
+  // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
+  if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
   if (session.sel.card !== null && session.sel.hex === null) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
@@ -1850,7 +2035,7 @@ function cancelDraw(msg: string | null = null) {
 function finishDraw(a: Meld) {
   draw = { ...DRAW0 };
   board.ghost(null);
-  if (confirmMovesFor(settings.confirmDraw, finePointer())) {
+  if (asksConfirm(a)) {
     session!.preset(a);
     render();
   } else humanPlay(a);
@@ -2050,6 +2235,7 @@ function replayBotTurn() {
   const turn = session.lastTurnOf(BOT);
   if (!turn.length) return;
   session.cancel();
+  replaying = true;
   queue.reset(turn[0]!.before.board);
   const v0 = viewFor(turn[0]!.before, HUMAN);
   shownScores = [v0.score, v0.opponentScore];
@@ -2074,12 +2260,37 @@ for (const r of ['sprout', 'seed'] as const)
     pickedRuleset = r;
     showScreen('levels');
   });
+for (const [sel, p] of [['.hud .score.you', HUMAN], ['.hud .score.bot', BOT]] as const) {
+  const el = document.querySelector<HTMLElement>(sel)!;
+  el.setAttribute('role', 'button');
+  el.tabIndex = 0;
+  el.addEventListener('click', () => showBreakdown(p));
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') showBreakdown(p);
+  });
+}
+document.addEventListener('pointerdown', (e) => {
+  if (!(e.target as Element | null)?.closest?.('.hud .score, #score-pop')) $('score-pop').hidden = true;
+});
 bind('levels-back', () => showScreen('menu'));
+// Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
+// tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
+document.addEventListener(
+  'pointerdown',
+  (e) => {
+    const b = (e.target as Element | null)?.closest?.('.btn, .tool, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
+    if (!b || (b as HTMLButtonElement).disabled) return;
+    sound.unlock();
+    if (settings.sound) sound.click();
+    const hp = hapticFor('press', settings);
+    if (hp) vibrate(true, hp as number | number[]);
+  },
+  { capture: true },
+);
 bind('hint-btn', () => sheet('sheet-howto'));
 bind('hand-sort', () => {
   settings = { ...settings, handSort: nextSort(settings.handSort) };
   saveSettings();
-  sound.click();
   render();
 });
 // overhaul item 7: legal hexes brighten softly as the finger or mouse comes near
@@ -2210,6 +2421,7 @@ bind('tool-skip', () => {
   fastForward();
 });
 bind('tool-replay', () => replayBotTurn());
+bind('tool-undo', () => undoMove());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-version', () => startGame(randomSeed(), gameLevel, ($('go-version').dataset.ruleset as Ruleset | undefined) ?? 'seed'));
 bind('version-chip', () => {
@@ -2220,6 +2432,40 @@ bind('go-board', () => {
   render();
 });
 bind('go-menu', () => showScreen('menu'));
+// Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
+bind('go-cut', () => {
+  const p = session?.biggestCut;
+  if (!session || !p || busy()) return;
+  gameOverDismissed = true;
+  reopenGameOver = true;
+  replaying = true;
+  queue.reset(p.before.board);
+  const v0 = viewFor(p.before, HUMAN);
+  shownScores = [v0.score, v0.opponentScore];
+  queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && s.k !== 'draw'));
+  const v = session.view;
+  queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
+  render();
+  void pump();
+});
+// Overhaul item 20: a picture of the result for the share sheet (or saved); nothing is uploaded
+bind('go-share', () => {
+  const st = session?.state;
+  if (!st?.result) return;
+  const hl = gameHighlights(st.history ?? [], HUMAN).filter((h) => h.value > 0).map((h) => `${h.title}: ${h.text}`);
+  void shareCard({
+    game: GAME_TITLE,
+    title: $('go-title').textContent ?? '',
+    sub: $('go-sub').textContent ?? '',
+    score: [st.result.scores[HUMAN], st.result.scores[BOT]],
+    highlights: hl,
+    board: st.board,
+    radius: st.config.boardRadius,
+    me: HUMAN,
+  }).then((r) => {
+    if (r === 'saved') $('go-share').textContent = 'Saved';
+  });
+});
 
 bind('coach-hide', () => {
   settings = { ...settings, coach: false };
@@ -2369,6 +2615,7 @@ document.addEventListener('keydown', (e) => {
 /** Read-only hook for the automated browser test (nothing is sent anywhere). */
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
+  pending: () => session?.pending ?? null,
   settings: () => ({ ...settings }),
   busy: () => busy(),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),

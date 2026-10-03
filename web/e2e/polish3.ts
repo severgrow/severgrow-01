@@ -151,8 +151,10 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
 }
 {
   // desktop: one click to start, a live preview while hovering, one click to finish (placed at once)
+  // (UI overhaul item 8: this line leaves 3 tiles cuttable, so Smart would ask first; this check
+  // is about the clicks, so it runs with "Confirm moves: Never")
   const s = stateWith({}, RUN);
-  const { page, errors } = await open(s, { width: 1280, height: 800 });
+  const { page, errors } = await open(s, { width: 1280, height: 800, settings: { confirmPolicy: 'never' } });
   await pick(page, 'line-3');
   const a = await hexCenter(page, '-1,1');
   const b = await hexCenter(page, '1,1');

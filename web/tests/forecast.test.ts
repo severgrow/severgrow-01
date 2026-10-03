@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, legalActions, score, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State } from '../../src/engine/index.js';
-import { CONFIRM_RULES, forecastMove, needsConfirm, riskReasons, rootBlocked } from '../src/logic/forecast.js';
+import { CONFIRM_RULES, forecastMove, ghostLinks, needsConfirm, riskLines, riskReasons, rootBlocked } from '../src/logic/forecast.js';
 import type { Forecast } from '../src/logic/forecast.js';
 import { customBoard, playGame } from './ui-helpers.js';
 
@@ -108,5 +108,47 @@ describe('Smart, Always and Never', () => {
     const strict = { ...CONFIRM_RULES, atRisk: 2 };
     expect(needsConfirm('smart', f({ atRisk: { key: '0,0', loss: 2 } }), strict)).toBe(true);
     expect(needsConfirm('smart', f({ atRisk: { key: '0,0', loss: 2 } }))).toBe(false);
+  });
+});
+
+describe('the forecast bar: one short plain line per risk', () => {
+  const f = (o: Partial<Forecast>): Forecast => ({ kind: 'grow', tiles: 2, points: 2, replaced: 0, cutTheirs: [], cutMine: [], atRisk: null, atRiskBefore: 0, wins: false, lastCard: false, rootDanger: false, ...o });
+  it('every risk reason gets a line with an icon, short, jargon-free, never "bot"', () => {
+    const all = f({ atRisk: { key: '0,0', loss: 4 }, cutMine: ['0,0', '1,0'], lastCard: true, rootDanger: true });
+    const lines = riskLines(all);
+    expect(lines.map((l) => l.reason)).toEqual(['atRisk', 'cutsOwn', 'lastCard', 'root']);
+    expect(lines[0]!.text).toContain('4');
+    expect(lines[1]!.text).toContain('2');
+    const fruit = riskLines(f({ kind: 'fruit', cutMine: ['a', 'b', 'c'] }));
+    expect(fruit.map((l) => l.reason)).toEqual(['fruit']);
+    expect(fruit[0]!.text).toContain('3');
+    for (const l of [...lines, ...fruit]) {
+      expect(l.icon.length).toBeGreaterThan(0);
+      expect(l.text.length).toBeLessThanOrEqual(40);
+      expect(l.text).not.toMatch(/\bbots?\b/i);
+    }
+  });
+  it('a safe move has no lines', () => {
+    expect(riskLines(f({}))).toEqual([]);
+  });
+});
+
+describe('ghost veins (item 10): the links a move would make', () => {
+  it('links each new tile to my neighbouring tiles and to the other new tiles, once each, never to the opponent', () => {
+    const board: Record<string, { owner: Player; strength: number; root?: boolean } | null> = {
+      '0,0': { owner: 0, strength: 3 },
+      '1,0': null,
+      '2,0': null,
+      '1,-1': { owner: 1, strength: 4 },
+    };
+    const links = ghostLinks(board as never, 0, ['1,0', '2,0']);
+    expect(links).toEqual([
+      ['0,0', '1,0'],
+      ['1,0', '2,0'],
+    ]);
+  });
+  it('a replaced opponent tile counts as mine after the move', () => {
+    const board = { '0,0': { owner: 0, strength: 3 }, '1,0': { owner: 1, strength: 2 } };
+    expect(ghostLinks(board as never, 0, ['1,0'])).toEqual([['0,0', '1,0']]);
   });
 });

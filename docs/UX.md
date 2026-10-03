@@ -468,3 +468,87 @@ Fifteen small changes to the look and feel; no rule changes.
 15. **Continue says where you left off**: version, level and turn.
 
 Checked by `web/e2e/seed-ab.ts` (25 checks) and unit tests (stats per version, move summary).
+
+## UI overhaul, Part 1 (twenty improvements)
+
+No rule, engine or opponent changes. Each item names the file where its logic lives; every
+piece of logic has a test in `web/tests/`.
+
+### The design system (item 11)
+
+One set of rules for every screen:
+
+- **Spacing:** an 8pt grid: 4, 8, 16, 24, 32, 48 px (`--sp-1` … `--sp-6`).
+- **Type scale:** 0.72, 0.85, 1, 1.25, 1.75 rem (`--fs-xs` … `--fs-xl`). Numbers are
+  **tabular** (every digit the same width), so scores and counts never wobble as they change.
+- **Buttons, three levels:**
+  - **Primary** (`.btn.primary`): filled cream pill. At most one per moment, for the main next step.
+  - **Secondary** (`.btn.ghost`): outlined pill on the surface colour.
+  - **Tertiary** (`.btn.link`): text only, for "Why?", "Back to menu".
+  - Heights: 56 (big), 44 (normal), 36 (compact); toolbar pills are 32 tall with a 44px hit area.
+- **Press:** every button (and toolbar pill, segment, chip, icon button) shrinks to **0.97 over
+  80ms** when pressed, plays a soft tick (Sound) and, with Effects High, a 6ms tap (Vibration).
+  Reduce motion keeps the tick but not the shrink. Nothing plays before the first tap.
+- **One light:** everything is lit from the top left (the plate's highlight, rims, shadows).
+
+### The screen
+
+1. **Bigger board, no dead space** (`logic/layout.ts`): the board takes everything the fixed dock
+   leaves; on phones it sits just above the toolbar. The board's rim is exactly what the plate
+   needs (`boardPad`), shared by the layout and the drawing.
+2. **Stable layout:** the dock (toolbar, hint line, forecast bar, piles and actions, hand) has one
+   fixed height for the whole game, so nothing that appears during a turn moves the board or the
+   hand. The coach and first-time tips sit over the hint and forecast rows, never over the board,
+   the toolbar, the piles or the hand.
+3. **Hand** (`logic/hand.ts`): big numerals, at least 40px of every card visible in a full hand, a
+   gentle fan, "By suit / By number" sort (remembered), a spring lift, a coloured underline
+   joining cards that make a combo, unplayable cards dimmed, a slight tilt under the mouse.
+4. **Toolbar under the board:** "My weak spots", "Their weak links" (on/off), "Replay" (only when
+   there is a turn to replay), "Undo", "Skip" (only while something animates).
+5. **Header:** one clock only. The turn count was removed (your choice); the deck count is the
+   game's clock. The "Only 1 card left" pill is gone (the deck shows it). The version chip
+   (SPROUT / SEED: which rules this game uses) sits with the three steps.
+6. **Deck and throw pile** (`logic/piles.ts`): 48px+ targets; the stack is as thick as the pile is
+   big; the count sits beside the label, clear of the art; they glow in the Draw step; the last
+   card turns gold and the label says "Last card"; drawing arcs the card into the hand;
+   throwing flips it onto the pile.
+7. **Calm drawing highlights** (`logic/draw.ts`): a soft fill and a 1px edge; before a touch only
+   the start hexes, while drawing only the next ones; the nearer your finger, the brighter.
+8. **Smart confirmation** (`logic/forecast.ts`): Settings → "Confirm moves: **Smart** (default) /
+   Always / Never". Smart plays safe moves at once (Undo takes them back) and asks only when a
+   move leaves 3+ of your tiles cuttable (and worse than before), cuts off your own tiles, uses
+   Fruit, uses your last card, or boxes in your root. The thresholds are config values
+   (`CONFIRM_RULES`). The forecast bar shows the result and an icon and a short line for each
+   risk; it keeps the same height in every state.
+9. **Undo:** in the toolbar, lit with a dot while a move can be taken back (until you throw).
+   The move runs backwards with a falling sound and a light double tap. The state after Undo is
+   exactly the state before the move.
+10. **Previews in real materials:** translucent moss (lava glowing through when replacing),
+    the real number, breathing gently; the veins it would grow draw on; a dashed red "−N" on your
+    tile that becomes cuttable, a gold "−N" on the opponent tiles it would cut. Computed on copies.
+11. **The design system** (above).
+12. **The board as a place:** a ground plate lit from the top left, a lighter edge, a soft shadow,
+    a fine soil grain in empty hexes (Material detail Normal only).
+13. **Hint line** (`logic/hint.ts`): one short line (it always fits a 360px phone) with a tiny
+    arrow toward where to tap; it says why a move isn't available. The single-tile move keeps
+    its version's word (Sprout / Seed): no renaming.
+14. **Score race** (`logic/race.ts`): a slim tug-of-war bar under the header; scores count up and
+    bounce; tap a score for what it is made of.
+15. **Final turns** (`logic/endgame.ts`): when 3 of your turns are left (turn limit) or the deck
+    has 6 cards or fewer, a slightly deeper vignette fades in, the ambient sound turns warmer, and
+    one short banner says "Last 3 turns" (or "The deck is running low"). No flashing, no red.
+16. **Ambient life** (`logic/ambient.ts`): moss sways, lava bubbles and embers, gold glints (each
+    gold hex at its own moment, from a hash), nutrient pulses running out from your root along
+    connected veins. At most 24 small shapes; none with Effects Low or Reduce motion.
+17. **Placement feel** (`logic/feedback.ts`): squash and stretch; higher numbers drop from a
+    little higher and settle heavier (the top rank lands with a stronger tap); grass blades spring
+    up; a puff of spores; veins draw on; the rising pitch ladder.
+18. **Sound and vibration** (`logic/feedback.ts`): one table of vibration patterns, all
+    different, none longer than 0.4s; cuts get bigger patterns as they get bigger, being cut is
+    calmer. The ambient bed ducks 6 dB during a cut. Sounds wobble slightly in pitch.
+19. **The opponent's turn** (`logic/opponent.ts`): thinking dots; a caption near each action; the
+    rest of the board dims a little; the view leans 1.5% toward the action; Replay plays at 0.75×;
+    when it cuts you, the cut is calmer (no shake, no thud).
+20. **Game over:** a calm glow, the score counts up, three highlights, "Replay the biggest cut",
+    "Share" (a picture made on the phone: the share sheet, or saved; nothing is uploaded),
+    Rematch and Menu.

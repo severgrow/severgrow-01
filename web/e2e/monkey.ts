@@ -180,7 +180,7 @@ const run = async (name: string, touch: boolean, seed: number) => {
       await page.keyboard.press(pick(['Escape', 'Enter', 'Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '1', '3']));
     } else if (roll < 0.95) {
       kind = 'undo or cancel';
-      await page.locator('#moves .undo:visible, #moves .cancel:visible, #confirm-cancel:visible').first().click({ timeout: 500 }).catch(() => {});
+      await page.locator('#tool-undo:enabled, #moves .cancel:visible, #confirm-cancel:visible').first().click({ timeout: 500 }).catch(() => {});
     } else {
       kind = 'menu round trip';
       await page.click('#hud-history').catch(() => {});

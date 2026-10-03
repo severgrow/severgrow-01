@@ -15,6 +15,22 @@ export const endgameNote = (v: View): string | null => {
   return null;
 };
 
+/** Overhaul item 15: how near the end is (at most this many of my turns are left, by the turn limit). */
+export const FINAL_TURNS = 3;
+/** ... or the deck has this many cards or fewer (the deck's end can't be counted in turns: it depends on the cards played). */
+export const FINAL_DECK = 6;
+
+export type FinalTurns = { final: boolean; turnsLeft: number | null; reason: 'limit' | 'deck' | null; banner: string | null };
+
+/** The calm final-turns state: when it starts, and its short banner. */
+export const finalTurns = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>): FinalTurns => {
+  const max = v.config.maxTurnsPerPlayer;
+  const left = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : null; // this turn included
+  if (left !== null && left <= FINAL_TURNS) return { final: true, turnsLeft: left, reason: 'limit', banner: left <= 1 ? 'Last turn' : `Last ${left} turns` };
+  if (v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Deck empty: last turn' : 'The deck is running low' };
+  return { final: false, turnsLeft: left, reason: null, banner: null };
+};
+
 /** A player's tiles and how many of them sit on gold (each gold tile scores 2). */
 export const scoreBreakdown = (ctx: BoardCtx, p: Player): { tiles: number; gold: number } => {
   let tiles = 0;

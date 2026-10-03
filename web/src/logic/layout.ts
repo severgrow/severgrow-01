@@ -30,11 +30,14 @@ const GUTTER = 16;
  * a thin rim for the plate. Pointy-top hexes: the board is wider than tall.
  */
 export const boardUnits = (radius: number, S = 30) => {
-  const pad = S * 1.0 + 4;
-  const halfW = Math.sqrt(3) * S * radius + pad;
-  const halfH = 1.5 * S * radius + pad;
-  return { w: 2 * halfW, h: 2 * halfH, hexW: Math.sqrt(3) * S, pad };
+  const { padX, padY } = boardPad(S);
+  const halfW = Math.sqrt(3) * S * radius + padX;
+  const halfH = 1.5 * S * radius + padY;
+  return { w: 2 * halfW, h: 2 * halfH, hexW: Math.sqrt(3) * S, pad: padX };
 };
+
+/** The rim around the outermost hex centres: the plate reaches S*1.35 past the corner hexes, plus its pins. */
+export const boardPad = (S = 30) => ({ padX: Math.ceil(S * 1.35 + 3.5), padY: Math.ceil(S * 1.2 + 2) });
 
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);
 

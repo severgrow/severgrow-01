@@ -56,7 +56,7 @@ export const previewMove = (v: View, a: Action): Preview | null => {
       points: 0,
       chip: `Strengthen ${plan.strengthen.from} → ${t.strength}`,
       warning: null,
-      note: `No points, but harder for ${OPP.the} to replace. It does not stop a cut or Fruit.`,
+      note: 'No points; harder to replace (not to cut)',
     };
   }
   const ghosts = plan.tiles.map((t) => {

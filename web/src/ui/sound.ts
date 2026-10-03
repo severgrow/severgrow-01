@@ -1,12 +1,18 @@
 // All sounds are made in code with the Web Audio API (no sound files). Nothing plays
 // until the player's first tap (browsers require that, and it is kinder). Volume is kept
 // modest, and each note wobbles a tiny bit in pitch so repeats don't sound robotic.
+import { DUCK_DB, dbToGain } from '../logic/feedback.js';
+
 type Wave = OscillatorType;
 
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private drone: { stop: () => void } | null = null;
+  /** overhaul item 18: the ambient bed's own gain (ducks during cuts) and filter (darker in the final turns) */
+  private bed: GainNode | null = null;
+  private bedFilter: BiquadFilterNode | null = null;
+  private calm = false;
   enabled = true;
   musicOn = false;
   base = 330;
@@ -100,6 +106,10 @@ export class Sound {
     this.noise(0.07, 0.4, 0, 6500 * pitch);
     this.tone(this.base * 1.5 * pitch, 0.08, { wave: 'triangle', gain: 0.1, slideTo: this.base * pitch });
   }
+  /** Undo: the growing ladder played backwards, soft. */
+  undo(pitches: readonly number[]) {
+    pitches.forEach((m, i) => this.tone(this.base * m, 0.1, { wave: 'sine', gain: 0.06, delay: i * 0.045 }));
+  }
   /** A low, soft thud for big moments. */
   thud() {
     this.tone(this.base / 3, 0.38, { wave: 'sine', gain: 0.3, slideTo: this.base / 6, delay: 0.01 });
@@ -148,7 +158,14 @@ export class Sound {
     lg.gain.value = 0.015;
     lfo.connect(lg).connect(g.gain);
     lfo.start();
-    g.connect(this.master);
+    if (!this.bed) {
+      this.bedFilter = ctx.createBiquadFilter();
+      this.bedFilter.type = 'lowpass';
+      this.bedFilter.frequency.value = this.calm ? CALM_HZ : OPEN_HZ;
+      this.bed = ctx.createGain();
+      this.bedFilter.connect(this.bed).connect(this.master);
+    }
+    g.connect(this.bedFilter!);
     this.drone = {
       stop: () => {
         const t = ctx.currentTime;
@@ -159,7 +176,32 @@ export class Sound {
       },
     };
   }
+  /** Overhaul item 15: the final turns: the ambient bed slowly turns warmer and softer (no urgency). */
+  setCalm(on: boolean) {
+    if (this.calm === on) return;
+    this.calm = on;
+    const f = this.bedFilter;
+    if (!f || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    f.frequency.cancelScheduledValues(t);
+    f.frequency.setValueAtTime(f.frequency.value, t);
+    f.frequency.exponentialRampToValueAtTime(on ? CALM_HZ : OPEN_HZ, t + 2.5);
+  }
+  /** Overhaul item 18: the ambient bed ducks by 6 dB during a cut, then comes back. */
+  duck(ms: number, db = DUCK_DB) {
+    const g = this.bed;
+    if (!g || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.linearRampToValueAtTime(dbToGain(db), t + 0.08);
+    g.gain.setValueAtTime(dbToGain(db), t + ms / 1000);
+    g.gain.linearRampToValueAtTime(1, t + ms / 1000 + 0.5);
+  }
 }
+
+const OPEN_HZ = 2400;
+const CALM_HZ = 700;
 
 export const vibrate = (on: boolean, pattern: number | number[]) => {
   if (on && 'vibrate' in navigator) {

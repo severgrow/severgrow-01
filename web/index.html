@@ -72,7 +72,8 @@
         </div>
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
-      <div id="race" class="race" aria-hidden="true"><i class="race-fill"></i></div>
+      <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
+      <div id="score-pop" class="score-pop" role="status" hidden></div>
       <div class="steps-row">
         <button id="version-chip" class="version-chip" type="button" title="The version you are playing"></button>
         <ol id="steps" class="steps" aria-label="Your turn, step by step">
@@ -100,6 +101,7 @@
             <button id="tool-weak" class="tool" type="button" aria-pressed="false" title="Show where your network is easy to cut"><span class="i" data-icon="shield"></span><span class="tool-label">My weak spots</span></button>
             <button id="tool-targets" class="tool" type="button" aria-pressed="false" title="Show where your opponent is easy to cut"><span class="i" data-icon="target"></span><span class="tool-label">Their weak links</span></button>
             <button id="tool-replay" class="tool" type="button" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span><span class="tool-label">Replay</span></button>
+            <button id="tool-undo" class="tool undo" type="button" disabled title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span class="tool-label">Undo</span></button>
             <button id="tool-skip" class="tool" type="button" hidden title="Skip the animation"><span class="i" data-icon="skip"></span><span class="tool-label">Skip</span></button>
           </div>
           <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
@@ -108,6 +110,7 @@
             <div class="confirm-text">
               <span id="confirm-chip" class="result-chip"></span>
               <span id="confirm-warn" class="warn" hidden></span>
+              <ul id="confirm-risks" class="risks" hidden></ul>
             </div>
             <div class="confirm-buttons">
               <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
@@ -122,17 +125,15 @@
               <button id="deck" class="pile deck" type="button" aria-label="Deck">
                 <span class="pile-card">
                   <span class="pile-stack" aria-hidden="true"></span>
-                  <span class="pile-count num" id="deck-count">0</span>
                 </span>
-                <span class="pile-label" aria-hidden="true">Deck</span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Deck</span><span class="pile-count num" id="deck-count">0</span></span>
                 <span class="pile-hint" id="deck-hint" aria-hidden="true"></span>
               </button>
               <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
                 <span class="pile-card">
                   <span class="pile-top" id="discard-top" aria-hidden="true"></span>
-                  <span class="pile-count num" id="discard-count">0</span>
                 </span>
-                <span class="pile-label" aria-hidden="true">Throw pile</span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
                 <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
               </button>
             </div>
@@ -245,6 +246,8 @@
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
           <button id="go-version" class="btn ghost" type="button"></button>
+          <button id="go-cut" class="btn ghost" type="button" hidden>Replay the biggest cut</button>
+          <button id="go-share" class="btn ghost" type="button">Share</button>
           <button id="go-board" class="btn ghost" type="button">See the board</button>
           <button id="go-menu" class="btn link" type="button">Back to menu</button>
           <p id="go-stats" class="muted small stats-line"></p>

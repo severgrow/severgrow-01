@@ -198,7 +198,7 @@ const playTurn = async (page: Page) => {
     if (await pickTarget(page)) {
       if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
       await idle(page);
-      await page.click('#moves .undo');
+      await page.click('#tool-undo');
       undone = (await stateJson(page)) === before && (await boardTiles(page)) === (await stateTiles(page));
     }
   }
