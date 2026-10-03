@@ -2,7 +2,7 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -92,6 +92,8 @@ import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
 import { GAME_TITLE, OPP, SPROUT } from '../../src/strings.js';
 import { debugLines, isDebug } from './logic/debug.js';
+import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
+import type { Beats } from './logic/emptyturn.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -172,6 +174,7 @@ const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) =
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
+  document.body.dataset.turn = player === HUMAN ? 'you' : 'opponent';
   pill.show(player, o, label);
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
@@ -575,6 +578,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
   markMoment(p.steps, p.before);
   queue.push(p.steps);
+  // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
+  if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
   render();
   void pump();
@@ -596,6 +601,31 @@ function humanPlay(a: Action) {
   afterPlay(p, HUMAN, advice);
 }
 
+/**
+ * The opponent's whole turn, worked out at its start (Step 2): each action is the same one the
+ * bot would pick step by step (its View and seeded randomness only), so knowing them early only
+ * sets the pace: an empty turn (draw, end, throw) is quick, about EMPTY_TURN_MS.
+ */
+type BotPlan = { keys: string[]; actions: Action[]; beats: Beats };
+/** Where a game is: the same turn, phase and number of events means the same position. */
+const posKey = (s: State) => `${s.seed}|${s.turnNumber}|${s.phase}|${s.actor}|${s.history?.length ?? 0}`;
+let botPlan: BotPlan | null = null;
+/** The opponent's empty turn is on show: the draw, throw and next turn start are quick. */
+let quickShow: Beats | null = null;
+const askFor = (st: State) => askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+async function planBotTurn(from: State): Promise<BotPlan> {
+  const keys: string[] = [];
+  const actions: Action[] = [];
+  let s = from;
+  while (s.phase !== 'GAME_OVER' && s.actor === BOT && s.turnPlayer === BOT && actions.length < 40) {
+    const a = await askFor(s);
+    keys.push(posKey(s));
+    actions.push(a);
+    s = apply(s, a);
+  }
+  return { keys, actions, beats: opponentBeats(actions, timeScale()) };
+}
+
 function scheduleBot() {
   if (!session || botBusy) return;
   const st = session.state;
@@ -605,15 +635,17 @@ function scheduleBot() {
   void (async () => {
     await idle();
     if (my !== epoch || !session) return;
-    const first = session.state.phase === 'DRAW';
     const started = performance.now();
     thinking = true;
     renderHud();
     const st = session.state;
-    const action = await askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+    if (st.phase === 'DRAW' && st.turnPlayer === BOT && botPlan?.keys[0] !== posKey(st)) botPlan = await planBotTurn(st);
+    const i = botPlan ? botPlan.keys.indexOf(posKey(st)) : -1;
+    const action = i >= 0 ? botPlan!.actions[i]! : await askFor(st);
     // A short think before the bot's turn and before each tile move; housekeeping is quick.
     const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
-    const beat = (first ? 550 : grows ? 300 : 90) * timeScale();
+    const beat = i >= 0 ? botPlan!.beats.think[i]! : (grows ? 300 : 90) * timeScale();
+    quickShow = i >= 0 && botPlan!.beats.quick ? botPlan!.beats : null;
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
@@ -703,13 +735,21 @@ function settleStep(s: Step, animated: boolean) {
   if (!animated && s.k === 'sever') caption(captionFor(s, HUMAN)!, s.origin, s.player === HUMAN ? 'bad' : 'good');
 }
 
-/** Nothing can grow this turn: skip the "Throw a card" tap and go straight to throwing. */
+/** The Grow step that auto-skip already skipped once (after an Undo it asks instead). */
+let skippedFrom: State | null = null;
+/**
+ * Step 2: nothing can grow this turn. With "Auto-skip when nothing to play" on, skip the Grow
+ * step and go straight to throwing (an empty turn is two taps: draw, throw). Off, the moves row
+ * shows why and a Continue button (renderControls).
+ */
 function autoAdvance() {
   if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return;
-  if (session.legal.some(isBoardAction) || session.view.hand.length === 0) return;
+  if (session.state === skippedFrom) return;
+  if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
-  caption('Nothing can grow. Tap a card to throw it.', null, 'info');
+  skippedFrom = session.state;
+  caption(NOTHING_TO_PLAY, null, 'info');
   humanPlay(end);
 }
 
@@ -853,7 +893,7 @@ async function playStep(step: Step, my: number) {
         await wait(240 * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        await wait(120 * f, my);
+        await wait(quickShow ? quickShow.show.draw : 120 * f, my);
       }
       return;
     }
@@ -980,7 +1020,7 @@ async function playStep(step: Step, my: number) {
       }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(320 * f, my);
+      await wait(quickShow && step.player === BOT ? quickShow.show.discard : 320 * f, my);
       show();
       return;
     }
@@ -1008,7 +1048,11 @@ async function playStep(step: Step, my: number) {
       announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
       // My turn starts: a soft glow passes over my hand.
       if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
-      await wait(320 * f, my);
+      // an empty opponent turn starts at once (its quick beats are in its plan)
+      const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
+      const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;
+      if (step.player === HUMAN) quickShow = null;
+      await wait(quick ?? 320 * f, my);
       return;
     }
     case 'end': {
@@ -1676,6 +1720,13 @@ function renderControls(v: View, advice: Advice | null) {
   } else if (v.phase === 'ACT' && fruitFlow) {
     renderFruitFlow(v);
     return;
+  } else if (v.phase === 'ACT' && skipPlan(legal, v.hand.length, settings.autoSkip && session.state !== skippedFrom).kind === 'ask') {
+    // Step 2, auto-skip off (or after an Undo of a skip): why nothing can be played, and Continue
+    const end = legal.find((a) => a.t === 'EndAct')!;
+    const note = document.createElement('span');
+    note.className = 'note empty-reason';
+    note.textContent = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    moves.append(note, button('Continue', 'primary empty-continue', () => humanPlay(end), 'Continue to the Throw step'));
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);

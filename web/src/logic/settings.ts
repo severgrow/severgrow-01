@@ -45,6 +45,8 @@ export type Settings = {
   placementList: boolean;
   /** overhaul item 3: how the hand is sorted (it always is; the Sort button switches) */
   handSort: HandSort;
+  /** Step 2 (Fruit cards task): an empty Grow step skips itself ("Nothing to play this turn") */
+  autoSkip: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   eyeCandy: true,
   placementList: false,
   handSort: 'suit',
+  autoSkip: true,
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -92,7 +95,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList', 'eyeCandy'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   return out;

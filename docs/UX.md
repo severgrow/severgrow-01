@@ -611,3 +611,14 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
   Part 2, about 42 fps after.
 - The full before/after screenshots and the adversarial set are deferred until after the Fruit
   cards change (agreed with the owner, so they show the final game).
+
+## Seed removal and Fruit cards (v0.6), Step 2: empty turns
+
+- **Auto-skip when nothing to play** (Settings → Playing, on by default): a Grow step with no legal
+  move skips itself and the caption says "Nothing to play this turn". Off: the moves row shows the
+  reason ("No combo in your hand, and no card can sprout.") and a Continue button.
+- Taps for an empty turn: **2** (draw, throw); with auto-skip off, **3** (draw, Continue, throw).
+  A throw never asks for a confirmation (only throwing your last card can). Undo stays until the throw.
+- The opponent's empty turn is quick: about **400ms** at Normal speed (measured 343-422ms on the
+  test phone size), scaled by the Speed setting. Logic: `web/src/logic/emptyturn.ts`; browser
+  check: `web/e2e/emptyturn.ts`.
