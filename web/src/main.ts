@@ -27,7 +27,6 @@ import {
   deskClick,
   deskHover,
   deskShape,
-  drawStarts,
   hexAtPoint,
   hexesAlong,
   keyStep,
@@ -37,6 +36,8 @@ import {
   onlyPlacement,
   pixelOf,
   snapDir,
+  drawNext,
+  proximity,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import type { FruitFlow } from './logic/fruitflow.js';
@@ -1236,7 +1237,9 @@ function renderBoard(v: View, advice: Advice | null) {
       usable: true,
     };
     const dc = drawCombo();
-    if (dc && !pending) o = { ...o, targets: dc.kind === 'line' ? drawStarts(dc) : clumpHexes(dc), selectedHex: null, coachHexes: [] };
+    // overhaul item 7: before drawing only the starts; while drawing only what can come next
+    const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
+    if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
     if (fruitFlow && v.phase === 'ACT') {
       const fa = fruitAction(session.legal, fruitFlow);
       const pv = fa ? fruitPreview(v, fa) : null;
@@ -2079,6 +2082,34 @@ bind('hand-sort', () => {
   sound.click();
   render();
 });
+// overhaul item 7: legal hexes brighten softly as the finger or mouse comes near
+{
+  let raf = 0;
+  let last: { x: number; y: number } | null = null;
+  const glowNear = () => {
+    raf = 0;
+    const targets = board.svg.querySelectorAll<SVGPathElement>('.l-over .target');
+    if (!targets.length) return;
+    const m = board.svg.getScreenCTM();
+    const p = last && m ? new DOMPoint(last.x, last.y).matrixTransform(m.inverse()) : null;
+    for (const t of targets) {
+      const key = t.dataset.key ?? t.getAttribute('data-key');
+      const c = key ? centerOf(key) : null;
+      const near = p && c ? proximity(Math.hypot(p.x - c.x, p.y - c.y)) : 0;
+      t.style.setProperty('--near', near.toFixed(2));
+    }
+  };
+  const track = (e: PointerEvent) => {
+    last = { x: e.clientX, y: e.clientY };
+    if (!raf) raf = requestAnimationFrame(glowNear);
+  };
+  board.svg.addEventListener('pointermove', track);
+  board.svg.addEventListener('pointerdown', track);
+  board.svg.addEventListener('pointerleave', () => {
+    last = null;
+    if (!raf) raf = requestAnimationFrame(glowNear);
+  });
+}
 // desktop: a card tilts a few degrees toward the pointer
 $('hand').addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse' || settings.reduceMotion) return;

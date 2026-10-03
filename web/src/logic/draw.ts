@@ -314,3 +314,37 @@ export const keyStep = (cursor: string, key: string, keys: ReadonlySet<string>):
   const next = coordKey({ q: cur.q + dq + shift, r: cur.r + dr });
   return keys.has(next) ? next : cursor;
 };
+
+// ---------- UI overhaul item 7: calm highlights ----------
+
+/**
+ * While drawing, the hexes that can legally come next. A line (shape = [start, ...]): every
+ * hex of a legal line from that start not drawn yet. A clump: every hex that, added to the
+ * shape, still fits inside some legal clump and touches the shape.
+ */
+export const drawNext = (combo: Combo, shape: readonly string[]): Set<string> => {
+  const out = new Set<string>();
+  if (shape.length === 0) return drawStarts(combo);
+  if (combo.kind === 'line') {
+    for (const a of combo.actions as Run[]) {
+      const ks = hexesOf(a);
+      if (ks[0] !== shape[0] && ks.at(-1) !== shape[0]) continue;
+      for (const k of ks) if (!shape.includes(k)) out.add(k);
+    }
+    return out;
+  }
+  if (shape.length >= combo.n) return out;
+  for (const a of combo.actions) {
+    const ks = hexesOf(a);
+    if (!shape.every((k) => ks.includes(k))) continue;
+    for (const k of ks) if (!shape.includes(k) && touches(shape, k)) out.add(k);
+  }
+  return out;
+};
+
+/** How bright a legal hex is from the pointer's distance (board units): 1 under it, 0 beyond `radius`, smooth between. */
+export const proximity = (distance: number, radius = S * 3.2): number => {
+  if (!(distance >= 0)) return 0;
+  const t = Math.max(0, 1 - distance / radius);
+  return t * t * (3 - 2 * t);
+};

@@ -3636,3 +3636,28 @@ html[data-layout='side'] .dock-overlays {
 html[data-layout='stack'] .board-wrap {
   padding-bottom: 6px;
 }
+
+/* ---- overhaul item 7: calm legal-hex highlights ----
+   a soft tint and a thin edge, brighter as the finger or mouse comes near (--near 0..1,
+   set from the pointer); everything else dims a little; no neon, no constant breathing */
+.target {
+  fill: var(--c-you);
+  fill-opacity: calc(0.07 + var(--near, 0) * 0.22);
+  stroke-width: 1;
+  stroke-opacity: calc(0.42 + var(--near, 0) * 0.55);
+  animation: target-in 0.24s ease-out both;
+  transition: fill-opacity 0.12s linear, stroke-opacity 0.12s linear;
+}
+.target.kind-strengthen {
+  stroke-width: 1.8;
+}
+.target.kind-replace {
+  stroke-dasharray: 4 3;
+}
+.dim {
+  opacity: 0.34;
+}
+.reduce-motion .target {
+  animation: none;
+  transition: none;
+}
