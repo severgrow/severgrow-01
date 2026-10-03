@@ -26,8 +26,14 @@ export type LevelConfig = {
   pressureWeight: number;
   /** Prefers discards that are least useful to the opponent. */
   cardDenial: boolean;
-  /** How it picks a discard: 'greedy' (level 7's rule) or 'keepHigh' (keep combos and strong cards). */
-  discardStyle: 'greedy' | 'keepHigh';
+  /**
+   * How it picks a discard: 'greedy' (level 7's rule), 'keepHigh' (bots-v0.6: keep every combo
+   * card, then throw the lowest), or 'value' (bots-v0.7: throw the card worth least to keep,
+   * its number plus `comboBonus` for each combo card it holds together; see keepValue).
+   */
+  discardStyle: 'greedy' | 'keepHigh' | 'value';
+  /** bots-v0.7, 'value' discards: what one combo card is worth on top of its number. */
+  comboBonus: number;
   /** Weight of the imagined opponent reply in level 9's search. */
   replyWeight: number;
   /** 0: one move at a time. 1: also weighs its best follow-up move this turn. */
@@ -41,7 +47,11 @@ export type LevelConfig = {
   whimRate: number;
 };
 
-const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
+const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', comboBonus: 0, replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
+
+/** bots-v0.6 (frozen): levels 8 and 9 kept every combo card and threw the lowest other card. */
+export const V06_LEVEL_8: LevelConfig = { ...base, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 };
+export const V06_LEVEL_9: LevelConfig = { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 };
 
 /** Tuned with the ladder simulation (docs/LADDER.md). */
 export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
@@ -59,10 +69,10 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   // 8: keeps its strong cards and combos when throwing (level 7's weak spot), but still
   //    slips now and then (v0.5 ladder: 0.45 slipped too often, 57.4% vs 7; 0.15 gives
   //    68.4% vs 7 and still loses to 9, 35.7%; docs/LADDER.md).
-  8: { ...base, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 },
+  8: { ...base, discardStyle: 'value', comboBonus: 1, mistakeRate: 0.15, topN: 3 },
   // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
   //    and imagines 6 possible opponent hands to judge their best reply.
-  9: { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
+  9: { ...base, lookahead: 1, discardStyle: 'value', comboBonus: 1, cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
 };
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */
@@ -170,6 +180,17 @@ const usefulness = (c: Card, unseen: readonly Card[]): number =>
 
 const CANDIDATES = 6;
 
+/** What a hand is worth to keep: every card's number, plus `bonus` for each card in a combo. */
+const handValue = (hand: readonly Card[], bonus: number): number =>
+  hand.reduce((n, c) => n + c.rank, 0) + bonus * bestMeldPartition(hand).melds.reduce((n, m) => n + m.length, 0);
+
+/**
+ * bots-v0.7: what keeping card `id` is worth: how much the hand loses without it (its number,
+ * plus the combo bonus of every combo card it alone holds together). Uses only my own hand.
+ */
+export const keepValue = (hand: readonly Card[], id: number, bonus: number): number =>
+  handValue(hand, bonus) - handValue(hand.filter((c) => c.id !== id), bonus);
+
 /** A bot decision, with a short plain-words reason for Strengthen and Fruit (debug only). */
 export type Decision = { action: Action; reason?: string };
 
@@ -239,7 +260,16 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       .map((x) => x.r);
   }
 
-  // Keep strong cards and combos: discard a loose card, the lowest one first.
+  // bots-v0.7: throw the card worth least to keep (its number, plus what it adds to a combo).
+  if (c.discardStyle === 'value' && v.phase === 'DISCARD') {
+    const options = legal.filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard');
+    const unseen = c.cardDenial ? unseenCards(v) : [];
+    const card = (a: Extract<Action, { t: 'Discard' }>) => v.hand.find((h) => h.id === a.card)!;
+    const cost = (a: Extract<Action, { t: 'Discard' }>) => keepValue(v.hand, a.card, c.comboBonus) + (c.cardDenial ? usefulness(card(a), unseen) * 0.25 : 0);
+    if (options.length > 0) return { action: options.reduce((x, y) => (cost(y) < cost(x) || (cost(y) === cost(x) && card(y).rank < card(x).rank) ? y : x)) };
+  }
+
+  // bots-v0.6: keep strong cards and combos: discard a loose card, the lowest one first.
   if (c.discardStyle === 'keepHigh' && v.phase === 'DISCARD') {
     const loose = new Set(bestMeldPartition(v.hand).leftover.map((x) => x.id));
     const options = legal.filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard');
