@@ -472,6 +472,8 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
     const { page } = await open(state, { width: 1280, height: 800, settings: { speed } });
     await pick(page, 'line-3');
     await drawMeld(page, goal);
+    // a risky line waits for Confirm ("Confirm moves: Smart")
+    if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
     await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
     const s = await st(page);
     finals.push(JSON.stringify({ board: s.board, hands: s.hands, phase: s.phase }));
@@ -479,7 +481,8 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
   }
   const engine = apply(state, goal);
   const want = JSON.stringify({ board: engine.board, hands: engine.hands, phase: engine.phase });
-  check('animations on or off give the identical final state, equal to the engine applying the same action', finals[0] === finals[1] && finals[0] === want);
+  const brief = (j: string) => { const o = JSON.parse(j) as { phase: string; hands: unknown[][] }; return `${o.phase} ${o.hands[0]!.length}`; };
+  check('animations on or off give the identical final state, equal to the engine applying the same action', finals[0] === finals[1] && finals[0] === want, `${finals.map(brief).join(' / ')} vs ${brief(want)}`);
 }
 {
   // v0.6: the tile card on an opponent 9: the note and "Use Fruit card", then the forecast and Confirm (Smart)

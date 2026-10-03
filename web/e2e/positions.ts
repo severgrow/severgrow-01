@@ -20,6 +20,7 @@ export const cutDemo = (): CutDemo => {
       const v = viewFor(after, 0);
       const legal = legalActions(v);
       for (const a of legal) {
+        if (a.t === 'PlayFruit') continue; // growing moves only (Fruit cards have their own checks)
         const pv = previewMove(v, a);
         if (pv && pv.cuts >= 3 && !pv.wins) {
           const sel = selFor(v, legal, a);
@@ -84,6 +85,7 @@ const findMove = (want: (v: ReturnType<typeof viewFor>, a: Action, after: State)
       const v = viewFor(after, 0);
       const legal = legalActions(v);
       for (const a of legal) {
+        if (a.t === 'PlayFruit') continue; // growing moves only (Fruit cards have their own checks)
         const pv = previewMove(v, a);
         if (pv && !pv.wins && want(v, a, after)) {
           const sel = selFor(v, legal, a);

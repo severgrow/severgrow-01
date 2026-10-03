@@ -68,6 +68,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   let asked = 0;
   let total = 0;
   const errs: string[] = [];
+  const miss: string[] = [];
   for (const seed of [31, 44, 52]) {
     const state = midGame(seed, 9);
     const { page, errors } = await open(state);
@@ -91,19 +92,23 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
           const want = needsConfirm('smart', forecastMove(viewFor(st, 0), a));
           const bar = await page.locator('#confirm').isVisible();
           if (want === bar) agree++;
+          else miss.push(`${a.t} want ${want} bar ${bar}`);
           if (bar) asked++;
         } else agree++; // played at once: it was safe (a risky move would have stayed pending)
       }
       if (played) {
-        await page.click('#tool-undo', { timeout: 3000 });
-        await page.waitForTimeout(150);
+        // back to the start (an auto-skipped Grow step is one more Undo)
+        for (let u = 0; u < 3 && ((await hook<State>(page, 'state'))!.history!.length > state.history!.length); u++) {
+          await page.click('#tool-undo', { timeout: 3000 });
+          await page.waitForTimeout(150);
+        }
       } else await page.locator('#confirm-cancel:visible, #moves .cancel').first().click().catch(() => {});
       await page.waitForTimeout(100);
     }
     errs.push(...errors);
     await page.close();
   }
-  check('Smart confirmation: the Confirm bar shows exactly when the policy says so (with Undo between tries)', total > 5 && agree === total && errs.length === 0, `${agree}/${total} agree, ${asked} asked${errs.length ? `; ${errs[0]}` : ''}`);
+  check('Smart confirmation: the Confirm bar shows exactly when the policy says so (with Undo between tries)', total > 5 && agree === total && errs.length === 0, `${agree}/${total} agree, ${asked} asked${miss.length ? `; ${miss.slice(0, 3).join(', ')}` : ''}${errs.length ? `; ${errs[0]}` : ''}`);
 }
 
 // ---- 2. Never / Always ----

@@ -16,7 +16,7 @@ export type Forecast = {
   replaced: number;
   /** opponent tiles cut off by the move (not the replaced ones) */
   cutTheirs: string[];
-  /** my tiles this move costs me: a Fruit's sacrifice and anything of mine it cuts off */
+  /** my tiles this move cuts off (a Fruit card never costs me a tile) */
   cutMine: string[];
   /** the opponent's best cut of my network after the move (the weak tile and how many it takes) */
   atRisk: { key: string; loss: number } | null;

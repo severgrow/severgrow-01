@@ -224,6 +224,8 @@ opponent tile (⇆), strengthen your tile (+)"). Growing and replacing still pla
 back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
 but harder for your opponent to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
 
+*(Retired in v0.6: the 3-tile Fruit and its flow below were replaced by Fruit cards; see "Step 4: Fruit cards on the page" at the end.)*
+
 **Fruit is used by tapping an opponent tile** (polish pass 3; there is no Fruit button in the move
 row any more: the row only shows what you can do right now). In your Grow step, while your Fruit
 is unused, the tile card of any opponent tile except their root shows:

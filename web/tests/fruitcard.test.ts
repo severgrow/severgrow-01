@@ -127,3 +127,34 @@ describe('the opponent and Fruit cards: calm captions', () => {
     expect(captionFor(buildSteps(t, d, apply(t, d), 0)[0]!, 0)).toBe('Opponent took the Fruit card');
   });
 });
+
+describe('state equivalence with Fruit cards (Step 7)', () => {
+  it('the shown board after the animation steps (played, or all skipped at once) equals the engine; Undo restores the exact state', async () => {
+    const { AnimQueue, buildSteps } = await import('../src/logic/anim.js');
+    const { Session } = await import('../src/logic/session.js');
+    // their 9 at (1,0) holds (2,0)=5 and (3,-1)=4; (1,-1)=9 stays joined
+    const s0 = at({ '-1,1': [0, 2], '0,0': [0, 2], '1,-1': [1, 9], '1,0': [1, 9], '2,0': [1, 5], '3,-1': [1, 4] }, [fruitCard(72), fruitCard(73), num(1, 0, 3)]);
+    const s = { ...s0, history: [] } as State;
+    const session = new Session(s);
+    for (const target of [{ q: 1, r: 0 }, { q: 1, r: -1 }]) {
+      const before = session.state;
+      const played = session.play({ t: 'PlayFruit', card: session.view.hand.find((c) => c.suit === null)!.id, target }, 0)!;
+      expect(played).toBeTruthy();
+      // animations on: step by step; off or skipped: all at once
+      const one = new AnimQueue(before.board);
+      one.push(played.steps);
+      while (one.next());
+      const all = new AnimQueue(before.board);
+      all.push(buildSteps(before, played.action, played.after, 0));
+      all.skipAll();
+      expect(one.board).toEqual(played.after.board);
+      expect(all.board).toEqual(played.after.board);
+    }
+    expect(session.state.fruitPlayed).toBe(2);
+    const after2 = JSON.stringify(session.state);
+    session.undo();
+    session.undo();
+    expect(JSON.stringify(session.state)).toBe(JSON.stringify(s));
+    expect(after2).not.toBe(JSON.stringify(s));
+  });
+});
