@@ -42,7 +42,8 @@ import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js'
 import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { endgameNote, scoreBreakdown } from './logic/endgame.js';
+import { scoreBreakdown } from './logic/endgame.js';
+import { HEIGHTS, computeLayout } from './logic/layout.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine, versionLine } from './logic/stats.js';
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
@@ -404,6 +405,7 @@ function beginSession(state: State, c: CoachProgress | null) {
   gameOverDismissed = false;
   botBusy = false;
   board.setup(state.config, state.terrain, theme().style, look(), theme().id);
+  applyLayout();
   lastBoard = null;
   showScreen('game');
   scheduleBot();
@@ -495,7 +497,6 @@ function humanPlay(a: Action) {
   fruitMsg = null;
   inspectKey = null;
   guideGoal = null;
-  hintOpen = false;
   afterPlay(p, HUMAN, advice);
 }
 
@@ -532,7 +533,6 @@ let thinking = false;
 /** Which side the header capsule last showed (for its cross-fade). */
 let lastTurnKey = '';
 /** Whether the ? tip is open. */
-let hintOpen = false;
 /** The bot level of the game being played (kept with the saved game). */
 let gameLevel: Level = 7;
 let lastBoard: unknown = null;
@@ -946,6 +946,7 @@ function syncGlow() {
 }
 
 function render() {
+  applyLayout();
   syncGlow();
   if (!session || $('game').hidden) return;
   armIdle();
@@ -1071,21 +1072,15 @@ function renderHud() {
   const over = st.phase === 'GAME_OVER' && !busy();
   const turn = $('turn');
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
-  const each = st.config.maxTurnsPerPlayer;
-  const turnNo = Math.min(Math.ceil(st.turnNumber / 2), each > 0 ? each : Infinity);
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
   if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' });
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Turn ${turnNo}${each > 0 ? `/${each}` : ''} · Level ${gameLevel}</small>`;
-  // The tip shows only when the ? is tapped; it closes again after each move.
-  $('hint').textContent = hintText(session.view);
-  $('hint').hidden = !hintOpen || !$('hint').textContent;
-  $('hint-btn').setAttribute('aria-expanded', String(hintOpen));
-  const note = st.phase === 'GAME_OVER' ? null : endgameNote(session.view);
-  $('endnote').hidden = !note;
-  $('endnote').textContent = note ?? '';
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
+  // The dock's hint line: always there (one fixed row), saying what to do next.
+  const hint = dockHint(session.view);
+  if ($('hint').textContent !== hint) $('hint').textContent = hint;
   // The turn as three steps; the current one is lit (only on your turn).
   const steps = $('steps');
   steps.hidden = st.phase === 'GAME_OVER';
@@ -1100,6 +1095,47 @@ function renderHud() {
 
 /** In the default game (Rot and Knock off) throwing a card ends the turn. */
 const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnabled && !v.finalTurn;
+
+/** The dock's one-line hint (overhaul item 13 shortens and sharpens it). */
+function dockHint(v: View): string {
+  return hintText(v);
+}
+
+// ---------- the layout (overhaul items 1-2): fixed dock, board fits the rest ----------
+
+/** The safe-area insets (notch, home bar), read from CSS env() through a probe element. */
+function safeArea() {
+  const probe = document.getElementById('safe-probe') ?? document.body.appendChild(Object.assign(document.createElement('div'), { id: 'safe-probe' }));
+  const cs = getComputedStyle(probe);
+  const px = (s: string) => parseFloat(s) || 0;
+  return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
+}
+
+let layoutKey = '';
+/** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
+function applyLayout() {
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
+  const radius = session?.state.config.boardRadius ?? 3;
+  const key = `${w}x${h}r${radius}`;
+  if (key === layoutKey) return;
+  layoutKey = key;
+  const l = computeLayout({ w, h, ...safeArea() }, radius);
+  const root = document.documentElement.style;
+  const px = (n: number) => `${Math.round(n)}px`;
+  root.setProperty('--hud-h', px(HEIGHTS.hud));
+  root.setProperty('--steps-h', px(HEIGHTS.steps));
+  root.setProperty('--race-h', px(HEIGHTS.race));
+  root.setProperty('--dock-h', px(l.dock.h));
+  root.setProperty('--dock-w', px(l.dock.w));
+  for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));
+  root.setProperty('--cw', px(l.card.w));
+  root.setProperty('--slice', px(l.card.slice));
+  document.documentElement.dataset.layout = l.mode;
+}
+window.addEventListener('resize', () => applyLayout());
+window.visualViewport?.addEventListener('resize', () => applyLayout());
 
 function hintText(v: View): string {
   if (!session) return '';
@@ -1350,12 +1386,6 @@ function renderControls(v: View, advice: Advice | null) {
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
-    if (!anySel && grow.sproutNote) {
-      const note = document.createElement('p');
-      note.className = 'step-note';
-      note.textContent = moveWords(v.config).pick;
-      moves.append(note);
-    }
     for (const k of moveButtons(v, legal, sel)) {
       const on = sel.kind === k.kind;
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
@@ -1373,10 +1403,7 @@ function renderControls(v: View, advice: Advice | null) {
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
     if (end && !pending && grow.skipLink && !anySel) moves.append(button(moveWords(v.config).skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), moveWords(v.config).skipTitle));
   } else if (v.phase === 'DISCARD') {
-    const note = document.createElement('p');
-    note.className = 'step-note';
-    note.textContent = 'Tap a card to throw it';
-    moves.append(note);
+    // (the hint line says "Tap a card to throw it")
   } else {
     for (const a of legal) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
@@ -1385,12 +1412,6 @@ function renderControls(v: View, advice: Advice | null) {
   }
   const dc = drawCombo();
   if (dc && !pending) {
-    const note = document.createElement('p');
-    note.className = 'step-note draw-note';
-    note.textContent = finePointer()
-      ? `Click where your ${dc.kind} starts, then click to finish (or drag)`
-      : dc.kind === 'line' ? 'Drag across the board to draw your line' : 'Drag over hexes to draw your clump';
-    moves.append(note);
     if (dc.kind === 'clump' && draw.shape.length > 0) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
   }
   if (dc && settings.placementList) {
@@ -2027,10 +2048,7 @@ for (const r of ['sprout', 'seed'] as const)
     showScreen('levels');
   });
 bind('levels-back', () => showScreen('menu'));
-bind('hint-btn', () => {
-  hintOpen = !hintOpen;
-  render();
-});
+bind('hint-btn', () => sheet('sheet-howto'));
 bind('go-other', () => {
   const lv = Number($('go-other').dataset.level) as Level;
   settings = { ...settings, level: lv };

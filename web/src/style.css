@@ -3348,3 +3348,216 @@ button.version-chip {
   cursor: pointer;
   min-height: 28px;
 }
+
+/* =====================================================================
+   UI OVERHAUL, items 1-2: one fixed layout from web/src/logic/layout.ts
+   (the dock never changes height; the board fits everything above it)
+   ===================================================================== */
+#safe-probe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.game {
+  grid-template-rows: var(--hud-h, 48px) var(--race-h, 8px) var(--steps-h, 36px) minmax(0, 1fr);
+}
+.game > .hud {
+  grid-row: 1;
+  height: var(--hud-h, 48px);
+  padding-block: 0;
+}
+.game > .race {
+  grid-row: 2;
+}
+.game > .steps-row {
+  grid-row: 3;
+  height: var(--steps-h, 36px);
+}
+.game > .steps-row .steps {
+  margin-top: 0;
+}
+.game > .play {
+  grid-row: 4;
+}
+.play {
+  grid-template-rows: minmax(0, 1fr) var(--dock-h, 360px);
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+  gap: 0;
+}
+.board-wrap {
+  margin: 0 4px;
+}
+/* the score race strip (item 14 fills it) */
+.race {
+  position: relative;
+  height: var(--race-h, 8px);
+}
+/* the dock: five fixed rows, top to bottom */
+.dock {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--row-toolbar, 40px) var(--row-hint, 24px) var(--row-forecast, 56px) var(--row-table, 64px) var(--row-hand, 140px);
+  gap: 0;
+  height: var(--dock-h, 360px);
+  box-sizing: border-box;
+  padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  overflow: visible;
+  justify-content: stretch;
+}
+.dock > * {
+  min-height: 0;
+}
+/* the board tools: one slim row with labels (item 4) */
+.toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+}
+.tool::after {
+  /* a 44px tall hit area around a slim pill */
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
+.tool[aria-pressed='true'] {
+  color: var(--c-bg);
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+.tool .i {
+  width: 16px;
+  height: 16px;
+}
+.tool[hidden] {
+  display: none;
+}
+/* the hint line: always one line, never changes the dock */
+.hint-line {
+  margin: 0;
+  padding: 0 16px;
+  line-height: var(--row-hint, 24px);
+  height: var(--row-hint, 24px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--c-muted);
+}
+/* the forecast slot: always reserved; the confirm bar fills it when there is something to confirm */
+.forecast-slot {
+  position: relative;
+  padding: 4px 12px;
+}
+.forecast-slot > .confirm {
+  position: absolute;
+  inset: 4px 12px;
+  flex-wrap: nowrap;
+  padding: 0 8px 0 12px;
+  border-width: 1px;
+}
+.forecast-slot .confirm-text {
+  overflow: hidden;
+}
+.forecast-slot .result-chip,
+.forecast-slot .warn {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.85rem;
+}
+.forecast-slot .confirm-buttons .btn {
+  min-height: 40px;
+  height: 40px;
+}
+/* piles and moves: one fixed row */
+.dock > .table-row {
+  height: var(--row-table, 64px);
+  padding: 0 12px;
+  gap: 10px;
+}
+.dock .pile-card {
+  width: calc((var(--row-table, 64px) - 16px) / 1.38);
+  height: calc(var(--row-table, 64px) - 16px);
+}
+.dock .pile {
+  min-width: 48px;
+  gap: 2px;
+}
+.dock .pile-label {
+  font-size: 0.62rem;
+}
+.dock .pile-hint {
+  display: none;
+}
+.dock .moves {
+  min-height: 0;
+  max-height: var(--row-table, 64px);
+  overflow: hidden;
+  align-content: center;
+}
+/* the hand: each card shows at least --slice px, a gentle fan */
+.dock > .hand {
+  height: var(--row-hand, 140px);
+  padding-top: 22px;
+  box-sizing: border-box;
+}
+.dock > .hand .card {
+  margin-left: calc(var(--slice, 40px) - var(--cw));
+}
+.dock > .hand .card:first-child {
+  margin-left: 0;
+}
+/* coach and first-time tips float above the dock, over the board's lower edge */
+.dock-overlays {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 4;
+}
+.dock-overlays > * {
+  pointer-events: auto;
+}
+/* wide screens: board on the left, the dock as a column on the right */
+html[data-layout='side'] .play {
+  grid-template-columns: minmax(0, 1fr) var(--dock-w, 380px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 16px 12px;
+}
+html[data-layout='side'] .dock {
+  align-self: center;
+}
+html[data-layout='side'] .dock-overlays {
+  bottom: auto;
+  top: calc(100% + 6px);
+}

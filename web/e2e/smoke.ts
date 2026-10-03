@@ -176,11 +176,14 @@ const playTurn = async (page: Page) => {
   const hud = (await page.textContent('#turn')) ?? '';
   check('the level screen starts a game at the picked level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
   {
-    const hiddenFirst = !(await page.locator('#hint').isVisible());
+    // UI overhaul: the hint line is always in the dock; the ? opens How to play
+    const hintText = ((await page.textContent('#hint')) ?? '').trim();
+    const hintShown = await page.locator('#hint').isVisible();
     await page.click('#hint-btn');
-    const shown = await page.locator('#hint').isVisible();
-    await page.click('#hint-btn');
-    check('the tip hides behind the ? button', hiddenFirst && shown && !(await page.locator('#hint').isVisible()));
+    await page.waitForTimeout(150);
+    const howto = await page.locator('#sheet-howto').isVisible();
+    await page.locator('#sheet-howto [data-close]').click().catch(() => {});
+    check('the hint line always says what to do next; the ? opens How to play', hintShown && hintText.length > 0 && howto, hintText.slice(0, 50));
   }
   await page.goto(BASE);
   await page.click('#menu-continue').catch(() => {});
