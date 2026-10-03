@@ -17,8 +17,8 @@ const check = (name: string, ok: boolean, note = '') => {
   results.push({ name, ok });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4191, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4191/';
+const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
+const BASE = 'http://localhost:4192/';
 const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

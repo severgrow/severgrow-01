@@ -766,13 +766,20 @@ svg.usable .hex-cell {
   transition: fill 0.25s;
 }
 /* While a cut plays: the moss dries and the fire burns out (only on the tiles being cut). */
-.tile.withering.mat-moss {
-  filter: saturate(0.15) sepia(0.35) brightness(0.8);
-  transition: filter 0.35s;
+/* (no CSS filters here: on SVG groups they draw the number plate as a black square in Chrome) */
+.tile.withering .world-fill {
+  transition: opacity 0.35s;
 }
-.tile.withering.mat-fire {
-  filter: grayscale(1) brightness(0.45);
-  transition: filter 0.35s;
+.tile.withering.mat-moss .world-fill {
+  opacity: 0.55;
+}
+.tile.withering.mat-fire .world-fill {
+  opacity: 0.35;
+}
+.tile.withering .num-plate,
+.tile.withering .tile-num {
+  opacity: 0.4;
+  transition: opacity 0.35s;
 }
 .tile.withering .lava-cracks,
 .tile.withering .lava-rim {
@@ -4311,4 +4318,10 @@ html.final-turns .game::after {
 }
 .reduce-motion .gameover .go-card::before {
   animation: none;
+}
+/* Part 2: the cut's impact flash (local, soft-edged, ≤35% white, ≤60ms) */
+.fx-cutflash {
+  fill: #fff;
+  opacity: 0;
+  pointer-events: none;
 }
