@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitAction, fruitChange, fruitNext, fruitOffer, fruitPickable, fruitPreview, fruitUndo, hexTapIntent, showTopTip, startFruit, tapFruit } from './logic/fruitflow.js';
 import type { FruitOffer } from './logic/fruitflow.js';
 import {
@@ -1923,7 +1923,8 @@ function cancelSel() {
 /** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
   if (!session || !myTurn() || busy()) return;
-  const a = playNow(session.view, session.legal, session.sel);
+  // a Strengthen waits for Confirm (a stray tap never plays it), unless "Confirm moves" is Never
+  const a = playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
   if (a && !asksConfirm(a)) humanPlay(a);
 }
 
@@ -2616,6 +2617,7 @@ document.addEventListener('keydown', (e) => {
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
+  canUndo: () => !!session?.canUndo,
   settings: () => ({ ...settings }),
   busy: () => busy(),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),

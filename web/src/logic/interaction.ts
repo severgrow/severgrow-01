@@ -164,6 +164,13 @@ export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | n
   return opts.length === 1 && sproutKind(v, opts[0]!) !== 'strengthen' ? opts[0]! : null;
 };
 
+/** The one move on the picked card and spot (a Strengthen included), or null (overhaul item 8: "Confirm moves: Never"). */
+export const onlyChoice = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
+  if (sel.hex === null || sel.card === null) return null;
+  const opts = options(v, legal, sel);
+  return opts.length === 1 ? opts[0]! : null;
+};
+
 /** The selection that makes `a` the pending move (for the coach's "Show me"). */
 export const selFor = (v: View, legal: readonly Action[], a: Action): Sel => {
   const ids = moveCards(a);

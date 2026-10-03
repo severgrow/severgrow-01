@@ -66,9 +66,10 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   let agree = 0;
   let asked = 0;
   let total = 0;
+  const errs: string[] = [];
   for (const seed of [31, 44, 52]) {
     const state = midGame(seed, 9);
-    const { page } = await open(state);
+    const { page, errors } = await open(state);
     const cards = await page.locator('#hand .card').count();
     for (let c = 0; c < cards && total < 18; c++) {
       await page.locator('#hand .card').nth(c).click();
@@ -93,20 +94,22 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
         } else agree++; // played at once: it was safe (a risky move would have stayed pending)
       }
       if (played) {
-        await page.click('#tool-undo');
+        await page.click('#tool-undo', { timeout: 3000 });
         await page.waitForTimeout(150);
       } else await page.locator('#confirm-cancel:visible, #moves .cancel').first().click().catch(() => {});
       await page.waitForTimeout(100);
     }
+    errs.push(...errors);
     await page.close();
   }
-  check('Smart confirmation: the Confirm bar shows exactly when the policy says so', total > 5 && agree === total, `${agree}/${total} agree, ${asked} asked`);
+  check('Smart confirmation: the Confirm bar shows exactly when the policy says so (with Undo between tries)', total > 5 && agree === total && errs.length === 0, `${agree}/${total} agree, ${asked} asked${errs.length ? `; ${errs[0]}` : ''}`);
 }
 
 // ---- 2. Never / Always ----
 {
   const s = stateWith({}, [[0, 3], [0, 4], [0, 5]]);
-  for (const [mode, wantBar] of [['never', false], ['always', true]] as const) {
+  // this line leaves 3 of my tiles cuttable, so Smart asks too
+  for (const [mode, wantBar] of [['never', false], ['always', true], ['smart', true]] as const) {
     const { page } = await open(s, { w: 1280, h: 800, settings: { confirmPolicy: mode } });
     await page.click('#moves [data-kind="line-3"]');
     const a = await hexCenter(page, '-1,1');
@@ -117,7 +120,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
     await page.waitForTimeout(300);
     const bar = await page.locator('#confirm').isVisible();
     const placed = ((await hook<State>(page, 'state'))!.history?.length ?? 0) > 0;
-    check(`Confirm moves: ${mode} ${wantBar ? 'always asks' : 'never asks'}`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
+    check(`Confirm moves: ${mode} ${wantBar ? 'asks' : 'does not ask'} for a risky line`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
     await page.close();
   }
 }
@@ -130,7 +133,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   const board0 = await rect(page, '#board');
   const before = JSON.stringify(await hook<State>(page, 'state'));
   const sizes: string[] = [];
-  await page.locator('#hand .card').first().click();
+  await page.locator('#hand .card.playable').first().click();
   await page.waitForTimeout(150);
   sizes.push(await rect(page, '#dock'), await rect(page, '#board'));
   const t = page.locator('.l-over .target').first();
@@ -140,11 +143,12 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   }
   await page.waitForTimeout(400);
   sizes.push(await rect(page, '#dock'), await rect(page, '#board'));
+  const moved = JSON.stringify(await hook<State>(page, 'state')) !== before;
   const undoOn = await page.locator('#tool-undo').isEnabled();
-  await page.click('#tool-undo');
+  if (undoOn) await page.click('#tool-undo');
   await page.waitForTimeout(400);
   const after = JSON.stringify(await hook<State>(page, 'state'));
-  check('Undo: lit after a move; afterwards the state equals the state before, exactly', undoOn && after === before);
+  check('Undo: lit after a move; afterwards the state equals the state before, exactly', moved && undoOn && after === before, `moved ${moved}, undo lit ${undoOn}, same ${after === before}`);
   check('the dock and the board keep their size and place through a move', sizes.every((r, i) => r === (i % 2 === 0 ? dock0 : board0)), '');
   check('no page errors', errors.length === 0, errors.join(' | '));
   await page.close();

@@ -96,7 +96,7 @@ export class Session {
     this.sel = EMPTY_SEL;
     this.drawn = null;
     const last = this.turns.at(-1);
-    if (last && last.player === s.turnPlayer && last.plays.at(-1)!.after === s) last.plays.push(played);
+    if (last && last.player === s.turnPlayer && (last.plays.length === 0 || last.plays.at(-1)!.after === s)) last.plays.push(played);
     else this.turns.push({ player: s.turnPlayer, plays: [played] });
     if (this.turns.length > 6) this.turns.shift();
     const n = played.steps.reduce((k, st) => k + (st.k === 'sever' ? st.keys.length : 0), 0);
@@ -118,6 +118,8 @@ export class Session {
     const last = this.turns.at(-1);
     const gone = last && last.player === this.viewer ? last.plays.pop() : undefined;
     if (gone) this.cuts = this.cuts.filter((c) => c.played !== gone);
+    // a turn with nothing left in it (resumed mid-turn, its only move taken back) is forgotten
+    if (last && last.plays.length === 0) this.turns.pop();
     return true;
   }
 
