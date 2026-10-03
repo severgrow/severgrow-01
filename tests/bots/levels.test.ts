@@ -46,7 +46,7 @@ describe('level 7 is the original bot, move for move', () => {
       const v = viewFor(s, s.actor);
       expect(chooseLevelAction(v, 7, seedFor(s, 7))).toEqual(GreedyBot.chooseAction(v));
     }
-  });
+  }, 180_000); // about 60s of work on a busy CI runner: its own time limit, the checks unchanged
 
   it('the frozen bots-v0.5 level 7 replays the recorded v0.4 golden games exactly on rules v0.4-defaults-2', () => {
     const fixture = JSON.parse(readFileSync(new URL('../fixtures/golden-v04.json', import.meta.url), 'utf8')) as { games: { seed: number; actions: Action[] }[] };

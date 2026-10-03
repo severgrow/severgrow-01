@@ -46,10 +46,19 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     else setTimeout(done, ms);
   };
 
+  /** A soft ring spreading from a hex (photosensitivity: at most 35% strength, fading at once). */
   function flash(key: string, f: number, big: boolean) {
     const { x, y } = centerOf(key);
     const c = el('circle', { cx: x, cy: y, r: S * 0.5, class: `fx-flash${big ? ' big' : ''}` }, board.fx);
-    removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: 1 }, { transform: `scale(${big ? 3.2 : 2.2})`, opacity: 0 }], { duration: 520 * Math.max(f, 0.3), easing: 'ease-out', fill: 'forwards' }), c, 600);
+    removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: 0.35 }, { transform: `scale(${big ? 3.2 : 2.2})`, opacity: 0 }], { duration: 520 * Math.max(f, 0.3), easing: 'ease-out', fill: 'forwards' }), c, 600);
+  }
+
+  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤35%), `ms` long (≤60ms). */
+  function cutFlash(key: string, ms: number, alpha: number, radius: number) {
+    if (ms <= 0 || alpha <= 0) return;
+    const { x, y } = centerOf(key);
+    const c = el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
+    removeAfter(anim(c, [{ opacity: alpha }, { opacity: 0 }], { duration: ms, easing: 'ease-out', fill: 'forwards' }), c, ms + 40);
   }
 
   /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
@@ -186,5 +195,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  return { flash, cutFlash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
 };

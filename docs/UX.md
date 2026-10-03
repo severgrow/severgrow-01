@@ -552,3 +552,30 @@ One set of rules for every screen:
 20. **Game over:** a calm glow, the score counts up, three highlights, "Replay the biggest cut",
     "Share" (a picture made on the phone: the share sheet, or saved; nothing is uploaded),
     Rematch and Menu.
+
+## UI overhaul, Part 2: the cinematic cut
+
+One pure generator (`web/src/logic/cut.ts`, tested in `web/tests/cut.test.ts`) turns a cut into
+a timeline; the page only plays it. The same cut always looks the same, and a replay plays the
+same sequence slower.
+
+- **Tiers** (config values, `CUT_TIERS`): Small 1–2 tiles, Medium 3–4, Big 5–7, Huge 8+ or at
+  least half of the victim's tiles.
+- **Stages:** anticipation (the board draws in a little; first cut of a move only) → impact
+  hit-stop (~100ms, nothing moves) with a small local flash (≤60ms, ≤35% white, a few hexes
+  around the cut) and a micro zoom (1–3%) → a pulse along the cut vein → the snap (a click and a
+  2–6px shake, bigger for bigger tiers, its own vibration) → the slow-motion ripple (the tiles die
+  one ring at a time, 70ms apart, all started within 700ms; moss dries and curls away, lava flares
+  once, cools and sinks into crumbs) → the crumble, leaving a ground scar → the payoff (the "−N"
+  number, the score tally, a banner for Big and Huge, the ambient sound ducked 6 dB).
+- **Length:** at most 1.8s at Normal speed, also for chains and several cuts in one move (they
+  follow each other and are squeezed to fit).
+- **The opponent cutting me:** calmer: no flash, no zoom, no anticipation, at most a 2px shake,
+  a soft vibration, no exclamation.
+- **Fruit** uses the same generator for the tiles you give up (calm, no banner).
+- **Replay the biggest cut** (result screen) plays it at 0.5×, from the saved board before it.
+- **Reduce motion:** one plain fade. **Effects Low:** no shake, flash or zoom.
+- Photosensitivity: the old cut "flash" (a full-strength ring for half a second) is gone; the
+  remaining soft rings are at most 35% and at most 3 a second.
+- Frames: `npx tsx web/e2e/cut-filmstrip.ts` saves frames at 0, 100, 220, 400, 700, 1000, 1400
+  and 1800ms with a contact sheet per tier and variant (`docs/screens/overhaul/cut/`).
