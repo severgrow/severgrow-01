@@ -16,10 +16,15 @@ const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number]
 };
 
 describe('levels and tiers', () => {
-  it('1-2 ignore both (with a rare whim), 3-4 simple rules, 5-6 weigh exposure, 7-8 full, 9 also the opponent Fruit', () => {
-    const tiers = LEVELS.map((l) => [LEVEL_CONFIGS[l].strengthenTier, LEVEL_CONFIGS[l].fruitTier]);
-    expect(tiers).toEqual([[0, 0], [0, 0], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3], [4, 4]]);
+  it('Strengthen: 1-2 ignore it (with a rare whim), 3-4 simple rules, 5-6 weigh exposure, 7-8 full, 9 also the opponent Fruit cards', () => {
+    expect(LEVELS.map((l) => LEVEL_CONFIGS[l].strengthenTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4]);
     for (const l of LEVELS) expect(LEVEL_CONFIGS[l].whimRate > 0).toBe(l <= 2);
+  });
+
+  it('v0.6 Fruit card bands: 1-3 random target and moment (1-2 sometimes throw one), 4-6 rules, 7-8 full, 9 counts unseen', () => {
+    expect(LEVELS.map((l) => LEVEL_CONFIGS[l].fruitTier)).toEqual([0, 0, 0, 2, 2, 2, 3, 3, 4]);
+    for (const l of LEVELS) expect(LEVEL_CONFIGS[l].fruitRandomRate > 0, `level ${l}`).toBe(l <= 3);
+    for (const l of LEVELS) expect(LEVEL_CONFIGS[l].fruitThrowRate > 0, `level ${l}`).toBe(l <= 2);
   });
 
   it('every Strengthen and Fruit decision carries a short plain-words reason', () => {

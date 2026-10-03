@@ -18,3 +18,7 @@ One line each: where the brief left room, what was chosen and why.
 - A Fruit card does not use the turn's Sprout, and the Strangle check after it can only end the game if a root was already surrounded (removing a tile only empties a hex).
 - The recorded v0.3.1 replays (they used the old 3-tile Fruit) were deleted with the old Fruit; `legacyV03` now only switches the parked rules on for their tests.
 - The old Fruit's sacrifice-picking UI (tile card "Fruit this tile", Change/Next, its screenshots and peek scripts) was deleted; a Fruit card is played like a Sprout (card, then target) or from the tile card's "Use Fruit card".
+- "Consider Strangle": a Fruit card can never surround a root by itself, so the bots look for a Fruit card that opens a Strangle (a Sprout or combo this turn then wins); levels 4-9 always take it.
+- Levels 1-3 play a Fruit card at a random moment with a seeded 35% / 30% / 30% chance per Grow step holding one; levels 1-2 throw one away with 25% / 15% per Throw step holding one.
+- "High strength" for levels 4-6 = 7 or more; "big cut" = 3 or more tiles removed in all.
+- A slip (the levels' mistake rate) never picks a move the bot rules out altogether (a Fruit card throw, a Fruit card it would keep); this also applies to Strengthen moves ruled out.

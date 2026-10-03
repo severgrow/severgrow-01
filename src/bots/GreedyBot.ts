@@ -6,7 +6,7 @@ import type { Action, Card, Player, View } from '../engine/index.js';
 import type { Bot } from './Bot.js';
 import { cutLoss, simulate, threats } from './evaluate.js';
 import type { Ctx } from './evaluate.js';
-import { NEVER, isStrengthen, judgeFruit, judgeStrengthen, lookFruit, tacticsCtx } from './tactics.js';
+import { NEVER, isFruitThrow, isStrengthen, judgeFruit, judgeStrengthen, lookFruit, tacticsCtx } from './tactics.js';
 import type { FruitLook, Tier } from './tactics.js';
 
 /** Weights. Points are worth 1 each; everything else is measured against that. */
@@ -158,6 +158,8 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): S
     }
     case 'Discard': {
       const c = v.hand.find((x) => x.id === a.card)!;
+      // v0.6: a Fruit card is never an ordinary throw (it would feed the opponent)
+      if (isFruitThrow(v, a)) return { action: a, score: NEVER, facts: { kind: 'discard', card: c, fitsCombo: false, deadwoodAfter: 0 } };
       const rest = v.hand.filter((x) => x.id !== a.card);
       const dw = deadwood(rest);
       // Lowest leftover total first; then shed the higher card.
@@ -199,7 +201,7 @@ export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
   }
   const shortlist = new Set(
     [...looks.values()]
-      .sort((x, y) => (y.sim.wins ? 1 : 0) - (x.sim.wins ? 1 : 0) || y.net - x.net || y.sim.botPointsLost - x.sim.botPointsLost)
+      .sort((x, y) => (y.sim.wins ? 1 : 0) - (x.sim.wins ? 1 : 0) || (y.opensStrangle ? 1 : 0) - (x.opensStrangle ? 1 : 0) || y.net - x.net || y.sim.botPointsLost - x.sim.botPointsLost)
       .slice(0, fTier >= 2 ? (opts.fruitShortlist ?? 4) : looks.size)
       .map((l) => l.a as Action),
   );

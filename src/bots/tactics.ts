@@ -1,10 +1,13 @@
 // Strengthen and Fruit judgement for the bots (v0.5), by skill tier. Pure and deterministic;
 // reads only a View (public information: my hand, the board, the discard pile, counts).
 //
-// Tiers: 0 ignores both (levels 1-2 only stumble into them by a seeded whim, see levels.ts),
-// 1 simple rules (levels 3-4), 2 weighs exposure and net swing (5-6), 3 full evaluation
-// (7-8), 4 also weighs the opponent's remaining Fruit and weak supporting links (9).
-import { allNeighbors, coordKey, createCards, hexDistance, parseKey, rootCoord } from '../engine/index.js';
+// Strengthen tiers: 0 ignores it (levels 1-2 only stumble into it by a seeded whim, see
+// levels.ts), 1 simple rules (3-4), 2 weighs exposure (5-6), 3 full evaluation (7-8), 4 also
+// weighs the opponent's unseen Fruit cards and weak supporting links (9).
+// v0.6 Fruit card tiers: 0-1 leave it to chance (levels 1-3 play one at a random moment, see
+// levels.ts), 2 simple rules (4-6: a high tile, a big cut, a Strangle), 3 full evaluation (7-8),
+// 4 also counts the unseen Fruit cards (9). A Fruit card is never an ordinary throw.
+import { allNeighbors, coordKey, createCards, hexDistance, isFruitCard, legalActions, parseKey, rootCoord } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import { cutLoss, simulate } from './evaluate.js';
 import type { Simulation } from './evaluate.js';
@@ -136,11 +139,25 @@ export const judgeStrengthen = (t: TacticsCtx, a: Extract<Action, { t: 'Sprout' 
   return { score: value - cost, reason: reasons.join('; ') };
 };
 
-/** A quick look at a Fruit: the board after it, and the plain points swing. */
-export type FruitLook = { a: Extract<Action, { t: 'PlayFruit' }>; sim: Simulation; net: number };
+/** A quick look at a Fruit card: the board after it, the plain points swing, and whether it opens a Strangle. */
+export type FruitLook = { a: Extract<Action, { t: 'PlayFruit' }>; sim: Simulation; net: number; opensStrangle: boolean };
 export const lookFruit = (v: View, a: Extract<Action, { t: 'PlayFruit' }>): FruitLook | null => {
   const sim = simulate(v, a);
-  return sim ? { a, sim, net: sim.botPointsLost + sim.points } : null;
+  return sim ? { a, sim, net: sim.botPointsLost + sim.points, opensStrangle: !sim.wins && opensStrangle(v, a, sim) } : null;
+};
+
+/**
+ * A Fruit card can never surround a root by itself (it only empties a hex), but it can open
+ * the way: after it, one of my growing moves this turn wins by Strangle.
+ */
+const opensStrangle = (v: View, a: Extract<Action, { t: 'PlayFruit' }>, sim: Simulation): boolean => {
+  const o = other(v.player);
+  const ring = allNeighbors(rootCoord(o, v.config.rootStyle, v.config.boardRadius)).map(coordKey).filter((k) => k in v.board);
+  // cheap first check: at most one ring hex left that is not mine or rock
+  const open = ring.filter((k) => v.terrain[k] !== 'rock' && sim.board[k]?.owner !== v.player);
+  if (open.length !== 1) return false;
+  const after: View = { ...v, board: sim.board, hand: v.hand.filter((c) => c.id !== a.card), lastResolution: null };
+  return legalActions(after).some((m) => (m.t === 'Sprout' || m.t === 'MeldRun' || m.t === 'MeldSet') && !!simulate(after, m)?.wins);
 };
 
 /**
@@ -148,33 +165,60 @@ export const lookFruit = (v: View, a: Extract<Action, { t: 'PlayFruit' }>): Frui
  * `full` (points, their losses, my exposure and pressure, as for any move).
  */
 export const judgeFruit = (v: View, f: FruitLook, tier: Tier, full: number): Judged => {
-  const target = v.board[coordKey(f.a.target)]!;
-  if (f.sim.wins) return { score: 1000, reason: 'Fruit wins at once (Strangle)' };
-  if (tier === 0) return { score: NEVER, reason: 'does not think about Fruit' };
-  if (tier === 1) {
-    return f.sim.botPointsLost >= 4
-      ? { score: f.sim.botPointsLost, reason: `removes ${f.sim.botPointsLost} of their points` }
-      : { score: NEVER, reason: 'not a big enough hit' };
-  }
-  const ownCut = f.sim.myLoss;
+  const key = coordKey(f.a.target);
+  const target = v.board[key]!;
+  const removed = 1 + f.sim.botCut;
+  if (f.sim.wins) return { score: 1000, reason: 'Fruit card wins at once (Strangle)' };
+  if (tier <= 1) return { score: NEVER, reason: 'leaves Fruit cards to chance (levels 1-3)' };
+  if (f.opensStrangle) return { score: 900, reason: 'opens a Strangle: a Sprout surrounds their root next' };
   if (tier === 2) {
-    if (ownCut > 0) return { score: NEVER, reason: `would cut off ${ownCut} of my own tiles` };
-    return { score: full - 1, reason: `net ${f.net}` };
+    // simple rules: a high tile, or a big cut
+    if (target.strength >= 7) return { score: full + 0.5, reason: `removes a high tile (${target.strength})` };
+    if (removed >= 3) return { score: full + 0.5, reason: `a big cut (${removed} tiles)` };
+    return { score: NEVER, reason: 'keeps it for a high tile or a big cut' };
   }
-  // tiers 3-4: the use is worth more later in a long game; less when well behind
+  // tiers 3-4: the net swing against holding it for later (worth more early in a long game)
   const deckFrac = Math.min(1, v.deckCount / 50);
   let hold = 0.6 + 2.2 * deckFrac;
-  const behind = v.score - v.opponentScore;
-  const reasons = [`net ${f.net}`];
-  if (behind <= -4) {
+  const reasons = [`net ${f.net} (${removed} of theirs gone)`];
+  if (v.score - v.opponentScore <= -4) {
     hold *= 0.5;
     reasons.push('a comeback try');
+  }
+  // a second Fruit card in the same turn only if it pays
+  if (v.lastResolution?.fruit && v.turnPlayer === v.player) {
+    hold += 1;
+    reasons.push('a second Fruit card: only if it pays');
   }
   let bonus = 0;
   if (target.strength >= v.config.maxRank) {
     bonus += 1;
     reasons.push('removes a top-rank blocker');
   }
-  if (ownCut > 0) reasons.push(`cuts ${ownCut} of my own`);
+  // protects my thin links: the target could take one of my tiles that holds up several
+  const guarded = allNeighbors(f.a.target).some((n) => {
+    const k = coordKey(n);
+    const t = v.board[k];
+    return !!t && t.owner === v.player && !t.root && t.strength < target.strength && cutLoss(v, k).length >= 3;
+  });
+  if (guarded) {
+    bonus += 0.8;
+    reasons.push('protects a thin link of mine');
+  }
+  if (tier === 4) {
+    // counting: with no Fruit card left unseen, nothing can remove my blockers: less rush;
+    // with several unseen, use it before the race turns
+    if (v.fruitUnseen === 0) {
+      hold *= 1.25;
+      reasons.push('no Fruit card left unseen');
+    } else if (v.fruitUnseen >= 2) {
+      hold *= 0.85;
+      reasons.push(`${v.fruitUnseen} Fruit cards unseen`);
+    }
+  }
   return { score: full - hold + bonus, reason: reasons.join('; ') };
 };
+
+/** v0.6: a Fruit card is never an ordinary throw (only when nothing else is left in hand). */
+export const isFruitThrow = (v: View, a: Action): boolean =>
+  a.t === 'Discard' && isFruitCard(v.hand.find((c) => c.id === a.card)!) && v.hand.some((c) => !isFruitCard(c));
