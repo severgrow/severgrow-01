@@ -56,7 +56,9 @@ const open = async (state: State, o: { w?: number; settings?: Record<string, unk
     ] as const,
   );
   await page.goto(BASE);
-  await page.click('#menu-continue');
+  // a finger on a phone (a mouse click would leave a hover tile card over the board)
+  if (o.mouse) await page.click('#menu-continue');
+  else await page.tap('#menu-continue');
   // let the board's deal-in finish (screenshots), then wait until nothing animates
   await page.waitForTimeout(SHOTS ? 1600 : 400);
   await idle(page);
@@ -73,6 +75,7 @@ const tap = async (page: Page, key: string) => {
 };
 
 // ---- 1. the card in the hand, the chip, picking it, a Fruit card on a 9, Undo ----
+console.log(`[1] the card in the hand, the chip, picking `);
 {
   const state = fruitPosition(NINE_CHAIN, [[0, 2], [1, 5], [2, 7]], 1);
   const { page, errors } = await open(state, { tips: { fruit: false } });
@@ -111,6 +114,7 @@ const tap = async (page: Page, key: string) => {
 }
 
 // ---- 2. two Fruit cards in one turn; the next one stays picked; the tile card shortcut ----
+console.log(`[2] two Fruit cards in one turn; the next on`);
 {
   const state = fruitPosition(NINE_PAIR, [[0, 2], [1, 5]], 2);
   const { page, errors } = await open(state, { settings: { confirmPolicy: 'never' } });
@@ -148,6 +152,7 @@ const scanWords = (page: Page): Promise<string[]> =>
 const words: string[] = [];
 
 // ---- 4. a Sprout (with its wording), a Strengthen, a dimmed Fruit card, the word scan ----
+console.log(`[4] a Sprout (with its wording), a Strengthe`);
 {
   // mine: root - (-1,1)=3 - (0,0)=3; theirs far away: (2,-1)=6 - (3,-1)=4 (nothing of theirs touches mine)
   const far: Record<string, [Player, number]> = { '-1,1': [0, 3], '0,0': [0, 3], '2,-1': [1, 6], '3,-1': [1, 4] };
@@ -188,6 +193,7 @@ const words: string[] = [];
 }
 
 // ---- 5. the opponent plays a Fruit card on my 9 (calmer: a caption, no banner) ----
+console.log(`[5] the opponent plays a Fruit card on my 9 `);
 {
   // late in the game: my 9 at (0,0) holds a chain of four; their 9s touch it; they hold a Fruit card
   const tiles: Record<string, [Player, number]> = { '-1,1': [0, 2], '0,0': [0, 9], '0,-1': [0, 3], '-1,-1': [0, 3], '-2,0': [0, 3], '-3,1': [0, 3], '1,0': [1, 9], '1,-1': [1, 9] };
@@ -212,6 +218,7 @@ const words: string[] = [];
 }
 
 // ---- 6. with a mouse (desktop): a Fruit card on a 9, click by click ----
+console.log(`[6] with a mouse (desktop): a Fruit card on `);
 {
   const state = fruitPosition(NINE_CHAIN, [[0, 2], [1, 5]], 1);
   const { page, errors } = await open(state, { mouse: true, settings: { confirmPolicy: 'always' } });
@@ -227,6 +234,7 @@ const words: string[] = [];
 }
 
 // ---- 7. an empty turn (auto-skip), then a whole game to the end, word scans on the way ----
+console.log(`[7] an empty turn (auto-skip), then a whole `);
 {
   const { stuckBoard } = await import('./empty-positions.js');
   const { page, errors } = await open({ ...stuckBoard(), phase: 'DRAW' });
@@ -237,7 +245,9 @@ const words: string[] = [];
   await page.close();
   // a whole game against level 7, tapping the first playable card each time
   const g = await open(fruitPosition(NINE_CHAIN, [[0, 2], [1, 5], [2, 7], [3, 3], [0, 4], [1, 6]], 1), { settings: { speed: 'skip', confirmPolicy: 'never' } });
-  for (let i = 0; i < 400; i++) {
+  const t0 = Date.now();
+  let tried = -1;
+  for (let i = 0; i < 400 && Date.now() - t0 < 180_000; i++) {
     const s = await st(g.page);
     if (!s || s.phase === 'GAME_OVER') break;
     if (s.actor !== 0) {
@@ -247,17 +257,23 @@ const words: string[] = [];
     }
     if (s.phase === 'DRAW') await g.page.click('#deck').catch(() => {});
     else if (s.phase === 'ACT') {
-      const card = g.page.locator('#hand .card.playable, #hand .card.fruit-ready').first();
-      if ((await card.count()) > 0 && i % 3 !== 2) {
-        await card.click().catch(() => {});
-        const t = g.page.locator('.l-over .target').first();
-        if ((await t.count()) > 0) {
-          const b = await t.boundingBox();
-          if (b) await g.page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+      // one try per turn: a playable card (a Fruit card too) and its first target; then end the Grow step
+      if (await g.page.locator('#confirm-play').isVisible()) await g.page.click('#confirm-play').catch(() => {});
+      else if (tried !== s.turnNumber) {
+        tried = s.turnNumber;
+        const card = g.page.locator('#hand .card.playable, #hand .card.fruit-ready').first();
+        if ((await card.count()) > 0) {
+          await card.click().catch(() => {});
+          const t = g.page.locator('.l-over .target').first();
+          if ((await t.count()) > 0) {
+            const b = await t.boundingBox();
+            if (b) await g.page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+          }
         }
-        await g.page.waitForTimeout(60);
-        if ((await st(g.page)).phase === 'ACT' && (await st(g.page)).turnNumber === s.turnNumber && (await st(g.page)).history!.length === s.history!.length) await g.page.locator('#moves .end, #moves .cancel').first().click().catch(() => {});
-      } else await g.page.locator('#moves .end').first().click().catch(() => {});
+      } else {
+        await g.page.locator('#moves .cancel').first().click({ timeout: 500 }).catch(() => {});
+        await g.page.locator('#moves .end').first().click({ timeout: 1000 }).catch(() => {});
+      }
     } else if (s.phase === 'DISCARD') await g.page.locator('#hand .card').first().click().catch(() => {});
     await g.page.waitForTimeout(40);
     if (i % 25 === 0) words.push(...(await scanWords(g.page)).map((w) => `game · ${w}`));
@@ -270,6 +286,7 @@ const words: string[] = [];
 check('the word scans: no "bot", "seed", "plant" (whole words) in text, aria-labels, alt or titles, in every state above', words.length === 0, words.slice(0, 3).join(' | '));
 
 // ---- 3. a full hand at 360px: everything visible, no sideways scroll ----
+console.log(`[3] a full hand at 360px: everything visible`);
 {
   const state = fruitPosition(NINE_CHAIN, [[0, 2], [0, 3], [1, 5], [2, 7], [3, 9], [1, 1]], 2);
   const { page, errors } = await open(state, { w: 360 });

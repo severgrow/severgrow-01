@@ -158,3 +158,15 @@ describe('state equivalence with Fruit cards (Step 7)', () => {
     expect(after2).not.toBe(JSON.stringify(s));
   });
 });
+
+describe('the hint line with a picked Fruit card (self-review fix)', () => {
+  it('never says "grow": the note, the tap hint, or why it has nothing to do', async () => {
+    const { hintFor } = await import('../src/logic/hint.js');
+    const { SPROUT } = await import('../../src/strings.js');
+    const base = { phase: 'ACT', myTurn: true, busy: false, words: SPROUT, deckCount: 40, canTakeThrow: false, pending: null, drawing: null, card: { single: false, grow: false, replace: false, strengthen: false }, kindPicked: false, hexWithNoMove: false, handEmpty: false, canSprout: true, canCombo: false, throwEndsTurn: false } as const;
+    expect(hintFor({ ...base, fruit: { firstTime: true } }).text).toBe(FRUIT.anyStrength);
+    expect(hintFor({ ...base, fruit: { firstTime: false } }).text).toBe(FRUIT.tapTarget);
+    expect(hintFor({ ...base, fruit: { firstTime: false, reason: FRUIT.noTarget } }).text).toBe(FRUIT.noTarget);
+    expect(hintFor({ ...base, fruit: null }).text).toBe("That card can't grow anywhere now");
+  });
+});

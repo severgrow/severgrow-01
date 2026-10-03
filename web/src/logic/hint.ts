@@ -19,7 +19,7 @@ export type HintCtx = {
   /** Draw step: can I take the throw pile's top card? */
   canTakeThrow: boolean;
   /** v0.6: a Fruit card is picked (`firstTime`: the "any strength" note has not been shown yet) */
-  fruit: null | { firstTime: boolean };
+  fruit: null | { firstTime: boolean; reason?: string | null };
   pending: null | 'strengthen' | 'drawn' | 'board';
   drawing: null | { kind: 'line' | 'clump'; n: number; fine: boolean };
   /** a card is picked: what it can do (empty: nothing) and whether it is a single-card move */
@@ -46,6 +46,7 @@ export const hintFor = (c: HintCtx): Hint => {
       return h(c.deckCount <= 3 ? `Draw a card: ${c.deckCount === 1 ? 'last one in the deck' : `${c.deckCount} left in the deck`}` : 'Draw: tap the deck or the throw pile', 'down');
     }
     case 'ACT': {
+      if (c.fruit?.reason) return h(c.fruit.reason);
       if (c.fruit && !c.pending) return h(c.fruit.firstTime ? FRUIT.anyStrength : FRUIT.tapTarget, 'up');
       if (c.pending === 'strengthen') return h('Strengthen: your tile takes the higher number', 'down');
       if (c.pending === 'drawn') return h('Confirm, or draw it again', 'down');

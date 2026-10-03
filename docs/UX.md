@@ -649,5 +649,19 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
   banner, a caption "Opponent used a Fruit card on your 9"; taking one from the throw pile says
   "Opponent took the Fruit card".
 - Checked by `web/tests/fruitcard.test.ts` and the browser test `web/e2e/fruitcards.ts`
-  (16 checks, including a full hand at 360px with no sideways scroll); screenshots in
+  (27 checks, touch and mouse, including a whole game and a full hand at 360px with no sideways scroll); screenshots in
   `docs/screens/fruit-cards/`.
+
+## Seed removal and Fruit cards (v0.6), Steps 7-8: proof and tidy
+
+- **Moves row**: always one line. When two or more move buttons share it they use short labels
+  ("Sprout", "Strengthen"), and it scrolls sideways rather than wrapping under the forecast. The
+  "Fruit cards unseen" chip sits under the piles, so it never pushes the row.
+- **Self-review of the screenshots** (`docs/screens/fruit-cards/`):
+  - Confusing: with a dimmed Fruit card picked, the reason appears twice (as a caption over the
+    board and as the hint line), and the one-time tip repeats "Fruit cards" in its title and text.
+  - Strong: the Fruit card is unmistakable in the hand (cream, no suit colour, at the right), and
+    its calm pearly target rings read as "you may" rather than as a warning.
+  - Fixed: the tip's "Got it" button was half cut off at the bottom of the box on a phone; it now
+    sits beside the text. Also, the hint line said "That card can't grow anywhere now" for a
+    Fruit card; it now gives the Fruit reason (Fruit cards never "grow").

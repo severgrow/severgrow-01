@@ -3732,6 +3732,21 @@ html[data-layout='side'] .dock-overlays {
 .dock-overlays .coach-actions .btn {
   min-height: 32px;
 }
+/* the tip's "Got it" sits beside the text, never scrolled out of the box */
+.dock-overlays > .first-tip:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+}
+.dock-overlays > .first-tip > :not(#first-tip-ok) {
+  grid-column: 1;
+}
+.dock-overlays #first-tip-ok {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 36px;
+}
 .dock-overlays #first-tip-text {
   margin: 0 0 4px;
   font-size: 0.8rem;

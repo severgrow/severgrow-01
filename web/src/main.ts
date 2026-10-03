@@ -1486,7 +1486,12 @@ function hintCtx(v: View): HintCtx {
     words: SPROUT,
     deckCount: v.deckCount,
     canTakeThrow: session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'),
-    fruit: kinds?.has('fruit') ? { firstTime: anyNoteCard === sel.card } : null,
+    // a picked Fruit card: the "any strength" note, or why it has nothing to do (never "grow")
+    fruit: kinds?.has('fruit')
+      ? { firstTime: anyNoteCard === sel.card }
+      : v.hand.find((c) => c.id === sel.card)?.suit === null
+        ? { firstTime: false, reason: fruitCardState(v, session!.legal, sel.card!).reason }
+        : null,
     pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
     drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
     card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
