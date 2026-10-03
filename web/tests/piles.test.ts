@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Action } from '../../src/engine/index.js';
-import { pileStates } from '../src/logic/piles.js';
+import { pileCountState, pileStates, stackLayers } from '../src/logic/piles.js';
 
 const both: Action[] = [{ t: 'Draw', from: 'deck' }, { t: 'Draw', from: 'discard' }];
 
@@ -34,5 +34,29 @@ describe('deck and throw pile: glow, dim and tappable per step', () => {
   it('game over: nothing glows', () => {
     const p = pileStates('GAME_OVER', true, false, []);
     expect(p.deck.glow || p.discard.glow).toBe(false);
+  });
+});
+
+describe('overhaul item 6: the stack thickness shows how many cards are left', () => {
+  it('more cards, a thicker stack (0 to 4 layers); one card is one layer; empty is none', () => {
+    expect(stackLayers(0, 40)).toBe(0);
+    expect(stackLayers(1, 40)).toBe(1);
+    expect(stackLayers(40, 40)).toBe(4);
+    let prev = 0;
+    for (let n = 0; n <= 60; n++) {
+      const l = stackLayers(n, 60);
+      expect(l).toBeGreaterThanOrEqual(prev);
+      expect(l).toBeLessThanOrEqual(4);
+      prev = l;
+    }
+    // a pile bigger than the start (the throw pile can grow) stays at 4
+    expect(stackLayers(99, 40)).toBe(4);
+  });
+  it('the last card is its own state', () => {
+    expect(pileCountState(1)).toBe('last');
+    expect(pileCountState(0)).toBe('empty');
+    expect(pileCountState(4)).toBe('low');
+    expect(pileCountState(5)).toBe('low');
+    expect(pileCountState(6)).toBe('normal');
   });
 });

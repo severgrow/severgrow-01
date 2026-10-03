@@ -17,6 +17,8 @@ export class Session {
   private turns: { player: Player; plays: Played[] }[] = [];
   /** States before each take-back-able move of the player's current turn (see undo). */
   private undoStack: State[] = [];
+  /** overhaul item 20: every play that cut tiles off (for "Replay the biggest cut") */
+  private cuts: { n: number; played: Played }[] = [];
   private cache: { state: State; view: View; legal: Action[] } | null = null;
   /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
   private drawn: Action | null = null;
@@ -94,9 +96,11 @@ export class Session {
     this.sel = EMPTY_SEL;
     this.drawn = null;
     const last = this.turns.at(-1);
-    if (last && last.player === s.turnPlayer && last.plays.at(-1)!.after === s) last.plays.push(played);
+    if (last && last.player === s.turnPlayer && (last.plays.length === 0 || last.plays.at(-1)!.after === s)) last.plays.push(played);
     else this.turns.push({ player: s.turnPlayer, plays: [played] });
     if (this.turns.length > 6) this.turns.shift();
+    const n = played.steps.reduce((k, st) => k + (st.k === 'sever' ? st.keys.length : 0), 0);
+    if (n > 0) this.cuts.push({ n, played });
     return played;
   }
 
@@ -112,8 +116,18 @@ export class Session {
     this.sel = EMPTY_SEL;
     this.drawn = null;
     const last = this.turns.at(-1);
-    if (last && last.player === this.viewer) last.plays.pop();
+    const gone = last && last.player === this.viewer ? last.plays.pop() : undefined;
+    if (gone) this.cuts = this.cuts.filter((c) => c.played !== gone);
+    // a turn with nothing left in it (resumed mid-turn, its only move taken back) is forgotten
+    if (last && last.plays.length === 0) this.turns.pop();
     return true;
+  }
+
+  /** The play that cut off the most tiles this game (the first, on a tie), or null. */
+  get biggestCut(): Played | null {
+    let best: { n: number; played: Played } | null = null;
+    for (const c of this.cuts) if (!best || c.n > best.n) best = c;
+    return best?.played ?? null;
   }
 
   /** Every action of `player`'s latest turn (for "Replay last turn"). */

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
-import { EMPTY_SEL, playNow, sproutKind, tapCard, tapHex, targetKinds, TARGET_LABEL, pendingAction } from '../src/logic/interaction.js';
+import { EMPTY_SEL, onlyChoice, playNow, sproutKind, tapCard, tapHex, targetKinds, TARGET_LABEL, pendingAction } from '../src/logic/interaction.js';
 import { previewMove } from '../src/logic/preview.js';
 import { buildSteps } from '../src/logic/anim.js';
 import { moveTier, tierBanner } from '../src/logic/juice.js';
@@ -86,5 +86,19 @@ describe('animation steps from the engine events', () => {
     // a small Strengthen is a small moment; to the top rank it is a medium one (a bigger shine)
     expect(moveTier(steps, () => false)).toBe('medium');
     expect(coordKey({ q: 1, r: 0 })).toBe('1,0');
+  });
+});
+
+describe('UI overhaul item 8: "Confirm moves: Never" and Strengthen', () => {
+  it('the only choice on the picked spot is known, Strengthen included (Never plays it at once; Smart and Always keep it waiting)', () => {
+    const s = stateWith({ '-1,1': [0, 5], '0,0': [0, 9], '1,0': [1, 4] }, [[0, 9]]);
+    const v = viewFor(s, 0);
+    const legal = legalActions(v);
+    const id = v.hand[0]!.id;
+    let sel = tapCard(v, legal, EMPTY_SEL, id);
+    sel = tapHex(v, legal, sel, '-1,1');
+    expect(playNow(v, legal, sel)).toBeNull();
+    expect(onlyChoice(v, legal, sel)).toEqual({ t: 'Sprout', card: id, coord: { q: -1, r: 1 } });
+    expect(onlyChoice(v, legal, tapCard(v, legal, EMPTY_SEL, id))).toBeNull(); // no spot yet
   });
 });

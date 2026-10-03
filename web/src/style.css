@@ -3348,3 +3348,967 @@ button.version-chip {
   cursor: pointer;
   min-height: 28px;
 }
+
+/* =====================================================================
+   UI OVERHAUL, items 1-2: one fixed layout from web/src/logic/layout.ts
+   (the dock never changes height; the board fits everything above it)
+   ===================================================================== */
+#safe-probe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.game {
+  grid-template-rows: var(--hud-h, 48px) var(--race-h, 8px) var(--steps-h, 36px) minmax(0, 1fr);
+}
+.game > .hud {
+  grid-row: 1;
+  height: var(--hud-h, 48px);
+  padding-block: 0;
+}
+.game > .race {
+  grid-row: 2;
+}
+.game > .steps-row {
+  grid-row: 3;
+  height: var(--steps-h, 36px);
+}
+.game > .steps-row .steps {
+  margin-top: 0;
+}
+.game > .play {
+  grid-row: 4;
+}
+.play {
+  grid-template-rows: minmax(0, 1fr) var(--dock-h, 360px);
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+  gap: 0;
+}
+.board-wrap {
+  margin: 0 4px;
+}
+/* the score race strip (item 14 fills it) */
+.race {
+  position: relative;
+  height: var(--race-h, 8px);
+}
+/* the dock: five fixed rows, top to bottom */
+.dock {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--row-toolbar, 40px) var(--row-hint, 24px) var(--row-forecast, 56px) var(--row-table, 64px) var(--row-hand, 140px);
+  gap: 0;
+  height: var(--dock-h, 360px);
+  box-sizing: border-box;
+  padding: 0 0 calc(8px + env(safe-area-inset-bottom));
+  overflow: visible;
+  justify-content: stretch;
+}
+.dock > * {
+  min-height: 0;
+}
+/* the board tools: one slim row with labels (item 4) */
+.toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+}
+.tool::after {
+  /* a 44px tall hit area around a slim pill */
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
+.tool[aria-pressed='true'] {
+  color: var(--c-bg);
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+.tool .i {
+  width: 16px;
+  height: 16px;
+}
+.tool[hidden] {
+  display: none;
+}
+/* the hint line: always one line, never changes the dock */
+.hint-line {
+  margin: 0;
+  padding: 0 16px;
+  line-height: var(--row-hint, 24px);
+  height: var(--row-hint, 24px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--c-muted);
+}
+/* the forecast slot: always reserved; the confirm bar fills it when there is something to confirm */
+.forecast-slot {
+  position: relative;
+  padding: 4px 12px;
+}
+.forecast-slot > .confirm {
+  position: absolute;
+  inset: 4px 12px;
+  flex-wrap: nowrap;
+  padding: 0 8px 0 12px;
+  border-width: 1px;
+}
+.forecast-slot .confirm-text {
+  overflow: hidden;
+}
+.forecast-slot .result-chip,
+.forecast-slot .warn {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.85rem;
+}
+.forecast-slot .confirm-buttons .btn {
+  min-height: 40px;
+  height: 40px;
+}
+/* piles and moves: one fixed row */
+.dock > .table-row {
+  height: var(--row-table, 64px);
+  padding: 0 12px;
+  gap: 10px;
+}
+.dock .pile-card {
+  width: calc((var(--row-table, 64px) - 16px) / 1.38);
+  height: calc(var(--row-table, 64px) - 16px);
+}
+.dock .pile {
+  min-width: 48px;
+  gap: 2px;
+}
+.dock .pile-label {
+  font-size: 0.62rem;
+}
+.dock .pile-hint {
+  display: none;
+}
+.dock .moves {
+  min-height: 0;
+  max-height: var(--row-table, 64px);
+  overflow: hidden;
+  align-content: center;
+}
+/* the hand: each card shows at least --slice px, a gentle fan */
+.dock > .hand {
+  height: var(--row-hand, 140px);
+  padding-top: 22px;
+  box-sizing: border-box;
+}
+.dock > .hand .card {
+  margin-left: calc(var(--slice, 40px) - var(--cw));
+}
+.dock > .hand .card:first-child {
+  margin-left: 0;
+}
+/* coach and first-time tips float above the dock, over the board's lower edge */
+.dock-overlays {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 4;
+}
+.dock-overlays > * {
+  pointer-events: auto;
+}
+/* wide screens: board on the left, the dock as a column on the right */
+html[data-layout='side'] .play {
+  grid-template-columns: minmax(0, 1fr) var(--dock-w, 380px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 16px 12px;
+}
+html[data-layout='side'] .dock {
+  align-self: center;
+}
+html[data-layout='side'] .dock-overlays {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+/* ---- overhaul item 3: the hand ---- */
+.dock .card {
+  padding: 5px 3px 8px;
+}
+.dock .c-num {
+  font-size: calc(var(--cw) * 0.36);
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.dock .c-suit svg {
+  width: calc(var(--cw) * 0.42);
+  height: calc(var(--cw) * 0.42);
+}
+/* lift with a small spring; others stay legible */
+.dock > .hand .card {
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(var(--dy, 0px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
+}
+.dock > .hand .card.lifted {
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.04);
+}
+.dock > .hand .card.dim {
+  opacity: 0.62;
+  filter: saturate(0.6);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dock > .hand .card:not(.lifted):hover {
+    transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 6px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
+    z-index: 3;
+  }
+}
+/* cards of one combo share a small bracket: a thicker, coloured bottom edge */
+.dock > .hand .card[data-combo] {
+  border-bottom: 3.5px solid var(--combo-c, var(--c-accent));
+}
+.dock > .hand .card[data-combo='1'] {
+  --combo-c: var(--c-gold);
+}
+.dock > .hand .card[data-combo='2'] {
+  --combo-c: var(--c-text);
+}
+.reduce-motion .dock > .hand .card {
+  transition: none;
+  animation: none;
+}
+/* the Sort button: a quiet pill at the hand's top right, never moving anything */
+.hand-sort {
+  position: absolute;
+  right: 12px;
+  bottom: calc(var(--row-hand, 140px) + 8px - 26px);
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-bg);
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  z-index: 3;
+}
+.hand-sort::before {
+  content: '⇅ ';
+}
+.hand-sort::after {
+  content: '';
+  position: absolute;
+  inset: -11px -6px;
+}
+
+/* phones: the board sits just above the toolbar; spare height becomes headroom at the top */
+html[data-layout='stack'] .board-wrap {
+  padding-bottom: 6px;
+}
+
+/* ---- overhaul item 7: calm legal-hex highlights ----
+   a soft tint and a thin edge, brighter as the finger or mouse comes near (--near 0..1,
+   set from the pointer); everything else dims a little; no neon, no constant breathing */
+.target {
+  fill: var(--c-you);
+  fill-opacity: calc(0.07 + var(--near, 0) * 0.22);
+  stroke-width: 1;
+  stroke-opacity: calc(0.42 + var(--near, 0) * 0.55);
+  animation: target-in 0.24s ease-out both;
+  transition: fill-opacity 0.12s linear, stroke-opacity 0.12s linear;
+}
+.target.kind-strengthen {
+  stroke-width: 1.8;
+}
+.target.kind-replace {
+  stroke-dasharray: 4 3;
+}
+.dim {
+  opacity: 0.34;
+}
+.reduce-motion .target {
+  animation: none;
+  transition: none;
+}
+/* overhaul item 8: the forecast bar's risk line (icons + short text, one row; the bar never grows) */
+.forecast-slot .confirm-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 2px;
+}
+.forecast-slot .risks {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--c-danger);
+}
+.forecast-slot .risks[hidden] {
+  display: none;
+}
+.forecast-slot .risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.forecast-slot .risk + .risk {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.forecast-slot .risk-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+/* overhaul item 10: previews in real materials. Translucent moss that breathes; over an
+   opponent tile the lava glows through; the veins it would grow; distinct "−N" marks. */
+.ghost .ghost-tile,
+.draw-ghost .ghost-tile {
+  fill: color-mix(in srgb, var(--c-you) 70%, var(--c-moss, var(--c-you)));
+  fill-opacity: 0.5;
+  stroke-dasharray: none;
+  stroke-width: 1.4;
+  stroke-opacity: 0.85;
+  animation: ghost-breathe 1.8s ease-in-out infinite;
+}
+.ghost.replaces .ghost-tile {
+  fill: color-mix(in srgb, var(--c-you) 55%, var(--c-bot));
+  stroke: var(--c-bot);
+}
+@keyframes ghost-breathe {
+  50% {
+    fill-opacity: 0.32;
+  }
+}
+.ghost-num {
+  font-size: 17px;
+  paint-order: stroke;
+  stroke: var(--c-bg);
+  stroke-width: 2.5px;
+  stroke-opacity: 0.6;
+}
+.ghost-vein {
+  fill: none;
+  stroke: var(--c-you);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-opacity: 0.7;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: ghost-vein-in 0.35s ease-out forwards;
+}
+@keyframes ghost-vein-in {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.badge.at-risk .badge-bg {
+  fill: var(--c-danger);
+}
+.badge.at-risk .badge-ring {
+  stroke-dasharray: 2 3;
+  animation: none;
+}
+.badge.cut-gain .badge-bg {
+  fill: var(--c-gold, var(--c-accent));
+}
+.badge.cut-gain .badge-ring {
+  stroke: var(--c-gold, var(--c-accent));
+  stroke-dasharray: none;
+  animation: none;
+  stroke-opacity: 0.6;
+}
+.reduce-motion .ghost .ghost-tile,
+.reduce-motion .draw-ghost .ghost-tile {
+  animation: none;
+}
+.reduce-motion .ghost-vein {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+/* overhaul item 6: piles. 48px+ targets, a stack as thick as the pile, the count beside the
+   label (clear of the art), the last card alone. */
+.dock .pile {
+  min-width: 52px;
+  min-height: 48px;
+}
+.pile-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1;
+}
+.dock .pile-meta .pile-count,
+.pile-meta .pile-count {
+  position: static;
+  min-width: 0;
+  padding: 1px 5px;
+  font-size: 0.66rem;
+  background: color-mix(in srgb, var(--c-text) 85%, transparent);
+}
+#discard .pile-meta .pile-count {
+  top: auto;
+}
+.pile[data-layers] .pile-stack,
+.pile[data-layers] .pile-top.card {
+  transition: box-shadow 0.3s;
+}
+.pile[data-layers='0'] .pile-stack {
+  opacity: 0.25;
+  border-style: dashed;
+  background: none;
+}
+.pile[data-layers='0'] .pile-stack::before,
+.pile[data-layers='0'] .pile-stack::after,
+.pile[data-layers='1'] .pile-stack::before,
+.pile[data-layers='1'] .pile-stack::after {
+  display: none;
+}
+.pile[data-layers='2'] .pile-stack::after {
+  display: none;
+}
+.pile[data-layers='4'] .pile-stack {
+  box-shadow: -2px -2px 0 -0.5px var(--c-surface), -2px -2px 0 0.5px var(--c-line), -4px -4px 0 -0.5px var(--c-surface), -4px -4px 0 0.5px var(--c-line);
+}
+.pile[data-layers='3'] .pile-top.card {
+  box-shadow: 2px 2px 0 -0.5px var(--c-surface), 2px 2px 0 0.5px var(--c-line);
+}
+.pile[data-layers='4'] .pile-top.card {
+  box-shadow: 2px 2px 0 -0.5px var(--c-surface), 2px 2px 0 0.5px var(--c-line), 4px 4px 0 -0.5px var(--c-surface), 4px 4px 0 0.5px var(--c-line);
+}
+#deck[data-count='last'] .pile-stack {
+  border-color: var(--c-gold, var(--c-accent));
+  box-shadow: 0 0 10px -2px color-mix(in srgb, var(--c-gold, var(--c-accent)) 60%, transparent);
+}
+#deck[data-count='last'] .pile-label {
+  color: var(--c-gold, var(--c-accent));
+}
+/* overhaul item 13: the hint's tiny arrow, bobbing gently toward where to tap */
+.hint-arrow {
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--c-accent);
+  font-size: 0.8rem;
+  animation: hint-bob-down 1.6s ease-in-out infinite;
+}
+.hint-arrow.up {
+  animation-name: hint-bob-up;
+}
+@keyframes hint-bob-down {
+  50% {
+    transform: translateY(2px);
+  }
+}
+@keyframes hint-bob-up {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+.reduce-motion .hint-arrow {
+  animation: none;
+}
+/* overhaul item 9: Undo sits in the toolbar; dim when there is nothing to take back, a dot when there is */
+.tool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.tool.undo.ready::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+/* The coach and the first-time tips sit over the dock's hint and forecast rows (never over
+   the board, the toolbar, the piles or the hand), in a compact form. While a Confirm bar is up
+   they shrink to one line over the hint row, so Confirm stays reachable. One at a time. */
+.dock-overlays,
+html[data-layout='side'] .dock-overlays {
+  top: var(--row-toolbar, 40px);
+  bottom: auto;
+  left: 8px;
+  right: 8px;
+  height: calc(var(--row-hint, 24px) + var(--row-forecast, 56px));
+  justify-content: flex-start;
+}
+.dock.confirming .dock-overlays {
+  height: var(--row-hint, 24px);
+}
+.dock-overlays > .coach,
+.dock-overlays > .first-tip {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 6px 10px;
+  box-shadow: 0 8px 24px -8px color-mix(in srgb, #000 80%, transparent);
+}
+#coach:not([hidden]) ~ #first-tip {
+  display: none;
+}
+.dock-overlays > .coach:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 6px;
+}
+.dock-overlays .coach-head {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.dock-overlays .coach-head > .i,
+.dock-overlays .coach-head > b {
+  display: none;
+}
+.dock-overlays .coach-head .icon-only.small {
+  width: 32px;
+  height: 32px;
+}
+.dock-overlays #coach-advice,
+.dock-overlays #coach-summary {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.dock-overlays .coach-main {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dock.confirming .dock-overlays .coach-main {
+  margin: 0;
+}
+.dock.confirming .dock-overlays .coach-head .icon-only.small {
+  width: 20px;
+  height: 20px;
+}
+.dock-overlays .tip {
+  display: none;
+}
+.dock-overlays #coach-why {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+.dock-overlays .coach-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.dock-overlays .coach-actions .btn {
+  min-height: 32px;
+}
+.dock-overlays #first-tip-text {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.dock-overlays .first-tip .draw-demo {
+  display: none;
+}
+.dock.confirming .dock-overlays > .coach {
+  padding: 2px 10px;
+}
+.dock.confirming .dock-overlays .coach-actions,
+.dock.confirming .dock-overlays #coach-why,
+.dock.confirming .dock-overlays > .first-tip {
+  display: none;
+}
+
+/* =================================================================
+   Overhaul item 11: one design system (documented in docs/UX.md).
+   Spacing on an 8pt grid; one type scale with even-width numbers;
+   three button levels; one press state everywhere.
+   ================================================================= */
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 16px;
+  --sp-4: 24px;
+  --sp-5: 32px;
+  --sp-6: 48px;
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.85rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+  --press-scale: 0.97;
+  --press-ms: 80ms;
+}
+.num,
+.score b,
+.pile-count,
+.badge-text,
+.ghost-num {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+/* Primary = .btn.primary (one per moment), Secondary = .btn.ghost, Tertiary = .btn.link */
+.btn:active:not(:disabled),
+.tool:active:not(:disabled),
+.seg-btn:active,
+.chip:active,
+.icon-only:active,
+.hand-sort:active {
+  transform: scale(var(--press-scale));
+  transition: transform var(--press-ms) ease-out, box-shadow var(--press-ms) ease-out;
+}
+.reduce-motion .btn:active,
+.reduce-motion .tool:active,
+.reduce-motion .seg-btn:active,
+.reduce-motion .chip:active,
+.reduce-motion .icon-only:active,
+.reduce-motion .hand-sort:active {
+  transform: none;
+}
+/* overhaul item 14: the score race, a slim tug-of-war under the header */
+.race {
+  margin: 0 16px;
+  display: flex;
+  align-items: center;
+}
+.race-fill {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--c-you) 0 calc(var(--share, 0.5) * 100%), var(--c-bot) calc(var(--share, 0.5) * 100%) 100%);
+  opacity: 0.8;
+  transition: --share 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.race-fill::after {
+  /* the middle mark: who is ahead of level */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 2px;
+  height: 8px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--c-text);
+  opacity: 0.55;
+}
+@property --share {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+.reduce-motion .race-fill {
+  transition: none;
+}
+.hud .score {
+  cursor: pointer;
+  border-radius: var(--pill, 999px);
+}
+.hud .score:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+.score-pop {
+  position: fixed;
+  top: calc(var(--hud-h, 48px) + 6px);
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: var(--fs-sm, 0.85rem);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 10px 24px -10px #000;
+}
+.score-pop.you {
+  left: 12px;
+  border-top: 2px solid var(--c-you);
+}
+.score-pop.bot {
+  right: 12px;
+  border-top: 2px solid var(--c-bot);
+}
+.score-pop[hidden] {
+  display: none;
+}
+/* overhaul item 15: the final turns. Calm: a slightly deeper vignette that fades in slowly,
+   a soft banner. No flashing, no countdown, no red. */
+.game::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  background: radial-gradient(ellipse at 50% 40%, transparent 60%, color-mix(in srgb, #000 38%, transparent) 100%);
+  transition: opacity 2.5s ease;
+}
+html.final-turns .game::after {
+  opacity: 1;
+}
+.banner.calm {
+  color: var(--c-text);
+  font-size: 1.15rem;
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--c-text) 35%, transparent);
+  letter-spacing: 0.02em;
+}
+/* overhaul item 12: the board as a place (one light, top left) */
+.l-plate {
+  filter: drop-shadow(0 10px 16px color-mix(in srgb, #000 55%, transparent));
+}
+.sun-hi {
+  stop-color: #fff;
+  stop-opacity: 0.07;
+}
+.sun-mid {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.sun-lo {
+  stop-color: #000;
+  stop-opacity: 0.22;
+}
+.plate-sun {
+  pointer-events: none;
+}
+.plate-edge {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.edge-hi {
+  stop-color: #fff;
+  stop-opacity: 0.22;
+}
+.edge-lo {
+  stop-color: #fff;
+  stop-opacity: 0;
+}
+.soil-speck {
+  fill: var(--c-text);
+  opacity: 0.09;
+}
+.soil-grain {
+  pointer-events: none;
+}
+/* overhaul item 16: ambient life. Small, slow, transform/opacity only. None with Effects Low
+   or Reduce motion (the plan is empty then). */
+.l-amb {
+  pointer-events: none;
+}
+.amb-pulse {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c-you) 55%, #fff);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 12 200;
+  stroke-dashoffset: 12;
+  opacity: 0;
+  animation: amb-pulse 4.2s ease-in-out infinite;
+}
+@keyframes amb-pulse {
+  0% {
+    stroke-dashoffset: 12;
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  30% {
+    stroke-dashoffset: -100;
+    opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: -100;
+    opacity: 0;
+  }
+}
+.amb-glint {
+  fill: #fff;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: amb-glint 9s ease-out infinite;
+}
+@keyframes amb-glint {
+  0%,
+  90%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  94% {
+    opacity: 0.85;
+    transform: scale(1) rotate(30deg);
+  }
+}
+.amb-bubble {
+  fill: none;
+  stroke: var(--m-fireTip, #ffd27a);
+  stroke-width: 0.9;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: amb-bubble 4s ease-out infinite;
+}
+@keyframes amb-bubble {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  60%,
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+.amb-ember {
+  fill: var(--m-fireTip, #ffd27a);
+  opacity: 0;
+  animation: amb-ember 6s ease-out infinite;
+}
+@keyframes amb-ember {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  15% {
+    opacity: 0.8;
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: translate(3px, -26px);
+  }
+}
+/* moss sway: the grass blades lean a little in a slow breeze */
+.sway .grass-blade {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: amb-sway 5.5s ease-in-out infinite;
+}
+.sway .grass-blade.t1 {
+  animation-delay: -1.8s;
+}
+.sway .grass-blade.t2 {
+  animation-delay: -3.6s;
+}
+@keyframes amb-sway {
+  50% {
+    transform: skewX(-4deg);
+  }
+}
+/* overhaul item 17: grass blades spring up when a tile lands */
+.tile.spring .grass-blade {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: blade-spring 0.55s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes blade-spring {
+  from {
+    transform: scaleY(0.2);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.reduce-motion .tile.spring .grass-blade {
+  animation: none;
+}
+/* overhaul item 19: while the opponent acts, the rest of the board dims a little */
+.l-dim {
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.l-dim.on {
+  opacity: 1;
+}
+.dim-mask {
+  fill: var(--c-bg);
+  fill-opacity: 0.38;
+}
+/* overhaul item 20: a calm flourish behind the result (one soft glow, fading in once) */
+.gameover .go-card {
+  position: relative;
+  isolation: isolate;
+}
+.gameover .go-card::before {
+  content: '';
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c-accent) 18%, transparent), transparent);
+  animation: go-flourish 1.6s ease-out both;
+  pointer-events: none;
+}
+.gameover.won .go-card::before {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c-you) 22%, transparent), transparent);
+}
+@keyframes go-flourish {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.reduce-motion .gameover .go-card::before {
+  animation: none;
+}

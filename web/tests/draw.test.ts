@@ -5,7 +5,7 @@
 // drawing (backtracking, completion, partial shapes), the desktop two-click state machine,
 // the deterministic desktop clump, the Confirm-moves default, and keyboard steps.
 import { describe, expect, it } from 'vitest';
-import { apply, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import { DIRECTIONS, apply, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { EMPTY_SEL, kindOf, options, pendingAction, tapCard, tapHex, tapKind } from '../src/logic/interaction.js';
 import {
@@ -23,6 +23,7 @@ import {
   deskHover,
   deskShape,
   dirToward,
+  drawNext,
   drawStarts,
   growClump,
   hexAtPoint,
@@ -32,9 +33,11 @@ import {
   lineGhost,
   onlyPlacement,
   pixelOf,
+  proximity,
   snapDir,
 } from '../src/logic/draw.js';
 import { fixture } from '../../tests/helpers.js';
+import { clumpChoice, lineChoice } from '../e2e/polish3-positions.js';
 import { S } from '../src/ui/geom.js';
 
 const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number][], opts: { rock?: string[]; config?: Partial<RulesConfig> } = {}): State => {
@@ -346,5 +349,46 @@ describe('review fixes (polish pass 3 follow-up)', () => {
     expect(g.action).toBeNull();
     expect(g.reason).toBe('A root is in the way');
     expect(g.tiles.find((t) => t.key === '2,-2')!.ok).toBe(false);
+  });
+});
+
+describe('UI overhaul item 7: calm highlights (next hexes and proximity)', () => {
+  it('proximity: 1 under the pointer, 0 far away, smooth and never increasing with distance', () => {
+    expect(proximity(0)).toBe(1);
+    expect(proximity(1e6)).toBe(0);
+    expect(proximity(-1)).toBe(0);
+    expect(proximity(Number.NaN)).toBe(0);
+    let prev = 1;
+    for (let d = 0; d <= 120; d += 5) {
+      const p = proximity(d);
+      expect(p).toBeLessThanOrEqual(prev + 1e-9);
+      expect(p).toBeGreaterThanOrEqual(0);
+      prev = p;
+    }
+  });
+
+  it('a line: before drawing only the starts; after the start, only the hexes of legal lines from it', () => {
+    const { state } = lineChoice();
+    const v = viewFor(state, 0);
+    const combo = comboFor(v, legalActions(v), tapKind(EMPTY_SEL, 'line-3'))!;
+    expect([...drawNext(combo, [])].sort()).toEqual([...drawStarts(combo)].sort());
+    const start = [...drawStarts(combo)][0]!;
+    const next = drawNext(combo, [start]);
+    expect(next.has(start)).toBe(false);
+    expect(next.size).toBeGreaterThan(0);
+    // every next hex lies on some legal line through that start
+    const keysOf = (a: Extract<Action, { t: 'MeldRun' }>) => a.cards.map((_, i) => coordKey({ q: a.start.q + DIRECTIONS[a.dir]!.q * i, r: a.start.r + DIRECTIONS[a.dir]!.r * i }));
+    for (const k of next) expect(combo.actions.some((a) => a.t === 'MeldRun' && [keysOf(a)[0], keysOf(a).at(-1)].includes(start) && keysOf(a).includes(k)), k).toBe(true);
+  });
+
+  it('a clump: next hexes touch the shape and keep it inside a legal clump; a full shape has none', () => {
+    const { state } = clumpChoice();
+    const v = viewFor(state, 0);
+    const combo = comboFor(v, legalActions(v), tapKind(EMPTY_SEL, `clump-${3}`))!;
+    const first = (combo.actions[0] as Extract<Action, { t: 'MeldSet' }>).hexes.map(coordKey);
+    const next = drawNext(combo, [first[0]!]);
+    expect(next.has(first[1]!) || next.has(first[2]!)).toBe(true);
+    expect(next.has(first[0]!)).toBe(false);
+    expect(drawNext(combo, first).size).toBe(0);
   });
 });

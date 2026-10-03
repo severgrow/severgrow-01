@@ -18,8 +18,9 @@ describe('settings (saved in the browser)', () => {
       effects: 'normal',
       materialDetail: 'normal',
       topGlow: 'subtle', // polish pass 3: the slight top-rank glow
-      confirmDraw: null, // polish pass 3: "Confirm moves" for drawn lines and clumps; the device decides (touch on, mouse off)
+      confirmPolicy: 'smart', // UI overhaul item 8: "Confirm moves": Smart asks only for risky moves (replaces the old device-based draw confirm)
       placementList: false, // polish pass 3: opt-in list of placements while drawing
+      handSort: 'suit', // UI overhaul: the hand is sorted by suit (Sort switches to by number)
     });
   });
 
@@ -67,5 +68,30 @@ describe('settings (saved in the browser)', () => {
     expect(speedFactor('normal')).toBe(1);
     expect(speedFactor('fast')).toBeLessThan(1);
     expect(speedFactor('skip')).toBe(0);
+  });
+});
+
+describe('UI overhaul: the hand sort is remembered', () => {
+  it('defaults to by suit; keeps "number"; ignores anything else', () => {
+    expect(parseSettings(null).handSort).toBe('suit');
+    expect(parseSettings(JSON.stringify({ handSort: 'number' })).handSort).toBe('number');
+    expect(parseSettings(JSON.stringify({ handSort: 'colour' })).handSort).toBe('suit');
+  });
+});
+
+describe('UI overhaul item 8: "Confirm moves: Smart / Always / Never"', () => {
+  it('defaults to Smart; keeps a saved choice; ignores anything else', () => {
+    expect(parseSettings(null).confirmPolicy).toBe('smart');
+    expect(parseSettings(JSON.stringify({ confirmPolicy: 'always' })).confirmPolicy).toBe('always');
+    expect(parseSettings(JSON.stringify({ confirmPolicy: 'never' })).confirmPolicy).toBe('never');
+    expect(parseSettings(JSON.stringify({ confirmPolicy: 'sometimes' })).confirmPolicy).toBe('smart');
+  });
+  it('an old "Confirm drawn moves: On" carries over as Always; Off and Auto become Smart', () => {
+    expect(parseSettings(JSON.stringify({ confirmDraw: true })).confirmPolicy).toBe('always');
+    expect(parseSettings(JSON.stringify({ confirmDraw: false })).confirmPolicy).toBe('smart');
+    expect(parseSettings(JSON.stringify({ confirmDraw: null })).confirmPolicy).toBe('smart');
+    expect(parseSettings(JSON.stringify({ confirmDraw: true }))).not.toHaveProperty('confirmDraw');
+    // a new saved choice wins over the old one
+    expect(parseSettings(JSON.stringify({ confirmDraw: true, confirmPolicy: 'never' })).confirmPolicy).toBe('never');
   });
 });

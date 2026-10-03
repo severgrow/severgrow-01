@@ -12,6 +12,8 @@ import type { MaterialLook } from '../logic/materials.js';
 import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
+import { boardPad } from '../logic/layout.js';
+import type { AmbientPlan } from '../logic/ambient.js';
 import type { PaintTile } from '../logic/worldpaint.js';
 import { numberStyle, vigour } from '../logic/vigour.js';
 import { topGlow } from '../logic/topglow.js';
@@ -54,6 +56,10 @@ export type Overlay = {
   fruitValid?: string[];
   fruitPicked?: string[];
   fruitTarget?: string | null;
+  /** overhaul item 10: the veins the previewed move would grow (pairs of keys) */
+  ghostLinks?: [string, string][];
+  /** overhaul item 10: after the previewed move, my weakest tile and how many tiles a cut there takes */
+  atRisk?: { key: string; loss: number } | null;
 };
 export const NO_OVERLAY: Overlay = {
   targets: null,
@@ -97,7 +103,7 @@ export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
   private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'marks' | 'over' | 'draw' | 'fx', SVGGElement>;
+  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
   private drawHandlers: DrawHandlers | null = null;
@@ -211,9 +217,10 @@ export class BoardView {
     this.keys = coords.map(coordKey);
     const xs = this.keys.map((k) => centerOf(k).x);
     const ys = this.keys.map((k) => centerOf(k).y);
-    const pad = S * 1.6 + 6; // room for the board's plate and frame
-    const [x0, y0] = [Math.min(...xs) - pad, Math.min(...ys) - pad];
-    svg.setAttribute('viewBox', `${x0} ${y0} ${Math.max(...xs) - Math.min(...xs) + 2 * pad} ${Math.max(...ys) - Math.min(...ys) + 2 * pad}`);
+    // room for the board's plate and its pins, and no more (the layout uses the same numbers: logic/layout.ts boardUnits)
+    const { padX, padY } = boardPad(S);
+    const [x0, y0] = [Math.min(...xs) - padX, Math.min(...ys) - padY];
+    svg.setAttribute('viewBox', `${x0} ${y0} ${Math.max(...xs) - Math.min(...xs) + 2 * padX} ${Math.max(...ys) - Math.min(...ys) + 2 * padY}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
@@ -279,8 +286,24 @@ export class BoardView {
     });
     const ring = (grow: number) => corners.map(({ x, y, d }) => `${(x * (1 + grow / d)).toFixed(1)},${(y * (1 + grow / d)).toFixed(1)}`).join(' ');
     const plate = el('g', { class: 'l-plate' }, svg);
+    // overhaul item 12: the board as a place: a ground plate lit from the top left (one light
+    // for the whole game), a lighter edge where the light catches it, a darker far side
+    const sun = el('linearGradient', { id: this.id('sun'), x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
+    el('stop', { offset: 0, class: 'sun-hi' }, sun);
+    el('stop', { offset: 0.5, class: 'sun-mid' }, sun);
+    el('stop', { offset: 1, class: 'sun-lo' }, sun);
+    const edge = el('linearGradient', { id: this.id('sun-edge'), x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
+    el('stop', { offset: 0, class: 'edge-hi' }, edge);
+    el('stop', { offset: 0.55, class: 'edge-lo' }, edge);
     el('polygon', { points: ring(S * 1.35), class: 'plate' }, plate);
+    el('polygon', { points: ring(S * 1.35), class: 'plate-sun', fill: this.url('sun') }, plate);
+    el('polygon', { points: ring(S * 1.35 - 1.5), class: 'plate-edge', stroke: this.url('sun-edge') }, plate);
     el('polygon', { points: ring(S * 1.35), class: 'plate-rim' }, plate);
+    if (look.textures) {
+      // soil grain in the empty hexes: a few specks, the same everywhere (one pattern)
+      const soil = el('pattern', { id: this.id('soil'), width: 11, height: 11, patternUnits: 'userSpaceOnUse' }, defs);
+      for (const [cx, cy, r] of [[2, 3, 0.8], [7.5, 1.5, 0.55], [5, 8, 0.7], [9.5, 6.5, 0.45], [1, 9.5, 0.5]] as const) el('circle', { cx, cy, r, class: 'soil-speck' }, soil);
+    }
     for (const { x, y, d } of corners) el('circle', { cx: x * (1 + (S * 1.35) / d), cy: y * (1 + (S * 1.35) / d), r: 2.2, class: 'plate-pin' }, plate);
 
     this.layers = {
@@ -289,7 +312,9 @@ export class BoardView {
       tiles: el('g', { class: 'l-tiles' }, svg),
       glow: el('g', { class: 'l-glow' }, svg),
       veins: el('g', { class: 'l-veins' }, svg),
+      amb: el('g', { class: 'l-amb', 'aria-hidden': 'true' }, svg),
       marks: el('g', { class: 'l-marks' }, svg),
+      dim: el('g', { class: 'l-dim', 'aria-hidden': 'true' }, svg),
       over: el('g', { class: 'l-over' }, svg),
       draw: el('g', { class: 'l-draw' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
@@ -299,6 +324,7 @@ export class BoardView {
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: `hex ${t}` }, g);
       drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
+      if (t === 'normal' && look.textures) el('path', { d: hexPath(key, S - 3, style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
       if (t === 'rich') {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
@@ -439,6 +465,13 @@ export class BoardView {
       }
     }
     for (const key of o.cutKeys) el('path', { d: hexPath(key, S * 0.7, st.tileShape), class: 'will-cut' }, over);
+    // overhaul item 10: the veins the move would grow, drawn on before the tiles
+    for (const [a, b] of o.ghostLinks ?? []) {
+      const A = centerOf(a);
+      const B = centerOf(b);
+      const t = 0.28;
+      el('path', { d: `M${(A.x + (B.x - A.x) * t).toFixed(1)},${(A.y + (B.y - A.y) * t).toFixed(1)}L${(B.x - (B.x - A.x) * t).toFixed(1)},${(B.y - (B.y - A.y) * t).toFixed(1)}`, class: 'ghost-vein' }, over);
+    }
     for (const g of o.ghosts) {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       el('path', { d: hexPath(g.key, S * tileScale(g.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
@@ -452,6 +485,9 @@ export class BoardView {
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
     if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, st.tileShape), class: 'selected' }, over);
+    // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
+    if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
+    if (o.cutKeys.length > 0 && o.ghosts.length > 0) this.badge(over, [...o.cutKeys].sort()[0]!, `−${o.cutKeys.length}`, 'opp cut-gain');
     for (const w of o.weak) this.badge(over, w.key, `−${w.loss}`, 'weak');
     if (o.pulse && !o.weak.some((w) => w.key === o.pulse!.key)) this.badge(over, o.pulse.key, `−${o.pulse.loss}`, 'weak pulse');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
@@ -690,7 +726,7 @@ export class BoardView {
     }
   }
 
-  private badge(parent: SVGGElement, key: string, text: string, kind: 'weak' | 'opp' | 'weak pulse') {
+  private badge(parent: SVGGElement, key: string, text: string, kind: 'weak' | 'opp' | 'weak pulse' | 'weak at-risk' | 'opp cut-gain') {
     const { x, y } = centerOf(key);
     const g = el('g', { class: `badge ${kind}` }, parent);
     el('path', { d: hexPath(key, S - 3, this.style.tileShape), class: 'badge-ring' }, g);
@@ -700,6 +736,45 @@ export class BoardView {
 
   tile(key: string) {
     return this.tileEls.get(key);
+  }
+
+  /** Overhaul item 19: dim the board except these hexes (null: no dimming). */
+  focus(keys: readonly string[] | null) {
+    const g = this.layers.dim;
+    if (!keys || keys.length === 0) {
+      g.classList.remove('on');
+      return;
+    }
+    const vb = this.svg.viewBox.baseVal;
+    const holes = keys.map((k) => hexPath(k, S + 1, this.style.tileShape)).join('');
+    g.replaceChildren();
+    el('path', { d: `M${vb.x},${vb.y}h${vb.width}v${vb.height}h${-vb.width}Z${holes}`, 'fill-rule': 'evenodd', class: 'dim-mask' }, g);
+    g.classList.add('on');
+  }
+
+  /** Overhaul item 16: ambient life (pure CSS animations of a few small shapes; see logic/ambient.ts). */
+  ambient(plan: AmbientPlan | null) {
+    const g = this.layers.amb;
+    g.replaceChildren();
+    this.svg.classList.toggle('sway', !!plan?.sway);
+    if (!plan) return;
+    for (const p of plan.pulses) {
+      const A = centerOf(p.from);
+      const B = centerOf(p.to);
+      el('path', { d: `M${A.x.toFixed(1)},${A.y.toFixed(1)}L${B.x.toFixed(1)},${B.y.toFixed(1)}`, class: 'amb-pulse', pathLength: 100, style: `animation-delay:${p.delay}s` }, g);
+    }
+    for (const gl of plan.glints) {
+      const { x, y } = centerOf(gl.key);
+      el('path', { d: star(x - S * 0.3, y - S * 0.35, 5), class: 'amb-glint', style: `animation-delay:${gl.delay}s` }, g);
+    }
+    for (const b of plan.bubbles) {
+      const { x, y } = centerOf(b.key);
+      el('circle', { cx: (x + b.dx * S).toFixed(1), cy: (y + b.dy * S).toFixed(1), r: 2.2, class: 'amb-bubble', style: `animation-delay:${b.delay}s` }, g);
+    }
+    for (const e of plan.embers) {
+      const { x, y } = centerOf(e.key);
+      el('circle', { cx: (x + e.dx * S).toFixed(1), cy: (y - S * 0.2).toFixed(1), r: 1.1, class: 'amb-ember', style: `animation-delay:${e.delay}s` }, g);
+    }
   }
   veinsTouching(keys: Set<string>) {
     return this.veinEls.filter((v) => keys.has(v.a) || keys.has(v.b)).map((v) => v.el);

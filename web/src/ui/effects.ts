@@ -118,7 +118,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ opacity: 0, transform: 'translate(-50%, 6px)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.1 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, 0)' }], { duration: ms, fill: 'forwards' }), d, ms);
   }
 
-  function banner(text: string, tone?: 'you' | 'bot' | 'big') {
+  function banner(text: string, tone?: 'you' | 'bot' | 'big' | 'calm') {
     const b = $('banner');
     b.textContent = text;
     b.className = `banner ${tone ?? 'you'}`;
