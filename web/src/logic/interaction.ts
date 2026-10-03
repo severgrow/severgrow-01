@@ -38,6 +38,9 @@ export const kindLabel = (kind: string): string => {
   return 'Pick a tile to rot';
 };
 
+/** The short label for a move button when several share the row ("Line of 3"; the full words stay its accessible name). */
+export const shortKindLabel = (kind: string): string => kindLabel(kind).replace(/^Grow a (\w)/, (_, c: string) => c.toUpperCase());
+
 /** True when card `b` is a copy of card `a` (same suit and number): copies play the same. */
 const sameCard = (v: View, a: number, b: number) => {
   const x = v.hand.find((c) => c.id === a);

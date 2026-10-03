@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
@@ -1718,13 +1718,16 @@ function renderControls(v: View, advice: Advice | null) {
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
-    for (const k of moveButtons(v, legal, sel)) {
+    const kindButtons = moveButtons(v, legal, sel);
+    for (const k of kindButtons) {
       const on = sel.kind === k.kind;
-      const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+      // two or more share the row: short words, so they fit beside the piles on a phone
+      const b = button(kindButtons.length > 1 ? shortKindLabel(k.kind) : k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         session!.tapKind(k.kind);
         render();
       });
       b.dataset.kind = k.kind;
+      if (kindButtons.length > 1) b.setAttribute('aria-label', k.label);
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }

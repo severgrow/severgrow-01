@@ -1206,10 +1206,18 @@ svg.usable .hex-cell {
 }
 .moves {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  /* one line, never wrapping up under the forecast; a crowded row scrolls sideways */
+  flex-wrap: nowrap;
+  justify-content: safe center;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
   gap: 6px;
   min-height: 44px;
+}
+.moves > * {
+  flex: none;
 }
 .moves .btn {
   padding: 0 12px;
@@ -4383,10 +4391,17 @@ html.final-turns .game::after {
 .hand .card.fruit.dim {
   opacity: 0.55;
 }
+.piles {
+  position: relative;
+}
+/* a small line just under the two piles: it takes no room from the move buttons */
 .fruit-chip {
-  align-self: center;
-  font-size: 0.72rem;
-  padding: 2px 8px;
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  padding: 0 6px;
   border-radius: 999px;
   border: 1px solid var(--c-line);
   color: var(--c-muted, var(--c-text));
@@ -4406,4 +4421,16 @@ html.final-turns .game::after {
   stroke-dasharray: 5 3;
   fill: #efe7cf;
   fill-opacity: 0.2;
+}
+@media (max-width: 420px) {
+  .moves {
+    gap: 4px;
+  }
+  .moves .btn {
+    padding: 0 10px;
+    font-size: 0.85rem;
+  }
+  .moves .btn.link {
+    padding: 0 4px;
+  }
 }

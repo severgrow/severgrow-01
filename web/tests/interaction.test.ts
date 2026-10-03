@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { moveCards, moveHexes, touchesHex } from '../src/names.js';
-import { EMPTY_SEL, growControls, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
+import { EMPTY_SEL, growControls, isBoardAction, moveButtons, options, playNow, selFor, tapCard, tapKind, kindLabel, kindOf, shortKindLabel, kindsAvailable, pendingAction, targetHexes, usableCards } from '../src/logic/interaction.js';
 import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
@@ -68,6 +68,9 @@ describe('tap a card, then a hex', () => {
   it('move kinds have plain names', () => {
     expect(kindLabel('line-3')).toBe('Grow a line of 3');
     expect(kindLabel('clump-4')).toBe('Grow a clump of 4');
+    // several buttons in a row: short words (the full ones stay the accessible name)
+    expect(shortKindLabel('line-3')).toBe('Line of 3');
+    expect(shortKindLabel('clump-4')).toBe('Clump of 4');
     expect(kindLabel('sprout')).toBe('Sprout one tile');
   });
 
