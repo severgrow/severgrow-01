@@ -798,9 +798,10 @@ async function playStep(step: Step, my: number) {
       const mine = step.player === HUMAN;
       const mo = momentOf(step);
       const victim = Object.values(queue.board).filter((t) => t && t.owner === step.player && !t.root).length;
+      // the caption comes first, so it is there however the cut ends (played, skipped, interrupted)
+      caption(captionFor(step, HUMAN)!, step.origin, mine ? 'bad' : 'good');
       await playCut({ origin: step.origin, keys: step.keys, victimTiles: victim, mine }, mo.first || mo.chain === 0, mo.chain, f, my);
       if (my !== epoch) return;
-      caption(captionFor(step, HUMAN)!, step.origin, mine ? 'bad' : 'good');
       show();
       return;
     }
