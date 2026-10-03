@@ -380,7 +380,7 @@ describe('legacyV03 reproduces v0.3.1 byte-for-byte', () => {
     );
   const hash = (x: unknown) => createHash('sha256').update(canonical(x)).digest('hex');
   const NEW_STATE_KEYS = ['sproutsThisTurn', 'dealAttempt', 'strengthenUsed'];
-  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer', 'unbiasedShuffle', 'allowStrengthen', 'strengthenLimitPerGame', 'fruitSacrifice', 'fruitOnlyWhenBehind'];
+  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer', 'allowStrengthen', 'strengthenLimitPerGame', 'fruitSacrifice', 'fruitOnlyWhenBehind'];
   const toV03 = (s: State) => {
     const { history: _h, ...rest } = s;
     const out: Record<string, unknown> = { ...rest };

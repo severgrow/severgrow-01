@@ -3,7 +3,7 @@
 import { viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { OPP, moveWords } from '../../../src/strings.js';
+import { OPP, SPROUT } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -46,7 +46,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
   if (before.actor === me) {
     if (a.t === 'MeldRun') return `You grew a line of ${a.cards.length}${tail}`;
     if (a.t === 'MeldSet') return `You grew a clump of ${a.cards.length}${tail}`;
-    if (a.t === 'Sprout') return `${moveWords(before.config).youDid(hn(a.coord))}${tail}`;
+    if (a.t === 'Sprout') return `${SPROUT.youDid(hn(a.coord))}${tail}`;
     return `You: ${moveSentence(viewFor(before, me), a)}`;
   }
   const hand = before.hands[before.actor];
@@ -59,7 +59,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'MeldSet':
       return `${OPP.The} grew a clump of ${a.cards.length} (${a.cards.map(name).join(', ')})${tail}`;
     case 'Sprout':
-      return `${moveWords(before.config).oppDid(name(a.card), hn(a.coord))}${tail}`;
+      return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':
       return `${OPP.The} finished playing cards`;
     case 'Discard':
@@ -78,11 +78,11 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** UX pass (result screen): what I did with the one-card move this game, or null if nothing. */
-export const moveSummary = (history: readonly Event[], me: Player, config: { ruleset?: string }): string | null => {
+export const moveSummary = (history: readonly Event[], me: Player): string | null => {
   const grown = history.filter((e) => e.t === 'Sprout' && e.player === me).length;
   const strong = history.filter((e) => e.t === 'Strengthen' && e.player === me).length;
   const parts: string[] = [];
-  if (grown) parts.push(config.ruleset === 'seed' ? `planted ${count(grown, 'seed', 'seeds')}` : `sprouted ${count(grown, 'tile', 'tiles')}`);
+  if (grown) parts.push(`sprouted ${count(grown, 'tile', 'tiles')}`);
   if (strong) parts.push(`strengthened ${count(strong, 'tile', 'tiles')}`);
   return parts.length ? `You ${parts.join(' and ')}.` : null;
 };

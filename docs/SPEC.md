@@ -12,6 +12,20 @@ default (see the appendix).
 
 ## Changelog
 
+**v0.6: Seed mode removed, Fruit cards** (rules version `v0.6-fruit-cards`, bot version `bots-v0.8`)
+- **Seed mode is gone.** The one-card move is the Sprout everywhere: a card's number becomes the
+  tile, straight away. The `ruleset` key, `RULESETS`, Seed tiles and every Seed word are deleted.
+- **Fruit cards replace the old 3-tile Fruit.** The deck gains `fruitCardCount` (4) special
+  cards: 72 numbered cards (8 of each number 1-9) plus 4 Fruit cards = 76. A Fruit card has no
+  suit and no number; it cannot be melded, sprouted or used to strengthen. Whenever I hold one,
+  during my Grow step, I may play it on any opponent non-root tile that one of my tiles touches
+  (my root counts, `fruitRootCountsAsTouch`): the tile is removed whatever its strength, the card
+  leaves the game, then Sever (both players) and Strangle. No per-turn or per-game limit. A
+  Fruit card may be thrown like any card. Action `PlayFruit { card, target }`, event `FruitCard`.
+- **Empty turns are fast** (page): with nothing to grow, Grow is skipped (a setting).
+- **No old-version support:** only the current rules and bots are kept (older recordings,
+  tickets and saves no longer replay). See "Retired rules" at the end.
+
 **Seed A/B test** (rules versions `v0.5-fruit-strengthen` = Sprout, unchanged, and `v0.5-seed`)
 - **Why.** The owner wants to play both one-card moves side by side and pick one. Nothing
   else changes; both rulesets are the same game.
@@ -566,3 +580,19 @@ the boundary are picked by the opponent in `ROT_PICK`. Then Sever and Strangle.
 
 ### A.5 Fruit
 No longer parked: back in v0.5 and on by default (section 7.8).
+
+---
+
+## Retired rules (descriptions only, v0.6)
+
+- **Seed mode** (v0.5 A/B test): the one-card move put a tile of strength 1 whatever the card
+  (marked as a seed until strengthened), and Strengthen had no per-game limit so a seed could be
+  grown later. Retired in favour of the Sprout.
+- **3-tile Fruit** (v0.5): once per game, give up 3 of my own connected tiles to remove one
+  opponent tile next to them, whatever its strength (`fruitPerPlayer`, `fruitSacrifice`,
+  `fruitOnlyWhenBehind`). Replaced by Fruit cards.
+- **Older rules versions** (`v0.4-defaults-2`, `v0.5-fruit-strengthen`, `v0.5-seed`) and the
+  frozen older bots (`bots-v0.5`, `bots-v0.7`): no longer kept; recordings made under them no
+  longer replay.
+- **The biased shuffle** (`unbiasedShuffle: false`, only used by v0.4): removed; the shuffle is
+  always unbiased.

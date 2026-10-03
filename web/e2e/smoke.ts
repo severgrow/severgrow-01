@@ -47,7 +47,7 @@ const idle = async (page: Page, ms = 15000) => {
 const boardTiles = (page: Page) => page.locator('.l-tiles .tile').count();
 const stateTiles = (page: Page) => page.evaluate(() => Object.values((window as unknown as { __severgrow: Hook }).__severgrow.state()!.board).filter((t) => t).length);
 
-const openPage = async (theme: string, size: keyof typeof SIZES, settings: Record<string, unknown> = {}, save?: State) => {
+const openPage = async (theme: string, size: keyof typeof SIZES, settings: Record<string, unknown> = {}, save?: State, query = '') => {
   const page = await browser.newPage({ viewport: SIZES[size], deviceScaleFactor: 1 });
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -64,14 +64,14 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
     },
     [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
   );
-  await page.goto(BASE);
+  await page.goto(BASE + query);
   await page.waitForTimeout(250);
   return { page, errors };
 };
 
 /** Play → level screen → the given level (default 7): starts a new game. */
 const newGame = async (page: Page, level = 7) => {
-  await page.click('#menu-sprout');
+  await page.click('#menu-new');
   await page.click(`#level-grid [data-level="${level}"]`);
 };
 
@@ -542,11 +542,14 @@ clearTimeout(juiceTimer);
 // Polish pass 3: the word "bot" never reaches the player. Scans visible text, aria-labels,
 // alt and title text, the page title and description, in every state the page can reach.
 const BOT_ALLOWLIST: readonly string[] = []; // intentional exceptions: none
+// Fruit cards task, Step 1: Seed mode is gone, so the whole words "seed", "seeds", "seeded",
+// "plant" and "planted" never show either. Allowlist: only the hidden ?debug=1 page.
+const SEED_RE = '\\b(?:seeds?|seeded|plant|planted)\\b';
 // (a plain string: tsx would wrap a named function in a helper the page does not have)
-const botWords = (page: Page): Promise<string[]> =>
+const bannedWords = (page: Page, re: string, allow: readonly string[]): Promise<string[]> =>
   page.evaluate(`(() => {
-    const allow = ${JSON.stringify(BOT_ALLOWLIST)};
-    const re = /\\bbots?\\b/i;
+    const allow = ${JSON.stringify(allow)};
+    const re = new RegExp(${JSON.stringify(re)}, 'i');
     const found = [];
     const push = (where, t) => {
       if (t && re.test(t) && !allow.some((a) => t.includes(a))) found.push(where + ': ' + t.trim().slice(0, 80));
@@ -558,9 +561,15 @@ const botWords = (page: Page): Promise<string[]> =>
       for (const a of ['aria-label', 'alt', 'title', 'placeholder']) push(a, el.getAttribute(a));
     return found;
   })()`);
+const botWords = (page: Page) => bannedWords(page, '\\bbots?\\b', BOT_ALLOWLIST);
+const seedWords = (page: Page) => bannedWords(page, SEED_RE, []);
 {
   const found: string[] = [];
-  const scan = async (page: Page, where: string) => found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));
+  const seeds: string[] = [];
+  const scan = async (page: Page, where: string) => {
+    found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));
+    seeds.push(...(await seedWords(page)).map((f) => `${where} · ${f}`));
+  };
   const { page, errors } = await openPage('soil', 'phone', { speed: 'fast' });
   await scan(page, 'menu');
   await page.click('#menu-howto');
@@ -572,7 +581,7 @@ const botWords = (page: Page): Promise<string[]> =>
   await page.waitForTimeout(200);
   await scan(page, 'settings');
   await page.locator('#sheet-settings [data-close]').click().catch(() => {});
-  await page.click('#menu-sprout');
+  await page.click('#menu-new');
   await page.waitForTimeout(200);
   await scan(page, 'level picker');
   await page.click('#level-grid [data-level="7"]');
@@ -636,6 +645,18 @@ const botWords = (page: Page): Promise<string[]> =>
   else found.push('(the scan did not reach game over)');
   await endPage.close();
   check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
+  check('the words "seed" and "plant" never show: text, aria-labels, alt and title text, every state', seeds.length === 0, seeds.slice(0, 3).join(' | '));
+  // the allowlisted ?debug=1 page shows the game's random number, and the normal page does not
+  const dbg = await openPage('soil', 'phone', { speed: 'skip' }, undefined, '?seed=4242&debug=1');
+  await idle(dbg.page).catch(() => {});
+  const corner = await dbg.page.locator('#debug-corner:visible').textContent().catch(() => null);
+  await dbg.page.close();
+  const plain = await openPage('soil', 'phone', { speed: 'skip' }, undefined, '?seed=4242');
+  await idle(plain.page).catch(() => {});
+  const hidden = await plain.page.locator('#debug-corner').isHidden();
+  const plainSeeds = await seedWords(plain.page);
+  await plain.page.close();
+  check('the ?debug=1 page alone shows the random number', !!corner && corner.includes('4242') && hidden && plainSeeds.length === 0, corner ?? 'no debug corner');
 }
 
 await browser.close();

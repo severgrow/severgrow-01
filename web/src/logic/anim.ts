@@ -8,7 +8,7 @@ import { cardName } from '../../../src/playtest/names.js';
 import { OPP } from '../../../src/strings.js';
 
 export type Board = Record<string, Tile | null>;
-export type GrowTile = { key: string; strength: number; replaced: boolean; seed?: true };
+export type GrowTile = { key: string; strength: number; replaced: boolean };
 
 export type Step =
   | { k: 'draw'; player: Player; from: 'deck' | 'discard'; card?: Card }
@@ -51,8 +51,7 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
           const key = coordKey(c);
           const now = after.board[key];
           const strength = now && now.owner === e.player ? now.strength : e.t === 'MeldSet' ? Math.min(...ranks) : ranks[i]!;
-          // Seed ruleset: a planted seed is shown as a seed from the first frame
-          return { key, strength, replaced: before.board[key]?.owner === opp(e.player), ...(now?.seed && now.owner === e.player ? { seed: true as const } : {}) };
+          return { key, strength, replaced: before.board[key]?.owner === opp(e.player) };
         });
         hits.push(...tiles.filter((t) => t.replaced).map((t) => t.key), ...tiles.map((t) => t.key));
         steps.push({ k: 'grow', style: e.t === 'MeldRun' ? 'line' : e.t === 'MeldSet' ? 'bloom' : 'sprout', player: e.player, tiles });
@@ -106,7 +105,7 @@ export const applyStep = (board: Board, s: Step): Board => {
   switch (s.k) {
     case 'grow': {
       const next = { ...board };
-      for (const t of s.tiles) next[t.key] = t.seed ? { owner: s.player, strength: t.strength, seed: true } : { owner: s.player, strength: t.strength };
+      for (const t of s.tiles) next[t.key] = { owner: s.player, strength: t.strength };
       return next;
     }
     case 'sever':
@@ -117,7 +116,6 @@ export const applyStep = (board: Board, s: Step): Board => {
     }
     case 'strengthen': {
       const t = board[s.key];
-      // a strengthened seed is a normal tile from this step on (the seed mark goes)
       return t ? { ...board, [s.key]: { owner: t.owner, strength: s.to, ...(t.root ? { root: true } : {}) } } : board;
     }
     case 'fruit': {

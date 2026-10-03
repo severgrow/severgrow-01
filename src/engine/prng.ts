@@ -37,21 +37,11 @@ export const boundedInt = (next: () => number, n: number, range = TWO32): number
 /** An exactly uniform integer in [0, n) (v0.5; see boundedInt). */
 export const randomInt = (rng: Rng, n: number): number => boundedInt(() => rng() * TWO32, n);
 
-/** The pre-v0.5 method, floor(rng() * n): kept so earlier rules versions replay exactly. */
-export const randomIntLegacy = (rng: Rng, n: number): number => {
-  if (!Number.isInteger(n) || n < 1) throw new RangeError(`randomInt: invalid n ${n}`);
-  return Math.floor(rng() * n);
-};
-
-/**
- * Fisher-Yates shuffle. Returns a new array; the input is not mutated. `unbiased` picks
- * the random-integer method (false only for rules versions before v0.5).
- */
-export const shuffle = <T>(items: readonly T[], rng: Rng, unbiased = true): T[] => {
+/** Fisher-Yates shuffle with exactly uniform picks. Returns a new array; the input is not mutated. */
+export const shuffle = <T>(items: readonly T[], rng: Rng): T[] => {
   const out = [...items];
-  const pick = unbiased ? randomInt : randomIntLegacy;
   for (let i = out.length - 1; i > 0; i--) {
-    const j = pick(rng, i + 1);
+    const j = randomInt(rng, i + 1);
     const tmp = out[i]!;
     out[i] = out[j]!;
     out[j] = tmp;

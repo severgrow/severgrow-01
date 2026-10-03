@@ -11,7 +11,7 @@ import type { Card, RulesConfig, State, Tile } from './types.js';
  * flipped to start the discard pile. Nothing is reordered, redealt or balanced.
  */
 export const dealOpening = (seed: number, config: RulesConfig): { hands: [Card[], Card[]]; deck: Card[]; discard: Card[] } => {
-  const deck = shuffleDeck(createCards(config), seed, config.unbiasedShuffle !== false);
+  const deck = shuffleDeck(createCards(config), seed);
   const p1 = drawFromDeck(deck, config.handSize);
   const p2 = drawFromDeck(p1.deck, config.handSize);
   const flip = drawFromDeck(p2.deck, 1);

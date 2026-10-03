@@ -19,7 +19,7 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
   if (detail === 'normal') warmPhotosNow();
   const page = document.createElement('main');
   page.className = 'lab';
-  page.innerHTML = `<h1>Material lab</h1><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a seed of each side between them. Detail: ${detail}.</p>`;
+  page.innerHTML = `<h1>Material lab</h1><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a lone tile of each side between them. Detail: ${detail}.</p>`;
   const R = 5;
   const config = { ...newGame(1).config, boardRadius: R };
   const terrain: Record<string, Terrain> = Object.fromEntries(allCoords(R).map((c) => [coordKey(c), 'normal' as Terrain]));
@@ -49,9 +49,6 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     ...[-4, -3, -2].map((q) => ({ key: k(q, 0), owner: 0 as Player, age: -2 - q })),
     ...[2, 3, 4].map((q) => ({ key: k(q, 0), owner: 1 as Player, age: q - 2 })),
   ];
-  // Seed A/B test: a seed of each side between the two chains
-  board[k(-1, 0)] = { owner: 0, strength: 1, seed: true };
-  board[k(1, 0)] = { owner: 1, strength: 1, seed: true };
   // the neighbours board: strengths from a fixed pattern (never random), moss on the left
   // half, lava on the right, so the two meet down the middle
   const allNormal: Record<string, Terrain> = Object.fromEntries(allCoords(R).map((c) => [coordKey(c), 'normal' as Terrain]));

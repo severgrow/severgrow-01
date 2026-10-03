@@ -11,7 +11,6 @@ export const LEGACY_V03: Partial<RulesConfig> = {
   copiesPerCard: 2,
   sproutsPerTurn: 0,
   allowStrengthen: false,
-  unbiasedShuffle: false,
   maxTurnsPerPlayer: 0,
   rotEnabled: true,
   knockEnabled: true,

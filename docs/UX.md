@@ -446,7 +446,8 @@ plain bold text, never shaped like buttons.
 
 ## UX pass (after the Seed A/B test)
 
-Fifteen small changes to the look and feel; no rule changes.
+Fifteen small changes to the look and feel; no rule changes. (v0.6: Seed mode is retired, so items
+4, 7, 11, 12, 13 and 14's seed wording, and the version chip, are gone; see SPEC "Retired rules".)
 
 1. **Turn pill on one line**: "Turn 6/30 · Level 8" (it used to wrap "Level / 8").
 2. **Scars fade**: what a cut-off tile leaves is drawn fainter each turn (100%, 60%, 30%), and the
@@ -467,7 +468,7 @@ Fifteen small changes to the look and feel; no rule changes.
 14. **What you did with the move** on the result screen: "You planted 6 seeds and strengthened 4 tiles."
 15. **Continue says where you left off**: version, level and turn.
 
-Checked by `web/e2e/seed-ab.ts` (25 checks) and unit tests (stats per version, move summary).
+Was checked by `web/e2e/seed-ab.ts` (deleted with Seed mode in v0.6).
 
 ## UI overhaul, Part 1 (twenty improvements)
 
@@ -506,8 +507,7 @@ One set of rules for every screen:
 4. **Toolbar under the board:** "My weak spots", "Their weak links" (on/off), "Replay" (only when
    there is a turn to replay), "Undo", "Skip" (only while something animates).
 5. **Header:** one clock only. The turn count was removed (your choice); the deck count is the
-   game's clock. The "Only 1 card left" pill is gone (the deck shows it). The version chip
-   (SPROUT / SEED: which rules this game uses) sits with the three steps.
+   game's clock. The "Only 1 card left" pill is gone (the deck shows it). (The version chip was removed with Seed mode in v0.6.)
 6. **Deck and throw pile** (`logic/piles.ts`): 48px+ targets; the stack is as thick as the pile is
    big; the count sits beside the label, clear of the art; they glow in the Draw step; the last
    card turns gold and the label says "Last card"; drawing arcs the card into the hand;
@@ -530,8 +530,8 @@ One set of rules for every screen:
 12. **The board as a place:** a ground plate lit from the top left, a lighter edge, a soft shadow,
     a fine soil grain in empty hexes (Material detail Normal only).
 13. **Hint line** (`logic/hint.ts`): one short line (it always fits a 360px phone) with a tiny
-    arrow toward where to tap; it says why a move isn't available. The single-tile move keeps
-    its version's word (Sprout / Seed): no renaming.
+    arrow toward where to tap; it says why a move isn't available. The single-tile move is
+    always called Sprout (one constant, `SPROUT`).
 14. **Score race** (`logic/race.ts`): a slim tug-of-war bar under the header; scores count up and
     bounce; tap a score for what it is made of.
 15. **Final turns** (`logic/endgame.ts`): when 3 of your turns are left (turn limit) or the deck

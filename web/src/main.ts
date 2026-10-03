@@ -2,8 +2,8 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { RULESETS, coordKey, newGame, parseKey, rulesetOf, viewFor } from '../../src/engine/index.js';
-import type { Action, Player, Ruleset, State, View } from '../../src/engine/index.js';
+import { coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -54,7 +54,7 @@ import type { CutInput } from './logic/cut.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
-import { STATS_KEY, parseStats, recordResult, statsLine, versionLine } from './logic/stats.js';
+import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
@@ -90,7 +90,8 @@ import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { GAME_TITLE, MOVE_WORDS, OPP, moveWords, versionLabel } from '../../src/strings.js';
+import { GAME_TITLE, OPP, SPROUT } from '../../src/strings.js';
+import { debugLines, isDebug } from './logic/debug.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -312,7 +313,6 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   $('game').hidden = name !== 'game';
   if (name === 'levels') {
     renderLevelGrid();
-    $('levels-version').textContent = versionLabel({ ruleset: pickedRuleset });
   }
   if (name === 'menu') {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
@@ -322,12 +322,12 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     if (canContinue) {
       const s = saved!.state;
       const turnNo = Math.ceil(s.turnNumber / 2);
-      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">${versionLabel(s.config)} · Level ${saved!.level} · turn ${turnNo}</span>`;
+      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">Level ${saved!.level} · turn ${turnNo}</span>`;
       $('menu-continue').classList.add('version-btn');
     } else $('menu-continue').textContent = 'Continue';
-    for (const r of ['sprout', 'seed']) {
-      $(`menu-${r}`).classList.toggle('primary', !canContinue);
-      $(`menu-${r}`).classList.toggle('ghost', canContinue);
+    {
+      $('menu-new').classList.toggle('primary', !canContinue);
+      $('menu-new').classList.toggle('ghost', canContinue);
     }
     // First visit: point new players at the tutorial.
     const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
@@ -335,13 +335,11 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     $('menu-tutorial').classList.toggle('primary', firstVisit);
     $('menu-tutorial').classList.toggle('ghost', !firstVisit);
     if (firstVisit) {
-      for (const r of ['sprout', 'seed']) {
-        $(`menu-${r}`).classList.remove('primary');
-        $(`menu-${r}`).classList.add('ghost');
-      }
+      $('menu-new').classList.remove('primary');
+      $('menu-new').classList.add('ghost');
     }
-    // the overall record, then (Seed A/B test) the record in each version played
-    $('menu-stats').textContent = [statsLine(stats), versionLine(stats)].filter(Boolean).join('\n');
+    // the overall record
+    $('menu-stats').textContent = statsLine(stats);
   }
   $('gameover').hidden = true;
   render();
@@ -363,17 +361,16 @@ function sheet(id: string | null) {
 function renderHowTo() {
   const cfg = session?.state.config;
   const sprout = (cfg?.sproutsPerTurn ?? 1) > 0;
-  const words = moveWords(cfg ?? { ruleset: pickedRuleset });
-  const seedGame = words === MOVE_WORDS.seed;
+  const words = SPROUT;
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? (cfg ? words.howto : `${MOVE_WORDS.sprout.howto} <i>In the Seed version</i> that card plants a seed worth <b>1</b> instead, whatever its number; strengthen it later with a higher card.`) : ''}</p>`,
+    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? words.howto : ''}</p>`,
     `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
-    `<p><b>Strength:</b> a tile is as strong as its card${seedGame ? ' (a seed is always 1)' : ''}. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
+    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
-      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit.${seedGame ? ' In the Seed version there is no limit per game.' : ''} ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
+      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((cfg?.fruitPerPlayer ?? 1) > 0
       ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. To use it, tap an ${OPP.noun} tile and choose “Fruit this tile”: the game suggests which of your tiles to give up, and you can change them. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
@@ -383,7 +380,6 @@ function renderHowTo() {
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
-    ...(seedGame ? ['<p class="legend">A small seed in dark soil is a fresh seed, worth 1. Strengthen it and it grows into a normal tile.</p>'] : []),
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
   ].join('');
 }
@@ -408,7 +404,7 @@ function renderLevelGrid() {
         sound.unlock();
         settings = { ...settings, level: lv };
         saveSettings();
-        startGame(randomSeed(), lv, pickedRuleset);
+        startGame(randomSeed(), lv);
       });
       return b;
     }),
@@ -502,9 +498,6 @@ function beginSession(state: State, c: CoachProgress | null) {
   scheduleBot();
 }
 
-/** The version picked on the menu (Seed A/B test); a rematch keeps the game's own version. */
-let pickedRuleset: Ruleset = 'sprout';
-const currentRuleset = (): Ruleset => (session ? rulesetOf(session.state.config) : pickedRuleset);
 
 /** Part 3 G: the opening deal: the hand flies in from the deck, card by card (Eye candy). */
 function dealIn() {
@@ -518,12 +511,11 @@ function dealIn() {
   });
 }
 
-function startGame(seed: number, level: Level = settings.level, ruleset: Ruleset = currentRuleset()) {
+function startGame(seed: number, level: Level = settings.level) {
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  pickedRuleset = ruleset;
-  const state = newGame(seed, RULESETS[ruleset]);
-  log = [`New game (${versionLabel(state.config)}) against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
+  const state = newGame(seed);
+  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
   revealToolLabels();
@@ -569,7 +561,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER') {
-      stats = recordResult(stats, p.after.result, HUMAN, gameLevel, rulesetOf(p.after.config));
+      stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
   }
@@ -1222,15 +1214,6 @@ function render() {
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
-  const chip = $('version-chip');
-  const label = versionLabel(v.config);
-  if (chip.textContent !== label) {
-    // "Seed version": on narrow phones only the first word shows (CSS), so it never widens the page
-    const [word, ...rest] = label.split(' ');
-    chip.innerHTML = `<span class="vc-word">${word}</span><span class="vc-rest"> ${rest.join(' ')}</span>`;
-    chip.setAttribute('aria-label', label);
-  }
-  chip.dataset.ruleset = rulesetOf(v.config);
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
   // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
@@ -1332,9 +1315,19 @@ function renderGuide(advice: Advice | null) {
   arrow.style.top = `${rect.y}px`;
 }
 
+/** The hidden ?debug=1 corner: the only place the game's random number shows. */
+const DEBUG = isDebug(location.search);
+function renderDebug(st: State) {
+  if (!DEBUG) return;
+  const el = $('debug-corner');
+  el.hidden = false;
+  el.textContent = debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }).join('\n');
+}
+
 function renderHud() {
   if (!session) return;
   const st = session.state;
+  renderDebug(st);
   if (!busy()) shownScores = [session.view.score, session.view.opponentScore];
   $('score-you').textContent = String(shownScores[0]);
   $('score-bot').textContent = String(shownScores[1]);
@@ -1438,7 +1431,7 @@ function hintCtx(v: View): HintCtx {
     phase: v.phase,
     myTurn: v.actor === HUMAN,
     busy: busy(),
-    words: moveWords(v.config),
+    words: SPROUT,
     deckCount: v.deckCount,
     canTakeThrow: session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'),
     fruit: fruitFlow ? { step: fruitFlow.step, changing: fruitFlow.changing, picks: fruitFlow.picks.length, n: v.config.fruitSacrifice, msg: fruitMsg } : null,
@@ -1620,8 +1613,7 @@ function renderTooltip(v: View) {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      const seed = t.seed ? `<span>A fresh seed: ${mine ? 'strengthen it with any higher card' : 'worth 1 until it is strengthened'}.</span>` : '';
-      html = `<b>${name} · ${who} ${t.seed ? 'seed' : 'tile'}</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span>${seed}<span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
     }
   }
   // Polish pass 3: in my Grow step, an opponent tile's card offers Fruit (a button, or a line saying why not yet)
@@ -1702,7 +1694,7 @@ function renderControls(v: View, advice: Advice | null) {
     const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
     if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel) moves.append(button(moveWords(v.config).skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), moveWords(v.config).skipTitle));
+    if (end && !pending && grow.skipLink && !anySel) moves.append(button(SPROUT.skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
@@ -2004,7 +1996,7 @@ function renderGameOver() {
   const won = r.winner === HUMAN;
   $('go-title').textContent = won ? `You beat Level ${gameLevel}!` : resultTitle(r, HUMAN);
   // No world map yet: every game is practice.
-  $('go-sub').textContent = `${won ? moveWords(st.config).practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`} · ${versionLabel(st.config)}`;
+  $('go-sub').textContent = won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
   const target = won ? Math.min(9, gameLevel + 1) : Math.max(1, gameLevel - 1);
@@ -2030,13 +2022,10 @@ function renderGameOver() {
   $('go-cut').hidden = !session?.biggestCut;
   $('go-share').textContent = 'Share';
   $('go-reason').textContent = resultReason(r, HUMAN);
-  // UX pass: what I did with the one-card move, and (A/B test) a quick switch to the other version
-  const moves = moveSummary(st.history ?? [], HUMAN, st.config);
+  // UX pass: what I did with the one-card move
+  const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   $('go-moves').hidden = !moves;
-  const otherVersion: Ruleset = rulesetOf(st.config) === 'seed' ? 'sprout' : 'seed';
-  $('go-version').textContent = `Try the ${MOVE_WORDS[otherVersion].Name} version`;
-  $('go-version').dataset.ruleset = otherVersion;
   const part = (p: Player) => {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
@@ -2451,13 +2440,10 @@ const bind = (id: string, fn: () => void) =>
     fn();
   });
 
-// Seed A/B test: the menu offers both versions; the level screen then starts that version.
-for (const r of ['sprout', 'seed'] as const)
-  bind(`menu-${r}`, () => {
-    if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
-    pickedRuleset = r;
-    showScreen('levels');
-  });
+bind('menu-new', () => {
+  if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
+  showScreen('levels');
+});
 for (const [sel, p] of [['.hud .score.you', HUMAN], ['.hud .score.bot', BOT]] as const) {
   const el = document.querySelector<HTMLElement>(sel)!;
   el.setAttribute('role', 'button');
@@ -2543,7 +2529,7 @@ bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
   settings = { ...settings, coach: true };
   saveSettings();
-  startGame(TUTORIAL_SEED, 7, 'sprout'); // the tutorial is tuned for the classic bot (and Sprout)
+  startGame(TUTORIAL_SEED, 7); // the tutorial is tuned for the classic opponent
 });
 bind('menu-howto', () => sheet('sheet-howto'));
 bind('menu-settings', () => sheet('sheet-settings'));
@@ -2621,10 +2607,6 @@ bind('tool-skip', () => {
 bind('tool-replay', () => replayBotTurn());
 bind('tool-undo', () => undoMove());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
-bind('go-version', () => startGame(randomSeed(), gameLevel, ($('go-version').dataset.ruleset as Ruleset | undefined) ?? 'seed'));
-bind('version-chip', () => {
-  if (session) caption(moveWords(session.state.config).explain, null, 'info');
-});
 bind('go-board', () => {
   gameOverDismissed = true;
   render();

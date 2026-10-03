@@ -5,7 +5,7 @@
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
-import { RULESETS, apply, newGame, viewFor } from '../../src/engine/index.js';
+import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { fixture } from '../../tests/helpers.js';
@@ -24,7 +24,7 @@ const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { execu
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
 const midGame = (seed: number, turn: number): State => {
-  let s: State = newGame(seed, RULESETS.sprout);
+  let s: State = newGame(seed);
   let i = 0;
   while (s.phase !== 'GAME_OVER' && !(s.turnNumber >= turn && s.actor === 0 && s.phase === 'ACT')) s = apply(s, chooseLevelAction(viewFor(s, s.actor), 7, i++));
   return s;

@@ -21,7 +21,6 @@ describe('DEFAULT_CONFIG', () => {
       maxRank: 9,
       sproutsPerTurn: 1,
       maxTurnsPerPlayer: 30,
-      unbiasedShuffle: true,
       allowStrengthen: true,
       strengthenLimitPerGame: 2, // chosen by simulation (SPEC 11.3)
       fruitSacrifice: 3,

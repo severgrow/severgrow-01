@@ -45,7 +45,7 @@ const CHAIN: Record<string, [Player, number]> = { '-1,1': [0, 5], '0,1': [0, 3],
 
 describe('v0.5 config: Fruit on, Strengthen on, a fair deal, no opening guarantee', () => {
   it('has the new keys and no trace of the removed opening-combo guarantee', () => {
-    expect(DEFAULT_CONFIG).toMatchObject({ fruitPerPlayer: 1, fruitSacrifice: 3, fruitOnlyWhenBehind: false, unbiasedShuffle: true });
+    expect(DEFAULT_CONFIG).toMatchObject({ fruitPerPlayer: 1, fruitSacrifice: 3, fruitOnlyWhenBehind: false });
     expect(typeof DEFAULT_CONFIG.allowStrengthen).toBe('boolean');
     expect(Number.isInteger(DEFAULT_CONFIG.strengthenLimitPerGame)).toBe(true);
     expect('guaranteeOpeningMeld' in DEFAULT_CONFIG).toBe(false);

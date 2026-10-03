@@ -8,7 +8,7 @@ import { rankActions } from '../bots/GreedyBot.js';
 import type { MoveFacts, Scored } from '../bots/GreedyBot.js';
 import { threats } from '../bots/evaluate.js';
 import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.js';
-import { OPP, moveWords } from '../strings.js';
+import { OPP, SPROUT } from '../strings.js';
 
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
@@ -139,7 +139,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   sprout: {
     active: ({ v }) => v.config.sproutsPerTurn > 0,
     fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'sprout'),
-    text: ({ v, say }) => moveWords(v.config).coachTip(say('combo')),
+    text: ({ say }) => SPROUT.coachTip(say('combo')),
   },
   strength: {
     active: () => true,
@@ -236,7 +236,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       return whyBoard(c, f.move, f.kind === 'fruit');
     case 'sprout':
       return f.move.placed > 0 && !f.move.taken && !f.move.botCut && !f.move.onRich && !f.move.wins
-        ? [moveWords(v.config).coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
+        ? [SPROUT.coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
     case 'strengthen':
       return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitPerPlayer > 0 ? ' or Fruit' : ''}.`];
@@ -359,6 +359,6 @@ export const coachSummary = (taught: readonly TipId[], config: View['config']): 
   const fill = (['connection', 'cutting', 'combos', 'goal'] as TipId[]).filter((id) => !used.includes(id));
   return {
     title: "You're on your own now. Here's what to remember:",
-    bullets: [...used, ...fill].slice(0, 3).map((id) => (id === 'sprout' ? moveWords(config).bullet : BULLETS[id])),
+    bullets: [...used, ...fill].slice(0, 3).map((id) => (id === 'sprout' ? SPROUT.bullet : BULLETS[id])),
   };
 };

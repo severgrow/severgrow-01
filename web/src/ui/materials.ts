@@ -65,11 +65,6 @@ export const materialDefs = (defs: SVGDefsElement, id: (name: string) => string,
   rad('lava-rim', [[0, 'st-fire-deep', 0], [0.7, 'st-fire-deep', 0], [0.9, 'st-fire', 0.4], [1, 'st-fire-hot', 0.9]], { cx: 0.5, cy: 0.5, r: 0.5 });
   rad('smoke', [[0, 'st-smoke', 0.5], [0.6, 'st-smoke', 0.18], [1, 'st-smoke', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
   rad('moss-glow', [[0, 'st-moss-top', 0.85], [1, 'st-moss-top', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
-  // Seed ruleset: a seed's husk (mine: young moss; the opponent's: an ember), and the
-  // dark, freshly turned soil it is planted in
-  rad('seed-you', [[0, 'st-moss-top', 1], [0.55, 'st-moss', 1], [1, 'st-moss-deep', 1]], { cx: 0.36, cy: 0.3, r: 0.85 });
-  rad('seed-bot', [[0, 'st-fire-hot', 1], [0.45, 'st-fire', 1], [1, 'st-crust', 1]], { cx: 0.36, cy: 0.3, r: 0.85 });
-  rad('seed-soil', [[0, 'st-dark', 0.12], [0.7, 'st-dark', 0.28], [1, 'st-dark', 0.42]], { cx: 0.5, cy: 0.45, r: 0.6 });
   if (L.textures && noiseTile()) {
     const n = el('pattern', { id: id('noise'), width: 32, height: 32, patternUnits: 'userSpaceOnUse' }, defs);
     el('image', { href: noiseTile(), width: 32, height: 32, preserveAspectRatio: 'none' }, n);

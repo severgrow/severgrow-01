@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ConfigError,
+  apply,
+  legalActions,
+  viewFor,
   DEFAULT_CONFIG,
   allCoords,
   coordKey,
@@ -153,5 +156,23 @@ describe('newGame', () => {
     const b = newGame(10, { handSize: 6 });
     expect(a.terrain).toEqual(b.terrain);
     expect(a.config).toEqual(resolveConfig());
+  });
+});
+
+describe('v0.6: Seed mode is gone, Sprout works from turn 1', () => {
+  it('in 50 deals the first player can sprout on turn 1, right after the draw', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const s = apply(newGame(seed), { t: 'Draw', from: 'deck' });
+      const sprouts = legalActions(viewFor(s, 0)).filter((a) => a.t === 'Sprout');
+      expect(sprouts.length, `seed ${seed}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('no tile and no config key remembers Seed mode', () => {
+    const s = newGame(7);
+    expect(s.config).not.toHaveProperty('ruleset');
+    expect(s.config).not.toHaveProperty('unbiasedShuffle');
+    const after = apply(apply(newGame(7), { t: 'Draw', from: 'deck' }), legalActions(viewFor(apply(newGame(7), { t: 'Draw', from: 'deck' }), 0)).find((a) => a.t === 'Sprout')!);
+    for (const t of Object.values(after.board)) if (t) expect(Object.keys(t).sort()).not.toContain('seed');
   });
 });

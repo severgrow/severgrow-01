@@ -4,7 +4,6 @@ import { IllegalActionError } from './errors.js';
 import { planFruit } from './fruit.js';
 import { claimBlocker } from './overgrow.js';
 import { planRun, strengthenBlocker, touchesNetwork } from './placement.js';
-import { sproutStrength } from './ruleset.js';
 import type { Action, Card, Coord, State, View } from './types.js';
 import { viewFor } from './view.js';
 
@@ -118,7 +117,7 @@ const actActions = (v: View): Action[] => {
     for (const card of [...reps.values()].sort((x, y) => x.id - y.id)) {
       for (const coord of board) {
         const own = v.board[coordKey(coord)]?.owner === p;
-        if (own ? v.config.allowStrengthen && strengthenBlocker(v, p, coord, card.rank, used) === null : startKeys.has(coordKey(coord)) && claimBlocker(v, p, coord, sproutStrength(v.config, card.rank)) === null) {
+        if (own ? v.config.allowStrengthen && strengthenBlocker(v, p, coord, card.rank, used) === null : startKeys.has(coordKey(coord)) && claimBlocker(v, p, coord, card.rank) === null) {
           out.push({ t: 'Sprout', card: card.id, coord });
         }
       }

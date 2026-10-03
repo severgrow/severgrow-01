@@ -1,8 +1,8 @@
-// The deck in the versions people play (Sprout and Seed): 72 cards, every number 1-9 exactly
+// The deck people play: 72 cards, every number 1-9 exactly
 // 8 times, every suit exactly 18 times, and a real deal keeps every card (hands + throw pile +
 // deck = the whole deck, nothing lost, nothing doubled).
 import { describe, expect, it } from 'vitest';
-import { RULESETS, createCards, newGame, resolveConfig } from '../../src/engine/index.js';
+import { DEFAULT_CONFIG, createCards, newGame, resolveConfig } from '../../src/engine/index.js';
 import type { Card } from '../../src/engine/index.js';
 
 const count = (cards: readonly Card[], key: 'rank' | 'suit') => {
@@ -11,8 +11,8 @@ const count = (cards: readonly Card[], key: 'rank' | 'suit') => {
   return out;
 };
 
-describe.each(Object.entries(RULESETS))('the %s version deck', (_name, rules) => {
-  const cards = createCards(resolveConfig(rules));
+describe('the deck', () => {
+  const cards = createCards(resolveConfig(DEFAULT_CONFIG));
 
   it('has 72 cards', () => {
     expect(cards).toHaveLength(72);
@@ -34,7 +34,7 @@ describe.each(Object.entries(RULESETS))('the %s version deck', (_name, rules) =>
 
   it('after a real deal (100 different games) no card is lost or doubled', () => {
     for (let seed = 1; seed <= 100; seed++) {
-      const g = newGame(seed, rules);
+      const g = newGame(seed);
       const all = [...g.hands[0], ...g.hands[1], ...g.discard, ...g.deck];
       expect(all).toHaveLength(72);
       expect(new Set(all.map((c) => c.id)).size).toBe(72);

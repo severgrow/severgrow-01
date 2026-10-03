@@ -390,8 +390,7 @@ export class BoardView {
     const { veins, tiles, over, scars } = this.layers;
     if (this.world) {
       const paint = new Map<string, PaintTile>();
-      // a seed is drawn on its own (planted in bare soil), so the landscape leaves its hex alone
-      for (const [k, t] of Object.entries(board)) if (t && !t.root && !t.seed) paint.set(k, { owner: t.owner, t: vigour(t.strength, this.config.maxRank) });
+      for (const [k, t] of Object.entries(board)) if (t && !t.root) paint.set(k, { owner: t.owner, t: vigour(t.strength, this.config.maxRank) });
       this.world.sync(paint, this.paletteId, this.look.textures ? 'normal' : 'low');
     }
     veins.replaceChildren();
@@ -572,55 +571,9 @@ export class BoardView {
     }
   }
 
-  /**
-   * Seed ruleset: a tile placed by a Seed (worth 1, not yet strengthened) is a small seed
-   * planted in freshly turned soil, with a hint of what it can grow into: a curling shoot
-   * (mine) or a waking ember (the opponent's). Replaces the moss / lava look for that tile only.
-   */
-  private drawSeed(g: SVGGElement, key: string, t: Tile) {
-    const { x, y } = centerOf(key);
-    const who = t.owner === 0 ? 'you' : 'bot';
-    const d = hexPath(key, S * 0.995, this.style.tileShape);
-    el('path', { d, class: `seed-ground ${who}` }, g);
-    el('path', { d, class: 'seed-soil', fill: this.url('seed-soil') }, g);
-    // two short furrows in the soil, the same for this hex every time
-    const tilt = -28 + hash(key) * 16;
-    const fur = (dy: number, w: number) => `M${(x - w).toFixed(1)},${(y + dy).toFixed(1)}q${w.toFixed(1)},${(S * 0.08).toFixed(1)} ${(w * 2).toFixed(1)},0`;
-    el('path', { d: `${fur(S * 0.3, S * 0.36)}${fur(S * 0.44, S * 0.22)}`, class: 'seed-furrow' }, g);
-    // the seed: an almond husk with a seam and a highlight, slightly tilted
-    const L = S * 0.42;
-    const W = S * 0.29;
-    const sx = x;
-    const sy = y - S * 0.04;
-    const husk = `M${sx},${(sy - L).toFixed(1)}Q${(sx + W * 1.35).toFixed(1)},${(sy - L * 0.1).toFixed(1)} ${sx},${(sy + L).toFixed(1)}Q${(sx - W * 1.35).toFixed(1)},${(sy - L * 0.1).toFixed(1)} ${sx},${(sy - L).toFixed(1)}Z`;
-    const seed = el('g', { class: `seed ${who}`, transform: `rotate(${tilt.toFixed(1)} ${sx} ${sy.toFixed(1)})` }, g);
-    el('ellipse', { cx: sx + 1.2, cy: sy + L * 0.9, rx: W * 0.95, ry: L * 0.22, class: 'seed-shadow' }, seed);
-    el('path', { d: husk, class: 'seed-husk', fill: this.url(`seed-${who}`) }, seed);
-    el('path', { d: `M${sx},${(sy - L * 0.82).toFixed(1)}Q${(sx + W * 0.3).toFixed(1)},${sy.toFixed(1)} ${sx},${(sy + L * 0.82).toFixed(1)}`, class: 'seed-seam' }, seed);
-    el('path', { d: `M${(sx - W * 0.55).toFixed(1)},${(sy - L * 0.35).toFixed(1)}q${(W * 0.15).toFixed(1)},${(-L * 0.3).toFixed(1)} ${(W * 0.45).toFixed(1)},${(-L * 0.42).toFixed(1)}`, class: 'seed-shine' }, seed);
-    // the promise of growth, from the seed's tip
-    const tip = { x: sx, y: sy - L };
-    if (t.owner === 0) {
-      el('path', { d: `M${tip.x},${tip.y.toFixed(1)}c${(-S * 0.02).toFixed(1)},${(-S * 0.14).toFixed(1)} ${(S * 0.14).toFixed(1)},${(-S * 0.2).toFixed(1)} ${(S * 0.16).toFixed(1)},${(-S * 0.1).toFixed(1)}`, class: 'seed-shoot' }, seed);
-      el('ellipse', { cx: tip.x + S * 0.17, cy: tip.y - S * 0.13, rx: S * 0.075, ry: S * 0.04, transform: `rotate(-35 ${(tip.x + S * 0.17).toFixed(1)} ${(tip.y - S * 0.13).toFixed(1)})`, class: 'seed-leaf' }, seed);
-    } else {
-      el('circle', { cx: tip.x, cy: tip.y - S * 0.05, r: S * 0.09, class: `seed-spark${this.look.motion ? ' pulsing' : ''}` }, seed);
-      el('circle', { cx: tip.x, cy: tip.y - S * 0.05, r: S * 0.035, class: 'seed-spark-core' }, seed);
-    }
-    el('path', { d, class: 'tile-edge' }, g);
-    el('circle', { cx: sx, cy: sy, r: S * 0.19, class: 'seed-num-plate' }, g);
-    el('text', { x: sx, y: sy + 0.5, class: 'num tile-num seed-num' }, g).textContent = String(t.strength);
-    this.mark(g, x, y + S * 0.62, t.owner === 0 ? this.style.youMark : this.style.botMark);
-  }
-
   private drawTile(parent: SVGGElement, key: string, t: Tile, maxRank: number): SVGGElement {
     const st = this.style;
     const who = t.owner === 0 ? 'you' : 'bot';
-    if (t.seed && !t.root) {
-      const g = el('g', { class: `tile ${who} seed-tile`, 'data-key': key }, parent);
-      this.drawSeed(g, key, t);
-      return g;
-    }
     const g = el('g', { class: `tile ${who}${t.root ? ' root' : ''} mat-${materialFor(t, 'normal')}`, 'data-key': key }, parent);
     const { x, y } = centerOf(key);
     const mat = materialFor(t, 'normal');

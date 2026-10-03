@@ -3,13 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { HINT_MAX, hintFor } from '../src/logic/hint.js';
 import type { HintCtx } from '../src/logic/hint.js';
-import { MOVE_WORDS } from '../../src/strings.js';
+import { SPROUT } from '../../src/strings.js';
 
 const base: HintCtx = {
   phase: 'ACT',
   myTurn: true,
   busy: false,
-  words: MOVE_WORDS.sprout,
+  words: SPROUT,
   deckCount: 20,
   canTakeThrow: true,
   fruit: null,
@@ -27,7 +27,7 @@ const base: HintCtx = {
 /** Every distinct moment the hint line can describe. */
 const moments = (): HintCtx[] => {
   const out: HintCtx[] = [];
-  for (const words of [MOVE_WORDS.sprout, MOVE_WORDS.seed]) {
+  for (const words of [SPROUT]) {
     const b = { ...base, words };
     for (const phase of ['DRAW', 'ACT', 'DISCARD', 'KNOCK', 'ROT_PICK', 'GAME_OVER'])
       for (const myTurn of [true, false]) for (const busy of [true, false]) out.push({ ...b, phase, myTurn, busy });
@@ -69,12 +69,12 @@ describe('the hint line', () => {
     expect(hintFor({ ...base, phase: 'DRAW', canTakeThrow: false }).text).not.toMatch(/throw pile/);
     expect(hintFor({ ...base, canSprout: false, canCombo: false }).text).toMatch(/Nothing can grow/);
     // the single-card move is once per turn: once used, the hint stops offering it
-    expect(hintFor({ ...base, canSprout: false }).text).not.toBe(MOVE_WORDS.sprout.tapHint);
+    expect(hintFor({ ...base, canSprout: false }).text).not.toBe(SPROUT.tapHint);
     expect(hintFor({ ...base, canSprout: false }).text).toMatch(/line or clump/);
   });
 
-  it("keeps each version's own word for the single-tile move (no renaming)", () => {
-    expect(hintFor(base).text).toBe(MOVE_WORDS.sprout.tapHint);
-    expect(hintFor({ ...base, words: MOVE_WORDS.seed }).text).toBe(MOVE_WORDS.seed.tapHint);
+  it('the single-tile move is always called Sprout', () => {
+    expect(hintFor(base).text).toBe(SPROUT.tapHint);
+    expect(SPROUT.tapHint).toMatch(/sprout/i);
   });
 });

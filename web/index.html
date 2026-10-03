@@ -17,6 +17,7 @@
   </head>
   <body>
     <div id="splash" class="splash" hidden aria-hidden="true"></div>
+    <pre id="debug-corner" class="debug-corner" hidden></pre>
     <div id="texture" aria-hidden="true"></div>
     <div id="spores" aria-hidden="true"></div>
 
@@ -30,10 +31,7 @@
         <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
-          <div class="menu-versions" role="group" aria-label="Pick a version to play">
-            <button id="menu-sprout" class="btn primary big version-btn" type="button" aria-label="Sprout version: a single card grows a tile of its number"><span class="vb-name">Sprout version</span><span class="vb-sub">Tile = card's number</span></button>
-            <button id="menu-seed" class="btn primary big version-btn" type="button" aria-label="Seed version: a single card plants a seed worth 1, strengthen it later"><span class="vb-name">Seed version</span><span class="vb-sub">Every tile starts at 1</span></button>
-          </div>
+          <button id="menu-new" class="btn primary big" type="button">New game</button>
           <button id="menu-tutorial" class="btn ghost" type="button">Tutorial game</button>
           <div class="menu-row">
             <button id="menu-howto" class="btn ghost" type="button">How to play</button>
@@ -50,7 +48,6 @@
         <header class="levels-head">
           <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
           <h2>Pick a level</h2>
-          <span id="levels-version" class="version-chip"></span>
         </header>
         <div id="level-grid" class="level-grid"></div>
         <p class="muted small levels-note">7 is the classic opponent.</p>
@@ -77,7 +74,6 @@
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>
       <div class="steps-row">
-        <button id="version-chip" class="version-chip" type="button" title="The version you are playing"></button>
         <ol id="steps" class="steps" aria-label="Your turn, step by step">
           <li data-step="DRAW"><span class="n">1</span>Draw</li>
           <li data-step="ACT"><span class="n">2</span>Grow</li>
@@ -250,7 +246,6 @@
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
-          <button id="go-version" class="btn ghost" type="button"></button>
           <button id="go-cut" class="btn ghost" type="button" hidden>Replay the biggest cut</button>
           <button id="go-share" class="btn ghost" type="button">Share</button>
           <button id="go-board" class="btn ghost" type="button">See the board</button>

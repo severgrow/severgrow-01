@@ -4,7 +4,7 @@ import type { Action, Card, Coord, Player, View } from '../engine/index.js';
 import { simulate } from '../bots/evaluate.js';
 import type { Simulation } from '../bots/evaluate.js';
 import { hexName } from './names-core.js';
-import { OPP, moveWords } from '../strings.js';
+import { OPP, SPROUT } from '../strings.js';
 
 export { hexName };
 
@@ -52,7 +52,7 @@ export const moveSentence = (v: View, a: Action): string => {
     case 'Sprout': {
       const sim = simulate(v, a)!;
       const card = v.hand.find((c) => c.id === a.card)!;
-      return `${moveWords(v.config).suggest(hn(a.coord), cardName(card))}${effects(sim)}${pointsText(sim)}`;
+      return `${SPROUT.suggest(hn(a.coord), cardName(card))}${effects(sim)}${pointsText(sim)}`;
     }
     case 'Fruit': {
       const sim = simulate(v, a)!;

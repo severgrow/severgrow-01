@@ -4,7 +4,7 @@
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { RULESETS, apply, newGame, viewFor } from '../../src/engine/index.js';
+import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
@@ -17,7 +17,7 @@ const server = await preview({ configFile: 'web/vite.config.ts', preview: { port
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 const midGame = (seed: number, turn: number): State => {
-  let s: State = newGame(seed, RULESETS.sprout);
+  let s: State = newGame(seed);
   let i = 0;
   while (s.phase !== 'GAME_OVER' && !(s.turnNumber >= turn && s.actor === 0 && s.phase === 'ACT')) s = apply(s, chooseLevelAction(viewFor(s, s.actor), 7, i++));
   return s;

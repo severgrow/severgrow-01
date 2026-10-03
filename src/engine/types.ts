@@ -10,12 +10,6 @@ export type Terrain = 'normal' | 'rock' | 'rich';
 
 export type RootStyle = 'ring2' | 'corner';
 
-/**
- * The A/B test of the one-card move: 'sprout' (the card's number becomes the tile) or 'seed'
- * (the tile is always worth 1). See ruleset.ts.
- */
-export type Ruleset = 'sprout' | 'seed';
-
 export type RulesConfig = {
   /** Spec default 3. Typed as number so nothing else hardcodes the radius (open question C). */
   boardRadius: number;
@@ -40,8 +34,6 @@ export type RulesConfig = {
   sproutsPerTurn: number;
   /** v0.4: the game ends after this many turns each (0 = no limit). */
   maxTurnsPerPlayer: number;
-  /** v0.5: random integers by rejection sampling (false only for earlier rules versions). */
-  unbiasedShuffle: boolean;
   /** v0.5: a Sprout may raise one of my own weaker tiles (Strengthen). */
   allowStrengthen: boolean;
   /** v0.5: Strengthens per player per game; -1 = no limit. */
@@ -53,11 +45,6 @@ export type RulesConfig = {
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
-  /**
-   * Seed A/B test: which one-card move this game uses. Absent means 'sprout', so every
-   * Sprout game, save and recording stays exactly as it was. 'seed' is always written out.
-   */
-  ruleset?: Ruleset;
 };
 
 export type Card = { id: number; suit: Suit; rank: number };
@@ -67,8 +54,6 @@ export type Tile = {
   owner: Player;
   strength: number;
   root?: boolean;
-  /** Seed ruleset: placed by a Seed and not yet strengthened (always strength 1). */
-  seed?: true;
 };
 
 export type Phase = 'DRAW' | 'ACT' | 'DISCARD' | 'KNOCK' | 'ROT_PICK' | 'GAME_OVER';

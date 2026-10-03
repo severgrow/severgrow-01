@@ -3,7 +3,6 @@ export type ConfigErrorCode =
   | 'INVALID_NUMBER'
   | 'INVALID_BOOLEAN'
   | 'INVALID_ROOT_STYLE'
-  | 'INVALID_RULESET'
   | 'INVALID_SEED'
   | 'RICH_COUNT_NOT_ODD'
   | 'ROCK_COUNT_NOT_EVEN'
