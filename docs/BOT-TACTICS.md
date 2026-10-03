@@ -59,6 +59,14 @@ leaves the game):
 | 7-8 | full evaluation (beatable chance before and after, exposure, root, blocker, cost) | full evaluation (net swing, blockers, thin links, Strangle, hold or use, second Fruit only if it pays) |
 | 9 | as 7-8, plus the opponent's unseen Fruit cards and weak supporting links | as 7-8, plus counting the unseen Fruit cards and the opponent's best reply |
 
+## Fruit cards in practice (level 7 vs level 7, 2,000 games, SPEC 11.4)
+
+Each side plays 1.76 Fruit cards a game on average, first around its 7th turn: 34.5% on a
+top-rank tile, 11.5% on a chain cut, 0.2% opening a Strangle, the rest on ordinary tiles near
+the end of the game (the hold value falls as the deck empties). Fruit cards thrown: 0.5% (none
+taken by the opponent). 0.38 Fruit cards per game are still in a hand when the game ends. A
+side plays two in one turn in 8% of games and wins 48% of those.
+
 ## Tuning and evidence
 
 See `docs/SPEC.md` section 11.3 for the simulations that set the rules defaults, and

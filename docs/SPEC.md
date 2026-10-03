@@ -552,6 +552,43 @@ cards (exact 5.25%) and **2.64%** with 72 cards (exact 2.62%); none at all in 31
 (exact 31.75% / 42.17%). `npx tsx src/sim/deal-stats.ts`.
 
 
+### 11.4 Fruit cards defaults (v0.6)
+
+`src/sim/fruitcards.ts` (run with `src/sim/fruit-stage.sh`) plays level-7 vs level-7 games with
+swapped starts on matched seeds. One setting changed at a time from the default; 500 games each
+to screen, then the chosen default confirmed with 2,000 (a rate is then good to about ±2.2%).
+
+| Setting | Games | Fruit games | Fruit/game | Fruit/side | Mean own turn | More-Fruit side wins | Two in a turn/game (that side wins) | Thrown, then taken | Stuck in a hand at the end/game | >30% top-rank | Comeback | Leader wins | P1 wins | Strangle | Turns/player | Ends: deck · turn limit · Strangle |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fruitCardCount 2 | 500 | 98.4% | 1.84 | 0.92 | 6.3 | 58.1% | 0.03 (75.0%) | 0.0% | 0.11 | 26.8% | 30.9% | 69.1% | 56.4% | 3.2% | 9.37 | 96.8% · 0% · 3.2% |
+| **fruitCardCount 4 (default)** | 500 | 99.6% | 3.54 | 1.77 | 6.8 | 61.8% | 0.10 (44.0%) | 0.0% | 0.38 | 16.4% | 35.9% | 64.1% | 53.2% | 2.4% | 9.71 | 97.6% · 0% · 2.4% |
+| fruitCardCount 6 | 500 | 100% | 5.05 | 2.52 | 7.4 | 53.3% | 0.16 (33.3%) | 0.0% | 0.77 | 10.8% | 43.0% | 57.0% | 56.8% | 1.6% | 10.20 | 98.4% · 0% · 1.6% |
+| fruitRootCountsAsTouch false | 500 | 99.6% | 3.53 | 1.77 | 6.8 | 62.1% | 0.10 (45.8%) | 0.0% | 0.38 | 16.4% | 36.0% | 64.0% | 54.0% | 2.4% | 9.72 | 97.6% · 0% · 2.4% |
+| **default, confirmed** | 2000 | 99.9% | 3.53 | 1.76 | 6.8 | 55.0% | 0.08 (48.1%) | 0.0% | 0.38 | 17.6% | 37.9% | 62.1% | 53.7% | 3.0% | 9.71 | 97.0% · 0% · 3.0% |
+
+What the Fruit cards were played on (default, 2,000 games): a top-rank tile 34.5%, a chain cut
+(3+ tiles removed) 11.5%, opening a Strangle 0.2%, other 53.9%. Fruit cards thrown: 0.5% (none
+of them taken by the opponent). The score lead right after a two-Fruit turn: +1.1 on average.
+
+Turns with no combo (Sprout only) / with nothing to play at all, by own turn (default):
+1-3: 65.6% / 0%; 4-6: 63.9% / 0%; 7-12: 63.3% / 0%; 13+: 88.9% / 0%. **Nothing to play after
+turn 3: 0.0%** in every setting (Sprout and Strengthen almost always leave a move), so no lever
+is needed. If it ever were, more cards (a third copy) would help most, without changing a rule.
+
+Targets (guides), for the default: Fruit cards played in 50-90% of games: **fail** (99.9%: with
+4 in 76 cards nearly every game sees one); on average after turn 4: pass (6.8); the side that
+played more wins 45-65%: pass (55.0%); at most 10% thrown and taken: pass (0%); comeback rises
+(v0.5: 34.4%) while the leader still wins over 55%: pass (37.9%, 62.1%); at most 10% of games
+with a player over 30% top-rank: **fail** (17.6%; v0.5 with Strengthen: 20.3%); first player
+46-54%: pass (53.7%); Strangle under 15%: pass (3.0%); game length within 10% of the v0.5
+default (9.14 turns each): pass (9.71, +6%).
+
+**Choice: 4 Fruit cards, my root counts as touching.** 2 fails more (top-rank 26.8%, the first
+player 56.4%); 6 nearly meets the top-rank target (10.8%) but tips the first player to 56.8%
+and slows the game (+11% on v0.5); 4 passes every other target. Root touch on or off plays the
+same (the root rarely matters), so the simpler wording stays ("touches yours"). Two Fruit cards
+in one turn happen in 8% of games and that side wins 48%: not too strong.
+
 ---
 
 ## Appendix A: Parked rules (off by default)

@@ -22,3 +22,5 @@ One line each: where the brief left room, what was chosen and why.
 - Levels 1-3 play a Fruit card at a random moment with a seeded 35% / 30% / 30% chance per Grow step holding one; levels 1-2 throw one away with 25% / 15% per Throw step holding one.
 - "High strength" for levels 4-6 = 7 or more; "big cut" = 3 or more tiles removed in all.
 - A slip (the levels' mistake rate) never picks a move the bot rules out altogether (a Fruit card throw, a Fruit card it would keep); this also applies to Strengthen moves ruled out.
+- Fruit card defaults chosen by simulation (SPEC 11.4): 4 cards, root counts as touching; two targets fail and are reported (Fruit played in 99.9% of games; 17.6% of games end with >30% top-rank tiles).
+- "Game length within 10% of the current default" compares with the v0.5 default (9.14 turns each), the last default before this change.
