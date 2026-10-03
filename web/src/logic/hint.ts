@@ -46,9 +46,7 @@ export const hintFor = (c: HintCtx): Hint => {
       return h(c.deckCount <= 3 ? `Draw a card: ${c.deckCount === 1 ? 'last one in the deck' : `${c.deckCount} left in the deck`}` : 'Draw: tap the deck or the throw pile', 'down');
     }
     case 'ACT': {
-      if (c.fruit) {
-        return h(c.fruit.firstTime ? FRUIT.anyStrength : FRUIT.tapTarget, 'up');
-      }
+      if (c.fruit && !c.pending) return h(c.fruit.firstTime ? FRUIT.anyStrength : FRUIT.tapTarget, 'up');
       if (c.pending === 'strengthen') return h('Strengthen: your tile takes the higher number', 'down');
       if (c.pending === 'drawn') return h('Confirm, or draw it again', 'down');
       if (c.pending) return h('Confirm, or tap the spot again', 'down');

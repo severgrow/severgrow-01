@@ -622,3 +622,30 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
 - The opponent's empty turn is quick: about **400ms** at Normal speed (measured 343-422ms on the
   test phone size), scaled by the Speed setting. Logic: `web/src/logic/emptyturn.ts`; browser
   check: `web/e2e/emptyturn.ts`.
+
+## Seed removal and Fruit cards (v0.6), Step 4: Fruit cards on the page
+
+- **The card**: a bone-cream face with a mushroom cap shedding spores, a small "Fruit" print, a
+  thin pearly edge and a low-key raised look; no suit colour (no amber, mint or coral). It reads
+  the same in the throw pile. Drawn in code (`FRUIT_SVG`, `.card.fruit`).
+- **In the hand**: Sort puts Fruit cards at the right, after a small gap. A Fruit card glows
+  softly when it has a legal target; otherwise it is dimmed, and tapping it says why in one line
+  ("No opponent tile touches yours." / "Play it in your Grow step.").
+- **Playing one**: tap the card: its targets get calm pearly rings (no badge, no alarm colour),
+  and the first time the hint says "Any strength: even a 9 can go." Tap a target: the forecast
+  bar ("✿ Uses a Fruit card", plus any cut) and Confirm. "Confirm moves": Smart and Always ask,
+  Never plays at once. Undo works until the throw. With another Fruit card in hand, it stays
+  picked after the first, its targets lit.
+- **Shortcut**: the tile card of an opponent tile a Fruit card can remove offers "Use Fruit
+  card"; on a top-rank tile it adds "No combo can replace this. A Fruit card can."
+- **Chip** near the deck: "Fruit cards unseen: 2" (public information only).
+- **One-time tip**: "Fruit cards: play one on an opponent tile that touches yours to remove it,
+  even a 9." (re-openable from How to play). Not part of the coach's 3-line summary.
+- **Animation**: the card lifts and flies to the tile, the tile swells like a pod, then bursts
+  (spore puff, soft thud, "Fruited!"), then the usual cut sequence. A Big moment; every setting
+  is respected (Speed, Reduce motion, Effects, sound, vibration). The opponent's is calmer: no
+  banner, a caption "Opponent used a Fruit card on your 9"; taking one from the throw pile says
+  "Opponent took the Fruit card".
+- Checked by `web/tests/fruitcard.test.ts` and the browser test `web/e2e/fruitcards.ts`
+  (16 checks, including a full hand at 360px with no sideways scroll); screenshots in
+  `docs/screens/fruit-cards/`.

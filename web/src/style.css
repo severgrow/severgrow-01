@@ -2681,85 +2681,8 @@ svg.usable .hex-cell {
 .mark-badge.replace circle {
   stroke-dasharray: 2 1.5;
 }
-.mark-badge.fruit circle,
-.mark-badge.fruit-x circle {
-  fill: var(--c-accent);
-  stroke: var(--c-bg);
-}
-.mark-badge.fruit text,
-.mark-badge.fruit-x text {
-  fill: var(--c-accentInk, var(--c-bg));
-}
 .mark-badge {
   pointer-events: none;
-}
-/* Fruit: tiles that can be given up glow; picked ones wear a number; the target a cross. */
-.target.fruit-valid {
-  stroke: var(--c-accent);
-}
-.fruit-picked {
-  fill: color-mix(in srgb, var(--c-bg) 45%, transparent);
-  stroke: var(--c-accent);
-  stroke-width: 2.6;
-  stroke-dasharray: 4 3;
-  pointer-events: none;
-}
-.fruit-target {
-  fill: none;
-  stroke: var(--c-danger);
-  stroke-width: 3;
-  pointer-events: none;
-}
-/* The Fruit button and the flow's progress line */
-.btn.fruit {
-  border-color: var(--c-accent);
-}
-.btn.fruit.off {
-  opacity: 0.55;
-  cursor: default;
-}
-.fruit-why {
-  font-size: 0.8rem;
-  color: var(--c-muted);
-  align-self: center;
-  max-width: 11em;
-  line-height: 1.2;
-}
-.fruit-steps {
-  display: flex;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: fs;
-  font-size: 0.82rem;
-  color: var(--c-muted);
-  align-items: center;
-  flex-wrap: wrap;
-}
-.fruit-steps li {
-  counter-increment: fs;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--c-line);
-  white-space: nowrap;
-}
-.fruit-steps li::before {
-  content: counter(fs) ' ';
-  font-weight: 700;
-}
-.fruit-steps li.now {
-  color: var(--c-text);
-  border-color: var(--c-accent);
-}
-.fruit-steps li.done {
-  opacity: 0.6;
-}
-.fruit-count {
-  font-weight: var(--w-num);
-  font-size: 1rem;
-  padding: 2px 8px;
-  align-self: center;
 }
 .warn.note {
   color: var(--c-muted);
@@ -2944,10 +2867,6 @@ svg.usable .hex-cell {
   font-weight: 600;
   margin-top: 4px;
 }
-.tooltip .tc-info {
-  margin-top: 4px;
-  font-style: italic;
-}
 .tooltip .tc-fruit {
   margin-top: 8px;
   align-self: flex-start;
@@ -2961,11 +2880,6 @@ svg.usable .hex-cell {
   font-style: italic;
   font-family: Georgia, serif;
   font-weight: 700;
-}
-.fruit-give {
-  font-size: 0.85rem;
-  color: var(--c-text);
-  align-self: center;
 }
 
 /* ---- polish pass 3: drawing a line or clump ---- */
@@ -4483,4 +4397,13 @@ html.final-turns .game::after {
   .hand .card.fruit.fruit-ready {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 2px #d9d2ec;
   }
+}
+/* a Fruit card's targets: a calm pearly dashed ring (any strength), no colour alarm */
+.target.kind-fruit {
+  stroke: #f2ecfb;
+  stroke-width: 2.6;
+  stroke-opacity: 0.95;
+  stroke-dasharray: 5 3;
+  fill: #efe7cf;
+  fill-opacity: 0.2;
 }

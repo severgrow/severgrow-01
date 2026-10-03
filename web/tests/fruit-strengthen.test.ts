@@ -33,7 +33,7 @@ describe('three kinds of Sprout target', () => {
     expect(kinds.get('1,0')).toBe('replace');
     expect(kinds.get('-2,1')).toBe('grow');
     expect(kinds.has('0,0')).toBe(false); // equal strength: not a target
-    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile' });
+    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile', fruit: 'Remove with a Fruit card' }); // v0.6: + a Fruit card's targets
     expect(sproutKind(v, { t: 'Sprout', card: id, coord: { q: -1, r: 1 } })).toBe('strengthen');
   });
 

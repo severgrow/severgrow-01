@@ -99,3 +99,31 @@ describe('the chip near the deck: "Fruit cards unseen: n"', () => {
     expect(viewFor(after, 1).fruitUnseen).toBe(before - 1);
   });
 });
+
+describe("a Fruit card's targets on the board", () => {
+  it('are their own calm kind ("Remove with a Fruit card"), never "replace"', async () => {
+    const { targetKinds, TARGET_LABEL } = await import('../src/logic/interaction.js');
+    const v = viewFor(at(tiles, [fruitCard(72), num(1, 0, 3)]), 0);
+    const l = legalActions(v);
+    const kinds = targetKinds(v, l, tapCard(v, l, EMPTY_SEL, 72));
+    expect([...kinds.values()]).toEqual(['fruit', 'fruit']);
+    expect(TARGET_LABEL.fruit).toBe('Remove with a Fruit card');
+  });
+});
+
+describe('the opponent and Fruit cards: calm captions', () => {
+  it('"Opponent used a Fruit card on your 9" and "Opponent took the Fruit card"', async () => {
+    const { buildSteps, captionFor } = await import('../src/logic/anim.js');
+    // the opponent (P2) holds a Fruit card next to my 9
+    const g = newGame(5);
+    const f = fixture({ tiles: { '-1,1': [0, 9], '1,-1': [1, 3], '0,0': [1, 3] } });
+    const s: State = { ...g, board: f.board, terrain: f.terrain, hands: [g.hands[0], [fruitCard(72), num(1, 0, 3)]], phase: 'ACT', turnPlayer: 1, actor: 1, history: [] };
+    const a = { t: 'PlayFruit' as const, card: 72, target: { q: -1, r: 1 } };
+    const steps = buildSteps(s, a, apply(s, a), 0);
+    expect(captionFor(steps[0]!, 0)).toBe('Opponent used a Fruit card on your 9');
+    // they take a Fruit card from the throw pile
+    const t: State = { ...g, discard: [fruitCard(73)], phase: 'DRAW', turnPlayer: 1, actor: 1, history: [] };
+    const d = { t: 'Draw' as const, from: 'discard' as const };
+    expect(captionFor(buildSteps(t, d, apply(t, d), 0)[0]!, 0)).toBe('Opponent took the Fruit card');
+  });
+});

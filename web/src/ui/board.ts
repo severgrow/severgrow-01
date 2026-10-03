@@ -49,13 +49,9 @@ export type Overlay = {
   /** Show the bot's fragile links flickering ("Bot's weak links" is on). */
   botFragile: boolean;
   /** v0.5: what each target does: grow on empty, replace a bot tile (⇆), strengthen mine (+). */
-  targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen'>;
+  targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen' | 'fruit'>;
   /** polish pass 3: the picked tiles are the game's suggestion (soft "−" markers, not numbers) */
-  fruitSoft?: boolean;
   /** v0.5 Fruit flow: tiles that can be picked, tiles picked so far (in order), the target. */
-  fruitValid?: string[];
-  fruitPicked?: string[];
-  fruitTarget?: string | null;
   /** overhaul item 10: the veins the previewed move would grow (pairs of keys) */
   ghostLinks?: [string, string][];
   /** overhaul item 10: after the previewed move, my weakest tile and how many tiles a cut there takes */
@@ -447,20 +443,8 @@ export class BoardView {
         const kind = o.targetKinds?.[key] ?? 'grow';
         el('path', { d: hexPath(key, S - 3, st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
-        if (kind !== 'grow') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
-      }
-    }
-    if (o.fruitValid?.length || o.fruitPicked?.length || o.fruitTarget) {
-      const lit = new Set([...(o.fruitValid ?? []), ...(o.fruitPicked ?? []), ...(o.fruitTarget ? [o.fruitTarget] : [])]);
-      for (const key of this.keys) if (!lit.has(key)) el('path', { d: hexPath(key, S - 1.2, st.tileShape), class: 'dim' }, over);
-      for (const key of o.fruitValid ?? []) el('path', { d: hexPath(key, S - 3, st.tileShape), class: 'target fruit-valid', 'data-key': key }, over);
-      (o.fruitPicked ?? []).forEach((key, i) => {
-        el('path', { d: hexPath(key, S - 2, st.tileShape), class: 'fruit-picked', 'data-key': key }, over);
-        this.markBadge(over, key, o.fruitSoft ? '−' : String(i + 1), 'fruit');
-      });
-      if (o.fruitTarget) {
-        el('path', { d: hexPath(o.fruitTarget, S - 2, st.tileShape), class: 'fruit-target', 'data-key': o.fruitTarget }, over);
-        this.markBadge(over, o.fruitTarget, '×', 'fruit-x');
+        // (a Fruit card's targets keep a calm ring, no badge)
+        if (kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
       }
     }
     for (const key of o.cutKeys) el('path', { d: hexPath(key, S * 0.7, st.tileShape), class: 'will-cut' }, over);

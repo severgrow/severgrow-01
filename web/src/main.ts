@@ -1013,7 +1013,7 @@ async function playStep(step: Step, my: number) {
       await wait(300 * f, my);
       // the burst: spores puff out, a soft thud
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
-      flash(step.target, f, true);
+      flash(step.target, f, false);
       if (settings.sound) sound.thud();
       {
         const hp = hapticFor('throw', settings);
@@ -1486,7 +1486,7 @@ function hintCtx(v: View): HintCtx {
     words: SPROUT,
     deckCount: v.deckCount,
     canTakeThrow: session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'),
-    fruit: v.hand.find((c) => c.id === sel.card)?.suit === null ? { firstTime: anyNoteCard === sel.card } : null,
+    fruit: kinds?.has('fruit') ? { firstTime: anyNoteCard === sel.card } : null,
     pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
     drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
     card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
@@ -2797,6 +2797,7 @@ document.addEventListener('keydown', (e) => {
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
+  sel: () => session?.sel ?? null,
   canUndo: () => !!session?.canUndo,
   /** tests only (filmstrip): play this action for this player, as if chosen */
   playFor: (a: Action, who: Player) => {

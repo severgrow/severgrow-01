@@ -115,7 +115,7 @@ export const riskLines = (f: Forecast, rules = CONFIRM_RULES): { reason: RiskRea
       case 'cutsOwn':
         return { reason, icon: '✂', text: `Cuts off ${n} of your tiles` };
       case 'fruit':
-        return { reason, icon: '✿', text: 'Uses a Fruit card (it leaves the game)' };
+        return { reason, icon: '✿', text: 'Uses a Fruit card' };
       case 'lastCard':
         return { reason, icon: '▢', text: 'Uses your last card' };
       case 'root':
