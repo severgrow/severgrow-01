@@ -4520,3 +4520,27 @@ html.final-turns .game::after {
   z-index: 0;
   background: radial-gradient(ellipse 70% 55% at 12% 6%, color-mix(in srgb, #fff 6%, transparent), transparent 70%);
 }
+/* Part 4: the one-time Smoother mode note (bottom of the board, never over the dock) */
+.smoother {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: var(--fs-sm, 0.85rem);
+}
+.smoother span {
+  flex: 1 1 180px;
+}
+.smoother[hidden] {
+  display: none;
+}

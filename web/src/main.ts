@@ -47,6 +47,7 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
+import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, rootDanger, rootRhythm, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
@@ -759,9 +760,48 @@ async function impact(m: Moment, f: number, my: number) {
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
 }
 
+/**
+ * Part 4: Smoother mode. While moves animate, frame times are watched; under 50 fps for 3
+ * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
+ */
+let perf = perfStart();
+let perfRaf = 0;
+function watchFrames() {
+  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
+  let last = performance.now();
+  const tick = (t: number) => {
+    const r = perfStep(perf, t - last);
+    perf = r.state;
+    last = t;
+    if (r.drop) {
+      perfRaf = 0;
+      return smootherMode();
+    }
+    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
+  };
+  perfRaf = requestAnimationFrame(tick);
+}
+const SMOOTH_KEY = 'severgrow.smoother';
+function smootherMode() {
+  const before = settings.effects;
+  settings = { ...settings, effects: 'low' };
+  saveSettings();
+  store.set(SMOOTH_KEY, '1');
+  const note = $('smoother');
+  note.hidden = false;
+  $('smoother-undo').onclick = () => {
+    settings = { ...settings, effects: before };
+    saveSettings();
+    note.hidden = true;
+    render();
+  };
+  $('smoother-keep').onclick = () => (note.hidden = true);
+}
+
 async function pump() {
   if (pumping) return;
   pumping = true;
+  watchFrames();
   const my = epoch;
   while (queue.pending > 0) {
     if (my !== epoch) return;

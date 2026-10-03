@@ -599,3 +599,15 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
 - **F. Terrarium menu:** the menu shows a small glass dome with a living board inside (moss that
   sways, lava that glows, floating spores).
 - **G. Small details:** at the start of a game the hand is dealt from the deck, card by card.
+
+## UI overhaul, Part 4 (light): smoothness
+
+- **Smoother mode** (`web/src/logic/perf.ts`, tested): while moves animate, the page watches the
+  frame rate. Under 50 frames a second for 3 seconds in a row, Effects drop to Low (once per
+  device) and a note says so, with **Keep** and **Undo**. A single very long frame (switching
+  tabs) is ignored.
+- **The cut is cheaper:** the veins' blur glow rests while a cut plays (it also drew a black box in
+  Chrome). Measured in the CI smoke test during a big cut on a 4× slowed CPU: about 22 fps before
+  Part 2, about 42 fps after.
+- The full before/after screenshots and the adversarial set are deferred until after the Fruit
+  cards change (agreed with the owner, so they show the final game).
