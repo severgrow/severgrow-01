@@ -40,6 +40,8 @@ export const BOARD_MARGIN = 4;
 export const MAX_GAP = 16;
 /** The corner tools: visible size and hit area. */
 export const TOOL = { size: 40, hit: 44, inset: 2 } as const;
+/** Desktop (side layout): the air between the dock's rows (hint, piles, hand). */
+export const SIDE_GAP = 20;
 const GUTTER = 16;
 /** The icon-only Sort button at the right end of the hand row. */
 export const SORT_W = 32;
@@ -111,7 +113,7 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layo
     const bw = u.w * fit.scale;
     const bh = u.h * fit.scale;
     const board: Box = { x: zone.x + (zone.w - bw) / 2, y: zone.y + (zone.h - bh) / 2, w: bw, h: bh };
-    const dockH = rows.forecast + rows.table + rows.hand + HEIGHTS.bottomPad;
+    const dockH = rows.forecast + rows.table + rows.hand + 2 * SIDE_GAP + HEIGHTS.bottomPad;
     const dock: Box = { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
     return { mode: 'side', orient: fit.orient, header, zone, board, dock, rows, card, hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
   }
