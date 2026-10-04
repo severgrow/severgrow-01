@@ -30,9 +30,6 @@ export const fruitOffer = (v: View, legal: readonly Action[], key: string): { la
   return { label: FRUIT.use, note: top ? FRUIT.topRank : null, action };
 };
 
-/** The chip near the deck, or null when the game has no Fruit cards. */
-export const unseenChip = (v: View): string | null => (v.config.fruitCardCount > 0 ? FRUIT.unseen(v.fruitUnseen) : null);
-
 /**
  * What a tap on hex `key` means in my Grow step: `tilecard` opens the tile card (an opponent
  * tile the picked card cannot reach, or any opponent tile with nothing picked: its card offers

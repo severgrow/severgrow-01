@@ -12,7 +12,7 @@ import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
 import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
-import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
+import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
   comboFor,
@@ -81,7 +81,7 @@ import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
-import { FRUIT_SVG, fillIcons } from './ui/icons.js';
+import { fillIcons } from './ui/icons.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, setOrient } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
@@ -1506,16 +1506,6 @@ function renderHud() {
     hintEl.innerHTML = '<span class="hint-text"></span>';
     hintEl.querySelector('.hint-text')!.textContent = hint.text;
   }
-  // The turn as three steps; the current one is lit (only on your turn).
-  const steps = $('steps');
-  steps.hidden = st.phase === 'GAME_OVER';
-  steps.classList.toggle('idle', st.actor !== HUMAN || busy());
-  for (const li of steps.querySelectorAll<HTMLElement>('li')) {
-    const on = st.actor === HUMAN && !busy() && li.dataset.step === st.phase;
-    li.classList.toggle('on', on);
-    if (on) li.setAttribute('aria-current', 'step');
-    else li.removeAttribute('aria-current');
-  }
 }
 
 /** In the default game (Rot and Knock off) throwing a card ends the turn. */
@@ -1568,7 +1558,6 @@ function applyLayout() {
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
   root.setProperty('--hud-h', px(HEIGHTS.hud));
-  root.setProperty('--steps-h', px(HEIGHTS.steps));
   root.setProperty('--race-h', px(HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
@@ -2087,19 +2076,6 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').classList.toggle('low', low);
   $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
   $('discard-count').textContent = String(v.discard.length);
-  // v0.6: "Fruit cards unseen: n" (public information only)
-  const chip = unseenChip(v);
-  // compact: the Fruit card icon and the number (the full words for screen readers and on hover)
-  $('fruit-chip').hidden = chip === null;
-  if (chip !== null) {
-    const n = String(v.fruitUnseen);
-    if ($('fruit-chip').dataset.n !== n) {
-      $('fruit-chip').dataset.n = n;
-      $('fruit-chip').innerHTML = `<span class="i">${FRUIT_SVG}</span><b>${n}</b>`;
-    }
-    $('fruit-chip').setAttribute('aria-label', chip);
-    $('fruit-chip').title = chip;
-  }
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {

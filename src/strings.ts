@@ -153,8 +153,6 @@ export const FRUIT = Object.freeze({
   /** why a held Fruit card has nothing to do */
   noTarget: `No ${lower} tile touches yours.`,
   notNow: 'Play it in your Grow step.',
-  /** the chip near the deck */
-  unseen: (n: number) => `Fruit cards unseen: ${n}`,
   /** the burst banner */
   banner: 'Fruited!',
   /** a move, in plain words */

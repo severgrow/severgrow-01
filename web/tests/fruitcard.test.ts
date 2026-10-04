@@ -8,7 +8,7 @@ import type { Card, Player, State } from '../../src/engine/index.js';
 import { FRUIT } from '../../src/strings.js';
 import { fixture } from '../../tests/helpers.js';
 import { EMPTY_SEL, onlyChoice, tapCard, tapHex, targetHexes } from '../src/logic/interaction.js';
-import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from '../src/logic/fruitcard.js';
+import { fruitCardState, fruitOffer, hexTapIntent } from '../src/logic/fruitcard.js';
 import { handOrder } from '../src/logic/hand.js';
 
 const fruitCard = (id: number): Card => ({ id, suit: null, rank: 0 });
@@ -84,14 +84,9 @@ describe('a tap on an opponent tile', () => {
   });
 });
 
-describe('the chip near the deck: "Fruit cards unseen: n"', () => {
-  it('counts from public information only, and hides with no Fruit cards in the game', () => {
-    const g = newGame(9);
-    expect(unseenChip(viewFor(g, 0))).toBe(FRUIT.unseen(viewFor(g, 0).fruitUnseen));
-    expect(FRUIT.unseen(2)).toBe('Fruit cards unseen: 2');
-    expect(unseenChip(viewFor(newGame(9, { fruitCardCount: 0 }), 0))).toBeNull();
-  });
-
+// v0.8 UI pass: the "Fruit cards unseen" chip is gone (no hidden-information indicator); the
+// engine still tracks the public count (the bots use it)
+describe('the public Fruit-unseen count (engine only, no chip)', () => {
   it('drops when a Fruit card is played', () => {
     const s = at(tiles, [fruitCard(72), num(1, 0, 3)]);
     const before = viewFor(s, 1).fruitUnseen;

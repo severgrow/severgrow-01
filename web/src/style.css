@@ -412,46 +412,6 @@ button {
     opacity: 1;
   }
 }
-.steps {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin: 6px 12px 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.8rem;
-}
-.steps li {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  border: 1.5px solid var(--c-line);
-  color: var(--c-muted);
-}
-.steps .n {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--c-line);
-  color: var(--c-text);
-  font-size: 0.7rem;
-  font-weight: var(--w-num);
-}
-.steps li.on {
-  border-color: var(--c-accent);
-  color: var(--c-accent);
-}
-.steps li.on .n {
-  background: var(--c-accent);
-  color: var(--c-accentInk);
-}
-.steps.idle {
-  opacity: 0.45;
-}
 .step-note {
   margin: 0;
   align-self: center;
@@ -1711,46 +1671,6 @@ svg.usable .hex-cell {
   :root {
     --cw: clamp(42px, 6.5vw, 56px);
   }
-  .steps {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  margin: 6px 12px 0;
-  padding: 0;
-  list-style: none;
-  font-size: 0.8rem;
-}
-.steps li {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px 3px 4px;
-  border-radius: 999px;
-  border: 1.5px solid var(--c-line);
-  color: var(--c-muted);
-}
-.steps .n {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--c-line);
-  color: var(--c-text);
-  font-size: 0.7rem;
-  font-weight: var(--w-num);
-}
-.steps li.on {
-  border-color: var(--c-accent);
-  color: var(--c-accent);
-}
-.steps li.on .n {
-  background: var(--c-accent);
-  color: var(--c-accentInk);
-}
-.steps.idle {
-  opacity: 0.45;
-}
 .step-note {
   margin: 0;
   align-self: center;
@@ -1908,9 +1828,6 @@ svg.usable .hex-cell {
 .game > .hud {
   grid-row: 1;
 }
-.game > .steps-row {
-  grid-row: 2;
-}
 .game > .endnote {
   grid-row: 3;
 }
@@ -2012,41 +1929,6 @@ svg.usable .hex-cell {
   color: var(--c-muted);
 }
 
-/* ---------- steps row with the tip button ---------- */
-.steps-row {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-}
-.steps-row .steps {
-  margin-left: 0;
-  margin-right: 0;
-}
-.help-btn {
-  width: 28px;
-  height: 28px;
-  margin-top: 6px;
-  border-radius: 50%;
-  border: 1.5px solid var(--c-line);
-  background: transparent;
-  color: var(--c-muted);
-  font-weight: var(--w-num);
-  font-size: 0.9rem;
-  cursor: pointer;
-  position: relative;
-}
-.help-btn::after {
-  /* a bigger invisible touch area (44px) */
-  content: '';
-  position: absolute;
-  inset: -8px;
-}
-.help-btn[aria-expanded='true'] {
-  color: var(--c-bg);
-  background: var(--c-text);
-  border-color: var(--c-text);
-}
 /* Weak-spot buttons: just the icon until switched on. */
 .chip .chip-label {
   display: none;
@@ -2200,19 +2082,6 @@ svg.usable .hex-cell {
   border-radius: var(--pill);
   padding: 0 12px;
 }
-.steps li {
-  min-height: var(--h-tag);
-  border-radius: var(--pill);
-}
-.help-btn {
-  width: var(--h-tag);
-  height: var(--h-tag);
-  margin-top: 0;
-  border-radius: 50%;
-}
-.steps-row {
-  align-items: center;
-}
 /* A hint in the moves row ("Pick a card to sprout", "Tap a card to throw it") is bold
    text pointing down at the hand, never shaped like a button. */
 .step-note {
@@ -2226,12 +2095,6 @@ svg.usable .hex-cell {
 .step-note::after {
   content: ' ↓';
   color: var(--c-muted);
-}
-.help-btn {
-  display: inline-grid;
-  place-items: center;
-  padding: 2px 0 0; /* the font's "?" sits high: nudge it to the optical centre */
-  line-height: 1;
 }
 
 /* =================================================================
@@ -3159,7 +3022,7 @@ svg.usable .hex-cell {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 .game {
-  grid-template-rows: var(--hud-h, 48px) var(--race-h, 8px) var(--steps-h, 36px) minmax(0, 1fr);
+  grid-template-rows: var(--hud-h, 48px) var(--race-h, 8px) minmax(0, 1fr);
 }
 .game > .hud {
   grid-row: 1;
@@ -3169,15 +3032,8 @@ svg.usable .hex-cell {
 .game > .race {
   grid-row: 2;
 }
-.game > .steps-row {
-  grid-row: 3;
-  height: var(--steps-h, 36px);
-}
-.game > .steps-row .steps {
-  margin-top: 0;
-}
 .game > .play {
-  grid-row: 4;
+  grid-row: 3;
 }
 .play {
   grid-template-rows: minmax(0, 1fr) var(--dock-h, 360px);
@@ -4376,20 +4232,7 @@ html.final-turns .game::after {
 .piles {
   position: relative;
 }
-/* a small line just under the two piles: it takes no room from the move buttons */
-.fruit-chip {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  font-size: 0.6rem;
-  line-height: 1.5;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid var(--c-line);
-  color: var(--c-muted, var(--c-text));
-  background: color-mix(in srgb, var(--c-surface) 85%, transparent);
-  white-space: nowrap;
-}
+
 @media (prefers-reduced-motion: reduce) {
   .hand .card.fruit.fruit-ready {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 2px #d9d2ec;
@@ -4513,6 +4356,19 @@ html.final-turns .game::after {
 .ctool.tr { right: 0; top: 0; }
 .ctool.bl { left: 0; bottom: 0; }
 .ctool.br { right: 0; bottom: 0; }
+/* v0.8: the "?" (how to play) sits in the board's lower-right corner; the Skip button takes
+   that corner only while an animation plays */
+.ctool.help {
+  right: 0;
+  bottom: 0;
+  font-weight: var(--w-num);
+  font-size: 1.05rem;
+  line-height: 1;
+  padding-top: 2px; /* the font's "?" sits high: nudge it to the optical centre */
+}
+#tool-skip:not([hidden]) ~ .ctool.help {
+  display: none;
+}
 .ctool[hidden] {
   display: none;
 }
@@ -4608,20 +4464,13 @@ html.final-turns .game::after {
 .dock .pile.dim {
   opacity: 0.55;
 }
-/* the Fruit-card tracker chip sits in the piles row, beside the piles (a fixed place) */
 .dock .piles {
   align-items: center;
-}
-.dock .fruit-chip {
-  position: static;
-  align-self: center;
-  margin-left: 4px;
 }
 /* Step 3 item 12: three text sizes in the dock: 15px (hint, buttons), 12px (labels, counts,
    chips) and the card numerals */
 .dock .pile-label,
 .dock .pile-meta .pile-count,
-.dock .fruit-chip,
 .dock .pile-hint {
   font-size: 12px;
 }
@@ -4966,14 +4815,7 @@ body.paused #board * {
 .reduce-motion .bloom-options {
   animation: none;
 }
-/* the compact Fruit chip: the Fruit card icon and the number */
-.fruit-chip .i {
-  width: 16px;
-  height: 16px;
-  display: inline-block;
-  vertical-align: -3px;
-  margin-right: 4px;
-}
+
 /* while the Bloom choices are open they sit above the board (and take the taps there) */
 .dock:has(.bloom-options:not([hidden])) {
   position: relative;

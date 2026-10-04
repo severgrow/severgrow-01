@@ -86,11 +86,8 @@ console.log(`[1] the card in the hand, the chip, picking `);
   await page.click('#first-tip-ok').catch(() => {});
   const last = page.locator('#hand .card').last();
   check('Sort puts the Fruit card at the right, glowing (it has a target)', ((await last.getAttribute('class')) ?? '').includes('fruit') && ((await last.getAttribute('class')) ?? '').includes('fruit-ready'));
-  // v0.7: the chip shows the Fruit card icon and the number; "Fruit cards unseen: n" is its spoken label and tooltip
-  const chip = ((await page.textContent('#fruit-chip')) ?? '').trim();
-  const chipLabel = (await page.getAttribute('#fruit-chip', 'aria-label')) ?? '';
-  const hasIcon = (await page.locator('#fruit-chip svg').count()) > 0;
-  check('the chip near the deck: the Fruit card icon and n, spoken as "Fruit cards unseen: n"', /^\d$/.test(chip) && hasIcon && chipLabel === `Fruit cards unseen: ${chip}` && (await page.getAttribute('#fruit-chip', 'title')) === chipLabel, `${chip} · ${chipLabel}`);
+  // v0.8 UI pass: no "Fruit cards unseen" chip any more (no hidden-information indicator)
+  check('no Fruit-unseen chip', (await page.locator('#fruit-chip').count()) === 0);
   await last.click();
   await page.waitForTimeout(250);
   const targets = await page.locator('.l-over .target.kind-fruit').count();

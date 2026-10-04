@@ -25,17 +25,17 @@ export type Layout = {
   /** screen px per board unit */
   scale: number;
   /** the icon-only corner tools (40pt visible, 44pt hit area), in the zone's corners */
-  tools: { weak: Box; targets: Box; replay: Box };
+  tools: { weak: Box; targets: Box; replay: Box; help: Box };
 };
 
 /** Fixed heights, CSS px (8pt grid). */
-export const HEIGHTS = { hud: 48, steps: 36, race: 8, forecast: 56, table: 72, handPad: 20, bottomPad: 8 } as const;
+export const HEIGHTS = { hud: 48, race: 8, forecast: 56, table: 84, handPad: 20, bottomPad: 8 } as const;
 /** The largest hand a player can hold (hand size + the drawn card). */
 export const MAX_HAND = 8;
 /** At least this much of every card is visible in a full hand. */
 export const MIN_SLICE = 36;
-/** Side margin of the board (8-12pt). */
-export const BOARD_MARGIN = 8;
+/** Side margin of the board zone (v0.8: 4pt, the board takes the full width on tall phones). */
+export const BOARD_MARGIN = 4;
 /** The largest gap allowed above or below the board (pt). */
 export const MAX_GAP = 16;
 /** The corner tools: visible size and hit area. */
@@ -47,17 +47,15 @@ const S = 30;
 
 /**
  * The board's drawing area in board units for a radius and orientation: the tiles plus a thin
- * margin and a little headroom for the home landmarks (they may rise a quarter tile above
- * their tile). Points left-right ("pointy" hexes): wider than tall; turned: taller than wide.
+ * margin (v0.8: the home landmarks are drawn top-down inside their tile, so no headroom). Points left-right ("pointy" hexes): wider than tall; turned: taller than wide.
  */
 export const boardUnits = (radius: number, orient: Orient = 'pointy') => {
-  const m = 6;
+  const m = 2;
   const halfLong = Math.sqrt(3) * S * radius + (Math.sqrt(3) / 2) * S + m; // across the points
   const halfShort = 1.5 * S * radius + S + m; // across the flat sides
-  const head = S * 0.5; // headroom above the board only (a landmark may rise a quarter tile)
   const halfW = orient === 'pointy' ? halfLong : halfShort;
   const halfH = orient === 'pointy' ? halfShort : halfLong;
-  return { w: 2 * halfW, h: 2 * halfH + head, x0: -halfW, y0: -halfH - head, hexW: Math.sqrt(3) * S };
+  return { w: 2 * halfW, h: 2 * halfH, x0: -halfW, y0: -halfH, hexW: Math.sqrt(3) * S };
 };
 
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);
@@ -88,6 +86,7 @@ const toolsIn = (zone: Box): Layout['tools'] => {
     weak: { x: zone.x + i, y: zone.y + i, w: s, h: s },
     targets: { x: zone.x + zone.w - s - i, y: zone.y + i, w: s, h: s },
     replay: { x: zone.x + i, y: zone.y + zone.h - s - i, w: s, h: s },
+    help: { x: zone.x + zone.w - s - i, y: zone.y + zone.h - s - i, w: s, h: s },
   };
 };
 
@@ -97,7 +96,7 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layo
   const sl = v.safeLeft ?? 0;
   const sr = v.safeRight ?? 0;
   const W = v.w - sl - sr;
-  const headerH = HEIGHTS.hud + HEIGHTS.steps + HEIGHTS.race;
+  const headerH = HEIGHTS.hud + HEIGHTS.race;
   const header: Box = { x: sl, y: st, w: W, h: headerH };
   const top = st + headerH;
 
@@ -127,10 +126,10 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layo
   };
   let p = place();
   // a board limited by the width leaves spare height: the piles and the message row take it
-  // first (bigger pile cards, more air), so no gap around the board is over 16pt
+  // first (bigger pile cards, more air), then the hand row, so no gap around the board is over 16pt
   let spare = p.zone.h - boardUnits(radius, p.fit.orient).h * p.fit.scale - 2 * MAX_GAP;
   if (spare > 0) {
-    for (const [row, most] of [['table', 40], ['forecast', 40]] as const) {
+    for (const [row, most] of [['table', 40], ['forecast', 40], ['hand', 32]] as const) {
       const add = Math.ceil(Math.min(most, spare));
       rows[row] += add;
       spare -= add;
