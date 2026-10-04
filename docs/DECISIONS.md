@@ -45,6 +45,10 @@ One line each: where the brief left room, what was chosen and why.
 - Step 7: motion tokens tap 80 / quick 160 / move 280 / moment 600 ms, ease-out and ease-spring, kept equal in CSS and code by a test.
 - Step 7: the settings groups stay as they were (Look; Sound and feel; Animations; Playing); the volume sliders join Sound and feel.
 - Step 8: the ladder runs 1,000 games per pairing, as asked (swapped starts, 4 processes).
+- Self-critique (main screen, round 1): with two or more ways to bloom, the Bloom buttons ran off the right edge of the dock. Now one "Bloom" button ("N ways") opens a list of choices upward over the message row; each choice shows its card numbers in suit colours, so "Bloom 4 tiles" from 3-4-5-6 and from four 6s are told apart. A single way keeps its own button.
+- Self-critique: the "Fruit cards unseen: N" chip is now the Fruit card icon and the number (the full words stay as its spoken label and tooltip), freeing room in the dock row.
+- Step 9: rotating the phone mid-paint keeps the half-painted shape (nothing is placed); painting carries on afterwards.
+- Step 9: the first-tap time is measured with a cold cache on a slow connection (1.6 Mbit/s, 150 ms) and the CPU 4x slower.
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 

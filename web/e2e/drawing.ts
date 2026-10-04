@@ -65,10 +65,16 @@ export const drawMeld = async (page: Page, a: Action): Promise<boolean> => {
 };
 
 /** Picks the exact card group of a Bloom: its family's button, then (if the button chose another group of that family) the test hook. */
+/** Clicks a Bloom button, opening the list of Bloom choices first when it is inside it. */
+export const clickKind = async (page: Page, selector: string) => {
+  const btn = page.locator(selector).first();
+  if (!(await btn.isVisible()) && (await page.locator('#moves .bloom-toggle').isVisible())) await page.click('#moves .bloom-toggle');
+  await btn.click();
+};
+
 export const chooseBloom = async (page: Page, a: Action) => {
   if (a.t !== 'Bloom') return;
   const kind = `bloom-${a.cards.length}-${[...a.cards].sort((x, y) => x - y).join('.')}`;
-  const btn = page.locator(`#moves [data-kinds~="${kind}"]`);
-  if (await btn.count()) await btn.first().click();
+  if (await page.locator(`#moves [data-kinds~="${kind}"]`).count()) await clickKind(page, `#moves [data-kinds~="${kind}"]`);
   await page.evaluate(`window.__severgrow.pickKind(${JSON.stringify(kind)})`);
 };

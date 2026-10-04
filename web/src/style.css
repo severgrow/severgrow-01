@@ -1207,11 +1207,13 @@ svg.usable .hex-cell {
 }
 .moves {
   display: flex;
-  /* one line, never wrapping up under the forecast; a crowded row scrolls sideways */
+  /* one line, never wrapping up under the forecast (v0.7: several Bloom choices share one
+     button that opens a list, so the row never crowds) */
   flex-wrap: nowrap;
   justify-content: safe center;
   align-items: center;
-  overflow-x: auto;
+  position: relative;
+  overflow: visible;
   scrollbar-width: none;
   min-width: 0;
   gap: 6px;
@@ -3267,7 +3269,8 @@ svg.usable .hex-cell {
 .dock .moves {
   min-height: 0;
   max-height: var(--row-table, 64px);
-  overflow: hidden;
+  /* v0.7: visible, so the list of Bloom choices can open upward over the message row */
+  overflow: visible;
   align-content: center;
 }
 /* the hand: each card shows at least --slice px, a gentle fan */
@@ -4928,3 +4931,67 @@ body.paused #board * {
   font-size: 12px;
   opacity: 0.8;
 }
+
+/* v0.7: the list of Bloom choices, opening upward from its button */
+.bloom-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  box-shadow: 0 12px 28px -10px color-mix(in srgb, #000 80%, transparent);
+  animation: bloom-options-in var(--dur-quick) var(--ease-out);
+}
+.bloom-options[hidden] {
+  display: none;
+}
+.bloom-options .btn {
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+@keyframes bloom-options-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.reduce-motion .bloom-options {
+  animation: none;
+}
+/* the compact Fruit chip: the Fruit card icon and the number */
+.fruit-chip .i {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 4px;
+}
+/* while the Bloom choices are open they sit above the board (and take the taps there) */
+.dock:has(.bloom-options:not([hidden])) {
+  position: relative;
+  z-index: 30;
+}
+/* the cards a Bloom choice uses, in their suit colours */
+.bloom-options .kind-cards {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 10px;
+  font-family: var(--font);
+  font-weight: 800;
+}
+.bloom-options .kind-cards b {
+  min-width: 18px;
+  text-align: center;
+  border-radius: 4px;
+  padding: 0 2px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.bloom-options .kind-cards .s0 { color: var(--c-moss); }
+.bloom-options .kind-cards .s1 { color: var(--c-ash); }
+.bloom-options .kind-cards .s2 { color: var(--c-dew); }
+.bloom-options .kind-cards .s3 { color: var(--c-ember); }

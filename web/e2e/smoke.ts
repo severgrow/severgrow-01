@@ -12,7 +12,7 @@ import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
 import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
-import { chooseBloom, drawMeld } from './drawing.js';
+import { chooseBloom, clickKind, drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
@@ -151,7 +151,7 @@ const playTurn = async (page: Page) => {
       const t = (await page.getAttribute('#guide-arrow', 'data-target'))!;
       if (t.startsWith('card:')) await page.click(`#hand [data-card="${t.slice(5)}"]`);
       else if (t.startsWith('hex:')) await tapHex(page, t.slice(4));
-      else if (t.startsWith('kind:')) await page.click(`#moves [data-kind="${t.slice(5)}"]`);
+      else if (t.startsWith('kind:')) await clickKind(page, `#moves [data-kind="${t.slice(5)}"]`);
       else await page.click({ confirm: '#confirm-play', deck: '#deck', discard: '#discard', end: '#moves .end', cancel: '#confirm-cancel', button: '#moves .btn.primary' }[t]!);
       if (((await getState(page))!.history?.length ?? 0) > before) break;
     }

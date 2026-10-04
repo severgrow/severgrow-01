@@ -13,7 +13,7 @@ import type { Action, Card, Player, State, Suit } from '../../src/engine/index.j
 import { fixture } from '../../tests/helpers.js';
 import { positionSave } from './position.js';
 import { fruitOnTop } from './paint-positions.js';
-import { chooseBloom, drawMeld, hexCenter } from './drawing.js';
+import { chooseBloom, clickKind, drawMeld, hexCenter } from './drawing.js';
 
 const results: { name: string; ok: boolean }[] = [];
 const check = (name: string, ok: boolean, note = '') => {
@@ -66,7 +66,7 @@ const open = async (state: State, o: { w: number; h: number; touch?: boolean; se
 };
 const st = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: { state: () => State } }).__severgrow.state());
 const idle = (page: Page) => page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
-const pick = (page: Page, n: number) => page.click(`#moves [data-kind^="bloom-${n}-"]`);
+const pick = (page: Page, n: number) => clickKind(page, `#moves [data-kind^="bloom-${n}-"]`);
 const confirm = async (page: Page) => {
   if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
   await page.waitForTimeout(200);
@@ -177,14 +177,19 @@ for (const ph of PHONES) {
   {
     // 4 tiles, and 3 from a group of 4 ("keep the other")
     const { page } = await open(stateWith({}, SET4), ph);
-    const btn3 = page.locator('#moves [data-kind^="bloom-3-"]');
-    const label3 = `${(await btn3.textContent()) ?? ''} | ${(await btn3.getAttribute('aria-label')) ?? ''}`;
+    // two ways to bloom: one "Bloom" button opens the list; it says "Bloom 3 tiles, keep the other"
+    const toggle = await page.locator('#moves .bloom-toggle').isVisible();
+    await page.click('#moves .bloom-toggle').catch(() => {});
+    const label3 = (await page.locator('#moves [data-kind^="bloom-3-"]').textContent()) ?? '';
+    const box = await page.locator('.bloom-options').boundingBox();
+    const inView = !!box && box.x >= 0 && box.x + box.width <= ph.w + 0.5 && box.y >= 0;
+    await page.click('#moves .bloom-toggle').catch(() => {});
     await pick(page, 4);
     await tDrag(page, ['-1,1', '0,1', '1,0', '1,1']);
     await confirm(page);
     const n4 = Object.values((await st(page)).board).filter((t) => t?.owner === 0 && !t.root).length;
     check(`${tag}: a Bloom of 4 places 4 tiles`, n4 === 4);
-    check(`${tag}: holding four of a kind offers "Bloom 3 tiles, keep the other"`, /keep the other/.test(label3.split(' | ')[0]!) && /Bloom 3 tiles, keep the other/.test(label3), label3);
+    check(`${tag}: two ways to bloom: one button opens the choices, all on screen, one says "Bloom 3 tiles, keep the other"`, toggle && inView && /Bloom 3 tiles, keep the other/.test(label3), label3);
     await page.close();
     const { page: p2 } = await open(stateWith({}, SET4), ph);
     await pick(p2, 3);

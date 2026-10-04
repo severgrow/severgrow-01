@@ -13,7 +13,7 @@ import { comboFor } from '../src/logic/draw.js';
 import { previewMove } from '../src/logic/preview.js';
 import { fixture } from '../../tests/helpers.js';
 import { fruitOnTop, runChoice } from './paint-positions.js';
-import { chooseBloom, drawMeld, hexCenter } from './drawing.js';
+import { chooseBloom, clickKind, drawMeld, hexCenter } from './drawing.js';
 
 const results: { name: string; ok: boolean; note?: string }[] = [];
 const check = (name: string, ok: boolean, note = '') => {
@@ -62,7 +62,7 @@ const open = async (state: State, o: Opts = {}) => {
 const st = (page: Page) => page.evaluate(() => (window as unknown as { __severgrow: { state: () => State } }).__severgrow.state());
 const histLen = async (page: Page) => (await st(page)).history?.length ?? 0;
 /** Chooses the Bloom button for n tiles (these tests hold one card group). */
-const pick = (page: Page, n: number) => page.click(`#moves [data-kind^="bloom-${n}-"]`);
+const pick = (page: Page, n: number) => clickKind(page, `#moves [data-kind^="bloom-${n}-"]`);
 /** The painting machine for the group in a position (to look up legal Blooms). */
 const comboIn = (s: State, n: number) => {
   const v = viewFor(s, 0);

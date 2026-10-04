@@ -11,7 +11,7 @@ import type { Action, Card, Player, State, Suit } from '../../src/engine/index.j
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { fixture } from '../../tests/helpers.js';
 import { forecastMove, needsConfirm } from '../src/logic/forecast.js';
-import { hexCenter } from './drawing.js';
+import { clickKind, hexCenter } from './drawing.js';
 import { cutPosition } from './cut-positions.js';
 
 const results: { name: string; ok: boolean }[] = [];
@@ -120,7 +120,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   // this bloom leaves 3 of my tiles cuttable, so Smart asks too
   for (const [mode, wantBar] of [['never', false], ['always', true], ['smart', true]] as const) {
     const { page } = await open(s, { w: 1280, h: 800, settings: { confirmPolicy: mode } });
-    await page.click('#moves [data-kind^="bloom-3-"]');
+    await clickKind(page, '#moves [data-kind^="bloom-3-"]');
     const a = await hexCenter(page, '-1,1');
     const b = await hexCenter(page, '1,1');
     await page.mouse.click(a.x, a.y);

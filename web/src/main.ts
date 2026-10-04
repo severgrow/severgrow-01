@@ -11,7 +11,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
@@ -81,7 +81,7 @@ import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
-import { fillIcons } from './ui/icons.js';
+import { FRUIT_SVG, fillIcons } from './ui/icons.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, setOrient } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
@@ -689,6 +689,8 @@ const wait = (ms: number, my = epoch) =>
 // Step 7: the pause menu. While it is open the opponent's moves and the animations wait
 // (the step in progress finishes; the next one starts after "Back to the game").
 let paused = false;
+/** v0.7: the list of Bloom choices is open (when there are two or more) */
+let bloomMenu = false;
 let unpauseWaiters: (() => void)[] = [];
 const whilePaused = () => new Promise<void>((resolve) => (paused ? unpauseWaiters.push(resolve) : resolve()));
 function setPaused(on: boolean) {
@@ -1392,9 +1394,11 @@ function renderGuide(advice: Advice | null) {
     case 'button':
       rect = above(document.querySelector('#moves .btn.primary'));
       break;
-    case 'kind':
-      rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
+    case 'kind': {
+      const el = document.querySelector<HTMLElement>(`#moves [data-kind="${t.move}"]`);
+      rect = above(el && el.offsetParent ? el : document.querySelector('#moves .bloom-toggle'));
       break;
+    }
   }
   if (!rect) return;
   arrow.hidden = false;
@@ -1784,28 +1788,56 @@ function renderControls(v: View, advice: Advice | null) {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
     const kindButtons = moveButtons(v, legal, sel);
+    // two or more ways to bloom: one "Bloom" button opens the list of choices (they never
+    // crowd the row or run off the screen); a single way gets its own button
+    const many = kindButtons.length > 1;
+    let host: HTMLElement = moves;
+    if (!many) bloomMenu = false;
+    if (many) {
+      const chosen = kindButtons.find((k) => sel.kind === k.kind);
+      const toggle = button(chosen ? shortKindLabel(chosen.kind) : BLOOM.Name, `kind bloom-toggle${chosen || bloomMenu ? ' on' : ''}`, () => {
+        bloomMenu = !bloomMenu;
+        render();
+      });
+      const sub = document.createElement('small');
+      sub.className = 'kind-keep';
+      sub.textContent = BLOOM.choices(kindButtons.length);
+      toggle.append(sub);
+      toggle.setAttribute('aria-haspopup', 'menu');
+      toggle.setAttribute('aria-expanded', String(bloomMenu));
+      moves.append(toggle);
+      const panel = document.createElement('div');
+      panel.className = 'bloom-options';
+      panel.setAttribute('role', 'menu');
+      panel.hidden = !bloomMenu;
+      moves.append(panel);
+      host = panel;
+    }
     for (const k of kindButtons) {
       const on = sel.kind === k.kind;
       // two or more share the row: short words, so they fit beside the piles on a phone
-      const b = button(kindButtons.length > 1 ? shortKindLabel(k.kind) : k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+      const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+        bloomMenu = false;
         session!.tapKind(k.kind);
         render();
       });
       b.dataset.kind = k.kind;
       b.dataset.kinds = k.kinds.join(' ');
-      if (kindButtons.length > 1) {
-        b.setAttribute('aria-label', k.label);
-        // the cards kept in hand stay visible as a small second line ("keep the other")
-        const rest = k.label.split(', ')[1];
-        if (rest) {
-          const small = document.createElement('small');
-          small.className = 'kind-keep';
-          small.textContent = rest;
-          b.append(small);
-        }
+      if (many) {
+        b.setAttribute('role', 'menuitemradio');
+        // the cards it uses, so two "Bloom 4 tiles" are told apart (numbers in their suit colours)
+        const cards = kindCards(k.kind)
+          .map((id) => v.hand.find((c) => c.id === id))
+          .filter((c): c is NonNullable<typeof c> => !!c)
+          .sort((x, y) => x.rank - y.rank || (x.suit ?? 0) - (y.suit ?? 0));
+        const nums = document.createElement('span');
+        nums.className = 'kind-cards';
+        nums.innerHTML = cards.map((c) => `<b class="${suitClass(c)}">${c.rank}</b>`).join('');
+        b.prepend(nums);
+        b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
       }
       b.setAttribute('aria-pressed', String(on));
-      moves.append(b);
+      host.append(b);
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
@@ -2003,8 +2035,17 @@ function renderPiles(v: View, advice: Advice | null) {
   $('discard-count').textContent = String(v.discard.length);
   // v0.6: "Fruit cards unseen: n" (public information only)
   const chip = unseenChip(v);
+  // compact: the Fruit card icon and the number (the full words for screen readers and on hover)
   $('fruit-chip').hidden = chip === null;
-  $('fruit-chip').textContent = chip ?? '';
+  if (chip !== null) {
+    const n = String(v.fruitUnseen);
+    if ($('fruit-chip').dataset.n !== n) {
+      $('fruit-chip').dataset.n = n;
+      $('fruit-chip').innerHTML = `<span class="i">${FRUIT_SVG}</span><b>${n}</b>`;
+    }
+    $('fruit-chip').setAttribute('aria-label', chip);
+    $('fruit-chip').title = chip;
+  }
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -2175,6 +2216,7 @@ function undoMove() {
 }
 
 function cancelSel() {
+  bloomMenu = false;
   draw = { ...DRAW0 };
   board.ghost(null);
   session?.cancel();

@@ -113,6 +113,8 @@ export const BLOOM = Object.freeze({
   name: 'bloom',
   /** the move button: "Bloom 3 tiles" / "Bloom 4 tiles" */
   button: (n: number) => `Bloom ${n} tiles`,
+  /** the one button that opens the list when there are several ways to bloom */
+  choices: (n: number) => `${n} ways`,
   /** when the group is longer than the bloom: "Bloom 3 tiles, keep the other" */
   buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
   /** How to play (HTML) */
