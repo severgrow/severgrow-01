@@ -51,13 +51,13 @@ export type Beats = {
 /** The usual beats: a longer think at the start, a pause before each tile move, housekeeping quick. */
 const USUAL = { first: 550, grow: 300, other: 90, draw: 120, discard: 320, turn: 320 };
 /**
- * The empty turn's beats (330ms). Drawing the board between the steps takes the rest, so on a
+ * The empty turn's beats (250ms). Drawing the board between the steps takes the rest, so on a
  * phone the whole turn shows for about EMPTY_TURN_MS (measured by web/e2e/emptyturn.ts). v0.7:
- * redraws got cheaper (no board frame, textures painted in idle time), so the beats grew from
- * 200ms to keep the same pace.
+ * redraws got cheaper (no board frame, textures painted in idle time; CI measured 280-430ms
+ * with 200ms of beats), so the beats grew to 250ms to keep the same pace.
  */
-export const QUICK_BEATS_MS = 330;
-const QUICK = { first: 110, other: 0, draw: 40, discard: 140, turn: 40 };
+export const QUICK_BEATS_MS = 250;
+const QUICK = { first: 80, other: 0, draw: 30, discard: 110, turn: 30 };
 
 /** The opponent's beats for a planned turn, at speed factor f (1 = Normal, 0 = Off). */
 export const opponentBeats = (actions: readonly Action[], f: number): Beats => {
