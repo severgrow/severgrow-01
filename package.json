@@ -21,7 +21,7 @@
     "play": "tsx src/cli/play-cli.ts",
     "replay": "tsx src/cli/replay-cli.ts",
     "grid": "tsx src/sim/grid.ts",
-    "e2e": "tsx web/e2e/smoke.ts && tsx web/e2e/painting.ts && tsx web/e2e/overhaul.ts && tsx web/e2e/monkey.ts --steps=200 && tsx web/e2e/emptyturn.ts && tsx web/e2e/fruitcards.ts",
+    "e2e": "tsx web/e2e/smoke.ts && tsx web/e2e/painting.ts && tsx web/e2e/overhaul.ts && tsx web/e2e/monkey.ts --steps=200 && tsx web/e2e/emptyturn.ts && tsx web/e2e/fruitcards.ts && tsx web/e2e/propass.ts",
     "ladder": "tsx src/sim/ladder.ts",
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",

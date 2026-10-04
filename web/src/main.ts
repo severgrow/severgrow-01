@@ -1495,9 +1495,9 @@ function applyLayout() {
   const l = computeLayout({ w, h, ...safeArea() }, radius);
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
+  document.documentElement.dataset.orient = l.orient;
   if (l.orient !== getOrient()) {
     setOrient(l.orient);
-    document.documentElement.dataset.orient = l.orient;
     photosForOrientation();
     if (session) {
       board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
@@ -1793,7 +1793,17 @@ function renderControls(v: View, advice: Advice | null) {
       });
       b.dataset.kind = k.kind;
       b.dataset.kinds = k.kinds.join(' ');
-      if (kindButtons.length > 1) b.setAttribute('aria-label', k.label);
+      if (kindButtons.length > 1) {
+        b.setAttribute('aria-label', k.label);
+        // the cards kept in hand stay visible as a small second line ("keep the other")
+        const rest = k.label.split(', ')[1];
+        if (rest) {
+          const small = document.createElement('small');
+          small.className = 'kind-keep';
+          small.textContent = rest;
+          b.append(small);
+        }
+      }
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }

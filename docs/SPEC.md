@@ -595,6 +595,29 @@ and slows the game (+11% on v0.5); 4 passes every other target. Root touch on or
 same (the root rarely matters), so the simpler wording stays ("touches yours"). Two Fruit cards
 in one turn happen in 8% of games and that side wins 48%: not too strong.
 
+### 11.5 Bloom simulation (v0.7)
+
+1,000 games, level 7 against level 7, one game per seed (`npx tsx src/sim/bloomsim.ts`; with the
+same level on both sides, swapping seats would replay the same games).
+
+| own turn | Grow steps | holds a Bloom group | a Bloom playable | Bloom possible but held | nothing to play |
+| --- | --- | --- | --- | --- | --- |
+| 1-3 | 5,994 | 36.2% | 36.2% | 0.0% | 0.0% |
+| 4-6 | 5,962 | 34.6% | 34.6% | 0.0% | 0.0% |
+| 7-12 | 7,250 | 37.5% | 37.4% | 0.1% | 0.0% |
+| 13+ | 23 | 39.1% | 39.1% | 0.0% | 0.0% |
+
+A group in hand can almost always be played somewhere (any shape, one hex touching is enough).
+Blooms per game 7.18, average size 3.08; runs 49.5%, sets 50.5%. A 3-card Bloom from a longer
+group: 0.1% (level 7 plays the 4 when it can). Run Blooms put their highest number on a chokepoint
+22.8%, against an opponent tile 75.8%, next to the network 49.3%. Tiles placed per turn in turns
+1-5: 2.02. Game length 9.61 turns per player (v0.6: 9.71); ends: deck 95.5%, Strangle 4.5%.
+Fruit cards played per game 3.49. Comeback (behind at half time, still won) 36.2%.
+
+Targets (guides): nothing to play after turn 3 under 60%: pass (0.0%: Sprout and Strengthen
+almost always leave a move; no lever needed); first player 46-54%: pass (53.0%); Strangle under
+15%: pass (4.5%); game length within 15% of the current default: pass (−1%).
+
 ---
 
 ## Appendix A: Parked rules (off by default)

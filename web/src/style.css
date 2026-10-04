@@ -4917,3 +4917,14 @@ body.paused #board * {
   margin: 0 0 4px;
   font-size: 0.88rem;
 }
+/* "Bloom 3 tiles" with "keep the other" as a small second line when two Bloom buttons share the row */
+.moves .btn.kind:has(.kind-keep) {
+  flex-direction: column;
+  line-height: 1.1;
+  gap: 1px;
+}
+.moves .btn.kind .kind-keep {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+}
