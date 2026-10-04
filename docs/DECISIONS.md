@@ -1,6 +1,25 @@
-# Decisions (Bloom, layout, homes, polish: v0.7)
+# Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
 One line each: where the brief left room, what was chosen and why.
+
+## v0.8 UI pass
+
+- Rule (asked for by the user): a Fruit card uses the turn's Sprout, so a turn has one Sprout, one Strengthen or one Fruit card. Blooms are unaffected. The error for a second one is `SPROUT_LIMIT`, the same as a second Sprout. `fruitUsesSprout: false` brings back v0.6/v0.7 play (the legacy test preset uses it, since it has no Sprouts at all).
+- The step's name stays "Grow" (user's choice), and the game's name stays Severor.
+- The Draw / Grow / Throw bar is gone. The hint line now carries the turn:
+  - it offers the Fruit card next to the sprout;
+  - it says "Fruit used" or "Sprouted" once the sprout is used;
+  - it always ends at "Throw a card".
+- The height freed by the bar, the landmarks' old headroom, and thinner margins (the zone keeps 4pt a side, the board 2 units) all go to the board. On tall phones the board is limited by the width, so the gain there is small (+2-4%); 360x640 gains most.
+- When the board cannot use more height, the spare goes to the piles row first (up to +40pt), then the message row (up to +40pt), then the hand row (up to +32pt). This keeps the gaps at 16pt or less.
+- The "?" is a fifth corner tool in the board zone's lower-right corner. That corner is usually empty: hex corners leave it free in both orientations, and the layout tests check this. During animations the Skip button takes the corner and the "?" hides.
+- The "Fruit cards unseen" chip is gone: no hidden-information indicator. The engine still keeps the public count for the bots.
+- Piles row: 84pt minimum (was 72), so the pile cards are about 25% taller. The labels and counts are unchanged; the old chip's slot gives them room.
+- Fruit card: the numbered cards' layout (corner index, centre icon), with the mushroom in both places. Bone cream, because Ash is already lavender and the four suit colours, gold and both player colours are taken.
+- Homes are drawn top-down inside their own hex:
+  - a round apple-tree canopy, with the mint circle marker at its heart;
+  - a 3/4 aerial volcano, with the diamond crater as its marker.
+  The home tile has no number plate, and the danger ring and count are drawn above the landmark, so no tile information is hidden. The old "rise a quarter tile" headroom is gone.
 
 - "Never a straight line" is read as "never has to be one": the brief also says "no shape restrictions beyond being connected", so a straight chain is one legal shape among many.
 - The action is a clean rename: `Bloom { cards, hexes }` replaces both old actions; the engine accepts the cards in any order (`hexes[i]` gets `cards[i]`); `legalActions` lists runs with the cards ascending.
@@ -18,7 +37,7 @@ One line each: where the brief left room, what was chosen and why.
 - Board orientation: chosen by measuring both for the board zone (ties keep points left-right). Tile width is the distance between neighbouring tile centres. 390x844 and 430x932 turn the board (+14%, +15%); 360x640 keeps points left-right (+29% from the slimmer dock).
 - The turned board is a rendering mapping only (logic/orient.ts): centres, corners, the point-to-hex lookups and the tile-shape tests of the painted textures go through it, so text, landmarks, textures and the top-left light stay upright. Each orientation paints its own tile textures (in the background).
 - The board has no outer frame, rim or corner pins; its drawing area is the tiles plus 6 units of margin and half a tile of headroom at the top (for the home landmarks).
-- The dock is three fixed rows: a message row (the hint line, or the forecast bar while a move waits for Confirm), the piles (with the Fruit chip beside them) and the hand. The hint and the forecast share one row because the empty forecast row read as a dead band under the board.
+- The dock is three fixed rows: a message row (the hint line, or the forecast bar while a move waits for Confirm), the piles (v0.8: no Fruit chip) and the hand. The hint and the forecast share one row because the empty forecast row read as a dead band under the board.
 - Spare height above a width-limited board goes to the piles row and the message row first (up to 40pt each), so no gap around the board is over 16pt; the pile cards grow with it.
 - The corner tools: shield top-left, target top-right, replay bottom-left, and Skip (only during animations) bottom-right; their one-time tooltip replaces the old "names for the first 3 games".
 - Sort is an icon at the right end of the hand (32pt reserved); the smallest visible slice of a card in a full hand is 36pt (was 40) so a full hand of 8 still fits beside it at 360pt.

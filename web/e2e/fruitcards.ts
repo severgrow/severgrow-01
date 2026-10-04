@@ -1,7 +1,7 @@
 // Fruit cards in the browser: the smoke test of the Fruit cards task (Steps 4 and 7), with touch
-// and mouse. The card in the hand (at the right, glowing, or dimmed with a reason), the chip
-// near the deck, picking it lights calm targets with the "any strength" note, a Fruit card on a
-// 9 (forecast, Confirm, burst, cut), Undo, two Fruit cards in one turn, the tile card shortcut,
+// and mouse. The card in the hand (at the right, glowing, or dimmed with a reason), no chip
+// near the deck (v0.8), picking it lights calm targets with the "any strength" note, a Fruit card on a
+// 9 (forecast, Confirm, burst, cut), Undo, v0.8's one Fruit card per turn then the throw, the tile card shortcut,
 // an empty turn, a Sprout, a Strengthen, an opponent's Fruit card, a full game to the end, the
 // word scans (no "bot", no "seed"/"plant"), and no sideways scroll at 360px with a full hand.
 // Saves screenshots (390x844) to docs/screens/fruit-cards/ with --shots.
@@ -114,11 +114,13 @@ console.log(`[1] the card in the hand, the chip, picking `);
   await page.close();
 }
 
-// ---- 2. two Fruit cards in one turn; the next one stays picked; the tile card shortcut ----
-console.log(`[2] two Fruit cards in one turn; the next on`);
+// ---- 2. v0.8: a Fruit card uses the turn's sprout; the tile card shortcut; Throw is next ----
+console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
 {
   const state = fruitPosition(NINE_PAIR, [[0, 2], [1, 5]], 2);
   const { page, errors } = await open(state, { settings: { confirmPolicy: 'never' } });
+  const hint0 = (await page.textContent('#hint')) ?? '';
+  check('after the draw the hint offers the Fruit card next to the sprout', hint0.includes('Sprout a card, or play your Fruit card'), hint0);
   await tap(page, '1,-1');
   const card = (await page.textContent('#tooltip')) ?? '';
   check('the tile card on a 9: "No combo can replace this. A Fruit card can." and "Use Fruit card"', card.includes('No combo can replace this. A Fruit card can.') && card.includes('Use Fruit card'));
@@ -127,14 +129,32 @@ console.log(`[2] two Fruit cards in one turn; the next on`);
   await idle(page);
   const one = await st(page);
   check('Confirm moves "Never": the shortcut plays at once', one.board['1,-1'] === null && one.fruitPlayed === 1);
-  const stillPicked = await page.locator('.l-over .target.kind-fruit').count();
-  check('another Fruit card in hand: its targets stay lit', stillPicked >= 1, `${stillPicked}`);
-  await shot(page, '07-second-fruit-ready');
-  const next = (await st(page)).board['1,0'] ? '1,0' : null;
-  if (next) await tap(page, next);
+  const lit = await page.locator('.l-over .target.kind-fruit').count();
+  check('the second Fruit card has no targets this turn (it used the sprout)', lit === 0, `${lit}`);
+  const fruitCards = page.locator('#hand .card.fruit');
+  const cls = (await fruitCards.last().getAttribute('class')) ?? '';
+  check('the second Fruit card is dimmed, not glowing', cls.includes('dim') && !cls.includes('fruit-ready'), cls);
+  const hint1 = (await page.textContent('#hint')) ?? '';
+  check('the hint says the Fruit card used the turn and points at the throw', hint1.includes('Fruit used') && hint1.includes('Throw'), hint1);
+  await fruitCards.last().click();
+  await page.waitForTimeout(250);
+  const why = (await page.textContent('#hint')) ?? '';
+  check('tapping it explains: "Sprout used this turn. Fruit is back next turn."', why.includes('Sprout used this turn'), why);
+  const sprouts = (await st(page)).sproutsThisTurn;
+  check('the engine agrees: the sprout is used', sprouts === 1);
+  await shot(page, '07-second-fruit-waits');
+  // the throw: the moves row's "Throw a card", then a card, and the turn passes
+  await page.click('#moves .btn:has-text("Throw")').catch(() => {});
+  await page.waitForTimeout(250);
+  const inThrow = (await st(page)).phase;
+  check('"Throw a card" moves on to the throw', inThrow === 'DISCARD', inThrow);
+  await page.locator('#hand .card:not(.fruit)').first().click();
+  await page.waitForTimeout(250);
+  if ((await page.locator('#confirm-play').isVisible().catch(() => false))) await page.click('#confirm-play');
+  await page.waitForFunction(`(() => { const s = window.__severgrow.state(); return s.turnPlayer === 0 && s.phase !== 'DISCARD' && s.turnNumber > ${one.turnNumber}; })()`, undefined, { timeout: 20000 }).catch(() => {});
   await idle(page);
-  const two = await st(page);
-  check('two Fruit cards in one turn', two.fruitPlayed === 2 && two.board['1,0'] === null);
+  const back = await st(page);
+  check('the opponent moves and my next turn starts clean (sprout free again)', back.turnPlayer === 0 && back.turnNumber > one.turnNumber && back.sproutsThisTurn === 0, `turn ${back.turnNumber} phase ${back.phase}`);
   check('no page errors (2)', errors.length === 0, errors[0]);
   await page.close();
 }

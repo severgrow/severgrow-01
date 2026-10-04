@@ -187,12 +187,11 @@ until its first move appears, and only while it is really still choosing.
   Bloom" below). With two or more ways to bloom, one **Bloom** button ("3 ways") opens the list of
   choices upward over the message row; each shows its card numbers in their suit colours, so two
   "Bloom 4 tiles" (3-4-5-6 and four 6s) are told apart. The row never runs off the screen.
-- **The Fruit chip** next to the piles is the Fruit card icon and the number of Fruit cards not
-  seen yet (its full words, "Fruit cards unseen: 3", are its spoken label and tooltip).
+- *(v0.8: the Fruit chip is gone; no hidden-information indicator.)*
 - **Cancel** always clears your choice. Esc does the same on a keyboard (while drawing, Esc first
   clears the shape, then the choice).
-- **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
-  **?** button next to them; tap it to read the tip, tap again to hide it.
+- *(v0.8: the "Draw, Grow, Throw" step bar is gone; the hint line carries the turn, and the
+  **?** (How to play) sits in the board's lower-right corner.)*
 - **Throw:** when it is time to throw, the hint says "Tap a card to throw it" and one
   tap throws that card (no Confirm). If nothing in your hand can grow, the game skips
   straight to the throw step for you.
@@ -680,3 +679,31 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
   - Fixed: the tip's "Got it" button was half cut off at the bottom of the box on a phone; it now
     sits beside the text. Also, the hint line said "That card can't grow anywhere now" for a
     Fruit card; it now gives the Fruit reason (Fruit cards never "grow").
+
+## v0.8 UI pass
+
+**No step bar.** The turn is now carried by the hint line in the dock. The steps soon become
+second nature, and the board gets the room.
+- After the draw, it says what you can do: "Tap a card to sprout it", or "Sprout a card, or play
+  your Fruit card" when one is playable. Blooms show as buttons.
+- Once the turn's sprout is used, it says what used it and points at the throw: "Fruit used ·
+  Bloom, or “Throw a card”" or "Sprouted · Next: “Throw a card”".
+- A held Fruit card is dimmed once the sprout is used. Tapping it says "Sprout used this turn.
+  Fruit is back next turn."
+
+**The "?"** is a round corner tool (40pt, 44pt hit area) in the board zone's lower-right corner.
+It is never over a tile or the dock, and is hidden while Skip takes that corner during an
+animation.
+
+**Piles** are about 25% taller (the row is at least 84pt). Each keeps its label and count
+("Deck 60", "Throw pile 1").
+
+**The Fruit card** is one of the family: the same dark face, tinted edge, inner frame, corners
+and depth as a numbered card. A small mushroom sits where the number sits, and a big one where
+the suit sits, in bone cream.
+
+**Homes** are seen from above, like the board, and stay inside their own hex:
+- my tree is a round apple canopy with red apples and a mint heart;
+- the opponent's volcano is a 3/4 aerial cone of faceted basalt, with glowing lava rivulets, a
+  diamond crater and a drift of smoke.
+The circle and the diamond still tell them apart without colour.

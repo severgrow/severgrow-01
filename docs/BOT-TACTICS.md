@@ -1,4 +1,4 @@
-# Bot tactics: Blooms, Strengthen and Fruit cards (bots-v0.9)
+# Bot tactics: Blooms, Strengthen and Fruit cards (bots-v0.10)
 
 All levels read only their own View (my hand, the board, the discard pile, counts). They never
 see the opponent's hand or the deck order. Every decision is deterministic for a given seed:
@@ -55,12 +55,14 @@ leaves the game):
 - *A quick look first:* every legal target is checked cheaply; only the 4 most promising get the
   full evaluation (exposure and pressure, as for any move). This keeps the bots fast.
 - *Strangle:* a Fruit card only empties a hex, so it can never surround a root by itself; but it
-  can **open** a Strangle: after it, a Sprout or combo this turn surrounds their root. Every
+  can **open** a Strangle: after it, a Bloom this turn surrounds their root (v0.8: a Fruit card
+  uses the turn's Sprout, so only a Bloom can finish it; the look-ahead knows this). Every
   level from 4 up takes that (never lost to a slip or laziness).
 - *Hold or use (levels 7-9):* a Fruit card used now gives up its future value. The bots subtract
   a "hold value", larger early in the game (the deck is full), smaller near the end, halved when
   well behind (a comeback try), and one point higher for a **second Fruit card in the same turn**
-  (only if it pays).
+  (only if it pays; since v0.8 the rules allow one Fruit card or Sprout per turn, so this case
+  only arises with `fruitUsesSprout` off).
 - *Blockers and thin links:* +1 for removing a top-rank tile (a permanent blocker); +0.8 when the
   target could take one of my tiles that holds up 3 or more (it protects my thin link).
 - *Counting (level 9):* with no Fruit card left unseen the hold value rises (nothing can remove
