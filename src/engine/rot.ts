@@ -1,4 +1,4 @@
-import { allCoords, allNeighbors, coordKey } from './board.js';
+import { allNeighbors, boardCoords, coordKey } from './board.js';
 import type { BoardCtx } from './overgrow.js';
 import type { Coord, Player, RotPickState, RulesConfig, Tile } from './types.js';
 
@@ -11,7 +11,7 @@ export const rotCount = (dw: number, config: RulesConfig): number =>
  * empty, rock or an enemy tile (i.e. not an own tile). Board order.
  */
 export const borderTiles = (ctx: BoardCtx, player: Player): Coord[] =>
-  allCoords(ctx.config.boardRadius).filter((c) => {
+  boardCoords(ctx.config).filter((c) => {
     const t = ctx.board[coordKey(c)];
     if (!t || t.owner !== player || t.root) return false;
     return allNeighbors(c).some((n) => ctx.board[coordKey(n)]?.owner !== player);

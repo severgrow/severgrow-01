@@ -1,4 +1,5 @@
 import { coordKey } from './board.js';
+import { reshuffleDiscard } from './deck.js';
 import { ACTION_PHASE, assertActionShape } from './actions.js';
 import { deadwood } from './deadwood.js';
 import { IllegalActionError } from './errors.js';
@@ -33,6 +34,8 @@ const knownAfter = (s: State, p: Player, hand: readonly Card[]): [number, number
 const draw = (s: State, from: 'deck' | 'discard'): State => {
   const p = s.turnPlayer;
   if (from === 'deck') {
+    // Lab: with reshuffle on, an empty deck takes the throw pile back first
+    if (s.deck.length === 0) s = reshuffleDiscard(s);
     const card = s.deck[0] ?? fail('DECK_EMPTY', 'the deck is empty');
     return {
       ...s,

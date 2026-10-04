@@ -1,4 +1,4 @@
-import { allCoords, coordKey, rootCoord } from './board.js';
+import { boardCoords, coordKey, homeCoord } from './board.js';
 import { createCards } from './cards.js';
 import { resolveConfig } from './config.js';
 import { drawFromDeck, shuffleDeck } from './deck.js';
@@ -29,9 +29,9 @@ export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): Sta
   const terrain = generateTerrain(seed, config);
 
   const board: Record<string, Tile | null> = {};
-  for (const c of allCoords(config.boardRadius)) board[coordKey(c)] = null;
+  for (const c of boardCoords(config)) board[coordKey(c)] = null;
   for (const owner of [0, 1] as const) {
-    board[coordKey(rootCoord(owner, config.rootStyle, config.boardRadius))] = { owner, strength: 0, root: true };
+    board[coordKey(homeCoord(owner, config))] = { owner, strength: 0, root: true };
   }
 
   const deal = dealOpening(seed, config);

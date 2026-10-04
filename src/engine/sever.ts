@@ -1,11 +1,11 @@
-import { allCoords, allNeighbors, coordKey, rootCoord } from './board.js';
+import { allNeighbors, boardCoords, coordKey, homeCoord } from './board.js';
 import type { Coord, Player, RulesConfig, Tile } from './types.js';
 
 type Board = Record<string, Tile | null>;
 
 /** Keys of player's tiles reachable from their root through their own tiles. */
 export const connectedKeys = (board: Board, config: RulesConfig, player: Player): Set<string> => {
-  const root = rootCoord(player, config.rootStyle, config.boardRadius);
+  const root = homeCoord(player, config);
   const rootTile = board[coordKey(root)];
   if (!rootTile?.root || rootTile.owner !== player) {
     throw new Error(`invariant: player ${player} root missing at ${coordKey(root)}`);
@@ -39,7 +39,7 @@ export const sever = (
   const severed: { player: Player; coords: Coord[] }[] = [];
   for (const player of [(1 - mover) as Player, mover]) {
     const keep = connectedKeys(board, config, player);
-    const coords = allCoords(config.boardRadius).filter((c) => {
+    const coords = boardCoords(config).filter((c) => {
       const k = coordKey(c);
       return board[k]?.owner === player && !keep.has(k);
     });

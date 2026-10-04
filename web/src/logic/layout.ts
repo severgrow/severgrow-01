@@ -70,11 +70,42 @@ const S = 30;
  */
 export const boardUnits = (radius: number, orient: Orient = 'pointy') => {
   const m = 2;
+  if (shape) return shapeUnits(shape, orient, m);
   const halfLong = Math.sqrt(3) * S * radius + (Math.sqrt(3) / 2) * S + m; // across the points
   const halfShort = 1.5 * S * radius + S + m; // across the flat sides
   const halfW = orient === 'pointy' ? halfLong : halfShort;
   const halfH = orient === 'pointy' ? halfShort : halfLong;
   return { w: 2 * halfW, h: 2 * halfH, x0: -halfW, y0: -halfH, hexW: Math.sqrt(3) * S };
+};
+
+// The Lab (test copy): a board of any shape. Its drawing area is the box around its tiles, turned
+// the way the page will turn it (the homes on the centre line). null: the classic hexagon.
+type Shape = { cells: readonly string[]; rot: (o: Orient) => number };
+let shape: Shape | null = null;
+export const setBoardShape = (s: Shape | null) => {
+  shape = s;
+};
+const shapeUnits = (sh: Shape, orient: Orient, m: number) => {
+  const a = (((orient === 'pointy' ? 0 : -90) + 60 * sh.rot(orient)) * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const k of sh.cells) {
+    const [q, r] = k.split(',').map(Number) as [number, number];
+    const bx = Math.sqrt(3) * S * (q + r / 2);
+    const by = 1.5 * S * r;
+    const x = bx * cos - by * sin;
+    const y = bx * sin + by * cos;
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const e = S + m; // a tile's corner reach, whatever the turn
+  return { w: x1 - x0 + 2 * e, h: y1 - y0 + 2 * e, x0: x0 - e, y0: y0 - e, hexW: Math.sqrt(3) * S };
 };
 
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);

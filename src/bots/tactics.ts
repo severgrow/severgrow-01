@@ -7,7 +7,7 @@
 // v0.6 Fruit card tiers: 0-1 leave it to chance (levels 1-3 play one at a random moment, see
 // levels.ts), 2 simple rules (4-6: a high tile, a big cut, a Strangle), 3 full evaluation (7-8),
 // 4 also counts the unseen Fruit cards (9). A Fruit card is never an ordinary throw.
-import { allNeighbors, coordKey, createCards, hexDistance, isFruitCard, legalActions, parseKey, rootCoord } from '../engine/index.js';
+import { allNeighbors, coordKey, createCards, hexDistance, isFruitCard, legalActions, homeCoord, parseKey } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import { lookBlooms } from './bloomLook.js';
 import { cutLoss, simulate } from './evaluate.js';
@@ -111,7 +111,7 @@ export const judgeStrengthen = (t: TacticsCtx, a: Extract<Action, { t: 'Sprout' 
   const after = to >= v.config.maxRank ? 0 : chanceAbove(v, t.unseen, to);
   let value = lossPts * reach * (before - after);
   const reasons = [`${from} to ${to}: beatable ${Math.round(before * 100)}% to ${Math.round(after * 100)}%, protects ${lost.length} tiles`];
-  const myRoot = coordKey(rootCoord(v.player, v.config.rootStyle, v.config.boardRadius));
+  const myRoot = coordKey(homeCoord(v.player, v.config));
   if (hexDistance(parseKey(key), parseKey(myRoot)) <= 1 && reach >= 0.45) {
     value += 0.5;
     reasons.push('guards my root');
@@ -154,7 +154,7 @@ export const lookFruit = (v: View, a: Extract<Action, { t: 'PlayFruit' }>): Frui
  */
 const opensStrangle = (v: View, a: Extract<Action, { t: 'PlayFruit' }>, sim: Simulation): boolean => {
   const o = other(v.player);
-  const ring = allNeighbors(rootCoord(o, v.config.rootStyle, v.config.boardRadius)).map(coordKey).filter((k) => k in v.board);
+  const ring = allNeighbors(homeCoord(o, v.config)).map(coordKey).filter((k) => k in v.board);
   // cheap first check: at most one ring hex left that is not mine or rock
   const open = ring.filter((k) => v.terrain[k] !== 'rock' && sim.board[k]?.owner !== v.player);
   if (open.length !== 1) return false;

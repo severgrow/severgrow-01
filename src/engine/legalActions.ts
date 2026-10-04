@@ -1,4 +1,4 @@
-import { allCoords, allNeighbors, coordKey } from './board.js';
+import { allNeighbors, boardCoords, coordKey } from './board.js';
 import { MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { fruitTargetBlocker } from './fruit.js';
 import { claimBlocker } from './overgrow.js';
@@ -95,7 +95,7 @@ export type BloomChoice = { kind: 'set' | 'run'; cards: Card[]; hexes: Coord[]; 
 export const bloomChoices = (v: View): BloomChoice[] => {
   if (v.phase !== 'ACT' || v.player !== v.actor) return [];
   const p = v.player;
-  const board = allCoords(v.config.boardRadius);
+  const board = boardCoords(v.config);
   const out: BloomChoice[] = [];
   const claimable = new Map<number, Coord[]>();
   const claimableBy = (rank: number) => {
@@ -134,8 +134,7 @@ export const bloomAction = (c: BloomChoice, order: readonly number[]): Action =>
 
 const actActions = (v: View): Action[] => {
   const p = v.player;
-  const radius = v.config.boardRadius;
-  const board = allCoords(radius);
+  const board = boardCoords(v.config);
   const reps = representatives(v.hand);
   const out: Action[] = [];
   // v0.7 Bloom: every legal assignment of every choice (a set once per hex set)
@@ -177,7 +176,8 @@ export const legalActions = (view: View): Action[] => {
   switch (view.phase) {
     case 'DRAW': {
       const out: Action[] = [];
-      if (view.deckCount > 0) out.push({ t: 'Draw', from: 'deck' });
+      // Lab: with reshuffle on, an empty deck can still be drawn from (the throw pile comes back)
+      if (view.deckCount > 0 || (view.config.reshuffleDiscard && view.discard.length > 1)) out.push({ t: 'Draw', from: 'deck' });
       if (view.discard.length > 0) out.push({ t: 'Draw', from: 'discard' });
       return out;
     }

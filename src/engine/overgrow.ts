@@ -1,4 +1,4 @@
-import { coordKey, isOnBoard } from './board.js';
+import { coordKey, onBoard } from './board.js';
 import type { IllegalActionCode } from './errors.js';
 import type { Coord, Player, RulesConfig, Terrain, Tile } from './types.js';
 
@@ -18,7 +18,7 @@ export const canOvergrow = (existing: Tile, player: Player, strength: number): b
  * when the claim is legal (empty hex, or an overgrowable enemy tile).
  */
 export const claimBlocker = (ctx: BoardCtx, player: Player, coord: Coord, strength: number): IllegalActionCode | null => {
-  if (!isOnBoard(coord, ctx.config.boardRadius)) return 'OFF_BOARD';
+  if (!onBoard(coord, ctx.config)) return 'OFF_BOARD';
   const key = coordKey(coord);
   if (ctx.terrain[key] === 'rock') return 'ROCK';
   const existing = ctx.board[key];

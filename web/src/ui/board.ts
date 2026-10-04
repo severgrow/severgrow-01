@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
+import { boardCoords, coordKey, homeCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -203,7 +203,7 @@ export class BoardView {
     this.shownVeins = new Set();
     const svg = this.svg;
     svg.replaceChildren();
-    const coords = allCoords(config.boardRadius);
+    const coords = boardCoords(config);
     this.keys = coords.map(coordKey);
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
@@ -298,7 +298,7 @@ export class BoardView {
     // Step 4: the homes as landmarks (my tree, the opponent's volcano), drawn once, kept across renders
     const colors = materialsOf(paletteId).colors;
     this.homeEls = ([0, 1] as const).map((p) => {
-      const key = coordKey(rootCoord(p, config.rootStyle, config.boardRadius));
+      const key = coordKey(homeCoord(p, config));
       return drawLandmark(this.layers.homes, p === 0 ? 'tree' : 'volcano', key, centerOf(key), getOrient(), colors, look);
     });
   }
@@ -701,7 +701,7 @@ export class BoardView {
     return this.layers.fx;
   }
   rootKey(p: Player) {
-    return coordKey(rootCoord(p, this.config.rootStyle, this.config.boardRadius));
+    return coordKey(homeCoord(p, this.config));
   }
   /** Where a hex is on screen (for captions and tooltips). */
   screenPoint(key: string): { x: number; y: number } {

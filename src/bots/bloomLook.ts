@@ -1,6 +1,6 @@
 // v0.7 Bloom look: a cheap first judgement of every legal Bloom (no cut check), so the bots
 // only fully simulate a short list. Pure: reads only the View.
-import { allNeighbors, bloomAction, bloomChoices, coordKey, rootCoord } from '../engine/index.js';
+import { allNeighbors, bloomAction, bloomChoices, coordKey, homeCoord } from '../engine/index.js';
 import type { Action, Player, View } from '../engine/index.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
@@ -34,7 +34,7 @@ export type BloomLook = {
 export const lookBlooms = (v: View): BloomLook[] => {
   const me = v.player;
   const opp = other(me);
-  const ring = allNeighbors(rootCoord(opp, v.config.rootStyle, v.config.boardRadius)).map(coordKey).filter((k) => k in v.board);
+  const ring = allNeighbors(homeCoord(opp, v.config)).map(coordKey).filter((k) => k in v.board);
   const open = ring.filter((k) => v.terrain[k] !== 'rock' && v.board[k]?.owner !== me);
   const enemyNear = (k: string) => {
     const [q, r] = k.split(',').map(Number) as [number, number];

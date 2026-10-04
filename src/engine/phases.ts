@@ -1,5 +1,5 @@
 import { deadwood } from './deadwood.js';
-import { drawFromDeck } from './deck.js';
+import { drawFromDeck, reshuffleDiscard } from './deck.js';
 import { deckExhaustionResult, strangleResult } from './result.js';
 import { scores } from './scoring.js';
 import { sever } from './sever.js';
@@ -58,10 +58,21 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
   const p = s.turnPlayer;
   const kept = settled.hands[p];
   const need = Math.max(0, s.config.handSize - kept.length);
-  const { drawn, deck } = drawFromDeck(settled.deck, need);
-  const hands: [typeof kept, typeof kept] = [...settled.hands];
+  // Lab: with reshuffle on, a short deck takes the throw pile back first
+  const stocked = settled.deck.length < need ? reshuffleDiscard(settled) : settled;
+  const { drawn, deck } = drawFromDeck(stocked.deck, need);
+  const hands: [typeof kept, typeof kept] = [stocked.hands[0], stocked.hands[1]];
   hands[p] = [...kept, ...drawn];
-  const refilled: State = { ...settled, hands, deck };
+  let refilled: State = { ...stocked, hands, deck };
+  if (s.config.reshuffleDiscard) {
+    // the deck never ends the game: only the turn limit does (a hand may stay short)
+    if (refilled.deck.length === 0) refilled = reshuffleDiscard(refilled);
+    if (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer) {
+      const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
+      return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, 'turn_limit'));
+    }
+    return passTurn(refilled);
+  }
 
   if (drawn.length < need) {
     // Kept-hand deadwood: the turn player's hand before the refill; the opponent's

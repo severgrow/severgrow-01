@@ -1,7 +1,7 @@
 // The share card (UI overhaul item 20): a picture of the result, drawn on a canvas in the
 // browser and handed to the phone's share sheet (or saved as a file). Nothing is uploaded.
 // This file is the card's layout: pure, so a test can check nothing overlaps or spills.
-import { allCoords, coordKey } from '../../../src/engine/index.js';
+import { allCoords, coordKey, parseKey } from '../../../src/engine/index.js';
 import type { Player, Tile } from '../../../src/engine/index.js';
 
 export const SHARE_W = 1080;
@@ -19,6 +19,8 @@ export type ShareData = {
   highlights: string[];
   board: Record<string, Tile | null>;
   radius: number;
+  /** the Lab (test copy): the board's hexes when it is not the classic hexagon */
+  cells?: readonly string[] | undefined;
   me: Player;
 };
 
@@ -56,17 +58,23 @@ export const shareLayout = (d: ShareData): ShareLayout => {
   const hlH = hl.length * (Math.round(34 * 1.25) + 12);
   const boardH = SHARE_H - M - hlH - 24 - y;
   const R = d.radius;
-  const unitW = Math.sqrt(3) * (2 * R + 1);
-  const unitH = 1.5 * (2 * R) + 2;
+  // the Lab (test copy): any set of hexes; the classic board is the hexagon of radius R
+  const coords = d.cells ? d.cells.map(parseKey) : allCoords(R);
+  const px = coords.map((c) => Math.sqrt(3) * (c.q + c.r / 2));
+  const py = coords.map((c) => 1.5 * c.r);
+  const midX = (Math.min(...px) + Math.max(...px)) / 2;
+  const midY = (Math.min(...py) + Math.max(...py)) / 2;
+  const unitW = Math.max(...px) - Math.min(...px) + Math.sqrt(3);
+  const unitH = Math.max(...py) - Math.min(...py) + 2;
   const hex = Math.floor(Math.min(W / unitW, boardH / unitH));
   const bw = Math.round(unitW * hex);
   const bh = Math.round(unitH * hex);
   const cx = Math.round(SHARE_W / 2);
   const cy = Math.round(y + boardH / 2);
-  const cells = allCoords(R).map((c) => {
+  const cells = coords.map((c) => {
     const key = coordKey(c);
     const t = d.board[key];
-    return { key, x: cx + hex * Math.sqrt(3) * (c.q + c.r / 2), y: cy + hex * 1.5 * c.r, owner: t ? t.owner : null, root: !!t?.root };
+    return { key, x: cx + hex * (Math.sqrt(3) * (c.q + c.r / 2) - midX), y: cy + hex * (1.5 * c.r - midY), owner: t ? t.owner : null, root: !!t?.root };
   });
   const board = { cx, cy, hex, cells, x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
   y += boardH + 24;

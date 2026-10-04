@@ -49,7 +49,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, computeLayout } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, computeLayout, setBoardShape } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -1569,7 +1569,10 @@ function applyLayout() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
-  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}`;
+  // the Lab (test copy): a board of any shape fits by the box around its tiles
+  const shapeCfg = session?.state.config;
+  setBoardShape(shapeCfg?.board ? { cells: shapeCfg.board.cells, rot: (o) => homeRotation(o, shapeCfg, HUMAN) } : null);
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
@@ -2971,6 +2974,7 @@ bind('go-share', () => {
     highlights: hl,
     board: st.board,
     radius: st.config.boardRadius,
+    cells: st.config.board?.cells,
     me: HUMAN,
   }).then((r) => {
     if (r === 'saved') $('go-share').textContent = 'Saved';

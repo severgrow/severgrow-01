@@ -1,7 +1,7 @@
 // v0.7: the two homes (my tree, the opponent's volcano). How many of a home's six sides are
 // blocked (off the board, rock, or an enemy tile: the Strangle rule) and whether it is in
 // danger (4 or more blocked, at least one by an enemy tile). Public information only.
-import { allNeighbors, coordKey, rootCoord } from '../../../src/engine/index.js';
+import { allNeighbors, coordKey, homeCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 
 type Ctx = { config: RulesConfig; board: Record<string, Tile | null>; terrain: Record<string, Terrain> };
@@ -11,7 +11,7 @@ export type HomeSides = { key: string; blocked: number; byEnemy: number; danger:
 export const DANGER_SIDES = 4;
 
 export const homeSides = (s: Ctx, owner: Player): HomeSides => {
-  const home = rootCoord(owner, s.config.rootStyle, s.config.boardRadius);
+  const home = homeCoord(owner, s.config);
   let byEnemy = 0;
   const sides = allNeighbors(home).map((n) => {
     const k = coordKey(n);

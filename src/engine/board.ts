@@ -1,5 +1,5 @@
 import { DIRECTIONS } from './constants.js';
-import type { Coord, Player, RootStyle } from './types.js';
+import type { BoardSpec, Coord, Player, RootStyle, RulesConfig } from './types.js';
 
 /** Normalises -0 to 0 so keys and JSON stay canonical. */
 const n0 = (x: number): number => x + 0;
@@ -79,3 +79,33 @@ export const rootCoord = (player: Player, style: RootStyle, radius: number): Coo
   const p1: Coord = style === 'ring2' ? { q: -2, r: 2 } : { q: -radius, r: radius };
   return player === 0 ? { q: n0(p1.q), r: n0(p1.r) } : mirror(p1);
 };
+
+// ---------- Lab: a board of any shape (config.board), or the classic hexagon ----------
+
+type BoardConfig = Pick<RulesConfig, 'boardRadius' | 'rootStyle' | 'board'>;
+const cellSets = new WeakMap<BoardSpec, Set<string>>();
+const cellSet = (b: BoardSpec): Set<string> => {
+  let set = cellSets.get(b);
+  if (!set) cellSets.set(b, (set = new Set(b.cells)));
+  return set;
+};
+const coordLists = new WeakMap<BoardSpec, Coord[]>();
+
+/** Is this hex on the game's board? */
+export const onBoard = (c: Coord, config: BoardConfig): boolean =>
+  config.board ? cellSet(config.board).has(coordKey(c)) : isOnBoard(c, config.boardRadius);
+
+/** Every hex of the game's board, in board order. */
+export const boardCoords = (config: BoardConfig): Coord[] => {
+  if (!config.board) return allCoords(config.boardRadius);
+  let list = coordLists.get(config.board);
+  if (!list) coordLists.set(config.board, (list = config.board.cells.map(parseKey)));
+  return list;
+};
+
+/** A player's home on the game's board. */
+export const homeCoord = (player: Player, config: BoardConfig): Coord =>
+  config.board ? parseKey(config.board.homes[player]) : rootCoord(player, config.rootStyle, config.boardRadius);
+
+/** On-board neighbours of c (any board), in DIRECTIONS order. */
+export const boardNeighbors = (c: Coord, config: BoardConfig): Coord[] => allNeighbors(c).filter((n) => onBoard(n, config));

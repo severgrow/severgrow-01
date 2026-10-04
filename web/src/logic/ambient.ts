@@ -2,7 +2,7 @@
 // nutrients pulsing out from my root along connected veins, lava bubbles and embers, moss sway.
 // Pure and deterministic (a hash of the hex, never Math.random), with a hard cap, and nothing
 // at all with Effects Low or Reduce motion.
-import { allNeighbors, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
+import { allNeighbors, coordKey, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import { connectedKeys } from '../../../src/engine/index.js';
 
@@ -56,7 +56,7 @@ export const ambientPlan = (a: AmbientInput): AmbientPlan => {
   } catch {
     joined = new Set();
   }
-  const root = coordKey(rootCoord(a.me, a.config.rootStyle, a.config.boardRadius));
+  const root = coordKey(homeCoord(a.me, a.config));
   if (joined.has(root)) {
     const depth = new Map([[root, 0]]);
     const queue = [root];

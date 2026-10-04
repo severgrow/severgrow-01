@@ -9,7 +9,8 @@ export type ConfigErrorCode =
   | 'HAND_SIZE_TOO_SMALL'
   | 'DECK_TOO_SMALL'
   | 'ROOT_OFF_BOARD'
-  | 'TERRAIN_INFEASIBLE';
+  | 'TERRAIN_INFEASIBLE'
+  | 'INVALID_BOARD';
 
 /** Thrown by `newGame` / `resolveConfig` for invalid configuration or seed. */
 export class ConfigError extends Error {

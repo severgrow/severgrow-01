@@ -28,6 +28,8 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   fruitUsesSprout: true,
   rotEnabled: false,
   knockEnabled: false,
+  board: null,
+  reshuffleDiscard: false,
 });
 
 /** Lowest allowed maxRank (v0.4). */
@@ -60,6 +62,7 @@ const BOOLEAN_KEYS = [
   'fruitUsesSprout',
   'rotEnabled',
   'knockEnabled',
+  'reshuffleDiscard',
 ] as const;
 
 
@@ -98,6 +101,18 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     throw new ConfigError('DECK_TOO_SMALL', `${deckSize} cards cannot deal two hands of ${c.handSize}, a discard, and leave a card to draw`);
   }
 
+  // Lab: a board of any shape brings its own cells, terrain and homes
+  if (c.board !== null) {
+    const b = c.board as unknown;
+    const keys = (x: unknown) => Array.isArray(x) && x.every((k) => typeof k === 'string' && /^-?\d+,-?\d+$/.test(k));
+    const ok = typeof b === 'object' && b !== null && keys((b as { cells: unknown }).cells) && keys((b as { rock: unknown }).rock) && keys((b as { gold: unknown }).gold) && keys((b as { homes: unknown }).homes);
+    if (!ok || c.board.cells.length < 2 || c.board.homes.length !== 2) throw new ConfigError('INVALID_BOARD', 'board must list cells, rock, gold and two homes');
+    const cells = new Set(c.board.cells);
+    const [h0, h1] = c.board.homes;
+    if (!cells.has(h0) || !cells.has(h1) || h0 === h1) throw new ConfigError('INVALID_BOARD', 'both homes must be different board cells');
+    if ([...c.board.rock, ...c.board.gold].some((k) => !cells.has(k) || k === h0 || k === h1)) throw new ConfigError('INVALID_BOARD', 'rock and gold must be board cells, never a home');
+    return c;
+  }
 
   for (const p of [0, 1] as const) {
     if (!isOnBoard(rootCoord(p, c.rootStyle, c.boardRadius), c.boardRadius)) {
