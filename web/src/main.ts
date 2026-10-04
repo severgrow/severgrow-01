@@ -1626,9 +1626,13 @@ let lastScoreFit = '';
 function fitHudNames() {
   const hud = document.querySelector<HTMLElement>('.hud');
   if (!hud) return;
-  hud.classList.remove('names-off');
-  const tight = [...hud.querySelectorAll<HTMLElement>('.score')].some((e) => e.scrollWidth > e.clientWidth + 0.5);
-  hud.classList.toggle('names-off', tight);
+  hud.classList.remove('names-off', 'tight');
+  const over = () => [...hud.querySelectorAll<HTMLElement>('.score')].some((e) => e.scrollWidth > e.clientWidth + 1); // 1px: rounding of a fractional column
+  if (!over()) return;
+  hud.classList.add('names-off');
+  // still too wide (Large text, three-digit scores on a 360px phone): smaller numbers and a
+  // narrower pill, both sides alike
+  if (over()) hud.classList.add('tight');
 }
 
 /** The moment, summarised for the hint line (overhaul item 13; the wording lives in logic/hint.ts). */

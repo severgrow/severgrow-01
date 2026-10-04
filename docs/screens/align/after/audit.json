@@ -1,0 +1,162 @@
+[
+  {
+    "viewport": "360x640",
+    "centre": 180,
+    "offsets": {
+      "pill": -0.01,
+      "raceTick": 0,
+      "board": -0.21,
+      "piles": 0,
+      "hint": 0,
+      "hand": 0
+    },
+    "margins": {
+      "board": [
+        7.7,
+        8.2
+      ],
+      "hand": [
+        23.3,
+        23.3
+      ],
+      "header": [
+        6,
+        6
+      ]
+    },
+    "board": {
+      "above": 12.2,
+      "below": 12.2,
+      "tileW": 54.92
+    },
+    "lone": []
+  },
+  {
+    "viewport": "390x844",
+    "centre": 195,
+    "offsets": {
+      "pill": -0.01,
+      "raceTick": 0,
+      "board": -0.23,
+      "piles": 0,
+      "hint": 0,
+      "hand": 0
+    },
+    "margins": {
+      "board": [
+        9.7,
+        10.2
+      ],
+      "hand": [
+        17.8,
+        17.8
+      ],
+      "header": [
+        6,
+        6
+      ]
+    },
+    "board": {
+      "above": 27.8,
+      "below": 27.8,
+      "tileW": 59
+    },
+    "lone": []
+  },
+  {
+    "viewport": "430x932",
+    "centre": 215,
+    "offsets": {
+      "pill": -0.01,
+      "raceTick": 0,
+      "board": -0.25,
+      "piles": 0,
+      "hint": 0,
+      "hand": 0
+    },
+    "margins": {
+      "board": [
+        8.4,
+        8.9
+      ],
+      "hand": [
+        16.8,
+        16.8
+      ],
+      "header": [
+        6,
+        6
+      ]
+    },
+    "board": {
+      "above": 47.7,
+      "below": 47.7,
+      "tileW": 65.91
+    },
+    "lone": []
+  },
+  {
+    "viewport": "768x1024",
+    "centre": 384,
+    "offsets": {
+      "pill": -0.01,
+      "raceTick": 0,
+      "board": 0.21,
+      "piles": 0,
+      "hint": 0,
+      "hand": 0
+    },
+    "margins": {
+      "board": [
+        5.7,
+        5.2
+      ],
+      "hand": [
+        66.8,
+        66.8
+      ],
+      "header": [
+        10,
+        10
+      ]
+    },
+    "board": {
+      "above": 22.1,
+      "below": 23,
+      "tileW": 108.82
+    },
+    "lone": []
+  },
+  {
+    "viewport": "1280x800",
+    "centre": 640,
+    "offsets": {
+      "pill": -0.01,
+      "raceTick": 0,
+      "board": 0.22,
+      "piles": 0,
+      "hint": 0,
+      "hand": 0
+    },
+    "margins": {
+      "board": [
+        32.8,
+        446.3
+      ],
+      "hand": [
+        863.3,
+        41.3
+      ],
+      "header": [
+        266,
+        266
+      ]
+    },
+    "board": {
+      "above": 10.5,
+      "below": 11.4,
+      "tileW": 115.19
+    },
+    "lone": []
+  }
+]

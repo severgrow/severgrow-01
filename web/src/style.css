@@ -327,11 +327,15 @@ button {
   gap: 7px;
   font-size: 0.9rem;
   min-width: 0;
-  overflow: hidden;
+  /* no clipping (the button's rounded corners cut the names off): main.ts measures the content
+     and drops the words when they don't fit */
+  overflow: visible;
   white-space: nowrap;
 }
 .score.bot {
-  justify-content: flex-end;
+  /* "safe": too-wide content overflows to the right, where the fit check can see it, never
+     clipping the score number off the left */
+  justify-content: safe flex-end;
 }
 .score .num {
   font-size: 1.7rem;
@@ -5087,4 +5091,69 @@ html.align-overlay::before {
 .hand-slot:disabled {
   opacity: 0.35;
   cursor: default;
+}
+/* the score bar's last step when space is short: smaller numbers, a narrower pill (both sides) */
+.hud.tight .score .num {
+  font-size: 1.25rem;
+  min-width: 0;
+}
+.hud.tight .score {
+  gap: 4px;
+}
+.hud.tight .turn {
+  min-width: 0;
+  padding-inline: 8px;
+}
+/* the pile labels stay on one line, centred under their card (they may reach a little past
+   a narrow card, into the gap) */
+.dock .table-row .pile {
+  overflow: visible;
+}
+.dock .table-row .pile-meta {
+  white-space: nowrap;
+  justify-self: center;
+}
+/* Undo and Sort sit at the bottom of the hand row: the end cards lean outward at the top, never
+   at the bottom (they turn about their bottom edge) */
+.dock .hand-row > .hand-slot {
+  align-self: end;
+  margin-bottom: 10px;
+}
+/* Positioning pass, round 2: each name sits small under its score (◯ 0 over "You", 0 ◆ over
+   "Opponent"), so both fit their equal columns on a 390pt phone with the pill exactly centred;
+   the words go only when even this doesn't fit (360pt with Large text) */
+.hud .score {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  align-items: center;
+  align-content: center;
+  column-gap: 6px;
+  row-gap: 1px;
+  justify-content: start;
+}
+.hud .score.bot {
+  justify-content: safe end;
+}
+.hud .score .mark,
+.hud .score .num {
+  grid-row: 1;
+}
+.hud .score .who {
+  grid-row: 2;
+  grid-column: 1 / span 2;
+  /* never narrower than the word: the columns grow to fit it, or the fit check hides both */
+  min-width: max-content;
+  justify-self: start;
+  font-size: 0.66rem;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+.hud .score .num {
+  line-height: 1;
+}
+/* each name hangs from its outer edge (mirrored), so a long word grows inward, never clipped */
+.hud .score.bot .who {
+  justify-self: end;
 }

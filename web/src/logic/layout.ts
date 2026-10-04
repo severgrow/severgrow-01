@@ -55,7 +55,8 @@ const COL_GAP = 8;
 export const CENTRE_MIN = 172;
 /** A pile's column: its card, or its label with the count ("Throw pile 1", 12pt), if wider. */
 const PILE_META_W = 72;
-const CENTRE_MAX = 260;
+/** The longest hint (28 characters) measures 163px at 14pt: a little air either side. */
+const CENTRE_FIT = 184;
 /** One line of hint and one row of move buttons. */
 export const HINT_H = 18;
 export const MOVES_H = 44;
@@ -118,7 +119,9 @@ const partsIn = (dock: Box, rows: Layout['rows'], card: Layout['card'], mode: La
   // both pile columns are the same width (the wider of the card and the label), so the pair is
   // a true mirror and the centre column sits exactly on the centre line
   const pileW = Math.max(PILE_META_W, pileCard.w);
-  const centreW = Math.min(CENTRE_MAX, dock.w - 2 * DOCK_PAD - 2 * COL_GAP - 2 * pileW);
+  // compact: the centre column is just wide enough for the hint, so the deck and the throw pile
+  // read as a pair close either side of it (the rest is equal air at both ends of the row)
+  const centreW = Math.max(CENTRE_MIN, Math.min(CENTRE_FIT, dock.w - 2 * DOCK_PAD - 2 * COL_GAP - 2 * pileW));
   const centre = { x: c - centreW / 2, w: centreW };
   const deck: Box = { x: centre.x - COL_GAP - pileW, y: dock.y, w: pileW, h: rows.table };
   const discard: Box = { x: centre.x + centreW + COL_GAP, y: dock.y, w: pileW, h: rows.table };
@@ -128,7 +131,8 @@ const partsIn = (dock: Box, rows: Layout['rows'], card: Layout['card'], mode: La
   const handY = dock.y + rows.table + (mode === 'side' ? SIDE_GAP : 0);
   const fanW = card.w + (maxHand - 1) * card.slice;
   const fan: Box = { x: c - fanW / 2, y: handY + HEIGHTS.handPad / 2, w: fanW, h: card.h };
-  const slotY = handY + (rows.hand - SORT_W) / 2;
+  // at the bottom of the hand row: the tilted end cards lean outward only at the top
+  const slotY = handY + rows.hand - SORT_W - 10;
   const undo: Box = { x: dock.x + HAND_EDGE, y: slotY, w: SORT_W, h: SORT_W };
   const sort: Box = { x: dock.x + dock.w - HAND_EDGE - SORT_W, y: slotY, w: SORT_W, h: SORT_W };
   return { hint, piles, deck, discard, moves, pileCard, undo, fan, sort };

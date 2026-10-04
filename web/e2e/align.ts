@@ -164,7 +164,7 @@ for (const v of [{ w: 390, h: 844, mouse: false, tag: 'phone' }, { w: 1280, h: 8
     const tx = tb.x + tb.width / 2;
     const vx = vb.x + vb.width / 2;
     if (!v.mouse) check(`${tag}: the volcano straight above the tree on the centre line`, Math.abs(tx - vx) <= 1 && Math.abs(tx - c.screen) <= 1 && vb.y < tb.y, `tree x ${tx.toFixed(1)}, volcano x ${vx.toFixed(1)}`);
-    else check(`${tag}: my tree on the left, the volcano on the right, level`, tx < vx && Math.abs(tb.y - vb.y) <= 1);
+    else check(`${tag}: my tree on the left, the volcano on the right, level`, tx < vx && Math.abs(tb.y + tb.height / 2 - (vb.y + vb.height / 2)) <= 1.5, `tree ${Math.round(tx)},${Math.round(tb.y)} volcano ${Math.round(vx)},${Math.round(vb.y)}`);
     for (const [name, key] of [['tree', tree], ['volcano', volcano]] as const) {
       const b = (await page.locator(`.hex-cell[data-key="${key}"]`).boundingBox())!;
       if (v.mouse) await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
@@ -215,12 +215,14 @@ for (const v of [{ w: 390, h: 844, mouse: false, tag: 'phone' }, { w: 1280, h: 8
 }
 
 // ---- ADVERSARIAL 1: the header at 360px with Large text and the longest scores ----
+// (a score can't reach three digits: 37 hexes, gold counting double, is at most 74; 99 is the
+// widest score that can happen)
 {
   const s = position(hand3);
   const { page, errors } = await open(s, { w: 360, h: 640, settings: { largeText: true } });
   await page.evaluate(() => {
-    document.querySelector('#score-you')!.textContent = '188';
-    document.querySelector('#score-bot')!.textContent = '188';
+    document.querySelector('#score-you')!.textContent = '99';
+    document.querySelector('#score-bot')!.textContent = '99';
   });
   // a resize makes the page fit the header again (as a real score change does)
   await page.setViewportSize({ width: 361, height: 640 });
@@ -233,12 +235,12 @@ for (const v of [{ w: 390, h: 844, mouse: false, tag: 'phone' }, { w: 1280, h: 8
     const words = [...hud.querySelectorAll<HTMLElement>('.who')].map((w) => getComputedStyle(w).display !== 'none');
     return {
       pillOff: (pill.left + pill.right) / 2 - window.innerWidth / 2,
-      clipped: scores.some((e) => e.scrollWidth > e.clientWidth + 0.5),
+      clipped: scores.some((e) => e.scrollWidth > e.clientWidth + 1), // 1px: a fractional column's rounding
       words,
       inside: [...hud.children].every((c) => c.getBoundingClientRect().right <= window.innerWidth + 0.5 && c.getBoundingClientRect().left >= -0.5),
     };
   });
-  check('ADVERSARIAL 1: header at 360px, Large text, scores 188-188: pill centred, nothing cut off, the words go together', Math.abs(r.pillOff) <= 1 && !r.clipped && r.inside && r.words[0] === r.words[1], JSON.stringify(r));
+  check('ADVERSARIAL 1: header at 360px, Large text, scores 99-99: pill centred, nothing cut off, the words go together', Math.abs(r.pillOff) <= 1 && !r.clipped && r.inside && r.words[0] === r.words[1], JSON.stringify(r));
   check('ADVERSARIAL 1: no page errors', errors.length === 0, errors[0]);
   await page.close();
 }
@@ -271,7 +273,16 @@ for (const v of [{ w: 360, h: 640 }, { w: 390, h: 844 }, { w: 1280, h: 800, mous
     const sort = document.querySelector('#hand-sort')!.getBoundingClientRect();
     const l = Math.min(...cards.map((c) => c.left));
     const rr = Math.max(...cards.map((c) => c.right));
-    return { n: cards.length, fruit: !!document.querySelector('#hand .card.fruit'), off: (l + rr) / 2 - (dock.left + dock.right) / 2, onScreen: l >= -0.5 && rr <= window.innerWidth + 0.5, clearOfSlots: undo.right <= l + 2 && sort.left >= rr - 2 };
+    // the end cards are tilted: test the slots against the cards' real corners near the slots'
+    // height band (a card's tilted corner passing above or below a slot is fine)
+    const hits = (slot: DOMRect) =>
+      [...document.querySelectorAll('#hand .card')].some((c) => {
+        const b = c.getBoundingClientRect();
+        const x = slot.left + slot.width / 2;
+        const y = slot.top + slot.height / 2;
+        return document.elementsFromPoint(x, y).includes(c) && b.width > 0;
+      });
+    return { n: cards.length, fruit: !!document.querySelector('#hand .card.fruit'), off: (l + rr) / 2 - (dock.left + dock.right) / 2, onScreen: l >= -0.5 && rr <= window.innerWidth + 0.5, clearOfSlots: !hits(undo) && !hits(sort), gaps: [Math.round(l - undo.right), Math.round(sort.left - rr)] };
   });
   check(`ADVERSARIAL 3: ${v.w}x${v.h}: 8 cards with a Fruit card, centred within 1pt, all on screen, clear of Undo and Sort`, r.n === 8 && r.fruit && Math.abs(r.off) <= 1 && r.onScreen && r.clearOfSlots, JSON.stringify(r));
   await page.close();

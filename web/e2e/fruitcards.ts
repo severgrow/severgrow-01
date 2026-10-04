@@ -186,7 +186,7 @@ console.log(`[4] a Sprout (with its wording), a Strengthe`);
   check('the single-tile move is called Sprout: "Tap a card to sprout it", "Skip sprout"', hint.includes('Tap a card to sprout it') && skip.includes('Skip sprout'), `${hint} · ${skip}`);
   await shot(page, '09-sprout-wording-and-tracker');
   const fruitEl = page.locator('#hand .card.fruit');
-  check('a Fruit card with no target is dimmed, and says why', ((await fruitEl.getAttribute('class')) ?? '').includes('dim') && ((await fruitEl.getAttribute('aria-label')) ?? '').includes('No opponent tile touches yours.'));
+  check('a Fruit card with no target is dimmed, and says why', ((await fruitEl.getAttribute('class')) ?? '').includes('dim') && ((await fruitEl.getAttribute('aria-label')) ?? '').includes('No opponent tile by yours'));
   await fruitEl.click();
   await page.waitForTimeout(250);
   await shot(page, '10-fruit-dimmed-reason');
