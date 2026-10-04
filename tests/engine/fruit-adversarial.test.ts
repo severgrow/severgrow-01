@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { apply, isFruitCard, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Card, Player, State } from '../../src/engine/index.js';
-import { fixture } from '../helpers.js';
+import { codeOf, fixture } from '../helpers.js';
 
 const fruitCard = (id: number): Card => ({ id, suit: null, rank: 0 });
 /** P1's Grow step on a hand-built board; the hands and deck are real cards (each once). */
@@ -29,28 +29,35 @@ describe('Fruit cards: 6 adversarial tests', () => {
     expect(legalActions(viewFor(t, 0))).toEqual([{ t: 'Discard', card: 72 }]);
   });
 
-  it('ADVERSARIAL 2: two Fruit cards in hand, both played in one turn (no limit), each with its own cut check', () => {
-    let s = at(arms, [fruitCard(72), fruitCard(73)]);
-    s = apply(s, { t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } });
-    s = apply(s, { t: 'PlayFruit', card: 73, target: { q: 1, r: -1 } });
-    expect(s.fruitPlayed).toBe(2);
-    expect(s.board['1,0']).toBeNull();
-    expect(s.board['1,-1']).toBeNull();
-    expect(s.history!.filter((e) => e.t === 'FruitCard')).toHaveLength(2);
-    expect(s.phase).toBe('ACT');
+  it('ADVERSARIAL 2: two Fruit cards in hand: the first uses the turn\'s Sprout, the second waits for the next turn (v0.8); with the option off both go, each with its own cut check', () => {
+    const s = at(arms, [fruitCard(72), fruitCard(73)]);
+    const one = apply(s, { t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } });
+    expect(one.board['1,0']).toBeNull();
+    expect(codeOf(() => apply(one, { t: 'PlayFruit', card: 73, target: { q: 1, r: -1 } }))).toBe('SPROUT_LIMIT');
+    expect(one.hands[0].some((c) => c.id === 73)).toBe(true);
+    let off: State = { ...s, config: { ...s.config, fruitUsesSprout: false } };
+    off = apply(off, { t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } });
+    off = apply(off, { t: 'PlayFruit', card: 73, target: { q: 1, r: -1 } });
+    expect(off.fruitPlayed).toBe(2);
+    expect(off.board['1,-1']).toBeNull();
+    expect(off.history!.filter((e) => e.t === 'FruitCard')).toHaveLength(2);
+    expect(off.phase).toBe('ACT');
   });
 
-  it('ADVERSARIAL 3: a removal and the Strangle: a Fruit card only empties a hex, so it cannot strangle by itself; it can open a Strangle that a Sprout then completes', () => {
+  it('ADVERSARIAL 3: a removal and the Strangle: a Fruit card only empties a hex, so it cannot strangle by itself; it can open a Strangle that a Bloom then completes (v0.8: not a Sprout, which the Fruit card used)', () => {
     // five of their root's six neighbours are mine; the sixth holds their 3
     const ring = ['-1,1', '0,0', '1,-1', '1,-2', '2,-3', '3,-3', '3,-2'];
     const tiles: Record<string, [Player, number]> = { '2,-1': [1, 3] };
     for (const k of ring) tiles[k] = [0, 2];
     const g = at(tiles, [fruitCard(72)]);
-    const two = g.hands[1].find((c) => c.rank <= 3) ?? g.deck.find((c) => c.rank <= 3)!;
-    const s: State = { ...g, hands: [[fruitCard(72), two], g.hands[1].filter((c) => c.id !== two.id)], deck: g.deck.filter((c) => c.id !== two.id) };
+    const pool = [...g.hands[1], ...g.deck];
+    const twos = [0, 1, 2].map((su) => pool.find((c) => c.rank === 2 && c.suit === su)!);
+    const ids = new Set(twos.map((c) => c.id));
+    const s: State = { ...g, hands: [[fruitCard(72), ...twos], g.hands[1].filter((c) => !ids.has(c.id))], deck: g.deck.filter((c) => !ids.has(c.id)) };
     const after = apply(s, { t: 'PlayFruit', card: 72, target: { q: 2, r: -1 } });
     expect(after.phase).toBe('ACT'); // no Strangle from the removal alone
-    const win = apply(after, { t: 'Sprout', card: two.id, coord: { q: 2, r: -1 } });
+    expect(codeOf(() => apply(after, { t: 'Sprout', card: twos[0]!.id, coord: { q: 2, r: -1 } }))).toBe('SPROUT_LIMIT');
+    const win = apply(after, { t: 'Bloom', cards: twos.map((c) => c.id), hexes: [{ q: 2, r: -1 }, { q: 2, r: 0 }, { q: 1, r: 0 }] });
     expect(win.result).toMatchObject({ winner: 0, reason: 'strangle' });
   });
 

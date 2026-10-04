@@ -129,22 +129,31 @@ describe('levels 7-9: full evaluation', () => {
     }
   });
 
-  it('a Fruit card that opens a Strangle (then a Sprout surrounds their root this turn) is taken from level 4 up', () => {
+  it('a Fruit card that opens a Strangle (then a Bloom surrounds their root this turn) is taken from level 4 up', () => {
     // five of their root's six neighbours are mine; the sixth, (2,-1), holds their 3
     const ring = ['-1,1', '0,0', '1,-1', '1,-2', '2,-3', '3,-3', '3,-2'];
     const tiles: Record<string, [Player, number]> = { '2,-1': [1, 3] };
     for (const k of ring) tiles[k] = [0, 2];
     const g = at(tiles, [fruitCard(72)]);
-    const s: State = { ...g, hands: [[fruitCard(72), num(g, 2, 2)], g.hands[1]] };
+    const s: State = { ...g, hands: [[fruitCard(72), num(g, 0, 2), num(g, 1, 2), num(g, 2, 2)], g.hands[1]] };
     for (const lv of [4, 5, 6, 7, 8, 9] as const) {
       const d = decide(viewFor(s, 0), lv, 3);
       expect(d.action, `level ${lv}`).toEqual({ t: 'PlayFruit', card: 72, target: { q: 2, r: -1 } });
       expect(d.reason).toMatch(/Strangle/);
     }
-    // and then the Sprout on the emptied hex wins
+    // and then a Bloom over the emptied hex wins
     const after = apply(s, { t: 'PlayFruit', card: 72, target: { q: 2, r: -1 } });
     const win = apply(after, decide(viewFor(after, 0), 7, 1).action);
     expect(win.result).toMatchObject({ winner: 0, reason: 'strangle' });
+  });
+
+  it('v0.8: with only one card to follow, the Fruit card does not open a Strangle (the Sprout is used up)', () => {
+    const ring = ['-1,1', '0,0', '1,-1', '1,-2', '2,-3', '3,-3', '3,-2'];
+    const tiles: Record<string, [Player, number]> = { '2,-1': [1, 3] };
+    for (const k of ring) tiles[k] = [0, 2];
+    const g = at(tiles, [fruitCard(72)]);
+    const s: State = { ...g, hands: [[fruitCard(72), num(g, 2, 2)], g.hands[1]] };
+    for (const lv of [7, 9] as const) expect(decide(viewFor(s, 0), lv, 3).reason ?? '').not.toMatch(/opens a Strangle|Strangle next/);
   });
 
 });

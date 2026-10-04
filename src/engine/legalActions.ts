@@ -158,7 +158,7 @@ const actActions = (v: View): Action[] => {
 
   // v0.6 Fruit cards: all alike, so the lowest-id one is listed, once per target, in board order.
   const fruitCard = [...v.hand].sort((a, b) => a.id - b.id).find((c) => c.suit === null);
-  if (fruitCard) {
+  if (fruitCard && (!v.config.fruitUsesSprout || v.sproutsThisTurn < v.config.sproutsPerTurn)) {
     for (const target of board) if (fruitTargetBlocker(v, p, target) === null) out.push({ t: 'PlayFruit', card: fruitCard.id, target });
   }
 

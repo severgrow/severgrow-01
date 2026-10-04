@@ -149,7 +149,8 @@ export const lookFruit = (v: View, a: Extract<Action, { t: 'PlayFruit' }>): Frui
 
 /**
  * A Fruit card can never surround a root by itself (it only empties a hex), but it can open
- * the way: after it, one of my growing moves this turn wins by Strangle.
+ * the way: after it, one of my growing moves this turn wins by Strangle (v0.8: a Bloom, since
+ * the Fruit card used the turn's Sprout).
  */
 const opensStrangle = (v: View, a: Extract<Action, { t: 'PlayFruit' }>, sim: Simulation): boolean => {
   const o = other(v.player);
@@ -157,7 +158,8 @@ const opensStrangle = (v: View, a: Extract<Action, { t: 'PlayFruit' }>, sim: Sim
   // cheap first check: at most one ring hex left that is not mine or rock
   const open = ring.filter((k) => v.terrain[k] !== 'rock' && sim.board[k]?.owner !== v.player);
   if (open.length !== 1) return false;
-  const after: View = { ...v, board: sim.board, hand: v.hand.filter((c) => c.id !== a.card), lastResolution: null };
+  // v0.8: the Fruit card used the turn's Sprout, so only a Bloom can finish it (Sprouts drop out of the list)
+  const after: View = { ...v, board: sim.board, hand: v.hand.filter((c) => c.id !== a.card), lastResolution: null, sproutsThisTurn: v.config.fruitUsesSprout ? v.sproutsThisTurn + 1 : v.sproutsThisTurn };
   const sprouts = legalActions(after).filter((m) => m.t === 'Sprout');
   const blooms = lookBlooms(after).filter((l) => l.strangles).map((l) => l.action);
   return [...sprouts, ...blooms].some((m) => !!simulate(after, m)?.wins);

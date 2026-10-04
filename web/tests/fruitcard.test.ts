@@ -134,7 +134,12 @@ describe('state equivalence with Fruit cards (Step 7)', () => {
     const { Session } = await import('../src/logic/session.js');
     // their 9 at (1,0) holds (2,0)=5 and (3,-1)=4; (1,-1)=9 stays joined
     const s0 = at({ '-1,1': [0, 2], '0,0': [0, 2], '1,-1': [1, 9], '1,0': [1, 9], '2,0': [1, 5], '3,-1': [1, 4] }, [fruitCard(72), fruitCard(73), num(1, 0, 3)]);
-    const s = { ...s0, history: [] } as State;
+    // v0.8: one Fruit card per turn (it uses the turn's Sprout): the second is refused
+    const one1 = new Session({ ...s0, history: [] } as State);
+    expect(one1.play({ t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } }, 0)).toBeTruthy();
+    expect(one1.play({ t: 'PlayFruit', card: 73, target: { q: 1, r: -1 } }, 0)).toBeNull();
+    // two in a row (the option off, as in v0.6) to check the replay and a double Undo
+    const s = { ...s0, config: { ...s0.config, fruitUsesSprout: false }, history: [] } as State;
     const session = new Session(s);
     for (const target of [{ q: 1, r: 0 }, { q: 1, r: -1 }]) {
       const before = session.state;

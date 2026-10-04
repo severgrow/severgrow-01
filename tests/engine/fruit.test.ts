@@ -129,12 +129,16 @@ describe('playing a Fruit card (PlayFruit)', () => {
     expect(codeOf(() => apply(position({ tiles: nearRoot, config: { fruitRootCountsAsTouch: false } }), play(72, '-1,2')))).toBe('FRUIT_TARGET_NOT_TOUCHED');
   });
 
-  it('two Fruit cards in one turn (no limit), and Sprout still allowed after', () => {
+  it('v0.8: a Fruit card uses the turn\'s Sprout: a second Fruit card or a Sprout after it waits for the next turn', () => {
     const s = position({ tiles: { ...arms, '0,-1': [1, 7] }, hand: [fruitCard(72), fruitCard(73), num(1, 0, 2)] });
     const a = apply(s, play(72, '1,0'));
-    const b = apply(a, play(73, '0,-1'));
-    expect(b.board['1,0']).toBeNull();
-    expect(b.board['0,-1']).toBeNull();
+    expect(a.board['1,0']).toBeNull();
+    expect(a.sproutsThisTurn).toBe(1);
+    expect(codeOf(() => apply(a, play(73, '0,-1')))).toBe('SPROUT_LIMIT');
+    expect(legalActions(viewFor(a, 0)).some((x) => x.t === 'Sprout' || x.t === 'PlayFruit')).toBe(false);
+    // with the option off (the v0.6 rule) both go in one turn, and a Sprout still follows
+    const off = { ...s, config: { ...s.config, fruitUsesSprout: false } };
+    const b = apply(apply(off, play(72, '1,0')), play(73, '0,-1'));
     expect(b.fruitPlayed).toBe(2);
     expect(b.sproutsThisTurn).toBe(0);
     expect(legalActions(viewFor(b, 0)).some((x) => x.t === 'Sprout')).toBe(true);

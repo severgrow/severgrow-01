@@ -6,7 +6,7 @@ import type { Level } from './levels.js';
 
 export type LevelChooser = (v: View, level: Level, seed: number) => Action;
 
-export const CURRENT_BOT_VERSION = 'bots-v0.9';
+export const CURRENT_BOT_VERSION = 'bots-v0.10';
 
 /** Every bot version still accepted, by name. */
 export const BOT_VERSIONS: Readonly<Record<string, LevelChooser>> = Object.freeze({
