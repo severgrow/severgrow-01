@@ -770,8 +770,11 @@ function autoAdvance() {
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
   skippedFrom = session.state;
-  note({ t: 'empty', at: Date.now() });
-  caption(NOTHING_TO_PLAY, null, 'info');
+  // v0.8: after a sprout or a Fruit card the turn was not empty: go on to the throw quietly
+  if (!grewThisTurn()) {
+    note({ t: 'empty', at: Date.now() });
+    caption(NOTHING_TO_PLAY, null, 'info');
+  }
   humanPlay(end);
 }
 
@@ -1834,8 +1837,9 @@ function renderControls(v: View, advice: Advice | null) {
 
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
-  } else if (v.phase === 'ACT' && skipPlan(legal, v.hand.length, settings.autoSkip && session.state !== skippedFrom).kind === 'ask') {
+  } else if (v.phase === 'ACT' && !grewThisTurn() && skipPlan(legal, v.hand.length, settings.autoSkip && session.state !== skippedFrom).kind === 'ask') {
     // Step 2, auto-skip off (or after an Undo of a skip): why nothing can be played, and Continue
+    // (v0.8: only for a truly empty Grow step; after a sprout or a Fruit card it is "Throw a card")
     const end = legal.find((a) => a.t === 'EndAct')!;
     const note = document.createElement('span');
     note.className = 'note empty-reason';

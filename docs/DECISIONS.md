@@ -11,6 +11,7 @@ One line each: where the brief left room, what was chosen and why.
   - it says "Fruit used" or "Sprouted" once the sprout is used;
   - it always ends at "Throw a card".
 - The height freed by the bar, the landmarks' old headroom, and thinner margins (the zone keeps 4pt a side, the board 2 units) all go to the board. On tall phones the board is limited by the width, so the gain there is small (+2-4%); 360x640 gains most.
+- Orientation is still chosen by measurement. Without the headroom, 360x640 now picks flat hexes too, by a hair (50.0pt against 49.7pt tiles; v0.7 had 47.6pt).
 - When the board cannot use more height, the spare goes to the piles row first (up to +40pt), then the message row (up to +40pt), then the hand row (up to +32pt). This keeps the gaps at 16pt or less.
 - The "?" is a fifth corner tool in the board zone's lower-right corner. That corner is usually empty: hex corners leave it free in both orientations, and the layout tests check this. During animations the Skip button takes the corner and the "?" hides.
 - The "Fruit cards unseen" chip is gone: no hidden-information indicator. The engine still keeps the public count for the bots.

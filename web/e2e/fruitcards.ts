@@ -118,7 +118,9 @@ console.log(`[1] the card in the hand, the chip, picking `);
 console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
 {
   const state = fruitPosition(NINE_PAIR, [[0, 2], [1, 5]], 2);
-  const { page, errors } = await open(state, { settings: { confirmPolicy: 'never' } });
+  // Auto-skip off: the turn waits after the Fruit card, so each step can be checked (with it on,
+  // the page goes straight to the throw: emptyturn.ts)
+  const { page, errors } = await open(state, { settings: { confirmPolicy: 'never', autoSkip: false } });
   const hint0 = (await page.textContent('#hint')) ?? '';
   check('after the draw the hint offers the Fruit card next to the sprout', hint0.includes('Sprout a card, or play your Fruit card'), hint0);
   await tap(page, '1,-1');

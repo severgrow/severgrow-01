@@ -1,5 +1,5 @@
 // v0.7 Step 9: ONE browser smoke test for the pro pass, by touch on a phone in BOTH board
-// orientations (390x844 picks flat hexes, 360x640 pointy), plus the mouse on a desktop:
+// orientations (390x844 picks flat hexes, 360x640 too since v0.8), plus the mouse on a desktop:
 // Blooms painted by hand (a set, a run with Reverse, 4 tiles, 3 from a longer group, one that
 // replaces, one that cuts), the one-tap suggestion, tap-only painting, a Fruit card, both homes,
 // the corner icons, Sort, Undo only when available, a Strangle finish, autosave and resume,
@@ -40,7 +40,8 @@ const RUN: [Suit, number][] = [[0, 3], [0, 4], [0, 5]];
 type Phone = { w: number; h: number; orient: 'flat' | 'pointy' };
 const PHONES: Phone[] = [
   { w: 390, h: 844, orient: 'flat' },
-  { w: 360, h: 640, orient: 'pointy' },
+  // v0.8: with no headroom above the board, flat now measures bigger here too (50.0 vs 49.7pt)
+  { w: 360, h: 640, orient: 'flat' },
 ];
 
 const open = async (state: State, o: { w: number; h: number; touch?: boolean; settings?: Record<string, unknown> }) => {
