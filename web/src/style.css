@@ -4887,3 +4887,30 @@ body.paused #board * {
 .dock .bloom-options {
   max-width: calc(100% - 16px);
 }
+
+/* Positioning pass: the alignment overlay (?align=1, or the lab's switch): the centre line in
+   magenta, the 16pt side margins dashed in cyan. Never shown to players unless asked for. */
+html.align-overlay::after {
+  content: '';
+  position: fixed;
+  left: calc(50% - 0.5px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #ff2bd6;
+  z-index: 99999;
+  pointer-events: none;
+}
+html.align-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0 16px;
+  border-left: 1px dashed #22e3ff;
+  border-right: 1px dashed #22e3ff;
+  z-index: 99999;
+  pointer-events: none;
+}
+.lab-align {
+  display: block;
+  margin: 4px 0 12px;
+}

@@ -22,7 +22,17 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
   if (detail === 'normal') warmPhotosNow();
   const page = document.createElement('main');
   page.className = 'lab';
-  page.innerHTML = `<h1>Material lab</h1><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a lone tile of each side between them. Detail: ${detail}.</p>`;
+  page.innerHTML = `<h1>Material lab</h1><label class="lab-align"><input type="checkbox" id="lab-align"> Alignment overlay (centre line, 16pt margins), also in the game</label><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a lone tile of each side between them. Detail: ${detail}.</p>`;
+  const align = page.querySelector<HTMLInputElement>('#lab-align')!;
+  align.checked = document.documentElement.classList.contains('align-overlay');
+  align.addEventListener('change', () => {
+    document.documentElement.classList.toggle('align-overlay', align.checked);
+    try {
+      localStorage.setItem('severgrow.align', align.checked ? '1' : '');
+    } catch {
+      /* storage blocked: the switch still works for this page */
+    }
+  });
   const R = 5;
   const config = { ...newGame(1).config, boardRadius: R };
   const terrain: Record<string, Terrain> = Object.fromEntries(allCoords(R).map((c) => [coordKey(c), 'normal' as Terrain]));

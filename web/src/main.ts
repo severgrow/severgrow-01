@@ -3100,6 +3100,13 @@ sound.musicOn = settings.music;
 applyTheme();
 showSplash();
 const params = new URLSearchParams(location.search);
+// Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
+// the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too
+{
+  const KEY = 'severgrow.align';
+  if (params.has('align')) store.set(KEY, params.get('align') === '1' ? '1' : '');
+  document.documentElement.classList.toggle('align-overlay', store.get(KEY) === '1');
+}
 const urlSeed = Number(params.get('seed'));
 if (params.get('lab') === '1') {
   // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
