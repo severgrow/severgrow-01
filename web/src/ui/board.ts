@@ -2,6 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
+import { IS_TEST } from '../channel.js';
 import { boardCoords, coordKey, homeCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
@@ -619,6 +620,8 @@ export class BoardView {
   }
 
   private mark(g: SVGGElement, x: number, y: number, kind: string) {
+    // the test copy: no owner marks on tiles (moss and lava already say whose tile it is)
+    if (IS_TEST) return;
     const r = 3.2;
     switch (kind) {
       case 'dot':

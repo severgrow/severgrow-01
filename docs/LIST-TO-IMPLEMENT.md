@@ -23,6 +23,13 @@ full `npm run check`, then the user's go-ahead. Tick an item off when it is on `
       already show it), update the e2e tests that click `#confirm-play`, and the coach's
       "Confirm" step.
 
+- [ ] **No owner marks on tiles.** The small circle on my tiles and the diamond on the
+      opponent's tiles are gone: the moss (green) and lava (red) materials already say whose tile
+      it is. Now in the test copy (`web/src/ui/board.ts`, `mark()`). On main: check colour-blind
+      readability without the marks (moss vs lava texture, the opponent's pattern), decide what
+      the "Low detail" look and the legend show, and update the theme fields `youMark` /
+      `botMark` (remove or keep for an accessibility setting).
+
 ## Lab ideas that could become real features
 
 - [ ] **Watch a game** (two opponents play each other). Could be a menu option in the main
