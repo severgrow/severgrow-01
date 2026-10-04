@@ -1,0 +1,14 @@
+name: Test copy pushed
+
+# A push to dev only announces itself here; "Deploy web game" (pages.yml) then rebuilds the
+# site from main's workflow, so the Pages deploy always runs from main (no Pages setting needs
+# to allow dev). Nothing slow runs here.
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "dev was pushed; the site (live + /test/) redeploys next"

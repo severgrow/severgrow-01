@@ -1,11 +1,18 @@
 name: Deploy web game
 
-# Builds web/ and publishes it to GitHub Pages whenever the default branch changes.
+# Publishes both release channels to GitHub Pages in one bundle:
+#   - main (the live game)  -> the site root
+#   - dev  (the test copy)  -> /test/   (built with CHANNEL=test: the Lab, its own storage)
+# Pages serves one bundle per site, so every run builds both; a push to either branch
+# redeploys the whole site (a dev push through test-copy.yml, so the deploy runs from main). No tests run here (CI guards main and pull requests); this only
+# installs from the lockfile and builds, so a dev push is live in a couple of minutes.
 on:
-  # main only: a run started by a push to any other branch would still join the "pages"
-  # group below and cancel a deploy of main that is in progress
   push:
     branches: [main]
+  # a push to dev (see test-copy.yml): runs from main, so Pages accepts the deploy
+  workflow_run:
+    workflows: ['Test copy pushed']
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -19,20 +26,44 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: live
+      - id: hasdev
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${{ github.repository }}" dev >/dev/null; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.hasdev.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - run: npm run web:build
+          cache-dependency-path: '*/package-lock.json'
+      - name: Build the live game (main)
+        working-directory: live
+        run: npm ci && npm run web:build
+      - name: Build the test copy (dev)
+        if: steps.hasdev.outputs.ok == 'true'
+        working-directory: dev
+        run: |
+          # same lockfile as main: reuse its install (saves a minute)
+          if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
+          CHANNEL=test npm run web:build
+      - name: Put both in one site
+        run: |
+          mkdir site
+          cp -r live/web/dist/. site/
+          if [ -d dev/web/dist ]; then mkdir -p site/test && cp -r dev/web/dist/. site/test/; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist
+          path: site
 
   deploy:
     needs: build

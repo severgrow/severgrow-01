@@ -6,5 +6,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: './',
+  // the release channel: "live" (main, the site root) or "test" (dev, /test/); web/src/channel.ts
+  define: { __CHANNEL__: JSON.stringify(process.env.CHANNEL === 'test' ? 'test' : 'live') },
   build: { outDir: 'dist', emptyOutDir: true },
 });
