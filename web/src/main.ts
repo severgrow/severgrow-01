@@ -38,13 +38,13 @@ import {
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { finalTurns, scoreBreakdown } from './logic/endgame.js';
+import { finalTurns, scoreBreakdown, turnsLeft } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { perfStart, perfStep } from './logic/perf.js';
-import { deckMoment, rootDanger, rootRhythm, splashPlan, sporesHome } from './logic/candy.js';
+import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
@@ -82,12 +82,15 @@ import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
-import { onPhotosReady, warmPhotos } from './ui/photo.js';
+import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
+import { getOrient, setOrient } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
+import { landmarkMotion, strangleFinish } from './logic/landmark.js';
+import { pulseLandmark } from './ui/landmarks.js';
 import { debugLines, isDebug } from './logic/debug.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 import type { Beats } from './logic/emptyturn.js';
@@ -515,20 +518,9 @@ function startGame(seed: number, level: Level = settings.level) {
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
-  revealToolLabels();
+  firstToolTips();
   save();
   announceTurn(HUMAN);
-}
-
-/** UX pass: the corner buttons' names show for a few seconds at the start of the first 3 games. */
-const TOOL_LABELS_KEY = 'severgrow.toollabels';
-function revealToolLabels() {
-  const n = Number(store.get(TOOL_LABELS_KEY) ?? 0) || 0;
-  if (n >= 3) return;
-  store.set(TOOL_LABELS_KEY, String(n + 1));
-  const wrap = $('board-wrap');
-  wrap.classList.add('show-labels');
-  setTimeout(() => wrap.classList.remove('show-labels'), 5000);
 }
 
 function continueGame() {
@@ -1043,20 +1035,37 @@ async function playStep(step: Step, my: number) {
     }
     case 'strangle': {
       const root = board.rootKey(step.loser);
-      // The surrounding tiles squeeze inward twice, a slow beat, then the flourish.
+      // Step 4: the Strangle finish (never over 2.0s at Normal): the surrounding tiles pulse
+      // inward, a slow beat, then the volcano is smothered by moss while my tree blooms, or my
+      // tree withers while the volcano roars. Tap or Skip jumps to the end state.
+      const loserEl = board.homeEls[step.loser];
+      const winnerEl = board.homeEls[step.loser === HUMAN ? BOT : HUMAN];
+      const beats = strangleFinish({ speed: f, reduceMotion: settings.reduceMotion }, step.loser === HUMAN ? 'tree' : 'volcano');
       const rc = centerOf(root);
-      for (const k of board.boardKeys) {
-        const tileEl = board.tile(k);
-        const p = centerOf(k);
-        if (!tileEl || k === root || Math.hypot(p.x - rc.x, p.y - rc.y) > S * 1.9) continue;
-        anim(tileEl, [{ translate: '0 0' }, { translate: `${(rc.x - p.x) * 0.14 * Math.max(m, 0.3)}px ${(rc.y - p.y) * 0.14 * Math.max(m, 0.3)}px`, offset: 0.45 }, { translate: '0 0' }], { duration: 700 * f, iterations: 2 });
+      for (const b of beats) {
+        if (b.k === 'pulse') {
+          for (const k of board.boardKeys) {
+            const tileEl = board.tile(k);
+            const p = centerOf(k);
+            if (!tileEl || k === root || Math.hypot(p.x - rc.x, p.y - rc.y) > S * 1.9) continue;
+            anim(tileEl, [{ translate: '0 0' }, { translate: `${(rc.x - p.x) * 0.14 * Math.max(m, 0.3)}px ${(rc.y - p.y) * 0.14 * Math.max(m, 0.3)}px`, offset: 0.45 }, { translate: '0 0' }], { duration: b.ms });
+          }
+          sound.snap();
+        } else if (b.k === 'smother' || b.k === 'wither') {
+          loserEl?.classList.add('strangled');
+          loserEl?.classList.remove('idle', 'danger', 'worried', 'show-ring');
+          if (b.k === 'smother') sound.sigh();
+          else sound.grind();
+        } else if (b.k === 'bloom' || b.k === 'roar') {
+          winnerEl?.classList.add('won');
+          if (winnerEl) pulseLandmark(winnerEl, 'tapped');
+        }
+        await wait(b.ms, my);
       }
-      await wait(1400 * f, my);
-      flash(root, f * 1.6, true);
-      sound.snap();
+      if (!beats.length) loserEl?.classList.add('strangled');
       await impact(momentOf(step), f, my);
       caption(captionFor(step, HUMAN)!, root, step.loser === HUMAN ? 'bad' : 'good');
-      await wait(500 * f, my);
+      await wait(400 * f, my);
       show();
       return;
     }
@@ -1401,15 +1410,15 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
   if (hintEl.dataset.text !== hint.text || hintEl.dataset.arrow !== String(hint.arrow)) {
     hintEl.dataset.text = hint.text;
     hintEl.dataset.arrow = String(hint.arrow);
-    const arrow = hint.arrow && hint.text ? `<span class="hint-arrow ${hint.arrow}" aria-hidden="true">${hint.arrow === 'up' ? '▴' : '▾'}</span>` : '';
-    hintEl.innerHTML = `${arrow}<span class="hint-text"></span>`;
+    // Step 3 item 11: one calm line, no floating triangle
+    hintEl.innerHTML = '<span class="hint-text"></span>';
     hintEl.querySelector('.hint-text')!.textContent = hint.text;
   }
   // The turn as three steps; the current one is lit (only on your turn).
@@ -1442,6 +1451,7 @@ function safeArea() {
   return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
 }
 
+let firstToolTips: () => void = () => {};
 let layoutKey = '';
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
@@ -1451,11 +1461,25 @@ function applyLayout() {
   const radius = session?.state.config.boardRadius ?? 3;
   const key = `${w}x${h}r${radius}`;
   // phones: the board sits just above the toolbar (board.setup resets this, so set it every time)
-  const par = document.documentElement.dataset.layout === 'side' ? 'xMidYMid meet' : 'xMidYMax meet';
+  const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
   const l = computeLayout({ w, h, ...safeArea() }, radius);
+  // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
+  // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
+  if (l.orient !== getOrient()) {
+    setOrient(l.orient);
+    document.documentElement.dataset.orient = l.orient;
+    photosForOrientation();
+    if (session) {
+      board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
+      lastAmbBoard = null;
+      lastBoard = null;
+      layoutKey = key;
+      render();
+    }
+  }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
   root.setProperty('--hud-h', px(HEIGHTS.hud));
@@ -1467,7 +1491,7 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
-  board.svg.setAttribute('preserveAspectRatio', l.mode === 'side' ? 'xMidYMid meet' : 'xMidYMax meet');
+  board.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
 }
 window.addEventListener('resize', () => applyLayout());
@@ -1592,19 +1616,21 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-replay').hidden = busy() || session.lastTurnOf(BOT).length === 0;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = session.canUndo && !busy();
-  ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
-  $('tool-undo').classList.toggle('ready', undoOk);
-  // Part 3 A: my root breathes; hemmed in, it beats like a heart, and says so (Eye candy)
+  // Step 3: Undo shows only when something can be undone (no greyed-out ghost)
+  $('tool-undo').hidden = !undoOk;
+  // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
+  // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
-    const danger = rootDanger(v, HUMAN).level;
-    const rt = board.tile(board.rootKey(HUMAN));
-    if (rt) {
-      rt.classList.toggle('root-watch', settings.eyeCandy && danger === 1);
-      rt.classList.toggle('root-danger', settings.eyeCandy && danger === 2);
-      rt.style.setProperty('--beat', `${rootRhythm(danger).ms}ms`);
-    }
+    const res = session.state.result;
+    const states = ([0, 1] as const).map((p) => {
+      const sides = homeSides(v, p);
+      const m = landmarkMotion({ reduceMotion: settings.reduceMotion, effects: settings.effects }, sides.danger);
+      const strangled = !busy() && res?.reason === 'strangle' && res.winner !== p;
+      return { ...sides, ...m, tapped: cardPinned && inspectKey === sides.key, strangled, won: !busy() && res?.reason === 'strangle' && res.winner === p };
+    });
+    board.setHomes(states);
     const warn = $('root-warn');
-    warn.hidden = !(settings.eyeCandy && danger === 2 && v.phase !== 'GAME_OVER');
+    warn.hidden = !(states[HUMAN]!.danger && v.phase !== 'GAME_OVER');
   }
   placeCorners();
   renderTooltip(v);
@@ -1910,8 +1936,9 @@ function renderHand(v: View, advice: Advice | null) {
   }
   const sortBtn = $('hand-sort');
   sortBtn.hidden = n < 2;
-  sortBtn.textContent = settings.handSort === 'suit' ? 'By suit' : 'By number';
-  sortBtn.setAttribute('aria-label', `Cards sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`);
+  const sortWords = `Sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`;
+  sortBtn.setAttribute('aria-label', sortWords);
+  sortBtn.title = sortWords;
   hand.style.setProperty('--n', String(n));
   hand.classList.toggle('waiting', !myTurn());
 }
@@ -2400,6 +2427,7 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
+  reactHome(key);
   if (!myTurn() || (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK')) {
     pinCard(inspectKey === key && cardPinned ? null : key);
     return;
@@ -2425,6 +2453,15 @@ function onInspect(key: string | null) {
   if (cardPinned) return;
   inspectKey = key;
   if (session) renderTooltip(session.view);
+}
+
+/** Step 4: tapping a home: the tree's heartbeat and rustle, or the volcano's thump and rumble. */
+function reactHome(key: string) {
+  const p = board.homeEls.findIndex((g) => g.dataset.key === key);
+  if (p < 0 || board.homeEls[p]!.classList.contains('strangled')) return;
+  if (!settings.reduceMotion) pulseLandmark(board.homeEls[p]!, 'tapped');
+  if (p === HUMAN) sound.rustle();
+  else sound.rumble();
 }
 
 /** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
@@ -2508,7 +2545,7 @@ bind('levels-back', () => showScreen('menu'));
 document.addEventListener(
   'pointerdown',
   (e) => {
-    const b = (e.target as Element | null)?.closest?.('.btn, .tool, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
+    const b = (e.target as Element | null)?.closest?.('.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
     if (!b || (b as HTMLButtonElement).disabled) return;
     sound.unlock();
     if (settings.sound) sound.click();
@@ -2649,6 +2686,48 @@ bind('tool-skip', () => {
   fastForward();
 });
 bind('tool-replay', () => replayBotTurn());
+// Step 3 item 7: the corner tools' tooltips: hover (mouse), long-press (touch), and once
+// automatically the first time they appear (one at a time, a few seconds each)
+{
+  const tip = $('ctool-tip');
+  let timer = 0;
+  const show = (b: HTMLElement, ms = 0) => {
+    const wrap = $('board-wrap').getBoundingClientRect();
+    const r = b.getBoundingClientRect();
+    tip.textContent = b.dataset.tip ?? '';
+    tip.hidden = false;
+    const right = r.left - wrap.left > wrap.width / 2;
+    const below = r.top - wrap.top < wrap.height / 2;
+    tip.style.left = right ? '' : `${r.left - wrap.left}px`;
+    tip.style.right = right ? `${wrap.right - r.right}px` : '';
+    tip.style.top = below ? `${r.bottom - wrap.top + 6}px` : '';
+    tip.style.bottom = below ? '' : `${wrap.bottom - r.top + 6}px`;
+    clearTimeout(timer);
+    if (ms) timer = window.setTimeout(() => (tip.hidden = true), ms);
+  };
+  const hide = () => {
+    clearTimeout(timer);
+    tip.hidden = true;
+  };
+  for (const b of document.querySelectorAll<HTMLElement>('.ctool')) {
+    b.title = '';
+    b.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && show(b));
+    b.addEventListener('pointerleave', hide);
+    let press = 0;
+    b.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') press = window.setTimeout(() => show(b, 2200), 450);
+    });
+    for (const ev of ['pointerup', 'pointercancel'] as const) b.addEventListener(ev, () => clearTimeout(press));
+  }
+  const KEY = 'severgrow.ctools.seen';
+  /** The first time the tools show in a game: name each once (shield, then target). */
+  firstToolTips = () => {
+    if (store.get(KEY)) return;
+    store.set(KEY, '1');
+    const tools = ['tool-weak', 'tool-targets'].map((id) => $(id)).filter((b) => !b.hidden);
+    tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
+  };
+}
 bind('tool-undo', () => undoMove());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {

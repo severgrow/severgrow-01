@@ -116,10 +116,10 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
 // ---- 2. Never / Always ----
 {
   const s = stateWith({}, [[0, 3], [0, 4], [0, 5]]);
-  // this line leaves 3 of my tiles cuttable, so Smart asks too
+  // this bloom leaves 3 of my tiles cuttable, so Smart asks too
   for (const [mode, wantBar] of [['never', false], ['always', true], ['smart', true]] as const) {
     const { page } = await open(s, { w: 1280, h: 800, settings: { confirmPolicy: mode } });
-    await page.click('#moves [data-kind="line-3"]');
+    await page.click('#moves [data-kind^="bloom-3-"]');
     const a = await hexCenter(page, '-1,1');
     const b = await hexCenter(page, '1,1');
     await page.mouse.click(a.x, a.y);
@@ -128,7 +128,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
     await page.waitForTimeout(300);
     const bar = await page.locator('#confirm').isVisible();
     const placed = ((await hook<State>(page, 'state'))!.history?.length ?? 0) > 0;
-    check(`Confirm moves: ${mode} ${wantBar ? 'asks' : 'does not ask'} for a risky line`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
+    check(`Confirm moves: ${mode} ${wantBar ? 'asks' : 'does not ask'} for a risky bloom`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
     await page.close();
   }
 }

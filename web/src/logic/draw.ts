@@ -10,6 +10,7 @@ import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { kindOf } from './interaction.js';
 import type { Sel } from './interaction.js';
 import { S, centerOf } from '../ui/geom.js';
+import { toBoard } from './orient.js';
 
 export type Bloom = Extract<Action, { t: 'Bloom' }>;
 /** Kept for the callers that still say "meld": a Bloom is the only combo. */
@@ -28,7 +29,8 @@ const NORMALS: readonly Pt[] = [0, 60, 120].map((d) => ({ x: Math.cos((d * Math.
 export const pixelOf = (key: string): Pt => centerOf(key);
 
 /** The hex whose (slightly smaller) hit area holds the point, or null (a gap, a corner, off the board). */
-export const hexAtPoint = (x: number, y: number, keys: ReadonlySet<string>, hit = HIT): string | null => {
+export const hexAtPoint = (sx: number, sy: number, keys: ReadonlySet<string>, hit = HIT): string | null => {
+  const { x, y } = toBoard(sx, sy);
   const qf = ((SQ3 / 3) * x - y / 3) / S;
   const rf = ((2 / 3) * y) / S;
   let q = Math.round(qf);
@@ -41,7 +43,8 @@ export const hexAtPoint = (x: number, y: number, keys: ReadonlySet<string>, hit 
   else if (dr > ds) r = -q - s;
   const key = coordKey({ q: q + 0, r: r + 0 });
   if (!keys.has(key)) return null;
-  const c = centerOf(key);
+  const cs = centerOf(key);
+  const c = toBoard(cs.x, cs.y);
   const px = x - c.x;
   const py = y - c.y;
   return NORMALS.every((n) => Math.abs(px * n.x + py * n.y) <= hit * INRADIUS) ? key : null;

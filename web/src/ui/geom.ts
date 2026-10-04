@@ -1,5 +1,6 @@
 // Shared hex geometry and SVG helpers for the board, the materials and the lab.
 import { parseKey } from '../../../src/engine/index.js';
+import { toScreen } from '../logic/orient.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
 
@@ -48,9 +49,10 @@ export const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = 
   return e;
 };
 
+/** A hex's centre on screen (board orientation applied: logic/orient.ts). */
 export const centerOf = (key: string) => {
   const c = parseKey(key);
-  return { x: S * SQ3 * (c.q + c.r / 2), y: S * 1.5 * c.r };
+  return toScreen(S * SQ3 * (c.q + c.r / 2), S * 1.5 * c.r);
 };
 
 export const hash = (s: string) => {
@@ -64,7 +66,8 @@ export const cornerPts = (key: string, size: number, jitter = 0) => {
   return Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 180) * (60 * i - 30);
     const r = size * (1 + (jitter ? (hash(`${key}:${i}`) - 0.5) * jitter : 0));
-    return [x + r * Math.cos(a), y + r * Math.sin(a)] as const;
+    const o = toScreen(r * Math.cos(a), r * Math.sin(a));
+    return [x + o.x, y + o.y] as const;
   });
 };
 export const polyPoints = (pts: readonly (readonly [number, number])[]) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');

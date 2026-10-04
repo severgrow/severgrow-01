@@ -3,6 +3,7 @@
 // runs in small slices in the background after the page shows; until an image is ready
 // the board draws its plain vector look, and listeners are told when all are ready.
 import { materialsOf } from '../logic/materials.js';
+import { getOrient } from '../logic/orient.js';
 import { GRASS_LEVELS, GRASS_VARIANTS, LAVA_VARIANTS, grassImage, lavaImages } from '../logic/photo.js';
 
 /** Pixels per side: sharp at phone size (a tile is about 60 CSS px, x3 on dense screens). */
@@ -14,7 +15,8 @@ const urls = new Map<string, string>();
 let state: 'idle' | 'running' | 'ready' | 'unavailable' = 'idle';
 const listeners: (() => void)[] = [];
 
-const key = (kind: 'grass' | 'lava', variant: number, level = 0) => `${kind}:${variant}:${level}`;
+// (the tile shape follows the board's orientation, so each orientation has its own images)
+const key = (kind: 'grass' | 'lava', variant: number, level = 0) => `${getOrient()}:${kind}:${variant}:${level}`;
 
 /** The image for a tile, or null while it is still being painted (or with no canvas). */
 export const photoUrl = (kind: 'grass' | 'lava', variant: number, level = 0): string | null => urls.get(key(kind, variant, level)) ?? null;
@@ -58,6 +60,17 @@ export const warmPhotos = () => {
     setTimeout(next, 0);
   };
   setTimeout(next, 30);
+};
+
+/**
+ * The board turned (Step 3): paint the images for the new orientation in the background (the
+ * plain vector look shows meanwhile); listeners are told again when they are ready.
+ */
+export const photosForOrientation = () => {
+  if (state === 'unavailable') return;
+  if (urls.has(key('grass', 0, 0))) return;
+  state = 'idle';
+  warmPhotos();
 };
 
 /** Paints everything right now (the material lab). */

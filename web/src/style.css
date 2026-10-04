@@ -622,15 +622,16 @@ html.kbd .board:focus-visible {
 }
 /* Gold hexes: warm amber, a fine diagonal weave, a soft shimmer and a "2" badge. */
 .hex.rich {
-  fill: color-mix(in srgb, var(--c-gold) 22%, var(--c-hexFill));
-  stroke: color-mix(in srgb, var(--c-gold) 55%, var(--c-hexFill));
+  fill: color-mix(in srgb, var(--c-gold) 15%, var(--c-hexFill));
+  stroke: color-mix(in srgb, var(--c-gold) 42%, var(--c-hexFill));
+  stroke-width: 0.9;
 }
 .gold-weave-fill {
   pointer-events: none;
 }
 .gold-weave {
   fill: var(--c-gold);
-  opacity: 0.22;
+  opacity: 0.3;
 }
 .gold-badge {
   pointer-events: none;
@@ -3176,7 +3177,7 @@ svg.usable .hex-cell {
   gap: 0;
 }
 .board-wrap {
-  margin: 0 4px;
+  margin: 0 8px;
 }
 /* the score race strip (item 14 fills it) */
 .race {
@@ -3187,7 +3188,7 @@ svg.usable .hex-cell {
 .dock {
   position: relative;
   display: grid;
-  grid-template-rows: var(--row-toolbar, 40px) var(--row-hint, 24px) var(--row-forecast, 56px) var(--row-table, 64px) var(--row-hand, 140px);
+  grid-template-rows: var(--row-forecast, 56px) var(--row-table, 72px) var(--row-hand, 118px);
   gap: 0;
   height: var(--dock-h, 360px);
   box-sizing: border-box;
@@ -3244,8 +3245,7 @@ svg.usable .hex-cell {
 .hint-line {
   margin: 0;
   padding: 0 16px;
-  line-height: var(--row-hint, 24px);
-  height: var(--row-hint, 24px);
+  line-height: 1.3;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -3307,8 +3307,8 @@ svg.usable .hex-cell {
 }
 /* the hand: each card shows at least --slice px, a gentle fan */
 .dock > .hand {
-  height: var(--row-hand, 140px);
-  padding-top: 22px;
+  height: var(--row-hand, 118px);
+  padding-top: 4px; /* Step 3: the hand row is the card plus 16px (the fan's arc and a lift fit) */
   box-sizing: border-box;
 }
 .dock > .hand .card {
@@ -3650,15 +3650,16 @@ html[data-layout='stack'] .board-wrap {
    they shrink to one line over the hint row, so Confirm stays reachable. One at a time. */
 .dock-overlays,
 html[data-layout='side'] .dock-overlays {
-  top: var(--row-toolbar, 40px);
+  top: 0;
   bottom: auto;
   left: 8px;
   right: 8px;
-  height: calc(var(--row-hint, 24px) + var(--row-forecast, 56px));
+  height: var(--row-forecast, 56px);
   justify-content: flex-start;
 }
 .dock.confirming .dock-overlays {
-  height: var(--row-hint, 24px);
+  /* the forecast bar owns the message row while a move waits for Confirm */
+  display: none;
 }
 .dock-overlays > .coach,
 .dock-overlays > .first-tip {
@@ -4446,4 +4447,433 @@ html.final-turns .game::after {
   .moves .btn.link {
     padding: 0 4px;
   }
+}
+
+/* =================================================================
+   Step 3: three fixed zones, a calmer board, icon-only tools
+   ================================================================= */
+/* the hint row: one line of text, with Undo beside it only when something can be undone */
+.hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 16px;
+  min-width: 0;
+}
+/* while a move waits for Confirm, the forecast bar takes the message row */
+.dock.confirming .hint-row {
+  display: none;
+}
+.forecast-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.forecast-slot > .confirm {
+  flex: 1;
+}
+.hint-row .hint-line {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0;
+  line-height: 1.3;
+  height: auto;
+  font-size: 0.95rem; /* 15pt */
+}
+.undo-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  position: relative;
+}
+.undo-chip::after {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+.undo-chip[hidden] {
+  display: none;
+}
+.undo-chip .i {
+  width: 16px;
+  height: 16px;
+}
+/* the corner tools: 40pt round icon buttons (44pt hit area), semi-transparent, never on a tile */
+.corner-tools {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ctool {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  margin: 2px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--c-line) 80%, transparent);
+  background: color-mix(in srgb, var(--c-bg) 62%, transparent);
+  color: var(--c-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.14s ease-out, color 0.14s ease-out, box-shadow 0.14s ease-out;
+}
+.ctool::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+}
+.ctool .i {
+  width: 20px;
+  height: 20px;
+}
+.ctool.tl { left: 0; top: 0; }
+.ctool.tr { right: 0; top: 0; }
+.ctool.bl { left: 0; bottom: 0; }
+.ctool.br { right: 0; bottom: 0; }
+.ctool[hidden] {
+  display: none;
+}
+/* on: a clear ring */
+.ctool[aria-pressed='true'] {
+  color: var(--c-text);
+  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
+  box-shadow: 0 0 0 2px var(--c-accent);
+}
+.ctool-tip {
+  position: absolute;
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  color: var(--c-text);
+  font-size: 0.85rem;
+  line-height: 1.3;
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, #000 80%, transparent);
+  pointer-events: none;
+  z-index: 30;
+}
+.ctool-tip[hidden] {
+  display: none;
+}
+/* Sort: an icon at the right end of the hand row */
+.hand-sort.icon-sort {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.hand-sort.icon-sort::before {
+  content: none;
+}
+.hand-sort.icon-sort .i {
+  width: 18px;
+  height: 18px;
+}
+.hand-sort.icon-sort {
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom) + (var(--row-hand, 118px) - 32px) / 2);
+  font-size: inherit;
+}
+/* the hand leaves room for Sort at its right end */
+#hand {
+  padding-right: 32px;
+  box-sizing: border-box;
+}
+/* Step 3 item 10: the pile cards are the hand's card component, scaled to the piles row: the
+   same proportions (1:1.42), the numeral top-left, the suit icon centred in the lower body,
+   everything inside the frame at every size; no double outline. Labels and counts sit below. */
+.dock .pile-card {
+  --pile-h: calc(var(--row-table, 72px) - 22px);
+  height: var(--pile-h);
+  width: calc(var(--pile-h) / 1.42);
+  --cw: calc(var(--pile-h) / 1.42);
+  --ch: var(--pile-h);
+}
+.dock .pile-top.card {
+  border-width: 1px;
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 40%, transparent);
+  padding: calc(var(--cw) * 0.06) calc(var(--cw) * 0.05) calc(var(--cw) * 0.1);
+  overflow: hidden;
+}
+.dock .pile-top.card .c-num {
+  font-size: calc(var(--cw) * 0.36);
+  padding-left: calc(var(--cw) * 0.08);
+}
+.dock .pile-top.card .c-suit svg {
+  width: calc(var(--cw) * 0.42);
+  height: calc(var(--cw) * 0.42);
+}
+.dock .pile-stack,
+.dock .pile-stack::before,
+.dock .pile-stack::after {
+  border-width: 1px;
+}
+/* the Draw step: a soft glow and a gentle lift instead of a thick outline; otherwise dim */
+.dock .pile.ready .pile-card {
+  box-shadow: 0 0 18px -4px color-mix(in srgb, var(--c-accent) 60%, transparent);
+  transform: translateY(-2px);
+  transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 0.22s ease-out;
+  animation: none;
+}
+.dock .pile.ready .pile-stack,
+.dock .pile.ready .pile-top {
+  border-color: color-mix(in srgb, var(--c-accent) 55%, var(--c-line));
+}
+.dock .pile.dim {
+  opacity: 0.55;
+}
+/* the Fruit-card tracker chip sits in the piles row, beside the piles (a fixed place) */
+.dock .piles {
+  align-items: center;
+}
+.dock .fruit-chip {
+  position: static;
+  align-self: center;
+  margin-left: 4px;
+}
+/* Step 3 item 12: three text sizes in the dock: 15px (hint, buttons), 12px (labels, counts,
+   chips) and the card numerals */
+.dock .pile-label,
+.dock .pile-meta .pile-count,
+.dock .fruit-chip,
+.dock .pile-hint {
+  font-size: 12px;
+}
+.dock .moves .btn,
+.dock .undo-chip {
+  font-size: 15px;
+}
+
+/* =================================================================
+   Step 4: the homes: my tree and the opponent's volcano
+   Calm idle life; a worried (never flashing) danger state with a "sides blocked" ring; a
+   heartbeat or thump when tapped; smothered or withered after a Strangle. Transforms and
+   opacity only (no live filters); idle motion stops with Reduce motion and Effects Low.
+   ================================================================= */
+.landmark {
+  pointer-events: none;
+}
+.landmark .lm-sprite {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.lm-heart {
+  fill: var(--c-you);
+  opacity: 0.85;
+}
+.lm-tree .lm-canopy {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.lm-shadow {
+  opacity: 0.34;
+}
+.lm-leaf,
+.lm-ember {
+  opacity: 0;
+}
+.lm-smoke {
+  opacity: 0.42;
+}
+.lm-smother {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transform: scaleY(0);
+}
+/* the ring: one segment per side, lit when that side is blocked */
+.lm-ring {
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+}
+.landmark.show-ring .lm-ring {
+  opacity: 1;
+}
+.lm-seg {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c-text) 28%, transparent);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.lm-tree .lm-seg.on {
+  stroke: var(--c-bot);
+}
+.lm-volcano .lm-seg.on {
+  stroke: var(--c-you);
+}
+.lm-count {
+  font-size: 7.5px;
+  font-weight: 700;
+  fill: var(--c-text);
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: var(--c-bg);
+  stroke-width: 2.4px;
+}
+
+/* idle: the canopy sways a few pixels, a leaf falls now and then; the smoke curls, the crater breathes, an ember pops */
+.landmark.idle.lm-tree .lm-canopy {
+  animation: lm-sway 5.2s ease-in-out infinite;
+  animation-delay: var(--lm-phase, 0s);
+}
+.landmark.idle.lm-tree .lm-leaf {
+  animation: lm-leaf 11s ease-in infinite;
+  animation-delay: var(--lm-phase, 0s);
+}
+.landmark.idle.lm-volcano .lm-smoke {
+  animation: lm-smoke 6.5s ease-in-out infinite;
+  animation-delay: var(--lm-phase, 0s);
+}
+.landmark.idle.lm-volcano .lm-crater {
+  animation: lm-breathe 3.6s ease-in-out infinite;
+}
+.landmark.idle.lm-volcano .lm-ember {
+  animation: lm-ember 7s ease-out infinite;
+  animation-delay: var(--lm-phase, 0s);
+}
+@keyframes lm-sway {
+  0%, 100% { transform: rotate(-1.6deg); }
+  50% { transform: rotate(1.6deg); }
+}
+@keyframes lm-leaf {
+  0%, 82% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-6px, 26px) rotate(160deg); }
+}
+@keyframes lm-smoke {
+  0%, 100% { transform: translate(0, 0); opacity: 0.32; }
+  50% { transform: translate(1.5px, -2px); opacity: 0.5; }
+}
+@keyframes lm-breathe {
+  0%, 100% { opacity: 0.86; }
+  50% { opacity: 1; }
+}
+@keyframes lm-ember {
+  0%, 88% { opacity: 0; transform: translate(0, 0); }
+  90% { opacity: 1; }
+  100% { opacity: 0; transform: translate(3px, -11px); }
+}
+/* danger: worried, never flashing: the leaves tremble and the canopy dims; the volcano rumbles, thicker smoke */
+.landmark.danger.lm-tree .lm-canopy {
+  opacity: 0.82;
+}
+.landmark.worried.lm-tree .lm-canopy {
+  animation: lm-tremble 0.5s ease-in-out infinite;
+}
+.landmark.danger.lm-volcano .lm-smoke {
+  stroke-width: 2.6;
+  opacity: 0.6;
+}
+.landmark.worried.lm-volcano .lm-sprite {
+  animation: lm-rumble 1.8s ease-in-out infinite;
+}
+@keyframes lm-tremble {
+  0%, 100% { transform: rotate(-0.7deg); }
+  50% { transform: rotate(0.7deg); }
+}
+@keyframes lm-rumble {
+  0%, 70%, 100% { transform: translate(0, 0); }
+  75% { transform: translate(-0.5px, 0); }
+  80% { transform: translate(0.5px, 0.2px); }
+  85% { transform: translate(-0.4px, 0); }
+  90% { transform: translate(0.3px, 0); }
+}
+/* tapped: the tree's soft heartbeat, the volcano's low thump */
+.landmark.tapped.lm-tree .lm-sprite {
+  animation: lm-heartbeat 0.8s ease-out;
+}
+.landmark.tapped.lm-volcano .lm-sprite {
+  animation: lm-thump 0.6s ease-out;
+}
+@keyframes lm-heartbeat {
+  0%, 100% { transform: scale(1); }
+  20% { transform: scale(1.07); }
+  40% { transform: scale(0.99); }
+  60% { transform: scale(1.04); }
+}
+@keyframes lm-thump {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(1.2px) scaleY(0.97); }
+}
+/* strangled: the volcano smothered by moss (smoke stops, the crater dies to ash); the tree withers */
+.landmark.strangled.lm-volcano .lm-smother {
+  opacity: 0.94;
+  transform: scaleY(1);
+  transition: transform 0.82s cubic-bezier(0.3, 0.8, 0.3, 1), opacity 0.4s ease-out;
+}
+.landmark.strangled.lm-volcano .lm-smoke,
+.landmark.strangled.lm-volcano .lm-ember {
+  opacity: 0;
+  animation: none;
+}
+.landmark.strangled.lm-volcano .lm-crater,
+.landmark.strangled.lm-volcano .lm-crater-hot,
+.landmark.strangled.lm-volcano .lm-rivulets {
+  fill: #6b6763;
+  stroke: #57534f;
+  animation: none;
+  transition: fill 0.6s ease-out, stroke 0.6s ease-out;
+}
+.landmark.strangled.lm-tree .lm-canopy circle {
+  fill: #8f8a83;
+  transition: fill 0.8s ease-out;
+}
+.landmark.strangled.lm-tree .lm-trunk {
+  fill: #3a2f29;
+}
+.landmark.strangled.lm-tree .lm-heart {
+  opacity: 0;
+}
+.landmark.strangled.lm-tree .lm-canopy {
+  transform: translateY(1.5px) scaleY(0.94);
+  animation: none;
+}
+/* the winner: a bright bloom of petals (tree) or an ember burst (volcano), once */
+.landmark.won.lm-tree .lm-flower {
+  animation: lm-petals 0.9s ease-out 1;
+}
+.landmark.won.lm-volcano .lm-crater-hot {
+  animation: lm-roar 0.7s ease-out 1;
+}
+@keyframes lm-petals {
+  0% { transform: scale(1); }
+  50% { transform: scale(2.4); }
+  100% { transform: scale(1.2); }
+}
+@keyframes lm-roar {
+  0% { opacity: 1; }
+  40% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+.reduce-motion .landmark *,
+.landmark.strangled * {
+  animation-iteration-count: 1;
+}
+.reduce-motion .landmark .lm-canopy,
+.reduce-motion .landmark .lm-sprite,
+.reduce-motion .landmark .lm-smoke {
+  animation: none !important;
+}
+/* the coach and tips never cover the Undo chip at the right end of the message row */
+.dock:has(#tool-undo:not([hidden])) .dock-overlays {
+  right: 104px;
 }

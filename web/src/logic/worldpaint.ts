@@ -6,6 +6,7 @@
 // exactly the pixels of that rectangle in a full repaint (so partial redraws are safe).
 import { CLEAR_ZONE, inClearZone } from './materials.js';
 import type { ThemeId } from './themes.js';
+import { toBoard } from './orient.js';
 import { S, centreOf, fieldT, hexAt, lavaLook, lavaPalette, mossLook, mossPalette, wfbm, wnoise } from './vigour.js';
 import type { FieldTile } from './vigour.js';
 
@@ -30,7 +31,8 @@ const hash = (a: number, b: number, salt: number) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 /** Distance from the hex centre in "hex radius" units (1 on the edge), pointy-top. */
-const hexDist = (dx: number, dy: number) => {
+const hexDist = (sx: number, sy: number) => {
+  const { x: dx, y: dy } = toBoard(sx, sy); // the hex shape follows the board's orientation
   const ax = Math.abs(dx);
   return Math.max(ax / ((S * SQ3) / 2), Math.abs(dy) / S + ax / (S * SQ3));
 };

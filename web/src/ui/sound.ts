@@ -123,6 +123,27 @@ export class Sound {
     this.noise(0.12, 0.12, 0, 9000);
   }
   /** A fuller flourish for a win (a rising arpeggio and a soft chord); a calm, soft tone for a loss. */
+  /** Step 4, the homes: my tree rustles (a soft leafy noise and a warm note) when tapped */
+  rustle() {
+    this.noise(0.22, 0.06, 0, 3200);
+    this.tone(this.base * 1.5, 0.3, { wave: 'sine', gain: 0.05, attack: 0.04 });
+  }
+  /** the opponent's volcano: a low rumble with a little crackle */
+  rumble() {
+    this.tone(this.base / 4, 0.42, { wave: 'sine', gain: 0.16, slideTo: this.base / 5, attack: 0.05 });
+    this.noise(0.05, 0.08, 0.12, 5200);
+    this.noise(0.04, 0.06, 0.24, 6000);
+  }
+  /** the Strangle finish: the volcano sighs out (smothered) */
+  sigh() {
+    this.noise(0.6, 0.07, 0, 900);
+    this.tone(this.base * 0.7, 0.6, { wave: 'sine', gain: 0.07, slideTo: this.base * 0.45, attack: 0.08 });
+  }
+  /** the Strangle finish: my tree grinds and withers */
+  grind() {
+    this.noise(0.45, 0.1, 0, 600);
+    this.tone(this.base * 0.5, 0.5, { wave: 'sawtooth', gain: 0.035, slideTo: this.base * 0.35, attack: 0.03 });
+  }
   fanfare(won: boolean) {
     if (!won) {
       this.tone(this.base * 0.75, 1.1, { wave: 'sine', gain: 0.07, attack: 0.12 });

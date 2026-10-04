@@ -74,6 +74,9 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 });
 
 
+/** The turn pill's clock: "12 turns left", "Last turn". */
+export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns left`);
+
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
 export const HOME = Object.freeze({
   word: 'home',

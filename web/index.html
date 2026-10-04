@@ -94,18 +94,23 @@
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+          <!-- Step 3: icon-only tools in the corners of the board zone (never over a tile) -->
+          <div class="corner-tools" role="toolbar" aria-label="Board tools">
+            <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
+            <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
+            <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
+            <button id="tool-skip" class="ctool br" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+            <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
+          </div>
         </div>
 
         <aside class="side dock" id="dock">
-          <div class="toolbar" role="toolbar" aria-label="Board tools">
-            <button id="tool-weak" class="tool" type="button" aria-pressed="false" title="Show where your network is easy to cut"><span class="i" data-icon="shield"></span><span class="tool-label">My weak spots</span></button>
-            <button id="tool-targets" class="tool" type="button" aria-pressed="false" title="Show where your opponent is easy to cut"><span class="i" data-icon="target"></span><span class="tool-label">Their weak links</span></button>
-            <button id="tool-replay" class="tool" type="button" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span><span class="tool-label">Replay</span></button>
-            <button id="tool-undo" class="tool undo" type="button" disabled title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span class="tool-label">Undo</span></button>
-            <button id="tool-skip" class="tool" type="button" hidden title="Skip the animation"><span class="i" data-icon="skip"></span><span class="tool-label">Skip</span></button>
-          </div>
-          <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
+          <!-- the message row: the hint line (with Undo when it can be used), or the forecast bar -->
           <div class="forecast-slot">
+          <div class="hint-row">
+            <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
+            <button id="tool-undo" class="undo-chip" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span>Undo</span></button>
+          </div>
           <div id="confirm" class="confirm forecast" hidden>
             <div class="confirm-text">
               <span id="confirm-chip" class="result-chip"></span>
@@ -142,7 +147,7 @@
           </div>
 
           <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
-          <button id="hand-sort" class="hand-sort" type="button" hidden>By suit</button>
+          <button id="hand-sort" class="hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
           <!-- floating above the dock: never changes its height -->
           <div class="dock-overlays">
           <section id="coach" class="coach" aria-label="Coach" hidden>
