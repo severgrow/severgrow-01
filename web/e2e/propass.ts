@@ -189,7 +189,7 @@ for (const ph of PHONES) {
     await confirm(page);
     const n4 = Object.values((await st(page)).board).filter((t) => t?.owner === 0 && !t.root).length;
     check(`${tag}: a Bloom of 4 places 4 tiles`, n4 === 4);
-    check(`${tag}: two ways to bloom: one button opens the choices, all on screen, one says "Bloom 3 tiles, keep the other"`, toggle && inView && /Bloom 3 tiles, keep the other/.test(label3), label3);
+    check(`${tag}: two ways to bloom: one button opens the choices, all on screen, one says "Bloom 3 tiles, keep the other"`, toggle && inView && /Bloom 3 tiles, keep the other/.test(label3), `${label3}; toggle ${toggle}; box ${box ? [box.x, box.y, box.width, box.height].map((n) => Math.round(n)).join(',') : 'none'}`);
     await page.close();
     const { page: p2 } = await open(stateWith({}, SET4), ph);
     await pick(p2, 3);

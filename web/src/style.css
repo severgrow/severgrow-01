@@ -5047,3 +5047,6 @@ body.paused #board * {
 .dock .bloom-options {
   right: 8px;
 }
+.dock .bloom-options {
+  max-width: calc(100% - 16px);
+}
