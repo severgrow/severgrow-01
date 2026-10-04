@@ -26,7 +26,7 @@ One line each: where the brief left room, what was chosen and why.
 - Gold hexes: a soft amber tint, a fine grain of tiny dots, a thin edge and the "2" badge (no stripes).
 - Pile cards reuse the hand's card component scaled to the piles row (1:1.42); in the Draw step they glow softly and lift 2pt instead of a thick outline.
 - Step 3: on tall phones the board is width-limited; spare height goes to the piles (up to +40pt) then the message row (up to +40pt), so no gap between zones exceeds 16pt.
-- Step 3: the coach and first-time tips stop 104px short of the right edge while Undo shows, so they never cover the Undo chip.
+- Step 3: while Undo shows, the coach and first-time tips stop 120px short of the right edge and the Undo chip sits above them, so it is never covered (CI's slightly wider fonts showed the gap alone was not enough).
 - Step 4: my home is a small gnarled tree (round, soft shapes, a mint circle in its hollow); the opponent's is a faceted basalt volcano (angular, a red-orange diamond crater): shape alone tells them apart in greyscale.
 - Step 4: the volcano is drawn as tall as the tree (peak at the same rise) with a thin light rim, so it stays readable on its dark lava tile and at 40pt.
 - Step 4: the danger ring is drawn in the other side's colour on the blocked sides (red on my tree, mint on the volcano), with "N/6" under the tile; it never flashes.
@@ -49,6 +49,10 @@ One line each: where the brief left room, what was chosen and why.
 - Self-critique: the "Fruit cards unseen: N" chip is now the Fruit card icon and the number (the full words stay as its spoken label and tooltip), freeing room in the dock row.
 - Step 9: rotating the phone mid-paint keeps the half-painted shape (nothing is placed); painting carries on afterwards.
 - Step 9: the first-tap time is measured with a cold cache on a slow connection (1.6 Mbit/s, 150 ms) and the CPU 4x slower.
+- Step 9 (performance): the background grass and lava painting now runs only in idle time, after the first paint; before, its back-to-back slices delayed the menu's first paint (first tap at 4x CPU: 6.4 s -> 2.1 s).
+- Step 10: the installable app (manifest, icons, offline service worker) already existed and is kept; the share preview is a 1200x630 image drawn in code (web/e2e/og-image.ts) and committed as web/public/og.png, with og/twitter meta tags.
+- Step 10: local playtest notes appear only on ?debug=1 (turn times, Undo count, empty turns, the longest pause and where it ended), kept in this browser (severgrow.playnotes.v1), with "Export as JSON"; nothing is sent anywhere.
+- Step 10: set dressing (decorative props outside the board) is not done: cut as the lowest-value item.
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 

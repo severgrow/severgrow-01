@@ -92,6 +92,8 @@ import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
 import { debugLines, isDebug } from './logic/debug.js';
+import { NOTES_KEY, emptyNotes, noteEvent, notesSummary } from './logic/playnotes.js';
+import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 import type { Beats } from './logic/emptyturn.js';
 
@@ -768,6 +770,7 @@ function autoAdvance() {
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
   skippedFrom = session.state;
+  note({ t: 'empty', at: Date.now() });
   caption(NOTHING_TO_PLAY, null, 'info');
   humanPlay(end);
 }
@@ -1409,11 +1412,62 @@ function renderGuide(advice: Advice | null) {
 
 /** The hidden ?debug=1 corner: the only place the game's random number shows. */
 const DEBUG = isDebug(location.search);
+// Step 10: local playtest notes (?debug=1 only; kept in this browser, never sent anywhere)
+let notes: Notes = DEBUG ? ((): Notes => {
+  try {
+    const n = JSON.parse(store.get(NOTES_KEY) ?? '') as Notes;
+    return Array.isArray(n?.events) ? n : emptyNotes();
+  } catch {
+    return emptyNotes();
+  }
+})() : emptyNotes();
+let notedPlayer: Player | null = null;
+function note(e: NoteEvent) {
+  if (!DEBUG) return;
+  notes = noteEvent(notes, e);
+  store.set(NOTES_KEY, JSON.stringify(notes));
+}
+if (DEBUG) {
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      const t = e.target as Element | null;
+      const where = t?.closest('#hand') ? 'hand' : t?.closest('#board-wrap') ? 'board' : t?.closest('.piles') ? 'piles' : t?.closest('#moves') ? 'moves' : t?.closest('.dock') ? 'dock' : 'other';
+      if (session && myTurn()) note({ t: 'input', at: Date.now(), where });
+    },
+    true,
+  );
+  const exp = document.createElement('button');
+  exp.type = 'button';
+  exp.className = 'btn small ghost debug-export';
+  exp.textContent = 'Export as JSON';
+  exp.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ summary: notesSummary(notes), events: notes.events }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'playtest-notes.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  document.body.append(exp);
+}
 function renderDebug(st: State) {
   if (!DEBUG) return;
+  // my turns start and end (for the notes)
+  if (st.turnPlayer !== notedPlayer) {
+    if (notedPlayer === HUMAN) note({ t: 'turnEnd', at: Date.now() });
+    if (st.turnPlayer === HUMAN && st.phase !== 'GAME_OVER') note({ t: 'turnStart', at: Date.now() });
+    notedPlayer = st.turnPlayer;
+  }
   const el = $('debug-corner');
   el.hidden = false;
-  el.textContent = debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }).join('\n');
+  const sm = notesSummary(notes);
+  el.textContent = [
+    ...debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }),
+    `my turns ${sm.turns} · ${(sm.avgTurnMs / 1000).toFixed(1)} s each`,
+    `undo ${sm.undos} · empty turns ${sm.emptyTurns}`,
+    sm.longestPause ? `longest pause ${(sm.longestPause.ms / 1000).toFixed(1)} s (then: ${sm.longestPause.before})` : 'longest pause -',
+  ].join('\n');
 }
 
 function renderHud() {
@@ -2179,6 +2233,7 @@ function renderHistory() {
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
   if (!session) return;
+  note({ t: 'undo', at: Date.now() });
   fastForward();
   const before = session.state.board;
   if (!session.undo()) return;

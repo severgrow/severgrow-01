@@ -44,6 +44,18 @@ const done = (ok: boolean) => {
   if (ok) for (const fn of listeners.splice(0)) fn();
 };
 
+/**
+ * The next slice of background painting: only in idle time, so the first paint of the page, taps
+ * and animation frames always come first (v0.7 Step 9: back-to-back slices delayed the menu's
+ * first paint by over a second). Browsers without idle callbacks wait one frame between slices.
+ */
+const later = (fn: () => void, wait = 0) => {
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+  const go = () => (w.requestIdleCallback ? w.requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 16));
+  if (wait > 0) setTimeout(go, wait);
+  else go();
+};
+
 /** Paints every image in the background (one slice at a time), then tells the listeners. */
 export const warmPhotos = () => {
   if (state !== 'idle') return;
@@ -57,9 +69,10 @@ export const warmPhotos = () => {
     } catch {
       return done(false); // no canvas: the vector look stays
     }
-    setTimeout(next, 0);
+    later(next);
   };
-  setTimeout(next, 30);
+  // after the page has painted once (two frames), then in idle time
+  requestAnimationFrame(() => requestAnimationFrame(() => later(next, 50)));
 };
 
 /**

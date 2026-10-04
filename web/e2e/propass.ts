@@ -137,7 +137,7 @@ for (const ph of PHONES) {
     check(`${tag}: Undo hidden before a move, shown after it, takes the Bloom back, hidden again`, !undoBefore && undoAfter && back && !(await page.locator('#tool-undo').isVisible()));
     // the word scans, mid-game
     const bad = await scan(page);
-    check(`${tag}: no "bot", "clump", "hypha", "line" or "root" words on the page`, bad.length === 0, bad.slice(0, 2).join(' | '));
+    check(`${tag}: none of the retired or banned words (BANNED above) on the page`, bad.length === 0, bad.slice(0, 2).join(' | '));
     await page.close();
   }
   {

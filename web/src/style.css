@@ -4246,8 +4246,11 @@ html.final-turns .game::after {
 }
 .root-warn {
   position: absolute;
-  top: 8px;
-  left: 12px;
+  top: 10px;
+  /* centred between the corner tools (never over them) */
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   z-index: 3;
   display: inline-flex;
   align-items: center;
@@ -4995,3 +4998,28 @@ body.paused #board * {
 .bloom-options .kind-cards .s1 { color: var(--c-ash); }
 .bloom-options .kind-cards .s2 { color: var(--c-dew); }
 .bloom-options .kind-cards .s3 { color: var(--c-ember); }
+
+/* a crowded moves row (a Bloom button and "Skip sprout") wraps the link under the button
+   instead of running off the edge */
+.dock .moves {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  align-content: center;
+}
+.dock .moves .btn.link {
+  min-height: 28px;
+}
+/* Step 10: ?debug=1 only: export the local playtest notes */
+.debug-export {
+  position: fixed;
+  left: 4px;
+  bottom: 92px;
+  z-index: 91;
+}
+/* Undo always stays on top of the coach and first-time tips (it is never covered) */
+.dock .undo-chip {
+  z-index: 5;
+}
+.dock:has(#tool-undo:not([hidden])) .dock-overlays {
+  right: 120px;
+}

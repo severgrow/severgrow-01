@@ -184,7 +184,11 @@ until its first move appears, and only while it is really still choosing.
   “Throw a card”" when a Bloom is still possible).
 - **Bloom has buttons** ("Bloom 3 tiles", "Bloom 4 tiles", "Bloom 3 tiles, keep the other"): tap
   one (a card too, if you want particular cards), then **paint it on the board** (see "Painting a
-  Bloom" below).
+  Bloom" below). With two or more ways to bloom, one **Bloom** button ("3 ways") opens the list of
+  choices upward over the message row; each shows its card numbers in their suit colours, so two
+  "Bloom 4 tiles" (3-4-5-6 and four 6s) are told apart. The row never runs off the screen.
+- **The Fruit chip** next to the piles is the Fruit card icon and the number of Fruit cards not
+  seen yet (its full words, "Fruit cards unseen: 3", are its spoken label and tooltip).
 - **Cancel** always clears your choice. Esc does the same on a keyboard (while drawing, Esc first
   clears the shape, then the choice).
 - **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
