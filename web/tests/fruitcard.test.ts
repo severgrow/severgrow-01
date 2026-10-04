@@ -167,7 +167,7 @@ describe('the hint line with a picked Fruit card (self-review fix)', () => {
     expect(hintFor({ ...base, fruit: { firstTime: true } }).text).toBe(FRUIT.anyStrength);
     expect(hintFor({ ...base, fruit: { firstTime: false } }).text).toBe(FRUIT.tapTarget);
     expect(hintFor({ ...base, fruit: { firstTime: false, reason: FRUIT.noTarget } }).text).toBe(FRUIT.noTarget);
-    expect(hintFor({ ...base, fruit: null }).text).toBe("That card can't grow anywhere now");
+    expect(hintFor({ ...base, fruit: null }).text).toBe("That card can't grow now");
   });
 });
 

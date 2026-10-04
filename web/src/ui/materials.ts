@@ -77,9 +77,30 @@ const f = (n: number) => n.toFixed(1);
 const lit = (c: DrawCtx, d: string, rim = c.look.rim) =>
   el('path', { d, class: 'lit', fill: c.url('lit'), stroke: c.url('rim'), 'stroke-opacity': Math.min(1, rim / Math.max(c.look.rim, 0.01)).toFixed(2) }, c.parent);
 
-/** A soft contact shadow, offset down-right by the lift. */
-const contact = (c: DrawCtx, d: string, lift: number, opacity: number) =>
-  el('path', { d, class: 'contact', transform: `translate(${f(lift * 0.5)} ${f(lift)})`, style: `opacity:${opacity.toFixed(2)}` }, c.parent);
+/**
+ * Positioning pass: every tile type draws inside its own hex. A shadow is the shape moved
+ * down-right (away from the top-left light), but never further than keeps it inside the hex:
+ * a hex of radius `size` moved by v stays inside the tile when size + |v| / cos 30° <= S.
+ */
+export const inFootprint = (size: number, dx: number, dy: number) => {
+  const len = Math.hypot(dx, dy);
+  const room = Math.max(0, ((S - size) * Math.sqrt(3)) / 2);
+  const k = len > room ? room / len : 1;
+  return { dx: dx * k, dy: dy * k };
+};
+/** The same for a circle of radius r (it must stay inside the hex's inner circle). */
+const circleInFootprint = (r: number, dx: number, dy: number) => {
+  const len = Math.hypot(dx, dy);
+  const room = Math.max(0, (S * Math.sqrt(3)) / 2 - r);
+  const k = len > room ? room / len : 1;
+  return { dx: dx * k, dy: dy * k };
+};
+
+/** A soft contact shadow, offset down-right by the lift (inside the hex). */
+const contact = (c: DrawCtx, d: string, lift: number, opacity: number) => {
+  const o = inFootprint(c.radius, lift * 0.5, lift);
+  return el('path', { d, class: 'contact', transform: `translate(${f(o.dx)} ${f(o.dy)})`, style: `opacity:${opacity.toFixed(2)}` }, c.parent);
+};
 
 /**
  * The photo-like image for a tile (Normal detail, once painted), centred on the hex and
@@ -124,8 +145,10 @@ registerMaterial('rock', {
     const d = hexPath(c.key, size, c.shape);
     const h = (n: number) => hash(`${c.key}:rock:${n}`);
     const { x, y } = centerOf(c.key);
-    el('path', { d, class: 'rock-shadow', transform: `translate(${f(L.depth * 0.9)} ${f(L.depth * 1.9)})` }, c.parent);
-    el('path', { d, class: 'rock-edge', transform: `translate(0 ${f(L.depth * 1.3)})` }, c.parent);
+    const sh = inFootprint(size, L.depth * 0.9, L.depth * 1.9);
+    const edge = inFootprint(size, 0, L.depth * 1.3);
+    el('path', { d, class: 'rock-shadow', transform: `translate(${f(sh.dx)} ${f(sh.dy)})` }, c.parent);
+    el('path', { d, class: 'rock-edge', transform: `translate(0 ${f(edge.dy)})` }, c.parent);
     el('path', { d, class: 'rock-body' }, c.parent);
     if (L.facets) {
       // two or three flat, uneven planes meeting at a ridge point up and left of centre
@@ -221,7 +244,11 @@ registerMaterial('moss', {
     const R = S * 0.88;
     const g = el('g', { class: `moss-root${c.look.motion ? ' breathing' : ''}` }, c.parent);
     const ctx = { ...c, parent: g };
-    el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, g);
+    el('circle', { ...(() => {
+      const rc = R * 0.92;
+      const o = circleInFootprint(rc, c.look.depth * 0.7, c.look.depth * 1.5);
+      return { cx: f(x + o.dx), cy: f(y + o.dy), r: f(rc) };
+    })(), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, g);
     const pic = photo(ctx, 'grass', R, 2);
     if (!pic) {
       el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'moss-body', fill: c.url('moss-dome') }, g);
@@ -295,7 +322,11 @@ registerMaterial('fire', {
   root: (c) => {
     const { x, y } = centerOf(c.key);
     const R = S * 0.88;
-    el('circle', { cx: f(x + c.look.depth * 0.7), cy: f(y + c.look.depth * 1.5), r: f(R), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, c.parent);
+    el('circle', { ...(() => {
+      const rc = R * 0.92;
+      const o = circleInFootprint(rc, c.look.depth * 0.7, c.look.depth * 1.5);
+      return { cx: f(x + o.dx), cy: f(y + o.dy), r: f(rc) };
+    })(), class: 'contact', style: `opacity:${c.look.shadow.toFixed(2)}` }, c.parent);
     const pic = photo(c, 'lava', R, 2);
     if (!pic) {
       el('circle', { cx: f(x), cy: f(y), r: f(R), class: 'lava-crust', fill: c.url('lava-crust') }, c.parent);

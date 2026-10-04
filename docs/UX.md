@@ -707,3 +707,15 @@ the suit sits, in bone cream.
 - the opponent's volcano is a 3/4 aerial cone of faceted basalt, with glowing lava rivulets, a
   diamond crater and a drift of smoke.
 The circle and the diamond still tell them apart without colour.
+
+## Positioning pass (v0.8.1)
+
+Everything on the game screen is centred on one line, and the controls are mirrored left and right:
+
+- **Header:** the turn pill sits exactly on the centre line, with mirrored sides (You ◯ 0 | pill | 0 ◆ Opponent).
+- **Board:** turned so the opponent's volcano is at the top and my tree at the bottom, both on the centre line (on wide screens: my tree left, the volcano right). It is centred in its area with the same space above and below. Every tile gap is the same size, snapped to device pixels.
+- **Corner tools:** two mirrored pairs. Top: My weak spots (shield) and Their weak links (target). Bottom: Replay (or Skip during an animation) and "?" (How to play).
+- **Pile row:** the deck and the throw pile mirror each other around a centre column. In that column, the hint sits on one line, with the move buttons under it. The forecast bar covers this row while a move waits for Confirm.
+- **Hand row:** Undo, then the fan, then Sort. Undo and Sort keep their slots (dimmed when there's nothing to do), so nothing moves.
+- **Hint:** at most 28 characters. It is at full strength for the first three turns, then quieter, and comes back when you seem stuck (6 seconds with no tap) or something unusual happens.
+- **Alignment overlay:** `?align=1` (or the switch on the `?lab=1` page) draws the centre line and the 16pt margins over the game.

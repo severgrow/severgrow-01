@@ -122,7 +122,7 @@ for (const ph of PHONES) {
     // a 3-tile Bloom from a set, painted by hand; the orientation chosen by measurement
     const { page, errors } = await open(stateWith({}, SET3), ph);
     const orient = await page.evaluate(() => document.documentElement.dataset.orient);
-    const undoBefore = await page.locator('#tool-undo').isVisible();
+    const undoBefore = await page.locator('#tool-undo').isEnabled();
     await pick(page, 3);
     await tDrag(page, ['-1,1', '0,1', '1,0']);
     await confirm(page);
@@ -131,11 +131,12 @@ for (const ph of PHONES) {
     check(`${tag}: the board picks ${ph.orient} hexes`, orient === ph.orient, orient);
     check(`${tag}: a set of 3 painted by hand blooms 3 tiles`, placed && errors.length === 0);
     // Undo shows only when there is something to take back; it takes the Bloom back
-    const undoAfter = await page.locator('#tool-undo').isVisible();
+    const undoAfter = await page.locator('#tool-undo').isEnabled();
     await page.click('#tool-undo');
     await idle(page);
     const back = (await st(page)).board['-1,1'] === null;
-    check(`${tag}: Undo hidden before a move, shown after it, takes the Bloom back, hidden again`, !undoBefore && undoAfter && back && !(await page.locator('#tool-undo').isVisible()));
+    // positioning pass: Undo keeps its slot; it is disabled (dimmed) when nothing can be undone
+    check(`${tag}: Undo off before a move, on after it, takes the Bloom back, off again`, !undoBefore && undoAfter && back && !(await page.locator('#tool-undo').isEnabled()) && (await page.locator('#tool-undo').isVisible()));
     // the word scans, mid-game
     const bad = await scan(page);
     check(`${tag}: none of the retired or banned words (BANNED above) on the page`, bad.length === 0, bad.slice(0, 2).join(' | '));

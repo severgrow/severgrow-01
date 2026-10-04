@@ -11,7 +11,7 @@ const EXT = /\.(ts|md|html|css|json|sh|yml|mjs|js)$/;
 const OLD = /MeldRun|MeldSet|\bhyphae?\b|planRun|planSet|runLine|allowHyphaOneBend|lineGhost|lineArrows|snapDir/i;
 const SELF = 'no-lines.test.ts';
 // The player-facing word scans must name the old words to ban them (allowlisted, the scanners only).
-const SCANNERS = new Set(['bloom-words.test.ts']);
+const SCANNERS = new Set(['bloom-words.test.ts', 'align.ts']); // align.ts: the positioning pass's browser word scan
 const SCANNER_LINE = /grow a line/;
 
 const files = (dir: string): string[] =>

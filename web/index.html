@@ -66,15 +66,15 @@
       <header class="hud">
         <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
         <div class="score you">
-          <span class="mark you" aria-hidden="true"></span>
           <span class="who">You</span>
+          <span class="mark you" aria-hidden="true"></span>
           <b id="score-you" class="num" aria-label="Your score">0</b>
         </div>
         <div id="turn" class="turn" aria-live="polite"></div>
-        <div class="score bot">
+        <div class="score bot" title="Opponent">
           <b id="score-bot" class="num" aria-label="Opponent score">0</b>
-          <span class="who" data-short="opp">Opponent</span>
           <span class="mark bot" aria-hidden="true"></span>
+          <span class="who" data-short="opp">Opponent</span>
         </div>
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
@@ -98,34 +98,18 @@
             <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
             <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
             <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
-            <button id="tool-skip" class="ctool br" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+            <button id="tool-skip" class="ctool bl" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
             <button id="hint-btn" class="ctool help" type="button" aria-label="How to play" aria-expanded="false" data-tip="How to play">?</button>
             <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
           </div>
         </div>
 
         <aside class="side dock" id="dock">
-          <!-- the message row: the hint line (with Undo when it can be used), or the forecast bar -->
-          <div class="forecast-slot">
-          <div class="hint-row">
-            <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
-            <button id="tool-undo" class="undo-chip" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span>Undo</span></button>
-          </div>
-          <div id="confirm" class="confirm forecast" hidden>
-            <div class="confirm-text">
-              <span id="confirm-chip" class="result-chip"></span>
-              <span id="confirm-warn" class="warn" hidden></span>
-              <ul id="confirm-risks" class="risks" hidden></ul>
-            </div>
-            <div class="confirm-buttons">
-              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
-              <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
-              <button id="confirm-play" class="btn primary" type="button">Confirm</button>
-            </div>
-          </div>
-          </div>
-
+          <!-- Positioning pass: one row, symmetric about the centre line: the hint, the deck and
+               throw pile as a centred pair, the moves; the forecast bar covers it while a move
+               waits for Confirm -->
           <div class="table-row">
+            <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
             <div class="piles">
               <button id="deck" class="pile deck" type="button" aria-label="Deck">
                 <span class="pile-card">
@@ -143,10 +127,29 @@
               </button>
             </div>
             <div id="moves" class="moves" role="group" aria-label="Moves"></div>
+            <div class="forecast-slot">
+            <div id="confirm" class="confirm forecast" hidden>
+            <div class="confirm-text">
+              <span id="confirm-chip" class="result-chip"></span>
+              <span id="confirm-warn" class="warn" hidden></span>
+              <ul id="confirm-risks" class="risks" hidden></ul>
+            </div>
+            <div class="confirm-buttons">
+              <button id="confirm-info" class="btn ghost small icon-info" type="button" aria-label="Open the tile card" title="Tile card" hidden>i</button>
+              <button id="confirm-cancel" class="btn ghost" type="button">Cancel</button>
+              <button id="confirm-play" class="btn primary" type="button">Confirm</button>
+            </div>
+            </div>
+            </div>
           </div>
 
-          <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
-          <button id="hand-sort" class="hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
+          <!-- the hand between two fixed slots: Undo (left) and Sort (right); either can come and go
+               without moving anything -->
+          <div class="hand-row">
+            <button id="tool-undo" class="hand-slot undo-slot" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span></button>
+            <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
+            <button id="hand-sort" class="hand-slot hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
+          </div>
           <!-- floating above the dock: never changes its height -->
           <div class="dock-overlays">
           <section id="coach" class="coach" aria-label="Coach" hidden>

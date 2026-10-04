@@ -47,7 +47,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { HEIGHTS, computeLayout } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, computeLayout } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -58,7 +58,7 @@ import { LEVEL_ICONS } from './ui/levelIcons.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
-import { hintFor } from './logic/hint.js';
+import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
 import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from './logic/forecast.js';
 import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
@@ -82,8 +82,9 @@ import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
+import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
-import { getOrient, setOrient } from './logic/orient.js';
+import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
@@ -1480,6 +1481,11 @@ function renderHud() {
   if (!busy()) shownScores = [session.view.score, session.view.opponentScore];
   $('score-you').textContent = String(shownScores[0]);
   $('score-bot').textContent = String(shownScores[1]);
+  const scoreKey = `${shownScores[0]}:${shownScores[1]}:${document.documentElement.className}`;
+  if (scoreKey !== lastScoreFit) {
+    lastScoreFit = scoreKey;
+    fitHudNames();
+  }
   setRace(shownScores);
   const over = st.phase === 'GAME_OVER' && !busy();
   // Overhaul item 15: the final turns: a calm vignette and a softer ambient sound; one short banner
@@ -1509,6 +1515,30 @@ function renderHud() {
     hintEl.innerHTML = '<span class="hint-text"></span>';
     hintEl.querySelector('.hint-text')!.textContent = hint.text;
   }
+  updateHintWeight();
+}
+
+/**
+ * Positioning pass: the hint is at full weight for my first 3 turns, then quieter; it comes back
+ * at full weight when it says something unusual, or when I've tapped nothing for about 6 s on
+ * my turn (I may be stuck).
+ */
+let lastInputAt = Date.now();
+let stuckTimer = 0;
+document.addEventListener('pointerdown', () => {
+  lastInputAt = Date.now();
+  updateHintWeight();
+}, { capture: true, passive: true });
+function updateHintWeight() {
+  if (!session) return;
+  const el = $('hint');
+  const text = el.dataset.text ?? '';
+  const mine = session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
+  const idle = mine ? Date.now() - lastInputAt : 0;
+  const w = hintWeight({ myTurns: Math.ceil(session.state.turnNumber / 2), idleMs: idle, routine: isRoutineHint(text) });
+  el.classList.toggle('quiet', w === 'quiet');
+  clearTimeout(stuckTimer);
+  if (w === 'quiet' && mine) stuckTimer = window.setTimeout(updateHintWeight, Math.max(50, STUCK_MS - idle + 20));
 }
 
 /** In the default game (Rot and Knock off) throwing a card ends the turn. */
@@ -1537,7 +1567,7 @@ function applyLayout() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
-  const key = `${w}x${h}r${radius}`;
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
@@ -1547,9 +1577,17 @@ function applyLayout() {
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
   document.documentElement.dataset.orient = l.orient;
-  if (l.orient !== getOrient()) {
+  // Positioning pass: the board also turns (steps of 60 degrees) so the homes sit on the centre
+  // line, and the tile centres snap to device pixels (every gap the same); display only
+  const cfg = session?.state.config ?? newGame(1).config;
+  const rot = homeRotation(l.orient, cfg, HUMAN);
+  const grid = 1 / (l.scale * (window.devicePixelRatio || 1));
+  const familyChanged = l.orient !== getOrient();
+  if (familyChanged || rot !== getRotation() || Math.abs(grid - getPixelGrid()) > 1e-9) {
     setOrient(l.orient);
-    photosForOrientation();
+    setRotation(rot);
+    setPixelGrid(grid);
+    if (familyChanged) photosForOrientation();
     if (session) {
       board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
       lastAmbBoard = null;
@@ -1564,15 +1602,38 @@ function applyLayout() {
   root.setProperty('--race-h', px(HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
+  root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
   for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));
+  root.setProperty('--pile-card-h', `${l.parts.pileCard.h.toFixed(1)}px`);
+  root.setProperty('--centre-w', `${l.parts.hint.w.toFixed(1)}px`);
+  root.setProperty('--pile-col', `${l.parts.deck.w.toFixed(1)}px`);
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
   board.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  fitHudNames();
 
 }
 window.addEventListener('resize', () => applyLayout());
 window.visualViewport?.addEventListener('resize', () => applyLayout());
+
+/**
+ * Positioning pass: the score bar keeps "You" and "Opponent" only while both fit their (equal)
+ * columns; otherwise both words go together (the marks, colours, aria-labels and the tooltip
+ * still say whose score it is). Never a cut-off word.
+ */
+let lastScoreFit = '';
+function fitHudNames() {
+  const hud = document.querySelector<HTMLElement>('.hud');
+  if (!hud) return;
+  hud.classList.remove('names-off', 'tight');
+  const over = () => [...hud.querySelectorAll<HTMLElement>('.score')].some((e) => e.scrollWidth > e.clientWidth + 1); // 1px: rounding of a fractional column
+  if (!over()) return;
+  hud.classList.add('names-off');
+  // still too wide (Large text, three-digit scores on a 360px phone): smaller numbers and a
+  // narrower pill, both sides alike
+  if (over()) hud.classList.add('tight');
+}
 
 /** The moment, summarised for the hint line (overhaul item 13; the wording lives in logic/hint.ts). */
 function hintCtx(v: View): HintCtx {
@@ -1704,11 +1765,19 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
   $('tool-targets').setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
-  $('tool-replay').hidden = busy() || session.lastTurnOf(BOT).length === 0;
+  // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
+  // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
+  const noReplay = session.lastTurnOf(BOT).length === 0;
+  $('tool-replay').hidden = busy();
+  $('tool-replay').classList.toggle('off', noReplay);
+  $('tool-replay').setAttribute('aria-disabled', String(noReplay));
+  $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = session.canUndo && !busy();
-  // Step 3: Undo shows only when something can be undone (no greyed-out ghost)
-  $('tool-undo').hidden = !undoOk;
+  // Positioning pass: Undo always holds its slot (opposite Sort), dimmed and disabled until a move
+  // can be taken back, so it appearing never moves anything and Sort is never alone
+  $('tool-undo').hidden = false;
+  ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
   // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
   // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
@@ -1843,7 +1912,11 @@ function renderControls(v: View, advice: Advice | null) {
     const end = legal.find((a) => a.t === 'EndAct')!;
     const note = document.createElement('span');
     note.className = 'note empty-reason';
-    note.textContent = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    // positioning pass: one short line in the centre column; the full reason on hover and for
+    // screen readers
+    note.textContent = NOTHING_TO_PLAY;
+    note.title = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    note.setAttribute('aria-label', note.title);
     moves.append(note, button('Continue', 'primary empty-continue', () => humanPlay(end), 'Continue to the Throw step'));
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
@@ -2065,7 +2138,8 @@ function renderHand(v: View, advice: Advice | null) {
     }
   }
   const sortBtn = $('hand-sort');
-  sortBtn.hidden = n < 2;
+  sortBtn.hidden = false;
+  (sortBtn as HTMLButtonElement).disabled = n < 2;
   const sortWords = `Sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`;
   sortBtn.setAttribute('aria-label', sortWords);
   sortBtn.title = sortWords;
@@ -2627,6 +2701,8 @@ function pickFruit(id: number) {
 /** The Fruit card the "any strength" note is shown for (the first one picked). */
 let anyNoteCard: number | null = null;
 
+const REPLAY_TIP = `Replay ${OPP.theirs} last turn`;
+const REPLAY_NONE = `Nothing to replay yet: ${OPP.the} hasn't moved`;
 function replayBotTurn() {
   if (!session || busy()) return;
   const turn = session.lastTurnOf(BOT);
@@ -2990,7 +3066,7 @@ document.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k === 'd') return void $('deck').click();
     if (k === 't') return void $('discard').click();
-    if (k === 'u' && !$('tool-undo').hidden) return void $('tool-undo').click();
+    if (k === 'u' && !($('tool-undo') as HTMLButtonElement).disabled) return void $('tool-undo').click();
   }
   if (target.id !== 'board') return;
   const dir = ARROWS[e.key];
@@ -3100,6 +3176,13 @@ sound.musicOn = settings.music;
 applyTheme();
 showSplash();
 const params = new URLSearchParams(location.search);
+// Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
+// the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too
+{
+  const KEY = 'severgrow.align';
+  if (params.has('align')) store.set(KEY, params.get('align') === '1' ? '1' : '');
+  document.documentElement.classList.toggle('align-overlay', store.get(KEY) === '1');
+}
 const urlSeed = Number(params.get('seed'));
 if (params.get('lab') === '1') {
   // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)

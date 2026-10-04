@@ -123,7 +123,7 @@ export const BLOOM = Object.freeze({
   /** the general hint */
   hint: 'You can bloom with cards that match or follow on.',
   /** why a held group cannot bloom right now */
-  tooFew: (n: number) => `Too few free hexes by your tiles to bloom ${n}`,
+  tooFew: (n: number) => `No room to bloom ${n}`,
   /** the move list and the log */
   suggest: (n: number, hexes: string) => `Bloom ${n} tiles at ${hexes}`,
   youDid: (n: number) => `You bloomed ${n} tiles`,
@@ -143,20 +143,20 @@ export const FRUIT = Object.freeze({
   /** How to play (HTML) */
   howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. A Fruit card uses your sprout for the turn (one sprout or one Fruit card per turn; a Bloom is still fine). It never makes a combo; you can throw it, and then ${OPP.the} can take it.`,
   /** first time a Fruit card is picked */
-  anyStrength: 'Any strength: even a 9 can go.',
+  anyStrength: 'Any strength, even a 9',
   /** the hint while a Fruit card is picked */
-  tapTarget: `Tap a lit ${lower} tile to remove it`,
+  tapTarget: `Tap a lit ${lower} tile`,
   /** the shortcut on an opponent tile's card */
   use: 'Use Fruit card',
   /** the shortcut's note on a top-rank tile */
   topRank: 'No combo can replace this. A Fruit card can.',
   /** why a held Fruit card has nothing to do */
-  noTarget: `No ${lower} tile touches yours.`,
+  noTarget: `No ${lower} tile by yours`,
   notNow: 'Play it in your Grow step.',
   /** v0.8: a Fruit card uses the turn's sprout */
-  used: 'Sprout used this turn. Fruit is back next turn.',
+  used: 'Fruit is back next turn',
   /** v0.8: the Grow step's first hint when a Fruit card is playable */
-  orSprout: 'Sprout a card, or play your Fruit card',
+  orSprout: 'Sprout, or play Fruit',
   /** the burst banner */
   banner: 'Fruited!',
   /** a move, in plain words */

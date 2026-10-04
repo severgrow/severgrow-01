@@ -43,6 +43,9 @@ const moments = (): HintCtx[] => {
 };
 
 describe('the hint line', () => {
+  it('positioning pass: a short hint, at most 28 characters (it sits beside the piles, no row of its own)', () => {
+    expect(HINT_MAX).toBeLessThanOrEqual(28);
+  });
   it(`always fits one line (≤${HINT_MAX} characters) and never says "bot"`, () => {
     for (const c of moments()) {
       const { text } = hintFor(c);
@@ -111,5 +114,25 @@ describe('v0.8: the hint line carries the turn (no step bar)', () => {
         expect(t.length).toBeLessThanOrEqual(HINT_MAX);
       }
     }
+  });
+});
+
+// Positioning pass: the hint is quieter once the player knows the turn, and comes back at full
+// weight when they seem stuck or something unusual happens
+describe('the hint weight', () => {
+  it('full for the first 3 turns, quiet after; full again when stuck (about 6 s) or unusual', async () => {
+    const { hintWeight } = await import('../src/logic/hint.js');
+    expect(hintWeight({ myTurns: 1, idleMs: 0, routine: true })).toBe('full');
+    expect(hintWeight({ myTurns: 3, idleMs: 0, routine: true })).toBe('full');
+    expect(hintWeight({ myTurns: 4, idleMs: 0, routine: true })).toBe('quiet');
+    expect(hintWeight({ myTurns: 4, idleMs: 6500, routine: true })).toBe('full');
+    expect(hintWeight({ myTurns: 9, idleMs: 0, routine: false })).toBe('full');
+  });
+  it('the routine hints are the everyday ones: draw, sprout, throw', async () => {
+    const { isRoutineHint } = await import('../src/logic/hint.js');
+    expect(isRoutineHint(hintFor({ ...base, phase: 'DRAW' }).text)).toBe(true);
+    expect(isRoutineHint(hintFor(base).text)).toBe(true);
+    expect(isRoutineHint(hintFor({ ...base, phase: 'DISCARD' }).text)).toBe(true);
+    expect(isRoutineHint(hintFor({ ...base, hexWithNoMove: true }).text)).toBe(false);
   });
 });

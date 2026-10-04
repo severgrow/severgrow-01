@@ -2,6 +2,32 @@
 
 One line each: where the brief left room, what was chosen and why.
 
+## Positioning pass (v0.8.1)
+
+- "Points-up/down family" in the brief: on phones the board already uses the family that gives bigger tiles, which is points left-right in the code ("flat"). I kept that family; its neighbour directions include straight up, so the homes can be exactly vertical.
+- Home axis: the board turns in steps of 60 degrees within its family. This is display only: engine coordinates, saves and replays never change.
+  - Phones: the volcano is at the top and the tree at the bottom, on the centre line.
+  - Points-up-down boards (the 768x1024 tablet and desktop, where that family gives tiles 8% bigger: 107 vs 99pt): my tree on the left, the volcano on the right, level.
+- Equal gaps: the two lattice vectors are rounded to whole device pixels once, and every centre is built from them.
+  - Of the roundings next to the true vectors, the one with the most equal neighbour distances wins.
+  - Drift is at most 1.5 device pixels per step out from the centre, symmetric, so the board stays centred.
+  - The painted world uses the same lattice.
+- The board's area now matches the layout exactly. The CSS had an 8px margin against the layout's 4px, plus a 6px bottom padding that lifted the board 3px.
+- Header: equal side columns (`minmax(0, 1fr)`) put the turn pill exactly on the centre line; before, "Opponent" being wider than "You" pushed it 14pt left at 390x844.
+  - The sides now mirror: You ◯ 0 | pill | 0 ◆ Opponent.
+  - When either side doesn't fit (a 360px phone with Large text, long scores), both words go together, so the sides stay mirrored. The marks, colours, labels and a tooltip still say whose score it is. No word is ever cut off.
+- "?" (How to play): it stays a round corner tool, bottom-right, paired with the bottom-left slot. That slot always holds Replay (dimmed until the opponent has moved), or Skip while an animation plays. The four corners are always two mirrored pairs, and How to play stays one tap away.
+- Hint: it sits in the pile row, centred, with the move buttons under it; the deck and the throw pile mirror each other on either side. The hint row is gone.
+  - Hints are 28 characters at most. The longest measures 163px at 14pt, so it fits on one line; the centre column is at least 172px.
+  - Both pile columns are the same width (the throw pile's label with its count needs 72px), so the pair is a true mirror.
+- Hint weight: full for my first 3 turns, then quieter (muted, regular weight) for the everyday hints (draw, sprout, throw). It returns to full when it says anything else, or after 6 seconds on my turn with no tap.
+- Undo and Sort: fixed 28pt slots at the two ends of the hand row (44pt touch area), with the fan centred between them. Each is always shown, dimmed and disabled when it has nothing to do, so neither ever appears alone and nothing moves.
+- Confirm: the forecast bar covers the whole pile row while a move waits, so the dock never changes height.
+- Spare height: on 390x844 and 430x932 the board already spans the full width, so the hint row's height can't make it bigger. The pile row first takes room for its largest piles plus 16pt above and below, then the hand row takes up to 32pt. Whatever is left goes equally above and below the board, never as dead space inside the dock. The old "no gap over 16pt" layout test now applies whenever the board doesn't span the full width. When it does, the test checks that the dock rows already took what they can use.
+  - Tiles at 360x640: 49.6 to 54.9pt (+11%). 390x844 and 430x932: unchanged (width-limited).
+- Hand cards stay at most 72pt wide. 84pt was tried: then a card's middle hides under the next card in a full hand (a card wider than twice its visible slice).
+- Footprint: rock shadows and edges, tile contact shadows and the home mounds' contact shadows now stay inside their own hex, still offset down-right (away from the top-left light). Grass and lava pictures still overlap their neighbours by design (one lawn), so I left that as it is.
+
 ## v0.8 UI pass
 
 - Rule (asked for by the user): a Fruit card uses the turn's Sprout, so a turn has one Sprout, one Strengthen or one Fruit card. Blooms are unaffected. The error for a second one is `SPROUT_LIMIT`, the same as a second Sprout. `fruitUsesSprout: false` brings back v0.6/v0.7 play (the legacy test preset uses it, since it has no Sprouts at all).
