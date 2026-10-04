@@ -6,6 +6,7 @@
 // word scans (no "bot", no "seed"/"plant"), and no sideways scroll at 360px with a full hand.
 // Saves screenshots (390x844) to docs/screens/fruit-cards/ with --shots.
 //   npx tsx web/e2e/fruitcards.ts [--shots]
+import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -37,7 +38,7 @@ const open = async (state: State, o: { w?: number; settings?: Record<string, unk
       sessionStorage.setItem('ready', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v6', saved as string);
+      localStorage.setItem('severgrow.save.v7', saved as string);
       localStorage.setItem('severgrow.tips.v1', tips as string);
       localStorage.setItem('severgrow.seen', '1');
       // record every caption as it appears (they replace each other quickly)
@@ -51,7 +52,7 @@ const open = async (state: State, o: { w?: number; settings?: Record<string, unk
     },
     [
       JSON.stringify({ sound: false, coach: false, speed: 'fast', ...o.settings }),
-      JSON.stringify({ state, coach: doneCoach, level: 7 }),
+      positionSave({ state, coach: doneCoach, level: 7 }),
       JSON.stringify({ fruit: true, strengthen: true, draw: true, ...o.tips }),
     ] as const,
   );

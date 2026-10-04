@@ -28,7 +28,7 @@
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">Severor</h1>
         <p class="tagline">Grow your network. Keep it joined to your home. Cut your opponent's links.</p>
-        <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
+        <div id="menu-welcome" class="welcome" role="note" hidden></div>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
           <button id="menu-new" class="btn primary big" type="button">New game</button>
@@ -196,7 +196,9 @@
         <div class="row"><span>Top-rank glow</span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
         <h3>Sound and feel</h3>
         <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row slider"><span>Effects volume</span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
         <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
+        <label class="row slider"><span>Music volume</span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
         <label class="row"><span id="vibration-label">Vibration</span><input type="checkbox" data-setting="vibration" /></label>
         <div class="test-row">
           <button id="test-sound" class="btn ghost small" type="button">Test sound</button>
@@ -221,7 +223,7 @@
     </section>
 
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
-      <header class="sheet-head"><h2 id="gm-title">Menu</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="gm-title">Paused</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
         <button id="gm-resume" class="btn primary" type="button">Back to the game</button>
         <button id="gm-new" class="btn ghost" type="button">New game</button>

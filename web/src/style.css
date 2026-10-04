@@ -2139,6 +2139,13 @@ svg.usable .hex-cell {
    Heights: big 56px, normal 44px, compact 36px; the step labels and their "?" are 32px.
    ================================================================= */
 :root {
+  /* Step 7: motion tokens (web/src/logic/motion.ts holds the same values) */
+  --dur-tap: 80ms;
+  --dur-quick: 160ms;
+  --dur-move: 280ms;
+  --dur-moment: 600ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.3, 1.1);
   --pill: 999px;
   --h-big: 56px;
   --h-btn: 44px;
@@ -2887,7 +2894,7 @@ svg.usable .hex-cell {
 .icon-info {
   min-width: 36px;
   font-style: italic;
-  font-family: Georgia, serif;
+  font-family: var(--font);
   font-weight: 700;
 }
 
@@ -3738,7 +3745,7 @@ html[data-layout='side'] .dock-overlays {
   --fs-lg: 1.25rem;
   --fs-xl: 1.75rem;
   --press-scale: 0.97;
-  --press-ms: 80ms;
+  --press-ms: var(--dur-tap);
 }
 .num,
 .score b,
@@ -4657,7 +4664,7 @@ html.final-turns .game::after {
 /* the ring: one segment per side, lit when that side is blocked */
 .lm-ring {
   opacity: 0;
-  transition: opacity 0.22s ease-out;
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 .landmark.show-ring .lm-ring {
   opacity: 1;
@@ -4865,3 +4872,48 @@ html.final-turns .game::after {
 }
 .dock-overlays .first-tip .draw-demo i:nth-child(2) { animation-delay: 0.48s; }
 .dock-overlays .first-tip .draw-demo i:nth-child(3) { animation-delay: 0.96s; }
+/* Step 7: the volume sliders */
+.row.slider input[type='range'] {
+  width: 46%;
+  max-width: 200px;
+  accent-color: var(--c-accent);
+  min-height: 44px;
+}
+/* Step 7: paused: the board's idle life and any running effect hold still */
+body.paused .board-wrap *,
+body.paused #board * {
+  animation-play-state: paused !important;
+}
+/* Step 7: the first-run welcome card */
+.welcome-title {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 8px;
+}
+.welcome-steps {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.welcome-steps li {
+  display: grid;
+  grid-template-columns: 24px 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.welcome-steps .i {
+  width: 22px;
+  height: 22px;
+  color: var(--c-accent);
+}
+.welcome-steps li > span:last-child {
+  color: var(--c-muted);
+  font-size: 0.88rem;
+}
+.welcome-goal,
+.welcome-tut {
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+}

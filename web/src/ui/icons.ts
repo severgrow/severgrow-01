@@ -15,6 +15,10 @@ export const ICONS: Record<string, string> = {
   undo: wrap('<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   skip: wrap('<path d="M5 6l7 6-7 6zM12 6l7 6-7 6z" fill="currentColor"/>'),
   coach: wrap('<path d="M4 6h16v10H9l-5 4z"/><path d="M8 10h8M8 13h5"/>'),
+  // Step 7: the three turn steps, for the welcome card
+  deck: wrap('<rect x="7" y="4" width="11" height="15" rx="2"/><path d="M5 7v12a2 2 0 0 0 2 2h9"/>'),
+  sprout: wrap('<path d="M12 21v-9"/><path d="M12 12c0-4 3-6 7-6 0 4-3 6-7 6z"/><path d="M12 14c0-3-2.5-5-6-5 0 3.5 2.5 5 6 5z"/>'),
+  throw: wrap('<rect x="5" y="9" width="10" height="12" rx="2" transform="rotate(-12 10 15)"/><path d="M14 6l5-3M15.5 9.5l5-.5"/>'),
   sound: wrap('<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>'),
 };
 

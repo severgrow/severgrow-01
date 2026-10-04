@@ -18,10 +18,11 @@ describe('the level screen', () => {
     expect(new Set(LEVELS.map((l) => LEVEL_ICONS[l])).size).toBe(9);
   });
 
-  it("a saved game keeps its bot level (an old save without one plays level 7)", () => {
+  it("a saved game keeps its bot level (a save without a valid one plays level 7)", () => {
     const s = newGame(1);
-    expect(decodeSave(encodeSave({ state: s, coach: null, level: 4 }))!.level).toBe(4);
-    expect(decodeSave(JSON.stringify({ state: s, coach: null }))!.level).toBe(7);
-    expect(decodeSave(JSON.stringify({ state: s, coach: null, level: 12 }))!.level).toBe(7);
+    const raw = JSON.parse(encodeSave({ seed: s.seed, actions: [], coach: null, level: 4 }));
+    expect(decodeSave(JSON.stringify(raw))!.level).toBe(4);
+    expect(decodeSave(JSON.stringify({ ...raw, level: undefined }))!.level).toBe(7);
+    expect(decodeSave(JSON.stringify({ ...raw, level: 12 }))!.level).toBe(7);
   });
 });

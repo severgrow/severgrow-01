@@ -87,7 +87,7 @@ import { getOrient, setOrient } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, WELCOME, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -179,7 +179,7 @@ const announceTurn = (player: Player, label?: string) => {
 const { flash, cutFlash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
-  if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach, level: gameLevel }));
+  if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
 };
 
 // ---------- the look ----------
@@ -332,6 +332,11 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     // First visit: point new players at the tutorial.
     const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
     $('menu-welcome').hidden = !firstVisit;
+    // Step 7: the first-run welcome card: the three steps of a turn, the goal, the tutorial
+    if (firstVisit && !$('menu-welcome').firstChild) {
+      $('menu-welcome').innerHTML = `<b class="welcome-title">${WELCOME.title}</b><ol class="welcome-steps">${WELCOME.steps.map((st) => `<li><span class="i" data-icon="${st.icon}"></span><b>${st.name}</b><span>${st.text}</span></li>`).join('')}</ol><p class="welcome-goal">${WELCOME.goal}</p><p class="welcome-tut">${WELCOME.tutorial}</p>`;
+      fillIcons($('menu-welcome'));
+    }
     $('menu-tutorial').classList.toggle('primary', firstVisit);
     $('menu-tutorial').classList.toggle('ghost', !firstVisit);
     if (firstVisit) {
@@ -348,6 +353,9 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
 function sheet(id: string | null) {
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
+  // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
+  if (id === 'sheet-menu') setPaused(true);
+  else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
   if (openSheet) {
     openSheet.hidden = false;
@@ -381,6 +389,7 @@ function renderHowTo() {
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
+    '<p class="muted"><b>Keyboard:</b> D draws from the deck, T takes the throw pile, 1-9 pick cards, Tab to the board then arrows and Enter to paint, Backspace removes the last hex, U undoes, Esc cancels.</p>',
   ].join('');
 }
 
@@ -419,6 +428,7 @@ function syncSettingsForm() {
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
+  for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')) input.value = String(settings[input.dataset.volume as 'sfxVolume' | 'musicVolume']);
   segmented('speed-seg', SPEEDS, settings.speed, (sp) => (sp === 'skip' ? 'Off' : cap(sp)), (sp) => {
     settings.speed = sp;
     if (sp === 'skip') fastForward();
@@ -471,11 +481,11 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-function beginSession(state: State, c: CoachProgress | null) {
+function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
   epoch++;
   for (const w of [...waiters]) w();
   pumping = false;
-  session = new Session(state, HUMAN);
+  session = new Session(state, HUMAN, log, base);
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
@@ -528,7 +538,7 @@ function continueGame() {
   if (!saved) return startGame(randomSeed());
   log = ['Welcome back.'];
   gameLevel = saved.level;
-  beginSession(saved.state, saved.coach);
+  beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
 
 // ---------- the coach ----------
@@ -676,6 +686,21 @@ const wait = (ms: number, my = epoch) =>
     const t = setTimeout(done, ms);
     waiters.add(done);
   });
+// Step 7: the pause menu. While it is open the opponent's moves and the animations wait
+// (the step in progress finishes; the next one starts after "Back to the game").
+let paused = false;
+let unpauseWaiters: (() => void)[] = [];
+const whilePaused = () => new Promise<void>((resolve) => (paused ? unpauseWaiters.push(resolve) : resolve()));
+function setPaused(on: boolean) {
+  if (paused === on) return;
+  paused = on;
+  document.body.classList.toggle('paused', on);
+  if (!on) {
+    const w = unpauseWaiters;
+    unpauseWaiters = [];
+    for (const r of w) r();
+  }
+}
 let idleWaiters: (() => void)[] = [];
 const idle = () => new Promise<void>((resolve) => (queue.pending === 0 && !pumping ? resolve() : idleWaiters.push(resolve)));
 const flushIdle = () => {
@@ -829,6 +854,8 @@ async function pump() {
   watchFrames();
   const my = epoch;
   while (queue.pending > 0) {
+    if (my !== epoch) return;
+    await whilePaused();
     if (my !== epoch) return;
     if (timeScale() === 0) {
       fastForward();
@@ -2826,13 +2853,27 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
   });
 }
 
+// Step 7: the effects and music volume sliders (each its own bus; the limiter is on the master)
+for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')) {
+  input.addEventListener('input', () => {
+    const k = input.dataset.volume as 'sfxVolume' | 'musicVolume';
+    settings = { ...settings, [k]: Number(input.value) };
+    sound.unlock();
+    sound.setMix(settings);
+  });
+  input.addEventListener('change', () => {
+    saveSettings();
+    if (input.dataset.volume === 'sfxVolume' && settings.sound) sound.click();
+  });
+}
+
 // Keyboard: arrows move over the board, Enter picks, Esc cancels or closes; 1-9 pick cards.
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
     else if (busy()) fastForward();
-    // Esc first stops the shape being drawn; again, it cancels the line or clump
+    // Esc first stops the shape being painted; again, it cancels the bloom
     else if (drawCombo() && (draw.shape.length || draw.desk.phase === 'live' || draw.ptr)) cancelDraw();
     else cancelSel();
     return;
@@ -2842,6 +2883,13 @@ document.addEventListener('keydown', (e) => {
   if (/^[1-9]$/.test(e.key) && target.tagName !== 'INPUT') {
     document.querySelectorAll<HTMLButtonElement>('#hand [data-card]')[Number(e.key) - 1]?.click();
     return;
+  }
+  // Step 7: whole turns from the keyboard: D draws from the deck, T takes the throw pile, U undoes
+  if (target.tagName !== 'INPUT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'd') return void $('deck').click();
+    if (k === 't') return void $('discard').click();
+    if (k === 'u' && !$('tool-undo').hidden) return void $('tool-undo').click();
   }
   if (target.id !== 'board') return;
   const dir = ARROWS[e.key];
@@ -2946,6 +2994,7 @@ onPhotosReady(() => {
   if (!busy()) render();
 });
 sound.enabled = settings.sound;
+sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
 showSplash();

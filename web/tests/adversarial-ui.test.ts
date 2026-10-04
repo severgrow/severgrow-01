@@ -90,9 +90,11 @@ describe('adversarial UI tests', () => {
 
   it('ADVERSARIAL 5: changing a display setting (or reloading after a rotation) keeps the game exactly', () => {
     const { ses } = playThrough(31, () => {});
-    const mid = new Session(playGame(32, undefined, 60));
+    // a game stopped mid-way (every move through a session, so its action log is complete)
+    const mid = new Session(newGame(32));
+    for (let i = 0; i < 60 && mid.state.phase !== 'GAME_OVER'; i++) mid.play(GreedyBot.chooseAction(viewFor(mid.state, mid.state.actor)), mid.state.actor);
     for (const s of [ses, mid]) {
-      const raw = encodeSave({ state: s.state, coach: null, level: 7 });
+      const raw = encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 });
       const settingsBefore = parseSettings(JSON.stringify({ largeText: false }));
       const settingsAfter = { ...settingsBefore, largeText: true };
       expect(settingsAfter.largeText).not.toBe(settingsBefore.largeText);

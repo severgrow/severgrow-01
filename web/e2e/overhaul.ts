@@ -2,6 +2,7 @@
 // clear of the board, the hint line on one line, no sideways scroll.
 //   npx tsx web/e2e/overhaul.ts
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
+import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -48,11 +49,11 @@ const open = async (state: State | null, o: { w?: number; h?: number; touch?: bo
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v7', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), state ? JSON.stringify({ state, coach: doneCoach }) : null],
+    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), state ? positionSave({ state, coach: doneCoach }) : null],
   );
   await page.goto(BASE);
   if (state) await page.click('#menu-continue');

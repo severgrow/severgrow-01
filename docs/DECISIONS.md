@@ -36,6 +36,15 @@ One line each: where the brief left room, what was chosen and why.
 - Step 4: the strangled volcano keeps its ashen crater visible above the moss (the first draft hid it under a flat green triangle).
 - Step 5: the one-tap suggestion ranks Blooms through the tapped hex by tiles gained, then opponent tiles replaced or cut, then the fewest of my tiles left open to a cut, then engine order (deterministic).
 - Step 5: the first painting tip loops a finger over a bent cluster of three hexes (not a straight strip), because a Bloom can be any connected shape.
+- Step 6: Bloom bands: levels 1-3 skip a Bloom 45% / 35% / 25% of the time they would play one, otherwise pick a random legal Bloom (seeded); 4-6 the best quick look; 7-9 the full short-list score; 8-9 hold a plain 3-card Bloom when the chance of a 4 over the next (at most 3) draws is at least 20% and the best other move costs at most 2.5 points.
+- Step 7: the autosave is seed + action list + rules version (key severgrow.save.v7); a save from other rules or with an action the rules refuse starts fresh. A game started from a set position (browser tests, the lab) also keeps that position as `base`; ordinary games never write one.
+- Step 7: two audio buses (effects, music) with 0-100 sliders on a squared curve (defaults 80 and 60); the Sound and Music toggles still switch them off; a limiter (-6 dB, 20:1, 3 ms) on the master.
+- Step 7: the in-game menu is the pause menu ("Paused"): while it (or a sheet opened from it) is open, the next animation step and the opponent's moves wait and CSS animations on the board hold still.
+- Step 7: the first-run welcome card shows the three turn steps with icons (Draw, Grow, Throw), the goal, and the tutorial suggestion; its words live in src/strings.ts (WELCOME).
+- Step 7: keyboard: D draws from the deck, T takes the throw pile, U undoes (only when Undo shows), next to the existing 1-9, Tab, arrows, Enter, Backspace and Esc.
+- Step 7: motion tokens tap 80 / quick 160 / move 280 / moment 600 ms, ease-out and ease-spring, kept equal in CSS and code by a test.
+- Step 7: the settings groups stay as they were (Look; Sound and feel; Animations; Playing); the volume sliders join Sound and feel.
+- Step 8: the ladder runs 400 games per pairing (not 800) to fit the run; the targets are judged on those.
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 

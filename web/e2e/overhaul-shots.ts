@@ -1,6 +1,7 @@
 // Screens for the UI overhaul review: mid-game positions with a move previewed (Confirm moves:
 // Always, so the forecast bar shows), after a move (Undo lit), and the Throw step.
 //   npx tsx web/e2e/overhaul-shots.ts --dir=<folder> [--w=390 --h=844]
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
@@ -28,9 +29,9 @@ const page = await browser.newPage({ viewport: { width: W, height: H }, deviceSc
 await page.addInitScript(([st]) => {
   localStorage.clear();
   localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip', level: 8, confirmPolicy: 'always' }));
-  localStorage.setItem('severgrow.save.v6', st as string);
+  localStorage.setItem('severgrow.save.v7', st as string);
   localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
-}, [JSON.stringify({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
+}, [positionSave({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
 await page.goto('http://localhost:4198/');
 await page.click('#menu-continue');
 await page.waitForTimeout(1200);

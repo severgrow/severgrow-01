@@ -78,6 +78,18 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns left`);
 
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
+/** Step 7: the first-run welcome card on the main menu. */
+export const WELCOME = Object.freeze({
+  title: `Welcome to ${GAME_TITLE}`,
+  steps: Object.freeze([
+    Object.freeze({ icon: 'deck', name: 'Draw', text: 'Take a card from the deck or the throw pile.' }),
+    Object.freeze({ icon: 'sprout', name: 'Grow', text: 'Play cards to grow tiles. Matching cards bloom into several.' }),
+    Object.freeze({ icon: 'throw', name: 'Throw', text: 'Throw one card to end your turn.' }),
+  ]),
+  goal: "Keep everything joined to your home, and cut your opponent's links.",
+  tutorial: 'New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.',
+});
+
 export const HOME = Object.freeze({
   word: 'home',
   Word: 'Home',

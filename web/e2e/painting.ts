@@ -2,6 +2,7 @@
 // events (Chrome's touch emulation) as well as the mouse and the keyboard.
 //   npx tsx web/e2e/painting.ts
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
+import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Browser, CDPSession, Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -48,10 +49,10 @@ const open = async (state: State, o: Opts = {}) => {
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v6', saved as string);
+      localStorage.setItem('severgrow.save.v7', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), JSON.stringify({ state, coach: doneCoach })],
+    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), positionSave({ state, coach: doneCoach })],
   );
   await page.goto(BASE);
   await page.click('#menu-continue');

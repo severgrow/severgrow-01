@@ -3,6 +3,7 @@
 //   npx tsx web/e2e/smoke.ts --shots=docs/screens   also saves screenshots
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome,
 // or one installed with `npx playwright-core install chromium`).
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -60,9 +61,9 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v7', saved as string);
     },
-    [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
+    [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? positionSave({ state: save, coach: doneCoach }) : null],
   );
   await page.goto(BASE + query);
   await page.waitForTimeout(250);

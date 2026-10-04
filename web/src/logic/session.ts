@@ -15,18 +15,26 @@ const same = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 export class Session {
   sel: Sel = EMPTY_SEL;
   private turns: { player: Player; plays: Played[] }[] = [];
-  /** States before each take-back-able move of the player's current turn (see undo). */
-  private undoStack: State[] = [];
+  /** States (and log lengths) before each take-back-able move of the player's current turn (see undo). */
+  private undoStack: { state: State; n: number }[] = [];
   /** overhaul item 20: every play that cut tiles off (for "Replay the biggest cut") */
   private cuts: { n: number; played: Played }[] = [];
   private cache: { state: State; view: View; legal: Action[] } | null = null;
   /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
   private drawn: Action | null = null;
 
+  /** Every action played in this game, from the start (the autosave keeps only this and the seed). */
+  readonly log: Action[];
+
   constructor(
     public state: State,
     public readonly viewer: Player = 0,
-  ) {}
+    log: readonly Action[] = [],
+    /** The set position the log starts from (null: the seed's own start). */
+    public readonly base: State | null = null,
+  ) {
+    this.log = [...log];
+  }
 
   private get memo() {
     if (this.cache?.state !== this.state) {
@@ -89,10 +97,11 @@ export class Session {
     const after = apply(s, action);
     // Growing tiles, Strengthen, a Fruit card (and pressing "Throw a card") reveal nothing new, so the player
     // may take them back. A draw, a throw or any bot move makes everything before final.
-    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push(s);
+    if (who === this.viewer && (action.t === 'Bloom' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });
     else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
+    this.log.push(action);
     this.sel = EMPTY_SEL;
     this.drawn = null;
     const last = this.turns.at(-1);
@@ -112,7 +121,9 @@ export class Session {
   /** Takes back the player's last move of this turn. Returns false if there is none. */
   undo(): boolean {
     if (!this.canUndo) return false;
-    this.state = this.undoStack.pop()!;
+    const back = this.undoStack.pop()!;
+    this.state = back.state;
+    this.log.length = back.n;
     this.sel = EMPTY_SEL;
     this.drawn = null;
     const last = this.turns.at(-1);

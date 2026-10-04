@@ -3,6 +3,7 @@
 // the material lab page.
 //   npx tsx web/e2e/material-shots.ts --dir=docs/screens/materials --prefix=after-
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -31,9 +32,9 @@ const open = async (settings: Record<string, unknown>, state: unknown = demo.sta
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v6', saved as string);
+      localStorage.setItem('severgrow.save.v7', saved as string);
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...settings }), JSON.stringify({ state, coach: doneCoach })],
+    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...settings }), positionSave({ state, coach: doneCoach })],
   );
   await page.goto(BASE);
   await page.click('#menu-continue');
