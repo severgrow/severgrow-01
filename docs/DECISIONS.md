@@ -24,3 +24,4 @@ One line each: where the brief left room, what was chosen and why.
 - A slip (the levels' mistake rate) never picks a move the bot rules out altogether (a Fruit card throw, a Fruit card it would keep); this also applies to Strengthen moves ruled out.
 - Fruit card defaults chosen by simulation (SPEC 11.4): 4 cards, root counts as touching; two targets fail and are reported (Fruit played in 99.9% of games; 17.6% of games end with >30% top-rank tiles).
 - "Game length within 10% of the current default" compares with the v0.5 default (9.14 turns each), the last default before this change.
+- Fast mode, saves: the saved-game key moves to severgrow.save.v6 and a save from older rules (no Fruit card fields) is dropped; the player starts a fresh game.

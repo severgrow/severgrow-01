@@ -29,7 +29,7 @@ for (const [name, seed, turn] of [['mid', 31, 11], ['late', 44, 17]] as const) {
   await page.addInitScript(([st]) => {
     localStorage.clear();
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip', level: 8 }));
-    localStorage.setItem('severgrow.save.v5', st as string);
+    localStorage.setItem('severgrow.save.v6', st as string);
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
   }, [JSON.stringify({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
   await page.goto('http://localhost:4197/');

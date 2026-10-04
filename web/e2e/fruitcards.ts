@@ -37,7 +37,7 @@ const open = async (state: State, o: { w?: number; settings?: Record<string, unk
       sessionStorage.setItem('ready', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v5', saved as string);
+      localStorage.setItem('severgrow.save.v6', saved as string);
       localStorage.setItem('severgrow.tips.v1', tips as string);
       localStorage.setItem('severgrow.seen', '1');
       // record every caption as it appears (they replace each other quickly)

@@ -48,7 +48,7 @@ const open = async (state: State | null, o: { w?: number; h?: number; touch?: bo
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v5', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },

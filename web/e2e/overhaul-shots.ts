@@ -28,7 +28,7 @@ const page = await browser.newPage({ viewport: { width: W, height: H }, deviceSc
 await page.addInitScript(([st]) => {
   localStorage.clear();
   localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip', level: 8, confirmPolicy: 'always' }));
-  localStorage.setItem('severgrow.save.v5', st as string);
+  localStorage.setItem('severgrow.save.v6', st as string);
   localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
 }, [JSON.stringify({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
 await page.goto('http://localhost:4198/');

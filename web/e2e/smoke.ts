@@ -60,7 +60,7 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v5', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
     },
     [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
   );

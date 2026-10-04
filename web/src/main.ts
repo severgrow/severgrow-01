@@ -2805,7 +2805,6 @@ document.addEventListener('keydown', (e) => {
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
-  sel: () => session?.sel ?? null,
   canUndo: () => !!session?.canUndo,
   /** tests only (filmstrip): play this action for this player, as if chosen */
   playFor: (a: Action, who: Player) => {

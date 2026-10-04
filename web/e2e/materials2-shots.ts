@@ -30,7 +30,7 @@ const open = async (vp: { width: number; height: number }, settings: Record<stri
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v5', saved as string);
+      localStorage.setItem('severgrow.save.v6', saved as string);
     },
     [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...settings }), JSON.stringify({ state, coach: doneCoach })],
   );
