@@ -47,6 +47,9 @@ export type Settings = {
   handSort: HandSort;
   /** Step 2 (Fruit cards task): an empty Grow step skips itself ("Nothing to play this turn") */
   autoSkip: boolean;
+  /** Step 7: the effects and music volume sliders, 0-100 */
+  sfxVolume: number;
+  musicVolume: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -69,6 +72,8 @@ export const DEFAULT_SETTINGS: Settings = {
   placementList: false,
   handSort: 'suit',
   autoSkip: true,
+  sfxVolume: 80,
+  musicVolume: 60,
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -97,6 +102,9 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
   for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
+  }
+  for (const k of ['sfxVolume', 'musicVolume'] as const) {
+    if (typeof s[k] === 'number' && Number.isFinite(s[k])) out[k] = Math.round(Math.min(100, Math.max(0, s[k] as number)));
   }
   return out;
 };

@@ -2,6 +2,7 @@
 // to play (auto-skip on: draw, throw = 2 taps; off: draw, Continue, throw = 3), checks the plain
 // throw asks nothing, Undo stays until the throw, and times the opponent's empty turn at Normal
 // speed (target about 400ms). Needs a built page (npm run web:build).
+import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -28,9 +29,9 @@ const open = async (autoSkip: boolean) => {
     sessionStorage.setItem('ready', '1');
     localStorage.clear();
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'normal', autoSkip: auto, eyeCandy: false }));
-    localStorage.setItem('severgrow.save.v6', st as string);
+    localStorage.setItem('severgrow.save.v7', st as string);
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
-  }, [JSON.stringify({ state: stuckBoard(), coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 7 }), autoSkip] as const);
+  }, [positionSave({ state: stuckBoard(), coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 7 }), autoSkip] as const);
   await page.goto(BASE);
   await page.click('#menu-continue');
   await until(page, `${HOOK}.state()?.phase === 'DRAW' && !${HOOK}.busy()`);

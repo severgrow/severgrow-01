@@ -1,21 +1,10 @@
 import { allCoords, allNeighbors, coordKey } from './board.js';
-import { DIRECTIONS, MAX_RANK, MIN_RANK, SUITS } from './constants.js';
-import { IllegalActionError } from './errors.js';
+import { MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { fruitTargetBlocker } from './fruit.js';
 import { claimBlocker } from './overgrow.js';
-import { planRun, strengthenBlocker, touchesNetwork } from './placement.js';
+import { strengthenBlocker, touchesNetwork } from './placement.js';
 import type { Action, Card, Coord, State, View } from './types.js';
 import { viewFor } from './view.js';
-
-const legal = (fn: () => unknown): boolean => {
-  try {
-    fn();
-    return true;
-  } catch (e) {
-    if (e instanceof IllegalActionError) return false;
-    throw e;
-  }
-};
 
 /** Lowest-id card for each (suit, rank) in the hand, optionally skipping one id. */
 const representatives = (hand: readonly Card[], skipId: number | null = null, numberedOnly = true): Map<string, Card> => {
@@ -28,17 +17,14 @@ const representatives = (hand: readonly Card[], skipId: number | null = null, nu
   return reps;
 };
 
-/** Card groups (one representative per suit/rank) that form valid runs. */
+/** v0.7: runs of exactly 3 or 4 consecutive numbers in one suit (one representative per suit/number). */
 const runGroups = (reps: Map<string, Card>): Card[][] => {
   const groups: Card[][] = [];
   for (const suit of SUITS) {
-    for (let lo = MIN_RANK; lo <= MAX_RANK; lo++) {
-      const run: Card[] = [];
-      for (let r = lo; r <= MAX_RANK; r++) {
-        const c = reps.get(`${suit}:${r}`);
-        if (!c) break;
-        run.push(c);
-        if (run.length >= 3) groups.push([...run]);
+    for (const k of [3, 4]) {
+      for (let lo = MIN_RANK; lo + k - 1 <= MAX_RANK; lo++) {
+        const run = Array.from({ length: k }, (_, i) => reps.get(`${suit}:${lo + i}`));
+        if (run.every((c) => c !== undefined)) groups.push(run as Card[]);
       }
     }
   }
@@ -58,13 +44,19 @@ const setGroups = (reps: Map<string, Card>): Card[][] => {
   return groups;
 };
 
+/** v0.7: every card group in the hand that can bloom (identical copies once): runs first, then sets. */
+export const bloomGroups = (hand: readonly Card[]): { kind: 'set' | 'run'; cards: Card[] }[] => {
+  const reps = representatives(hand);
+  return [...runGroups(reps).map((cards) => ({ kind: 'run' as const, cards })), ...setGroups(reps).map((cards) => ({ kind: 'set' as const, cards }))];
+};
+
 /** All connected k-hex subsets of `allowed`, each in board order, deduplicated. */
 const connectedSubsets = (allowed: Coord[], k: number): Coord[][] => {
   const order = new Map(allowed.map((c, i) => [coordKey(c), i]));
   const seen = new Set<string>();
   const out: Coord[][] = [];
   const grow = (set: Coord[]) => {
-    const key = set.map(coordKey).sort().join('|');
+    const key = set.map((c) => order.get(coordKey(c))!).sort((x, y) => x - y).join('|');
     if (seen.has(key)) return;
     seen.add(key);
     if (set.length === k) {
@@ -83,36 +75,76 @@ const connectedSubsets = (allowed: Coord[], k: number): Coord[][] => {
   return out;
 };
 
+/** Permutations of 0..n-1 in lexicographic order. */
+const permutations = (n: number): number[][] => {
+  if (n === 0) return [[]];
+  const out: number[][] = [];
+  for (const rest of permutations(n - 1)) for (let i = 0; i <= rest.length; i++) out.push([...rest.slice(0, i), n - 1, ...rest.slice(i)]);
+  return out.sort((a, b) => a.join(',').localeCompare(b.join(',')));
+};
+const PERMS = [0, 1, 2, 3, 4].map(permutations);
+
+/**
+ * v0.7: one legal Bloom choice in compact form: a card group (ascending), a cluster of hexes
+ * (board order) and every legal assignment: `orders[j][i]` is the index in `hexes` that card i
+ * goes to. A set has one assignment (all numbers are equal); a run has up to 24.
+ */
+export type BloomChoice = { kind: 'set' | 'run'; cards: Card[]; hexes: Coord[]; orders: number[][] };
+
+/** Every legal Bloom of the view's player, in compact form, in a fixed order (spec 7.2). */
+export const bloomChoices = (v: View): BloomChoice[] => {
+  if (v.phase !== 'ACT' || v.player !== v.actor) return [];
+  const p = v.player;
+  const board = allCoords(v.config.boardRadius);
+  const out: BloomChoice[] = [];
+  const claimable = new Map<number, Coord[]>();
+  const claimableBy = (rank: number) => {
+    if (!claimable.has(rank)) claimable.set(rank, board.filter((c) => claimBlocker(v, p, c, rank) === null));
+    return claimable.get(rank)!;
+  };
+  const touching = new Set(board.filter((c) => touchesNetwork(v.board, p, c)).map(coordKey));
+  const clusters = new Map<string, Coord[][]>();
+  for (const g of bloomGroups(v.hand)) {
+    const ranks = g.cards.map((c) => c.rank);
+    const top = Math.max(...ranks);
+    const ck = `${top}:${g.cards.length}`;
+    if (!clusters.has(ck)) {
+      const all = connectedSubsets(claimableBy(top), g.cards.length);
+      clusters.set(ck, v.config.bloomMustTouchNetwork ? all.filter((h) => h.some((c) => touching.has(coordKey(c)))) : all);
+    }
+    for (const hexes of clusters.get(ck)!) {
+      if (g.kind === 'set') {
+        out.push({ kind: 'set', cards: g.cards, hexes, orders: [hexes.map((_, i) => i)] });
+        continue;
+      }
+      const ok = hexes.map((h) => new Set(ranks.filter((r) => claimBlocker(v, p, h, r) === null)));
+      const orders = PERMS[g.cards.length]!.filter((perm) => perm.every((hi, ci) => ok[hi]!.has(ranks[ci]!)));
+      if (orders.length > 0) out.push({ kind: 'run', cards: g.cards, hexes, orders });
+    }
+  }
+  return out;
+};
+
+/** The Bloom action for one choice and one of its assignments (hexes[i] receives cards[i]). */
+export const bloomAction = (c: BloomChoice, order: readonly number[]): Action => ({
+  t: 'Bloom',
+  cards: c.cards.map((x) => x.id),
+  hexes: order.map((hi) => ({ ...c.hexes[hi]! })),
+});
+
 const actActions = (v: View): Action[] => {
   const p = v.player;
   const radius = v.config.boardRadius;
   const board = allCoords(radius);
   const reps = representatives(v.hand);
   const out: Action[] = [];
-  // Hypha: start must touch the network; planRun checks every hex on the line.
-  const starts = board.filter((c) => touchesNetwork(v.board, p, c));
-  for (const g of runGroups(reps)) {
-    const cards = g.map((c) => c.id);
-    for (const start of starts) {
-      for (let dir = 0; dir < DIRECTIONS.length; dir++) {
-        if (legal(() => planRun(v, p, v.hand, cards, start, dir))) out.push({ t: 'MeldRun', cards, start, dir });
-      }
-    }
-  }
-
-  // Bloom: connected clusters of claimable hexes with at least one network contact.
-  for (const g of setGroups(reps)) {
-    const rank = g[0]!.rank;
-    const claimable = board.filter((c) => claimBlocker(v, p, c, rank) === null);
-    for (const hexes of connectedSubsets(claimable, g.length)) {
-      if (hexes.some((c) => touchesNetwork(v.board, p, c))) out.push({ t: 'MeldSet', cards: g.map((c) => c.id), hexes });
-    }
-  }
+  // v0.7 Bloom: every legal assignment of every choice (a set once per hex set)
+  for (const choice of bloomChoices(v)) for (const order of choice.orders) out.push(bloomAction(choice, order));
 
   // Sprout (v0.4): one card, one tile next to the network; one card per suit/rank. v0.5
   // Strengthen is a Sprout on my own weaker non-root tile, listed in the same board order.
   if (v.sproutsThisTurn < v.config.sproutsPerTurn) {
-    const startKeys = new Set(starts.map(coordKey));
+    const startKeys = new Set(board.filter((c) => touchesNetwork(v.board, p, c)).map(coordKey));
     const used = (v.strengthenUsed ?? [0, 0])[p];
     for (const card of [...reps.values()].sort((x, y) => x.id - y.id)) {
       for (const coord of board) {
@@ -137,7 +169,8 @@ const actActions = (v: View): Action[] => {
 /**
  * Every legal action for the view's player (spec 13), or [] when that player is not
  * the actor or the game is over. Identical card copies are deduplicated using the
- * lowest ids (Fruit cards are all alike); Bloom hexes and Fruit targets are listed in board order.
+ * lowest ids (Fruit cards are all alike). A set Bloom is listed once per hex set (board order);
+ * a run Bloom once per legal assignment, cards ascending. Fruit targets in board order.
  */
 export const legalActions = (view: View): Action[] => {
   if (view.phase === 'GAME_OVER' || view.player !== view.actor) return [];

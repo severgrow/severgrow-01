@@ -87,3 +87,19 @@ export const randomPlay = (
   }
   return s;
 };
+
+/**
+ * v0.7: the hexes of a straight chain (start, start+dir, ...), for tests that used to grow a
+ * line: the same tiles as a Bloom, numbers rising from the start (cards in ascending order).
+ */
+export const chain = (start: { q: number; r: number }, dir: number, n: number): { q: number; r: number }[] => {
+  const D = [
+    [1, 0],
+    [1, -1],
+    [0, -1],
+    [-1, 0],
+    [-1, 1],
+    [0, 1],
+  ][dir]!;
+  return Array.from({ length: n }, (_, i) => ({ q: start.q + D[0]! * i + 0, r: start.r + D[1]! * i + 0 }));
+};

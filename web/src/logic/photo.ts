@@ -8,6 +8,7 @@
 // radius 1, pointy-top hex, y down), so the grass fringe can poke out past the edge.
 import { CLEAR_ZONE, inClearZone } from './materials.js';
 import type { MaterialToken } from './materials.js';
+import { toBoard } from './orient.js';
 
 export const PHOTO_SPAN = 1.2;
 export const GRASS_VARIANTS = 4;
@@ -21,8 +22,9 @@ export const grassLevel = lavaLevel;
 type Colors = Record<MaterialToken, string>;
 type RGB = [number, number, number];
 
-/** 1 on the edge of a pointy-top hex of radius 1, less inside. */
-export const hexDist = (x: number, y: number) => {
+/** 1 on the edge of a hex of radius 1 (pointy-top, or flat-top when the board is turned), less inside. */
+export const hexDist = (sx: number, sy: number) => {
+  const { x, y } = toBoard(sx, sy);
   const ax = Math.abs(x);
   return Math.max(ax / (Math.sqrt(3) / 2), Math.abs(y) + ax / Math.sqrt(3));
 };

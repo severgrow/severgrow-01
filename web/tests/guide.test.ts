@@ -60,13 +60,13 @@ describe('coach arrows (show where to tap)', () => {
     expect(checked).toBeGreaterThan(100);
   }, 300_000);
 
-  it('the first arrow points at a card for a sprout, and at the line or clump button for a combo', () => {
+  it('the first arrow points at a card for a sprout, and at the Bloom button for a Bloom', () => {
     let both = 0;
     for (const s of states.filter((x) => x.phase === 'ACT')) {
       const v = viewFor(s, 0);
       const legal = legalActions(v);
       const sprout = legal.find((a) => a.t === 'Sprout');
-      const combo = legal.find((a) => a.t === 'MeldRun' || a.t === 'MeldSet');
+      const combo = legal.find((a) => a.t === 'Bloom');
       if (!sprout || !combo) continue;
       expect(guideTarget(v, legal, EMPTY_SEL, sprout)!.kind).toBe('card');
       expect(guideTarget(v, legal, EMPTY_SEL, combo)).toEqual({ kind: 'kind', move: kindOf(combo) });

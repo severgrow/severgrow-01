@@ -1,4 +1,4 @@
-// Positions for the UI polish pass 3 screenshots and browser tests (deterministic: found by
+// Positions for the browser tests and screenshots (deterministic: found by
 // letting GreedyBot play itself from fixed seeds).
 import { coordKey, isFruitCard, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
@@ -39,12 +39,14 @@ export const fruitOnTop = (): { state: State; target: string } => {
   return { state: s, target: coordKey(a.target) };
 };
 
-/** My Grow step with a line of 3 that can be placed in several ways. */
-export const lineChoice = (): { state: State } => ({
-  state: firstAct((st, legal) => count(st, 0) >= 4 && legal.filter((a) => a.t === 'MeldRun' && a.cards.length === 3).length >= 3),
+const isRun = (s: State, a: Action) => a.t === 'Bloom' && new Set(a.cards.map((id) => s.hands[0].find((c) => c.id === id)?.rank)).size > 1;
+
+/** My Grow step with a run of 3 that can bloom in several ways. */
+export const runChoice = (): { state: State } => ({
+  state: firstAct((st, legal) => count(st, 0) >= 4 && legal.filter((a) => a.t === 'Bloom' && a.cards.length === 3 && isRun(st, a)).length >= 3),
 });
 
-/** My Grow step with a clump of 3 that can be placed in several ways. */
-export const clumpChoice = (): { state: State } => ({
-  state: firstAct((st, legal) => count(st, 0) >= 4 && legal.filter((a) => a.t === 'MeldSet' && a.cards.length === 3).length >= 3),
+/** My Grow step with a set of 3 that can bloom in several ways. */
+export const setChoice = (): { state: State } => ({
+  state: firstAct((st, legal) => count(st, 0) >= 4 && legal.filter((a) => a.t === 'Bloom' && a.cards.length === 3 && !isRun(st, a)).length >= 3),
 });

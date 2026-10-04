@@ -2,7 +2,7 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -11,42 +11,40 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
-  clumpEnter,
-  clumpGhost,
-  clumpHexes,
-  clumpMatch,
-  clumpProblem,
-  clumpTap,
   comboFor,
   deskClick,
   deskHover,
   deskShape,
+  drawNext,
+  drawStarts,
+  growToward,
   hexAtPoint,
   hexesAlong,
   keyStep,
-  lineArrows,
-  lineEnds,
-  lineGhost,
   onlyPlacement,
-  pixelOf,
-  snapDir,
-  drawNext,
+  paintEnter,
+  paintGhost,
+  paintMatch,
+  paintProblem,
+  paintTap,
   proximity,
+  suggestBloom,
+  unavailable,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { finalTurns, scoreBreakdown } from './logic/endgame.js';
+import { finalTurns, scoreBreakdown, turnsLeft } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { perfStart, perfStep } from './logic/perf.js';
-import { deckMoment, rootDanger, rootRhythm, splashPlan, sporesHome } from './logic/candy.js';
+import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
@@ -83,13 +81,19 @@ import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
-import { fillIcons } from './ui/icons.js';
-import { onPhotosReady, warmPhotos } from './ui/photo.js';
+import { FRUIT_SVG, fillIcons } from './ui/icons.js';
+import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
+import { getOrient, setOrient } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { FRUIT, GAME_TITLE, OPP, SPROUT } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, WELCOME, turnsLeftText } from '../../src/strings.js';
+import { homeSides } from './logic/home.js';
+import { landmarkMotion, strangleFinish } from './logic/landmark.js';
+import { pulseLandmark } from './ui/landmarks.js';
 import { debugLines, isDebug } from './logic/debug.js';
+import { NOTES_KEY, emptyNotes, noteEvent, notesSummary } from './logic/playnotes.js';
+import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 import type { Beats } from './logic/emptyturn.js';
 
@@ -177,7 +181,7 @@ const announceTurn = (player: Player, label?: string) => {
 const { flash, cutFlash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
 
 const save = () => {
-  if (session) store.set(SAVE_KEY, encodeSave({ state: session.state, coach, level: gameLevel }));
+  if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
 };
 
 // ---------- the look ----------
@@ -330,6 +334,11 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     // First visit: point new players at the tutorial.
     const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
     $('menu-welcome').hidden = !firstVisit;
+    // Step 7: the first-run welcome card: the three steps of a turn, the goal, the tutorial
+    if (firstVisit && !$('menu-welcome').firstChild) {
+      $('menu-welcome').innerHTML = `<b class="welcome-title">${WELCOME.title}</b><ol class="welcome-steps">${WELCOME.steps.map((st) => `<li><span class="i" data-icon="${st.icon}"></span><b>${st.name}</b><span>${st.text}</span></li>`).join('')}</ol><p class="welcome-goal">${WELCOME.goal}</p><p class="welcome-tut">${WELCOME.tutorial}</p>`;
+      fillIcons($('menu-welcome'));
+    }
     $('menu-tutorial').classList.toggle('primary', firstVisit);
     $('menu-tutorial').classList.toggle('ghost', !firstVisit);
     if (firstVisit) {
@@ -346,6 +355,9 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
 function sheet(id: string | null) {
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
+  // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
+  if (id === 'sheet-menu') setPaused(true);
+  else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
   if (openSheet) {
     openSheet.hidden = false;
@@ -364,8 +376,8 @@ function renderHowTo() {
   $('howto-body').innerHTML = [
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? words.howto : ''}</p>`,
-    `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
+    `<p><b>Grow:</b>${BLOOM.howto}${sprout ? words.howto : ''}</p>`,
+    `<p><b>Painting a bloom:</b> ${TIPS.draw.text} For numbers in a row, the lowest goes on the first hex you paint; “Reverse” flips it. <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
     `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
       ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
@@ -373,12 +385,13 @@ function renderHowTo() {
     ...((cfg?.fruitCardCount ?? 4) > 0
       ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Fruit card on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
-    '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
-    `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
+    '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
+    `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
+    '<p class="muted"><b>Keyboard:</b> D draws from the deck, T takes the throw pile, 1-9 pick cards, Tab to the board then arrows and Enter to paint, Backspace removes the last hex, U undoes, Esc cancels.</p>',
   ].join('');
 }
 
@@ -417,6 +430,7 @@ function syncSettingsForm() {
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
+  for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')) input.value = String(settings[input.dataset.volume as 'sfxVolume' | 'musicVolume']);
   segmented('speed-seg', SPEEDS, settings.speed, (sp) => (sp === 'skip' ? 'Off' : cap(sp)), (sp) => {
     settings.speed = sp;
     if (sp === 'skip') fastForward();
@@ -469,11 +483,11 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-function beginSession(state: State, c: CoachProgress | null) {
+function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
   epoch++;
   for (const w of [...waiters]) w();
   pumping = false;
-  session = new Session(state, HUMAN);
+  session = new Session(state, HUMAN, log, base);
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
@@ -516,20 +530,9 @@ function startGame(seed: number, level: Level = settings.level) {
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
-  revealToolLabels();
+  firstToolTips();
   save();
   announceTurn(HUMAN);
-}
-
-/** UX pass: the corner buttons' names show for a few seconds at the start of the first 3 games. */
-const TOOL_LABELS_KEY = 'severgrow.toollabels';
-function revealToolLabels() {
-  const n = Number(store.get(TOOL_LABELS_KEY) ?? 0) || 0;
-  if (n >= 3) return;
-  store.set(TOOL_LABELS_KEY, String(n + 1));
-  const wrap = $('board-wrap');
-  wrap.classList.add('show-labels');
-  setTimeout(() => wrap.classList.remove('show-labels'), 5000);
 }
 
 function continueGame() {
@@ -537,7 +540,7 @@ function continueGame() {
   if (!saved) return startGame(randomSeed());
   log = ['Welcome back.'];
   gameLevel = saved.level;
-  beginSession(saved.state, saved.coach);
+  beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
 
 // ---------- the coach ----------
@@ -644,7 +647,7 @@ function scheduleBot() {
     const i = botPlan ? botPlan.keys.indexOf(posKey(st)) : -1;
     const action = i >= 0 ? botPlan!.actions[i]! : await askFor(st);
     // A short think before the bot's turn and before each tile move; housekeeping is quick.
-    const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
+    const grows = action.t === 'Bloom' || action.t === 'Sprout';
     const beat = i >= 0 ? botPlan!.beats.think[i]! : (grows ? 300 : 90) * timeScale();
     quickShow = i >= 0 && botPlan!.beats.quick ? botPlan!.beats : null;
     const left = beat - (performance.now() - started);
@@ -685,6 +688,23 @@ const wait = (ms: number, my = epoch) =>
     const t = setTimeout(done, ms);
     waiters.add(done);
   });
+// Step 7: the pause menu. While it is open the opponent's moves and the animations wait
+// (the step in progress finishes; the next one starts after "Back to the game").
+let paused = false;
+/** v0.7: the list of Bloom choices is open (when there are two or more) */
+let bloomMenu = false;
+let unpauseWaiters: (() => void)[] = [];
+const whilePaused = () => new Promise<void>((resolve) => (paused ? unpauseWaiters.push(resolve) : resolve()));
+function setPaused(on: boolean) {
+  if (paused === on) return;
+  paused = on;
+  document.body.classList.toggle('paused', on);
+  if (!on) {
+    const w = unpauseWaiters;
+    unpauseWaiters = [];
+    for (const r of w) r();
+  }
+}
 let idleWaiters: (() => void)[] = [];
 const idle = () => new Promise<void>((resolve) => (queue.pending === 0 && !pumping ? resolve() : idleWaiters.push(resolve)));
 const flushIdle = () => {
@@ -750,6 +770,7 @@ function autoAdvance() {
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
   skippedFrom = session.state;
+  note({ t: 'empty', at: Date.now() });
   caption(NOTHING_TO_PLAY, null, 'info');
   humanPlay(end);
 }
@@ -839,6 +860,8 @@ async function pump() {
   const my = epoch;
   while (queue.pending > 0) {
     if (my !== epoch) return;
+    await whilePaused();
+    if (my !== epoch) return;
     if (timeScale() === 0) {
       fastForward();
       return;
@@ -905,15 +928,16 @@ async function playStep(step: Step, my: number) {
       const b = mo.budget;
       await anticipate(mo, f, my);
       if (!show()) return;
-      const per = (step.style === 'line' ? 140 : step.style === 'bloom' ? 110 : 0) * f;
-      const cx = step.tiles.reduce((s, t) => s + centerOf(t.key).x, 0) / step.tiles.length;
-      const cy = step.tiles.reduce((s, t) => s + centerOf(t.key).y, 0) / step.tiles.length;
+      const per = (step.style === 'bloom' ? 60 : 0) * f;
+      // v0.7: a Bloom pops outward from its first hex (the lowest number), a quick staggered ripple
+      const cx = centerOf(step.tiles[0]!.key).x;
+      const cy = centerOf(step.tiles[0]!.key).y;
       const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       step.tiles.forEach((t, i) => {
         const tileEl = board.tile(t.key);
         const p = centerOf(t.key);
-        const delay = step.style === 'line' ? i * per : step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
+        const delay = step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
         last = Math.max(last, delay);
         const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
         // Squash and stretch: a quick pop that overshoots and settles.
@@ -1043,20 +1067,37 @@ async function playStep(step: Step, my: number) {
     }
     case 'strangle': {
       const root = board.rootKey(step.loser);
-      // The surrounding tiles squeeze inward twice, a slow beat, then the flourish.
+      // Step 4: the Strangle finish (never over 2.0s at Normal): the surrounding tiles pulse
+      // inward, a slow beat, then the volcano is smothered by moss while my tree blooms, or my
+      // tree withers while the volcano roars. Tap or Skip jumps to the end state.
+      const loserEl = board.homeEls[step.loser];
+      const winnerEl = board.homeEls[step.loser === HUMAN ? BOT : HUMAN];
+      const beats = strangleFinish({ speed: f, reduceMotion: settings.reduceMotion }, step.loser === HUMAN ? 'tree' : 'volcano');
       const rc = centerOf(root);
-      for (const k of board.boardKeys) {
-        const tileEl = board.tile(k);
-        const p = centerOf(k);
-        if (!tileEl || k === root || Math.hypot(p.x - rc.x, p.y - rc.y) > S * 1.9) continue;
-        anim(tileEl, [{ translate: '0 0' }, { translate: `${(rc.x - p.x) * 0.14 * Math.max(m, 0.3)}px ${(rc.y - p.y) * 0.14 * Math.max(m, 0.3)}px`, offset: 0.45 }, { translate: '0 0' }], { duration: 700 * f, iterations: 2 });
+      for (const b of beats) {
+        if (b.k === 'pulse') {
+          for (const k of board.boardKeys) {
+            const tileEl = board.tile(k);
+            const p = centerOf(k);
+            if (!tileEl || k === root || Math.hypot(p.x - rc.x, p.y - rc.y) > S * 1.9) continue;
+            anim(tileEl, [{ translate: '0 0' }, { translate: `${(rc.x - p.x) * 0.14 * Math.max(m, 0.3)}px ${(rc.y - p.y) * 0.14 * Math.max(m, 0.3)}px`, offset: 0.45 }, { translate: '0 0' }], { duration: b.ms });
+          }
+          sound.snap();
+        } else if (b.k === 'smother' || b.k === 'wither') {
+          loserEl?.classList.add('strangled');
+          loserEl?.classList.remove('idle', 'danger', 'worried', 'show-ring');
+          if (b.k === 'smother') sound.sigh();
+          else sound.grind();
+        } else if (b.k === 'bloom' || b.k === 'roar') {
+          winnerEl?.classList.add('won');
+          if (winnerEl) pulseLandmark(winnerEl, 'tapped');
+        }
+        await wait(b.ms, my);
       }
-      await wait(1400 * f, my);
-      flash(root, f * 1.6, true);
-      sound.snap();
+      if (!beats.length) loserEl?.classList.add('strangled');
       await impact(momentOf(step), f, my);
       caption(captionFor(step, HUMAN)!, root, step.loser === HUMAN ? 'bad' : 'good');
-      await wait(500 * f, my);
+      await wait(400 * f, my);
       show();
       return;
     }
@@ -1356,9 +1397,11 @@ function renderGuide(advice: Advice | null) {
     case 'button':
       rect = above(document.querySelector('#moves .btn.primary'));
       break;
-    case 'kind':
-      rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
+    case 'kind': {
+      const el = document.querySelector<HTMLElement>(`#moves [data-kind="${t.move}"]`);
+      rect = above(el && el.offsetParent ? el : document.querySelector('#moves .bloom-toggle'));
       break;
+    }
   }
   if (!rect) return;
   arrow.hidden = false;
@@ -1369,11 +1412,62 @@ function renderGuide(advice: Advice | null) {
 
 /** The hidden ?debug=1 corner: the only place the game's random number shows. */
 const DEBUG = isDebug(location.search);
+// Step 10: local playtest notes (?debug=1 only; kept in this browser, never sent anywhere)
+let notes: Notes = DEBUG ? ((): Notes => {
+  try {
+    const n = JSON.parse(store.get(NOTES_KEY) ?? '') as Notes;
+    return Array.isArray(n?.events) ? n : emptyNotes();
+  } catch {
+    return emptyNotes();
+  }
+})() : emptyNotes();
+let notedPlayer: Player | null = null;
+function note(e: NoteEvent) {
+  if (!DEBUG) return;
+  notes = noteEvent(notes, e);
+  store.set(NOTES_KEY, JSON.stringify(notes));
+}
+if (DEBUG) {
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      const t = e.target as Element | null;
+      const where = t?.closest('#hand') ? 'hand' : t?.closest('#board-wrap') ? 'board' : t?.closest('.piles') ? 'piles' : t?.closest('#moves') ? 'moves' : t?.closest('.dock') ? 'dock' : 'other';
+      if (session && myTurn()) note({ t: 'input', at: Date.now(), where });
+    },
+    true,
+  );
+  const exp = document.createElement('button');
+  exp.type = 'button';
+  exp.className = 'btn small ghost debug-export';
+  exp.textContent = 'Export as JSON';
+  exp.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ summary: notesSummary(notes), events: notes.events }, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'playtest-notes.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  document.body.append(exp);
+}
 function renderDebug(st: State) {
   if (!DEBUG) return;
+  // my turns start and end (for the notes)
+  if (st.turnPlayer !== notedPlayer) {
+    if (notedPlayer === HUMAN) note({ t: 'turnEnd', at: Date.now() });
+    if (st.turnPlayer === HUMAN && st.phase !== 'GAME_OVER') note({ t: 'turnStart', at: Date.now() });
+    notedPlayer = st.turnPlayer;
+  }
   const el = $('debug-corner');
   el.hidden = false;
-  el.textContent = debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }).join('\n');
+  const sm = notesSummary(notes);
+  el.textContent = [
+    ...debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }),
+    `my turns ${sm.turns} · ${(sm.avgTurnMs / 1000).toFixed(1)} s each`,
+    `undo ${sm.undos} · empty turns ${sm.emptyTurns}`,
+    sm.longestPause ? `longest pause ${(sm.longestPause.ms / 1000).toFixed(1)} s (then: ${sm.longestPause.before})` : 'longest pause -',
+  ].join('\n');
 }
 
 function renderHud() {
@@ -1401,15 +1495,15 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
   if (hintEl.dataset.text !== hint.text || hintEl.dataset.arrow !== String(hint.arrow)) {
     hintEl.dataset.text = hint.text;
     hintEl.dataset.arrow = String(hint.arrow);
-    const arrow = hint.arrow && hint.text ? `<span class="hint-arrow ${hint.arrow}" aria-hidden="true">${hint.arrow === 'up' ? '▴' : '▾'}</span>` : '';
-    hintEl.innerHTML = `${arrow}<span class="hint-text"></span>`;
+    // Step 3 item 11: one calm line, no floating triangle
+    hintEl.innerHTML = '<span class="hint-text"></span>';
     hintEl.querySelector('.hint-text')!.textContent = hint.text;
   }
   // The turn as three steps; the current one is lit (only on your turn).
@@ -1442,6 +1536,7 @@ function safeArea() {
   return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
 }
 
+let firstToolTips: () => void = () => {};
 let layoutKey = '';
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
@@ -1450,12 +1545,26 @@ function applyLayout() {
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
   const key = `${w}x${h}r${radius}`;
-  // phones: the board sits just above the toolbar (board.setup resets this, so set it every time)
-  const par = document.documentElement.dataset.layout === 'side' ? 'xMidYMid meet' : 'xMidYMax meet';
+  // phones: the board sits just above the dock (board.setup resets this, so set it every time)
+  const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
   const l = computeLayout({ w, h, ...safeArea() }, radius);
+  // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
+  // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
+  document.documentElement.dataset.orient = l.orient;
+  if (l.orient !== getOrient()) {
+    setOrient(l.orient);
+    photosForOrientation();
+    if (session) {
+      board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
+      lastAmbBoard = null;
+      lastBoard = null;
+      layoutKey = key;
+      render();
+    }
+  }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
   root.setProperty('--hud-h', px(HEIGHTS.hud));
@@ -1467,7 +1576,7 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
-  board.svg.setAttribute('preserveAspectRatio', l.mode === 'side' ? 'xMidYMid meet' : 'xMidYMax meet');
+  board.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
 }
 window.addEventListener('resize', () => applyLayout());
@@ -1493,13 +1602,17 @@ function hintCtx(v: View): HintCtx {
         ? { firstTime: false, reason: fruitCardState(v, session!.legal, sel.card!).reason }
         : null,
     pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
-    drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
+    drawing: dc ? { n: dc.n, fine: finePointer() } : null,
     card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
     kindPicked: sel.kind !== null,
     hexWithNoMove: sel.hex !== null,
     handEmpty: v.hand.length === 0,
     canSprout: session!.legal.some((a) => a.t === 'Sprout'),
-    canCombo: session!.legal.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet'),
+    canCombo: session!.legal.some((a) => a.t === 'Bloom'),
+    bloomBlocked: (() => {
+      const groups = bloomGroups(v.hand);
+      return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
+    })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
   };
 }
@@ -1588,19 +1701,21 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-replay').hidden = busy() || session.lastTurnOf(BOT).length === 0;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = session.canUndo && !busy();
-  ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
-  $('tool-undo').classList.toggle('ready', undoOk);
-  // Part 3 A: my root breathes; hemmed in, it beats like a heart, and says so (Eye candy)
+  // Step 3: Undo shows only when something can be undone (no greyed-out ghost)
+  $('tool-undo').hidden = !undoOk;
+  // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
+  // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
-    const danger = rootDanger(v, HUMAN).level;
-    const rt = board.tile(board.rootKey(HUMAN));
-    if (rt) {
-      rt.classList.toggle('root-watch', settings.eyeCandy && danger === 1);
-      rt.classList.toggle('root-danger', settings.eyeCandy && danger === 2);
-      rt.style.setProperty('--beat', `${rootRhythm(danger).ms}ms`);
-    }
+    const res = session.state.result;
+    const states = ([0, 1] as const).map((p) => {
+      const sides = homeSides(v, p);
+      const m = landmarkMotion({ reduceMotion: settings.reduceMotion, effects: settings.effects }, sides.danger);
+      const strangled = !busy() && res?.reason === 'strangle' && res.winner !== p;
+      return { ...sides, ...m, tapped: cardPinned && inspectKey === sides.key, strangled, won: !busy() && res?.reason === 'strangle' && res.winner === p };
+    });
+    board.setHomes(states);
     const warn = $('root-warn');
-    warn.hidden = !(settings.eyeCandy && danger === 2 && v.phase !== 'GAME_OVER');
+    warn.hidden = !(states[HUMAN]!.danger && v.phase !== 'GAME_OVER');
   }
   placeCorners();
   renderTooltip(v);
@@ -1649,12 +1764,15 @@ function renderTooltip(v: View) {
   else {
     const mine = t.owner === HUMAN;
     const who = mine ? 'Your' : OPP.Label;
-    if (t.root) html = `<b>${name} · ${who} root</b><span>It can never be taken.</span>`;
+    if (t.root) {
+      const sides = homeSides(v, t.owner);
+      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.blocked)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.blocked)}</span>`;
+    }
     else {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -1709,7 +1827,7 @@ function renderControls(v: View, advice: Advice | null) {
   const sel = session.sel;
   const pending = session.pending;
   const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
-  const coachKind = advice && (advice.action.t === 'MeldRun' || advice.action.t === 'MeldSet') ? kindOf(advice.action) : null;
+  const coachKind = advice && advice.action.t === 'Bloom' ? kindOf(advice.action) : null;
 
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
@@ -1724,17 +1842,56 @@ function renderControls(v: View, advice: Advice | null) {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
     const kindButtons = moveButtons(v, legal, sel);
+    // two or more ways to bloom: one "Bloom" button opens the list of choices (they never
+    // crowd the row or run off the screen); a single way gets its own button
+    const many = kindButtons.length > 1;
+    let host: HTMLElement = moves;
+    if (!many) bloomMenu = false;
+    if (many) {
+      const chosen = kindButtons.find((k) => sel.kind === k.kind);
+      const toggle = button(chosen ? shortKindLabel(chosen.kind) : BLOOM.Name, `kind bloom-toggle${chosen || bloomMenu ? ' on' : ''}`, () => {
+        bloomMenu = !bloomMenu;
+        render();
+      });
+      const sub = document.createElement('small');
+      sub.className = 'kind-keep';
+      sub.textContent = BLOOM.choices(kindButtons.length);
+      toggle.append(sub);
+      toggle.setAttribute('aria-haspopup', 'menu');
+      toggle.setAttribute('aria-expanded', String(bloomMenu));
+      moves.append(toggle);
+      const panel = document.createElement('div');
+      panel.className = 'bloom-options';
+      panel.setAttribute('role', 'menu');
+      panel.hidden = !bloomMenu;
+      moves.append(panel);
+      host = panel;
+    }
     for (const k of kindButtons) {
       const on = sel.kind === k.kind;
       // two or more share the row: short words, so they fit beside the piles on a phone
-      const b = button(kindButtons.length > 1 ? shortKindLabel(k.kind) : k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+      const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+        bloomMenu = false;
         session!.tapKind(k.kind);
         render();
       });
       b.dataset.kind = k.kind;
-      if (kindButtons.length > 1) b.setAttribute('aria-label', k.label);
+      b.dataset.kinds = k.kinds.join(' ');
+      if (many) {
+        b.setAttribute('role', 'menuitemradio');
+        // the cards it uses, so two "Bloom 4 tiles" are told apart (numbers in their suit colours)
+        const cards = kindCards(k.kind)
+          .map((id) => v.hand.find((c) => c.id === id))
+          .filter((c): c is NonNullable<typeof c> => !!c)
+          .sort((x, y) => x.rank - y.rank || (x.suit ?? 0) - (y.suit ?? 0));
+        const nums = document.createElement('span');
+        nums.className = 'kind-cards';
+        nums.innerHTML = cards.map((c) => `<b class="${suitClass(c)}">${c.rank}</b>`).join('');
+        b.prepend(nums);
+        b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
+      }
       b.setAttribute('aria-pressed', String(on));
-      moves.append(b);
+      host.append(b);
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
@@ -1752,7 +1909,13 @@ function renderControls(v: View, advice: Advice | null) {
   }
   const dc = drawCombo();
   if (dc && !pending) {
-    if (dc.kind === 'clump' && draw.shape.length > 0) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+    if (draw.shape.length > 0 || draw.suggested) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+    // a run: which end gets the lowest number (a set has one number: no toggle)
+    if (dc.run) {
+      const b = button('Reverse', `ghost draw-reverse${draw.reverse ? ' on' : ''}`, () => toggleReverse(), 'Reverse the numbers: highest on the first hex');
+      b.setAttribute('aria-pressed', String(draw.reverse));
+      moves.append(b);
+    }
   }
   if (dc && settings.placementList) {
     // an opt-in accessibility list: step through every legal placement of this combo
@@ -1896,8 +2059,9 @@ function renderHand(v: View, advice: Advice | null) {
   }
   const sortBtn = $('hand-sort');
   sortBtn.hidden = n < 2;
-  sortBtn.textContent = settings.handSort === 'suit' ? 'By suit' : 'By number';
-  sortBtn.setAttribute('aria-label', `Cards sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`);
+  const sortWords = `Sorted ${settings.handSort === 'suit' ? 'by suit' : 'by number'}. Tap to sort ${settings.handSort === 'suit' ? 'by number' : 'by suit'}.`;
+  sortBtn.setAttribute('aria-label', sortWords);
+  sortBtn.title = sortWords;
   hand.style.setProperty('--n', String(n));
   hand.classList.toggle('waiting', !myTurn());
 }
@@ -1925,8 +2089,17 @@ function renderPiles(v: View, advice: Advice | null) {
   $('discard-count').textContent = String(v.discard.length);
   // v0.6: "Fruit cards unseen: n" (public information only)
   const chip = unseenChip(v);
+  // compact: the Fruit card icon and the number (the full words for screen readers and on hover)
   $('fruit-chip').hidden = chip === null;
-  $('fruit-chip').textContent = chip ?? '';
+  if (chip !== null) {
+    const n = String(v.fruitUnseen);
+    if ($('fruit-chip').dataset.n !== n) {
+      $('fruit-chip').dataset.n = n;
+      $('fruit-chip').innerHTML = `<span class="i">${FRUIT_SVG}</span><b>${n}</b>`;
+    }
+    $('fruit-chip').setAttribute('aria-label', chip);
+    $('fruit-chip').title = chip;
+  }
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -2060,6 +2233,7 @@ function renderHistory() {
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
   if (!session) return;
+  note({ t: 'undo', at: Date.now() });
   fastForward();
   const before = session.state.board;
   if (!session.undo()) return;
@@ -2097,6 +2271,7 @@ function undoMove() {
 }
 
 function cancelSel() {
+  bloomMenu = false;
   draw = { ...DRAW0 };
   board.ghost(null);
   session?.cancel();
@@ -2142,35 +2317,29 @@ function onCardTap(id: number) {
   maybeAutoPlay();
 }
 
-// ---------- drawing a line or clump (polish pass 3) ----------
+// ---------- painting a Bloom (v0.7) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
-type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean };
-const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null };
+type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean; suggested?: boolean };
+const DRAW0: DrawUi = { shape: [], reverse: false, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
-/** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
+/** The picked Bloom while painting is possible (my Grow step, a Bloom picked), else null. */
 let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
   if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return null;
-  // worked out once per position and selection (it scores every placement), not on every pointer move
+  // worked out once per position and selection, not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
 }
 
-/** The ghost of the shape being drawn right now (null when nothing is drawn). */
+/** The ghost of the shape being painted right now (null when nothing is painted). */
 function drawGhostNow(c: Combo): DrawGhost | null {
   const v = session!.view;
-  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk);
-  if (c.kind === 'line') {
-    const start = draw.shape[0];
-    if (!start) return null;
-    if (draw.dir === null) return { tiles: [], action: null, reason: null };
-    return lineGhost(v, c, start, draw.dir);
-  }
-  return draw.shape.length ? clumpGhost(v, c, draw.shape) : null;
+  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk, draw.reverse);
+  return draw.shape.length ? paintGhost(v, c, draw.shape, draw.reverse) : null;
 }
 
 /** Repaints only the ghost layer and the info card (no full board redraw), once per frame. */
@@ -2180,12 +2349,12 @@ function paintDraw() {
     const c = drawCombo();
     if (!c || !session) return;
     const g = session.presetMove ? null : drawGhostNow(c);
-    const lineStart = c.kind === 'line' ? (draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]) : undefined;
-    const showArrows = lineStart && (draw.desk.phase === 'live' ? draw.desk.hover === draw.desk.start : draw.dir === null);
-    board.ghost(g || showArrows ? {
+    const shape = draw.desk.phase === 'live' ? growToward(c, draw.desk.start, draw.desk.hover, draw.reverse) : draw.shape;
+    const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
+    board.ghost(g || blocked.length ? {
       tiles: g?.tiles ?? [],
-      blocked: !!g && !g.action && g.tiles.length > 0,
-      arrows: showArrows ? { from: lineStart!, dirs: lineArrows(c, lineStart!) } : null,
+      blocked: !!g && !g.action && g.tiles.length === c.n,
+      unavailable: blocked,
       cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
     } : null);
     renderDrawInfo(c, g);
@@ -2200,14 +2369,13 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   if (session!.presetMove) text = '';
   else if (g?.action) {
     const pv = previewMove(v, g.action);
-    text = `${c.kind === 'clump' ? `${c.n}/${c.n} · ` : ''}${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
-  } else if (c.kind === 'clump' && draw.shape.length) text = clumpProblem(v, c, draw.shape) ?? '';
-  else if (g?.reason) text = g.reason;
+    text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+  } else if (g?.reason) text = draw.msg ? `${g.reason} · ${draw.msg}` : g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;
   box.hidden = !text;
-  const n = c.kind === 'clump' ? draw.shape.length : g?.tiles.length ?? 0;
-  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : c.kind === 'clump' && n ? `${n} of ${c.n} hexes chosen` : '';
+  const n = g?.tiles.length ?? 0;
+  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : n ? `${n} of ${c.n} hexes chosen` : '';
 }
 
 /** A soft rising tick and a light haptic for each hex added (Sound and Vibration toggles). */
@@ -2217,14 +2385,32 @@ function drawTick(i: number) {
 }
 
 function cancelDraw(msg: string | null = null) {
-  draw = { ...DRAW0, msg };
+  if (draw.suggested) session?.preset(null);
+  draw = { ...DRAW0, reverse: draw.reverse, msg };
   board.ghost(null);
+  render();
+}
+
+/** Flips which end of a run gets the lowest number (only shown for runs). */
+function toggleReverse() {
+  const c = drawCombo();
+  if (!c) return;
+  if (draw.suggested) session!.preset(null);
+  draw = { ...draw, reverse: !draw.reverse, suggested: false };
+  // keep only the part of the shape that still fits the flipped numbers
+  const kept: string[] = [];
+  for (const k of draw.shape) {
+    const next = paintEnter(c, kept, k, draw.reverse);
+    if (next.length === kept.length) break;
+    kept.push(k);
+  }
+  draw = { ...draw, shape: kept };
   render();
 }
 
 /** A finished shape: placed at once, or shown with Confirm (the "Confirm moves" setting). */
 function finishDraw(a: Meld) {
-  draw = { ...DRAW0 };
+  draw = { ...DRAW0, reverse: draw.reverse };
   board.ghost(null);
   if (asksConfirm(a)) {
     session!.preset(a);
@@ -2232,26 +2418,42 @@ function finishDraw(a: Meld) {
   } else humanPlay(a);
 }
 
-/** A tap or click on a hex while drawing (no drag): the two-click machine, or clump tapping. */
+/**
+ * A tap on a hex while painting (no drag). The first tap on an empty shape also shows the
+ * suggested Bloom through that hex (with its result chip and Confirm); tapping on adds hexes
+ * one by one (every Bloom can be made by taps alone); a mouse uses the two-click machine.
+ */
 function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
-  if (c.kind === 'line' || (type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
-    const r = deskClick(draw.desk, key, v, c);
+  if (((type === 'mouse' || type === 'keyboard') && draw.shape.length === 0) || draw.desk.phase === 'live') {
+    const r = deskClick(draw.desk, key, v, c, draw.reverse);
     if (r.finish) return finishDraw(r.finish);
-    // a tap on another legal start begins again from there
-    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && (c.kind === 'line' ? lineEnds(c) : clumpHexes(c)).has(key) && !deskShape(v, c, r.desk).action) {
-      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [], dir: null };
-    } else draw = { ...draw, desk: r.desk, shape: [], dir: null };
+    // a click on another legal start begins again from there
+    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && drawStarts(c, draw.reverse).has(key) && !deskShape(v, c, r.desk, draw.reverse).action) {
+      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [] };
+    } else draw = { ...draw, desk: r.desk, shape: [] };
     if (r.desk.phase === 'live' && draw.desk.phase === 'live') drawTick(0);
     paintDraw();
     return;
   }
-  const next = clumpTap(draw.shape, key, c);
+  if (draw.suggested) session!.preset(null);
+  const next = paintTap(c, draw.shape, key, draw.reverse);
   if (next.length > draw.shape.length) drawTick(next.length - 1);
-  draw = { ...draw, shape: next, msg: null };
-  const m = clumpMatch(c, next);
+  else if (next.length === draw.shape.length && !draw.shape.includes(key)) draw = { ...draw, msg: unavailable(v, c, draw.shape, draw.reverse).get(key) ?? null };
+  draw = { ...draw, shape: next, suggested: false, msg: next.length !== draw.shape.length ? null : draw.msg };
+  const m = paintMatch(c, next, draw.reverse);
   if (m) return finishDraw(m);
-  paintDraw();
+  // the one-tap suggestion: a first tap shows the best Bloom through this hex, ready to confirm
+  if (next.length === 1 && draw.shape.length === 1) {
+    const s = suggestBloom(v, c.actions, key);
+    if (s) {
+      session!.preset(s);
+      draw = { ...draw, suggested: true };
+      render();
+      return;
+    }
+  }
+  render();
 }
 
 const drawHandlers = {
@@ -2259,29 +2461,26 @@ const drawHandlers = {
     const c = drawCombo();
     if (!c || !session) return;
     if (e.button === 2) return cancelDraw();
-    // a second finger (a pinch, a scroll) cancels the drawing
+    // a second finger (a pinch, a scroll) cancels the painting
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
-    if (session.presetMove) {
-      // drawing again over a waiting preview: the preview goes (and the one-placement shortcut
-      // does not bring it straight back while this drawing is on)
+    const keys = new Set(board.boardKeys);
+    const key = hexAtPoint(p.x, p.y, keys);
+    if (session.presetMove && !draw.suggested) {
+      // painting again over a waiting preview: the preview goes (and the one-placement shortcut
+      // does not bring it straight back while this painting is on)
       session.preset(null);
       draw = { ...draw, redraw: true };
       render();
     }
-    const keys = new Set(board.boardKeys);
-    const key = hexAtPoint(p.x, p.y, keys);
     draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
-    if (draw.desk.phase === 'live') return; // a live two-click shape finishes where the pointer is released
-    if (!key) return;
-    if (c.kind === 'line' && lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
-    // a clump hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
+    // a hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
     paintDraw();
   },
   move(p: Pt, e: PointerEvent) {
     const c = drawCombo();
     if (!c) return;
     const keys = new Set(board.boardKeys);
-    // after a first click (or tap) the live shape follows the pointer, button held or not
+    // after a first click the live shape follows the pointer, button held or not
     if (draw.desk.phase === 'live') {
       const k = hexAtPoint(p.x, p.y, keys);
       if (k && k !== draw.desk.hover) {
@@ -2291,20 +2490,22 @@ const drawHandlers = {
       if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
       return;
     }
-    if (!draw.ptr) return;
-    if (e.pointerId !== draw.ptr.id) return;
+    if (!draw.ptr || e.pointerId !== draw.ptr.id) return;
     const ptr = draw.ptr;
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
       ptr.moved = true;
-      // a drag on a clump begins with the hex it started on
-      if (c.kind === 'clump' && ptr.downKey && !draw.shape.includes(ptr.downKey)) {
-        const next = clumpEnter(draw.shape, ptr.downKey, c);
+      // a drag begins with the hex it started on (a drag from a suggestion reshapes it)
+      if (draw.suggested) {
+        session!.preset(null);
+        draw = { ...draw, suggested: false, shape: ptr.downKey && draw.shape[0] === ptr.downKey ? [ptr.downKey] : [] };
+      }
+      if (ptr.downKey && !draw.shape.includes(ptr.downKey)) {
+        const next = paintEnter(c, draw.shape, ptr.downKey, draw.reverse);
         if (next.length > draw.shape.length) drawTick(next.length - 1);
         draw = { ...draw, shape: next, msg: null };
       }
     }
-    // only hexes the finger moves INTO count (not the one it is already on): so starting a
-    // new stroke on a hex of the shape never reads as "dragging back"
+    // only hexes the finger moves INTO count (fast swipes are sampled so none is skipped)
     const entered: string[] = [];
     for (const k of hexesAlong(ptr.last, p, keys)) {
       if (k === ptr.cur) continue;
@@ -2313,22 +2514,17 @@ const drawHandlers = {
     }
     ptr.last = p;
     if (!ptr.moved) return;
-    if (c.kind === 'line' && draw.shape[0]) {
-      const o = pixelOf(draw.shape[0]);
-      const dir = snapDir(p.x - o.x, p.y - o.y, draw.dir);
-      if (dir !== draw.dir) {
-        draw = { ...draw, dir };
-        if (dir !== null) drawTick(c.n - 1);
-      }
-    } else if (c.kind === 'clump') {
-      let shape = draw.shape;
-      for (const k of entered) {
-        const next = clumpEnter(shape, k, c);
-        if (next.length > shape.length) drawTick(next.length - 1);
-        shape = next;
-      }
-      draw = { ...draw, shape };
+    let shape = draw.shape;
+    let msg = draw.msg;
+    for (const k of entered) {
+      const next = paintEnter(c, shape, k, draw.reverse);
+      if (next.length > shape.length) {
+        drawTick(next.length - 1);
+        msg = null;
+      } else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+      shape = next;
     }
+    draw = { ...draw, shape, msg };
     paintDraw();
   },
   up(p: Pt, e: PointerEvent, inside: boolean) {
@@ -2341,7 +2537,7 @@ const drawHandlers = {
       return;
     }
     // lifting the finger outside the board: nothing is placed
-    if (!inside) return cancelDraw('Drawing cancelled');
+    if (!inside) return cancelDraw('Painting cancelled');
     // a live two-click shape dragged and released: it finishes where it was released
     if (draw.desk.phase === 'live') {
       const k = hexAtPoint(p.x, p.y, new Set(board.boardKeys)) ?? draw.desk.hover;
@@ -2349,11 +2545,12 @@ const drawHandlers = {
     }
     const g = drawGhostNow(c);
     if (g?.action) return finishDraw(g.action);
-    if (c.kind === 'line') {
-      if (draw.dir !== null) board.shake(settings.reduceMotion);
-      draw = { ...draw, shape: [], dir: null, msg: g?.reason ?? null };
-    } else if (draw.shape.length === c.n) draw = { ...draw, msg: clumpProblem(session!.view, c, draw.shape) };
-    paintDraw();
+    // released early: the partial shape stays (with Clear); a full shape that can't go shakes
+    if (draw.shape.length === c.n) {
+      board.shake(settings.reduceMotion);
+      draw = { ...draw, msg: paintProblem(session!.view, c, draw.shape, draw.reverse) };
+    }
+    render();
   },
   cancel() {
     if (draw.ptr || draw.shape.length || draw.desk.phase === 'live') cancelDraw();
@@ -2364,6 +2561,7 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
+  reactHome(key);
   if (!myTurn() || (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK')) {
     pinCard(inspectKey === key && cardPinned ? null : key);
     return;
@@ -2389,6 +2587,15 @@ function onInspect(key: string | null) {
   if (cardPinned) return;
   inspectKey = key;
   if (session) renderTooltip(session.view);
+}
+
+/** Step 4: tapping a home: the tree's heartbeat and rustle, or the volcano's thump and rumble. */
+function reactHome(key: string) {
+  const p = board.homeEls.findIndex((g) => g.dataset.key === key);
+  if (p < 0 || board.homeEls[p]!.classList.contains('strangled')) return;
+  if (!settings.reduceMotion) pulseLandmark(board.homeEls[p]!, 'tapped');
+  if (p === HUMAN) sound.rustle();
+  else sound.rumble();
 }
 
 /** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
@@ -2472,7 +2679,7 @@ bind('levels-back', () => showScreen('menu'));
 document.addEventListener(
   'pointerdown',
   (e) => {
-    const b = (e.target as Element | null)?.closest?.('.btn, .tool, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
+    const b = (e.target as Element | null)?.closest?.('.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
     if (!b || (b as HTMLButtonElement).disabled) return;
     sound.unlock();
     if (settings.sound) sound.click();
@@ -2613,6 +2820,48 @@ bind('tool-skip', () => {
   fastForward();
 });
 bind('tool-replay', () => replayBotTurn());
+// Step 3 item 7: the corner tools' tooltips: hover (mouse), long-press (touch), and once
+// automatically the first time they appear (one at a time, a few seconds each)
+{
+  const tip = $('ctool-tip');
+  let timer = 0;
+  const show = (b: HTMLElement, ms = 0) => {
+    const wrap = $('board-wrap').getBoundingClientRect();
+    const r = b.getBoundingClientRect();
+    tip.textContent = b.dataset.tip ?? '';
+    tip.hidden = false;
+    const right = r.left - wrap.left > wrap.width / 2;
+    const below = r.top - wrap.top < wrap.height / 2;
+    tip.style.left = right ? '' : `${r.left - wrap.left}px`;
+    tip.style.right = right ? `${wrap.right - r.right}px` : '';
+    tip.style.top = below ? `${r.bottom - wrap.top + 6}px` : '';
+    tip.style.bottom = below ? '' : `${wrap.bottom - r.top + 6}px`;
+    clearTimeout(timer);
+    if (ms) timer = window.setTimeout(() => (tip.hidden = true), ms);
+  };
+  const hide = () => {
+    clearTimeout(timer);
+    tip.hidden = true;
+  };
+  for (const b of document.querySelectorAll<HTMLElement>('.ctool')) {
+    b.title = '';
+    b.addEventListener('pointerenter', (e) => e.pointerType === 'mouse' && show(b));
+    b.addEventListener('pointerleave', hide);
+    let press = 0;
+    b.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') press = window.setTimeout(() => show(b, 2200), 450);
+    });
+    for (const ev of ['pointerup', 'pointercancel'] as const) b.addEventListener(ev, () => clearTimeout(press));
+  }
+  const KEY = 'severgrow.ctools.seen';
+  /** The first time the tools show in a game: name each once (shield, then target). */
+  firstToolTips = () => {
+    if (store.get(KEY)) return;
+    store.set(KEY, '1');
+    const tools = ['tool-weak', 'tool-targets'].map((id) => $(id)).filter((b) => !b.hidden);
+    tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
+  };
+}
 bind('tool-undo', () => undoMove());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {
@@ -2711,13 +2960,27 @@ for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]'
   });
 }
 
+// Step 7: the effects and music volume sliders (each its own bus; the limiter is on the master)
+for (const input of document.querySelectorAll<HTMLInputElement>('[data-volume]')) {
+  input.addEventListener('input', () => {
+    const k = input.dataset.volume as 'sfxVolume' | 'musicVolume';
+    settings = { ...settings, [k]: Number(input.value) };
+    sound.unlock();
+    sound.setMix(settings);
+  });
+  input.addEventListener('change', () => {
+    saveSettings();
+    if (input.dataset.volume === 'sfxVolume' && settings.sound) sound.click();
+  });
+}
+
 // Keyboard: arrows move over the board, Enter picks, Esc cancels or closes; 1-9 pick cards.
 const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
     else if (busy()) fastForward();
-    // Esc first stops the shape being drawn; again, it cancels the line or clump
+    // Esc first stops the shape being painted; again, it cancels the bloom
     else if (drawCombo() && (draw.shape.length || draw.desk.phase === 'live' || draw.ptr)) cancelDraw();
     else cancelSel();
     return;
@@ -2727,6 +2990,13 @@ document.addEventListener('keydown', (e) => {
   if (/^[1-9]$/.test(e.key) && target.tagName !== 'INPUT') {
     document.querySelectorAll<HTMLButtonElement>('#hand [data-card]')[Number(e.key) - 1]?.click();
     return;
+  }
+  // Step 7: whole turns from the keyboard: D draws from the deck, T takes the throw pile, U undoes
+  if (target.tagName !== 'INPUT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'd') return void $('deck').click();
+    if (k === 't') return void $('discard').click();
+    if (k === 'u' && !$('tool-undo').hidden) return void $('tool-undo').click();
   }
   if (target.id !== 'board') return;
   const dir = ARROWS[e.key];
@@ -2806,6 +3076,12 @@ document.addEventListener('keydown', (e) => {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
   canUndo: () => !!session?.canUndo,
+  /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
+  pickKind: (kind: string) => {
+    if (!session) return;
+    session.sel = { ...session.sel, kind };
+    render();
+  },
   /** tests only (filmstrip): play this action for this player, as if chosen */
   playFor: (a: Action, who: Player) => {
     const p = session?.play(a, who);
@@ -2825,6 +3101,7 @@ onPhotosReady(() => {
   if (!busy()) render();
 });
 sound.enabled = settings.sound;
+sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
 showSplash();

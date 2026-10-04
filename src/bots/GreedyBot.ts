@@ -1,7 +1,8 @@
 // GreedyBot (spec 16): scores every legal action by its immediate effect and picks the
 // best. Simple and explainable: each score comes with the facts it was built from,
 // which the playtest coach turns into plain-language reasons.
-import { DIRECTIONS as DIR, bestMeldPartition, coordKey, deadwood, hexDistance, legalActions, rootCoord } from '../engine/index.js';
+import { bestMeldPartition, coordKey, deadwood, legalActions } from '../engine/index.js';
+import { BLOOM_SHORTLIST, lookBlooms, shortlistBlooms } from './bloomLook.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import type { Bot } from './Bot.js';
 import { cutLoss, simulate, threats } from './evaluate.js';
@@ -36,8 +37,6 @@ export type MoveFacts = {
   points: number;
   botPointsLost: number;
   wins: boolean;
-  /** A Hypha whose tip ends closer to the opponent's root than its start. */
-  toward: boolean;
   exposureBefore: number;
   exposureAfter: number;
   /** My biggest weak spot after the move (coord key), if any. */
@@ -47,11 +46,11 @@ export type MoveFacts = {
 };
 
 export type Facts =
-  | { kind: 'meld' | 'fruit' | 'sprout'; move: MoveFacts; reason?: string }
+  | { kind: 'bloom' | 'fruit' | 'sprout'; move: MoveFacts; reason?: string }
   | { kind: 'strengthen'; from: number; to: number; reason: string }
   | { kind: 'draw'; from: 'deck' | 'discard'; completesCombo: boolean; comboWith: Card[] }
   | { kind: 'discard'; card: Card; fitsCombo: boolean; deadwoodAfter: number }
-  | { kind: 'endAct'; meldsAvailable: boolean }
+  | { kind: 'endAct'; bloomsAvailable: boolean }
   | { kind: 'knock'; lead: number; risk: number }
   | { kind: 'continue' }
   | { kind: 'rotPick'; botLoss: number };
@@ -63,16 +62,19 @@ export type Weights = { readonly [K in keyof typeof WEIGHTS]: number };
  * v0.5: how well the bot judges Strengthen and Fruit (see tactics.ts). Default 3, the full
  * evaluation (levels 7-8). `fruitShortlist`: Fruits fully scored after a quick look.
  */
-export type GreedyOptions = { allowKnock?: boolean; weights?: Weights; strengthenTier?: Tier; fruitTier?: Tier; fruitShortlist?: number };
+export type GreedyOptions = { allowKnock?: boolean; weights?: Weights; strengthenTier?: Tier; fruitTier?: Tier; fruitShortlist?: number; bloomShortlist?: number };
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
-const emptyMove = (): MoveFacts => ({ placed: 0, onRich: 0, taken: 0, botCut: 0, myLoss: 0, points: 0, botPointsLost: 0, wins: false, toward: false, exposureBefore: 0, exposureAfter: 0, weakSpot: null, pressureBefore: 0, pressureAfter: 0 });
+const emptyMove = (): MoveFacts => ({ placed: 0, onRich: 0, taken: 0, botCut: 0, myLoss: 0, points: 0, botPointsLost: 0, wins: false, exposureBefore: 0, exposureAfter: 0, weakSpot: null, pressureBefore: 0, pressureAfter: 0 });
 const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
 
 const inCombo = (hand: readonly Card[], c: Card): boolean =>
   bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
 
-const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'PlayFruit' | 'Sprout' }>, w: Weights): Scored => {
+type BoardMove = Extract<Action, { t: 'Bloom' | 'PlayFruit' | 'Sprout' }>;
+
+/** The full board score of one Bloom, Sprout or Fruit card (also for moves off the Bloom shortlist). */
+export const scoreBoardMove = (v: View, a: BoardMove, w: Weights = WEIGHTS): Scored => {
   const me = v.player;
   const opp = other(me);
   const sim = simulate(v, a)!;
@@ -83,21 +85,7 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
   const pressureBefore = worst(v, opp)?.loss ?? 0;
   const pressureAfter = worst(after, opp)?.loss ?? 0;
 
-  const placedKeys =
-    a.t === 'MeldRun'
-      ? Array.from({ length: a.cards.length }, (_, i) => coordKey({ q: a.start.q + DIR[a.dir]!.q * i, r: a.start.r + DIR[a.dir]!.r * i }))
-      : a.t === 'MeldSet'
-        ? a.hexes.map(coordKey)
-        : a.t === 'Sprout'
-          ? [coordKey(a.coord)]
-          : [];
-  let toward = false;
-  if (a.t === 'MeldRun') {
-    const target = rootCoord(opp, v.config.rootStyle, v.config.boardRadius);
-    const d = DIR[a.dir]!;
-    const tip = { q: a.start.q + d.q * (a.cards.length - 1), r: a.start.r + d.r * (a.cards.length - 1) };
-    toward = hexDistance(tip, target) < hexDistance(a.start, target);
-  }
+  const placedKeys = a.t === 'Bloom' ? a.hexes.map(coordKey) : a.t === 'Sprout' ? [coordKey(a.coord)] : [];
   const move: MoveFacts = {
     placed: sim.placed,
     onRich: placedKeys.filter((k) => v.terrain[k] === 'rich').length,
@@ -107,7 +95,6 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
     points: sim.points,
     botPointsLost: sim.botPointsLost,
     wins: sim.wins,
-    toward,
     exposureBefore: myBefore,
     exposureAfter: myAfter,
     weakSpot: myAfterThreat?.key ?? null,
@@ -120,10 +107,7 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
       ? []
       : a.t === 'Sprout'
         ? [v.hand.find((c) => c.id === a.card)!.rank]
-        : a.cards
-          .map((id) => v.hand.find((c) => c.id === id)!.rank)
-          .sort((x, y) => x - y)
-          .map((r, _i, all) => (a.t === 'MeldSet' ? all[0]! : r));
+        : a.cards.map((id) => v.hand.find((c) => c.id === id)!.rank); // hexes[i] gets cards[i]
   const wasted = placedKeys.reduce((sum, k, i) => sum + (v.board[k] ? 0 : (strengths[i] ?? 0)), 0);
   const breaksCombo = a.t === 'Sprout' && inCombo(v.hand, v.hand.find((c) => c.id === a.card)!);
   const score =
@@ -134,14 +118,13 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
     sim.botPointsLost -
     w.exposure * (myAfter - myBefore) +
     w.pressure * (pressureAfter - pressureBefore);
-  return { action: a, score, facts: { kind: a.t === 'PlayFruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'meld', move } };
+  return { action: a, score, facts: { kind: a.t === 'PlayFruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'bloom', move } };
 };
 
 
-const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): Scored => {
+const scoreAction = (v: View, a: Action, bloomsAvailable: boolean, w: Weights): Scored => {
   switch (a.t) {
-    case 'MeldRun':
-    case 'MeldSet':
+    case 'Bloom':
     case 'Sprout':
     case 'PlayFruit':
       return scoreBoardMove(v, a, w);
@@ -166,7 +149,7 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): S
       return { action: a, score: -dw + c.rank / 100, facts: { kind: 'discard', card: c, fitsCombo: inCombo(v.hand, c), deadwoodAfter: dw } };
     }
     case 'EndAct':
-      return { action: a, score: 0, facts: { kind: 'endAct', meldsAvailable } };
+      return { action: a, score: 0, facts: { kind: 'endAct', bloomsAvailable } };
     case 'Knock': {
       const lead = v.score - v.opponentScore;
       const risk = worst(v, v.player)?.loss ?? 0;
@@ -186,8 +169,11 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): S
  * Ties keep the engine's legal-action order, so the result is deterministic.
  */
 export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
-  const acts = legalActions(v).filter((a) => opts.allowKnock !== false || a.t !== 'Knock');
-  const meldsAvailable = acts.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet');
+  const all = legalActions(v).filter((a) => opts.allowKnock !== false || a.t !== 'Knock');
+  const bloomsAvailable = all.some((a) => a.t === 'Bloom');
+  // v0.7 Blooms: a quick look at every legal one, the full board score only for a shortlist
+  const blooms = bloomsAvailable ? shortlistBlooms(lookBlooms(v), opts.bloomShortlist ?? BLOOM_SHORTLIST).map((l) => l.action as Action) : [];
+  const acts = [...blooms, ...all.filter((a) => a.t !== 'Bloom')];
   const w = opts.weights ?? WEIGHTS;
   const sTier = opts.strengthenTier ?? 3;
   const fTier = opts.fruitTier ?? 3;
@@ -205,12 +191,12 @@ export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
       .slice(0, fTier >= 2 ? (opts.fruitShortlist ?? 4) : looks.size)
       .map((l) => l.a as Action),
   );
-  const plain = acts.map((a) => (isStrengthen(v, a) || a.t === 'PlayFruit' ? null : scoreAction(v, a, meldsAvailable, w)));
+  const plain = acts.map((a) => (isStrengthen(v, a) || a.t === 'PlayFruit' ? null : scoreAction(v, a, bloomsAvailable, w)));
   // the best other use of each card this turn (for tier 1 Strengthen)
   const bestUse = new Map<number, number>();
   for (const s of plain) {
     if (!s) continue;
-    const used = s.action.t === 'Sprout' ? [s.action.card] : s.action.t === 'MeldRun' || s.action.t === 'MeldSet' ? s.action.cards : [];
+    const used = s.action.t === 'Sprout' ? [s.action.card] : s.action.t === 'Bloom' ? s.action.cards : [];
     for (const id of used) bestUse.set(id, Math.max(bestUse.get(id) ?? -Infinity, s.score));
   }
   const scored = acts.map((a, i): Scored => {

@@ -3,7 +3,7 @@
 import { coordKey, viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { FRUIT, OPP, SPROUT } from '../../../src/strings.js';
+import { BLOOM, FRUIT, OPP, SPROUT } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -15,9 +15,9 @@ export const resultReason = (r: GameResult, me: Player): string => {
   const tie = r.scores[0] === r.scores[1] ? ` A tie goes to ${OPP.the}.` : '';
   switch (r.reason) {
     case 'double_strangle':
-      return 'Both roots were surrounded at once.';
+      return 'Both homes were surrounded at once.';
     case 'strangle':
-      return won ? `You surrounded ${OPP.theirs} root.` : `${OPP.The} surrounded your root.`;
+      return won ? `You surrounded ${OPP.theirs} home.` : `${OPP.The} surrounded your home.`;
     case 'knock':
       if (!r.undercut) return won ? 'You knocked and stayed ahead.' : `${OPP.The} knocked and stayed ahead.`;
       return other(r.winner!) === me ? 'You knocked but did not finish ahead.' : `${OPP.The} knocked and you held on.`;
@@ -41,11 +41,10 @@ const resolution = (s: State, me: Player): string => {
 export const describe = (before: State, a: Action, after: State, me: Player): string => {
   const R = before.config.boardRadius;
   const hn = (c: Coord) => hexName(c, R);
-  const placed = a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit';
+  const placed = a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit';
   const tail = placed && after.lastResolution !== before.lastResolution ? resolution(after, me) : '';
   if (before.actor === me) {
-    if (a.t === 'MeldRun') return `You grew a line of ${a.cards.length}${tail}`;
-    if (a.t === 'MeldSet') return `You grew a clump of ${a.cards.length}${tail}`;
+    if (a.t === 'Bloom') return `${BLOOM.youDid(a.cards.length)}${tail}`;
     if (a.t === 'Sprout') return `${SPROUT.youDid(hn(a.coord))}${tail}`;
     return `You: ${moveSentence(viewFor(before, me), a)}`;
   }
@@ -54,10 +53,8 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
   switch (a.t) {
     case 'Draw':
       return a.from === 'deck' ? `${OPP.The} drew a card` : `${OPP.The} took the ${cardName(before.discard.at(-1)!)}`;
-    case 'MeldRun':
-      return `${OPP.The} grew a line of ${a.cards.length} from ${hn(a.start)} (${a.cards.map(name).join(', ')})${tail}`;
-    case 'MeldSet':
-      return `${OPP.The} grew a clump of ${a.cards.length} (${a.cards.map(name).join(', ')})${tail}`;
+    case 'Bloom':
+      return `${BLOOM.oppDid(a.cards.length)} (${a.cards.map(name).join(', ')})${tail}`;
     case 'Sprout':
       return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':

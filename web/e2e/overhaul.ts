@@ -2,6 +2,7 @@
 // clear of the board, the hint line on one line, no sideways scroll.
 //   npx tsx web/e2e/overhaul.ts
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
+import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -10,7 +11,7 @@ import type { Action, Card, Player, State, Suit } from '../../src/engine/index.j
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { fixture } from '../../tests/helpers.js';
 import { forecastMove, needsConfirm } from '../src/logic/forecast.js';
-import { hexCenter } from './drawing.js';
+import { clickKind, hexCenter } from './drawing.js';
 import { cutPosition } from './cut-positions.js';
 
 const results: { name: string; ok: boolean }[] = [];
@@ -48,11 +49,11 @@ const open = async (state: State | null, o: { w?: number; h?: number; touch?: bo
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v7', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), state ? JSON.stringify({ state, coach: doneCoach }) : null],
+    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), state ? positionSave({ state, coach: doneCoach }) : null],
   );
   await page.goto(BASE);
   if (state) await page.click('#menu-continue');
@@ -116,10 +117,10 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
 // ---- 2. Never / Always ----
 {
   const s = stateWith({}, [[0, 3], [0, 4], [0, 5]]);
-  // this line leaves 3 of my tiles cuttable, so Smart asks too
+  // this bloom leaves 3 of my tiles cuttable, so Smart asks too
   for (const [mode, wantBar] of [['never', false], ['always', true], ['smart', true]] as const) {
     const { page } = await open(s, { w: 1280, h: 800, settings: { confirmPolicy: mode } });
-    await page.click('#moves [data-kind="line-3"]');
+    await clickKind(page, '#moves [data-kind^="bloom-3-"]');
     const a = await hexCenter(page, '-1,1');
     const b = await hexCenter(page, '1,1');
     await page.mouse.click(a.x, a.y);
@@ -128,7 +129,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
     await page.waitForTimeout(300);
     const bar = await page.locator('#confirm').isVisible();
     const placed = ((await hook<State>(page, 'state'))!.history?.length ?? 0) > 0;
-    check(`Confirm moves: ${mode} ${wantBar ? 'asks' : 'does not ask'} for a risky line`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
+    check(`Confirm moves: ${mode} ${wantBar ? 'asks' : 'does not ask'} for a risky bloom`, bar === wantBar && placed === !wantBar, `bar ${bar}, placed ${placed}`);
     await page.close();
   }
 }

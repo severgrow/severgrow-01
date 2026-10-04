@@ -4,8 +4,7 @@ import type { Action, Phase } from './types.js';
 /** The phase in which each action is legal (spec 6). */
 export const ACTION_PHASE: Record<Action['t'], Phase> = {
   Draw: 'DRAW',
-  MeldRun: 'ACT',
-  MeldSet: 'ACT',
+  Bloom: 'ACT',
   Sprout: 'ACT',
   PlayFruit: 'ACT',
   EndAct: 'ACT',
@@ -19,7 +18,7 @@ const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object
 
 /**
  * Top-level shape check so `apply` never crashes on malformed input. Field contents
- * (coords, card ids, dir) are checked by the rule that consumes them.
+ * (coords, card ids) are checked by the rule that consumes them.
  */
 export const assertActionShape = (a: unknown): Action => {
   const bad = (msg: string): never => {
@@ -30,11 +29,8 @@ export const assertActionShape = (a: unknown): Action => {
     case 'Draw':
       if (a.from !== 'deck' && a.from !== 'discard') bad('Draw.from must be deck or discard');
       break;
-    case 'MeldRun':
-      if (!Array.isArray(a.cards) || typeof a.dir !== 'number') bad('MeldRun needs cards[], start, dir');
-      break;
-    case 'MeldSet':
-      if (!Array.isArray(a.cards) || !Array.isArray(a.hexes)) bad('MeldSet needs cards[] and hexes[]');
+    case 'Bloom':
+      if (!Array.isArray(a.cards) || !Array.isArray(a.hexes)) bad('Bloom needs cards[] and hexes[]');
       break;
     case 'PlayFruit':
       if (typeof a.card !== 'number') bad('PlayFruit needs a card id and a target');

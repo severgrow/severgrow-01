@@ -1,8 +1,7 @@
-import { addCoord, allNeighbors, coordKey, isConnected, isOnBoard, normalizeCoord, scaleCoord } from './board.js';
-import { DIRECTIONS } from './constants.js';
+import { allNeighbors, coordKey, isConnected, isOnBoard, normalizeCoord } from './board.js';
 import { IllegalActionError } from './errors.js';
 import type { IllegalActionCode } from './errors.js';
-import { validateRun, validateSet, takeCards } from './melds.js';
+import { takeCards, validateBloom } from './melds.js';
 import { claimBlocker } from './overgrow.js';
 import type { BoardCtx } from './overgrow.js';
 import type { Card, Coord, Player, Tile } from './types.js';
@@ -25,13 +24,6 @@ export const assertCoord = (c: unknown): Coord => {
   return normalizeCoord(c);
 };
 
-/** start, start+dir, start+2*dir, ... (n hexes). */
-export const runLine = (start: Coord, dir: number, n: number): Coord[] => {
-  const d = DIRECTIONS[dir];
-  if (!d) throw new IllegalActionError('INVALID_DIR', `dir must be an integer 0-5, got ${dir}`);
-  return Array.from({ length: n }, (_, i) => addCoord(start, scaleCoord(d, i)));
-};
-
 /** True when coord touches one of player's tiles (root included) on the current board. */
 export const touchesNetwork = (board: BoardCtx['board'], player: Player, coord: Coord): boolean =>
   allNeighbors(coord).some((n) => board[coordKey(n)]?.owner === player);
@@ -44,56 +36,33 @@ const assertClaims = (ctx: BoardCtx, player: Player, tiles: PlannedTile[]): void
 };
 
 /**
- * Validates a Hypha (spec 8.2) without changing anything. Cards are ordered by
- * ascending rank; the lowest lands on `start`, strength rising to the tip.
+ * Validates a Bloom (v0.7) without changing anything: `hexes[i]` receives `cards[i]` with that
+ * card's own number. The cards are a set or a run of 3-4; the hexes are distinct, one connected
+ * cluster of any shape, at least one touching my network on the board before the move
+ * (`bloomMustTouchNetwork`), and each claimable by the number it receives.
  */
-export const planRun = (
-  ctx: BoardCtx,
-  player: Player,
-  hand: readonly Card[],
-  cardIds: readonly number[],
-  start: Coord,
-  dir: number,
-): Placement => {
-  const cards = validateRun(takeCards(hand, cardIds));
-  if (!Number.isInteger(dir) || !DIRECTIONS[dir]) {
-    throw new IllegalActionError('INVALID_DIR', `dir must be an integer 0-5, got ${dir}`);
-  }
-  const s = assertCoord(start);
-  if (!touchesNetwork(ctx.board, player, s)) {
-    throw new IllegalActionError('NOT_ADJACENT', 'hypha must start adjacent to your network');
-  }
-  const line = runLine(s, dir, cards.length);
-  const tiles = line.map((coord, i) => ({ coord, strength: cards[i]!.rank }));
-  assertClaims(ctx, player, tiles);
-  return { player, cards, tiles };
-};
-
-/** Validates a Bloom (spec 8.3) without changing anything. */
-export const planSet = (
+export const planBloom = (
   ctx: BoardCtx,
   player: Player,
   hand: readonly Card[],
   cardIds: readonly number[],
   hexes: readonly Coord[],
 ): Placement => {
-  const cards = validateSet(takeCards(hand, cardIds));
+  const given = takeCards(hand, cardIds);
+  validateBloom(given);
   if (!Array.isArray(hexes)) throw new IllegalActionError('MALFORMED_ACTION', 'hexes must be an array');
-  if (hexes.length !== cards.length) {
-    throw new IllegalActionError('HEX_COUNT_MISMATCH', 'a bloom claims exactly one hex per card');
-  }
+  if (hexes.length !== given.length) throw new IllegalActionError('HEX_COUNT_MISMATCH', 'a bloom claims exactly one hex per card');
   const coords = hexes.map(assertCoord);
-  if (new Set(coords.map(coordKey)).size !== coords.length) {
-    throw new IllegalActionError('DUPLICATE_HEX', 'bloom hexes must be distinct');
-  }
+  if (new Set(coords.map(coordKey)).size !== coords.length) throw new IllegalActionError('DUPLICATE_HEX', 'bloom hexes must be distinct');
   if (!isConnected(coords)) throw new IllegalActionError('HEXES_NOT_CONNECTED', 'bloom hexes must form one cluster');
-  if (!coords.some((c) => touchesNetwork(ctx.board, player, c))) {
-    throw new IllegalActionError('NOT_ADJACENT', 'bloom must touch your network');
+  if (ctx.config.bloomMustTouchNetwork && !coords.some((c) => touchesNetwork(ctx.board, player, c))) {
+    throw new IllegalActionError('NOT_ADJACENT', 'a bloom must touch your network');
   }
-  const strength = cards[0]!.rank;
-  const tiles = coords.map((coord) => ({ coord, strength }));
+  const tiles = coords.map((coord, i) => ({ coord, strength: given[i]!.rank }));
   assertClaims(ctx, player, tiles);
-  return { player, cards, tiles };
+  // cards in ascending order, each still paired with its hex
+  const pairs = given.map((card, i) => ({ card, tile: tiles[i]! })).sort((x, y) => x.card.rank - y.card.rank || x.card.id - y.card.id);
+  return { player, cards: pairs.map((x) => x.card), tiles: pairs.map((x) => x.tile) };
 };
 
 /** Why a Strengthen of my own tile is illegal, or null (v0.5). `used` = my Strengthens so far. */

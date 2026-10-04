@@ -23,6 +23,8 @@ describe('settings (saved in the browser)', () => {
       handSort: 'suit', // UI overhaul: the hand is sorted by suit (Sort switches to by number)
       eyeCandy: true, // UI overhaul Part 3: the decorations, on by default (Settings can switch them off)
       autoSkip: true, // Fruit cards task, Step 2: "Auto-skip when nothing to play", on by default
+      sfxVolume: 80, // v0.7 Step 7: effects volume slider
+      musicVolume: 60, // v0.7 Step 7: music volume slider
     });
   });
 

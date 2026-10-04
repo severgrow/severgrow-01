@@ -4,9 +4,16 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0e11" />
-    <meta name="description" content="Severor: grow your network, keep it joined to your root, cut your opponent's links." />
+    <meta name="description" content="Severor: grow your network, keep it joined to your home, cut your opponent's links." />
     <title>Severor</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230d0e11%27/%3E%3Cpolygon points=%2716,5 25,10 25,22 16,27 7,22 7,10%27 fill=%27none%27 stroke=%27%234df0b4%27 stroke-width=%273%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%273.5%27 fill=%27%234df0b4%27/%3E%3C/svg%3E" />
+    <meta property="og:title" content="Severor" />
+    <meta property="og:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icon-180.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -27,8 +34,8 @@
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">Severor</h1>
-        <p class="tagline">Grow your network. Keep it joined to your root. Cut your opponent's links.</p>
-        <p id="menu-welcome" class="welcome" hidden>New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.</p>
+        <p class="tagline">Grow your network. Keep it joined to your home. Cut your opponent's links.</p>
+        <div id="menu-welcome" class="welcome" role="note" hidden></div>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
           <button id="menu-new" class="btn primary big" type="button">New game</button>
@@ -90,22 +97,27 @@
           <div id="draw-live" class="sr-only" aria-live="polite"></div>
           <div id="banner" class="banner" aria-hidden="true"></div>
           <div id="smoother" class="smoother" role="status" hidden><span>Smoother mode: effects are lighter so the game runs smoothly.</span><button id="smoother-keep" class="btn small primary" type="button">Keep</button><button id="smoother-undo" class="btn small ghost" type="button">Undo</button></div>
-          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i>Root in danger</div>
+          <div id="root-warn" class="root-warn" role="status" hidden><i aria-hidden="true"></i>Home in danger</div>
           <div id="edge-wash" class="edge-wash" aria-hidden="true"></div>
           <div id="turn-pill" class="turn-pill" aria-hidden="true" hidden></div>
           <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+          <!-- Step 3: icon-only tools in the corners of the board zone (never over a tile) -->
+          <div class="corner-tools" role="toolbar" aria-label="Board tools">
+            <button id="tool-weak" class="ctool tl" type="button" aria-pressed="false" aria-label="My weak spots" data-tip="My weak spots: where your network is easy to cut"><span class="i" data-icon="shield"></span></button>
+            <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
+            <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
+            <button id="tool-skip" class="ctool br" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+            <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
+          </div>
         </div>
 
         <aside class="side dock" id="dock">
-          <div class="toolbar" role="toolbar" aria-label="Board tools">
-            <button id="tool-weak" class="tool" type="button" aria-pressed="false" title="Show where your network is easy to cut"><span class="i" data-icon="shield"></span><span class="tool-label">My weak spots</span></button>
-            <button id="tool-targets" class="tool" type="button" aria-pressed="false" title="Show where your opponent is easy to cut"><span class="i" data-icon="target"></span><span class="tool-label">Their weak links</span></button>
-            <button id="tool-replay" class="tool" type="button" title="Replay your opponent's last turn"><span class="i" data-icon="replay"></span><span class="tool-label">Replay</span></button>
-            <button id="tool-undo" class="tool undo" type="button" disabled title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span class="tool-label">Undo</span></button>
-            <button id="tool-skip" class="tool" type="button" hidden title="Skip the animation"><span class="i" data-icon="skip"></span><span class="tool-label">Skip</span></button>
-          </div>
-          <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
+          <!-- the message row: the hint line (with Undo when it can be used), or the forecast bar -->
           <div class="forecast-slot">
+          <div class="hint-row">
+            <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
+            <button id="tool-undo" class="undo-chip" type="button" hidden aria-label="Undo: take back your last move" title="Take back your last move (you can until you throw)"><span class="i" data-icon="undo"></span><span>Undo</span></button>
+          </div>
           <div id="confirm" class="confirm forecast" hidden>
             <div class="confirm-text">
               <span id="confirm-chip" class="result-chip"></span>
@@ -142,7 +154,7 @@
           </div>
 
           <div id="hand" class="hand" role="group" aria-label="Your cards"></div>
-          <button id="hand-sort" class="hand-sort" type="button" hidden>By suit</button>
+          <button id="hand-sort" class="hand-sort icon-sort" type="button" hidden><span class="i" data-icon="sort"></span></button>
           <!-- floating above the dock: never changes its height -->
           <div class="dock-overlays">
           <section id="coach" class="coach" aria-label="Coach" hidden>
@@ -191,7 +203,9 @@
         <div class="row"><span>Top-rank glow</span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
         <h3>Sound and feel</h3>
         <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row slider"><span>Effects volume</span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
         <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
+        <label class="row slider"><span>Music volume</span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
         <label class="row"><span id="vibration-label">Vibration</span><input type="checkbox" data-setting="vibration" /></label>
         <div class="test-row">
           <button id="test-sound" class="btn ghost small" type="button">Test sound</button>
@@ -202,11 +216,11 @@
         <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
         <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
         <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
-        <label class="row"><span>Eye candy (opening splash, root heartbeat, terrarium menu, drifting spores)</span><input type="checkbox" data-setting="eyeCandy" /></label>
+        <label class="row"><span>Eye candy (opening splash, home heartbeat, terrarium menu, drifting spores)</span><input type="checkbox" data-setting="eyeCandy" /></label>
         <h3>Playing</h3>
         <div class="row"><span>Confirm moves</span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
         <label class="row"><span>Auto-skip when nothing to play</span><input type="checkbox" data-setting="autoSkip" /></label>
-        <label class="row"><span>Placement list (step through the places a line or clump can go)</span><input type="checkbox" data-setting="placementList" /></label>
+        <label class="row"><span>Placement list (step through the places a bloom can go)</span><input type="checkbox" data-setting="placementList" /></label>
         <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
         <label class="row"><span>Pulse my weakest link</span><input type="checkbox" data-setting="weakPulse" /></label>
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
@@ -216,7 +230,7 @@
     </section>
 
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
-      <header class="sheet-head"><h2 id="gm-title">Menu</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="gm-title">Paused</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
         <button id="gm-resume" class="btn primary" type="button">Back to the game</button>
         <button id="gm-new" class="btn ghost" type="button">New game</button>

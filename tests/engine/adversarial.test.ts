@@ -3,13 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPlacement,
   isStrangled,
-  planRun,
-  planSet,
+  planBloom,
   sever,
   strangleOutcome,
 } from '../../src/engine/index.js';
 import type { Card, Placement, Player } from '../../src/engine/index.js';
-import { card, clone, codeOf, fixture, tilesOf } from '../helpers.js';
+import { chain, card, clone, codeOf, fixture, tilesOf } from '../helpers.js';
 
 const ids = (cs: Card[]) => cs.map((c) => c.id);
 const P1_RING = ['-1,2', '-1,1', '-2,1', '-3,2', '-3,3', '-2,3'];
@@ -17,32 +16,32 @@ const owned = (keys: string[], owner: Player): Record<string, [Player, number]> 
   Object.fromEntries(keys.map((k) => [k, [owner, 1]]));
 
 describe('adversarial', () => {
-  it('A1: a hypha that overgrows enemies then crosses its own tile (or own root) fails whole', () => {
+  it('A1: a run bloom (a straight chain) that overgrows enemies then crosses its own tile (or own root) fails whole', () => {
     // Line (-1,1) e1, (0,0) e2, (1,-1) OWN. The first two claims are legal overgrows.
     const f = fixture({ tiles: { '-1,1': [1, 1], '0,0': [1, 2], '1,-1': [0, 1] } });
     const hand = [card(1, 0, 3), card(2, 0, 4), card(3, 0, 5)];
     const before = clone({ f, hand });
-    expect(codeOf(() => planRun(f, 0, hand, ids(hand), { q: -1, r: 1 }, 1))).toBe('OWN_TILE');
+    expect(codeOf(() => planBloom(f, 0, hand, ids(hand), chain({ q: -1, r: 1 }, 1, hand.length)))).toBe('OWN_TILE');
     expect({ f, hand }).toEqual(before);
-    // A hypha aimed back through its own root: (-1,2) -> (-2,2) is P1's root.
-    expect(codeOf(() => planRun(fixture(), 0, hand, ids(hand), { q: -1, r: 2 }, 3))).toBe('OWN_TILE');
+    // A chain aimed back through its own root: (-1,2) -> (-2,2) is P1's root.
+    expect(codeOf(() => planBloom(fixture(), 0, hand, ids(hand), chain({ q: -1, r: 2 }, 3, hand.length)))).toBe('OWN_TILE');
   });
 
   it('A2: a bloom whose only network contact would come from its own hexes or overgrows is rejected', () => {
     const set = [card(1, 0, 6), card(2, 1, 6), card(3, 2, 6)];
     // (0,0),(1,-1),(1,0): each touches another new hex but none touches P1's network.
     expect(
-      codeOf(() => planSet(fixture(), 0, set, ids(set), [{ q: 0, r: 0 }, { q: 1, r: -1 }, { q: 1, r: 0 }])),
+      codeOf(() => planBloom(fixture(), 0, set, ids(set), [{ q: 0, r: 0 }, { q: 1, r: -1 }, { q: 1, r: 0 }])),
     ).toBe('NOT_ADJACENT');
     // Overgrowing an enemy tile at (0,0) does not count as "existing" own tile for the
     // other hexes, and (0,0) itself is not adjacent to P1's network before the meld.
     const f = fixture({ tiles: { '0,0': [1, 2], '-1,0': [1, 2] } });
     expect(
-      codeOf(() => planSet(f, 0, set, ids(set), [{ q: 0, r: 0 }, { q: -1, r: 0 }, { q: 1, r: 0 }])),
+      codeOf(() => planBloom(f, 0, set, ids(set), [{ q: 0, r: 0 }, { q: -1, r: 0 }, { q: 1, r: 0 }])),
     ).toBe('NOT_ADJACENT');
     // A chain from a legal contact still works: only one hex needs pre-meld contact.
     expect(
-      planSet(fixture(), 0, set, ids(set), [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 1, r: -1 }]).tiles,
+      planBloom(fixture(), 0, set, ids(set), [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 1, r: -1 }]).tiles,
     ).toHaveLength(3);
   });
 
@@ -106,21 +105,21 @@ describe('adversarial', () => {
     const set = [card(1, 0, 6), card(2, 1, 6), card(3, 2, 6), card(4, 3, 6)];
     const hexes = [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 0, r: 1 }, { q: 1, r: 0 }];
     const before = clone({ f, set, hexes });
-    expect(codeOf(() => planSet(f, 0, set, ids(set), hexes))).toBe('ROCK');
+    expect(codeOf(() => planBloom(f, 0, set, ids(set), hexes))).toBe('ROCK');
     expect({ f, set, hexes }).toEqual(before);
 
-    // 5-card hypha: three legal overgrows, then on-board empty, then off the edge.
-    const g = fixture({ tiles: { '-1,1': [1, 1], '0,1': [1, 2], '1,1': [1, 3] } });
-    const run = [card(1, 3, 3), card(2, 3, 4), card(3, 3, 5), card(4, 3, 6), card(5, 3, 7)];
+    // 4-card run bloom (a straight chain): three legal overgrows, then off the edge.
+    const g = fixture({ tiles: { '-1,2': [1, 1], '0,2': [1, 2], '1,2': [1, 3] } });
+    const run = [card(1, 3, 3), card(2, 3, 4), card(3, 3, 5), card(4, 3, 6)];
     const gBefore = clone({ g, run });
-    expect(codeOf(() => planRun(g, 0, run, ids(run), { q: -1, r: 1 }, 0))).toBe('OFF_BOARD');
+    expect(codeOf(() => planBloom(g, 0, run, ids(run), chain({ q: -1, r: 2 }, 0, run.length)))).toBe('OFF_BOARD');
     expect({ g, run }).toEqual(gBefore);
   });
 
   it('A6: -0 coordinates in input never leak into placements or the board', () => {
     const set = [card(1, 0, 6), card(2, 1, 6), card(3, 2, 6)];
     const f = fixture();
-    const p = planSet(f, 0, set, ids(set), [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: -0, r: 1 }]);
+    const p = planBloom(f, 0, set, ids(set), [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: -0, r: 1 }]);
     const out = applyPlacement(f.board, p);
     for (const c of [...p.tiles.map((t) => t.coord), ...out.placed]) {
       expect(Object.is(c.q, -0) || Object.is(c.r, -0)).toBe(false);
@@ -131,7 +130,7 @@ describe('adversarial', () => {
 
     const g = fixture({ tiles: { '0,0': [0, 1] } });
     const run = [card(1, 0, 3), card(2, 0, 4), card(3, 0, 5)];
-    const r = planRun(g, 0, run, ids(run), { q: -0, r: 1 }, 0);
+    const r = planBloom(g, 0, run, ids(run), chain({ q: -0, r: 1 }, 0, run.length));
     expect(Object.is(r.tiles[0]!.coord.q, -0)).toBe(false);
   });
 });

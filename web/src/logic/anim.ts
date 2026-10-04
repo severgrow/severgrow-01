@@ -5,14 +5,14 @@
 import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/engine/index.js';
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
-import { FRUIT, OPP } from '../../../src/strings.js';
+import { FRUIT, HOME, OPP } from '../../../src/strings.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
 
 export type Step =
   | { k: 'draw'; player: Player; from: 'deck' | 'discard'; card?: Card }
-  | { k: 'grow'; style: 'line' | 'bloom' | 'sprout'; player: Player; tiles: GrowTile[] }
+  | { k: 'grow'; style: 'bloom' | 'sprout'; player: Player; tiles: GrowTile[] }
   | { k: 'sever'; player: Player; by: Player; keys: string[]; origin: string }
   | { k: 'remove'; reason: 'fruit' | 'rot'; keys: string[] }
   | { k: 'strengthen'; player: Player; key: string; from: number; to: number }
@@ -42,8 +42,7 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
         steps.push(card ? { k: 'draw', player: e.player, from: e.from, card: { ...card } } : { k: 'draw', player: e.player, from: e.from });
         break;
       }
-      case 'MeldRun':
-      case 'MeldSet':
+      case 'Bloom':
       case 'Sprout': {
         const ids = e.t === 'Sprout' ? [e.card] : e.cards;
         const coords = e.t === 'Sprout' ? [e.coord] : e.hexes;
@@ -51,11 +50,11 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
         const tiles = coords.map((c, i) => {
           const key = coordKey(c);
           const now = after.board[key];
-          const strength = now && now.owner === e.player ? now.strength : e.t === 'MeldSet' ? Math.min(...ranks) : ranks[i]!;
+          const strength = now && now.owner === e.player ? now.strength : ranks[i]!;
           return { key, strength, replaced: before.board[key]?.owner === opp(e.player) };
         });
         hits.push(...tiles.filter((t) => t.replaced).map((t) => t.key), ...tiles.map((t) => t.key));
-        steps.push({ k: 'grow', style: e.t === 'MeldRun' ? 'line' : e.t === 'MeldSet' ? 'bloom' : 'sprout', player: e.player, tiles });
+        steps.push({ k: 'grow', style: e.t === 'Bloom' ? 'bloom' : 'sprout', player: e.player, tiles });
         break;
       }
       case 'Strengthen':
@@ -176,7 +175,7 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
       return taken > 0 ? `${OPP.The} grew ${tiles(s.tiles.length)}, taking ${taken} of yours` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
     }
     case 'strangle':
-      return s.loser === viewer ? 'Your root is surrounded!' : `${OPP.Theirs} root is surrounded!`;
+      return s.loser === viewer ? HOME.mineSurrounded : HOME.theirsSurrounded;
     case 'strengthen':
       return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
     case 'fruit':

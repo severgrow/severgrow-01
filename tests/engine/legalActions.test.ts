@@ -29,10 +29,12 @@ const canon = (s: State, a: Action): string => {
       .join(',');
   const hexKey = (cs: Coord[]) => cs.map(coordKey).sort().join('|');
   switch (a.t) {
-    case 'MeldRun':
-      return `R ${cardKey(a.cards)} ${coordKey(a.start)} ${a.dir}`;
-    case 'MeldSet':
-      return `S ${cardKey(a.cards)} ${hexKey(a.hexes)}`;
+    case 'Bloom': {
+      // a set: which suit lands where does not matter; a run: each number's hex does
+      const cs = a.cards.map((id) => hand.find((x) => x.id === id)!);
+      if (cs.every((c) => c.rank === cs[0]!.rank)) return `S ${cardKey(a.cards)} ${hexKey(a.hexes)}`;
+      return `R ${cs.map((c, i) => `${c.suit}:${c.rank}@${coordKey(a.hexes[i]!)}`).sort().join(',')}`;
+    }
     case 'PlayFruit':
       // Fruit cards are all alike: only the target matters
       return `F ${coordKey(a.target)}`;
@@ -67,6 +69,24 @@ const subsets = <T>(xs: T[], k: number): T[][] => {
   const [h, ...t] = xs as [T, ...T[]];
   return [...subsets(t, k - 1).map((r) => [h, ...r]), ...subsets(t, k)];
 };
+
+/** True when the hexes form one cluster (checked here independently of the engine). */
+const connected = (hexes: Coord[]): boolean => {
+  const seen = new Set([0]);
+  const todo = [0];
+  while (todo.length) {
+    const i = todo.pop()!;
+    hexes.forEach((h, j) => {
+      if (!seen.has(j) && hexDistance(h, hexes[i]!) === 1) {
+        seen.add(j);
+        todo.push(j);
+      }
+    });
+  }
+  return seen.size === hexes.length;
+};
+
+const permutations = <T>(xs: T[]): T[][] => (xs.length <= 1 ? [xs] : xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map((r) => [x, ...r])));
 
 /** Independent brute force over a superset of plausible actions, filtered by apply. */
 const bruteForce = (s: State): Set<string> => {
@@ -106,12 +126,16 @@ const bruteForce = (s: State): Set<string> => {
           if (seenCards.has(ck)) continue;
           seenCards.add(ck);
           const ids = cards.map((c) => c.id);
-          if (isValidRun(cards)) {
-            for (const start of board) for (let dir = 0; dir < 6; dir++) add({ t: 'MeldRun', cards: ids, start, dir });
-          }
-          if (isValidSet(cards)) {
+          // v0.7 Bloom: a set or a run of 3-4 cards on any connected cluster near my tiles;
+          // a run in every assignment of its cards to the hexes (apply decides)
+          if (k <= 4 && (isValidRun(cards) || isValidSet(cards))) {
             const near = board.filter((c) => own.some((o) => hexDistance(o, c) <= k));
-            for (const hexes of subsets(near, k)) add({ t: 'MeldSet', cards: ids, hexes });
+            const asc = [...cards].sort((x, y) => x.rank - y.rank || x.id - y.id).map((c) => c.id);
+            for (const hexes of subsets(near, k)) {
+              if (!connected(hexes)) continue;
+              if (isValidSet(cards)) add({ t: 'Bloom', cards: ids, hexes });
+              else for (const perm of permutations(hexes)) add({ t: 'Bloom', cards: asc, hexes: perm });
+            }
           }
         }
       }
@@ -233,10 +257,10 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { id: 70, suit: 0, rank: 5 },
     ];
     const s: State = { ...s0, phase: 'ACT', hands: [hand, s0.hands[1]], drawnFromDiscard: 50 };
-    const runs = legalActionsForState(s).filter((a) => a.t === 'MeldRun');
+    const runs = legalActionsForState(s).filter((a) => a.t === 'Bloom');
     expect(runs.length).toBeGreaterThan(0);
     for (const a of runs) {
-      expect(a.t === 'MeldRun' && a.cards).toContain(10);
+      expect(a.t === 'Bloom' && a.cards).toContain(10);
       const after = apply(apply(s, a), { t: 'EndAct' });
       expect(legalActionsForState(after)).toEqual([{ t: 'Discard', card: 50 }]);
     }

@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { DIRECTIONS, allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
+import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -12,7 +12,8 @@ import type { MaterialLook } from '../logic/materials.js';
 import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
-import { boardPad } from '../logic/layout.js';
+import { boardUnits } from '../logic/layout.js';
+import { getOrient } from '../logic/orient.js';
 import type { AmbientPlan } from '../logic/ambient.js';
 import type { PaintTile } from '../logic/worldpaint.js';
 import { numberStyle, vigour } from '../logic/vigour.js';
@@ -22,6 +23,8 @@ import { glowSprite } from './glowsprite.js';
 import type { ThemeId } from '../logic/themes.js';
 import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
+import { drawLandmark, setLandmarkState } from './landmarks.js';
+import { materialsOf } from '../logic/materials.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -87,11 +90,12 @@ export type DrawHandlers = {
   cancel: () => void;
 };
 
-/** What the drawing ghost shows: tiles (with numbers; "can't" style when not ok), direction arrows, a cursor. */
+/** What the painting ghost shows: tiles (with numbers; "can't" style when not ok), unavailable hexes, a cursor. */
 export type GhostView = {
   tiles: { key: string; strength: number; ok: boolean }[];
   blocked: boolean;
-  arrows: { from: string; dirs: number[] } | null;
+  /** hexes this Bloom uses that cannot take the number they would get now (marked, with a reason elsewhere) */
+  unavailable?: string[];
   cursor: string | null;
 };
 
@@ -99,7 +103,7 @@ export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
   private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
+  private layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
   private drawHandlers: DrawHandlers | null = null;
@@ -180,21 +184,11 @@ export class BoardView {
       const { x, y } = centerOf(t.key);
       el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
     }
-    if (g.arrows) {
-      const c = centerOf(g.arrows.from);
-      for (const d of g.arrows.dirs) {
-        const nb = DIRECTIONS[d]!;
-        const n = centerOf(coordKey({ q: parseKey(g.arrows.from).q + nb.q, r: parseKey(g.arrows.from).r + nb.r }));
-        const ang = (Math.atan2(n.y - c.y, n.x - c.x) * 180) / Math.PI;
-        const ax = c.x + (n.x - c.x) * 0.62;
-        const ay = c.y + (n.y - c.y) * 0.62;
-        el('path', { d: 'M-5,-5 L3,0 L-5,5', class: 'draw-arrow', transform: `translate(${ax.toFixed(1)},${ay.toFixed(1)}) rotate(${ang.toFixed(0)})`, 'data-dir': d }, layer);
-      }
-    }
+    for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
     if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
   }
 
-  /** A small shake of the ghost: lifting the finger on a blocked line does nothing else. */
+  /** A small shake of the ghost: lifting the finger on a shape that can't be placed does nothing else. */
   shake(reduceMotion: boolean) {
     if (reduceMotion) return;
     this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });
@@ -211,12 +205,9 @@ export class BoardView {
     svg.replaceChildren();
     const coords = allCoords(config.boardRadius);
     this.keys = coords.map(coordKey);
-    const xs = this.keys.map((k) => centerOf(k).x);
-    const ys = this.keys.map((k) => centerOf(k).y);
-    // room for the board's plate and its pins, and no more (the layout uses the same numbers: logic/layout.ts boardUnits)
-    const { padX, padY } = boardPad(S);
-    const [x0, y0] = [Math.min(...xs) - padX, Math.min(...ys) - padY];
-    svg.setAttribute('viewBox', `${x0} ${y0} ${Math.max(...xs) - Math.min(...xs) + 2 * padX} ${Math.max(...ys) - Math.min(...ys) + 2 * padY}`);
+    // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
+    const u = boardUnits(config.boardRadius, getOrient());
+    svg.setAttribute('viewBox', `${u.x0.toFixed(1)} ${u.y0.toFixed(1)} ${u.w.toFixed(1)} ${u.h.toFixed(1)}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
@@ -228,10 +219,11 @@ export class BoardView {
     el('circle', { cx: 5.5, cy: 5, r: 0.9, class: 'pat-ink' }, grain);
     const stripe = el('pattern', { id: this.id('pat-stripe'), width: 10, height: 10, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(-30)' }, defs);
     el('rect', { width: 4, height: 10, class: 'pat-ink' }, stripe);
-    // A fine diagonal weave for gold hexes (gold is recognisable by pattern and its "2"
-    // badge, not by colour alone).
-    const weave = el('pattern', { id: this.id('pat-gold'), width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
-    el('rect', { width: 1.1, height: 5, class: 'gold-weave' }, weave);
+    // Step 3 item 6: a calm, fine grain of tiny dots for gold hexes (recognisable without
+    // colour, with the "2" badge), no strong stripes
+    const weave = el('pattern', { id: this.id('pat-gold'), width: 4.5, height: 4.5, patternUnits: 'userSpaceOnUse' }, defs);
+    el('circle', { cx: 1.1, cy: 1.1, r: 0.62, class: 'gold-weave' }, weave);
+    el('circle', { cx: 3.35, cy: 3.35, r: 0.62, class: 'gold-weave' }, weave);
     const glow = el('filter', { id: this.id('glow'), x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
     el('feGaussianBlur', { stdDeviation: 2.4, result: 'b' }, glow);
     const merge = el('feMerge', {}, glow);
@@ -265,42 +257,13 @@ export class BoardView {
     svg.style.setProperty("--m-depth", `${look.depth}px`);
     svg.style.setProperty("--m-shadow", String(look.shadow));
 
-    // The plate: a soft hexagonal tray under the board with a thin frame and corner pins,
-    // so the board sits on the table instead of floating.
-    const R = config.boardRadius;
-    const corners = [
-      { q: R, r: -R },
-      { q: R, r: 0 },
-      { q: 0, r: R },
-      { q: -R, r: R },
-      { q: -R, r: 0 },
-      { q: 0, r: -R },
-    ].map((c) => {
-      const { x, y } = centerOf(coordKey(c));
-      const d = Math.hypot(x, y) || 1;
-      return { x, y, d };
-    });
-    const ring = (grow: number) => corners.map(({ x, y, d }) => `${(x * (1 + grow / d)).toFixed(1)},${(y * (1 + grow / d)).toFixed(1)}`).join(' ');
-    const plate = el('g', { class: 'l-plate' }, svg);
-    // overhaul item 12: the board as a place: a ground plate lit from the top left (one light
-    // for the whole game), a lighter edge where the light catches it, a darker far side
-    const sun = el('linearGradient', { id: this.id('sun'), x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
-    el('stop', { offset: 0, class: 'sun-hi' }, sun);
-    el('stop', { offset: 0.5, class: 'sun-mid' }, sun);
-    el('stop', { offset: 1, class: 'sun-lo' }, sun);
-    const edge = el('linearGradient', { id: this.id('sun-edge'), x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
-    el('stop', { offset: 0, class: 'edge-hi' }, edge);
-    el('stop', { offset: 0.55, class: 'edge-lo' }, edge);
-    el('polygon', { points: ring(S * 1.35), class: 'plate' }, plate);
-    el('polygon', { points: ring(S * 1.35), class: 'plate-sun', fill: this.url('sun') }, plate);
-    el('polygon', { points: ring(S * 1.35 - 1.5), class: 'plate-edge', stroke: this.url('sun-edge') }, plate);
-    el('polygon', { points: ring(S * 1.35), class: 'plate-rim' }, plate);
+    // Step 3 item 5: no outer frame, rim or corner pins; the board is its tiles (the empty
+    // hexes keep their faint soil and a slightly lighter edge, so the grid reads in sunlight)
     if (look.textures) {
       // soil grain in the empty hexes: a few specks, the same everywhere (one pattern)
       const soil = el('pattern', { id: this.id('soil'), width: 11, height: 11, patternUnits: 'userSpaceOnUse' }, defs);
       for (const [cx, cy, r] of [[2, 3, 0.8], [7.5, 1.5, 0.55], [5, 8, 0.7], [9.5, 6.5, 0.45], [1, 9.5, 0.5]] as const) el('circle', { cx, cy, r, class: 'soil-speck' }, soil);
     }
-    for (const { x, y, d } of corners) el('circle', { cx: x * (1 + (S * 1.35) / d), cy: y * (1 + (S * 1.35) / d), r: 2.2, class: 'plate-pin' }, plate);
 
     this.layers = {
       base: el('g', { class: 'l-base' }, svg),
@@ -308,6 +271,7 @@ export class BoardView {
       tiles: el('g', { class: 'l-tiles' }, svg),
       glow: el('g', { class: 'l-glow' }, svg),
       veins: el('g', { class: 'l-veins' }, svg),
+      homes: el('g', { class: 'l-homes' }, svg),
       amb: el('g', { class: 'l-amb', 'aria-hidden': 'true' }, svg),
       marks: el('g', { class: 'l-marks' }, svg),
       dim: el('g', { class: 'l-dim', 'aria-hidden': 'true' }, svg),
@@ -331,6 +295,23 @@ export class BoardView {
       }
       this.bindHex(g, key);
     }
+    // Step 4: the homes as landmarks (my tree, the opponent's volcano), drawn once, kept across renders
+    const colors = materialsOf(paletteId).colors;
+    this.homeEls = ([0, 1] as const).map((p) => {
+      const key = coordKey(rootCoord(p, config.rootStyle, config.boardRadius));
+      return drawLandmark(this.layers.homes, p === 0 ? 'tree' : 'volcano', key, centerOf(key), getOrient(), colors, look);
+    });
+  }
+
+  /** Step 4: the two home landmarks (index = player), for their states and reactions. */
+  homeEls: SVGGElement[] = [];
+
+  /** Sets each home's state (danger ring, worried, tapped, strangled) from public information. */
+  setHomes(states: Parameters<typeof setLandmarkState>[1][]) {
+    states.forEach((s, p) => {
+      const g = this.homeEls[p];
+      if (g) setLandmarkState(g, s);
+    });
   }
 
   /** What a material drawer needs for one hex. */

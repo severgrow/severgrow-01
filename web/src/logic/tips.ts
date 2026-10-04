@@ -12,9 +12,9 @@ export const TIPS: Record<TipId, { title: string; text: string }> = {
     text: `A higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your sprout for the turn, and it doesn’t stop a cut or a Fruit card.`,
   },
   draw: {
-    // shown the first time drawing a line or clump starts (polish pass 3), with a small animated finger
-    title: 'Draw it on the board',
-    text: 'Drag over hexes to draw your clump or line. On a computer, click to start and click to finish.',
+    // shown the first time painting a Bloom starts, with a small animated finger painting a cluster
+    title: 'Paint your bloom',
+    text: 'Paint your bloom: drag over touching hexes, or tap them one by one. On a computer, click to start and click to finish.',
   },
   fruit: {
     title: FRUIT.cards,

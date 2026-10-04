@@ -2,17 +2,16 @@
 // final score was made.
 import type { BoardCtx, Player, View } from '../../../src/engine/index.js';
 
-/** "3 turns left", "Last turn!", "Only 4 cards left"... or null when the end is far away. */
-export const endgameNote = (v: View): string | null => {
+/**
+ * Step 3 item 9: how many of my turns are left (this one included), from public information:
+ * whichever clock ends the game first, the turn limit or the deck (each round takes at least
+ * one card from the deck per player, so the deck lasts at most half its cards in my turns).
+ */
+export const turnsLeft = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>): number => {
   const max = v.config.maxTurnsPerPlayer;
-  if (max > 0) {
-    const left = max - Math.ceil(v.turnNumber / 2) + 1; // this turn included
-    if (left <= 1) return 'Last turn!';
-    if (left <= 3) return `${left} turns left`;
-  }
-  if (v.deckCount === 0) return 'Deck empty: last turn!';
-  if (v.deckCount <= 6) return `Only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left`;
-  return null;
+  const byLimit = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : Infinity;
+  const byDeck = Math.max(1, Math.ceil(v.deckCount / 2));
+  return Math.max(1, Math.min(byLimit, byDeck));
 };
 
 /** Overhaul item 15: how near the end is (at most this many of my turns are left, by the turn limit). */

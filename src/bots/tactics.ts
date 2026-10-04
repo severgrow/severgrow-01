@@ -9,6 +9,7 @@
 // 4 also counts the unseen Fruit cards (9). A Fruit card is never an ordinary throw.
 import { allNeighbors, coordKey, createCards, hexDistance, isFruitCard, legalActions, parseKey, rootCoord } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
+import { lookBlooms } from './bloomLook.js';
 import { cutLoss, simulate } from './evaluate.js';
 import type { Simulation } from './evaluate.js';
 
@@ -157,7 +158,9 @@ const opensStrangle = (v: View, a: Extract<Action, { t: 'PlayFruit' }>, sim: Sim
   const open = ring.filter((k) => v.terrain[k] !== 'rock' && sim.board[k]?.owner !== v.player);
   if (open.length !== 1) return false;
   const after: View = { ...v, board: sim.board, hand: v.hand.filter((c) => c.id !== a.card), lastResolution: null };
-  return legalActions(after).some((m) => (m.t === 'Sprout' || m.t === 'MeldRun' || m.t === 'MeldSet') && !!simulate(after, m)?.wins);
+  const sprouts = legalActions(after).filter((m) => m.t === 'Sprout');
+  const blooms = lookBlooms(after).filter((l) => l.strangles).map((l) => l.action);
+  return [...sprouts, ...blooms].some((m) => !!simulate(after, m)?.wins);
 };
 
 /**

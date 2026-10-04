@@ -67,7 +67,7 @@ export const playFruitGame = (seed: number, aFirst: boolean, config: Partial<Rul
       const legal = legalActions(v);
       const g = rec.grow[bucketOf(ownTurn(s.turnNumber))]!;
       g.steps++;
-      if (!legal.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet')) g.noCombo++;
+      if (!legal.some((a) => a.t === 'Bloom')) g.noCombo++;
       if (legal.every((a) => a.t === 'EndAct')) g.nothing++;
     }
     if (s.phase === 'DRAW') diffByTurn[s.turnNumber] = score(s, 0) - score(s, 1);

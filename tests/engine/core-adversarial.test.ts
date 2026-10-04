@@ -39,8 +39,7 @@ describe('v0.4 adversarial', () => {
     const s = at({ '-1,1': [1, 7] }, [c(0, 5), c(0, 6), c(0, 7), c(1, 7), c(2, 7), c(3, 7)]);
     const touching = legalActions(viewFor(s, 0)).filter((a) =>
       (a.t === 'Sprout' && a.coord.q === -1 && a.coord.r === 1) ||
-      (a.t === 'MeldSet' && a.hexes.some((h) => h.q === -1 && h.r === 1)) ||
-      (a.t === 'MeldRun' && a.start.q === -1 && a.start.r === 1),
+      (a.t === 'Bloom' && a.hexes.some((h) => h.q === -1 && h.r === 1)),
     );
     expect(touching).toEqual([]);
     expect(() => apply(s, { t: 'Sprout', card: s.hands[0][2]!.id, coord: { q: -1, r: 1 } })).toThrow(/NOT_STRONGER/);

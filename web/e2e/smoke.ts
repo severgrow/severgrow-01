@@ -3,6 +3,7 @@
 //   npx tsx web/e2e/smoke.ts --shots=docs/screens   also saves screenshots
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome,
 // or one installed with `npx playwright-core install chromium`).
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -11,7 +12,7 @@ import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
 import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
-import { drawMeld } from './drawing.js';
+import { chooseBloom, clickKind, drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
@@ -60,9 +61,9 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v7', saved as string);
     },
-    [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? JSON.stringify({ state: save, coach: doneCoach }) : null],
+    [JSON.stringify({ palette: theme, sound: false, ...settings }), save ? positionSave({ state: save, coach: doneCoach }) : null],
   );
   await page.goto(BASE + query);
   await page.waitForTimeout(250);
@@ -78,7 +79,7 @@ const newGame = async (page: Page, level = 7) => {
 /** Picks the demo move's card: a line or clump needs its button first (a card tap alone picks Sprout). */
 type Pick = { action: CutDemo['action']; card: number; hex: string; option: number };
 const pickCard = async (page: Page, d: Pick) => {
-  if (d.action.t === 'MeldRun' || d.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(d.action)}"]`);
+  if (d.action.t === 'Bloom') await chooseBloom(page, d.action);
   await page.click(`#hand [data-card="${d.card}"]`);
 };
 
@@ -87,7 +88,7 @@ const startMove = async (page: Page, d: Pick) => {
   const before = (await getState(page))!.history?.length ?? 0;
   await pickCard(page, d);
   if (((await getState(page))!.history?.length ?? 0) > before) return; // the card's only spot: played at once
-  const meld = d.action.t === 'MeldRun' || d.action.t === 'MeldSet';
+  const meld = d.action.t === 'Bloom';
   if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, d.action);
   else if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
   if (((await getState(page))!.history?.length ?? 0) > before) return; // a drawn move with Confirm moves off: placed at once
@@ -150,7 +151,7 @@ const playTurn = async (page: Page) => {
       const t = (await page.getAttribute('#guide-arrow', 'data-target'))!;
       if (t.startsWith('card:')) await page.click(`#hand [data-card="${t.slice(5)}"]`);
       else if (t.startsWith('hex:')) await tapHex(page, t.slice(4));
-      else if (t.startsWith('kind:')) await page.click(`#moves [data-kind="${t.slice(5)}"]`);
+      else if (t.startsWith('kind:')) await clickKind(page, `#moves [data-kind="${t.slice(5)}"]`);
       else await page.click({ confirm: '#confirm-play', deck: '#deck', discard: '#discard', end: '#moves .end', cancel: '#confirm-cancel', button: '#moves .btn.primary' }[t]!);
       if (((await getState(page))!.history?.length ?? 0) > before) break;
     }
@@ -258,7 +259,7 @@ for (const theme of THEMES) {
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
     const histBefore = ((await getState(page))!.history?.length ?? 0);
     await pickCard(page, demo);
-    const meld = demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet';
+    const meld = demo.action.t === 'Bloom';
     if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, demo.action);
     // A clear choice plays at once (no Confirm); a double tap on the spot must still play once.
     if (!meld && ((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {
@@ -563,10 +564,14 @@ const bannedWords = (page: Page, re: string, allow: readonly string[]): Promise<
   })()`);
 const botWords = (page: Page) => bannedWords(page, '\\bbots?\\b', BOT_ALLOWLIST);
 const seedWords = (page: Page) => bannedWords(page, SEED_RE, []);
+// v0.7: the old combo words and the generic "root" never show either (no allowlist)
+const oldWords = (page: Page) => bannedWords(page, '\\b(?:clumps?|hyphae?|grow a line|line of|roots?)\\b', []);
 {
   const found: string[] = [];
   const seeds: string[] = [];
+  const olds: string[] = [];
   const scan = async (page: Page, where: string) => {
+    olds.push(...(await oldWords(page)).map((f) => `${where} · ${f}`));
     found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));
     seeds.push(...(await seedWords(page)).map((f) => `${where} · ${f}`));
   };
@@ -646,6 +651,7 @@ const seedWords = (page: Page) => bannedWords(page, SEED_RE, []);
   await endPage.close();
   check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
   check('the words "seed" and "plant" never show: text, aria-labels, alt and title text, every state', seeds.length === 0, seeds.slice(0, 3).join(' | '));
+  check('"clump", "hypha", "grow a line", "line of" and "root" never show: text, aria-labels, alt and title text, every state', olds.length === 0, olds.slice(0, 3).join(' | '));
   // the allowlisted ?debug=1 page shows the game's random number, and the normal page does not
   const dbg = await openPage('soil', 'phone', { speed: 'skip' }, undefined, '?seed=4242&debug=1');
   await idle(dbg.page).catch(() => {});

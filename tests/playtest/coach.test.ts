@@ -4,8 +4,8 @@ import type { Action, Card, Player, RulesConfig, State, View } from '../../src/e
 import { COACH_STEPS, TIP_ORDER, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { LEGACY_V03 } from '../legacy.js';
-import { createGreedyBot, rankActions } from '../../src/bots/GreedyBot.js';
-import { fixture } from '../helpers.js';
+import { createGreedyBot, rankActions, scoreBoardMove } from '../../src/bots/GreedyBot.js';
+import { chain, fixture } from '../helpers.js';
 
 const key = (a: Action) => JSON.stringify(a);
 const card = (id: number, suit: 0 | 1 | 2 | 3, rank: number): Card => ({ id, suit, rank });
@@ -92,7 +92,7 @@ describe('coach: suggestions', () => {
       expect(adv.why.length).toBeGreaterThanOrEqual(1);
       expect(adv.why.length).toBeLessThanOrEqual(2);
       for (const w of adv.why) expect(w.length).toBeLessThan(160);
-      if (adv.action.t === 'MeldRun' || adv.action.t === 'MeldSet') {
+      if (adv.action.t === 'Bloom') {
         expect(adv.cards).toEqual(adv.action.cards);
         expect(adv.hexes.length).toBe(adv.action.cards.length);
       }
@@ -225,43 +225,44 @@ const actState = (tiles: Record<string, [Player, number]>, hand: Card[]): View =
 };
 const sixes = [card(11, 1, 6), card(12, 2, 6), card(13, 3, 6)];
 const run345 = [card(1, 0, 3), card(2, 0, 4), card(3, 0, 5)];
-const factsOf = (v: View, a: Action) => rankActions(v, { allowKnock: false }).find((r) => key(r.action) === key(a))!.facts;
+// (a move off the bot's Bloom shortlist is scored on its own)
+const factsOf = (v: View, a: Action) => (rankActions(v, { allowKnock: false }).find((r) => key(r.action) === key(a)) ?? scoreBoardMove(v, a as never)).facts;
 
 describe('coach: adversarial safety', () => {
-  it('ADV-1: does not hang a new line off a weak tile near the bot when a safe +3 exists', () => {
-    // Weak strength-1 tile at (-1,1). A Hypha from (0,0) would hang 4 tiles off it.
+  it('ADV-1: does not hang a new bloom off a weak tile near the bot when a safe +3 exists', () => {
+    // Weak strength-1 tile at (-1,1). A run bloom from (0,0) eastward would hang 4 tiles off it.
     const v = actState({ '-1,1': [0, 1] }, [...run345, ...sixes, card(20, 3, 9)]);
-    const risky: Action = { t: 'MeldRun', cards: [1, 2, 3], start: { q: 0, r: 0 }, dir: 0 };
+    const risky: Action = { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: 0, r: 0 }, 0, 3) };
     const rf = factsOf(v, risky);
-    expect(rf.kind === 'meld' && rf.move.exposureAfter).toBe(4);
+    expect(rf.kind === 'bloom' && rf.move.exposureAfter).toBe(4);
     const adv = coachAdvice(input(v))!;
     expect(key(adv.action)).not.toBe(key(risky));
     const f = factsOf(v, adv.action);
-    expect(f.kind === 'meld' ? f.move.exposureAfter : 0).toBeLessThan(4);
+    expect(f.kind === 'bloom' ? f.move.exposureAfter : 0).toBeLessThan(4);
   });
 
   it('ADV-2: does not take a bot tile if that leaves 4 tiles on a thin link, when a safe +3 exists', () => {
     // Bot: (0,0) strength 2 linked to its root through (1,-1) strength 7.
     const v = actState({ '-1,1': [0, 1], '0,0': [1, 2], '1,-1': [1, 7] }, [...run345, ...sixes, card(20, 3, 9)]);
-    const greedyTake: Action = { t: 'MeldRun', cards: [1, 2, 3], start: { q: 0, r: 0 }, dir: 0 };
+    const greedyTake: Action = { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: 0, r: 0 }, 0, 3) };
     const rf = factsOf(v, greedyTake);
-    expect(rf.kind === 'meld' && rf.move.taken).toBe(1);
-    expect(rf.kind === 'meld' && rf.move.exposureAfter).toBeGreaterThanOrEqual(4);
+    expect(rf.kind === 'bloom' && rf.move.taken).toBe(1);
+    expect(rf.kind === 'bloom' && rf.move.exposureAfter).toBeGreaterThanOrEqual(4);
     const adv = coachAdvice(input(v))!;
     const f = factsOf(v, adv.action);
-    expect(f.kind === 'meld' ? f.move.exposureAfter : 0).toBeLessThan(4);
+    expect(f.kind === 'bloom' ? f.move.exposureAfter : 0).toBeLessThan(4);
   });
 
   it('ADV-3: prefers a move that protects an existing thin link over an equal move that does not', () => {
     // Chain root-(-1,1)s1-(0,0)-(1,0)-(2,0): cutting (-1,1) loses 4 tiles.
     const v = actState({ '-1,1': [0, 1], '0,0': [0, 5], '1,0': [0, 5], '2,0': [0, 5] }, [...run345, ...sixes, card(20, 3, 9)]);
-    const protect: Action = { t: 'MeldSet', cards: [11, 12, 13], hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 1, r: 1 }] };
+    const protect: Action = { t: 'Bloom', cards: [11, 12, 13], hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 1, r: 1 }] };
     const pf = factsOf(v, protect);
-    expect(pf.kind === 'meld' && pf.move.exposureBefore).toBe(4);
-    expect(pf.kind === 'meld' && pf.move.exposureAfter).toBeLessThan(4);
+    expect(pf.kind === 'bloom' && pf.move.exposureBefore).toBe(4);
+    expect(pf.kind === 'bloom' && pf.move.exposureAfter).toBeLessThan(4);
     const adv = coachAdvice(input(v))!;
     const f = factsOf(v, adv.action);
-    expect(f.kind === 'meld' ? f.move.exposureAfter : 4).toBeLessThan(4);
+    expect(f.kind === 'bloom' ? f.move.exposureAfter : 4).toBeLessThan(4);
     expect(adv.why.join(' ')).toMatch(/weak spot/i);
   });
 });

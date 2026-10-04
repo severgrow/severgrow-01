@@ -9,8 +9,7 @@ export type ConfigErrorCode =
   | 'HAND_SIZE_TOO_SMALL'
   | 'DECK_TOO_SMALL'
   | 'ROOT_OFF_BOARD'
-  | 'TERRAIN_INFEASIBLE'
-  | 'NOT_IMPLEMENTED';
+  | 'TERRAIN_INFEASIBLE';
 
 /** Thrown by `newGame` / `resolveConfig` for invalid configuration or seed. */
 export class ConfigError extends Error {
@@ -26,7 +25,6 @@ export type IllegalActionCode =
   // malformed input
   | 'MALFORMED_ACTION'
   | 'INVALID_COORD'
-  | 'INVALID_DIR'
   // cards
   | 'CARD_NOT_IN_HAND'
   | 'DUPLICATE_CARD'
@@ -36,6 +34,7 @@ export type IllegalActionCode =
   | 'SET_WRONG_SIZE'
   | 'SET_MIXED_RANKS'
   | 'SET_DUPLICATE_SUIT'
+  | 'BLOOM_WRONG_SIZE'
   // placement
   | 'OFF_BOARD'
   | 'ROCK'

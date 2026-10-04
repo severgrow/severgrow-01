@@ -1,7 +1,7 @@
 // The dock's hint line (UI overhaul item 13): one short line saying what to do next, with a
 // tiny arrow toward where to do it (up: the board; down: the hand and the piles). It also says
 // why a move is not available. Pure: the page passes a small summary of the moment.
-import { FRUIT, OPP } from '../../../src/strings.js';
+import { BLOOM, FRUIT, OPP } from '../../../src/strings.js';
 import type { MoveWords } from '../../../src/strings.js';
 
 /** The longest hint allowed: it must fit one line on a 360px-wide phone. */
@@ -21,7 +21,7 @@ export type HintCtx = {
   /** v0.6: a Fruit card is picked (`firstTime`: the "any strength" note has not been shown yet) */
   fruit: null | { firstTime: boolean; reason?: string | null };
   pending: null | 'strengthen' | 'drawn' | 'board';
-  drawing: null | { kind: 'line' | 'clump'; n: number; fine: boolean };
+  drawing: null | { n: number; fine: boolean };
   /** a card is picked: what it can do (empty: nothing) and whether it is a single-card move */
   card: null | { single: boolean; grow: boolean; replace: boolean; strengthen: boolean };
   kindPicked: boolean;
@@ -29,8 +29,10 @@ export type HintCtx = {
   handEmpty: boolean;
   /** a single card can still grow a tile this turn */
   canSprout: boolean;
-  /** a combo (line or clump) can still be played */
+  /** a Bloom can still be played */
   canCombo: boolean;
+  /** v0.7: I hold cards that can bloom, but no Bloom fits on the board (the smallest group's size) */
+  bloomBlocked?: number | null;
   throwEndsTurn: boolean;
 };
 
@@ -52,8 +54,8 @@ export const hintFor = (c: HintCtx): Hint => {
       if (c.pending === 'drawn') return h('Confirm, or draw it again', 'down');
       if (c.pending) return h('Confirm, or tap the spot again', 'down');
       if (c.drawing) {
-        if (c.drawing.fine) return h(`Click where the ${c.drawing.kind} starts, then ends`, 'up');
-        return h(c.drawing.kind === 'line' ? 'Drag across the board to draw your line' : `Drag over ${c.drawing.n} hexes for your clump`, 'up');
+        if (c.drawing.fine) return h("Click to start your bloom, click to finish", "up");
+        return h(`Paint ${c.drawing.n} touching hexes for your bloom`, 'up');
       }
       if (c.card) {
         const { grow, replace, strengthen } = c.card;
@@ -64,8 +66,9 @@ export const hintFor = (c: HintCtx): Hint => {
       if (c.kindPicked) return h('Tap a glowing hex', 'up');
       if (c.hexWithNoMove) return h('Nothing grows there right now');
       if (c.handEmpty) return h('No cards left. Tap “End turn”', 'down');
+      if (!c.canCombo && c.bloomBlocked) return h(BLOOM.tooFew(c.bloomBlocked));
       if (c.canSprout) return h(c.words.tapHint, 'down');
-      if (c.canCombo) return h('Play a line or clump, or “Throw a card”', 'down');
+      if (c.canCombo) return h('Bloom, or “Throw a card”', 'down');
       return h('Nothing can grow. Tap “Throw a card”', 'down');
     }
     case 'DISCARD':

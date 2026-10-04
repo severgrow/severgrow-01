@@ -144,11 +144,11 @@ describe('playing a Fruit card (PlayFruit)', () => {
     const s = position({ tiles: arms, hand: [fruitCard(72), fruitCard(73), fruitCard(74), num(1, 0, 4), num(2, 0, 5)] });
     expect(codeOf(() => apply(s, { t: 'Sprout', card: 72, coord: at('-1,0') }))).toBe('NOT_A_NUMBER_CARD');
     expect(codeOf(() => apply(s, { t: 'Sprout', card: 72, coord: at('0,0') }))).toBe('NOT_A_NUMBER_CARD');
-    expect(codeOf(() => apply(s, { t: 'MeldSet', cards: [72, 73, 74], hexes: [at('-1,0'), at('0,1'), at('-2,1')] }))).toBe('NOT_A_NUMBER_CARD');
-    expect(codeOf(() => apply(s, { t: 'MeldRun', cards: [1, 2, 72], start: at('-1,0'), dir: 0 }))).toBe('NOT_A_NUMBER_CARD');
+    expect(codeOf(() => apply(s, { t: 'Bloom', cards: [72, 73, 74], hexes: [at('-1,0'), at('0,1'), at('-2,1')] }))).toBe('NOT_A_NUMBER_CARD');
+    expect(codeOf(() => apply(s, { t: 'Bloom', cards: [1, 2, 72], hexes: [at('-1,0'), at('0,0'), at('1,0')] }))).toBe('NOT_A_NUMBER_CARD');
     for (const a of legalActions(viewFor(s, 0))) {
       if (a.t === 'Sprout') expect([72, 73, 74]).not.toContain(a.card);
-      if (a.t === 'MeldRun' || a.t === 'MeldSet') for (const c of a.cards) expect([72, 73, 74]).not.toContain(c);
+      if (a.t === 'Bloom') for (const c of a.cards) expect([72, 73, 74]).not.toContain(c);
     }
   });
 

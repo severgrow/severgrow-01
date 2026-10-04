@@ -7,10 +7,8 @@ const brief = (a: Action): string => {
   switch (a.t) {
     case 'Draw':
       return `Draw ${a.from}`;
-    case 'MeldRun':
-      return `MeldRun cards ${a.cards.join(',')} from ${a.start.q},${a.start.r} dir ${a.dir}`;
-    case 'MeldSet':
-      return `MeldSet cards ${a.cards.join(',')} on ${a.hexes.map((h) => `${h.q},${h.r}`).join(' ')}`;
+    case 'Bloom':
+      return `Bloom cards ${a.cards.join(',')} on ${a.hexes.map((h) => `${h.q},${h.r}`).join(' ')}`;
     case 'PlayFruit':
       return `PlayFruit card ${a.card} on ${a.target.q},${a.target.r}`;
     case 'Discard':

@@ -1,3 +1,59 @@
+# Decisions (Bloom, layout, homes, polish: v0.7)
+
+One line each: where the brief left room, what was chosen and why.
+
+- "Never a straight line" is read as "never has to be one": the brief also says "no shape restrictions beyond being connected", so a straight chain is one legal shape among many.
+- The action is a clean rename: `Bloom { cards, hexes }` replaces both old actions; the engine accepts the cards in any order (`hexes[i]` gets `cards[i]`); `legalActions` lists runs with the cards ascending.
+- `legalActions` stays exhaustive: a set once per hex set, a run once per legal assignment. The worst case measured (a four of a kind plus a 4-card run, a wide network) is about 6,200 Blooms, listed in about 25 ms, so no cap was needed; `bloomChoices` gives the compact form (group, cluster, assignments).
+- Five or more cards of a run: only runs of exactly 3 or 4 consecutive cards are listed (the brief's "any 3 or 4 consecutive cards").
+- Error codes: a wrong size is `BLOOM_WRONG_SIZE`; cards with two numbers and mixed suits are `RUN_MIXED_SUITS` (neither a set nor a run); the old set/run codes stay for the other cases and for the parked deadwood rule.
+- `bloomMustTouchNetwork: false` (engine only) simply skips the touching check; nothing in the page offers it.
+- Bots fully score a short list of Blooms after a quick look at every legal one (10 by default): the best quick scores, the clusters most joined to my network (they protect thin links) and the strongest takeovers, so one purpose never crowds out another.
+- Each card group is its own move kind; the moves row shows one button per family (a number for sets, a suit for runs) and size: a set keeps the card that fits the rest of the hand best, a run blooms its highest numbers; a picked card narrows it.
+- Painting: the first tap on an empty shape also shows the suggested Bloom through that hex (with Confirm); tapping on keeps painting one hex at a time, so every Bloom can still be made by taps alone.
+- The hint for a mouse says "Click to start your bloom, click to finish" (the longer wording did not fit one line on a 360px phone).
+- Home wording: the code keeps "root"; the player reads "home", and tile cards and captions say "Your tree" and "Opponent's volcano" (strings: HOME). The coach's glossary word is now "home".
+- The blocked-Bloom hint reads "Too few free hexes by your tiles to bloom 3" (it must fit one line); it shows when a held group has no legal Bloom and nothing is picked.
+- Word scans: the old combo words and "root"/"roots" are banned with no player-facing allowlist; the only exemption is the scanners themselves (web/tests/bloom-words.test.ts and the scan line in web/e2e/smoke.ts), which must name the banned words.
+- Board orientation: chosen by measuring both for the board zone (ties keep points left-right). Tile width is the distance between neighbouring tile centres. 390x844 and 430x932 turn the board (+14%, +15%); 360x640 keeps points left-right (+29% from the slimmer dock).
+- The turned board is a rendering mapping only (logic/orient.ts): centres, corners, the point-to-hex lookups and the tile-shape tests of the painted textures go through it, so text, landmarks, textures and the top-left light stay upright. Each orientation paints its own tile textures (in the background).
+- The board has no outer frame, rim or corner pins; its drawing area is the tiles plus 6 units of margin and half a tile of headroom at the top (for the home landmarks).
+- The dock is three fixed rows: a message row (the hint line, or the forecast bar while a move waits for Confirm), the piles (with the Fruit chip beside them) and the hand. The hint and the forecast share one row because the empty forecast row read as a dead band under the board.
+- Spare height above a width-limited board goes to the piles row and the message row first (up to 40pt each), so no gap around the board is over 16pt; the pile cards grow with it.
+- The corner tools: shield top-left, target top-right, replay bottom-left, and Skip (only during animations) bottom-right; their one-time tooltip replaces the old "names for the first 3 games".
+- Sort is an icon at the right end of the hand (32pt reserved); the smallest visible slice of a card in a full hand is 36pt (was 40) so a full hand of 8 still fits beside it at 360pt.
+- The pill's clock "X turns left" is the smaller of the turn limit and half the deck (each round takes at least one card per player); the old unused end-of-game note was deleted.
+- Gold hexes: a soft amber tint, a fine grain of tiny dots, a thin edge and the "2" badge (no stripes).
+- Pile cards reuse the hand's card component scaled to the piles row (1:1.42); in the Draw step they glow softly and lift 2pt instead of a thick outline.
+- Step 3: on tall phones the board is width-limited; spare height goes to the piles (up to +40pt) then the message row (up to +40pt), so no gap between zones exceeds 16pt.
+- Step 3: while Undo shows, the coach and first-time tips stop 120px short of the right edge and the Undo chip sits above them, so it is never covered (CI's slightly wider fonts showed the gap alone was not enough).
+- Step 4: my home is a small gnarled tree (round, soft shapes, a mint circle in its hollow); the opponent's is a faceted basalt volcano (angular, a red-orange diamond crater): shape alone tells them apart in greyscale.
+- Step 4: the volcano is drawn as tall as the tree (peak at the same rise) with a thin light rim, so it stays readable on its dark lava tile and at 40pt.
+- Step 4: the danger ring is drawn in the other side's colour on the blocked sides (red on my tree, mint on the volcano), with "N/6" under the tile; it never flashes.
+- Step 4: idle motion (sway, falling leaf, smoke, breathing crater, embers) runs only with motion on and Effects above Low; Material detail Low draws the landmarks flat (no highlights, flowers or basalt layers).
+- Step 4: the Strangle finish is pulse 380ms, hold 260ms, smother/wither 820ms, bloom/roar 480ms (1.94s at Normal), scaled down by speed; Reduce motion shows only the smother/wither (500ms).
+- Step 4: home sounds: tree tap = soft rustle and a warm note; volcano tap = low rumble with crackles; smothered = a breathy sigh; withered = a low grind. All go through the existing sound toggle.
+- Step 4: the strangled volcano keeps its ashen crater visible above the moss (the first draft hid it under a flat green triangle).
+- Step 5: the one-tap suggestion ranks Blooms through the tapped hex by tiles gained, then opponent tiles replaced or cut, then the fewest of my tiles left open to a cut, then engine order (deterministic).
+- Step 5: the first painting tip loops a finger over a bent cluster of three hexes (not a straight strip), because a Bloom can be any connected shape.
+- Step 6: Bloom bands: levels 1-3 skip a Bloom 45% / 35% / 25% of the time they would play one, otherwise pick a random legal Bloom (seeded); 4-6 the best quick look; 7-9 the full short-list score; 8-9 hold a plain 3-card Bloom when the chance of a 4 over the next (at most 3) draws is at least 20% and the best other move costs at most 2.5 points.
+- Step 7: the autosave is seed + action list + rules version (key severgrow.save.v7); a save from other rules or with an action the rules refuse starts fresh. A game started from a set position (browser tests, the lab) also keeps that position as `base`; ordinary games never write one.
+- Step 7: two audio buses (effects, music) with 0-100 sliders on a squared curve (defaults 80 and 60); the Sound and Music toggles still switch them off; a limiter (-6 dB, 20:1, 3 ms) on the master.
+- Step 7: the in-game menu is the pause menu ("Paused"): while it (or a sheet opened from it) is open, the next animation step and the opponent's moves wait and CSS animations on the board hold still.
+- Step 7: the first-run welcome card shows the three turn steps with icons (Draw, Grow, Throw), the goal, and the tutorial suggestion; its words live in src/strings.ts (WELCOME).
+- Step 7: keyboard: D draws from the deck, T takes the throw pile, U undoes (only when Undo shows), next to the existing 1-9, Tab, arrows, Enter, Backspace and Esc.
+- Step 7: motion tokens tap 80 / quick 160 / move 280 / moment 600 ms, ease-out and ease-spring, kept equal in CSS and code by a test.
+- Step 7: the settings groups stay as they were (Look; Sound and feel; Animations; Playing); the volume sliders join Sound and feel.
+- Step 8: the ladder runs 1,000 games per pairing, as asked (swapped starts, 4 processes).
+- Self-critique (main screen, round 1): with two or more ways to bloom, the Bloom buttons ran off the right edge of the dock. Now one "Bloom" button ("N ways") opens a list of choices upward over the message row; each choice shows its card numbers in suit colours, so "Bloom 4 tiles" from 3-4-5-6 and from four 6s are told apart. A single way keeps its own button.
+- Self-critique: the "Fruit cards unseen: N" chip is now the Fruit card icon and the number (the full words stay as its spoken label and tooltip), freeing room in the dock row.
+- Step 9: rotating the phone mid-paint keeps the half-painted shape (nothing is placed); painting carries on afterwards.
+- Step 9: the first-tap time is measured with a cold cache on a slow connection (1.6 Mbit/s, 150 ms) and the CPU 4x slower.
+- Step 9 (performance): the background grass and lava painting now runs only in idle time, after the first paint; before, its back-to-back slices delayed the menu's first paint (first tap at 4x CPU: 6.4 s -> 2.1 s).
+- Step 10: the installable app (manifest, icons, offline service worker) already existed and is kept; the share preview is a 1200x630 image drawn in code (web/e2e/og-image.ts) and committed as web/public/og.png, with og/twitter meta tags.
+- Step 10: local playtest notes appear only on ?debug=1 (turn times, Undo count, empty turns, the longest pause and where it ended), kept in this browser (severgrow.playnotes.v1), with "Export as JSON"; nothing is sent anywhere.
+- Step 10: set dressing (decorative props outside the board) is not done: cut as the lowest-value item.
+
 # Decisions (Seed removal and Fruit cards, v0.6)
 
 One line each: where the brief left room, what was chosen and why.

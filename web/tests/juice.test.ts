@@ -4,9 +4,9 @@ import { buildSteps } from '../src/logic/anim.js';
 import { ParticleBudget, effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from '../src/logic/juice.js';
 import { playGame } from './ui-helpers.js';
 
-const grow = (n: number, extra: Partial<{ replaced: number; player: 0 | 1; style: 'line' | 'bloom' | 'sprout' }> = {}): Step => ({
+const grow = (n: number, extra: Partial<{ replaced: number; player: 0 | 1; style: 'bloom' | 'sprout' }> = {}): Step => ({
   k: 'grow',
-  style: extra.style ?? (n === 1 ? 'sprout' : 'line'),
+  style: extra.style ?? (n === 1 ? 'sprout' : 'bloom'),
   player: extra.player ?? 0,
   tiles: Array.from({ length: n }, (_, i) => ({ key: `${i},0`, strength: 3, replaced: i < (extra.replaced ?? 0) })),
 });

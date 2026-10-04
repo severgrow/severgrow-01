@@ -25,7 +25,8 @@ export type RulesConfig = {
   rotThreshold: number;
   rotStep: number;
   forbidRedundantDiscard: boolean;
-  allowHyphaOneBend: boolean;
+  /** v0.7: a Bloom must touch my network (my root counts), judged before the move. */
+  bloomMustTouchNetwork: boolean;
   rootsScore: boolean;
   /** v0.4: cards run 1..maxRank (5-9). */
   maxRank: number;
@@ -78,6 +79,8 @@ export type ResolutionSummary = {
   overgrown: Coord[];
   rotted: Coord[];
   severed: { player: Player; coords: Coord[] }[];
+  /** v0.7: a Bloom: cards in ascending order, hexes[i] got cards[i]. */
+  bloom?: { cards: number[]; hexes: Coord[] };
   /** v0.6: a Fruit card removed this tile (its strength before). */
   fruit?: { card: number; target: Coord; strength: number };
   strangled?: Player;
@@ -89,8 +92,8 @@ export type ResolutionSummary = {
 
 export type Action =
   | { t: 'Draw'; from: 'deck' | 'discard' }
-  | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
-  | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
+  /** v0.7 Bloom, the only combo: hexes[i] receives cards[i] (a set or a run of 3-4 cards). */
+  | { t: 'Bloom'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
   | { t: 'PlayFruit'; card: number; target: Coord }
   | { t: 'EndAct' }
@@ -101,7 +104,7 @@ export type Action =
 
 export type Event =
   | { t: 'Draw'; player: Player; from: 'deck' | 'discard'; card?: number }
-  | { t: 'MeldRun' | 'MeldSet'; player: Player; cards: number[]; hexes: Coord[] }
+  | { t: 'Bloom'; player: Player; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; player: Player; card: number; coord: Coord }
   | { t: 'Strengthen'; player: Player; card: number; coord: Coord; oldStrength: number; newStrength: number }
   | {

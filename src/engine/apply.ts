@@ -6,7 +6,7 @@ import { isFruitCard } from './cards.js';
 import { planFruitCard } from './fruit.js';
 import { eventsOf } from './events.js';
 import { afterDiscard, emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
-import { applyPlacement, assertCoord, planRun, planSet, planSprout } from './placement.js';
+import { applyPlacement, assertCoord, planBloom, planSprout } from './placement.js';
 import type { Placement } from './placement.js';
 import { knockResult } from './result.js';
 import { planRot, removeTiles, rotCount } from './rot.js';
@@ -56,12 +56,14 @@ const draw = (s: State, from: 'deck' | 'discard'): State => {
   };
 };
 
-const meld = (s: State, placement: Placement): State => {
+/** v0.7 Bloom: the cards leave the hand, one tile per card, then cut and Strangle checks. */
+const bloom = (s: State, placement: Placement): State => {
   const p = s.turnPlayer;
   const used = new Set(placement.cards.map((c) => c.id));
   const hand = s.hands[p].filter((c) => !used.has(c.id));
   const out = applyPlacement(s.board, placement);
-  const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord) };
+  const bloomed = { cards: placement.cards.map((c) => c.id), hexes: placement.tiles.map((t) => ({ ...t.coord })) };
+  const res = { ...emptyResolution(), placed: out.placed, overgrown: out.overgrown.map((o) => o.coord), bloom: bloomed };
   return severAndStrangle({ ...s, board: out.board, hands: setHand(s, p, hand) }, p, res);
 };
 
@@ -185,10 +187,8 @@ const applyRules = (state: State, action: Action): State => {
   switch (a.t) {
     case 'Draw':
       return draw(state, a.from);
-    case 'MeldRun':
-      return meld(state, planRun(state, p, state.hands[p], a.cards, a.start, a.dir));
-    case 'MeldSet':
-      return meld(state, planSet(state, p, state.hands[p], a.cards, a.hexes));
+    case 'Bloom':
+      return bloom(state, planBloom(state, p, state.hands[p], a.cards, a.hexes));
     case 'PlayFruit':
       return playFruit(state, a);
     case 'Sprout':

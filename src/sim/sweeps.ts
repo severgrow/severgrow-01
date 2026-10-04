@@ -23,11 +23,6 @@ export const SWEEPS: Sweep[] = [
   { name: 'knockDeadwood', variants: grid([10, 9, 8, 7], (x) => `${x}`, (knockDeadwood) => ({ knockDeadwood })) },
   { name: 'knockGivesFinalTurn', variants: grid([true, false], (x) => (x ? 'on' : 'off'), (knockGivesFinalTurn) => ({ knockGivesFinalTurn })) },
   { name: 'copiesPerCard', variants: grid([1, 2], (x) => `${x}`, (copiesPerCard) => ({ copiesPerCard })) },
-  {
-    name: 'allowHyphaOneBend',
-    variants: [{ label: 'on', config: { allowHyphaOneBend: true } }],
-    skipped: 'not implemented (spec 8.2 defers bend to Milestone C; the engine rejects it)',
-  },
   { name: 'fruitCardCount', variants: grid([0, 2, 4, 6], (x) => `${x}`, (fruitCardCount) => ({ fruitCardCount })) },
 ];
 

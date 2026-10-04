@@ -1,5 +1,6 @@
 // Screens for a design review: real mid-game positions (bots play the first turns), phone size.
 //   npx tsx web/e2e/review-shots.ts --dir=<folder>
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
@@ -29,9 +30,9 @@ for (const [name, seed, turn] of [['mid', 31, 11], ['late', 44, 17]] as const) {
   await page.addInitScript(([st]) => {
     localStorage.clear();
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip', level: 8 }));
-    localStorage.setItem('severgrow.save.v6', st as string);
+    localStorage.setItem('severgrow.save.v7', st as string);
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
-  }, [JSON.stringify({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
+  }, [positionSave({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
   await page.goto('http://localhost:4197/');
   await page.click('#menu-continue');
   await page.waitForTimeout(1500);

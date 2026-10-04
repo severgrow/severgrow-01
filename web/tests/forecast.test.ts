@@ -20,7 +20,7 @@ describe('the forecast matches the engine', () => {
         const opp: Player = me === 0 ? 1 : 0;
         const v = viewFor(after, me);
         const before = JSON.stringify(v);
-        for (const a of legalActions(v).filter((x) => x.t === 'MeldRun' || x.t === 'MeldSet' || x.t === 'Sprout' || x.t === 'PlayFruit').slice(0, 12)) {
+        for (const a of legalActions(v).filter((x) => x.t === 'Bloom' || x.t === 'Sprout' || x.t === 'PlayFruit').slice(0, 12)) {
           const f = forecastMove(v, a)!;
           const real = apply(after, a);
           const mineBefore = new Set(tilesOf(after, me));

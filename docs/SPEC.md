@@ -1,4 +1,4 @@
-# SEVERGROW: Engine Spec v0.6 (one game)
+# SEVERGROW: Engine Spec v0.7 (one game)
 
 > **Grow a living network. Keep it connected. Cut theirs.**
 
@@ -11,6 +11,25 @@ default (see the appendix).
 ---
 
 ## Changelog
+
+**v0.7: Bloom is the only combo** (rules version `v0.7-bloom`, bot version `bots-v0.9`)
+- **One combo, Bloom.** It replaces both old combos (the straight line from a run and the clump
+  from a set). The card groups are unchanged: a set (3 or 4 cards of one number, different suits)
+  or a run (3 or 4 cards of one suit, numbers in a row, no wraparound). Holding more (four of a
+  kind, a run of 5+), I choose which 3 or 4 to use (a run: consecutive ones); the rest stay in
+  hand. Fruit cards never bloom.
+- **Each card becomes one tile with its own number**, on its own hex. The hexes form one
+  connected cluster of any shape (no straight-line rule), at least one touching my network on the
+  board before the move (`bloomMustTouchNetwork`, default on); each hex is empty or an opponent
+  non-root tile weaker than the number it gets. For a run I choose which number goes where.
+  Atomic. Action `Bloom { cards, hexes }` (`hexes[i]` gets `cards[i]`), event `Bloom`,
+  resolution `bloom`. Any number per Grow step, in any order with Sprout, Strengthen and Fruit cards.
+- **Removed:** the two old combo actions, directions, straight-line placement and the one-bend option. See
+  "Retired rules" at the end. Everything else is unchanged.
+- **Bots (bots-v0.9):** levels 1-3 bloom at random (seeded) and sometimes skip a Bloom; 4-6 pick
+  by a quick look (tiles, gold, strongest replacement, compact); 7-9 fully score a short list of
+  10, and 8-9 may hold a plain 3-card Bloom when the unseen cards make a Bloom of 4 likely
+  (`docs/BOT-TACTICS.md`).
 
 **v0.6: Seed mode removed, Fruit cards** (rules version `v0.6-fruit-cards`, bot version `bots-v0.8`)
 - **Seed mode is gone.** The one-card move is the Sprout everywhere: a card's number becomes the
@@ -104,8 +123,9 @@ default (see the appendix).
 
 1. **Draw** one card from the deck or the top of the discard pile.
 2. **Act:** play any combos you hold, and up to `sproutsPerTurn` Sprouts.
-   - **Hypha** (3+ cards of one suit in a row): a straight line of tiles, strength rising outward.
-   - **Bloom** (3-4 cards of one number, different suits): a connected clump, all that strength.
+   - **Bloom** (v0.7, the only combo): 3-4 cards that go together (one number in different
+     suits, or numbers in a row in one suit) grow that many tiles, each with its own card's
+     number, in a connected cluster of any shape that touches my tiles.
    - **Sprout** (any one card): one tile with that card's number. **Strengthen** is a Sprout on
      one of your own tiles with a strictly higher card: the tile takes the card's number.
    - New tiles must touch your network. They may replace an enemy tile only if **strictly stronger**.
@@ -158,7 +178,7 @@ type RulesConfig = {
   richCount: number;            // 5 (odd: centre + pairs)
   forbidRedundantDiscard: boolean; // true
   rootsScore: boolean;          // false
-  allowHyphaOneBend: boolean;   // false (not implemented)
+  bloomMustTouchNetwork: boolean; // v0.7: true (a Bloom must touch my tiles before the move)
   // Parked rules (appendix A), all off by default:
   rotEnabled: boolean;          // false
   rotThreshold: number;         // 20
@@ -232,8 +252,8 @@ in a Knock final turn (appendix). The discard pile may be empty (after an empty-
 only the deck draw is legal. Records `drawnFromDiscard`.
 
 ### 6.2 ACT
-Any number of `MeldRun` / `MeldSet`, up to `sproutsPerTurn` `Sprout` per turn, in any order, then
-`EndAct`. Melded and sprouted cards leave the hand permanently; a move may use the last card.
+Any number of `Bloom`, up to `sproutsPerTurn` `Sprout` per turn and any number of `PlayFruit`, in
+any order, then `EndAct`. Bloomed and sprouted cards leave the hand permanently; a move may use the last card.
 After **each** placement: Sever, then the Strangle check.
 
 ### 6.3 DISCARD
@@ -260,20 +280,29 @@ if both players keep taking each other's discard.
 
 ---
 
-## 7. Moves: placement, Hypha, Bloom, Sprout, replacing
+## 7. Moves: placement, Bloom, Sprout, replacing
 
 ### 7.1 Placement rules (all placing moves)
 A new tile may claim an **empty** hex or an **enemy non-root tile with strictly lower strength**
 (replace). Never rock, off-board, a root, or the mover's own tile. "Touches the network" is
 judged on the board **before** the move; the root counts. Moves are **atomic**.
 
-### 7.2 Hypha (`MeldRun { cards, start, dir }`)
-3+ cards, one suit, consecutive ranks, no wraparound, sorted ascending. `start` touches the
-network; tiles go `start, start+dir, ...`, strength rising outward.
-
-### 7.3 Bloom (`MeldSet { cards, hexes }`)
-3 or 4 cards of one rank, different suits; as many distinct hexes, forming one connected cluster,
-at least one touching the network; every tile gets that rank.
+### 7.2 Bloom (`Bloom { cards, hexes }`), v0.7
+- **Cards:** a set (3 or 4 cards of one number, all different suits) or a run (3 or 4 cards of
+  one suit with numbers in a row, no wraparound). Other sizes: `BLOOM_WRONG_SIZE`; a repeated
+  suit in a set: `SET_DUPLICATE_SUIT`; mixed suits in a run: `RUN_MIXED_SUITS`; a gap:
+  `RUN_NOT_CONSECUTIVE`; a Fruit card: `NOT_A_NUMBER_CARD`.
+- **Hexes:** as many as cards, distinct (`DUPLICATE_HEX`), one connected cluster of any shape
+  (`HEXES_NOT_CONNECTED`), at least one touching the mover's network on the board before the
+  move, root included (`NOT_ADJACENT`; `bloomMustTouchNetwork`, default true). `hexes[i]`
+  receives a tile of strength = `cards[i]`'s number and must be claimable at that number (7.1).
+  A set's tiles all share one number; a run's keep their own (any one-to-one assignment).
+- **Listing:** `legalActions` lists a set once per hex set (hexes in board order) and a run once
+  per legal assignment (cards ascending); identical cards use the lowest ids; runs of exactly 3
+  or 4 consecutive cards. `bloomChoices(view)` gives the same list in compact form (a card group,
+  a cluster and its legal assignments) for the bots.
+- After it: Sever (both players), then Strangle. Event `Bloom { player, cards, hexes }` (cards
+  ascending, paired with their hexes), then `Overgrow` and `Sever` events.
 
 ### 7.4 Sprout (`Sprout { card, coord }`), new in v0.4
 - One card from hand becomes one tile of strength = its rank on `coord`.
@@ -355,8 +384,7 @@ Never the opponent's hand or the deck order.
 ```ts
 type Action =
   | { t: 'Draw'; from: 'deck' | 'discard' }
-  | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
-  | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
+  | { t: 'Bloom'; cards: number[]; hexes: Coord[] } // hexes[i] receives cards[i]
   | { t: 'Sprout'; card: number; coord: Coord }
   | { t: 'PlayFruit'; card: number; target: Coord }
   | { t: 'EndAct' }
@@ -365,10 +393,10 @@ type Action =
   | { t: 'Knock' } | { t: 'Continue' } | { t: 'RotPick'; coord: Coord };
 ```
 
-Events (`state.history`): `Draw, MeldRun, MeldSet, Sprout, Strengthen, Overgrow, FruitCard, Discard,
+Events (`state.history`): `Draw, Bloom, Sprout, Strengthen, Overgrow, FruitCard, Discard,
 Sever, Strangle, GameEnd`, plus the parked `Knock, FinalTurnStart, RotCount, Rot, RotPick`. A deck draw
 hides its card in the opponent's `eventsFor`. `ResolutionSummary` lists `placed, overgrown,
-rotted, severed`, and optionally `sprout, strengthen, fruit, strangled`.
+rotted, severed`, and optionally `bloom, sprout, strengthen, fruit, strangled`.
 
 API: `newGame, legalActions(view), legalActionsForState, apply, applyAs, viewFor, score,
 deadwood, bestMeldPartition, replay, eventsFor, isFruitCard, RULES_VERSIONS`.
@@ -475,7 +503,8 @@ ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1
 are pure and deterministic (same view, level and seed, same move), and count search in
 iterations, never time. Level 7 is GreedyBot; levels 1-6 add sloppiness to it; level 8 throws
 better; level 9 plans its turn and imagines the opponent's reply. Each level judges
-Strengthen and Fruit at its own skill (`docs/BOT-TACTICS.md`).
+Strengthen, Fruit cards and Blooms at its own skill (`docs/BOT-TACTICS.md`; v0.7 Bloom bands:
+1-3 random, 4-6 quick look, 7-9 full evaluation, 8-9 holding).
 
 Ladder (800 games per pairing, starts swapped; `docs/LADDER.md`): every level beats the one
 below in 64-72% of games (target 58%), level 9 beats level 7 in 76.8% (target 65%), and
@@ -566,6 +595,29 @@ and slows the game (+11% on v0.5); 4 passes every other target. Root touch on or
 same (the root rarely matters), so the simpler wording stays ("touches yours"). Two Fruit cards
 in one turn happen in 8% of games and that side wins 48%: not too strong.
 
+### 11.5 Bloom simulation (v0.7)
+
+1,000 games, level 7 against level 7, one game per seed (`npx tsx src/sim/bloomsim.ts`; with the
+same level on both sides, swapping seats would replay the same games).
+
+| own turn | Grow steps | holds a Bloom group | a Bloom playable | Bloom possible but held | nothing to play |
+| --- | --- | --- | --- | --- | --- |
+| 1-3 | 5,994 | 36.2% | 36.2% | 0.0% | 0.0% |
+| 4-6 | 5,962 | 34.6% | 34.6% | 0.0% | 0.0% |
+| 7-12 | 7,250 | 37.5% | 37.4% | 0.1% | 0.0% |
+| 13+ | 23 | 39.1% | 39.1% | 0.0% | 0.0% |
+
+A group in hand can almost always be played somewhere (any shape, one hex touching is enough).
+Blooms per game 7.18, average size 3.08; runs 49.5%, sets 50.5%. A 3-card Bloom from a longer
+group: 0.1% (level 7 plays the 4 when it can). Run Blooms put their highest number on a chokepoint
+22.8%, against an opponent tile 75.8%, next to the network 49.3%. Tiles placed per turn in turns
+1-5: 2.02. Game length 9.61 turns per player (v0.6: 9.71); ends: deck 95.5%, Strangle 4.5%.
+Fruit cards played per game 3.49. Comeback (behind at half time, still won) 36.2%.
+
+Targets (guides): nothing to play after turn 3 under 60%: pass (0.0%: Sprout and Strengthen
+almost always leave a move; no lever needed); first player 46-54%: pass (53.0%); Strangle under
+15%: pass (4.5%); game length within 15% of the current default: pass (−1%).
+
 ---
 
 ## Appendix A: Parked rules (off by default)
@@ -599,7 +651,14 @@ No longer parked: back in v0.5 and on by default (section 7.8).
 
 ---
 
-## Retired rules (descriptions only, v0.6)
+## Retired rules (descriptions only)
+
+- **Hypha, the line combo** (until v0.6): a run of 3+ cards in one suit grew a straight line of
+  tiles from a start hex next to my network, in one of six directions, numbers rising outward
+  (`MeldRun { cards, start, dir }`); a run of any length could be played. An option for one bend
+  (`allowHyphaOneBend`) was never built. Replaced by Bloom (v0.7), which takes 3-4 cards.
+- **The clump** (until v0.6): a set grew a connected clump, every tile with the set's number
+  (`MeldSet { cards, hexes }`). Merged into Bloom (v0.7).
 
 - **Seed mode** (v0.5 A/B test): the one-card move put a tile of strength 1 whatever the card
   (marked as a seed until strengthened), and Strengthen had no per-game limit so a seed could be

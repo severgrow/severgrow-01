@@ -8,6 +8,7 @@
 // border (a band about a third of a tile wide), so there is no seam.
 import type { ThemeId } from './themes.js';
 import { materialsOf } from './materials.js';
+import { toBoard, toScreen } from './orient.js';
 
 /** t = (strength - 1) / (maxRank - 1), clamped to 0..1. */
 export const vigour = (strength: number, maxRank: number): number =>
@@ -121,7 +122,8 @@ const SQ3 = Math.sqrt(3);
 export type FieldTile = { owner: number; t: number };
 
 /** The hex (axial q, r) whose cell contains a world point (pointy-top hexes). */
-export const hexAt = (x: number, y: number): { q: number; r: number } => {
+export const hexAt = (sx: number, sy: number): { q: number; r: number } => {
+  const { x, y } = toBoard(sx, sy);
   const qf = (SQ3 / 3 * x - y / 3) / S;
   const rf = ((2 / 3) * y) / S;
   let q = Math.round(qf);
@@ -134,7 +136,7 @@ export const hexAt = (x: number, y: number): { q: number; r: number } => {
   else if (dr > ds) r = -q - s;
   return { q: q + 0, r: r + 0 };
 };
-export const centreOf = (q: number, r: number) => ({ x: S * SQ3 * (q + r / 2), y: S * 1.5 * r });
+export const centreOf = (q: number, r: number) => toScreen(S * SQ3 * (q + r / 2), S * 1.5 * r);
 const NB: readonly [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
 /** Width of the blend band across a shared border, board units (about a third of a tile). */

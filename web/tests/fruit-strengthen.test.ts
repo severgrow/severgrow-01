@@ -66,7 +66,7 @@ describe('first-time tips (remembered in the browser)', () => {
     // v0.6: the one-time Fruit card tip, in the strings file's words
     expect(TIPS.fruit.text).toBe('Fruit cards: play one on an opponent tile that touches yours to remove it, even a 9.');
     // polish pass 3: the drawing tip, in the words the How to play sheet uses too
-    expect(TIPS.draw.text).toBe('Drag over hexes to draw your clump or line. On a computer, click to start and click to finish.');
+    expect(TIPS.draw.text).toBe('Paint your bloom: drag over touching hexes, or tap them one by one. On a computer, click to start and click to finish.');
   });
 });
 

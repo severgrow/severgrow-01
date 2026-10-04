@@ -6,7 +6,7 @@ import { moveHexes } from '../src/names.js';
 import { chipText, previewMove } from '../src/logic/preview.js';
 import { findState } from './ui-helpers.js';
 
-const boardMove = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout';
+const boardMove = (a: Action) => a.t === 'Bloom' || a.t === 'Sprout';
 
 /** Mid-game positions where the human (player 0) is choosing board moves. */
 const positions = (): View[] => {

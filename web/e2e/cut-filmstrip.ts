@@ -1,6 +1,7 @@
 // The cut, frame by frame (Part 2 / Part 4 proof): plays a built cut with the page clock frozen
 // and stepped to exact times, and saves a PNG per moment plus a contact sheet.
 //   npx tsx web/e2e/cut-filmstrip.ts [--dir=docs/screens/overhaul/cut]
+import { positionSave } from './position.js';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -70,11 +71,11 @@ const film = async (name: string, n: number, mine: boolean, settings: Record<str
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v6', saved as string);
+      localStorage.setItem('severgrow.save.v7', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'normal', level: 7, ...settings }), JSON.stringify({ state, coach: doneCoach, level: 7 })],
+    [JSON.stringify({ sound: false, coach: false, speed: 'normal', level: 7, ...settings }), positionSave({ state, coach: doneCoach, level: 7 })],
   );
   await page.goto('http://localhost:4193/');
   await page.click('#menu-continue');

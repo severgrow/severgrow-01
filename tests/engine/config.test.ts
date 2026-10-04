@@ -15,7 +15,7 @@ describe('DEFAULT_CONFIG', () => {
       rotThreshold: 20,
       rotStep: 8,
       forbidRedundantDiscard: true,
-      allowHyphaOneBend: false,
+      bloomMustTouchNetwork: true, // v0.7
       rootsScore: false,
       maxRank: 9,
       sproutsPerTurn: 1,
@@ -123,9 +123,5 @@ describe('resolveConfig', () => {
   it('rejects terrain counts that cannot be placed', () => {
     reject({ rockCount: 30 }, 'TERRAIN_INFEASIBLE');
     reject({ richCount: 21 }, 'TERRAIN_INFEASIBLE');
-  });
-
-  it('rejects allowHyphaOneBend until it is implemented (Milestone C)', () => {
-    reject({ allowHyphaOneBend: true }, 'NOT_IMPLEMENTED');
   });
 });

@@ -12,6 +12,9 @@ import type { Detail } from './logic/materials.js';
 import { BoardView, NO_OVERLAY } from './ui/board.js';
 import { warmPhotosNow } from './ui/photo.js';
 import { GLOW_CAP, OLD_GLOW_OPACITY } from './logic/topglow.js';
+import { drawLandmark, setLandmarkState } from './ui/landmarks.js';
+import { el } from './ui/geom.js';
+import type { Orient } from './logic/orient.js';
 
 const k = (q: number, r: number) => coordKey({ q, r });
 
@@ -110,6 +113,48 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
       gv.setup(small, smallTerrain, t.style, look, id);
       gv.setGlow({ setting, effects: 'normal', reduceMotion }, scale);
       gv.render(tops, NO_OVERLAY);
+    }
+  }
+  // Step 4: the homes, in every palette: each state, both orientations, three sizes, and the
+  // squint checks (greyscale, 25% size)
+  for (const id of THEME_IDS) {
+    const t = THEMES[id];
+    const sec = document.createElement('section');
+    sec.className = 'lab-section lab-homes';
+    sec.dataset.palette = id;
+    for (const [name, v] of Object.entries(cssVars(t))) sec.style.setProperty(name, v);
+    const m = materialsOf(id);
+    const look = materialLook(id, detail, reduceMotion);
+    sec.innerHTML = `<h2>${t.name}: homes</h2>`;
+    page.appendChild(sec);
+    const states = ['idle', 'danger', 'tapped', 'strangled', 'won'] as const;
+    for (const orient of ['flat', 'pointy'] as Orient[]) {
+      for (const [label, cls] of [['', ''], ['Greyscale', 'grey'], ['40pt', 'pt40'], ['25%', 'tiny']] as const) {
+        const row = document.createElement('div');
+        row.className = `lab-home-row ${cls}`;
+        sec.appendChild(row);
+        for (const kind of ['tree', 'volcano'] as const) {
+          for (const st of states) {
+            const fig = document.createElement('figure');
+            const cap = document.createElement('figcaption');
+            cap.textContent = `${kind} · ${st} · ${orient}${label ? ` · ${label}` : ''}`;
+            const svg = el('svg', { viewBox: '-40 -48 80 84', class: 'lab-home' });
+            fig.append(svg, cap);
+            row.appendChild(fig);
+            const g = el('g', {}, svg);
+            const pts = Array.from({ length: 6 }, (_, i) => {
+              const a = ((orient === 'flat' ? 0 : 30) + 60 * i) * (Math.PI / 180);
+              return `${(30 * Math.cos(a)).toFixed(1)},${(30 * Math.sin(a)).toFixed(1)}`;
+            }).join(' ');
+            el('polygon', { points: pts, fill: kind === 'tree' ? m.colors.moss : m.colors.fireCrust, stroke: m.colors.rockDark }, g);
+            const lm = drawLandmark(g, kind, `lab-${kind}`, { x: 0, y: 0 }, orient, m.colors, look);
+            const sides = [true, true, true, st === 'danger' || st === 'strangled', st === 'strangled', st === 'strangled'];
+            const blocked = sides.filter(Boolean).length;
+            const danger = st === 'danger';
+            setLandmarkState(lm, { sides, blocked, danger, ring: danger, tapped: st === 'tapped', strangled: st === 'strangled', won: st === 'won', idle: !reduceMotion && detail !== 'low', worried: danger && !reduceMotion });
+          }
+        }
+      }
     }
   }
   document.body.appendChild(page);

@@ -2,12 +2,18 @@
 // until the player's first tap (browsers require that, and it is kinder). Volume is kept
 // modest, and each note wobbles a tiny bit in pitch so repeats don't sound robotic.
 import { DUCK_DB, dbToGain } from '../logic/feedback.js';
+import { LIMITER, busGains } from '../logic/audio.js';
+import type { Mix } from '../logic/audio.js';
 
 type Wave = OscillatorType;
 
 export class Sound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** Step 7: the effects bus (every tone and noise) and the music bus (the ambient bed) */
+  private sfx: GainNode | null = null;
+  private musicBus: GainNode | null = null;
+  private mix: Mix = { sound: true, music: false, sfxVolume: 80, musicVolume: 60 };
   private drone: { stop: () => void } | null = null;
   /** overhaul item 18: the ambient bed's own gain (ducks during cuts) and filter (darker in the final turns) */
   private bed: GainNode | null = null;
@@ -29,8 +35,32 @@ export class Sound {
     this.ctx = new AC();
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.38;
-    this.master.connect(this.ctx.destination);
+    // the limiter on the master: stacked effects never clip
+    const lim = this.ctx.createDynamicsCompressor();
+    lim.threshold.value = LIMITER.threshold;
+    lim.knee.value = LIMITER.knee;
+    lim.ratio.value = LIMITER.ratio;
+    lim.attack.value = LIMITER.attack;
+    lim.release.value = LIMITER.release;
+    this.master.connect(lim).connect(this.ctx.destination);
+    this.sfx = this.ctx.createGain();
+    this.musicBus = this.ctx.createGain();
+    this.sfx.connect(this.master);
+    this.musicBus.connect(this.master);
+    this.setMix(this.mix);
     if (this.musicOn) this.setMusic(true);
+  }
+
+  /** Step 7: the bus volumes from the settings (sliders and toggles), smoothly. */
+  setMix(m: Mix) {
+    this.mix = m;
+    const ctx = this.ctx;
+    if (!ctx || !this.sfx || !this.musicBus) return;
+    const g = busGains({ ...m, sound: true });
+    for (const [bus, v] of [[this.sfx, g.sfx], [this.musicBus, busGains({ ...m, music: true }).music]] as const) {
+      bus.gain.cancelScheduledValues(ctx.currentTime);
+      bus.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+    }
   }
 
   tune(base: number, wave: Wave) {
@@ -56,7 +86,7 @@ export class Sound {
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(peak, t0 + (opts.attack ?? 0.008));
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g).connect(this.master);
+    osc.connect(g).connect(this.sfx ?? this.master);
     osc.start(t0);
     osc.stop(t0 + dur + 0.05);
   }
@@ -79,7 +109,7 @@ export class Sound {
     f.frequency.value = lowpass;
     const g = ctx.createGain();
     g.gain.value = gain;
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfx ?? this.master);
     src.start(ctx.currentTime + delay);
   }
 
@@ -123,6 +153,27 @@ export class Sound {
     this.noise(0.12, 0.12, 0, 9000);
   }
   /** A fuller flourish for a win (a rising arpeggio and a soft chord); a calm, soft tone for a loss. */
+  /** Step 4, the homes: my tree rustles (a soft leafy noise and a warm note) when tapped */
+  rustle() {
+    this.noise(0.22, 0.06, 0, 3200);
+    this.tone(this.base * 1.5, 0.3, { wave: 'sine', gain: 0.05, attack: 0.04 });
+  }
+  /** the opponent's volcano: a low rumble with a little crackle */
+  rumble() {
+    this.tone(this.base / 4, 0.42, { wave: 'sine', gain: 0.16, slideTo: this.base / 5, attack: 0.05 });
+    this.noise(0.05, 0.08, 0.12, 5200);
+    this.noise(0.04, 0.06, 0.24, 6000);
+  }
+  /** the Strangle finish: the volcano sighs out (smothered) */
+  sigh() {
+    this.noise(0.6, 0.07, 0, 900);
+    this.tone(this.base * 0.7, 0.6, { wave: 'sine', gain: 0.07, slideTo: this.base * 0.45, attack: 0.08 });
+  }
+  /** the Strangle finish: my tree grinds and withers */
+  grind() {
+    this.noise(0.45, 0.1, 0, 600);
+    this.tone(this.base * 0.5, 0.5, { wave: 'sawtooth', gain: 0.035, slideTo: this.base * 0.35, attack: 0.03 });
+  }
   fanfare(won: boolean) {
     if (!won) {
       this.tone(this.base * 0.75, 1.1, { wave: 'sine', gain: 0.07, attack: 0.12 });
@@ -163,7 +214,7 @@ export class Sound {
       this.bedFilter.type = 'lowpass';
       this.bedFilter.frequency.value = this.calm ? CALM_HZ : OPEN_HZ;
       this.bed = ctx.createGain();
-      this.bedFilter.connect(this.bed).connect(this.master);
+      this.bedFilter.connect(this.bed).connect(this.musicBus ?? this.master);
     }
     g.connect(this.bedFilter!);
     this.drone = {

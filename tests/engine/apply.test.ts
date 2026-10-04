@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { IllegalActionError, apply, applyAs, deadwood, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
-import { clone, fixture, tilesOf } from '../helpers.js';
+import { chain, clone, fixture, tilesOf } from '../helpers.js';
 import { LEGACY_V03 } from '../legacy.js';
 
 const MOSS = 0;
@@ -111,10 +111,10 @@ describe('DRAW', () => {
 describe('ACT: melds', () => {
   const run = () => [c(MOSS, 3), c(MOSS, 4), c(MOSS, 5)];
 
-  it('MeldRun places the hypha, removes the cards, records the resolution', () => {
+  it('a Bloom from a run places its tiles, removes the cards, records the resolution', () => {
     const r = run();
     const s = makeState({ phase: 'ACT', rich: ['0,0'], hands: [[...r, ...junk(5)], junk(7)] });
-    const n = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    const n = act(s, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -1, r: 1 }, 1, (ids(r)).length) });
     expect(n.board['0,0']).toEqual({ owner: 0, strength: 4 });
     expect(n.hands[0]).toHaveLength(5);
     expect(n.hands[0].some((x) => ids(r).includes(x.id))).toBe(false);
@@ -124,15 +124,16 @@ describe('ACT: melds', () => {
       overgrown: [],
       rotted: [],
       severed: [],
+      bloom: { cards: ids(r), hexes: [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 1, r: -1 }] },
     });
   });
 
-  it('MeldSet places a bloom; multiple melds per turn are allowed', () => {
+  it('a Bloom from a set; several Blooms per turn are allowed', () => {
     const set = [c(MOSS, 6), c(ASH, 6), c(DEW, 6)];
     const r = run();
     const s = makeState({ phase: 'ACT', hands: [[...set, ...r, ...junk(2)], junk(7)] });
-    const a = act(s, { t: 'MeldSet', cards: ids(set), hexes: [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }] });
-    const b = act(a, { t: 'MeldRun', cards: ids(r), start: { q: -2, r: 1 }, dir: 2 });
+    const a = act(s, { t: 'Bloom', cards: ids(set), hexes: [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }] });
+    const b = act(a, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -2, r: 1 }, 2, (ids(r)).length) });
     expect(tilesOf(b.board, 0)).toHaveLength(7);
     expect(b.hands[0]).toHaveLength(2);
   });
@@ -144,8 +145,8 @@ describe('ACT: melds', () => {
       tiles: { '0,0': [1, 1], '1,-1': [1, 1], '-1,0': [1, 1] }, // P2 arm (1,-1)-(0,0)-(-1,0)
       hands: [[...r, ...junk(5)], junk(7)],
     });
-    // Hypha from (-1,1) dir 1 overgrows (0,0) and (1,-1); (-1,0) is cut off.
-    const n = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    // a run bloom on the chain from (-1,1) overgrows (0,0) and (1,-1); (-1,0) is cut off.
+    const n = act(s, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -1, r: 1 }, 1, (ids(r)).length) });
     expect(n.lastResolution!.overgrown).toEqual([{ q: 0, r: 0 }, { q: 1, r: -1 }]);
     expect(n.lastResolution!.severed).toEqual([{ player: 1, coords: [{ q: -1, r: 0 }] }]);
     expect(n.board['-1,0']).toBeNull();
@@ -154,7 +155,7 @@ describe('ACT: melds', () => {
   it('a meld may use the last card; the discard is then skipped (v0.4, replaces the v0.3 rule)', () => {
     const r = run();
     const s = makeState({ phase: 'ACT', hands: [r, junk(7)] });
-    const m = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    const m = act(s, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -1, r: 1 }, 1, (ids(r)).length) });
     expect(m.hands[0]).toEqual([]);
     expect(act(m, { t: 'EndAct' }).phase).toBe('KNOCK'); // Knock is on in these tests
   });
@@ -163,7 +164,7 @@ describe('ACT: melds', () => {
     const r = run();
     const taken = c(EMBER, 9);
     const s = makeState({ phase: 'ACT', hands: [[...r, taken], junk(7)], patch: { drawnFromDiscard: taken.id } });
-    const m = act(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 });
+    const m = act(s, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -1, r: 1 }, 1, (ids(r)).length) });
     expect(m.hands[0]).toEqual([taken]);
     const d = act(m, { t: 'EndAct' });
     expect(legalActions(viewFor(d, 0))).toEqual([{ t: 'Discard', card: taken.id }]);
@@ -173,7 +174,7 @@ describe('ACT: melds', () => {
   it('an illegal meld changes nothing (atomic)', () => {
     const r = run();
     const s = makeState({ phase: 'ACT', tiles: { '1,-1': [1, 5] }, hands: [[...r, ...junk(5)], junk(7)] });
-    illegal(s, { t: 'MeldRun', cards: ids(r), start: { q: -1, r: 1 }, dir: 1 }, 'NOT_STRONGER');
+    illegal(s, { t: 'Bloom', cards: ids(r), hexes: chain({ q: -1, r: 1 }, 1, (ids(r)).length) }, 'NOT_STRONGER');
   });
 
   it('a meld that strangles the enemy root ends the game', () => {
@@ -186,7 +187,7 @@ describe('ACT: melds', () => {
       tiles: { '1,-1': [1, 1], '0,0': [1, 1], '-1,1': [1, 1], '-2,1': [1, 1] },
       hands: [junk(7), [...set, ...junk(5)]],
     });
-    const n = act(s, { t: 'MeldSet', cards: ids(set), hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 0, r: 2 }] });
+    const n = act(s, { t: 'Bloom', cards: ids(set), hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 0, r: 2 }] });
     expect(n.phase).toBe('GAME_OVER');
     expect(n.result).toEqual({ winner: 1, reason: 'strangle', scores: [0, 7] });
     expect(n.lastResolution!.strangled).toBe(0);
@@ -278,7 +279,7 @@ describe('DISCARD and the redundant-discard loophole (14.11)', () => {
     const s = act(s0, { t: 'Draw', from: 'discard' });
     const hand = s.hands[0];
     const run = [hand[0]!, m4, hand[1]!];
-    const melded = act(s, { t: 'MeldRun', cards: ids(run), start: { q: -1, r: 1 }, dir: 1 });
+    const melded = act(s, { t: 'Bloom', cards: ids(run), hexes: chain({ q: -1, r: 1 }, 1, (ids(run)).length) });
     const d = act(melded, { t: 'EndAct' });
     expect(act(d, { t: 'Discard', card: d.hands[0][0]!.id }).phase).toBe('KNOCK');
   });
@@ -343,7 +344,7 @@ describe('KNOCK and the final turn (14.10)', () => {
       tiles: { '-1,1': [0, 1], '0,0': [0, 1], '1,0': [0, 1], '2,0': [0, 1], '1,-1': [1, 5] },
     });
     const ft = act(act(s, { t: 'Knock' }), { t: 'Draw', from: 'deck' });
-    const m = act(ft, { t: 'MeldSet', cards: ids(fives), hexes: [{ q: 0, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -2 }] });
+    const m = act(ft, { t: 'Bloom', cards: ids(fives), hexes: [{ q: 0, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -2 }] });
     expect(m.lastResolution!.severed).toEqual([{ player: 0, coords: [{ q: 1, r: 0 }, { q: 2, r: 0 }] }]);
     const d = act(m, { t: 'EndAct' });
     const end = act(d, { t: 'Discard', card: d.hands[1][0]!.id });
@@ -359,7 +360,7 @@ describe('KNOCK and the final turn (14.10)', () => {
       hands: [hand10(), [...set, ...junk(4)]],
     });
     const ft = act(act(s, { t: 'Knock' }), { t: 'Draw', from: 'deck' });
-    const n = act(ft, { t: 'MeldSet', cards: ids(set), hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 0, r: 2 }] });
+    const n = act(ft, { t: 'Bloom', cards: ids(set), hexes: [{ q: -1, r: 2 }, { q: 0, r: 1 }, { q: 0, r: 2 }] });
     expect(n.result).toMatchObject({ winner: 1, reason: 'strangle' });
   });
 
@@ -552,22 +553,22 @@ describe('general legality', () => {
     const s = (hand: Card[], tiles: Record<string, [Player, number]> = {}, rock: string[] = []) =>
       makeState({ phase: 'ACT', hands: [[...hand, ...junk(3)], junk(7)], tiles, rock });
     const run = [c(MOSS, 3), c(MOSS, 4), c(MOSS, 5)];
-    const go = (cards: Card[], dir = 1) => ({ t: 'MeldRun' as const, cards: ids(cards), start: { q: -1, r: 1 }, dir });
+    const go = (cards: Card[], dir = 1, start = { q: -1, r: 1 }) => ({ t: 'Bloom' as const, cards: ids(cards), hexes: chain(start, dir, cards.length) });
     illegal(s(run), { ...go(run), cards: [...ids(run).slice(0, 2), 424242] }, 'CARD_NOT_IN_HAND');
     const wrap = [c(EMBER, 8), c(EMBER, 9), c(EMBER, 1)];
     illegal(s(wrap), go(wrap), 'RUN_NOT_CONSECUTIVE');
     const dupSuit = [c(MOSS, 6), c(MOSS, 6), c(DEW, 6)];
     illegal(
       s(dupSuit),
-      { t: 'MeldSet', cards: ids(dupSuit), hexes: [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }] },
+      { t: 'Bloom', cards: ids(dupSuit), hexes: [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }] },
       'SET_DUPLICATE_SUIT',
     );
     illegal(s(run, {}, ['0,0']), go(run), 'ROCK');
     illegal(s(run, { '0,0': [0, 1] }), go(run), 'OWN_TILE');
     illegal(s(run, { '0,0': [1, 4] }), go(run), 'NOT_STRONGER');
     illegal(s(run, { '0,0': [1, 9] }), go(run), 'NOT_STRONGER');
-    illegal(s(run), { ...go(run), start: { q: 9, r: 9 } }, 'NOT_ADJACENT');
-    illegal(s(run), { ...go(run), start: { q: -2, r: 1 }, dir: 3 }, 'OFF_BOARD');
+    illegal(s(run), go(run, 1, { q: 1, r: 1 }), 'NOT_ADJACENT');
+    illegal(s(run), go(run, 3, { q: -2, r: 1 }), 'OFF_BOARD');
   });
 
   it('fruit card edge cases via apply', () => {

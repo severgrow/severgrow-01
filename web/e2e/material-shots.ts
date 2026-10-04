@@ -3,14 +3,14 @@
 // the material lab page.
 //   npx tsx web/e2e/material-shots.ts --dir=docs/screens/materials --prefix=after-
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
+import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { THEME_IDS } from '../src/logic/themes.js';
 import { bigCutDemo, botCut, goldDemo } from './positions.js';
-import { kindOf } from '../src/logic/interaction.js';
-import { drawMeld } from './drawing.js';
+import { chooseBloom, drawMeld } from './drawing.js';
 import { DIRECTIONS, addCoord, coordKey, parseKey } from '../../src/engine/index.js';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -32,9 +32,9 @@ const open = async (settings: Record<string, unknown>, state: unknown = demo.sta
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v6', saved as string);
+      localStorage.setItem('severgrow.save.v7', saved as string);
     },
-    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...settings }), JSON.stringify({ state, coach: doneCoach })],
+    [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...settings }), positionSave({ state, coach: doneCoach })],
   );
   await page.goto(BASE);
   await page.click('#menu-continue');
@@ -76,10 +76,10 @@ for (const id of THEME_IDS) {
 {
   const big = bigCutDemo();
   const page = await open({ palette: 'soil', speed: 'slow' }, big.state);
-  if (big.action.t === 'MeldRun' || big.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(big.action)}"]`);
+  if (big.action.t === 'Bloom') await chooseBloom(page, big.action);
   await page.click(`#hand [data-card="${big.card}"]`);
   if (!(await page.evaluate(() => (window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy()))) {
-    if (big.action.t === 'MeldRun' || big.action.t === 'MeldSet') await drawMeld(page, big.action);
+    if (big.action.t === 'Bloom') await drawMeld(page, big.action);
     else {
       const hb = (await page.locator(`.hex-cell[data-key="${big.hex}"] path.hex`).boundingBox())!;
       await page.mouse.click(hb.x + hb.width / 2, hb.y + hb.height / 2);

@@ -2,7 +2,7 @@ import { coordKey } from './board.js';
 import { deadwood } from './deadwood.js';
 import { rotCount } from './rot.js';
 import { leftoverRulesOn } from './phases.js';
-import type { Action, Card, Event, Player, State } from './types.js';
+import type { Action, Event, Player, State } from './types.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -24,7 +24,7 @@ const settleEvents = (before: State, after: State, p: Player, refill: boolean): 
 
 /**
  * The events one action produced (spec 12), derived from the states before and after
- * it. Every board change is covered: placements (MeldRun/MeldSet), Overgrow, Fruit cards,
+ * it. Every board change is covered: placements (Bloom, Sprout), Overgrow, Fruit cards,
  * Rot, RotPick and Sever.
  */
 export const eventsOf = (before: State, a: Action, after: State): Event[] => {
@@ -37,12 +37,9 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       out.push({ t: 'Draw', player: p, from: a.from, card: card.id });
       break;
     }
-    case 'MeldRun':
-    case 'MeldSet': {
-      const byId = new Map(before.hands[p].map((c) => [c.id, c]));
-      const cards: Card[] = a.cards.map((id) => byId.get(id)!);
-      if (a.t === 'MeldRun') cards.sort((x, y) => x.rank - y.rank || x.id - y.id);
-      out.push({ t: a.t, player: p, cards: cards.map((c) => c.id), hexes: (res?.placed ?? []).map((c) => ({ ...c })) });
+    case 'Bloom': {
+      const b = res!.bloom!;
+      out.push({ t: 'Bloom', player: p, cards: [...b.cards], hexes: b.hexes.map((c) => ({ ...c })) });
       for (const c of res?.overgrown ?? []) {
         const old = before.board[coordKey(c)]!;
         out.push({

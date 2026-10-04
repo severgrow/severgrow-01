@@ -18,7 +18,7 @@ export const gameHighlights = (history: readonly Event[], viewer: Player): Highl
     current = null;
   };
   for (const e of history) {
-    if (e.t === 'MeldRun' || e.t === 'MeldSet' || e.t === 'Sprout') {
+    if (e.t === 'Bloom' || e.t === 'Sprout') {
       close();
       const n = e.t === 'Sprout' ? 1 : e.hexes.length;
       current = { by: e.player, n };

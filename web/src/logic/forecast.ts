@@ -71,11 +71,11 @@ export const forecastMove = (v: View, a: Action, rules = CONFIRM_RULES): Forecas
   if (!sim) return null;
   const after: Ctx = { config: v.config, terrain: v.terrain, board: sim.board };
   const isStrengthen = a.t === 'Sprout' && v.board[coordKey(a.coord)]?.owner === me;
-  const placedKeys = new Set<string>(a.t === 'Sprout' ? [coordKey(a.coord)] : a.t === 'MeldSet' ? a.hexes.map(coordKey) : a.t === 'MeldRun' ? Object.keys(sim.board).filter((k) => sim.board[k]?.owner === me && v.board[k]?.owner !== me) : []);
+  const placedKeys = new Set<string>(a.t === 'Sprout' ? [coordKey(a.coord)] : a.t === 'Bloom' ? a.hexes.map(coordKey) : []);
   const cutTheirs = Object.keys(v.board).filter((k) => v.board[k]?.owner === opp && !v.board[k]!.root && !placedKeys.has(k) && !sim.board[k] && !(a.t === 'PlayFruit' && coordKey(a.target) === k));
   const cutMine = Object.keys(v.board).filter((k) => v.board[k]?.owner === me && !v.board[k]!.root && sim.board[k]?.owner !== me).sort();
   const worst = threats(after, me)[0] ?? null;
-  const cards = a.t === 'Sprout' || a.t === 'PlayFruit' ? 1 : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards.length : 0;
+  const cards = a.t === 'Sprout' || a.t === 'PlayFruit' ? 1 : a.t === 'Bloom' ? a.cards.length : 0;
   return {
     kind: a.t === 'PlayFruit' ? 'fruit' : isStrengthen ? 'strengthen' : 'grow',
     tiles: isStrengthen ? 0 : sim.placed,
@@ -119,7 +119,7 @@ export const riskLines = (f: Forecast, rules = CONFIRM_RULES): { reason: RiskRea
       case 'lastCard':
         return { reason, icon: '▢', text: 'Uses your last card' };
       case 'root':
-        return { reason, icon: '◉', text: 'Your root gets boxed in' };
+        return { reason, icon: '◉', text: 'Your home gets boxed in' };
     }
   });
 

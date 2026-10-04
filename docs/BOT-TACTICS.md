@@ -1,13 +1,35 @@
-# Bot tactics: Strengthen and Fruit cards (bots-v0.8)
+# Bot tactics: Blooms, Strengthen and Fruit cards (bots-v0.9)
 
 All levels read only their own View (my hand, the board, the discard pile, counts). They never
 see the opponent's hand or the deck order. Every decision is deterministic for a given seed:
 randomness only comes from the seeded PRNG. The code is in `src/bots/tactics.ts` (judging) and
-`src/bots/levels.ts` (the levels). Every Strengthen or Fruit card decision carries a short
+`src/bots/levels.ts` (the levels). Every Bloom, Strengthen or Fruit card decision carries a short
 plain-words reason (`decideLevelAction(...).reason`) for debugging and simulation reports;
 players never see it.
 
 v0.6: only the current bots are kept (the frozen bots-v0.5 were deleted with the old rules).
+v0.7: Bloom is the only combo; the old line and clump play was deleted with bots-v0.8.
+
+## Blooms (v0.7)
+
+A hand can usually bloom in many ways (up to about 6,000 legal Blooms in the worst positions
+measured, listed in about 25 ms). The bots look at all of them cheaply, then fully score a
+short list (`src/bots/bloomLook.ts`):
+- **Quick look** (every legal Bloom): tiles gained, gold hexes, the number and strength of the
+  opponent tiles replaced, links to my network (compact clusters joined by several links resist
+  cuts), strong numbers on the front line, little strength wasted on empty hexes. A Bloom that
+  fills the last open sides around the opponent's home (a likely Strangle) always ranks first.
+- **Short list** (10 per Grow step): every likely Strangle, then the best 60% by quick look, then
+  the most-linked clusters, then the strongest takeovers, at most two shapes per set of hexes,
+  so a protective Bloom is never crowded out by greedy ones.
+- **Full score** (the short list only): the same board evaluation as every other move (net
+  tiles, cuts, my exposure, pressure on the opponent, the home ring).
+- **Level 9's opponent reply** imagines their Blooms the same way, with a short list of 6.
+- **Holding** (levels 8-9): a plain 3-card Bloom (no replacement, no Strangle) is held when the
+  unseen cards (not in my hand, not thrown) that would make it a Bloom of 4 give at least a 20%
+  chance over my next draws (at most 3, fewer near the end), and the best other move (not using
+  those cards) costs at most 2.5 points. It is a judgement call, not a habit: once in about 200
+  Blooms in 30 games of 9 vs 8.
 
 ## What the bots weigh
 
@@ -50,14 +72,14 @@ leaves the game):
 
 ## Levels
 
-| Level | Strengthen | Fruit cards |
-| --- | --- | --- |
-| 1-2 | ignores it, but now and then (3% of Grow steps, seeded) plays a random Strengthen | a random legal target at a random moment (35% / 30% of Grow steps holding one, seeded); sometimes throws one away (25% / 15% of Throw steps holding one) |
-| 3 | only with a top card that has no better use this turn | a random legal target at a random moment (30%); never throws one |
-| 4 | as 3 | simple rules: a high tile (7+), a big cut (3+ tiles), or opening a Strangle; never throws one |
-| 5-6 | protected tiles x exposure x size of the step up | as 4 |
-| 7-8 | full evaluation (beatable chance before and after, exposure, root, blocker, cost) | full evaluation (net swing, blockers, thin links, Strangle, hold or use, second Fruit only if it pays) |
-| 9 | as 7-8, plus the opponent's unseen Fruit cards and weak supporting links | as 7-8, plus counting the unseen Fruit cards and the opponent's best reply |
+| Level | Bloom | Strengthen | Fruit cards |
+| --- | --- | --- | --- |
+| 1-2 | when it would bloom: a random legal Bloom (seeded), or none at all (45% / 35%) | ignores it, but now and then (3% of Grow steps, seeded) plays a random Strengthen | a random legal target at a random moment (35% / 30% of Grow steps holding one, seeded); sometimes throws one away (25% / 15% of Throw steps holding one) |
+| 3 | a random legal Bloom, or none (25%) | only with a top card that has no better use this turn | a random legal target at a random moment (30%); never throws one |
+| 4 | the best quick look only (tiles, gold, strongest replacement, compact) | as 3 | simple rules: a high tile (7+), a big cut (3+ tiles), or opening a Strangle; never throws one |
+| 5-6 | as 4 | protected tiles x exposure x size of the step up | as 4 |
+| 7-8 | full evaluation of the short list; 8 also holds (above) | full evaluation (beatable chance before and after, exposure, root, blocker, cost) | full evaluation (net swing, blockers, thin links, Strangle, hold or use, second Fruit only if it pays) |
+| 9 | as 8, plus the opponent's best Bloom reply | as 7-8, plus the opponent's unseen Fruit cards and weak supporting links | as 7-8, plus counting the unseen Fruit cards and the opponent's best reply |
 
 ## Fruit cards in practice (level 7 vs level 7, 2,000 games, SPEC 11.4)
 

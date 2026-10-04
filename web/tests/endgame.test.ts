@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { newGame, viewFor } from '../../src/engine/index.js';
 import type { View } from '../../src/engine/index.js';
-import { endgameNote, finalTurns, scoreBreakdown } from '../src/logic/endgame.js';
+import { finalTurns, scoreBreakdown, turnsLeft } from '../src/logic/endgame.js';
 import { score } from '../../src/engine/index.js';
 import { playGame } from './ui-helpers.js';
 
 const at = (turnNumber: number, deckCount: number): View => ({ ...viewFor(newGame(1), 0), turnNumber, deckCount });
 
-describe('the end of the game is never a surprise', () => {
-  it('warns about the last turns (30 each by default)', () => {
-    expect(endgameNote(at(1, 40))).toBeNull();
-    expect(endgameNote(at(55, 40))).toBe('3 turns left');
-    expect(endgameNote(at(57, 40))).toBe('2 turns left');
-    expect(endgameNote(at(59, 40))).toBe('Last turn!');
+describe('the end of the game is never a surprise (the turn pill counts down)', () => {
+  it('the last turns by the limit (30 each by default)', () => {
+    expect(turnsLeft(at(1, 80))).toBe(30);
+    expect(turnsLeft(at(55, 40))).toBe(3);
+    expect(turnsLeft(at(57, 40))).toBe(2);
+    expect(turnsLeft(at(59, 40))).toBe(1);
   });
-  it('warns when the deck is nearly empty', () => {
-    expect(endgameNote(at(9, 6))).toBe('Only 6 cards left');
-    expect(endgameNote(at(9, 1))).toBe('Only 1 card left');
-    expect(endgameNote(at(9, 0))).toBe('Deck empty: last turn!');
+  it('the deck running out (at most half its cards in my turns)', () => {
+    expect(turnsLeft(at(9, 6))).toBe(3);
+    expect(turnsLeft(at(9, 1))).toBe(1);
+    expect(turnsLeft(at(9, 0))).toBe(1);
   });
 });
 
@@ -66,5 +66,19 @@ describe('UI overhaul item 15: the calm final turns', () => {
       checked += seen.length;
     }
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+describe('Step 3: the turn pill clock (whichever ends first)', () => {
+  it('turns left by the limit or by the deck, never below 1', async () => {
+    const { turnsLeft } = await import('../src/logic/endgame.js');
+    const { turnsLeftText } = await import('../../src/strings.js');
+    const cfg = { maxTurnsPerPlayer: 30 } as never;
+    expect(turnsLeft({ config: cfg, turnNumber: 1, deckCount: 60 })).toBe(30);
+    expect(turnsLeft({ config: cfg, turnNumber: 1, deckCount: 20 })).toBe(10);
+    expect(turnsLeft({ config: cfg, turnNumber: 59, deckCount: 40 })).toBe(1);
+    expect(turnsLeft({ config: cfg, turnNumber: 9, deckCount: 0 })).toBe(1);
+    expect(turnsLeftText(1)).toBe('Last turn');
+    expect(turnsLeftText(12)).toBe('12 turns left');
   });
 });

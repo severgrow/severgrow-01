@@ -1,7 +1,8 @@
 // Tap-to-play: what the player has picked so far (a card, a hex, a kind of move) and
 // what that means on the board. Pure functions of the player's View and legal moves.
 import { coordKey } from '../../../src/engine/index.js';
-import type { Action, View } from '../../../src/engine/index.js';
+import type { Action, Card, View } from '../../../src/engine/index.js';
+import { BLOOM, FRUIT, SPROUT } from '../../../src/strings.js';
 import { simulate } from '../../../src/bots/evaluate.js';
 import { moveCards, moveHexes, touchesHex } from '../../../src/playtest/names.js';
 
@@ -9,15 +10,16 @@ export type Sel = { card: number | null; hex: string | null; kind: string | null
 export const EMPTY_SEL: Sel = Object.freeze({ card: null, hex: null, kind: null, option: 0 }) as Sel;
 
 export const isBoardAction = (a: Action): boolean =>
-  a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit' || a.t === 'RotPick';
+  a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit' || a.t === 'RotPick';
 
-/** "line-3", "clump-3", "sprout", "fruit" or "rot"; null for moves that are not on the board. */
+/**
+ * "bloom-3-4.9.17" (a Bloom: its size and its card ids), "sprout", "fruit" or "rot"; null for
+ * moves that are not on the board. Each card group that can bloom is its own kind.
+ */
 export const kindOf = (a: Action): string | null => {
   switch (a.t) {
-    case 'MeldRun':
-      return `line-${a.cards.length}`;
-    case 'MeldSet':
-      return `clump-${a.cards.length}`;
+    case 'Bloom':
+      return `bloom-${a.cards.length}-${[...a.cards].sort((x, y) => x - y).join('.')}`;
     case 'Sprout':
       return 'sprout';
     case 'PlayFruit':
@@ -31,15 +33,17 @@ export const kindOf = (a: Action): string | null => {
 
 export const kindLabel = (kind: string): string => {
   const [k, n] = kind.split('-');
-  if (k === 'line') return `Grow a line of ${n}`;
-  if (k === 'clump') return `Grow a clump of ${n}`;
-  if (k === 'sprout') return 'Sprout one tile';
-  if (k === 'fruit') return 'Use a Fruit card';
+  if (k === 'bloom') return BLOOM.button(Number(n));
+  if (k === 'sprout') return `${SPROUT.Name} one tile`;
+  if (k === 'fruit') return `Use a ${FRUIT.card}`;
   return 'Pick a tile to rot';
 };
 
-/** The short label for a move button when several share the row ("Line of 3"; the full words stay its accessible name). */
-export const shortKindLabel = (kind: string): string => kindLabel(kind).replace(/^Grow a (\w)/, (_, c: string) => c.toUpperCase());
+/** The short label for a move button when several share the row (the full words stay its accessible name). */
+export const shortKindLabel = (kind: string): string => kindLabel(kind);
+
+/** The card ids of a Bloom kind. */
+export const kindCards = (kind: string): number[] => (kind.startsWith('bloom-') ? kind.split('-')[2]!.split('.').map(Number) : []);
 
 /** True when card `b` is a copy of card `a` (same suit and number): copies play the same. */
 const sameCard = (v: View, a: number, b: number) => {
@@ -105,7 +109,7 @@ export const usableCards = (v: View, legal: readonly Action[], sel: Sel): Set<nu
   return out;
 };
 
-const KIND_ORDER = (k: string) => (k.startsWith('line') ? 0 : k.startsWith('clump') ? 1 : k === 'sprout' ? 2 : 3);
+const KIND_ORDER = (k: string) => (k.startsWith('bloom') ? 0 : k === 'sprout' ? 2 : 3);
 
 /** The kinds of move still possible with what is picked, e.g. "Grow a line of 3 (4 ways)". */
 export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { kind: string; label: string; count: number }[] => {
@@ -116,9 +120,53 @@ export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { k
     .sort((a, b) => KIND_ORDER(a.kind) - KIND_ORDER(b.kind) || a.kind.localeCompare(b.kind, 'en', { numeric: true }));
 };
 
-/** The move buttons above the hand: lines and clumps only. Sprouting needs no button,
- *  because tapping a card picks Sprout by default. */
-export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout' && k.kind !== 'fruit');
+/** A card group's family: the number of a set ("s5") or the suit of a run ("r2"). */
+const familyOf = (cards: readonly Card[]) => (cards.every((c) => c.rank === cards[0]!.rank) ? `s${cards[0]!.rank}` : `r${cards[0]!.suit}`);
+
+/**
+ * The move buttons above the hand: Blooms only (sprouting needs no button: tapping a card
+ * picks Sprout). One button per family and size ("Bloom 4 tiles", "Bloom 3 tiles, keep the
+ * other"): a set keeps the card that best fits the rest of the hand; a run blooms its highest
+ * numbers (a picked card narrows it to the groups holding that card).
+ */
+export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => {
+  const byId = new Map(v.hand.map((c) => [c.id, c]));
+  const kinds = kindsAvailable(v, legal, sel).filter((k) => k.kind.startsWith('bloom-'));
+  const fam = new Map<string, { kind: string; label: string; count: number; score: number; kinds: string[] }>();
+  for (const k of kinds) {
+    const cards = kindCards(k.kind).map((id) => byId.get(id)!).filter(Boolean);
+    if (cards.length !== kindCards(k.kind).length) continue;
+    const family = familyOf(cards);
+    // how many cards of that family the hand holds (a longer run, a four of a kind)
+    const holding = v.hand.filter((c) => (family.startsWith('s') ? c.rank === cards[0]!.rank : c.suit === cards[0]!.suit && c.suit !== null));
+    const set = family.startsWith('s');
+    const kept = set ? holding.length - cards.length : 0;
+    // a set: keep the card that fits the rest of the hand best; a run: the highest numbers
+    const keptCards = holding.filter((c) => !cards.some((x) => x.id === c.id));
+    const fit = keptCards.reduce((n, c) => n + v.hand.filter((h) => h.suit === c.suit && h.id !== c.id && Math.abs(h.rank - c.rank) <= 2).length, 0);
+    const score = set ? fit : Math.max(...cards.map((c) => c.rank));
+    const label = kept > 0 ? BLOOM.buttonKeep(cards.length, kept) : runLeft(holding, cards) > 0 ? BLOOM.buttonKeep(cards.length, runLeft(holding, cards)) : BLOOM.button(cards.length);
+    const key = `${family}-${cards.length}`;
+    const old = fam.get(key);
+    const kinds = [...(old?.kinds ?? []), k.kind];
+    if (!old || score > old.score) fam.set(key, { kind: k.kind, label, count: k.count, score, kinds });
+    else old.kinds = kinds;
+  }
+  return [...fam.values()]
+    .sort((a, b) => kindCards(b.kind).length - kindCards(a.kind).length || a.kind.localeCompare(b.kind, 'en', { numeric: true }))
+    .map(({ kind, label, count, kinds }) => ({ kind, label, count, kinds }));
+};
+
+/** Cards of a run's suit that stay in hand after blooming `cards` (only the ones joined to it count). */
+const runLeft = (holding: readonly Card[], cards: readonly Card[]): number => {
+  const lo = Math.min(...cards.map((c) => c.rank));
+  const hi = Math.max(...cards.map((c) => c.rank));
+  const ranks = new Set(holding.map((c) => c.rank));
+  let n = 0;
+  for (let r = lo - 1; ranks.has(r); r--) n++;
+  for (let r = hi + 1; ranks.has(r); r++) n++;
+  return cards.every((c) => c.rank === cards[0]!.rank) ? 0 : n;
+};
 
 /**
  * What the Grow step offers. While a sprout is possible the player sprouts first: the bar
@@ -145,7 +193,18 @@ export const bestFirst = (v: View, moves: readonly Action[]): Action[] =>
 export const options = (v: View, legal: readonly Action[], sel: Sel): Action[] => {
   if (sel.hex === null) return [];
   const list = matching(v, legal, sel).map((a, i) => ({ a, i, s: quickScore(v, a) }));
-  return list.sort((x, y) => y.s - x.s || x.i - y.i).map((x) => x.a);
+  // v0.7: a Bloom kind offers only its best Bloom on this hex (there can be hundreds)
+  const seen = new Set<string>();
+  return list
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .filter((x) => {
+      if (x.a.t !== 'Bloom') return true;
+      const k = kindOf(x.a)!;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((x) => x.a);
 };
 
 /** The move the Confirm button would play, or null. */
