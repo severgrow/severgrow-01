@@ -127,3 +127,10 @@ One line each: where the brief left room, what was chosen and why.
 - Fruit card defaults chosen by simulation (SPEC 11.4): 4 cards, root counts as touching; two targets fail and are reported (Fruit played in 99.9% of games; 17.6% of games end with >30% top-rank tiles).
 - "Game length within 10% of the current default" compares with the v0.5 default (9.14 turns each), the last default before this change.
 - Fast mode, saves: the saved-game key moves to severgrow.save.v6 and a save from older rules (no Fruit card fields) is dropped; the player starts a fresh game.
+- Lab (TEST, lite): Classic = no board override (`board: null`), so the classic game's own terrain generation is untouched; Lab boards set `config.board`.
+- Lab: with reshuffle on, the game also ends when every card is on the board or in a hand (nothing left to draw, not even after a reshuffle); before this it froze.
+- Lab: bot caps apply only on Lab boards (`config.board` set): 4 candidates (not 6), 3 imagined hands (not 6), 12 other replies per hand, 300 Bloom choices per quick look. The classic game's opponent is unchanged.
+- Lab: a Lab board's `boardRadius` is how far its farthest hex is from the centre (hex names and sizes use it); rows past Z are named by coordinates.
+- Lab: an active experiment also applies to "New game" from the menu, until "Back to Classic".
+- Lab: one finger on empty space pans a zoomed board; one finger on a hex still taps or paints, as before.
+- Lab: "Homes: near centre" picks the pair about 4 steps apart (the shortest distance that gives no warning).

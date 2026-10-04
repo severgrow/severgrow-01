@@ -5,7 +5,7 @@ import { IS_TEST } from './channel.js';
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
 import { apply, bloomGroups, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
-import type { Action, Player, State, View } from '../../src/engine/index.js';
+import type { Action, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -526,10 +526,21 @@ function dealIn() {
   });
 }
 
+// the Lab (test copy only: this import is dropped from the live build)
+let lab: { overrides: () => Partial<RulesConfig>; thinking: (on: boolean) => void } | null = null;
+// (the build constant itself, so the live build drops the Lab's code entirely)
+declare const __CHANNEL__: string;
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  void import('./lab-mode/panel.js').then((m) => {
+    lab = m.mountLab({ sheet, play: (_o, level) => startGame(randomSeed(), level as Level), board: board.svg, boardWrap: $('board-wrap') });
+  });
+}
+
 function startGame(seed: number, level: Level = settings.level) {
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  const state = newGame(seed);
+  // the test copy: the Lab's active experiment (none: the classic game)
+  const state = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
@@ -644,6 +655,7 @@ function scheduleBot() {
     if (my !== epoch || !session) return;
     const started = performance.now();
     thinking = true;
+    if (IS_TEST) lab?.thinking(true);
     renderHud();
     const st = session.state;
     if (st.phase === 'DRAW' && st.turnPlayer === BOT && botPlan?.keys[0] !== posKey(st)) botPlan = await planBotTurn(st);
@@ -656,6 +668,7 @@ function scheduleBot() {
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
+    if (IS_TEST) lab?.thinking(false);
     pill.botMoved();
     if (my !== epoch || !session) return;
     const p = session.play(action, BOT);
