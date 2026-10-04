@@ -44,7 +44,7 @@ One line each: where the brief left room, what was chosen and why.
 - Step 7: keyboard: D draws from the deck, T takes the throw pile, U undoes (only when Undo shows), next to the existing 1-9, Tab, arrows, Enter, Backspace and Esc.
 - Step 7: motion tokens tap 80 / quick 160 / move 280 / moment 600 ms, ease-out and ease-spring, kept equal in CSS and code by a test.
 - Step 7: the settings groups stay as they were (Look; Sound and feel; Animations; Playing); the volume sliders join Sound and feel.
-- Step 8: the ladder runs 400 games per pairing (not 800) to fit the run; the targets are judged on those.
+- Step 8: the ladder runs 1,000 games per pairing, as asked (swapped starts, 4 processes).
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 
