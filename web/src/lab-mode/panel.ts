@@ -16,11 +16,19 @@ export type LabHooks = {
   sheet: (id: string | null) => void;
   /** starts a new game with these overrides at this opponent level */
   play: (overrides: Partial<RulesConfig>, level: number) => void;
+  /** "Watch a game": starts a game where a second opponent (level `green`) plays my seat */
+  watch: (level: number, green: number, pause: number) => void;
+  /** changes the watched game in place (null: I take over my seat) */
+  setWatch: (w: { level: number; pause: number } | null) => void;
   board: SVGSVGElement;
   boardWrap: HTMLElement;
 };
 
 const ACTIVE_KEY = 'severgrow-lab-active';
+/** "Watch a game" speeds: the extra pause after each move, in ms */
+const PACES = [1400, 500, 0];
+const PACE_NAMES = ['Slow', 'Normal', 'Fast'];
+let pace = 1;
 const MINE_KEY = 'severgrow-lab-presets';
 
 const read = (k: string): string | null => {
@@ -176,8 +184,12 @@ export const mountLab = (hooks: LabHooks) => {
         <p class="muted small">${s.reshuffle ? 'With reshuffle on, the turn limit is the only clock.' : 'The game ends at the turn limit or when the deck runs out, whichever comes first.'}</p>
         <h3>Opponent</h3>
         ${num('level', 'Level', 1, 9)}
+        <h3>Watch a game</h3>
+        <p class="muted small">Two opponents play each other on this experiment while you watch. Green plays your side, red is the opponent above. You can take over green at any time.</p>
+        ${num('watchLevel', 'Green level', 1, 9)}
         <div class="lab-buttons">
           <button class="btn primary big" type="button" data-lab="play">Apply and play</button>
+          <button class="btn big" type="button" data-lab="watch">Watch a game</button>
           <button class="btn ghost" type="button" data-lab="classic">Reset to Classic</button>
           <button class="btn ghost" type="button" data-lab="copy">Copy link</button>
           <button class="btn ghost" type="button" data-lab="save">Save as preset</button>
@@ -242,6 +254,11 @@ export const mountLab = (hooks: LabHooks) => {
       activate(s);
       hooks.sheet(null);
       hooks.play(toOverrides(s), s.level);
+    } else if (what === 'watch') {
+      fromLink = false;
+      activate(s);
+      hooks.sheet(null);
+      hooks.watch(s.level, s.watchLevel, PACES[pace]!);
     } else if (what === 'copy') {
       const url = `${location.origin}${location.pathname}#lab=${encodeSetup(s)}`;
       msg(url);
@@ -311,7 +328,38 @@ export const mountLab = (hooks: LabHooks) => {
   document.body.appendChild(note);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  // ---------- the bar shown while watching: speed and "Take over" ----------
+  const bar = document.createElement('div');
+  bar.className = 'lab-watchbar';
+  bar.hidden = true;
+  document.body.appendChild(bar);
+  let watched: { level: number; pause: number } | null = null;
+  const showBar = () => {
+    bar.hidden = !watched;
+    if (!watched) return;
+    bar.innerHTML = `<span>Watching: <b>green</b> Level ${watched.level} vs <b>red</b> Level ${s.level}</span>
+      <div class="lab-speed" role="radiogroup" aria-label="Speed">${PACE_NAMES.map((n, i) => `<button type="button" role="radio" aria-checked="${i === pace}" data-pace="${i}"${i === pace ? ' class="on"' : ''}>${n}</button>`).join('')}</div>
+      <button type="button" class="btn ghost" data-take>Take over</button>`;
+  };
+  bar.addEventListener('click', (e) => {
+    const t = (e.target as Element).closest<HTMLElement>('[data-pace], [data-take]');
+    if (!t || !watched) return;
+    if (t.dataset.pace !== undefined) {
+      pace = Number(t.dataset.pace);
+      watched = { ...watched, pause: PACES[pace]! };
+      hooks.setWatch(watched);
+    } else {
+      watched = null;
+      hooks.setWatch(null);
+    }
+    showBar();
+  });
+
   return {
+    watchingChanged: (w: { level: number; pause: number } | null) => {
+      watched = w;
+      showBar();
+    },
     /** the engine overrides for a new game (the active experiment's, or none) */
     overrides: (): Partial<RulesConfig> => (active ? toOverrides(active) : {}),
     thinking: (on: boolean) => {

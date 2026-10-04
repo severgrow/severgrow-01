@@ -134,3 +134,4 @@ One line each: where the brief left room, what was chosen and why.
 - Lab: an active experiment also applies to "New game" from the menu, until "Back to Classic".
 - Lab: one finger on empty space pans a zoomed board; one finger on a hex still taps or paints, as before.
 - Lab: "Homes: near centre" picks the pair about 4 steps apart (the shortest distance that gives no warning).
+- Lab: the "bots play each other" feature is called "Watch a game": green (my seat) and red each have a level; "Take over" hands green back to me; watched games are not counted in stats.

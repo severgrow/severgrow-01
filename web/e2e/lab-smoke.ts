@@ -114,6 +114,32 @@ const pickPreset = async (page: Page, name: string) => {
   await p2.close();
 }
 
+// 5. "Watch a game": two opponents play to the end on their own; "Take over" hands green back
+{
+  const { page, errors } = await open();
+  await page.click('#menu-lab');
+  await page.click('#sheet-lab .lab-buttons [data-lab="watch"]');
+  check('the watch bar shows', await page.locator('.lab-watchbar').isVisible());
+  await page.click('.lab-watchbar [data-pace="2"]');
+  await page.waitForFunction(() => (window as unknown as { __severgrow: Hook }).__severgrow.state()?.phase === 'GAME_OVER', undefined, { timeout: 240000 }).catch(() => {});
+  const s = (await state(page))!;
+  check('a watched game plays to the end by itself', s.phase === 'GAME_OVER', `turn ${s.turnNumber}, result ${JSON.stringify(s.result)}`);
+  // take over mid-game: green waits for me
+  await page.click('#menu-lab').catch(() => {});
+  await page.goto(BASE);
+  await page.click('#menu-lab');
+  await page.click('#sheet-lab .lab-buttons [data-lab="watch"]');
+  await page.waitForFunction(() => ((window as unknown as { __severgrow: Hook }).__severgrow.state()?.history?.length ?? 0) > 6, undefined, { timeout: 60000 });
+  await page.click('.lab-watchbar [data-take]');
+  await page.waitForTimeout(4000);
+  const a = (await state(page))!;
+  await page.waitForTimeout(2500);
+  const b = (await state(page))!;
+  check('"Take over": the game waits for my move', a.actor === 0 && JSON.stringify(a) === JSON.stringify(b) && !(await page.locator('.lab-watchbar').isVisible()));
+  check('no console errors (watch)', errors.length === 0, errors.slice(0, 3).join(' | '));
+  await page.close();
+}
+
 await browser.close();
 server.httpServer.close();
 console.log(failed ? `${failed} FAILED` : 'ALL PASS');

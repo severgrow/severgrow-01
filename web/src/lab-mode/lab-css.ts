@@ -29,4 +29,13 @@ export const LAB_CSS = `
 .lab-line .lab-back { min-height: 40px; margin-left: 6px; }
 .lab-reset-view { position: absolute; left: 8px; bottom: 8px; z-index: 3; min-height: 40px; padding: 0 12px; border-radius: 20px; border: 1.5px solid var(--c-line); background: var(--c-surface); color: inherit; font: inherit; }
 .lab-thinking { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 9; padding: 6px 14px; border-radius: 16px; background: var(--c-surface); border: 1.5px solid var(--c-line); font-size: 0.9rem; opacity: 0.9; pointer-events: none; }
+.lab-watchbar { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top) + 56px); z-index: 9; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; padding: 4px 8px; font-size: 0.8rem; max-width: calc(100vw - 32px); border-radius: 16px; background: var(--c-surface); border: 1.5px solid var(--c-line); box-shadow: 0 4px 18px rgba(0,0,0,0.3); }
+.lab-watchbar .btn { min-height: 40px; padding: 0 12px; }
+.lab-watchbar > span { width: 100%; text-align: center; }
+.lab-speed { display: flex; border: 1.5px solid var(--c-line); border-radius: 12px; overflow: hidden; }
+.lab-speed button { min-height: 40px; min-width: 52px; border: 0; background: transparent; color: inherit; font: inherit; }
+.lab-speed button.on { background: var(--c-line); font-weight: 700; }
+/* while watching, my seat is not mine: no taps on the board, hand or piles */
+body.lab-watching #board-wrap, body.lab-watching #hand, body.lab-watching .dock { pointer-events: none; }
+body.lab-watching .dock { opacity: 0.55; }
 `;

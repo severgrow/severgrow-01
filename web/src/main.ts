@@ -527,16 +527,37 @@ function dealIn() {
 }
 
 // the Lab (test copy only: this import is dropped from the live build)
-let lab: { overrides: () => Partial<RulesConfig>; thinking: (on: boolean) => void } | null = null;
+let lab: {
+  overrides: () => Partial<RulesConfig>;
+  thinking: (on: boolean) => void;
+  watchingChanged: (w: { level: number; pause: number } | null) => void;
+} | null = null;
 // (the build constant itself, so the live build drops the Lab's code entirely)
 declare const __CHANNEL__: string;
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   void import('./lab-mode/panel.js').then((m) => {
-    lab = m.mountLab({ sheet, play: (_o, level) => startGame(randomSeed(), level as Level), board: board.svg, boardWrap: $('board-wrap') });
+    lab = m.mountLab({
+      sheet,
+      play: (_o, level) => startGame(randomSeed(), level as Level),
+      watch: (level, green, pause) => startGame(randomSeed(), level as Level, { level: green as Level, pause }),
+      setWatch: (w) => {
+        watching = w ? { level: w.level as Level, pause: w.pause } : null;
+        document.body.classList.toggle('lab-watching', !!watching);
+        render();
+        scheduleBot();
+      },
+      board: board.svg,
+      boardWrap: $('board-wrap'),
+    });
   });
 }
 
-function startGame(seed: number, level: Level = settings.level) {
+function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+  watching = IS_TEST ? watch : null;
+  if (IS_TEST) {
+    document.body.classList.toggle('lab-watching', !!watching);
+    lab?.watchingChanged(watching);
+  }
   store.set(SEEN_KEY, '1');
   gameLevel = level;
   // the test copy: the Lab's active experiment (none: the classic game)
@@ -553,6 +574,11 @@ function continueGame() {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
   log = ['Welcome back.'];
+  watching = null;
+  if (IS_TEST) {
+    document.body.classList.remove('lab-watching');
+    lab?.watchingChanged(null);
+  }
   gameLevel = saved.level;
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
@@ -575,7 +601,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER') {
+    if (p.before.phase !== 'GAME_OVER' && !watching) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
@@ -647,7 +673,9 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 function scheduleBot() {
   if (!session || botBusy) return;
   const st = session.state;
-  if (st.phase === 'GAME_OVER' || st.actor !== BOT) return;
+  if (st.phase === 'GAME_OVER') return;
+  // the Lab's "Watch a game" (test copy only): a second opponent plays my seat
+  if (st.actor !== BOT) return void (IS_TEST && watching && scheduleWatch());
   botBusy = true;
   const my = epoch;
   void (async () => {
@@ -674,6 +702,32 @@ function scheduleBot() {
     const p = session.play(action, BOT);
     botBusy = false;
     if (p) afterPlay(p, BOT, null);
+    else render();
+  })();
+}
+/** The Lab's "Watch a game": the level playing my seat and the pause after each move (null: I play). */
+let watching: { level: Level; pause: number } | null = null;
+function scheduleWatch() {
+  if (!session || botBusy || !watching) return;
+  botBusy = true;
+  const my = epoch;
+  // something on my side (a skipped animation, a new deal) can restart the step: try again
+  const retry = () => {
+    botBusy = false;
+    if (watching && session) setTimeout(scheduleBot, 60);
+  };
+  void (async () => {
+    await idle();
+    if (my !== epoch || !session || !watching) return retry();
+    const st = session.state;
+    const lvl = watching.level;
+    const action = await askBot(viewFor(st, HUMAN), lvl, botSeed(st.seed ^ 0x9e3779b9, lvl, st.turnNumber, st.history?.length ?? 0));
+    const grows = action.t === 'Bloom' || action.t === 'Sprout';
+    await wait(((grows ? 300 : 90) + (watching?.pause ?? 0)) * timeScale(), my);
+    if (my !== epoch || !session || !watching || session.state !== st) return retry();
+    const p = session.play(action, HUMAN);
+    botBusy = false;
+    if (p) afterPlay(p, HUMAN, null);
     else render();
   })();
 }
@@ -1519,7 +1573,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');

@@ -36,6 +36,14 @@ saves and settings, separate from the real game.
 
 **Opponent**: level 1 to 9.
 
+## Watch a game
+
+Two opponents play each other on the current experiment while you watch, live, with every
+animation. Set **Green level** (green plays your side, at the bottom) and the opponent's
+**Level** (red, at the top), then tap **Watch a game**. A small bar at the top shows who is
+playing, a speed switch (**Slow**, **Normal**, **Fast**) and **Take over**: green stops and the
+game waits for you to play its moves. Watched games don't count in your stats.
+
 ## Buttons
 
 - **Apply and play** starts the experiment. "New game" from the menu keeps using it until you

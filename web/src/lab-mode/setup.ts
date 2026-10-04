@@ -26,6 +26,8 @@ export type LabSetup = {
   /** turns per player; 0 = until the deck runs out (not allowed with reshuffle) */
   turns: number;
   level: number;
+  /** "Watch a game": the level playing the green side (my seat) */
+  watchLevel: number;
 };
 
 export const CLASSIC: LabSetup = {
@@ -46,6 +48,7 @@ export const CLASSIC: LabSetup = {
   reshuffle: false,
   turns: DEFAULT_CONFIG.maxTurnsPerPlayer,
   level: 7,
+  watchLevel: 7,
 };
 
 const P = (name: string, x: Partial<LabSetup>): LabSetup => ({ ...CLASSIC, name, ...x });
@@ -89,6 +92,7 @@ export const sanitize = (x: Partial<Record<keyof LabSetup, unknown>>): LabSetup 
     // with reshuffle the turn limit is the only clock, so it can't be "until the deck runs out"
     turns: clampInt(x.turns, reshuffle ? 10 : 0, 200, CLASSIC.turns),
     level: clampInt(x.level, 1, 9, 7),
+    watchLevel: clampInt(x.watchLevel, 1, 9, 7),
   };
 };
 
