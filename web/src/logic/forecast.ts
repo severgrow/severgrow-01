@@ -16,7 +16,7 @@ export type Forecast = {
   replaced: number;
   /** opponent tiles cut off by the move (not the replaced ones) */
   cutTheirs: string[];
-  /** my tiles this move costs me: a Fruit's sacrifice and anything of mine it cuts off */
+  /** my tiles this move cuts off (a Fruit card never costs me a tile) */
   cutMine: string[];
   /** the opponent's best cut of my network after the move (the weak tile and how many it takes) */
   atRisk: { key: string; loss: number } | null;
@@ -72,15 +72,15 @@ export const forecastMove = (v: View, a: Action, rules = CONFIRM_RULES): Forecas
   const after: Ctx = { config: v.config, terrain: v.terrain, board: sim.board };
   const isStrengthen = a.t === 'Sprout' && v.board[coordKey(a.coord)]?.owner === me;
   const placedKeys = new Set<string>(a.t === 'Sprout' ? [coordKey(a.coord)] : a.t === 'MeldSet' ? a.hexes.map(coordKey) : a.t === 'MeldRun' ? Object.keys(sim.board).filter((k) => sim.board[k]?.owner === me && v.board[k]?.owner !== me) : []);
-  const cutTheirs = Object.keys(v.board).filter((k) => v.board[k]?.owner === opp && !v.board[k]!.root && !placedKeys.has(k) && !sim.board[k] && !(a.t === 'Fruit' && coordKey(a.target) === k));
+  const cutTheirs = Object.keys(v.board).filter((k) => v.board[k]?.owner === opp && !v.board[k]!.root && !placedKeys.has(k) && !sim.board[k] && !(a.t === 'PlayFruit' && coordKey(a.target) === k));
   const cutMine = Object.keys(v.board).filter((k) => v.board[k]?.owner === me && !v.board[k]!.root && sim.board[k]?.owner !== me).sort();
   const worst = threats(after, me)[0] ?? null;
-  const cards = a.t === 'Sprout' ? 1 : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards.length : 0;
+  const cards = a.t === 'Sprout' || a.t === 'PlayFruit' ? 1 : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards.length : 0;
   return {
-    kind: a.t === 'Fruit' ? 'fruit' : isStrengthen ? 'strengthen' : 'grow',
+    kind: a.t === 'PlayFruit' ? 'fruit' : isStrengthen ? 'strengthen' : 'grow',
     tiles: isStrengthen ? 0 : sim.placed,
     points: sim.points,
-    replaced: isStrengthen ? 0 : sim.taken - (a.t === 'Fruit' ? 1 : 0),
+    replaced: isStrengthen ? 0 : sim.taken - (a.t === 'PlayFruit' ? 1 : 0),
     cutTheirs: cutTheirs.sort(),
     cutMine,
     atRisk: worst ? { key: worst.key, loss: worst.loss } : null,
@@ -115,7 +115,7 @@ export const riskLines = (f: Forecast, rules = CONFIRM_RULES): { reason: RiskRea
       case 'cutsOwn':
         return { reason, icon: '✂', text: `Cuts off ${n} of your tiles` };
       case 'fruit':
-        return { reason, icon: '✿', text: `Uses Fruit: gives up ${n} tiles` };
+        return { reason, icon: '✿', text: 'Uses a Fruit card' };
       case 'lastCard':
         return { reason, icon: '▢', text: 'Uses your last card' };
       case 'root':

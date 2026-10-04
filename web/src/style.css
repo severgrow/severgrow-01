@@ -1206,10 +1206,18 @@ svg.usable .hex-cell {
 }
 .moves {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  /* one line, never wrapping up under the forecast; a crowded row scrolls sideways */
+  flex-wrap: nowrap;
+  justify-content: safe center;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
   gap: 6px;
   min-height: 44px;
+}
+.moves > * {
+  flex: none;
 }
 .moves .btn {
   padding: 0 12px;
@@ -2681,85 +2689,8 @@ svg.usable .hex-cell {
 .mark-badge.replace circle {
   stroke-dasharray: 2 1.5;
 }
-.mark-badge.fruit circle,
-.mark-badge.fruit-x circle {
-  fill: var(--c-accent);
-  stroke: var(--c-bg);
-}
-.mark-badge.fruit text,
-.mark-badge.fruit-x text {
-  fill: var(--c-accentInk, var(--c-bg));
-}
 .mark-badge {
   pointer-events: none;
-}
-/* Fruit: tiles that can be given up glow; picked ones wear a number; the target a cross. */
-.target.fruit-valid {
-  stroke: var(--c-accent);
-}
-.fruit-picked {
-  fill: color-mix(in srgb, var(--c-bg) 45%, transparent);
-  stroke: var(--c-accent);
-  stroke-width: 2.6;
-  stroke-dasharray: 4 3;
-  pointer-events: none;
-}
-.fruit-target {
-  fill: none;
-  stroke: var(--c-danger);
-  stroke-width: 3;
-  pointer-events: none;
-}
-/* The Fruit button and the flow's progress line */
-.btn.fruit {
-  border-color: var(--c-accent);
-}
-.btn.fruit.off {
-  opacity: 0.55;
-  cursor: default;
-}
-.fruit-why {
-  font-size: 0.8rem;
-  color: var(--c-muted);
-  align-self: center;
-  max-width: 11em;
-  line-height: 1.2;
-}
-.fruit-steps {
-  display: flex;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: fs;
-  font-size: 0.82rem;
-  color: var(--c-muted);
-  align-items: center;
-  flex-wrap: wrap;
-}
-.fruit-steps li {
-  counter-increment: fs;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--c-line);
-  white-space: nowrap;
-}
-.fruit-steps li::before {
-  content: counter(fs) ' ';
-  font-weight: 700;
-}
-.fruit-steps li.now {
-  color: var(--c-text);
-  border-color: var(--c-accent);
-}
-.fruit-steps li.done {
-  opacity: 0.6;
-}
-.fruit-count {
-  font-weight: var(--w-num);
-  font-size: 1rem;
-  padding: 2px 8px;
-  align-self: center;
 }
 .warn.note {
   color: var(--c-muted);
@@ -2944,10 +2875,6 @@ svg.usable .hex-cell {
   font-weight: 600;
   margin-top: 4px;
 }
-.tooltip .tc-info {
-  margin-top: 4px;
-  font-style: italic;
-}
 .tooltip .tc-fruit {
   margin-top: 8px;
   align-self: flex-start;
@@ -2961,11 +2888,6 @@ svg.usable .hex-cell {
   font-style: italic;
   font-family: Georgia, serif;
   font-weight: 700;
-}
-.fruit-give {
-  font-size: 0.85rem;
-  color: var(--c-text);
-  align-self: center;
 }
 
 /* ---- polish pass 3: drawing a line or clump ---- */
@@ -3116,136 +3038,6 @@ svg.usable .hex-cell {
   min-height: 44px;
 }
 
-/* ---- Seed ruleset (A/B test): a tile placed by a Seed is a small planted seed ---- */
-/* the seed's tilt is an SVG rotate() around its own centre: keep the board's coordinates */
-.tile .seed,
-.tile .seed * {
-  transform-box: view-box;
-  transform-origin: 0 0;
-}
-/* freshly turned soil, warm and dark, with a hint of the owner's colour */
-.seed-ground.you {
-  fill: color-mix(in srgb, var(--c-you) 16%, #2b2219);
-}
-.seed-ground.bot {
-  fill: color-mix(in srgb, var(--c-bot) 16%, #2b2219);
-}
-.seed-ground.you {
-  stroke: color-mix(in srgb, var(--c-you) 70%, transparent);
-  stroke-width: 1.6;
-}
-.seed-ground.bot {
-  stroke: color-mix(in srgb, var(--c-bot) 70%, transparent);
-  stroke-width: 1.6;
-}
-.seed-soil {
-  stroke: none;
-}
-.seed-furrow {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.28);
-  stroke-width: 1.1;
-  stroke-linecap: round;
-}
-.seed-shadow {
-  fill: rgba(0, 0, 0, 0.3);
-}
-.seed-husk {
-  stroke: rgba(0, 0, 0, 0.45);
-  stroke-width: 0.8;
-}
-.seed-seam {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.32);
-  stroke-width: 0.8;
-}
-.seed-shine {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 1.2;
-  stroke-linecap: round;
-}
-.seed-shoot {
-  fill: none;
-  stroke: var(--c-you);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-.seed-leaf {
-  fill: var(--c-you);
-}
-.seed-spark {
-  fill: var(--c-bot);
-  opacity: 0.55;
-}
-.seed-spark.pulsing {
-  animation: seed-wake 2.8s ease-in-out infinite alternate;
-}
-.seed-spark-core {
-  fill: #fff3c4;
-}
-@keyframes seed-wake {
-  from {
-    opacity: 0.3;
-  }
-  to {
-    opacity: 0.75;
-  }
-}
-.reduce-motion .seed-spark.pulsing {
-  animation: none;
-}
-.seed-num {
-  font-size: 12.5px;
-  paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.45);
-  stroke-width: 2px;
-  fill: #fff !important;
-}
-
-/* ---- Seed A/B test: the two version buttons and the quiet "which version" label ---- */
-.menu-versions {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-}
-.menu-versions .btn {
-  flex: 1 1 0;
-  min-width: 0;
-  padding-inline: 10px;
-}
-.version-chip {
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--c-muted);
-  border: 1px solid var(--c-line);
-  border-radius: 999px;
-  padding: 2px 8px;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-.version-chip:empty {
-  display: none;
-}
-.steps-row .version-chip {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@media (max-width: 430px) {
-  .steps-row .version-chip .vc-rest {
-    display: none;
-  }
-  .steps-row .version-chip {
-    padding: 2px 6px;
-  }
-}
-.levels-head .version-chip {
-  margin-left: auto;
-}
-
 /* narrow phones (under ~385px, e.g. 375px iPhone SE / mini, 360px Android): the score bar
    drops the "You" / "Opponent" words (the marks, colours and aria-labels still say whose score
    it is), so the history button stays on screen */
@@ -3255,7 +3047,7 @@ svg.usable .hex-cell {
   }
 }
 
-/* the version buttons: the name, and a small line saying what it means */
+/* a two-line button (Continue): the name, and a small line under it */
 .version-btn {
   display: flex;
   flex-direction: column;
@@ -3292,10 +3084,6 @@ svg.usable .hex-cell {
   transform-box: fill-box;
   transform-origin: center;
   transform: translate(2.5px, -1px) scale(0.78);
-}
-/* the seed's number on a small dark plate, readable on every palette */
-.seed-num-plate {
-  fill: rgba(0, 0, 0, 0.42);
 }
 /* what the opponent changed last turn: a small spark at the top of the hex */
 .fresh-halo {
@@ -3346,14 +3134,6 @@ svg.usable .hex-cell {
 .board-wrap.show-labels .chip.corner .chip-label {
   display: inline;
   font-size: 0.72rem;
-}
-/* the version label is a button: tap it for one line about the version */
-button.version-chip {
-  font: inherit;
-  font-size: 0.68rem;
-  background: none;
-  cursor: pointer;
-  min-height: 28px;
 }
 
 /* =====================================================================
@@ -3952,6 +3732,21 @@ html[data-layout='side'] .dock-overlays {
 .dock-overlays .coach-actions .btn {
   min-height: 32px;
 }
+/* the tip's "Got it" sits beside the text, never scrolled out of the box */
+.dock-overlays > .first-tip:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: center;
+}
+.dock-overlays > .first-tip > :not(#first-tip-ok) {
+  grid-column: 1;
+}
+.dock-overlays #first-tip-ok {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 36px;
+}
 .dock-overlays #first-tip-text {
   margin: 0 0 4px;
   font-size: 0.8rem;
@@ -4543,4 +4338,114 @@ html.final-turns .game::after {
 }
 .smoother[hidden] {
   display: none;
+}
+
+/* the hidden ?debug=1 corner (the game's random number; never on the normal page) */
+.debug-corner {
+  position: fixed;
+  left: 4px;
+  bottom: 4px;
+  z-index: 90;
+  margin: 0;
+  padding: 4px 6px;
+  font: 11px/1.3 ui-monospace, monospace;
+  color: var(--ink, #eee);
+  background: rgb(0 0 0 / 0.55);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* ---------- v0.6 Fruit cards ---------- */
+/* Bone-cream face, a mushroom with spores, a small "Fruit" print, a thin pearly edge and a
+   low-key raised look. No suit colour (and no amber, mint or coral). */
+.card.fruit {
+  --card-bg: linear-gradient(160deg, #f4ecdb 0%, #ebe0c8 55%, #e2d5ba 100%);
+  --card-ink: #4a3a2a;
+  background: var(--card-bg);
+  color: var(--card-ink);
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -2px 3px rgb(90 70 40 / 0.12), 0 1px 2px rgb(0 0 0 / 0.25);
+  grid-template-rows: 1fr auto;
+  align-items: center;
+}
+.card.fruit::before {
+  /* the thin pearly (iridescent) edge */
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from 210deg, #d9d2ec, #cfe3ea, #efe7cf, #e6d6e8, #d6e6dc, #d9d2ec);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.card.fruit .c-fruit {
+  font-size: calc(var(--ch) * 0.42);
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.card.fruit .c-print {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.pile-top.card.fruit .c-fruit {
+  font-size: calc(var(--ch) * 0.36);
+}
+/* in the hand: a small gap before the Fruit cards, a soft glow when one has a target */
+.hand .card.fruit-gap {
+  margin-left: calc(min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1))) + 6px);
+}
+.hand .card.fruit.fruit-ready {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.35), 0 0 10px 2px color-mix(in srgb, #e9e2f4 55%, transparent);
+}
+.hand .card.fruit.dim {
+  opacity: 0.55;
+}
+.piles {
+  position: relative;
+}
+/* a small line just under the two piles: it takes no room from the move buttons */
+.fruit-chip {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  font-size: 0.6rem;
+  line-height: 1.5;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  color: var(--c-muted, var(--c-text));
+  background: color-mix(in srgb, var(--c-surface) 85%, transparent);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hand .card.fruit.fruit-ready {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 2px #d9d2ec;
+  }
+}
+/* a Fruit card's targets: a calm pearly dashed ring (any strength), no colour alarm */
+.target.kind-fruit {
+  stroke: #f2ecfb;
+  stroke-width: 2.6;
+  stroke-opacity: 0.95;
+  stroke-dasharray: 5 3;
+  fill: #efe7cf;
+  fill-opacity: 0.2;
+}
+@media (max-width: 420px) {
+  .moves {
+    gap: 4px;
+  }
+  .moves .btn {
+    padding: 0 10px;
+    font-size: 0.85rem;
+  }
+  .moves .btn.link {
+    padding: 0 4px;
+  }
 }

@@ -4,7 +4,7 @@
 dir=$1; games=$2; shift 2
 for pair in "$@"; do
   for p in 0 1 2 3; do
-    npx tsx src/sim/ladder.ts --pair="$pair" --games="$games" --part=$p --parts=4 --dir="$dir" --ruleset="${RULESET:-sprout}" &
+    npx tsx src/sim/ladder.ts --pair="$pair" --games="$games" --part=$p --parts=4 --dir="$dir" &
   done
   wait
 done

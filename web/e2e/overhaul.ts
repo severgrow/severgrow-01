@@ -5,7 +5,7 @@
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
-import { RULESETS, apply, newGame, viewFor } from '../../src/engine/index.js';
+import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { fixture } from '../../tests/helpers.js';
@@ -24,7 +24,7 @@ const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { execu
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
 const midGame = (seed: number, turn: number): State => {
-  let s: State = newGame(seed, RULESETS.sprout);
+  let s: State = newGame(seed);
   let i = 0;
   while (s.phase !== 'GAME_OVER' && !(s.turnNumber >= turn && s.actor === 0 && s.phase === 'ACT')) s = apply(s, chooseLevelAction(viewFor(s, s.actor), 7, i++));
   return s;
@@ -48,7 +48,7 @@ const open = async (state: State | null, o: { w?: number; h?: number; touch?: bo
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      if (saved) localStorage.setItem('severgrow.save.v5', saved as string);
+      if (saved) localStorage.setItem('severgrow.save.v6', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },
@@ -68,6 +68,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   let asked = 0;
   let total = 0;
   const errs: string[] = [];
+  const miss: string[] = [];
   for (const seed of [31, 44, 52]) {
     const state = midGame(seed, 9);
     const { page, errors } = await open(state);
@@ -88,22 +89,28 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
         total++;
         const a = pending ?? null;
         if (a) {
-          const want = needsConfirm('smart', forecastMove(viewFor(st, 0), a));
+          // a Strengthen always shows its preview first (by design, docs/UX.md); other moves ask by the policy
+          const strengthen = a.t === 'Sprout' && st.board[`${a.coord.q},${a.coord.r}`]?.owner === 0;
+          const want = strengthen || needsConfirm('smart', forecastMove(viewFor(st, 0), a));
           const bar = await page.locator('#confirm').isVisible();
           if (want === bar) agree++;
+          else miss.push(`${a.t} want ${want} bar ${bar}`);
           if (bar) asked++;
         } else agree++; // played at once: it was safe (a risky move would have stayed pending)
       }
       if (played) {
-        await page.click('#tool-undo', { timeout: 3000 });
-        await page.waitForTimeout(150);
+        // back to the start (an auto-skipped Grow step is one more Undo)
+        for (let u = 0; u < 3 && ((await hook<State>(page, 'state'))!.history!.length > state.history!.length); u++) {
+          await page.click('#tool-undo', { timeout: 3000 });
+          await page.waitForTimeout(150);
+        }
       } else await page.locator('#confirm-cancel:visible, #moves .cancel').first().click().catch(() => {});
       await page.waitForTimeout(100);
     }
     errs.push(...errors);
     await page.close();
   }
-  check('Smart confirmation: the Confirm bar shows exactly when the policy says so (with Undo between tries)', total > 5 && agree === total && errs.length === 0, `${agree}/${total} agree, ${asked} asked${errs.length ? `; ${errs[0]}` : ''}`);
+  check('Smart confirmation: the Confirm bar shows exactly when the policy says so (with Undo between tries)', total > 5 && agree === total && errs.length === 0, `${agree}/${total} agree, ${asked} asked${miss.length ? `; ${miss.slice(0, 3).join(', ')}` : ''}${errs.length ? `; ${errs[0]}` : ''}`);
 }
 
 // ---- 2. Never / Always ----
@@ -179,13 +186,23 @@ for (const [w, h] of [[360, 640], [390, 844], [430, 932], [768, 1024], [1280, 80
 // ---- 5. Smoother mode: on a very slow device a big cut switches effects to Low, once, with a note ----
 {
   const { state, action } = cutPosition(9);
-  const { page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } });
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 20 });
-  await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
-  await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-  const shown = await page.locator('#smoother').isVisible();
+  // The detector counts frames between 20 ms and 500 ms; how slow a throttled frame is depends
+  // on the machine, so try a few slow-downs (each on a fresh page) until frames land in that band.
+  let page: Page | null = null;
+  let errors: string[] = [];
+  let shown = false;
+  for (const rate of [20, 10, 6, 40]) {
+    if (page) await page.close();
+    ({ page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } }));
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+    await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
+    await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    shown = await page.locator('#smoother').isVisible();
+    if (shown) break;
+  }
+  page = page!;
   const low = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'low';
   if (shown) await page.click('#smoother-undo');
   const back = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'normal';

@@ -1,12 +1,11 @@
 // "What if" helpers shared by GreedyBot and the playtest coach. Pure; read only the
 // engine's public API and a player's View (never hidden cards).
 import {
-  applyFruit,
   applyPlacement,
   coordKey,
   hexDistance,
   parseKey,
-  planFruit,
+  planFruitCard,
   planRun,
   planSet,
   planSprout,
@@ -65,14 +64,13 @@ export type Simulation = {
   wins: boolean;
 };
 
-/** The board after a meld or Fruit (with Sever), and what changed. Null for other moves. */
+/** The board after a meld, Sprout or Fruit card (with Sever), and what changed. Null for other moves. */
 export const simulate = (v: View, a: Action): Simulation | null => {
   const p = v.player;
   const o = other(p);
   let board: Record<string, Tile | null>;
   let placed = 0;
   let taken = 0;
-  let sacrificed = 0;
   if (a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout') {
     const plan =
       a.t === 'MeldRun'
@@ -84,10 +82,10 @@ export const simulate = (v: View, a: Action): Simulation | null => {
     board = out.board;
     placed = plan.tiles.length;
     taken = out.overgrown.length;
-  } else if (a.t === 'Fruit') {
-    board = applyFruit(v.board, planFruit(v, p, v.fruitUsed[p], a.sacrifice, a.target));
+  } else if (a.t === 'PlayFruit') {
+    // v0.6 Fruit card: the target goes (whatever its strength), nothing of mine is given up
+    board = removeTiles(v.board, [planFruitCard(v, p, v.hand, a.card, a.target).target]);
     taken = 1;
-    sacrificed = 3;
   } else return null;
 
   const cut = sever(board, v.config, p);
@@ -99,7 +97,7 @@ export const simulate = (v: View, a: Action): Simulation | null => {
     placed,
     taken,
     botCut: count(o),
-    myLoss: sacrificed + count(p),
+    myLoss: count(p),
     points: score(after, p) - score(v, p),
     botPointsLost: score(v, o) - score(after, o),
     wins: outcome?.reason === 'strangle' && outcome.loser === o,

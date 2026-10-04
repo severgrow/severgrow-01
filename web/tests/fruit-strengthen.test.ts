@@ -10,7 +10,7 @@ import { moveTier, tierBanner } from '../src/logic/juice.js';
 import { TIPS, markTip, parseTips } from '../src/logic/tips.js';
 import { fixture } from '../../tests/helpers.js';
 
-const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number][], config: Partial<RulesConfig> = {}, patch: Partial<State> = {}): State => {
+const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit | null, number][], config: Partial<RulesConfig> = {}, patch: Partial<State> = {}): State => {
   const g = newGame(5, config);
   const f = fixture({ tiles, config });
   const pool = [...g.hands[0], ...g.hands[1], ...g.deck];
@@ -33,7 +33,7 @@ describe('three kinds of Sprout target', () => {
     expect(kinds.get('1,0')).toBe('replace');
     expect(kinds.get('-2,1')).toBe('grow');
     expect(kinds.has('0,0')).toBe(false); // equal strength: not a target
-    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile' });
+    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile', fruit: 'Remove with a Fruit card' }); // v0.6: + a Fruit card's targets
     expect(sproutKind(v, { t: 'Sprout', card: id, coord: { q: -1, r: 1 } })).toBe('strengthen');
   });
 
@@ -61,25 +61,28 @@ describe('first-time tips (remembered in the browser)', () => {
     let seen = parseTips(null);
     expect(seen.fruit).toBe(false);
     seen = markTip(seen, 'fruit');
-    expect(parseTips(JSON.stringify(seen))).toEqual({ fruit: true, strengthen: false, draw: false });
-    expect(parseTips('{oops')).toEqual({ fruit: false, strengthen: false, draw: false });
+    expect(parseTips(JSON.stringify(seen))).toEqual({ fruit: true, strengthen: false, draw: false, fruitAny: false });
+    expect(parseTips('{oops')).toEqual({ fruit: false, strengthen: false, draw: false, fruitAny: false });
+    // v0.6: the one-time Fruit card tip, in the strings file's words
+    expect(TIPS.fruit.text).toBe('Fruit cards: play one on an opponent tile that touches yours to remove it, even a 9.');
     // polish pass 3: the drawing tip, in the words the How to play sheet uses too
     expect(TIPS.draw.text).toBe('Drag over hexes to draw your clump or line. On a computer, click to start and click to finish.');
   });
 });
 
 describe('animation steps from the engine events', () => {
-  it('Strengthen becomes a level-up step; Fruit becomes a big moment with a banner, then the cuts; the board always syncs', () => {
-    const s = stateWith({ '-1,1': [0, 5], '0,1': [0, 2], '0,0': [0, 2], '1,0': [1, 9], '1,-1': [1, 4], '2,0': [1, 3] }, [[0, 9], [1, 1]]);
+  it('Strengthen becomes a level-up step; a Fruit card becomes a big moment with a banner, then the cuts; the board always syncs', () => {
+    const s = stateWith({ '-1,1': [0, 5], '0,1': [0, 2], '0,0': [0, 2], '1,0': [1, 9], '1,-1': [1, 4], '2,0': [1, 3] }, [[0, 9], [1, 1], [null, 0]]);
     const st: Action = { t: 'Sprout', card: s.hands[0].find((c) => c.rank === 9)!.id, coord: { q: -1, r: 1 } };
     const after = apply(s, st);
     const steps = buildSteps(s, st, after, 0);
     expect(steps[0]).toEqual({ k: 'strengthen', player: 0, key: '-1,1', from: 5, to: 9 });
     expect(steps.at(-1)!.k).toBe('sync');
-    const fr: Action = { t: 'Fruit', sacrifice: [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 0, r: 1 }], target: { q: 1, r: 0 } };
+    const fruitId = s.hands[0].find((c) => c.suit === null)!.id;
+    const fr: Action = { t: 'PlayFruit', card: fruitId, target: { q: 1, r: 0 } };
     const a2 = apply(s, fr);
     const fs = buildSteps(s, fr, a2, 0);
-    expect(fs[0]).toEqual({ k: 'fruit', player: 0, sacrifice: ['-1,1', '0,0', '0,1'], target: '1,0' });
+    expect(fs[0]).toEqual({ k: 'fruit', player: 0, card: { id: fruitId, suit: null, rank: 0 }, target: '1,0', strength: 9 });
     expect(fs.some((x) => x.k === 'sever')).toBe(true);
     expect(moveTier(fs, () => false)).toBe('big');
     expect(tierBanner(fs)).toBe('Fruited!');

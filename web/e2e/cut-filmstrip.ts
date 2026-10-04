@@ -70,7 +70,7 @@ const film = async (name: string, n: number, mine: boolean, settings: Record<str
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v5', saved as string);
+      localStorage.setItem('severgrow.save.v6', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
       localStorage.setItem('severgrow.seen', '1');
     },

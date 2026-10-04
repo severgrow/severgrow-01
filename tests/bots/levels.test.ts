@@ -1,9 +1,7 @@
 // Bot levels 1-9 (v0.5). Level 7 is the original GreedyBot, unchanged.
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { RULES_VERSIONS, apply, legalActions, newGame, viewFor } from '../../src/engine/index.js';
-import { chooseLevelAction as chooseV05 } from '../../src/bots/v05/levels.js';
-import type { Action, State, View } from '../../src/engine/index.js';
+import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import type { State, View } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { LEVELS, LEVEL_CONFIGS, botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 
@@ -48,16 +46,7 @@ describe('level 7 is the original bot, move for move', () => {
     }
   }, 180_000); // about 60s of work on a busy CI runner: its own time limit, the checks unchanged
 
-  it('the frozen bots-v0.5 level 7 replays the recorded v0.4 golden games exactly on rules v0.4-defaults-2', () => {
-    const fixture = JSON.parse(readFileSync(new URL('../fixtures/golden-v04.json', import.meta.url), 'utf8')) as { games: { seed: number; actions: Action[] }[] };
-    for (const g of fixture.games) {
-      let s = newGame(g.seed, RULES_VERSIONS['v0.4-defaults-2']);
-      for (const a of g.actions) {
-        expect(chooseV05(viewFor(s, s.actor), 7, seedFor(s, 7))).toEqual(a);
-        s = apply(s, a);
-      }
-    }
-  });
+
 });
 
 describe('every level is legal and deterministic', () => {

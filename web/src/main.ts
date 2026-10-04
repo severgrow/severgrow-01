@@ -2,8 +2,8 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { RULESETS, coordKey, newGame, parseKey, rulesetOf, viewFor } from '../../src/engine/index.js';
-import type { Action, Player, Ruleset, State, View } from '../../src/engine/index.js';
+import { apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -11,9 +11,8 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
-import { fruitAction, fruitChange, fruitNext, fruitOffer, fruitPickable, fruitPreview, fruitUndo, hexTapIntent, showTopTip, startFruit, tapFruit } from './logic/fruitflow.js';
-import type { FruitOffer } from './logic/fruitflow.js';
+import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
   clumpEnter,
@@ -39,7 +38,6 @@ import {
   proximity,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
-import type { FruitFlow } from './logic/fruitflow.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
 import { finalTurns, scoreBreakdown } from './logic/endgame.js';
@@ -54,7 +52,7 @@ import type { CutInput } from './logic/cut.js';
 import { HEIGHTS, computeLayout } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
-import { STATS_KEY, parseStats, recordResult, statsLine, versionLine } from './logic/stats.js';
+import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { LEVELS, botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
@@ -84,13 +82,16 @@ import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
-import { anim, cardFace, createEffects, removeAfter, shakeFrames } from './ui/effects.js';
+import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
 import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { GAME_TITLE, MOVE_WORDS, OPP, moveWords, versionLabel } from '../../src/strings.js';
+import { FRUIT, GAME_TITLE, OPP, SPROUT } from '../../src/strings.js';
+import { debugLines, isDebug } from './logic/debug.js';
+import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
+import type { Beats } from './logic/emptyturn.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -123,9 +124,6 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce());
 let stats = parseStats(store.get(STATS_KEY));
 const SEEN_KEY = 'severgrow.seen';
-/** v0.5: the Fruit flow while it is open (null otherwise), and its last gentle refusal. */
-let fruitFlow: FruitFlow | null = null;
-let fruitMsg: string | null = null;
 /** Polish pass 3: the tile card stays open (pinned) after a tap or long-press, so its buttons can be used. */
 let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
@@ -171,6 +169,7 @@ const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) =
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
   const o = bannerOpts(settings);
+  document.body.dataset.turn = player === HUMAN ? 'you' : 'opponent';
   pill.show(player, o, label);
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
@@ -312,7 +311,6 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   $('game').hidden = name !== 'game';
   if (name === 'levels') {
     renderLevelGrid();
-    $('levels-version').textContent = versionLabel({ ruleset: pickedRuleset });
   }
   if (name === 'menu') {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
@@ -322,12 +320,12 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     if (canContinue) {
       const s = saved!.state;
       const turnNo = Math.ceil(s.turnNumber / 2);
-      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">${versionLabel(s.config)} · Level ${saved!.level} · turn ${turnNo}</span>`;
+      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">Level ${saved!.level} · turn ${turnNo}</span>`;
       $('menu-continue').classList.add('version-btn');
     } else $('menu-continue').textContent = 'Continue';
-    for (const r of ['sprout', 'seed']) {
-      $(`menu-${r}`).classList.toggle('primary', !canContinue);
-      $(`menu-${r}`).classList.toggle('ghost', canContinue);
+    {
+      $('menu-new').classList.toggle('primary', !canContinue);
+      $('menu-new').classList.toggle('ghost', canContinue);
     }
     // First visit: point new players at the tutorial.
     const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
@@ -335,13 +333,11 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     $('menu-tutorial').classList.toggle('primary', firstVisit);
     $('menu-tutorial').classList.toggle('ghost', !firstVisit);
     if (firstVisit) {
-      for (const r of ['sprout', 'seed']) {
-        $(`menu-${r}`).classList.remove('primary');
-        $(`menu-${r}`).classList.add('ghost');
-      }
+      $('menu-new').classList.remove('primary');
+      $('menu-new').classList.add('ghost');
     }
-    // the overall record, then (Seed A/B test) the record in each version played
-    $('menu-stats').textContent = [statsLine(stats), versionLine(stats)].filter(Boolean).join('\n');
+    // the overall record
+    $('menu-stats').textContent = statsLine(stats);
   }
   $('gameover').hidden = true;
   render();
@@ -363,27 +359,25 @@ function sheet(id: string | null) {
 function renderHowTo() {
   const cfg = session?.state.config;
   const sprout = (cfg?.sproutsPerTurn ?? 1) > 0;
-  const words = moveWords(cfg ?? { ruleset: pickedRuleset });
-  const seedGame = words === MOVE_WORDS.seed;
+  const words = SPROUT;
   const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
   $('howto-body').innerHTML = [
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? (cfg ? words.howto : `${MOVE_WORDS.sprout.howto} <i>In the Seed version</i> that card plants a seed worth <b>1</b> instead, whatever its number; strengthen it later with a higher card.`) : ''}</p>`,
+    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? words.howto : ''}</p>`,
     `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
-    `<p><b>Strength:</b> a tile is as strong as its card${seedGame ? ' (a seed is always 1)' : ''}. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
+    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
-      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit.${seedGame ? ' In the Seed version there is no limit per game.' : ''} ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
+      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
-    ...((cfg?.fruitPerPlayer ?? 1) > 0
-      ? [`<p><b>Fruit</b> (once per game): give up ${cfg?.fruitSacrifice ?? 3} of your tiles that touch each other to remove one ${OPP.noun} tile next to them, whatever its strength. Anything cut off from a root goes too, on both sides, so check the preview. To use it, tap an ${OPP.noun} tile and choose “Fruit this tile”: the game suggests which of your tiles to give up, and you can change them. <i>Example: an ${OPP.noun} 9 blocks your way; give up 3 small tiles beside it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
+    ...((cfg?.fruitCardCount ?? 4) > 0
+      ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Fruit card on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
     `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
-    ...(seedGame ? ['<p class="legend">A small seed in dark soil is a fresh seed, worth 1. Strengthen it and it grows into a normal tile.</p>'] : []),
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
   ].join('');
 }
@@ -408,7 +402,7 @@ function renderLevelGrid() {
         sound.unlock();
         settings = { ...settings, level: lv };
         saveSettings();
-        startGame(randomSeed(), lv, pickedRuleset);
+        startGame(randomSeed(), lv);
       });
       return b;
     }),
@@ -502,9 +496,6 @@ function beginSession(state: State, c: CoachProgress | null) {
   scheduleBot();
 }
 
-/** The version picked on the menu (Seed A/B test); a rematch keeps the game's own version. */
-let pickedRuleset: Ruleset = 'sprout';
-const currentRuleset = (): Ruleset => (session ? rulesetOf(session.state.config) : pickedRuleset);
 
 /** Part 3 G: the opening deal: the hand flies in from the deck, card by card (Eye candy). */
 function dealIn() {
@@ -518,12 +509,11 @@ function dealIn() {
   });
 }
 
-function startGame(seed: number, level: Level = settings.level, ruleset: Ruleset = currentRuleset()) {
+function startGame(seed: number, level: Level = settings.level) {
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  pickedRuleset = ruleset;
-  const state = newGame(seed, RULESETS[ruleset]);
-  log = [`New game (${versionLabel(state.config)}) against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
+  const state = newGame(seed);
+  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
   revealToolLabels();
@@ -569,7 +559,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
     if (p.before.phase !== 'GAME_OVER') {
-      stats = recordResult(stats, p.after.result, HUMAN, gameLevel, rulesetOf(p.after.config));
+      stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
   }
@@ -583,6 +573,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
   markMoment(p.steps, p.before);
   queue.push(p.steps);
+  // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
+  if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
   render();
   void pump();
@@ -597,11 +589,42 @@ function humanPlay(a: Action) {
   rememberCardRects();
   const p = session.play(a, HUMAN);
   if (!p) return;
-  fruitFlow = null;
-  fruitMsg = null;
   inspectKey = null;
   guideGoal = null;
   afterPlay(p, HUMAN, advice);
+  // v0.6: after a Fruit card, another one in hand stays picked, its targets lit (until the throw)
+  if (a.t === 'PlayFruit' && session.state.phase === 'ACT') {
+    const next = session.legal.find((x) => x.t === 'PlayFruit');
+    if (next) {
+      session.tapCard(next.card);
+      render();
+    }
+  }
+}
+
+/**
+ * The opponent's whole turn, worked out at its start (Step 2): each action is the same one the
+ * bot would pick step by step (its View and seeded randomness only), so knowing them early only
+ * sets the pace: an empty turn (draw, end, throw) is quick, about EMPTY_TURN_MS.
+ */
+type BotPlan = { keys: string[]; actions: Action[]; beats: Beats };
+/** Where a game is: the same turn, phase and number of events means the same position. */
+const posKey = (s: State) => `${s.seed}|${s.turnNumber}|${s.phase}|${s.actor}|${s.history?.length ?? 0}`;
+let botPlan: BotPlan | null = null;
+/** The opponent's empty turn is on show: the draw, throw and next turn start are quick. */
+let quickShow: Beats | null = null;
+const askFor = (st: State) => askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+async function planBotTurn(from: State): Promise<BotPlan> {
+  const keys: string[] = [];
+  const actions: Action[] = [];
+  let s = from;
+  while (s.phase !== 'GAME_OVER' && s.actor === BOT && s.turnPlayer === BOT && actions.length < 40) {
+    const a = await askFor(s);
+    keys.push(posKey(s));
+    actions.push(a);
+    s = apply(s, a);
+  }
+  return { keys, actions, beats: opponentBeats(actions, timeScale()) };
 }
 
 function scheduleBot() {
@@ -613,15 +636,17 @@ function scheduleBot() {
   void (async () => {
     await idle();
     if (my !== epoch || !session) return;
-    const first = session.state.phase === 'DRAW';
     const started = performance.now();
     thinking = true;
     renderHud();
     const st = session.state;
-    const action = await askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+    if (st.phase === 'DRAW' && st.turnPlayer === BOT && botPlan?.keys[0] !== posKey(st)) botPlan = await planBotTurn(st);
+    const i = botPlan ? botPlan.keys.indexOf(posKey(st)) : -1;
+    const action = i >= 0 ? botPlan!.actions[i]! : await askFor(st);
     // A short think before the bot's turn and before each tile move; housekeeping is quick.
     const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
-    const beat = (first ? 550 : grows ? 300 : 90) * timeScale();
+    const beat = i >= 0 ? botPlan!.beats.think[i]! : (grows ? 300 : 90) * timeScale();
+    quickShow = i >= 0 && botPlan!.beats.quick ? botPlan!.beats : null;
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
@@ -711,13 +736,21 @@ function settleStep(s: Step, animated: boolean) {
   if (!animated && s.k === 'sever') caption(captionFor(s, HUMAN)!, s.origin, s.player === HUMAN ? 'bad' : 'good');
 }
 
-/** Nothing can grow this turn: skip the "Throw a card" tap and go straight to throwing. */
+/** The Grow step that auto-skip already skipped once (after an Undo it asks instead). */
+let skippedFrom: State | null = null;
+/**
+ * Step 2: nothing can grow this turn. With "Auto-skip when nothing to play" on, skip the Grow
+ * step and go straight to throwing (an empty turn is two taps: draw, throw). Off, the moves row
+ * shows why and a Continue button (renderControls).
+ */
 function autoAdvance() {
   if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return;
-  if (session.legal.some(isBoardAction) || session.view.hand.length === 0) return;
+  if (session.state === skippedFrom) return;
+  if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
-  caption('Nothing can grow. Tap a card to throw it.', null, 'info');
+  skippedFrom = session.state;
+  caption(NOTHING_TO_PLAY, null, 'info');
   humanPlay(end);
 }
 
@@ -731,7 +764,8 @@ function markMoment(steps: readonly Step[], before: State) {
   const tier = moveTier(steps, (k) => before.terrain[k] === 'rich');
   const budget = effectBudget(tier, settings.effects, settings.reduceMotion);
   // Part 2: a cut has its own banner in its payoff (logic/cut.ts), so the move's banner stays quiet
-  const banner = budget.banner && !steps.some((s) => s.k === 'sever') ? tierBanner(steps) : null;
+  // (a Fruit card shows its own "Fruited!" in its burst, mine only: the opponent's is calmer)
+  const banner = budget.banner && !steps.some((s) => s.k === 'sever' || s.k === 'fruit') ? tierBanner(steps) : null;
   let chain = 0;
   let first = true;
   for (const st of steps) {
@@ -861,7 +895,7 @@ async function playStep(step: Step, my: number) {
         await wait(240 * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        await wait(120 * f, my);
+        await wait(quickShow ? quickShow.show.draw : 120 * f, my);
       }
       return;
     }
@@ -960,22 +994,37 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'fruit': {
-      // The 3 given-up tiles burst into spore puffs, the spores stream to the target, it shatters.
+      // v0.6 Fruit card: the card lifts and flies to the tile, the tile swells like a pod, then
+      // bursts (a spore puff, a thud, "Fruited!"); the cut that follows is its own steps.
+      // The opponent's version is calmer: no banner, a caption instead.
       const mo = momentOf(step);
       const b = mo.budget;
+      const mine = step.player === HUMAN;
+      const tileEl = board.tile(step.target);
+      const to = tileEl?.getBoundingClientRect();
+      const from = mine ? cardRects.get(step.card.id) : document.querySelector<HTMLElement>('.score.bot')!.getBoundingClientRect();
+      if (from && to && m > 0) {
+        flyCard(step.card, from, to, f * (mine ? 1 : 1.2));
+        await wait(380 * f, my);
+      }
       await anticipate(mo, f, my);
-      // Part 2: the given-up tiles die through the same cut generator (calm: they are the player's own)
-      if (b.particles > 0) stream(step.sacrifice, step.target, f, Math.max(6, Math.round(b.particles / 2)));
-      void playCut({ origin: step.target, keys: step.sacrifice, victimTiles: 99, mine: true, kind: 'fruit' }, false, 0, f, my, true);
-      await wait(560 * f, my);
-      flash(step.target, f, true);
-      anim(board.tile(step.target), m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, transform: 'scale(1) rotate(0deg)' }, { opacity: 0.8, transform: `scale(${1 + 0.1 * m}) rotate(${6 * m}deg)`, offset: 0.25 }, { opacity: 0, transform: `scale(${1 - 0.6 * m}) rotate(${-14 * m}deg)` }], { duration: 380 * f, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
-      if (b.particles > 0) sparks(step.target, step.player === HUMAN ? 'bot' : 'you', 0, f, Math.max(6, Math.round(b.particles / 2)));
-      sound.snap(0.8);
+      // the pod swells (a plain fade with Reduce motion)
+      anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 1 }, { opacity: 0.85 }] : [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.14 * m})`, offset: 0.7 }, { transform: `scale(${1 + 0.1 * m})` }], { duration: 300 * f, fill: 'forwards', easing: 'ease-out', transformOrigin: 'center' } as KeyframeAnimationOptions);
+      await wait(300 * f, my);
+      // the burst: spores puff out, a soft thud
+      if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
+      flash(step.target, f, false);
+      if (settings.sound) sound.thud();
+      {
+        const hp = hapticFor('throw', settings);
+        if (hp && mine) vibrate(true, hp as number | number[]);
+      }
+      anim(tileEl, m === 0 || b.fadeOnly ? [{ opacity: 0.85 }, { opacity: 0 }] : [{ opacity: 1, transform: `scale(${1 + 0.1 * m})` }, { opacity: 0, transform: `scale(${1 + 0.35 * m})` }], { duration: 260 * f, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
+      if (mine && b.banner) banner(FRUIT.banner, 'big');
       await impact(mo, f, my);
       const cap = captionFor(step, HUMAN);
-      if (cap && !(mo.banner && mo.first)) caption(cap, step.target, step.player === HUMAN ? 'good' : 'bad');
-      await wait(260 * f, my);
+      if (cap && !(mine && b.banner)) caption(cap, step.target, mine ? 'good' : 'bad');
+      await wait(220 * f, my);
       show();
       return;
     }
@@ -988,7 +1037,7 @@ async function playStep(step: Step, my: number) {
       }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(320 * f, my);
+      await wait(quickShow && step.player === BOT ? quickShow.show.discard : 320 * f, my);
       show();
       return;
     }
@@ -1016,7 +1065,11 @@ async function playStep(step: Step, my: number) {
       announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
       // My turn starts: a soft glow passes over my hand.
       if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
-      await wait(320 * f, my);
+      // an empty opponent turn starts at once (its quick beats are in its plan)
+      const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
+      const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;
+      if (step.player === HUMAN) quickShow = null;
+      await wait(quick ?? 320 * f, my);
       return;
     }
     case 'end': {
@@ -1222,15 +1275,6 @@ function render() {
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
-  const chip = $('version-chip');
-  const label = versionLabel(v.config);
-  if (chip.textContent !== label) {
-    // "Seed version": on narrow phones only the first word shows (CSS), so it never widens the page
-    const [word, ...rest] = label.split(' ');
-    chip.innerHTML = `<span class="vc-word">${word}</span><span class="vc-rest"> ${rest.join(' ')}</span>`;
-    chip.setAttribute('aria-label', label);
-  }
-  chip.dataset.ruleset = rulesetOf(v.config);
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
   // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
@@ -1250,7 +1294,7 @@ function render() {
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
-  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued && !fruitFlow) {
+  if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
     autoQueued = true;
     setTimeout(() => {
       autoQueued = false;
@@ -1269,7 +1313,7 @@ function renderGuide(advice: Advice | null) {
     guideGoal = null;
     return;
   }
-  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, fruitFlow, cardPinned ? inspectKey : null, session.pending);
+  let t = guideTarget(session.view, session.legal, session.sel, guideGoal, session.pending);
   if (t?.kind === 'preset') {
     // A line or clump: the coach shows its placement on the board, ready to confirm.
     session.preset(guideGoal);
@@ -1315,15 +1359,6 @@ function renderGuide(advice: Advice | null) {
     case 'kind':
       rect = above(document.querySelector(`#moves [data-kind="${t.move}"]`));
       break;
-    case 'fruit':
-      rect = above(document.querySelector('#tooltip .tc-fruit'));
-      break;
-    case 'change':
-      rect = above(document.querySelector('#moves .fruit-change'));
-      break;
-    case 'next':
-      rect = above(document.querySelector('#moves .fruit-next'));
-      break;
   }
   if (!rect) return;
   arrow.hidden = false;
@@ -1332,9 +1367,19 @@ function renderGuide(advice: Advice | null) {
   arrow.style.top = `${rect.y}px`;
 }
 
+/** The hidden ?debug=1 corner: the only place the game's random number shows. */
+const DEBUG = isDebug(location.search);
+function renderDebug(st: State) {
+  if (!DEBUG) return;
+  const el = $('debug-corner');
+  el.hidden = false;
+  el.textContent = debugLines({ seed: st.seed, turnNumber: st.turnNumber, level: gameLevel }).join('\n');
+}
+
 function renderHud() {
   if (!session) return;
   const st = session.state;
+  renderDebug(st);
   if (!busy()) shownScores = [session.view.score, session.view.opponentScore];
   $('score-you').textContent = String(shownScores[0]);
   $('score-bot').textContent = String(shownScores[1]);
@@ -1438,10 +1483,15 @@ function hintCtx(v: View): HintCtx {
     phase: v.phase,
     myTurn: v.actor === HUMAN,
     busy: busy(),
-    words: moveWords(v.config),
+    words: SPROUT,
     deckCount: v.deckCount,
     canTakeThrow: session!.legal.some((a) => a.t === 'Draw' && a.from === 'discard'),
-    fruit: fruitFlow ? { step: fruitFlow.step, changing: fruitFlow.changing, picks: fruitFlow.picks.length, n: v.config.fruitSacrifice, msg: fruitMsg } : null,
+    // a picked Fruit card: the "any strength" note, or why it has nothing to do (never "grow")
+    fruit: kinds?.has('fruit')
+      ? { firstTime: anyNoteCard === sel.card }
+      : v.hand.find((c) => c.id === sel.card)?.suit === null
+        ? { firstTime: false, reason: fruitCardState(v, session!.legal, sel.card!).reason }
+        : null,
     pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
     drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
     card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
@@ -1510,22 +1560,6 @@ function renderBoard(v: View, advice: Advice | null) {
     // overhaul item 7: before drawing only the starts; while drawing only what can come next
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
-    if (fruitFlow && v.phase === 'ACT') {
-      const fa = fruitAction(session.legal, fruitFlow);
-      const pv = fa ? fruitPreview(v, fa) : null;
-      o = {
-        ...o,
-        targets: null,
-        ghosts: [],
-        coachHexes: [],
-        selectedHex: null,
-        cutKeys: pv ? [...pv.ownCut, ...pv.theirCut] : [],
-        fruitValid: [...fruitPickable(v, session.legal, fruitFlow)],
-        fruitPicked: fruitFlow.picks,
-        fruitSoft: !fruitFlow.changing,
-        fruitTarget: fruitFlow.target,
-      };
-    }
   }
   if (!busy()) {
     if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
@@ -1553,7 +1587,7 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-skip').hidden = !busy();
   $('tool-replay').hidden = busy() || session.lastTurnOf(BOT).length === 0;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
-  const undoOk = session.canUndo && !busy() && !fruitFlow;
+  const undoOk = session.canUndo && !busy();
   ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
   $('tool-undo').classList.toggle('ready', undoOk);
   // Part 3 A: my root breathes; hemmed in, it beats like a heart, and says so (Eye candy)
@@ -1620,14 +1654,12 @@ function renderTooltip(v: View) {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      const seed = t.seed ? `<span>A fresh seed: ${mine ? 'strengthen it with any higher card' : 'worth 1 until it is strengthened'}.</span>` : '';
-      html = `<b>${name} · ${who} ${t.seed ? 'seed' : 'tile'}</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span>${seed}<span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
     }
   }
-  // Polish pass 3: in my Grow step, an opponent tile's card offers Fruit (a button, or a line saying why not yet)
-  const offer: FruitOffer = cardPinned && myTurn() ? fruitOffer(v, session.legal, key) : null;
-  if (offer?.kind === 'action') html += `${offer.note ? `<span class="tc-note">${offer.note}</span>` : ''}<button type="button" class="btn primary small tc-fruit" data-fruit="${key}">${offer.label}</button>`;
-  else if (offer?.kind === 'info') html += `<span class="tc-info">${offer.text}</span>`;
+  // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
+  const offer = cardPinned && myTurn() ? fruitOffer(v, session.legal, key) : null;
+  if (offer) html += `${offer.note ? `<span class="tc-note">${offer.note}</span>` : ''}<button type="button" class="btn primary small tc-fruit" data-fruit="${key}">${offer.label}</button>`;
   tip.innerHTML = html;
   tip.hidden = false;
   tip.classList.toggle('pinned', cardPinned);
@@ -1681,19 +1713,26 @@ function renderControls(v: View, advice: Advice | null) {
 
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
-  } else if (v.phase === 'ACT' && fruitFlow) {
-    renderFruitFlow(v);
-    return;
+  } else if (v.phase === 'ACT' && skipPlan(legal, v.hand.length, settings.autoSkip && session.state !== skippedFrom).kind === 'ask') {
+    // Step 2, auto-skip off (or after an Undo of a skip): why nothing can be played, and Continue
+    const end = legal.find((a) => a.t === 'EndAct')!;
+    const note = document.createElement('span');
+    note.className = 'note empty-reason';
+    note.textContent = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    moves.append(note, button('Continue', 'primary empty-continue', () => humanPlay(end), 'Continue to the Throw step'));
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
-    for (const k of moveButtons(v, legal, sel)) {
+    const kindButtons = moveButtons(v, legal, sel);
+    for (const k of kindButtons) {
       const on = sel.kind === k.kind;
-      const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+      // two or more share the row: short words, so they fit beside the piles on a phone
+      const b = button(kindButtons.length > 1 ? shortKindLabel(k.kind) : k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         session!.tapKind(k.kind);
         render();
       });
       b.dataset.kind = k.kind;
+      if (kindButtons.length > 1) b.setAttribute('aria-label', k.label);
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
     }
@@ -1702,7 +1741,7 @@ function renderControls(v: View, advice: Advice | null) {
     const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
     if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel) moves.append(button(moveWords(v.config).skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), moveWords(v.config).skipTitle));
+    if (end && !pending && grow.skipLink && !anySel) moves.append(button(SPROUT.skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
@@ -1776,60 +1815,6 @@ function renderRisks(risks: ReturnType<typeof riskLines>) {
   box.hidden = risks.length === 0;
 }
 
-/**
- * The Fruit flow (polish pass 3, target first). Step 1: the suggested tiles, "Give up these
- * 3 tiles", with Change and Next (or, while changing, a counter). Step 2: the plain-words
- * preview and Confirm. Undo and Cancel at every step.
- */
-function renderFruitFlow(v: View) {
-  if (!session || !fruitFlow) return;
-  const f = fruitFlow;
-  const moves = $('moves');
-  const n = v.config.fruitSacrifice;
-  const steps = document.createElement('ol');
-  steps.className = 'fruit-steps';
-  [`Give up ${n} tiles`, 'Confirm'].forEach((t, i) => {
-    const li = document.createElement('li');
-    li.textContent = t;
-    li.className = i + 1 === f.step ? 'now' : i + 1 < f.step ? 'done' : '';
-    steps.append(li);
-  });
-  moves.append(steps);
-  const redo = (next: typeof f) => {
-    fruitFlow = next;
-    fruitMsg = null;
-    render();
-  };
-  if (f.step === 1 && f.changing) {
-    const c = document.createElement('span');
-    c.className = 'fruit-count';
-    c.textContent = `${f.picks.length}/${n}`;
-    c.setAttribute('aria-label', `${f.picks.length} of ${n} tiles picked`);
-    moves.append(c);
-  } else if (f.step === 1) {
-    const what = document.createElement('span');
-    what.className = 'fruit-give';
-    what.textContent = `Give up these ${n} tiles`;
-    moves.append(what);
-    moves.append(button('Change', 'ghost fruit-change', () => redo(fruitChange(f)), `Pick other tiles to give up`));
-    moves.append(button('Next', 'primary fruit-next', () => redo(fruitNext(session!.legal, f)), 'See what this Fruit does'));
-  }
-  if (f.step === 2 || (f.changing && (f.picks.length > 0 || f.before.length > 0))) moves.append(button('Undo', 'ghost undo', () => redo(fruitUndo(f)), 'Undo the last Fruit step'));
-  // (at step 2 the preview bar has its own Cancel)
-  if (f.step === 1) moves.append(button('Cancel', 'ghost cancel', () => cancelSel(), 'Cancel the Fruit'));
-  const fa = fruitAction(session.legal, f);
-  if (fa) {
-    const pv = fruitPreview(v, fa);
-    $('confirm-chip').textContent = pv.chip;
-    $('confirm-play').textContent = 'Use Fruit';
-    renderRisks([]);
-    const warn = $('confirm-warn');
-    warn.hidden = pv.warnings.length === 0;
-    warn.textContent = pv.warnings.join(' ');
-    warn.classList.remove('note');
-    $('confirm').hidden = false;
-  }
-}
 
 /** First-time tips for Fruit and Strengthen: shown once, until dismissed (re-open from How to play). */
 function renderFirstTip(v: View) {
@@ -1840,7 +1825,7 @@ function renderFirstTip(v: View) {
   }
   if (!tipOpen && myTurn() && !busy() && v.phase === 'ACT') {
     if (!tipsSeen.draw && drawCombo()) tipOpen = 'draw';
-    else if (showTopTip(v, !!tipsSeen.fruit)) tipOpen = 'fruit';
+    else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
   card.hidden = !tipOpen;
@@ -1885,11 +1870,16 @@ function renderHand(v: View, advice: Advice | null) {
     const off = i - (n - 1) / 2;
     const lifted = sel.card === c.id || picked.has(c.id);
     const playable = legal.length > 0 && usable.has(c.id);
-    b.className = `card s${c.suit}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
+    // v0.6: a Fruit card glows softly when it has a target now; dimmed, it says why (one line)
+    const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
+    const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
+    b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
+    if (fs?.reason && myTurn()) b.title = fs.reason;
+    else b.removeAttribute('title');
     b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
     b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${lifted ? ', picked' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -1925,7 +1915,7 @@ function renderPiles(v: View, advice: Advice | null) {
   const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
   const top = v.discard.at(-1);
   const t = $('discard-top');
-  t.className = `pile-top${top ? ` card s${top.suit}` : ' empty'}`;
+  t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   t.innerHTML = top ? cardFace(top) : '';
   $('deck-count').textContent = String(v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
@@ -1933,6 +1923,10 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').classList.toggle('low', low);
   $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
   $('discard-count').textContent = String(v.discard.length);
+  // v0.6: "Fruit cards unseen: n" (public information only)
+  const chip = unseenChip(v);
+  $('fruit-chip').hidden = chip === null;
+  $('fruit-chip').textContent = chip ?? '';
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -2004,7 +1998,7 @@ function renderGameOver() {
   const won = r.winner === HUMAN;
   $('go-title').textContent = won ? `You beat Level ${gameLevel}!` : resultTitle(r, HUMAN);
   // No world map yet: every game is practice.
-  $('go-sub').textContent = `${won ? moveWords(st.config).practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`} · ${versionLabel(st.config)}`;
+  $('go-sub').textContent = won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
   const target = won ? Math.min(9, gameLevel + 1) : Math.max(1, gameLevel - 1);
@@ -2030,13 +2024,10 @@ function renderGameOver() {
   $('go-cut').hidden = !session?.biggestCut;
   $('go-share').textContent = 'Share';
   $('go-reason').textContent = resultReason(r, HUMAN);
-  // UX pass: what I did with the one-card move, and (A/B test) a quick switch to the other version
-  const moves = moveSummary(st.history ?? [], HUMAN, st.config);
+  // UX pass: what I did with the one-card move
+  const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   $('go-moves').hidden = !moves;
-  const otherVersion: Ruleset = rulesetOf(st.config) === 'seed' ? 'sprout' : 'seed';
-  $('go-version').textContent = `Try the ${MOVE_WORDS[otherVersion].Name} version`;
-  $('go-version').dataset.ruleset = otherVersion;
   const part = (p: Player) => {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
@@ -2108,8 +2099,6 @@ function undoMove() {
 function cancelSel() {
   draw = { ...DRAW0 };
   board.ghost(null);
-  fruitFlow = null;
-  fruitMsg = null;
   session?.cancel();
   inspectKey = null;
   cardPinned = false;
@@ -2135,8 +2124,13 @@ function onCardTap(id: number) {
   if (busy()) fastForward();
   if (!myTurn()) return;
   sound.click();
-  session.tapCard(id);
+  pickFruit(id);
   inspectKey = null;
+  // a Fruit card with nothing to do says why, in one line
+  if (session.view.hand.find((c) => c.id === id)?.suit === null) {
+    const why = fruitCardState(session.view, session.legal, id).reason;
+    if (why) caption(why, null, 'info');
+  }
   // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
   if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
@@ -2160,7 +2154,7 @@ const finePointer = () => typeof matchMedia === 'function' && matchMedia('(point
 /** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
 let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
-  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT' || fruitFlow) return null;
+  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return null;
   // worked out once per position and selection (it scores every placement), not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
@@ -2375,18 +2369,8 @@ function onHexTap(key: string) {
     return;
   }
   sound.click();
-  if (fruitFlow && session.view.phase === 'ACT') {
-    const r = tapFruit(session.view, session.legal, fruitFlow, key);
-    fruitFlow = r.flow;
-    fruitMsg = r.refused;
-    inspectKey = null;
-    cardPinned = false;
-    if (r.refused) caption(r.refused, key, 'info');
-    render();
-    return;
-  }
-  // Polish pass 3: an opponent tile the picked card cannot take (or any opponent tile with
-  // nothing picked) opens its tile card, which offers Fruit. The picked card stays picked.
+  // An opponent tile the picked card cannot take (or any opponent tile with nothing picked)
+  // opens its tile card, which offers "Use Fruit card". The picked card stays picked.
   if (session.view.phase === 'ACT' && hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard') {
     pinCard(inspectKey === key && cardPinned ? null : key);
     return;
@@ -2401,31 +2385,46 @@ function onHexTap(key: string) {
 }
 
 function onInspect(key: string | null) {
-  // hovering never moves a pinned tile card; no tile cards while the Fruit flow is picking tiles
+  // hovering never moves a pinned tile card
   if (cardPinned) return;
-  inspectKey = fruitFlow ? null : key;
+  inspectKey = key;
   if (session) renderTooltip(session.view);
 }
 
 /** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
 function pinCard(key: string | null) {
-  if (fruitFlow) key = null;
   inspectKey = key;
   cardPinned = key !== null;
   render();
 }
 
-/** "Fruit this tile" in the tile card: step 1 with the suggested tiles. */
-function startFruitOn(key: string) {
+/** "Use Fruit card" in the tile card: the Fruit card and this target are picked (Confirm per "Confirm moves"). */
+function useFruitOn(key: string) {
   if (!session) return;
+  const offer = fruitOffer(session.view, session.legal, key);
+  if (!offer) return;
   sound.click();
   session.cancel();
-  fruitFlow = startFruit(session.view, session.legal, key);
-  fruitMsg = null;
+  pickFruit(offer.action.card);
+  session.tapHex(key);
   inspectKey = null;
   cardPinned = false;
   render();
+  maybeAutoPlay();
 }
+
+/** Picks a card in the hand; a Fruit card's first pick shows the "any strength" note once. */
+function pickFruit(id: number) {
+  if (!session) return;
+  session.tapCard(id);
+  if (session.sel.card === id && session.view.hand.find((c) => c.id === id)?.suit === null && !tipsSeen.fruitAny) {
+    anyNoteCard = id;
+    tipsSeen = markTip(tipsSeen, 'fruitAny');
+    store.set(TIPS_KEY, JSON.stringify(tipsSeen));
+  }
+}
+/** The Fruit card the "any strength" note is shown for (the first one picked). */
+let anyNoteCard: number | null = null;
 
 function replayBotTurn() {
   if (!session || busy()) return;
@@ -2451,13 +2450,10 @@ const bind = (id: string, fn: () => void) =>
     fn();
   });
 
-// Seed A/B test: the menu offers both versions; the level screen then starts that version.
-for (const r of ['sprout', 'seed'] as const)
-  bind(`menu-${r}`, () => {
-    if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
-    pickedRuleset = r;
-    showScreen('levels');
-  });
+bind('menu-new', () => {
+  if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
+  showScreen('levels');
+});
 for (const [sel, p] of [['.hud .score.you', HUMAN], ['.hud .score.bot', BOT]] as const) {
   const el = document.querySelector<HTMLElement>(sel)!;
   el.setAttribute('role', 'button');
@@ -2543,7 +2539,7 @@ bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
   settings = { ...settings, coach: true };
   saveSettings();
-  startGame(TUTORIAL_SEED, 7, 'sprout'); // the tutorial is tuned for the classic bot (and Sprout)
+  startGame(TUTORIAL_SEED, 7); // the tutorial is tuned for the classic opponent
 });
 bind('menu-howto', () => sheet('sheet-howto'));
 bind('menu-settings', () => sheet('sheet-settings'));
@@ -2573,8 +2569,6 @@ for (const b of document.querySelectorAll<HTMLElement>('[data-close]')) b.addEve
 
 bind('confirm-play', () => {
   if (!session) return;
-  const fa = fruitFlow ? fruitAction(session.legal, fruitFlow) : null;
-  if (fa) return humanPlay(fa);
   const a = session.pending;
   if (a) humanPlay(a);
 });
@@ -2585,7 +2579,7 @@ bind('confirm-info', () => {
 });
 $('tooltip').addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLElement>('[data-fruit]');
-  if (b) startFruitOn(b.dataset.fruit!);
+  if (b) useFruitOn(b.dataset.fruit!);
 });
 bind('first-tip-ok', () => {
   if (tipOpen) {
@@ -2621,10 +2615,6 @@ bind('tool-skip', () => {
 bind('tool-replay', () => replayBotTurn());
 bind('tool-undo', () => undoMove());
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
-bind('go-version', () => startGame(randomSeed(), gameLevel, ($('go-version').dataset.ruleset as Ruleset | undefined) ?? 'seed'));
-bind('version-chip', () => {
-  if (session) caption(moveWords(session.state.config).explain, null, 'info');
-});
 bind('go-board', () => {
   gameOverDismissed = true;
   render();

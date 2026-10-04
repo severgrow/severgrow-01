@@ -6,7 +6,7 @@ import type { Action, Card, Player, View } from '../engine/index.js';
 import type { Bot } from './Bot.js';
 import { cutLoss, simulate, threats } from './evaluate.js';
 import type { Ctx } from './evaluate.js';
-import { NEVER, isStrengthen, judgeFruit, judgeStrengthen, lookFruit, tacticsCtx } from './tactics.js';
+import { NEVER, isFruitThrow, isStrengthen, judgeFruit, judgeStrengthen, lookFruit, tacticsCtx } from './tactics.js';
 import type { FruitLook, Tier } from './tactics.js';
 
 /** Weights. Points are worth 1 each; everything else is measured against that. */
@@ -72,7 +72,7 @@ const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
 const inCombo = (hand: readonly Card[], c: Card): boolean =>
   bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
 
-const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'Fruit' | 'Sprout' }>, w: Weights): Scored => {
+const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' | 'PlayFruit' | 'Sprout' }>, w: Weights): Scored => {
   const me = v.player;
   const opp = other(me);
   const sim = simulate(v, a)!;
@@ -116,7 +116,7 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
   };
   // Strength placed on empty hexes is "spent" without taking anything.
   const strengths =
-    a.t === 'Fruit'
+    a.t === 'PlayFruit'
       ? []
       : a.t === 'Sprout'
         ? [v.hand.find((c) => c.id === a.card)!.rank]
@@ -134,7 +134,7 @@ const scoreBoardMove = (v: View, a: Extract<Action, { t: 'MeldRun' | 'MeldSet' |
     sim.botPointsLost -
     w.exposure * (myAfter - myBefore) +
     w.pressure * (pressureAfter - pressureBefore);
-  return { action: a, score, facts: { kind: a.t === 'Fruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'meld', move } };
+  return { action: a, score, facts: { kind: a.t === 'PlayFruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'meld', move } };
 };
 
 
@@ -143,7 +143,7 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): S
     case 'MeldRun':
     case 'MeldSet':
     case 'Sprout':
-    case 'Fruit':
+    case 'PlayFruit':
       return scoreBoardMove(v, a, w);
     case 'Draw': {
       if (a.from === 'deck') return { action: a, score: 0, facts: { kind: 'draw', from: 'deck', completesCombo: false, comboWith: [] } };
@@ -158,6 +158,8 @@ const scoreAction = (v: View, a: Action, meldsAvailable: boolean, w: Weights): S
     }
     case 'Discard': {
       const c = v.hand.find((x) => x.id === a.card)!;
+      // v0.6: a Fruit card is never an ordinary throw (it would feed the opponent)
+      if (isFruitThrow(v, a)) return { action: a, score: NEVER, facts: { kind: 'discard', card: c, fitsCombo: false, deadwoodAfter: 0 } };
       const rest = v.hand.filter((x) => x.id !== a.card);
       const dw = deadwood(rest);
       // Lowest leftover total first; then shed the higher card.
@@ -191,7 +193,7 @@ export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
   const fTier = opts.fruitTier ?? 3;
   const tctx = tacticsCtx(v);
   // Fruits: a quick look at all of them, the full board score only for the most promising.
-  const fruits = acts.filter((a): a is Extract<Action, { t: 'Fruit' }> => a.t === 'Fruit');
+  const fruits = acts.filter((a): a is Extract<Action, { t: 'PlayFruit' }> => a.t === 'PlayFruit');
   const looks = new Map<Action, FruitLook>();
   for (const f of fruits) {
     const l = lookFruit(v, f);
@@ -199,11 +201,11 @@ export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
   }
   const shortlist = new Set(
     [...looks.values()]
-      .sort((x, y) => (y.sim.wins ? 1 : 0) - (x.sim.wins ? 1 : 0) || y.net - x.net || y.sim.botPointsLost - x.sim.botPointsLost)
+      .sort((x, y) => (y.sim.wins ? 1 : 0) - (x.sim.wins ? 1 : 0) || (y.opensStrangle ? 1 : 0) - (x.opensStrangle ? 1 : 0) || y.net - x.net || y.sim.botPointsLost - x.sim.botPointsLost)
       .slice(0, fTier >= 2 ? (opts.fruitShortlist ?? 4) : looks.size)
       .map((l) => l.a as Action),
   );
-  const plain = acts.map((a) => (isStrengthen(v, a) || a.t === 'Fruit' ? null : scoreAction(v, a, meldsAvailable, w)));
+  const plain = acts.map((a) => (isStrengthen(v, a) || a.t === 'PlayFruit' ? null : scoreAction(v, a, meldsAvailable, w)));
   // the best other use of each card this turn (for tier 1 Strengthen)
   const bestUse = new Map<number, number>();
   for (const s of plain) {
@@ -220,7 +222,7 @@ export const rankActions = (v: View, opts: GreedyOptions = {}): Scored[] => {
     }
     const look = looks.get(a);
     if (!look || !shortlist.has(a)) return { action: a, score: NEVER, facts: { kind: 'fruit', move: emptyMove(), reason: 'not on the shortlist' } };
-    const full = fTier >= 2 ? scoreBoardMove(v, a as Extract<Action, { t: 'Fruit' }>, w) : null;
+    const full = fTier >= 2 ? scoreBoardMove(v, a as Extract<Action, { t: 'PlayFruit' }>, w) : null;
     const j = judgeFruit(v, look, fTier, full?.score ?? look.net);
     return { action: a, score: j.score, facts: { kind: 'fruit', move: full ? (full.facts as { move: MoveFacts }).move : emptyMove(), reason: j.reason } };
   });

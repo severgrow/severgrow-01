@@ -16,10 +16,15 @@ const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number]
 };
 
 describe('levels and tiers', () => {
-  it('1-2 ignore both (with a rare whim), 3-4 simple rules, 5-6 weigh exposure, 7-8 full, 9 also the opponent Fruit', () => {
-    const tiers = LEVELS.map((l) => [LEVEL_CONFIGS[l].strengthenTier, LEVEL_CONFIGS[l].fruitTier]);
-    expect(tiers).toEqual([[0, 0], [0, 0], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3], [4, 4]]);
+  it('Strengthen: 1-2 ignore it (with a rare whim), 3-4 simple rules, 5-6 weigh exposure, 7-8 full, 9 also the opponent Fruit cards', () => {
+    expect(LEVELS.map((l) => LEVEL_CONFIGS[l].strengthenTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4]);
     for (const l of LEVELS) expect(LEVEL_CONFIGS[l].whimRate > 0).toBe(l <= 2);
+  });
+
+  it('v0.6 Fruit card bands: 1-3 random target and moment (1-2 sometimes throw one), 4-6 rules, 7-8 full, 9 counts unseen', () => {
+    expect(LEVELS.map((l) => LEVEL_CONFIGS[l].fruitTier)).toEqual([0, 0, 0, 2, 2, 2, 3, 3, 4]);
+    for (const l of LEVELS) expect(LEVEL_CONFIGS[l].fruitRandomRate > 0, `level ${l}`).toBe(l <= 3);
+    for (const l of LEVELS) expect(LEVEL_CONFIGS[l].fruitThrowRate > 0, `level ${l}`).toBe(l <= 2);
   });
 
   it('every Strengthen and Fruit decision carries a short plain-words reason', () => {
@@ -29,7 +34,7 @@ describe('levels and tiers', () => {
       while (s.phase !== 'GAME_OVER') {
         const lv = s.actor === 0 ? 7 : 9;
         const d = decideLevelAction(viewFor(s, s.actor), lv, botSeed(s.seed, lv, s.turnNumber, s.history!.length));
-        if (d.action.t === 'Fruit' || isStrengthen(viewFor(s, s.actor), d.action)) {
+        if (d.action.t === 'PlayFruit' || isStrengthen(viewFor(s, s.actor), d.action)) {
           seen++;
           expect(d.reason, JSON.stringify(d.action)).toMatch(/\w/);
         }
@@ -46,7 +51,7 @@ describe('levels and tiers', () => {
     for (let seed = 1; seed <= 400; seed++) {
       const a = decideLevelAction(v, 1, seed);
       expect(decideLevelAction(v, 1, seed)).toEqual(a);
-      if (a.action.t === 'Fruit' || isStrengthen(v, a.action)) odd++;
+      if (a.action.t === 'PlayFruit' || isStrengthen(v, a.action)) odd++;
     }
     expect(odd).toBeGreaterThan(0);
     expect(odd).toBeLessThan(60); // rare
@@ -77,13 +82,13 @@ describe('Strengthen judgement', () => {
     const exposed = judgeStrengthen(t, { t: 'Sprout', card: id, coord: { q: 0, r: 0 } }, 3).score;
     const safe = judgeStrengthen(t, { t: 'Sprout', card: id, coord: { q: -3, r: 3 } }, 3).score;
     expect(exposed).toBeGreaterThan(safe);
-    // give them a connected group of 3 next to (0,0) and an unused Fruit: level 9 values it less
+    // their tiles touch (0,0) and Fruit cards are still unseen: level 9 values it less
     const s2 = stateWith({ ...tiles, '0,-1': [1, 2], '1,-2': [1, 2] }, [[0, 9]]);
     const v2 = viewFor(s2, 0);
     const t2 = tacticsCtx(v2);
     const a = { t: 'Sprout' as const, card: v2.hand[0]!.id, coord: { q: 0, r: 0 } };
     expect(judgeStrengthen(t2, a, 4).score).toBeLessThan(judgeStrengthen(t2, a, 3).score);
-    const used = viewFor({ ...s2, fruitUsed: [0, 1] }, 0);
+    const used = { ...viewFor(s2, 0), fruitUnseen: 0 }; // every Fruit card accounted for
     expect(judgeStrengthen(tacticsCtx(used), a, 4).score).toBeCloseTo(judgeStrengthen(tacticsCtx(used), a, 3).score, 5);
   });
 });

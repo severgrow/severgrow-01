@@ -48,7 +48,7 @@ const open = async (state: State, o: Opts = {}) => {
       sessionStorage.setItem('seeded', '1');
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v5', saved as string);
+      localStorage.setItem('severgrow.save.v6', saved as string);
       localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
     },
     [JSON.stringify({ sound: false, coach: false, speed: 'skip', ...o.settings }), JSON.stringify({ state, coach: doneCoach })],
@@ -472,6 +472,8 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
     const { page } = await open(state, { width: 1280, height: 800, settings: { speed } });
     await pick(page, 'line-3');
     await drawMeld(page, goal);
+    // a risky line waits for Confirm ("Confirm moves: Smart")
+    if (await page.locator('#confirm-play').isVisible()) await page.click('#confirm-play');
     await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
     const s = await st(page);
     finals.push(JSON.stringify({ board: s.board, hands: s.hands, phase: s.phase }));
@@ -479,19 +481,22 @@ const runKeys = (a: Extract<Action, { t: 'MeldRun' }>) => Array.from({ length: a
   }
   const engine = apply(state, goal);
   const want = JSON.stringify({ board: engine.board, hands: engine.hands, phase: engine.phase });
-  check('animations on or off give the identical final state, equal to the engine applying the same action', finals[0] === finals[1] && finals[0] === want);
+  const brief = (j: string) => { const o = JSON.parse(j) as { phase: string; hands: unknown[][] }; return `${o.phase} ${o.hands[0]!.length}`; };
+  check('animations on or off give the identical final state, equal to the engine applying the same action', finals[0] === finals[1] && finals[0] === want, `${finals.map(brief).join(' / ')} vs ${brief(want)}`);
 }
 {
-  // the tile card on an opponent 9: "Fruit this tile", the note, the suggestion, Change, preview
+  // v0.6: the tile card on an opponent 9: the note and "Use Fruit card", then the forecast and Confirm (Smart)
   const top = fruitOnTop();
   const { page, errors } = await open(top.state, { touch: true });
   await tTap(page, await hexCenter(page, top.target));
   const card = (await page.textContent('#tooltip')) ?? '';
   await page.click('#tooltip .tc-fruit');
-  const soft = await page.evaluate(() => document.querySelectorAll('.l-over .fruit-picked').length);
-  await page.click('#moves .fruit-next');
-  const chip = (await page.textContent('#confirm-chip')) ?? '';
-  check('Fruit from the tile card: the note, 3 suggested tiles, a plain-words preview', /No card can replace this\. Fruit can\./.test(card) && soft === 3 && /You give up 3/.test(chip) && errors.length === 0, chip);
+  await page.waitForTimeout(200);
+  const asks = await page.locator('#confirm-play').isVisible();
+  await page.click('#confirm-play');
+  await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
+  const gone = (await st(page)).board[top.target] === null;
+  check('Fruit card from the tile card: the note, "Use Fruit card", Confirm, the 9 is gone', /No combo can replace this\. A Fruit card can\./.test(card) && asks && gone && errors.length === 0, card.slice(0, 80));
   await page.close();
 }
 {

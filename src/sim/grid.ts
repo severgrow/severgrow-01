@@ -15,7 +15,7 @@ export const GRID: Cell[] = [9, 8, 7, 6].flatMap((maxRank) =>
 export const cellConfig = (c: Cell): Partial<RulesConfig> => ({
   maxRank: c.maxRank,
   sproutsPerTurn: c.sprout ? 1 : 0,
-  fruitPerPlayer: 0,
+  fruitCardCount: 0,
   allowStrengthen: false,
   copiesPerCard: c.copies,
 });

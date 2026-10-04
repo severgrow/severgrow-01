@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { legalActions, viewFor, newGame, apply } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
-import { RULES_VERSIONS } from '../../src/engine/index.js';
-import { BOT_VERSIONS, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
+import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { BOT_VERSION, DEFAULT_WORLD_CONFIG, RULES_VERSION, finishGame, issueTicket, newAccount, verifyGame } from '../../src/server-core/index.js';
 import type { Ticket } from '../../src/server-core/index.js';
 import { losingGame, winningGame } from './helpers.js';
@@ -15,17 +14,13 @@ describe('tickets', () => {
   it('a ticket carries the server-chosen seed, the level, the rules version and expires in 2 hours', () => {
     const t = ticketFor(42, 5, 1000);
     expect(t).toMatchObject({ id: 't-42-5', playerId: 'p1', seed: 42, level: 5, rulesVersion: RULES_VERSION, botVersion: BOT_VERSION, expiresAt: 1000 + 2 * H, used: false });
-    expect(RULES_VERSION).toBe('v0.5-fruit-strengthen');
+    expect(RULES_VERSION).toBe('v0.6-fruit-cards');
     expect(BOT_VERSION).toBe(CURRENT_BOT_VERSION);
   });
 });
 
-describe('versions: earlier games still verify with the rules and bots they were played with', () => {
-  it('a ticket from before v0.5 (rules v0.4-defaults-2, bots-v0.5, no botVersion stored) still verifies', () => {
-    const old = winningGame(3, 1, 9, RULES_VERSIONS['v0.4-defaults-2'], BOT_VERSIONS['bots-v0.5']);
-    const { botVersion: _b, ...t } = issueTicket({ id: 'old', playerId: 'p1', seed: old.seed, level: 3, now: 1_000_000 }, { ...DEFAULT_WORLD_CONFIG, rulesVersion: 'v0.4-defaults-2', botVersion: 'bots-v0.5' });
-    expect(verifyGame(t, old.actions, 2_000_000)).toEqual({ ok: true, scores: old.end.result!.scores });
-  });
+describe('versions: only the current rules and bots are accepted', () => {
+
 
   it('rejects unknown rules or bot versions', () => {
     const t = ticketFor(1, 4);

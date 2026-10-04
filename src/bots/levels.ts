@@ -7,7 +7,7 @@ import type { Action, Card, Player, View } from '../engine/index.js';
 import { simulate } from './evaluate.js';
 import { WEIGHTS, rankActions } from './GreedyBot.js';
 import type { Scored, Weights } from './GreedyBot.js';
-import { isStrengthen } from './tactics.js';
+import { NEVER, isFruitThrow, isStrengthen } from './tactics.js';
 import type { Tier } from './tactics.js';
 
 export const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
@@ -37,22 +37,28 @@ export type LevelConfig = {
   /** v0.5: how well it judges Strengthen and Fruit (tactics.ts tiers 0-4). */
   strengthenTier: Tier;
   fruitTier: Tier;
-  /** v0.5: chance per Grow step of a whim: a random Strengthen or Fruit, good or not. */
+  /** v0.5: chance per Grow step of a whim: a random Strengthen, good or not. */
   whimRate: number;
+  /** v0.6: chance per Grow step (holding a Fruit card with a target) of playing it on a random legal target (levels 1-3). */
+  fruitRandomRate: number;
+  /** v0.6: chance per Throw step of throwing a Fruit card away (levels 1-2). */
+  fruitThrowRate: number;
 };
 
-const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0 } as const;
+const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0, fruitRandomRate: 0, fruitThrowRate: 0 } as const;
 
 /** Tuned with the ladder simulation (docs/LADDER.md). */
 export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   // 1-6: one "sloppiness" dial k (0 = level 7, 1 = careless) sets mistakes, laziness and
   // how little it cares about danger. k = 0.95, 0.85, 0.72, 0.55, 0.40, 0.15.
-  // v0.5 Strengthen/Fruit: 1-2 ignore them but act on a rare whim; 3-4 simple rules;
-  // 5-6 weigh exposure and net swing; 7-8 full evaluation; 9 also the opponent's Fruit.
-  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015, strengthenTier: 0, fruitTier: 0, whimRate: 0.03 },
-  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045, strengthenTier: 0, fruitTier: 0, whimRate: 0.03 },
-  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084, strengthenTier: 1, fruitTier: 1 },
-  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135, strengthenTier: 1, fruitTier: 1 },
+  // Strengthen: 1-2 ignore it but act on a rare whim; 3-4 simple rules; 5-6 weigh exposure;
+  // 7-8 full evaluation; 9 also the opponent's unseen Fruit cards.
+  // v0.6 Fruit cards: 1-3 play one on a random target at a random moment (1-2 sometimes throw
+  // one away); 4-6 simple rules; 7-8 full evaluation; 9 also counts the unseen Fruit cards.
+  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.35, fruitThrowRate: 0.25 },
+  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.3, fruitThrowRate: 0.15 },
+  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084, strengthenTier: 1, fruitTier: 0, fruitRandomRate: 0.3 },
+  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135, strengthenTier: 1, fruitTier: 2 },
   5: { ...base, mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18, strengthenTier: 2, fruitTier: 2 },
   6: { ...base, mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255, strengthenTier: 2, fruitTier: 2 },
   7: { ...base }, // GreedyBot (v0.5: with the full Strengthen and Fruit evaluation)
@@ -79,8 +85,9 @@ export const botSeed = (gameSeed: number, level: number, turnNumber: number, act
 };
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
-const growing = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout';
-const usedCards = (a: Action): number[] => (a.t === 'Sprout' ? [a.card] : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards : []);
+/** Moves that change the board in my Grow step (v0.6: a Fruit card too). */
+const growing = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit';
+const usedCards = (a: Action): number[] => (a.t === 'Sprout' || a.t === 'PlayFruit' ? [a.card] : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards : []);
 
 /** The bot's own view after one of its growing moves (needs nothing hidden). */
 const viewAfter = (v: View, a: Action): View | null => {
@@ -95,7 +102,8 @@ const viewAfter = (v: View, a: Action): View | null => {
     sproutsThisTurn: v.sproutsThisTurn + (a.t === 'Sprout' ? 1 : 0),
     score: score(ctx, v.player),
     opponentScore: score(ctx, other(v.player)),
-    lastResolution: null,
+    // (a Fruit card played: the next one is judged as a second Fruit card this turn)
+    lastResolution: a.t === 'PlayFruit' ? { placed: [], overgrown: [], rotted: [], severed: [], fruit: { card: a.card, target: a.target, strength: v.board[`${a.target.q},${a.target.r}`]?.strength ?? 0 } } : null,
   };
 };
 
@@ -199,12 +207,23 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
 
   const weights = { ...WEIGHTS, exposure: c.dangerWeight, pressure: c.pressureWeight };
   const rng = mulberry32(seed);
-  // Levels 1-2: now and then a whim - a random Strengthen or Fruit, whether it helps or not.
+  // Levels 1-2: now and then a whim - a random Strengthen, whether it helps or not.
   // (Its own random stream, so the rest of the bot's choices are not shifted by it.)
   const whim = mulberry32(seed ^ 0x5bd1e995);
   if (c.whimRate > 0 && v.phase === 'ACT' && whim() < c.whimRate) {
-    const odd = legal.filter((a) => a.t === 'Fruit' || isStrengthen(v, a));
+    const odd = legal.filter((a) => isStrengthen(v, a));
     if (odd.length > 0) return { action: odd[Math.floor(whim() * odd.length)]!, reason: 'a whim (levels 1-2 sometimes waste it)' };
+  }
+  // v0.6 Fruit cards, levels 1-3: a random legal target at a random moment; levels 1-2 also
+  // sometimes throw one away. (Their own random stream too.)
+  const fr = mulberry32(seed ^ 0x2545f491);
+  if (c.fruitRandomRate > 0 && v.phase === 'ACT') {
+    const fruits = legal.filter((a) => a.t === 'PlayFruit');
+    if (fruits.length > 0 && fr() < c.fruitRandomRate) return { action: fruits[Math.floor(fr() * fruits.length)]!, reason: 'a Fruit card on a random target, at a random moment (levels 1-3)' };
+  }
+  if (c.fruitThrowRate > 0 && v.phase === 'DISCARD') {
+    const throws = legal.filter((a) => a.t === 'Discard' && v.hand.find((h) => h.id === a.card)?.suit === null);
+    if (throws.length > 0 && fr() < c.fruitThrowRate) return { action: throws[0]!, reason: 'throws a Fruit card away (levels 1-2)' };
   }
   let ranked: Scored[] = rankActions(v, { weights, strengthenTier: c.strengthenTier, fruitTier: c.fruitTier });
 
@@ -245,8 +264,9 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
     const options = legal.filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard');
     const rankOf = (a: Extract<Action, { t: 'Discard' }>) => v.hand.find((h) => h.id === a.card)!.rank;
     const unseen = c.cardDenial ? unseenCards(v) : [];
+    // (v0.6: a Fruit card is never an ordinary throw)
     const cost = (a: Extract<Action, { t: 'Discard' }>) =>
-      (loose.has(a.card) ? 0 : 100) + rankOf(a) * 2 + (c.cardDenial ? usefulness(v.hand.find((h) => h.id === a.card)!, unseen) * 0.5 : 0);
+      (isFruitThrow(v, a) ? 10_000 : 0) + (loose.has(a.card) ? 0 : 100) + rankOf(a) * 2 + (c.cardDenial ? usefulness(v.hand.find((h) => h.id === a.card)!, unseen) * 0.5 : 0);
     if (options.length > 0) return { action: options.reduce((x, y) => (cost(y) < cost(x) ? y : x)) };
   }
 
@@ -262,16 +282,21 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
     }
   }
 
+  // v0.6: a Fruit card that wins or opens a Strangle is never lost to laziness or a slip
+  if (ranked[0]!.facts.kind === 'fruit' && ranked[0]!.score >= 900) return withReason(ranked[0]!);
+
   // Laziness: sometimes stop growing even though it could.
   if (c.skipGrowth > 0 && v.phase === 'ACT' && rng() < c.skipGrowth) {
     const stop = legal.find((a) => a.t === 'EndAct');
     if (stop) return { action: stop };
   }
 
-  // Mistakes: sometimes settle for one of the next-best moves.
+  // Mistakes: sometimes settle for one of the next-best moves (never one it rules out
+  // altogether, such as throwing a Fruit card or a Fruit card it would keep).
   if (c.mistakeRate > 0 && ranked.length > 1 && rng() < c.mistakeRate) {
-    const n = Math.min(c.topN, ranked.length);
-    if (n > 1) return withReason(ranked[1 + Math.floor(rng() * (n - 1))]!);
+    const ok = ranked.filter((r) => r.score > NEVER / 2);
+    const n = Math.min(c.topN, ok.length);
+    if (n > 1) return withReason(ok[1 + Math.floor(rng() * (n - 1))]!);
   }
   return withReason(ranked[0]!);
 };

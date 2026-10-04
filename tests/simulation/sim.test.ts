@@ -17,7 +17,7 @@ describe('sim: one game record', () => {
     expect(g.tilesPlaced).toBe(h.reduce((n, e) => n + (e.t === 'MeldRun' || e.t === 'MeldSet' ? e.hexes.length : e.t === 'Sprout' ? 1 : 0), 0));
     expect(g.overgrows).toBe(h.filter((e) => e.t === 'Overgrow').length);
     expect(g.severedTiles).toBe(h.reduce((n, e) => n + (e.t === 'Sever' ? e.coords.length : 0), 0));
-    expect(g.fruitUses).toBe(h.filter((e) => e.t === 'Fruit').length);
+    expect(g.fruitUses).toBe(h.filter((e) => e.t === 'FruitCard').length);
     expect(g.knocked).toBe(h.some((e) => e.t === 'Knock'));
   });
 

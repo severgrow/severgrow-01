@@ -52,7 +52,7 @@ export const generateTerrain = (seed: number, config: RulesConfig): Record<strin
   for (const c of allCoords(boardRadius)) terrain[coordKey(c)] = 'normal';
   terrain[coordKey(CENTRE)] = 'rich';
 
-  const order = shuffle(eligible, mulberry32(deriveSeed(seed, TERRAIN_STREAM)), config.unbiasedShuffle !== false);
+  const order = shuffle(eligible, mulberry32(deriveSeed(seed, TERRAIN_STREAM)));
   order.forEach(([a, b], i) => {
     const kind: Terrain | null = i < rockPairs ? 'rock' : i < rockPairs + richPairs ? 'rich' : null;
     if (kind) {

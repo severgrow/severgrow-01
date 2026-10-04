@@ -22,6 +22,7 @@ describe('settings (saved in the browser)', () => {
       placementList: false, // polish pass 3: opt-in list of placements while drawing
       handSort: 'suit', // UI overhaul: the hand is sorted by suit (Sort switches to by number)
       eyeCandy: true, // UI overhaul Part 3: the decorations, on by default (Settings can switch them off)
+      autoSkip: true, // Fruit cards task, Step 2: "Auto-skip when nothing to play", on by default
     });
   });
 

@@ -1,7 +1,7 @@
 // The dock's hint line (UI overhaul item 13): one short line saying what to do next, with a
 // tiny arrow toward where to do it (up: the board; down: the hand and the piles). It also says
 // why a move is not available. Pure: the page passes a small summary of the moment.
-import { OPP } from '../../../src/strings.js';
+import { FRUIT, OPP } from '../../../src/strings.js';
 import type { MoveWords } from '../../../src/strings.js';
 
 /** The longest hint allowed: it must fit one line on a 360px-wide phone. */
@@ -18,7 +18,8 @@ export type HintCtx = {
   deckCount: number;
   /** Draw step: can I take the throw pile's top card? */
   canTakeThrow: boolean;
-  fruit: null | { step: 1 | 2; changing: boolean; picks: number; n: number; msg: string | null };
+  /** v0.6: a Fruit card is picked (`firstTime`: the "any strength" note has not been shown yet) */
+  fruit: null | { firstTime: boolean; reason?: string | null };
   pending: null | 'strengthen' | 'drawn' | 'board';
   drawing: null | { kind: 'line' | 'clump'; n: number; fine: boolean };
   /** a card is picked: what it can do (empty: nothing) and whether it is a single-card move */
@@ -45,12 +46,8 @@ export const hintFor = (c: HintCtx): Hint => {
       return h(c.deckCount <= 3 ? `Draw a card: ${c.deckCount === 1 ? 'last one in the deck' : `${c.deckCount} left in the deck`}` : 'Draw: tap the deck or the throw pile', 'down');
     }
     case 'ACT': {
-      if (c.fruit) {
-        if (c.fruit.msg) return h(c.fruit.msg);
-        if (c.fruit.step === 2) return h('Fruit: check the result, then Confirm', 'down');
-        if (c.fruit.changing) return h(`Fruit: tap ${c.fruit.n} linked tiles (${c.fruit.picks}/${c.fruit.n})`, 'up');
-        return h(`Fruit: give up these ${c.fruit.n}? Next or Change`, 'down');
-      }
+      if (c.fruit?.reason) return h(c.fruit.reason);
+      if (c.fruit && !c.pending) return h(c.fruit.firstTime ? FRUIT.anyStrength : FRUIT.tapTarget, 'up');
       if (c.pending === 'strengthen') return h('Strengthen: your tile takes the higher number', 'down');
       if (c.pending === 'drawn') return h('Confirm, or draw it again', 'down');
       if (c.pending) return h('Confirm, or tap the spot again', 'down');

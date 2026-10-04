@@ -33,8 +33,9 @@ const canon = (s: State, a: Action): string => {
       return `R ${cardKey(a.cards)} ${coordKey(a.start)} ${a.dir}`;
     case 'MeldSet':
       return `S ${cardKey(a.cards)} ${hexKey(a.hexes)}`;
-    case 'Fruit':
-      return `F ${hexKey(a.sacrifice)} ${coordKey(a.target)}`;
+    case 'PlayFruit':
+      // Fruit cards are all alike: only the target matters
+      return `F ${coordKey(a.target)}`;
     case 'Sprout':
       return `T ${cardKey([a.card])} ${coordKey(a.coord)}`;
     case 'Discard': {
@@ -120,7 +121,8 @@ const bruteForce = (s: State): Set<string> => {
         const t = s.board[coordKey(c)];
         return t && t.owner !== p;
       });
-      for (const sacrifice of subsets(mine, 3)) for (const target of enemy) add({ t: 'Fruit', sacrifice, target });
+      void mine;
+      for (const card of hand) for (const target of enemy) add({ t: 'PlayFruit', card: card.id, target });
       break;
     }
   }
@@ -179,9 +181,9 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
     }
   }, 300_000);
 
-  it('matches brute force on ACT states with Fruit available and many tiles', () => {
-    // States where at least one Fruit is legal; the full list must still match brute force.
-    const states = sampleStates(4, (s) => s.phase === 'ACT' && legalActionsForState(s).some((a) => a.t === 'Fruit'), LEGACY_V03);
+  it('matches brute force on ACT states with a Fruit card playable and many tiles', () => {
+    // States where at least one Fruit card is legal; the full list must still match brute force.
+    const states = sampleStates(4, (s) => s.phase === 'ACT' && legalActionsForState(s).some((a) => a.t === 'PlayFruit'), LEGACY_V03);
     expect(states.length).toBe(4);
     for (const s of states) {
       const listed = new Set(legalActionsForState(s).map((a) => canon(s, a)));

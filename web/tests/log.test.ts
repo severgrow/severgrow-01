@@ -11,7 +11,7 @@ group('history lines', () => {
       expect(line.length).toBeGreaterThan(0);
       if (before.actor !== 1) return;
       const used = new Set<number>(
-        action.t === 'MeldRun' || action.t === 'MeldSet' ? action.cards : action.t === 'Sprout' || action.t === 'Discard' ? [action.card] : [],
+        action.t === 'MeldRun' || action.t === 'MeldSet' ? action.cards : action.t === 'Sprout' || action.t === 'Discard' || action.t === 'PlayFruit' ? [action.card] : [],
       );
       for (const c of after.hands[1]) if (!used.has(c.id) && !before.discard.some((d) => d.id === c.id)) {
         // a held card may share a name with a played copy; only flag names never shown
@@ -31,12 +31,11 @@ group('history lines', () => {
 
 group('UX pass: what you did with the one-card move (result screen)', () => {
   const ev = (t: 'Sprout' | 'Strengthen', player: 0 | 1) => (t === 'Sprout' ? { t, player, card: 1, coord: { q: 0, r: 0 } } : { t, player, card: 1, coord: { q: 0, r: 0 }, oldStrength: 1, newStrength: 5 }) as Event;
-  it('counts only my moves and names them for the version', () => {
+  it('counts only my moves and names them (always "sprouted")', () => {
     const h = [ev('Sprout', 0), ev('Sprout', 0), ev('Strengthen', 0), ev('Sprout', 1), ev('Strengthen', 1)];
-    expect(moveSummary(h, 0, { ruleset: 'seed' })).toBe('You planted 2 seeds and strengthened 1 tile.');
-    expect(moveSummary(h, 0, {})).toBe('You sprouted 2 tiles and strengthened 1 tile.');
-    expect(moveSummary([ev('Sprout', 0)], 0, { ruleset: 'seed' })).toBe('You planted 1 seed.');
-    expect(moveSummary([ev('Strengthen', 0), ev('Strengthen', 0)], 0, {})).toBe('You strengthened 2 tiles.');
-    expect(moveSummary([ev('Sprout', 1)], 0, {})).toBeNull();
+    expect(moveSummary(h, 0)).toBe('You sprouted 2 tiles and strengthened 1 tile.');
+    expect(moveSummary([ev('Sprout', 0)], 0)).toBe('You sprouted 1 tile.');
+    expect(moveSummary([ev('Strengthen', 0), ev('Strengthen', 0)], 0)).toBe('You strengthened 2 tiles.');
+    expect(moveSummary([ev('Sprout', 1)], 0)).toBeNull();
   });
 });

@@ -27,7 +27,7 @@ const open = async (settings: Record<string, unknown>, state: unknown) => {
     ([s, saved]) => {
       localStorage.clear();
       localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v5', saved as string);
+      localStorage.setItem('severgrow.save.v6', saved as string);
     },
     [JSON.stringify({ sound: false, coach: false, ...settings }), JSON.stringify({ state, coach: doneCoach })],
   );
@@ -113,7 +113,7 @@ for (const id of THEME_IDS) {
   await page.goto(BASE);
   await page.waitForTimeout(300);
   await shot(page, 'menu');
-  await page.click('#menu-sprout');
+  await page.click('#menu-new');
   await page.waitForTimeout(300);
   await shot(page, 'levels');
   await page.close();

@@ -161,7 +161,7 @@ describe('coach: tactic tips and words', () => {
 
   it('with the parked rules off it never mentions Rot, Knock or leftover points; with Fruit off, never Fruit', () => {
     const bad = /\brot\b|rotted|knock|deadwood|leftover/i;
-    for (const s of humanStates({ fruitPerPlayer: 0 }, 100)) {
+    for (const s of humanStates({ fruitCardCount: 0 }, 100)) {
       const v = viewFor(s, 0);
       for (let choice = 0; choice < 3; choice++) {
         const adv = coachAdvice(input(v, { taught: TIP_ORDER.slice(0, s.turnNumber % TIP_ORDER.length) }), choice)!;

@@ -78,10 +78,6 @@ export const checkState = (
   for (const [key, t] of Object.entries(s.board)) {
     if (t && !t.root && (!Number.isInteger(t.strength) || t.strength < 1 || t.strength > 9)) fail(4, `strength ${t.strength} at ${key}`);
   }
-  // 4b. Seed marks: only in the Seed ruleset, only on non-root tiles worth exactly 1.
-  for (const [key, t] of Object.entries(s.board)) {
-    if (t?.seed && (s.config.ruleset !== 'seed' || t.root || t.strength !== 1)) fail(4, `bad seed mark at ${key}`);
-  }
 
   // 2. Every non-root tile connected to its root (Sever waits until all Rot picks are done).
   if (s.phase !== 'ROT_PICK') {
@@ -91,7 +87,7 @@ export const checkState = (
     }
   }
 
-  // 5. Every card exactly once: in a hand, the deck, the discard pile, or melded.
+  // 5. Every card exactly once: in a hand, the deck, the discard pile, or played (melded, sprouted, or a Fruit card used).
   const seen = new Set<number>();
   for (const c of [...s.hands[0], ...s.hands[1], ...s.deck, ...s.discard]) {
     if (seen.has(c.id)) fail(5, `card ${c.id} is in two places`);
@@ -144,7 +140,7 @@ export const runPropertyGame = (
     s = apply(s, a);
     actions.push(a);
     if (a.t === 'MeldRun' || a.t === 'MeldSet') for (const id of a.cards) melded.add(id);
-    if (a.t === 'Sprout') melded.add(a.card);
+    if (a.t === 'Sprout' || a.t === 'PlayFruit') melded.add(a.card); // a played Fruit card leaves the game
     if (checks) {
       // 6. apply never mutates its input.
       if (withoutHistory(before) !== snapshot) throw new PropertyFailure(6, 'apply mutated its input', report({ failingAction: a, before }));

@@ -34,7 +34,7 @@ export const involvedKeys = (s: Step): string[] => {
     case 'strengthen':
       return [s.key];
     case 'fruit':
-      return [...s.sacrifice, s.target];
+      return [s.target];
     case 'sever':
       return [...new Set([s.origin, ...s.keys])];
     case 'remove':

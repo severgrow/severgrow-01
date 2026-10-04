@@ -7,7 +7,7 @@ export const ACTION_PHASE: Record<Action['t'], Phase> = {
   MeldRun: 'ACT',
   MeldSet: 'ACT',
   Sprout: 'ACT',
-  Fruit: 'ACT',
+  PlayFruit: 'ACT',
   EndAct: 'ACT',
   Discard: 'DISCARD',
   Knock: 'KNOCK',
@@ -36,8 +36,8 @@ export const assertActionShape = (a: unknown): Action => {
     case 'MeldSet':
       if (!Array.isArray(a.cards) || !Array.isArray(a.hexes)) bad('MeldSet needs cards[] and hexes[]');
       break;
-    case 'Fruit':
-      if (!Array.isArray(a.sacrifice)) bad('Fruit needs sacrifice[] and target');
+    case 'PlayFruit':
+      if (typeof a.card !== 'number') bad('PlayFruit needs a card id and a target');
       break;
     case 'Sprout':
       if (typeof a.card !== 'number') bad('Sprout needs a card id and a coord');

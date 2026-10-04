@@ -224,6 +224,8 @@ opponent tile (⇆), strengthen your tile (+)"). Growing and replacing still pla
 back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
 but harder for your opponent to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
 
+*(Retired in v0.6: the 3-tile Fruit and its flow below were replaced by Fruit cards; see "Step 4: Fruit cards on the page" at the end.)*
+
 **Fruit is used by tapping an opponent tile** (polish pass 3; there is no Fruit button in the move
 row any more: the row only shows what you can do right now). In your Grow step, while your Fruit
 is unused, the tile card of any opponent tile except their root shows:
@@ -446,7 +448,8 @@ plain bold text, never shaped like buttons.
 
 ## UX pass (after the Seed A/B test)
 
-Fifteen small changes to the look and feel; no rule changes.
+Fifteen small changes to the look and feel; no rule changes. (v0.6: Seed mode is retired, so items
+4, 7, 11, 12, 13 and 14's seed wording, and the version chip, are gone; see SPEC "Retired rules".)
 
 1. **Turn pill on one line**: "Turn 6/30 · Level 8" (it used to wrap "Level / 8").
 2. **Scars fade**: what a cut-off tile leaves is drawn fainter each turn (100%, 60%, 30%), and the
@@ -467,7 +470,7 @@ Fifteen small changes to the look and feel; no rule changes.
 14. **What you did with the move** on the result screen: "You planted 6 seeds and strengthened 4 tiles."
 15. **Continue says where you left off**: version, level and turn.
 
-Checked by `web/e2e/seed-ab.ts` (25 checks) and unit tests (stats per version, move summary).
+Was checked by `web/e2e/seed-ab.ts` (deleted with Seed mode in v0.6).
 
 ## UI overhaul, Part 1 (twenty improvements)
 
@@ -506,8 +509,7 @@ One set of rules for every screen:
 4. **Toolbar under the board:** "My weak spots", "Their weak links" (on/off), "Replay" (only when
    there is a turn to replay), "Undo", "Skip" (only while something animates).
 5. **Header:** one clock only. The turn count was removed (your choice); the deck count is the
-   game's clock. The "Only 1 card left" pill is gone (the deck shows it). The version chip
-   (SPROUT / SEED: which rules this game uses) sits with the three steps.
+   game's clock. The "Only 1 card left" pill is gone (the deck shows it). (The version chip was removed with Seed mode in v0.6.)
 6. **Deck and throw pile** (`logic/piles.ts`): 48px+ targets; the stack is as thick as the pile is
    big; the count sits beside the label, clear of the art; they glow in the Draw step; the last
    card turns gold and the label says "Last card"; drawing arcs the card into the hand;
@@ -530,8 +532,8 @@ One set of rules for every screen:
 12. **The board as a place:** a ground plate lit from the top left, a lighter edge, a soft shadow,
     a fine soil grain in empty hexes (Material detail Normal only).
 13. **Hint line** (`logic/hint.ts`): one short line (it always fits a 360px phone) with a tiny
-    arrow toward where to tap; it says why a move isn't available. The single-tile move keeps
-    its version's word (Sprout / Seed): no renaming.
+    arrow toward where to tap; it says why a move isn't available. The single-tile move is
+    always called Sprout (one constant, `SPROUT`).
 14. **Score race** (`logic/race.ts`): a slim tug-of-war bar under the header; scores count up and
     bounce; tap a score for what it is made of.
 15. **Final turns** (`logic/endgame.ts`): when 3 of your turns are left (turn limit) or the deck
@@ -611,3 +613,55 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
   Part 2, about 42 fps after.
 - The full before/after screenshots and the adversarial set are deferred until after the Fruit
   cards change (agreed with the owner, so they show the final game).
+
+## Seed removal and Fruit cards (v0.6), Step 2: empty turns
+
+- **Auto-skip when nothing to play** (Settings → Playing, on by default): a Grow step with no legal
+  move skips itself and the caption says "Nothing to play this turn". Off: the moves row shows the
+  reason ("No combo in your hand, and no card can sprout.") and a Continue button.
+- Taps for an empty turn: **2** (draw, throw); with auto-skip off, **3** (draw, Continue, throw).
+  A throw never asks for a confirmation (only throwing your last card can). Undo stays until the throw.
+- The opponent's empty turn is quick: about **400ms** at Normal speed (measured 343-422ms on the
+  test phone size), scaled by the Speed setting. Logic: `web/src/logic/emptyturn.ts`; browser
+  check: `web/e2e/emptyturn.ts`.
+
+## Seed removal and Fruit cards (v0.6), Step 4: Fruit cards on the page
+
+- **The card**: a bone-cream face with a mushroom cap shedding spores, a small "Fruit" print, a
+  thin pearly edge and a low-key raised look; no suit colour (no amber, mint or coral). It reads
+  the same in the throw pile. Drawn in code (`FRUIT_SVG`, `.card.fruit`).
+- **In the hand**: Sort puts Fruit cards at the right, after a small gap. A Fruit card glows
+  softly when it has a legal target; otherwise it is dimmed, and tapping it says why in one line
+  ("No opponent tile touches yours." / "Play it in your Grow step.").
+- **Playing one**: tap the card: its targets get calm pearly rings (no badge, no alarm colour),
+  and the first time the hint says "Any strength: even a 9 can go." Tap a target: the forecast
+  bar ("✿ Uses a Fruit card", plus any cut) and Confirm. "Confirm moves": Smart and Always ask,
+  Never plays at once. Undo works until the throw. With another Fruit card in hand, it stays
+  picked after the first, its targets lit.
+- **Shortcut**: the tile card of an opponent tile a Fruit card can remove offers "Use Fruit
+  card"; on a top-rank tile it adds "No combo can replace this. A Fruit card can."
+- **Chip** near the deck: "Fruit cards unseen: 2" (public information only).
+- **One-time tip**: "Fruit cards: play one on an opponent tile that touches yours to remove it,
+  even a 9." (re-openable from How to play). Not part of the coach's 3-line summary.
+- **Animation**: the card lifts and flies to the tile, the tile swells like a pod, then bursts
+  (spore puff, soft thud, "Fruited!"), then the usual cut sequence. A Big moment; every setting
+  is respected (Speed, Reduce motion, Effects, sound, vibration). The opponent's is calmer: no
+  banner, a caption "Opponent used a Fruit card on your 9"; taking one from the throw pile says
+  "Opponent took the Fruit card".
+- Checked by `web/tests/fruitcard.test.ts` and the browser test `web/e2e/fruitcards.ts`
+  (27 checks, touch and mouse, including a whole game and a full hand at 360px with no sideways scroll); screenshots in
+  `docs/screens/fruit-cards/`.
+
+## Seed removal and Fruit cards (v0.6), Steps 7-8: proof and tidy
+
+- **Moves row**: always one line. When two or more move buttons share it they use short labels
+  ("Sprout", "Strengthen"), and it scrolls sideways rather than wrapping under the forecast. The
+  "Fruit cards unseen" chip sits under the piles, so it never pushes the row.
+- **Self-review of the screenshots** (`docs/screens/fruit-cards/`):
+  - Confusing: with a dimmed Fruit card picked, the reason appears twice (as a caption over the
+    board and as the hint line), and the one-time tip repeats "Fruit cards" in its title and text.
+  - Strong: the Fruit card is unmistakable in the hand (cream, no suit colour, at the right), and
+    its calm pearly target rings read as "you may" rather than as a warning.
+  - Fixed: the tip's "Got it" button was half cut off at the bottom of the box on a phone; it now
+    sits beside the text. Also, the hint line said "That card can't grow anywhere now" for a
+    Fruit card; it now gives the Fruit reason (Fruit cards never "grow").

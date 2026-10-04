@@ -12,7 +12,6 @@ import {
   mulberry32,
   newGame,
   randomInt,
-  randomIntLegacy,
   shuffle,
   viewFor,
 } from '../../src/engine/index.js';
@@ -24,7 +23,7 @@ const placesOf = (s: State): number[] => {
   const played: number[] = [];
   for (const e of s.history ?? []) {
     if (e.t === 'MeldRun' || e.t === 'MeldSet') played.push(...e.cards);
-    if (e.t === 'Sprout' || e.t === 'Strengthen') played.push(e.card);
+    if (e.t === 'Sprout' || e.t === 'Strengthen' || e.t === 'FruitCard') played.push(e.card); // a played Fruit card leaves the game
   }
   return [...s.hands[0], ...s.hands[1], ...s.deck, ...s.discard].map((c) => c.id).concat(played);
 };
@@ -72,8 +71,8 @@ describe('fairness', () => {
       const g = newGame(i + 1);
       expect(stateHash({ hands: g.hands, deck: g.deck, discard: g.discard, terrain: g.terrain })).toBe(deals[i]);
     }
-    // recorded by an earlier, separate run (tests/fixtures/make-deals-v05.ts)
-    const rec = JSON.parse(readFileSync(new URL('../fixtures/deals-v05.json', import.meta.url), 'utf8')) as { deals: string[] };
+    // recorded by an earlier, separate run (tests/fixtures/make-deals.ts)
+    const rec = JSON.parse(readFileSync(new URL('../fixtures/deals.json', import.meta.url), 'utf8')) as { deals: string[] };
     expect(deals).toEqual(rec.deals);
   });
 
@@ -119,15 +118,12 @@ describe('fairness', () => {
     expect(new Set(biased).size).toBeGreaterThan(1);
   });
 
-  it('randomInt is uniform and in range on the real generator; the legacy method stays for old rules', () => {
+  it('randomInt is uniform and in range on the real generator; no legacy method is left', () => {
     const r = mulberry32(99);
     const counts = new Array<number>(7).fill(0);
     for (let i = 0; i < 70_000; i++) counts[randomInt(r, 7)]!++;
     for (const c of counts) expect(Math.abs(c - 10_000) / 10_000).toBeLessThan(0.04);
     expect(() => randomInt(r, 0)).toThrow(RangeError);
-    const a = mulberry32(5);
-    const b = mulberry32(5);
-    for (let i = 0; i < 1000; i++) expect(randomIntLegacy(a, 37)).toBe(Math.floor(b() * 37));
   });
 
   it('nothing is rigged: hands with several top cards, and with none, both happen', () => {

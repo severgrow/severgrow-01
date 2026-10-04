@@ -27,14 +27,9 @@ export const OPP = Object.freeze({
 /** The game's name, as the player sees it (the code, storage keys and repo keep "severgrow"). */
 export const GAME_TITLE = 'Severor';
 
-/**
- * The words for the one-card move in each version of the Seed A/B test. The Sprout version
- * keeps its exact old wording; the Seed version never says "sprout".
- */
+/** The words for the one-card move. It is called "Sprout" everywhere (one constant: SPROUT). */
 export type MoveWords = {
-  /** "Sprout" / "Seed" */
   Name: string;
-  /** "sprout" / "seed" ("it uses your sprout for the turn") */
   name: string;
   /** the How to play sentence (HTML) */
   howto: string;
@@ -58,51 +53,58 @@ export type MoveWords = {
   oppDid: (card: string, hex: string) => string;
   /** the move list */
   suggest: (hex: string, card: string) => string;
-  /** one line explaining this version (tapping the version label) */
-  explain: string;
 };
 
-export const MOVE_WORDS: Readonly<Record<'sprout' | 'seed', MoveWords>> = Object.freeze({
-  sprout: Object.freeze({
-    Name: 'Sprout',
-    name: 'sprout',
-    howto: ' Once per turn you can <b>sprout</b> one tile with any single card.',
-    strengthenExample: `<i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i>`,
-    tapHint: 'Tap a card to sprout it',
-    pick: 'Pick a card to sprout',
-    skip: 'Skip sprout',
-    skipTitle: 'Skip the sprout and throw a card',
-    practice: 'Practice game: no sprout this time.',
-    coachTip: (combo: string) => `Sprout: one card, one tile. Handy when you have no ${combo}.`,
-    coachWhy: (combo: string) => `A Sprout grows one tile for you with a single card, so your ${combo} cards stay in your hand.`,
-    bullet: 'No combo? Sprout one card as one tile.',
-    youDid: (hex: string) => `You sprouted one tile at ${hex}`,
-    oppDid: (card: string, hex: string) => `${OPP.The} sprouted a ${card} at ${hex}`,
-    suggest: (hex: string, card: string) => `Sprout one tile at ${hex} with the ${card}`,
-    explain: 'Sprout version: a single card grows one tile of its own number.',
-  }),
-  seed: Object.freeze({
-    Name: 'Seed',
-    name: 'seed',
-    howto: ' Once per turn you can <b>plant a seed</b>: any single card grows one tile worth <b>1</b>, whatever its number. Strengthen it later with a higher card.',
-    strengthenExample: '<i>Example: plant a seed (worth 1); on a later turn play a 9 on it and it becomes a 9.</i>',
-    tapHint: 'Tap a card to plant it as a seed',
-    pick: 'Pick a card to plant a seed',
-    skip: 'Skip seed',
-    skipTitle: 'Skip the seed and throw a card',
-    practice: 'Practice game: no seed planted this time.',
-    coachTip: (combo: string) => `Seed: one card, one tile worth 1. Handy when you have no ${combo}; strengthen it later.`,
-    coachWhy: (combo: string) => `A Seed plants one tile (worth 1) with a single card, so your ${combo} cards stay in your hand. A higher card can strengthen it later.`,
-    bullet: 'No combo? Plant a card as a seed (worth 1), then strengthen it.',
-    youDid: (hex: string) => `You planted a seed at ${hex}`,
-    oppDid: (card: string, hex: string) => `${OPP.The} planted a seed (with a ${card}) at ${hex}`,
-    suggest: (hex: string, card: string) => `Plant a seed at ${hex} with the ${card}`,
-    explain: 'Seed version: a single card plants a seed worth 1. Strengthen it later with a higher card.',
-  }),
+export const SPROUT: Readonly<MoveWords> = Object.freeze({
+  Name: 'Sprout',
+  name: 'sprout',
+  howto: ' Once per turn you can <b>sprout</b> one tile with any single card.',
+  strengthenExample: `<i>Example: your 5 sits next to ${OPP.the}; sprout a 9 on it and it becomes a 9.</i>`,
+  tapHint: 'Tap a card to sprout it',
+  pick: 'Pick a card to sprout',
+  skip: 'Skip sprout',
+  skipTitle: 'Skip the sprout and throw a card',
+  practice: 'Practice game: no sprout this time.',
+  coachTip: (combo: string) => `Sprout: one card, one tile. Handy when you have no ${combo}.`,
+  coachWhy: (combo: string) => `A Sprout grows one tile for you with a single card, so your ${combo} cards stay in your hand.`,
+  bullet: 'No combo? Sprout one card as one tile.',
+  youDid: (hex: string) => `You sprouted one tile at ${hex}`,
+  oppDid: (card: string, hex: string) => `${OPP.The} sprouted a ${card} at ${hex}`,
+  suggest: (hex: string, card: string) => `Sprout one tile at ${hex} with the ${card}`,
 });
 
-/** The words for a game's version ('sprout' when the config has no ruleset). */
-export const moveWords = (c: { ruleset?: string }): MoveWords => (c.ruleset === 'seed' ? MOVE_WORDS.seed : MOVE_WORDS.sprout);
 
-/** "Sprout version" / "Seed version". */
-export const versionLabel = (c: { ruleset?: string }): string => `${moveWords(c).Name} version`;
+/** The words for v0.6 Fruit cards, in one place. */
+export const FRUIT = Object.freeze({
+  /** "Fruit card" */
+  card: 'Fruit card',
+  /** "Fruit cards" */
+  cards: 'Fruit cards',
+  /** the small print on the card face */
+  print: 'Fruit',
+  /** the one-time tip (re-openable from How to play) */
+  tip: `Fruit cards: play one on an ${lower} tile that touches yours to remove it, even a 9.`,
+  /** How to play (HTML) */
+  howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your root counts): that tile is removed, even a 9, and anything that hung on it is cut off. Play as many as you hold. A Fruit card never makes a combo or a sprout; you can throw it, and then ${OPP.the} can take it.`,
+  /** first time a Fruit card is picked */
+  anyStrength: 'Any strength: even a 9 can go.',
+  /** the hint while a Fruit card is picked */
+  tapTarget: `Tap a lit ${lower} tile to remove it`,
+  /** the shortcut on an opponent tile's card */
+  use: 'Use Fruit card',
+  /** the shortcut's note on a top-rank tile */
+  topRank: 'No combo can replace this. A Fruit card can.',
+  /** why a held Fruit card has nothing to do */
+  noTarget: `No ${lower} tile touches yours.`,
+  notNow: 'Play it in your Grow step.',
+  /** the chip near the deck */
+  unseen: (n: number) => `Fruit cards unseen: ${n}`,
+  /** the burst banner */
+  banner: 'Fruited!',
+  /** a move, in plain words */
+  suggest: (hex: string, strength: number) => `Use a Fruit card on ${OPP.theirs} ${strength} at ${hex}`,
+  youDid: (hex: string, strength: number) => `You used a Fruit card on ${OPP.theirs} ${strength} at ${hex}`,
+  oppDid: (strength: number) => `${OPPONENT_LABEL} used a Fruit card on your ${strength}`,
+  oppTook: `${OPPONENT_LABEL} took the Fruit card`,
+  youTook: 'You took the Fruit card',
+});

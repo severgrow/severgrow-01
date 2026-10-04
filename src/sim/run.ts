@@ -60,7 +60,7 @@ const canStrangle = (s: State, acts: Action[]): boolean => {
   const v = viewFor(s, s.actor);
   const ring = new Set(allNeighbors(rootCoord(s.actor === 0 ? 1 : 0, s.config.rootStyle, s.config.boardRadius)).map(coordKey));
   return acts.some((a) => {
-    const hexes = a.t === 'MeldSet' ? a.hexes : a.t === 'MeldRun' ? [a.start] : a.t === 'Fruit' ? [a.target] : null;
+    const hexes = a.t === 'MeldSet' ? a.hexes : a.t === 'MeldRun' ? [a.start] : a.t === 'PlayFruit' ? [a.target] : null;
     if (!hexes) return false;
     if (a.t === 'MeldSet' && !hexes.some((h) => ring.has(coordKey(h)))) return false;
     return simulate(v, a)?.wins ?? false;
@@ -130,7 +130,7 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
         rec.severedTiles += e.coords.length;
         rec.maxSever = Math.max(rec.maxSever, e.coords.length);
       }
-      if (e.t === 'Fruit') rec.fruitUses++;
+      if (e.t === 'FruitCard') rec.fruitUses++;
       if (e.t === 'RotCount') {
         if (turn >= 4) rec.midGameTurns++;
         if (e.count > 0) {

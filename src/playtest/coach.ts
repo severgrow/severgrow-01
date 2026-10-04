@@ -8,7 +8,7 @@ import { rankActions } from '../bots/GreedyBot.js';
 import type { MoveFacts, Scored } from '../bots/GreedyBot.js';
 import { threats } from '../bots/evaluate.js';
 import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.js';
-import { OPP, moveWords } from '../strings.js';
+import { FRUIT, OPP, SPROUT } from '../strings.js';
 
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
@@ -109,7 +109,8 @@ const glossary = (known: readonly string[]) => {
 // Parked rules (spec appendix A) are taught only when switched on.
 const rotOn = (v: View) => v.config.rotEnabled && rotCount(9 * (v.config.handSize + 1), v.config) > 0;
 const knockOn = (v: View) => v.config.knockEnabled;
-const fruitOn = (v: View) => v.config.fruitPerPlayer > 0;
+/** v0.6: Fruit cards are in the game (the deck has some). */
+const fruitOn = (v: View) => v.config.fruitCardCount > 0;
 
 // ---------- tips ----------
 
@@ -139,7 +140,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   sprout: {
     active: ({ v }) => v.config.sproutsPerTurn > 0,
     fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'sprout'),
-    text: ({ v, say }) => moveWords(v.config).coachTip(say('combo')),
+    text: ({ say }) => SPROUT.coachTip(say('combo')),
   },
   strength: {
     active: () => true,
@@ -177,7 +178,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   fruit: {
     active: ({ v }) => fruitOn(v),
     fits: ({ ranked }) => ranked.slice(0, 3).some((r) => r.facts.kind === 'fruit' && r.score > 0),
-    text: ({ v }) => `Fruit, once per game: give up ${v.config.fruitSacrifice} tiles to remove one touching ${OPP.noun} tile, even a ${v.config.maxRank}.`,
+    text: () => FRUIT.tip,
   },
   strengthen: {
     active: ({ v }) => v.config.allowStrengthen && v.config.sproutsPerTurn > 0,
@@ -211,7 +212,7 @@ const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   const { say, v } = c;
   const reasons: string[] = [];
   if (m.wins) reasons.push(`This surrounds ${OPP.theirs} root, so you win right away.`);
-  if (isFruit) reasons.push(`Giving up 3 of your tiles destroys an ${OPP.noun} tile you could not replace.`);
+  if (isFruit) reasons.push(`A Fruit card removes an ${OPP.noun} tile, whatever its number.`);
   if (m.botCut > 0) reasons.push(`This cuts ${OPP.theirs} link and removes ${m.taken + m.botCut} of their tiles.`);
   if (m.exposureAfter < m.exposureBefore) reasons.push(`This fixes a ${say('weak spot')} in your network.`);
   if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This replaces ${plural(m.taken, `a weaker ${OPP.noun} tile`, `weaker ${OPP.noun} tiles`)}.`);
@@ -236,10 +237,10 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       return whyBoard(c, f.move, f.kind === 'fruit');
     case 'sprout':
       return f.move.placed > 0 && !f.move.taken && !f.move.botCut && !f.move.onRich && !f.move.wins
-        ? [moveWords(v.config).coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
+        ? [SPROUT.coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
     case 'strengthen':
-      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitPerPlayer > 0 ? ' or Fruit' : ''}.`];
+      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitCardCount > 0 ? ' or a Fruit card' : ''}.`];
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
@@ -330,7 +331,7 @@ const BULLETS: Record<TipId, string> = {
   cutting: `Cut ${OPP.theirs} weak spots to make their tiles wither.`,
   leftovers: 'Keep your leftover cards low to avoid rot.',
   knock: 'Knock only when you are clearly ahead.',
-  fruit: `Save Fruit for an ${OPP.noun} tile you cannot replace.`,
+  fruit: `Save Fruit cards for an ${OPP.noun} tile you cannot replace.`,
   strengthen: 'Strengthen the tile that holds many others up.',
   strangle: `Surround ${OPP.theirs} root to win at once.`,
   planning: `Before a big move, check what ${OPP.the} could cut.`,
@@ -348,17 +349,16 @@ const SUMMARY_PRIORITY: readonly TipId[] = [
   'strangle',
   'leftovers',
   'knock',
-  'fruit',
   'strengthen',
 ];
-/** The goodbye message at COACH_STEPS: three things the player used (only rules that are on). */
+/** The goodbye message at COACH_STEPS: three things the player used (only rules that are on; never Fruit cards). */
 export const coachSummary = (taught: readonly TipId[], config: View['config']): { title: string; bullets: string[] } => {
   const allowed = (id: TipId) =>
-    (id !== 'leftovers' || config.rotEnabled) && (id !== 'knock' || config.knockEnabled) && (id !== 'fruit' || config.fruitPerPlayer > 0) && (id !== 'strengthen' || config.allowStrengthen);
+    (id !== 'leftovers' || config.rotEnabled) && (id !== 'knock' || config.knockEnabled) && id !== 'fruit' && (id !== 'strengthen' || config.allowStrengthen);
   const used = SUMMARY_PRIORITY.filter((id) => taught.includes(id) && allowed(id));
   const fill = (['connection', 'cutting', 'combos', 'goal'] as TipId[]).filter((id) => !used.includes(id));
   return {
     title: "You're on your own now. Here's what to remember:",
-    bullets: [...used, ...fill].slice(0, 3).map((id) => (id === 'sprout' ? moveWords(config).bullet : BULLETS[id])),
+    bullets: [...used, ...fill].slice(0, 3).map((id) => (id === 'sprout' ? SPROUT.bullet : BULLETS[id])),
   };
 };

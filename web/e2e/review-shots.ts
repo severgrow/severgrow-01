@@ -3,7 +3,7 @@
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { RULESETS, apply, newGame, viewFor } from '../../src/engine/index.js';
+import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
@@ -14,8 +14,8 @@ const server = await preview({ configFile: 'web/vite.config.ts', preview: { port
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 /** Bots play until it is my Grow step on turn `turn` (or later). */
-const midGame = (seed: number, rs: 'sprout' | 'seed', turn: number): State => {
-  let s: State = newGame(seed, RULESETS[rs]);
+const midGame = (seed: number, turn: number): State => {
+  let s: State = newGame(seed);
   let i = 0;
   while (s.phase !== 'GAME_OVER' && !(s.turnNumber >= turn && s.actor === 0 && s.phase === 'ACT')) {
     s = apply(s, chooseLevelAction(viewFor(s, s.actor), 7, i++));
@@ -23,13 +23,13 @@ const midGame = (seed: number, rs: 'sprout' | 'seed', turn: number): State => {
   return s;
 };
 
-for (const [name, rs, seed, turn] of [['seed-mid', 'seed', 31, 11], ['sprout-mid', 'sprout', 31, 11], ['seed-late', 'seed', 44, 17]] as const) {
-  const state = midGame(seed, rs, turn);
+for (const [name, seed, turn] of [['mid', 31, 11], ['late', 44, 17]] as const) {
+  const state = midGame(seed, turn);
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
   await page.addInitScript(([st]) => {
     localStorage.clear();
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip', level: 8 }));
-    localStorage.setItem('severgrow.save.v5', st as string);
+    localStorage.setItem('severgrow.save.v6', st as string);
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
   }, [JSON.stringify({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
   await page.goto('http://localhost:4197/');

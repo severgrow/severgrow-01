@@ -9,7 +9,7 @@ export type Sel = { card: number | null; hex: string | null; kind: string | null
 export const EMPTY_SEL: Sel = Object.freeze({ card: null, hex: null, kind: null, option: 0 }) as Sel;
 
 export const isBoardAction = (a: Action): boolean =>
-  a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'Fruit' || a.t === 'RotPick';
+  a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit' || a.t === 'RotPick';
 
 /** "line-3", "clump-3", "sprout", "fruit" or "rot"; null for moves that are not on the board. */
 export const kindOf = (a: Action): string | null => {
@@ -20,7 +20,7 @@ export const kindOf = (a: Action): string | null => {
       return `clump-${a.cards.length}`;
     case 'Sprout':
       return 'sprout';
-    case 'Fruit':
+    case 'PlayFruit':
       return 'fruit';
     case 'RotPick':
       return 'rot';
@@ -34,9 +34,12 @@ export const kindLabel = (kind: string): string => {
   if (k === 'line') return `Grow a line of ${n}`;
   if (k === 'clump') return `Grow a clump of ${n}`;
   if (k === 'sprout') return 'Sprout one tile';
-  if (k === 'fruit') return 'Use a fruit';
+  if (k === 'fruit') return 'Use a Fruit card';
   return 'Pick a tile to rot';
 };
+
+/** The short label for a move button when several share the row ("Line of 3"; the full words stay its accessible name). */
+export const shortKindLabel = (kind: string): string => kindLabel(kind).replace(/^Grow a (\w)/, (_, c: string) => c.toUpperCase());
 
 /** True when card `b` is a copy of card `a` (same suit and number): copies play the same. */
 const sameCard = (v: View, a: number, b: number) => {
@@ -46,23 +49,23 @@ const sameCard = (v: View, a: number, b: number) => {
 };
 
 type Skip = 'card' | 'hex' | 'kind' | null;
-// Fruit has its own guided flow (fruitflow.ts), so card and hex picking never offer it.
+// v0.6: a Fruit card is picked and played like any card (card, then its target).
 const matching = (v: View, legal: readonly Action[], sel: Sel, skip: Skip = null): Action[] =>
   legal.filter(
     (a) =>
       isBoardAction(a) &&
-      a.t !== 'Fruit' &&
       (skip === 'card' || sel.card === null || moveCards(a).some((id) => sameCard(v, sel.card!, id))) &&
       (skip === 'hex' || sel.hex === null || touchesHex(a, sel.hex)) &&
       (skip === 'kind' || sel.kind === null || kindOf(a) === sel.kind),
   );
 
 /** v0.5: the three kinds of Sprout target, each with its own words (not colour alone). */
-export type TargetKind = 'grow' | 'replace' | 'strengthen';
+export type TargetKind = 'grow' | 'replace' | 'strengthen' | 'fruit';
 export const TARGET_LABEL: Record<TargetKind, string> = {
   grow: 'Grow on an empty hex',
   replace: 'Replace an enemy tile',
   strengthen: 'Strengthen my tile',
+  fruit: 'Remove with a Fruit card',
 };
 
 /** What a Sprout does to its hex: grow on empty, replace an enemy tile, or strengthen mine. */
@@ -75,7 +78,12 @@ export const sproutKind = (v: View, a: Action): TargetKind | null => {
 /** Each target hex and its kind (for any growing move: an empty hex grows, an enemy tile is replaced). */
 export const targetKinds = (v: View, legal: readonly Action[], sel: Sel): Map<string, TargetKind> => {
   const out = new Map<string, TargetKind>();
+  const fruit = sel.card !== null && v.hand.find((c) => c.id === sel.card)?.suit === null;
   for (const key of targetHexes(v, legal, sel)) {
+    if (fruit) {
+      out.set(key, 'fruit');
+      continue;
+    }
     const t = v.board[key];
     out.set(key, !t ? 'grow' : t.owner === v.player ? 'strengthen' : 'replace');
   }
@@ -110,7 +118,7 @@ export const kindsAvailable = (v: View, legal: readonly Action[], sel: Sel): { k
 
 /** The move buttons above the hand: lines and clumps only. Sprouting needs no button,
  *  because tapping a card picks Sprout by default. */
-export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout');
+export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => kindsAvailable(v, legal, sel).filter((k) => k.kind !== 'sprout' && k.kind !== 'fruit');
 
 /**
  * What the Grow step offers. While a sprout is possible the player sprouts first: the bar

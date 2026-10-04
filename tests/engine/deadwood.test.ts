@@ -112,7 +112,7 @@ describe('deadwood (spec 9.1)', () => {
   }, 60_000);
 
   it('matches brute force on dense same-suit hands (worst case for search)', () => {
-    const all = createCards(resolveConfig()).filter((c) => c.suit <= 1);
+    const all = createCards(resolveConfig()).filter((c) => c.suit !== null && c.suit <= 1);
     const rng = mulberry32(7);
     for (let i = 0; i < 1000; i++) {
       const hand = shuffle(all, rng).slice(0, 8);

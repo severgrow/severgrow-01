@@ -62,16 +62,18 @@ export type MeldPartition = { deadwood: number; melds: Card[][]; leftover: Card[
 /** Optimal partition (diagnostic). Copies are assigned lowest id first. */
 export const bestMeldPartition = (hand: readonly Card[]): MeldPartition => {
   const counts = new Array<number>(SUITS.length * RANKS).fill(0);
-  for (const c of hand) counts[idx(c.suit, c.rank)]!++;
+  // v0.6: Fruit cards never meld and count 0 (they stay in the leftover)
+  const fruit = hand.filter((c) => c.suit === null);
+  for (const c of hand) if (c.suit !== null) counts[idx(c.suit, c.rank)]!++;
   const found = search(counts, new Map());
 
-  const pool = [...hand].sort((a, b) => a.id - b.id);
+  const pool = hand.filter((c) => c.suit !== null).sort((a, b) => a.id - b.id);
   const pick = ([s, r]: Cell): Card => {
     const i = pool.findIndex((c) => c.suit === s && c.rank === r);
     return pool.splice(i, 1)[0]!;
   };
   const melds = found.melds.map((m) => m.map(pick));
-  return { deadwood: found.dw, melds, leftover: pool };
+  return { deadwood: found.dw, melds, leftover: [...pool, ...fruit] };
 };
 
 export const deadwood = (hand: readonly Card[]): number => bestMeldPartition(hand).deadwood;

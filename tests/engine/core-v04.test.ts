@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ConfigError,
@@ -17,7 +15,6 @@ import {
 import type { Action, Card, Phase, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { shuffleDeck } from '../../src/engine/deck.js';
 import { clone, fixture, tilesOf } from '../helpers.js';
-import { LEGACY_V03 } from '../legacy.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 
 let nextId = 5000;
@@ -89,7 +86,7 @@ describe('v0.4 config', () => {
       sproutsPerTurn: 1,
       rotEnabled: false,
       knockEnabled: false,
-      fruitPerPlayer: 1, // v0.5: Fruit is back
+      fruitCardCount: 4, // v0.6: 4 Fruit cards
       maxTurnsPerPlayer: 30,
     });
   });
@@ -109,17 +106,19 @@ describe('v0.4 config', () => {
     expect(code({ maxRank: 6.5 })).toBe('INVALID_NUMBER');
     expect(code({ sproutsPerTurn: -1 })).toBe('INVALID_NUMBER');
     expect(code({ rotEnabled: 1 as never })).toBe('INVALID_BOOLEAN');
-    // 4 x 5 x 1 = 20 cards: two hands of 9 + a discard leave only 1 card; need at least 1 to draw.
-    expect(code({ maxRank: 5, copiesPerCard: 1, handSize: 9 })).toBe(null);
-    expect(code({ maxRank: 5, copiesPerCard: 1, handSize: 10 })).toBe('DECK_TOO_SMALL');
+    // 4 x 5 x 1 = 20 cards + 4 Fruit cards = 24: two hands of 11 + a discard leave only 1 card; need at least 1 to draw.
+    expect(code({ maxRank: 5, copiesPerCard: 1, handSize: 11 })).toBe(null);
+    expect(code({ maxRank: 5, copiesPerCard: 1, handSize: 12 })).toBe('DECK_TOO_SMALL');
     for (const m of [5, 6, 7, 8, 9]) expect(code({ maxRank: m })).toBe(null);
   });
 
   it.each([5, 6, 7, 9])('maxRank %i: the deck holds ranks 1..%i only', (m) => {
     const cards = createCards(resolveConfig({ maxRank: m }));
-    expect(cards).toHaveLength(4 * m * 2);
-    expect(Math.max(...cards.map((x) => x.rank))).toBe(m);
-    expect(Math.min(...cards.map((x) => x.rank))).toBe(1);
+    const numbered = cards.filter((x) => x.suit !== null); // (plus the 4 Fruit cards)
+    expect(numbered).toHaveLength(4 * m * 2);
+    expect(cards).toHaveLength(4 * m * 2 + 4);
+    expect(Math.max(...numbered.map((x) => x.rank))).toBe(m);
+    expect(Math.min(...numbered.map((x) => x.rank))).toBe(1);
     const g = newGame(3, { maxRank: m });
     const ids = [...g.hands[0], ...g.hands[1], ...g.deck, ...g.discard].map((x) => x.id).sort((a, b) => a - b);
     expect(ids).toEqual(cards.map((x) => x.id));
@@ -364,44 +363,10 @@ describe('turn limit (v0.4)', () => {
   });
 
   it('the recorded stall (seed 122, both players swapping discards) now ends', () => {
-    let g = newGame(122, { maxRank: 9, sproutsPerTurn: 0, copiesPerCard: 3, fruitPerPlayer: 0, allowStrengthen: false });
+    let g = newGame(122, { maxRank: 9, sproutsPerTurn: 0, copiesPerCard: 3, fruitCardCount: 0, allowStrengthen: false });
     for (let i = 0; i < 5000 && g.phase !== 'GAME_OVER'; i++) g = apply(g, GreedyBot.chooseAction(viewFor(g, g.actor)));
     expect(g.phase).toBe('GAME_OVER');
     expect(g.result!.reason).toBe('turn_limit');
-  });
-});
-
-describe('legacyV03 reproduces v0.3.1 byte-for-byte', () => {
-  const canonical = (x: unknown): string =>
-    JSON.stringify(x, (_, v: unknown) =>
-      v && typeof v === 'object' && !Array.isArray(v)
-        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
-        : v,
-    );
-  const hash = (x: unknown) => createHash('sha256').update(canonical(x)).digest('hex');
-  const NEW_STATE_KEYS = ['sproutsThisTurn', 'dealAttempt', 'strengthenUsed'];
-  const NEW_CONFIG_KEYS = ['maxRank', 'sproutsPerTurn', 'rotEnabled', 'knockEnabled', 'maxTurnsPerPlayer', 'unbiasedShuffle', 'allowStrengthen', 'strengthenLimitPerGame', 'fruitSacrifice', 'fruitOnlyWhenBehind'];
-  const toV03 = (s: State) => {
-    const { history: _h, ...rest } = s;
-    const out: Record<string, unknown> = { ...rest };
-    for (const k of NEW_STATE_KEYS) delete out[k];
-    const config: Record<string, unknown> = { ...s.config };
-    for (const k of NEW_CONFIG_KEYS) delete config[k];
-    out.config = config;
-    return out;
-  };
-  const fixtureFile = JSON.parse(readFileSync(new URL('../fixtures/legacy-v03.json', import.meta.url), 'utf8')) as {
-    games: { seed: number; bot: string; actions: Action[]; stateHash: string; historyHash: string }[];
-  };
-
-  it.each(fixtureFile.games.map((g) => [g.bot, g.seed, g] as const))('%s game, seed %i', (_bot, seed, g) => {
-    const s = replay(seed, g.actions, LEGACY_V03);
-    expect(hash(toV03(s))).toBe(g.stateHash);
-    expect(hash(s.history)).toBe(g.historyHash);
-  });
-
-  it('every legacy game is a finished game', () => {
-    for (const g of fixtureFile.games) expect(replay(g.seed, g.actions, LEGACY_V03).phase).toBe('GAME_OVER');
   });
 });
 

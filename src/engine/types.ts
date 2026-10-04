@@ -10,12 +10,6 @@ export type Terrain = 'normal' | 'rock' | 'rich';
 
 export type RootStyle = 'ring2' | 'corner';
 
-/**
- * The A/B test of the one-card move: 'sprout' (the card's number becomes the tile) or 'seed'
- * (the tile is always worth 1). See ruleset.ts.
- */
-export type Ruleset = 'sprout' | 'seed';
-
 export type RulesConfig = {
   /** Spec default 3. Typed as number so nothing else hardcodes the radius (open question C). */
   boardRadius: number;
@@ -32,7 +26,6 @@ export type RulesConfig = {
   rotStep: number;
   forbidRedundantDiscard: boolean;
   allowHyphaOneBend: boolean;
-  fruitPerPlayer: number;
   rootsScore: boolean;
   /** v0.4: cards run 1..maxRank (5-9). */
   maxRank: number;
@@ -40,35 +33,30 @@ export type RulesConfig = {
   sproutsPerTurn: number;
   /** v0.4: the game ends after this many turns each (0 = no limit). */
   maxTurnsPerPlayer: number;
-  /** v0.5: random integers by rejection sampling (false only for earlier rules versions). */
-  unbiasedShuffle: boolean;
   /** v0.5: a Sprout may raise one of my own weaker tiles (Strengthen). */
   allowStrengthen: boolean;
   /** v0.5: Strengthens per player per game; -1 = no limit. */
   strengthenLimitPerGame: number;
-  /** v0.5: own tiles given up by a Fruit. */
-  fruitSacrifice: number;
-  /** v0.5: Fruit only while behind on score (simulation option). */
-  fruitOnlyWhenBehind: boolean;
+  /** v0.6: Fruit cards in the deck (joker-style: no suit, no number). */
+  fruitCardCount: number;
+  /** v0.6: a Fruit target may be touched by my root, not only by my other tiles. */
+  fruitRootCountsAsTouch: boolean;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
-  /**
-   * Seed A/B test: which one-card move this game uses. Absent means 'sprout', so every
-   * Sprout game, save and recording stays exactly as it was. 'seed' is always written out.
-   */
-  ruleset?: Ruleset;
 };
 
-export type Card = { id: number; suit: Suit; rank: number };
+/**
+ * A card. Numbered cards have a suit and a rank 1-9. A v0.6 Fruit card has no suit
+ * (`suit: null`) and no number (`rank: 0`, FRUIT_CARD_RANK): see isFruitCard.
+ */
+export type Card = { id: number; suit: Suit | null; rank: number };
 
 /** Root immunity is encoded by `root: true` (never by Infinity). */
 export type Tile = {
   owner: Player;
   strength: number;
   root?: boolean;
-  /** Seed ruleset: placed by a Seed and not yet strengthened (always strength 1). */
-  seed?: true;
 };
 
 export type Phase = 'DRAW' | 'ACT' | 'DISCARD' | 'KNOCK' | 'ROT_PICK' | 'GAME_OVER';
@@ -90,7 +78,8 @@ export type ResolutionSummary = {
   overgrown: Coord[];
   rotted: Coord[];
   severed: { player: Player; coords: Coord[] }[];
-  fruit?: { sacrifice: Coord[]; target: Coord };
+  /** v0.6: a Fruit card removed this tile (its strength before). */
+  fruit?: { card: number; target: Coord; strength: number };
   strangled?: Player;
   /** v0.4: the hex a Sprout claimed. */
   sprout?: Coord;
@@ -103,7 +92,7 @@ export type Action =
   | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
   | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
-  | { t: 'Fruit'; sacrifice: Coord[]; target: Coord }
+  | { t: 'PlayFruit'; card: number; target: Coord }
   | { t: 'EndAct' }
   | { t: 'Discard'; card: number }
   | { t: 'Knock' }
@@ -123,7 +112,7 @@ export type Event =
       oldStrength: number;
       newStrength: number;
     }
-  | { t: 'Fruit'; player: Player; sacrifice: Coord[]; target: Coord }
+  | { t: 'FruitCard'; player: Player; card: number; target: Coord; strength: number }
   | { t: 'Discard'; player: Player; card: number }
   | { t: 'Knock'; player: Player }
   | { t: 'FinalTurnStart'; player: Player }
@@ -151,7 +140,10 @@ export type State = {
   actor: Player;
   phase: Phase;
   drawnFromDiscard: number | null;
-  fruitUsed: [number, number];
+  /** v0.6: Fruit cards played so far (they leave the game). */
+  fruitPlayed: number;
+  /** v0.6: Fruit cards each player holds that the other saw them take from the throw pile. */
+  fruitKnown: [number, number];
   /** v0.5: Strengthens used per player this game. */
   strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
@@ -178,7 +170,10 @@ export type View = {
   actor: Player;
   phase: Phase;
   drawnFromDiscard: number | null;
-  fruitUsed: [number, number];
+  /** v0.6: Fruit cards played so far. */
+  fruitPlayed: number;
+  /** v0.6: Fruit cards I have not seen (not in my hand, not played, not in the throw pile, not known to be in the opponent's hand). */
+  fruitUnseen: number;
   strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
   rotPick: RotPickState | null;

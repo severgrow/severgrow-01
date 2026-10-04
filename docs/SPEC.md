@@ -1,4 +1,4 @@
-# SEVERGROW: Engine Spec v0.5 (one game)
+# SEVERGROW: Engine Spec v0.6 (one game)
 
 > **Grow a living network. Keep it connected. Cut theirs.**
 
@@ -11,6 +11,20 @@ default (see the appendix).
 ---
 
 ## Changelog
+
+**v0.6: Seed mode removed, Fruit cards** (rules version `v0.6-fruit-cards`, bot version `bots-v0.8`)
+- **Seed mode is gone.** The one-card move is the Sprout everywhere: a card's number becomes the
+  tile, straight away. The `ruleset` key, `RULESETS`, Seed tiles and every Seed word are deleted.
+- **Fruit cards replace the old 3-tile Fruit.** The deck gains `fruitCardCount` (4) special
+  cards: 72 numbered cards (8 of each number 1-9) plus 4 Fruit cards = 76. A Fruit card has no
+  suit and no number; it cannot be melded, sprouted or used to strengthen. Whenever I hold one,
+  during my Grow step, I may play it on any opponent non-root tile that one of my tiles touches
+  (my root counts, `fruitRootCountsAsTouch`): the tile is removed whatever its strength, the card
+  leaves the game, then Sever (both players) and Strangle. No per-turn or per-game limit. A
+  Fruit card may be thrown like any card. Action `PlayFruit { card, target }`, event `FruitCard`.
+- **Empty turns are fast** (page): with nothing to grow, Grow is skipped (a setting).
+- **No old-version support:** only the current rules and bots are kept (older recordings,
+  tickets and saves no longer replay). See "Retired rules" at the end.
 
 **Seed A/B test** (rules versions `v0.5-fruit-strengthen` = Sprout, unchanged, and `v0.5-seed`)
 - **Why.** The owner wants to play both one-card moves side by side and pick one. Nothing
@@ -95,8 +109,9 @@ default (see the appendix).
    - **Sprout** (any one card): one tile with that card's number. **Strengthen** is a Sprout on
      one of your own tiles with a strictly higher card: the tile takes the card's number.
    - New tiles must touch your network. They may replace an enemy tile only if **strictly stronger**.
-   - **Fruit** (once per game): give up 3 of your own connected tiles to remove one enemy tile
-     next to them, whatever its strength.
+   - **Fruit card** (v0.6): play one on an enemy non-root tile that touches one of your tiles
+     (your root counts): the tile is removed whatever its strength; the card leaves the game.
+     As many as you hold, in any order with the other Grow moves.
 3. **Discard** one card (skipped if your hand is empty).
 4. **Sever** removes every tile no longer joined to its root, **Strangle** is checked, and you
    **refill** to `handSize`. The turn passes.
@@ -135,19 +150,16 @@ type RulesConfig = {
   copiesPerCard: number;        // 2 (chosen by simulation, 11.1)
   sproutsPerTurn: number;       // 1 (0 = Sprout off)
   maxTurnsPerPlayer: number;    // 30 (0 = no limit); the game ends after this many turns each
-  unbiasedShuffle: boolean;     // true (v0.5): random integers by rejection sampling
   allowStrengthen: boolean;     // v0.5, default set by simulation (11.3)
   strengthenLimitPerGame: number; // v0.5, -1 = no limit; default set by simulation (11.3)
-  fruitPerPlayer: number;       // v0.5: 1 (Fruit uses per player per game; 0 = off)
-  fruitSacrifice: number;       // v0.5: 3 (own tiles given up per Fruit)
-  fruitOnlyWhenBehind: boolean; // v0.5: false (simulation only)
+  fruitCardCount: number;       // v0.6: 4 (Fruit cards in the deck; 0 = none)
+  fruitRootCountsAsTouch: boolean; // v0.6: true (my root counts as touching a Fruit target)
   rockCount: number;            // 4 (even)
   richCount: number;            // 5 (odd: centre + pairs)
   forbidRedundantDiscard: boolean; // true
   rootsScore: boolean;          // false
   allowHyphaOneBend: boolean;   // false (not implemented)
   // Parked rules (appendix A), all off by default:
-  ruleset?: 'sprout' | 'seed';  // absent = 'sprout' (Seed A/B test, section 7.4.1)
   rotEnabled: boolean;          // false
   rotThreshold: number;         // 20
   rotStep: number;              // 8
@@ -160,18 +172,15 @@ type RulesConfig = {
 `newGame(seed, config?)` validates the config and throws `ConfigError` on invalid values:
 `maxRank` 5-9, odd `richCount`, even `rockCount`, `handSize >= 3`, integers where expected,
 known keys only, and a deck large enough to deal both hands, flip a starting discard **and
-still leave at least one card to draw** (`4 * maxRank * copiesPerCard >= 2 * handSize + 2`).
+still leave at least one card to draw** (`4 * maxRank * copiesPerCard + fruitCardCount >= 2 * handSize + 2`).
 
 **legacyV03** (test-only, never in the page): `maxRank 9, copiesPerCard 2, sproutsPerTurn 0,
-maxTurnsPerPlayer 0, rotEnabled true, knockEnabled true, fruitPerPlayer 1, allowStrengthen false,
-unbiasedShuffle false`. Replaying
-the recorded v0.3.1 games with it gives byte-identical states and events (state fields and
-config keys added in v0.4 or later excluded).
+maxTurnsPerPlayer 0, rotEnabled true, knockEnabled true, allowStrengthen false`: the parked rules
+on, for their tests. (v0.6: the recorded v0.3.1 replays were deleted with the old Fruit.)
 
-**Rules versions** (`src/engine/versions.ts`): `RULES_VERSIONS` maps a version name to the config
-overrides that reproduce it; `CURRENT_RULES_VERSION` is the page's. `v0.4-defaults-2` =
-`fruitPerPlayer 0, allowStrengthen false, unbiasedShuffle false`. A world-map ticket stores its
-`rulesVersion` and `botVersion`; verification replays it with exactly those.
+**Rules versions** (`src/engine/versions.ts`): only the current one, `CURRENT_RULES_VERSION`
+(v0.6: older versions, frozen bots and old replays were deleted; see "Retired rules"). A
+world-map ticket stores its `rulesVersion` and `botVersion`; verification accepts only the current ones.
 
 ---
 
@@ -204,9 +213,9 @@ by the game seed's deck stream, and hands are dealt from the top; draws come off
 order. Nothing is reordered, redealt, balanced or limited: any hand is possible, including
 several top cards or none. Random integers in `[0, n)` use rejection sampling on the PRNG's
 32-bit output (Lemire's multiply-and-reject), so every value is exactly equally likely
-(`unbiasedShuffle`; the old floor-multiply method is kept for earlier rules versions). Cards are
-conserved: every card is always in exactly one place (a hand, the deck, the discard pile, or
-played). There is no reshuffle of the discard pile.
+(v0.6: the old floor-multiply method is gone). Cards are conserved: every card is always in
+exactly one place (a hand, the deck, the discard pile, or played; a played Fruit card leaves
+the game). There is no reshuffle of the discard pile.
 
 ---
 
@@ -282,28 +291,6 @@ at least one touching the network; every tile gets that rank.
   (instead of `Sprout`); resolution `strengthen: { coord, from, to }`. In `legalActions` it is a
   `Sprout` like any other (one card per suit/rank, board order).
 
-### 7.4.1 Seed (ruleset `seed`, the A/B test)
-With `ruleset: 'seed'` (overrides `RULESETS.seed` = `{ ruleset: 'seed', strengthenLimitPerGame: -1 }`,
-rules version `v0.5-seed`) the `Sprout` action is played as a **Seed**:
-- One card from hand is used up; the new tile has strength **1** (`SEED_STRENGTH`) whatever the
-  card's rank, and is written `{ owner, strength: 1, seed: true }`.
-- Placement is the Sprout's: `coord` touches the mover's network (root counts), no rock,
-  off-board, root or own tile. As 1 is never strictly stronger, a Seed never replaces an enemy
-  tile (`NOT_STRONGER`); it only claims empty hexes.
-- Strengthen is the same move on my own tile (section 7.4), sharing the turn's one Seed. A
-  strengthened tile is written without the `seed` mark. There is no per-game limit.
-- Everything else (combos, Fruit, Sever, Strangle, scoring, ending, events) is unchanged. The
-  event is still `Sprout`; the bots play it through the same `legalActions`.
-- Bots need no Seed code: they rank the legal moves by simulating them with the engine, so a
-  Seed is valued as the 1-tile it makes (GreedyBot still counts the card's number as what an
-  empty-hex move spends, so it seeds with low cards first). First look, level 7 vs level 7,
-  150 games each: Sprout 15.9 sprouts and 3.9 Strengthens per game, total score 19.9, P1 wins
-  55.3%; Seed 12.7 seeds and 9.7 Strengthens, total score 24.3, P1 wins 56.0%; game length the
-  same (18 turns).
-- The page: the menu offers "Sprout version" and "Seed version"; a seed is drawn as a small
-  seed in turned soil until it is strengthened; every player-facing word comes from
-  `MOVE_WORDS` (`src/strings.ts`), and the Sprout version's text is unchanged.
-
 ### 7.5 Replacing ("overgrowth")
 `new.strength > old.strength` replaces the enemy tile. Equal is blocked; roots are immune. A
 tile of strength `maxRank` can only be removed by Sever (or the parked Rot/Fruit).
@@ -318,19 +305,25 @@ A root is strangled when all six neighbours are off-board, rock or enemy tiles *
 one is an enemy tile. One strangled root: its owner loses at once (`strangle`). Both: draw
 (`double_strangle`, which cannot occur through normal moves).
 
-### 7.8 Fruit (`Fruit { sacrifice, target }`), back in v0.5
-- At most `fruitPerPlayer` uses per player per game (`FRUIT_EXHAUSTED`); legal only in `ACT`.
-- `sacrifice`: exactly `fruitSacrifice` distinct own non-root tiles, connected to each other
-  (`FRUIT_SACRIFICE_COUNT`, `DUPLICATE_HEX`, `FRUIT_SACRIFICE_NOT_OWN`, `FRUIT_SACRIFICE_ROOT`,
-  `FRUIT_SACRIFICE_NOT_CONNECTED`).
-- `target`: an enemy non-root tile adjacent to at least one sacrificed tile
-  (`FRUIT_TARGET_NOT_ENEMY`, `FRUIT_TARGET_ROOT`, `FRUIT_TARGET_NOT_ADJACENT`). Its strength is
-  ignored, so a top-rank tile can be removed.
-- With `fruitOnlyWhenBehind`, only while the mover's score is lower (`FRUIT_NOT_BEHIND`).
-- Resolution: remove the sacrifice and the target; Sever for **both** players (the mover's own
-  network may be cut; that is allowed and public); then Strangle. Atomic. Event `Fruit`, then
-  the `Sever` events; resolution `fruit: { sacrifice, target }`. In `legalActions`, sacrifices are
-  listed in board order, each with every legal target.
+### 7.8 Fruit cards (`PlayFruit { card, target }`), v0.6
+- The deck holds `fruitCardCount` (4) Fruit cards besides the numbered cards (76 in all). A Fruit
+  card has no suit and no number (`suit: null`, `rank: 0`); the deal and every draw stay fully
+  random. It can never be in a combo, sprout or strengthen (`NOT_A_NUMBER_CARD`), and is not wild.
+- Legal only in `ACT`, with a Fruit card from the mover's hand (`CARD_NOT_IN_HAND`,
+  `NOT_A_FRUIT_CARD`). No limit per turn or per game; it does not use the turn's Sprout.
+- `target`: an enemy non-root tile (`FRUIT_TARGET_NOT_ENEMY`, `FRUIT_TARGET_ROOT`, `OFF_BOARD`)
+  touched by one of the mover's tiles; the mover's root counts when `fruitRootCountsAsTouch`
+  (`FRUIT_TARGET_NOT_TOUCHED`). Its strength is ignored, so a 9 can be removed.
+- Resolution: the target is removed; the card leaves the game (it does not go to the throw
+  pile); then Sever for **both** players and the Strangle check, after **each** Fruit card.
+  Atomic. Event `FruitCard { player, card, target, strength }`, then the `Sever` events;
+  resolution `fruit: { card, target, strength }`. In `legalActions` all Fruit cards are alike:
+  the lowest-id one is listed once per target, targets in board order.
+- A Fruit card may be thrown like any card; the opponent can then take it from the throw pile.
+  With the parked Rot and Knock it counts 0 as a leftover card.
+- The View adds `fruitPlayed` and `fruitUnseen`: the Fruit cards the player has not seen (all
+  of them, less those in their hand, played, in the throw pile, or seen taken from the throw
+  pile by the opponent and not yet played or thrown). Public information only.
 
 ---
 
@@ -352,11 +345,11 @@ type GameResult = { winner: Player | null; reason: EndReason; undercut?: boolean
 ## 9. Types and API
 
 `State` (plain JSON): `seed, config, board, terrain, hands, deck, discard, turnPlayer, actor,
-phase, drawnFromDiscard, fruitUsed, strengthenUsed, finalTurn, rotPick, turnNumber, result,
+phase, drawnFromDiscard, fruitPlayed, fruitKnown, strengthenUsed, finalTurn, rotPick, turnNumber, result,
 lastResolution, history, sproutsThisTurn`.
 
 `View`: the player's own hand, opponent hand count, public discard, deck count, the phase and
-turn fields (including `sproutsThisTurn`, `fruitUsed`, `strengthenUsed`), both scores, own deadwood, result, last resolution.
+turn fields (including `sproutsThisTurn`, `fruitPlayed`, `fruitUnseen`, `strengthenUsed`), both scores, own deadwood, result, last resolution.
 Never the opponent's hand or the deck order.
 
 ```ts
@@ -365,24 +358,24 @@ type Action =
   | { t: 'MeldRun'; cards: number[]; start: Coord; dir: number }
   | { t: 'MeldSet'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
-  | { t: 'Fruit'; sacrifice: Coord[]; target: Coord }
+  | { t: 'PlayFruit'; card: number; target: Coord }
   | { t: 'EndAct' }
   | { t: 'Discard'; card: number }
   // parked (appendix A):
   | { t: 'Knock' } | { t: 'Continue' } | { t: 'RotPick'; coord: Coord };
 ```
 
-Events (`state.history`): `Draw, MeldRun, MeldSet, Sprout, Strengthen, Overgrow, Fruit, Discard,
+Events (`state.history`): `Draw, MeldRun, MeldSet, Sprout, Strengthen, Overgrow, FruitCard, Discard,
 Sever, Strangle, GameEnd`, plus the parked `Knock, FinalTurnStart, RotCount, Rot, RotPick`. A deck draw
 hides its card in the opponent's `eventsFor`. `ResolutionSummary` lists `placed, overgrown,
 rotted, severed`, and optionally `sprout, strengthen, fruit, strangled`.
 
 API: `newGame, legalActions(view), legalActionsForState, apply, applyAs, viewFor, score,
-deadwood, bestMeldPartition, replay, eventsFor, dealOpening, RULES_VERSIONS`.
+deadwood, bestMeldPartition, replay, eventsFor, isFruitCard, RULES_VERSIONS`.
 
 Illegal actions throw and leave the input untouched (codes include `WRONG_PHASE, NOT_ACTOR,
 CARD_NOT_IN_HAND, NOT_ADJACENT, OWN_TILE, ROCK, OFF_BOARD, ROOT_IMMUNE, NOT_STRONGER,
-SPROUT_LIMIT, STRENGTHEN_LIMIT, FRUIT_NOT_BEHIND, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER,
+SPROUT_LIMIT, STRENGTHEN_LIMIT, NOT_A_FRUIT_CARD, NOT_A_NUMBER_CARD, FRUIT_TARGET_NOT_TOUCHED, REDUNDANT_DISCARD, DECK_EMPTY, GAME_OVER,
 KNOCK_DISABLED, ...`).
 
 ---
@@ -536,6 +529,43 @@ cards (exact 5.25%) and **2.64%** with 72 cards (exact 2.62%); none at all in 31
 (exact 31.75% / 42.17%). `npx tsx src/sim/deal-stats.ts`.
 
 
+### 11.4 Fruit cards defaults (v0.6)
+
+`src/sim/fruitcards.ts` (run with `src/sim/fruit-stage.sh`) plays level-7 vs level-7 games with
+swapped starts on matched seeds. One setting changed at a time from the default; 500 games each
+to screen, then the chosen default confirmed with 2,000 (a rate is then good to about ±2.2%).
+
+| Setting | Games | Fruit games | Fruit/game | Fruit/side | Mean own turn | More-Fruit side wins | Two in a turn/game (that side wins) | Thrown, then taken | Stuck in a hand at the end/game | >30% top-rank | Comeback | Leader wins | P1 wins | Strangle | Turns/player | Ends: deck · turn limit · Strangle |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fruitCardCount 2 | 500 | 98.4% | 1.84 | 0.92 | 6.3 | 58.1% | 0.03 (75.0%) | 0.0% | 0.11 | 26.8% | 30.9% | 69.1% | 56.4% | 3.2% | 9.37 | 96.8% · 0% · 3.2% |
+| **fruitCardCount 4 (default)** | 500 | 99.6% | 3.54 | 1.77 | 6.8 | 61.8% | 0.10 (44.0%) | 0.0% | 0.38 | 16.4% | 35.9% | 64.1% | 53.2% | 2.4% | 9.71 | 97.6% · 0% · 2.4% |
+| fruitCardCount 6 | 500 | 100% | 5.05 | 2.52 | 7.4 | 53.3% | 0.16 (33.3%) | 0.0% | 0.77 | 10.8% | 43.0% | 57.0% | 56.8% | 1.6% | 10.20 | 98.4% · 0% · 1.6% |
+| fruitRootCountsAsTouch false | 500 | 99.6% | 3.53 | 1.77 | 6.8 | 62.1% | 0.10 (45.8%) | 0.0% | 0.38 | 16.4% | 36.0% | 64.0% | 54.0% | 2.4% | 9.72 | 97.6% · 0% · 2.4% |
+| **default, confirmed** | 2000 | 99.9% | 3.53 | 1.76 | 6.8 | 55.0% | 0.08 (48.1%) | 0.0% | 0.38 | 17.6% | 37.9% | 62.1% | 53.7% | 3.0% | 9.71 | 97.0% · 0% · 3.0% |
+
+What the Fruit cards were played on (default, 2,000 games): a top-rank tile 34.5%, a chain cut
+(3+ tiles removed) 11.5%, opening a Strangle 0.2%, other 53.9%. Fruit cards thrown: 0.5% (none
+of them taken by the opponent). The score lead right after a two-Fruit turn: +1.1 on average.
+
+Turns with no combo (Sprout only) / with nothing to play at all, by own turn (default):
+1-3: 65.6% / 0%; 4-6: 63.9% / 0%; 7-12: 63.3% / 0%; 13+: 88.9% / 0%. **Nothing to play after
+turn 3: 0.0%** in every setting (Sprout and Strengthen almost always leave a move), so no lever
+is needed. If it ever were, more cards (a third copy) would help most, without changing a rule.
+
+Targets (guides), for the default: Fruit cards played in 50-90% of games: **fail** (99.9%: with
+4 in 76 cards nearly every game sees one); on average after turn 4: pass (6.8); the side that
+played more wins 45-65%: pass (55.0%); at most 10% thrown and taken: pass (0%); comeback rises
+(v0.5: 34.4%) while the leader still wins over 55%: pass (37.9%, 62.1%); at most 10% of games
+with a player over 30% top-rank: **fail** (17.6%; v0.5 with Strengthen: 20.3%); first player
+46-54%: pass (53.7%); Strangle under 15%: pass (3.0%); game length within 10% of the v0.5
+default (9.14 turns each): pass (9.71, +6%).
+
+**Choice: 4 Fruit cards, my root counts as touching.** 2 fails more (top-rank 26.8%, the first
+player 56.4%); 6 nearly meets the top-rank target (10.8%) but tips the first player to 56.8%
+and slows the game (+11% on v0.5); 4 passes every other target. Root touch on or off plays the
+same (the root rarely matters), so the simpler wording stays ("touches yours"). Two Fruit cards
+in one turn happen in 8% of games and that side wins 48%: not too strong.
+
 ---
 
 ## Appendix A: Parked rules (off by default)
@@ -566,3 +596,19 @@ the boundary are picked by the opponent in `ROT_PICK`. Then Sever and Strangle.
 
 ### A.5 Fruit
 No longer parked: back in v0.5 and on by default (section 7.8).
+
+---
+
+## Retired rules (descriptions only, v0.6)
+
+- **Seed mode** (v0.5 A/B test): the one-card move put a tile of strength 1 whatever the card
+  (marked as a seed until strengthened), and Strengthen had no per-game limit so a seed could be
+  grown later. Retired in favour of the Sprout.
+- **3-tile Fruit** (v0.5): once per game, give up 3 of my own connected tiles to remove one
+  opponent tile next to them, whatever its strength (`fruitPerPlayer`, `fruitSacrifice`,
+  `fruitOnlyWhenBehind`). Replaced by Fruit cards.
+- **Older rules versions** (`v0.4-defaults-2`, `v0.5-fruit-strengthen`, `v0.5-seed`) and the
+  frozen older bots (`bots-v0.5`, `bots-v0.7`): no longer kept; recordings made under them no
+  longer replay.
+- **The biased shuffle** (`unbiasedShuffle: false`, only used by v0.4): removed; the shuffle is
+  always unbiased.

@@ -1,10 +1,9 @@
 import { allCoords, allNeighbors, coordKey } from './board.js';
 import { DIRECTIONS, MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { IllegalActionError } from './errors.js';
-import { planFruit } from './fruit.js';
+import { fruitTargetBlocker } from './fruit.js';
 import { claimBlocker } from './overgrow.js';
 import { planRun, strengthenBlocker, touchesNetwork } from './placement.js';
-import { sproutStrength } from './ruleset.js';
 import type { Action, Card, Coord, State, View } from './types.js';
 import { viewFor } from './view.js';
 
@@ -19,10 +18,10 @@ const legal = (fn: () => unknown): boolean => {
 };
 
 /** Lowest-id card for each (suit, rank) in the hand, optionally skipping one id. */
-const representatives = (hand: readonly Card[], skipId: number | null = null): Map<string, Card> => {
+const representatives = (hand: readonly Card[], skipId: number | null = null, numberedOnly = true): Map<string, Card> => {
   const reps = new Map<string, Card>();
   for (const c of [...hand].sort((a, b) => a.id - b.id)) {
-    if (c.id === skipId) continue;
+    if (c.id === skipId || (numberedOnly && c.suit === null)) continue;
     const k = `${c.suit}:${c.rank}`;
     if (!reps.has(k)) reps.set(k, c);
   }
@@ -118,25 +117,17 @@ const actActions = (v: View): Action[] => {
     for (const card of [...reps.values()].sort((x, y) => x.id - y.id)) {
       for (const coord of board) {
         const own = v.board[coordKey(coord)]?.owner === p;
-        if (own ? v.config.allowStrengthen && strengthenBlocker(v, p, coord, card.rank, used) === null : startKeys.has(coordKey(coord)) && claimBlocker(v, p, coord, sproutStrength(v.config, card.rank)) === null) {
+        if (own ? v.config.allowStrengthen && strengthenBlocker(v, p, coord, card.rank, used) === null : startKeys.has(coordKey(coord)) && claimBlocker(v, p, coord, card.rank) === null) {
           out.push({ t: 'Sprout', card: card.id, coord });
         }
       }
     }
   }
 
-  // Fruit: connected groups of my own non-root tiles and an adjacent enemy non-root target.
-  if (v.fruitUsed[p] < v.config.fruitPerPlayer && (!v.config.fruitOnlyWhenBehind || v.score < v.opponentScore)) {
-    const mine = board.filter((c) => {
-      const t = v.board[coordKey(c)];
-      return t !== null && t !== undefined && t.owner === p && !t.root;
-    });
-    for (const sacrifice of connectedSubsets(mine, v.config.fruitSacrifice ?? 3)) {
-      const targets = board.filter((t) => sacrifice.some((s) => allNeighbors(s).some((n) => coordKey(n) === coordKey(t))));
-      for (const target of targets) {
-        if (legal(() => planFruit(v, p, v.fruitUsed[p], sacrifice, target))) out.push({ t: 'Fruit', sacrifice, target });
-      }
-    }
+  // v0.6 Fruit cards: all alike, so the lowest-id one is listed, once per target, in board order.
+  const fruitCard = [...v.hand].sort((a, b) => a.id - b.id).find((c) => c.suit === null);
+  if (fruitCard) {
+    for (const target of board) if (fruitTargetBlocker(v, p, target) === null) out.push({ t: 'PlayFruit', card: fruitCard.id, target });
   }
 
   out.push({ t: 'EndAct' });
@@ -146,7 +137,7 @@ const actActions = (v: View): Action[] => {
 /**
  * Every legal action for the view's player (spec 13), or [] when that player is not
  * the actor or the game is over. Identical card copies are deduplicated using the
- * lowest ids; Bloom hexes and Fruit sacrifices are listed in board order.
+ * lowest ids (Fruit cards are all alike); Bloom hexes and Fruit targets are listed in board order.
  */
 export const legalActions = (view: View): Action[] => {
   if (view.phase === 'GAME_OVER' || view.player !== view.actor) return [];
@@ -162,7 +153,8 @@ export const legalActions = (view: View): Action[] => {
     case 'DISCARD': {
       // v0.4: the card just taken may be discarded when it is the only card.
       const skip = view.config.forbidRedundantDiscard && view.hand.length > 1 ? view.drawnFromDiscard : null;
-      const reps = [...representatives(view.hand, skip).values()].sort((a, b) => a.id - b.id);
+      // a Fruit card can be thrown like any card (numberedOnly off)
+      const reps = [...representatives(view.hand, skip, false).values()].sort((a, b) => a.id - b.id);
       return reps.map((c) => ({ t: 'Discard', card: c.id }));
     }
     case 'KNOCK':

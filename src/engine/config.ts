@@ -2,7 +2,6 @@ import { coordKey, isOnBoard, rootCoord } from './board.js';
 import { CENTRE, MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { ConfigError } from './errors.js';
 import { eligibleTerrainPairs, rootZone } from './terrain.js';
-import { RULESET_NAMES } from './ruleset.js';
 import type { RulesConfig } from './types.js';
 
 export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
@@ -18,16 +17,14 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rotStep: 8,
   forbidRedundantDiscard: true,
   allowHyphaOneBend: false,
-  fruitPerPlayer: 1,
   rootsScore: false,
   maxRank: 9,
   sproutsPerTurn: 1,
   maxTurnsPerPlayer: 30,
-  unbiasedShuffle: true,
   allowStrengthen: true,
   strengthenLimitPerGame: 2,
-  fruitSacrifice: 3,
-  fruitOnlyWhenBehind: false,
+  fruitCardCount: 4,
+  fruitRootCountsAsTouch: true,
   rotEnabled: false,
   knockEnabled: false,
 });
@@ -45,12 +42,11 @@ const NUMBER_MIN: Record<string, number> = {
   knockDeadwood: 0,
   rotThreshold: 0,
   rotStep: 1,
-  fruitPerPlayer: 0,
   maxRank: MIN_MAX_RANK,
   sproutsPerTurn: 0,
   maxTurnsPerPlayer: 0,
   strengthenLimitPerGame: -1,
-  fruitSacrifice: 1,
+  fruitCardCount: 0,
 };
 
 const BOOLEAN_KEYS = [
@@ -58,21 +54,18 @@ const BOOLEAN_KEYS = [
   'forbidRedundantDiscard',
   'allowHyphaOneBend',
   'rootsScore',
-  'unbiasedShuffle',
   'allowStrengthen',
-  'fruitOnlyWhenBehind',
+  'fruitRootCountsAsTouch',
   'rotEnabled',
   'knockEnabled',
 ] as const;
 
 
-/** Keys that may be absent from a config (the default is then implied). */
-const OPTIONAL_KEYS = new Set(['ruleset']);
 
 /** Merges overrides onto the defaults and validates. Throws ConfigError. */
 export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig => {
   for (const key of Object.keys(overrides)) {
-    if (!(key in DEFAULT_CONFIG) && !OPTIONAL_KEYS.has(key)) throw new ConfigError('UNKNOWN_KEY', `unknown config key "${key}"`);
+    if (!(key in DEFAULT_CONFIG)) throw new ConfigError('UNKNOWN_KEY', `unknown config key "${key}"`);
   }
   const c: RulesConfig = { ...DEFAULT_CONFIG, ...overrides };
 
@@ -86,9 +79,6 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     if (typeof c[key] !== 'boolean') throw new ConfigError('INVALID_BOOLEAN', `${key} must be a boolean`);
   }
   if (c.maxRank > MAX_RANK) throw new ConfigError('INVALID_NUMBER', `maxRank must be ${MIN_MAX_RANK}-${MAX_RANK}, got ${c.maxRank}`);
-  if ('ruleset' in c && !RULESET_NAMES.includes(c.ruleset as never)) {
-    throw new ConfigError('INVALID_RULESET', `ruleset must be ${RULESET_NAMES.map((r) => `'${r}'`).join(' or ')}`);
-  }
   if (c.rootStyle !== 'ring2' && c.rootStyle !== 'corner') {
     throw new ConfigError('INVALID_ROOT_STYLE', `rootStyle must be 'ring2' or 'corner'`);
   }
@@ -103,7 +93,7 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     throw new ConfigError('NOT_IMPLEMENTED', 'allowHyphaOneBend is not implemented until Milestone C');
   }
 
-  const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard;
+  const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard + c.fruitCardCount;
   // Two hands, a starting discard, and at least one card left to draw.
   if (deckSize < 2 * c.handSize + 2) {
     throw new ConfigError('DECK_TOO_SMALL', `${deckSize} cards cannot deal two hands of ${c.handSize}, a discard, and leave a card to draw`);
