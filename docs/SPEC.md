@@ -631,6 +631,35 @@ Targets (guides): nothing to play after turn 3 under 60%: pass (0.0%: Sprout and
 almost always leave a move; no lever needed); first player 46-54%: pass (53.0%); Strangle under
 15%: pass (4.5%); game length within 15% of the current default: pass (−1%).
 
+### 11.6 Fruit card uses the Sprout (v0.8)
+
+400 games, level 7 against level 7, one game per seed (`npx tsx src/sim/bloomsim.ts`), with a
+Fruit card using the turn's Sprout. The v0.7 numbers (1,000 games, 11.5) are in brackets.
+
+| Measure | v0.8 | (v0.7) |
+| --- | --- | --- |
+| Fruit cards played per game | 1.86 | (3.49) |
+| Game length, turns per player | 10.57 | (9.61) |
+| Ends by Strangle | 2.5% | (4.5%) |
+| First player wins | 55.3% | (53.0%) |
+| Comeback (behind at half time, still won) | 37.5% | (36.2%) |
+| Blooms per game | 7.15 | (7.18) |
+| Tiles placed per turn, turns 1-5 | 1.94 | (2.02) |
+| Nothing to play after turn 3 | 0.0% | (0.0%) |
+
+Fruit cards are played about half as often: one now costs the turn's Sprout. Games run about
+10% longer, since fewer tiles are removed. Bloom play is unchanged.
+
+Against the guides:
+- game length within 15% of the default: pass (+10%);
+- Strangle under 15%: pass;
+- nothing to play: pass;
+- first player 46-54%: just over (55.3%).
+
+The first-player figure has a standard error of about ±2.5 points at 400 games, so it is not
+clearly different from v0.7's 53.0%. It is noted, and no lever was changed: the brief allows no
+balance changes beyond this rule. A longer run or a ladder can confirm it.
+
 ---
 
 ## Appendix A: Parked rules (off by default)
