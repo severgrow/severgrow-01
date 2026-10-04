@@ -3135,15 +3135,15 @@ svg.usable .hex-cell {
   align-content: center;
 }
 /* the hand: each card shows at least --slice px, a gentle fan */
-.dock > .hand {
+.dock .hand-row > .hand {
   height: var(--row-hand, 118px);
   padding-top: 4px; /* Step 3: the hand row is the card plus 16px (the fan's arc and a lift fit) */
   box-sizing: border-box;
 }
-.dock > .hand .card {
+.dock .hand-row > .hand .card {
   margin-left: calc(var(--slice, 40px) - var(--cw));
 }
-.dock > .hand .card:first-child {
+.dock .hand-row > .hand .card:first-child {
   margin-left: 0;
 }
 /* coach and first-time tips float above the dock, over the board's lower edge */
@@ -3200,34 +3200,34 @@ html[data-layout='side'] .dock-overlays {
   height: calc(var(--cw) * 0.42);
 }
 /* lift with a small spring; others stay legible */
-.dock > .hand .card {
+.dock .hand-row > .hand .card {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(var(--dy, 0px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
   transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.3), opacity 0.2s, filter 0.2s;
 }
-.dock > .hand .card.lifted {
+.dock .hand-row > .hand .card.lifted {
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.04);
 }
-.dock > .hand .card.dim {
+.dock .hand-row > .hand .card.dim {
   opacity: 0.62;
   filter: saturate(0.6);
 }
 @media (hover: hover) and (pointer: fine) {
-  .dock > .hand .card:not(.lifted):hover {
+  .dock .hand-row > .hand .card:not(.lifted):hover {
     transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 6px)) rotateY(var(--tilt-x, 0deg)) rotateX(var(--tilt-y, 0deg));
     z-index: 3;
   }
 }
 /* cards of one combo share a small bracket: a thicker, coloured bottom edge */
-.dock > .hand .card[data-combo] {
+.dock .hand-row > .hand .card[data-combo] {
   border-bottom: 3.5px solid var(--combo-c, var(--c-accent));
 }
-.dock > .hand .card[data-combo='1'] {
+.dock .hand-row > .hand .card[data-combo='1'] {
   --combo-c: var(--c-gold);
 }
-.dock > .hand .card[data-combo='2'] {
+.dock .hand-row > .hand .card[data-combo='2'] {
   --combo-c: var(--c-text);
 }
-.reduce-motion .dock > .hand .card {
+.reduce-motion .dock .hand-row > .hand .card {
   transition: none;
   animation: none;
 }

@@ -25,7 +25,7 @@ One line each: where the brief left room, what was chosen and why.
 - Confirm: the forecast bar covers the whole pile row while a move waits, so the dock never changes height.
 - Spare height: on 390x844 and 430x932 the board already spans the full width, so the hint row's height can't make it bigger. The pile row first takes room for its largest piles plus 16pt above and below, then the hand row takes up to 32pt. Whatever is left goes equally above and below the board, never as dead space inside the dock. The old "no gap over 16pt" layout test now applies whenever the board doesn't span the full width. When it does, the test checks that the dock rows already took what they can use.
   - Tiles at 360x640: 49.6 to 54.9pt (+11%). 390x844 and 430x932: unchanged (width-limited).
-- Hand cards: up to 84pt wide (was 72) where a full hand of 8 still shows 36pt of every card (430x932, desktop).
+- Hand cards stay at most 72pt wide. 84pt was tried: then a card's middle hides under the next card in a full hand (a card wider than twice its visible slice).
 - Footprint: rock shadows and edges, tile contact shadows and the home mounds' contact shadows now stay inside their own hex, still offset down-right (away from the top-left light). Grass and lava pictures still overlap their neighbours by design (one lawn), so I left that as it is.
 
 ## v0.8 UI pass

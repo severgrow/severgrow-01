@@ -81,8 +81,7 @@ const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h 
 /** The card size for a full hand in `width` px: big numerals, at least MIN_SLICE of each card. */
 export const cardSize = (width: number, maxHand = MAX_HAND) => {
   const avail = width - 2 * (HAND_EDGE + SORT_W); // the fan sits between the two fixed end slots
-  // positioning pass: up to 84pt wide where a full hand still shows MIN_SLICE of each card
-  const w = Math.max(44, Math.min(84, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
+  const w = Math.max(44, Math.min(72, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
   const slice = Math.min(w + 4, Math.floor((avail - w) / (maxHand - 1)));
   return { w, h: Math.round(w * 1.42), slice };
 };
