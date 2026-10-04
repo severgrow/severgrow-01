@@ -122,7 +122,7 @@ console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
   // the page goes straight to the throw: emptyturn.ts)
   const { page, errors } = await open(state, { settings: { confirmPolicy: 'never', autoSkip: false } });
   const hint0 = (await page.textContent('#hint')) ?? '';
-  check('after the draw the hint offers the Fruit card next to the sprout', hint0.includes('Sprout a card, or play your Fruit card'), hint0);
+  check('after the draw the hint offers the Fruit card next to the sprout', hint0.includes('Sprout, or play Fruit'), hint0);
   await tap(page, '1,-1');
   const card = (await page.textContent('#tooltip')) ?? '';
   check('the tile card on a 9: "No combo can replace this. A Fruit card can." and "Use Fruit card"', card.includes('No combo can replace this. A Fruit card can.') && card.includes('Use Fruit card'));
@@ -141,7 +141,7 @@ console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
   await fruitCards.last().click();
   await page.waitForTimeout(250);
   const why = (await page.textContent('#hint')) ?? '';
-  check('tapping it explains: "Sprout used this turn. Fruit is back next turn."', why.includes('Sprout used this turn'), why);
+  check('tapping it explains: "Fruit is back next turn"', why.includes('Fruit is back next turn'), why);
   const sprouts = (await st(page)).sproutsThisTurn;
   check('the engine agrees: the sprout is used', sprouts === 1);
   await shot(page, '07-second-fruit-waits');

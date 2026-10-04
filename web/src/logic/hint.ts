@@ -5,7 +5,7 @@ import { BLOOM, FRUIT, OPP } from '../../../src/strings.js';
 import type { MoveWords } from '../../../src/strings.js';
 
 /** The longest hint allowed: it must fit one line on a 360px-wide phone. */
-export const HINT_MAX = 46;
+export const HINT_MAX = 28;
 
 export type HintArrow = 'up' | 'down' | null;
 export type Hint = { text: string; arrow: HintArrow };
@@ -48,46 +48,59 @@ export const hintFor = (c: HintCtx): Hint => {
   if (c.busy) return h('');
   switch (c.phase) {
     case 'DRAW': {
-      if (!c.canTakeThrow) return h(c.deckCount <= 3 ? `Draw from the deck: ${c.deckCount} left` : 'Draw: tap the deck', 'down');
-      return h(c.deckCount <= 3 ? `Draw a card: ${c.deckCount === 1 ? 'last one in the deck' : `${c.deckCount} left in the deck`}` : 'Draw: tap the deck or the throw pile', 'down');
+      const low = c.deckCount === 1 ? 'Draw: last card in deck' : `Draw: ${c.deckCount} left in deck`;
+      if (!c.canTakeThrow) return h(c.deckCount <= 3 ? low : 'Draw: tap the deck', 'down');
+      return h(c.deckCount <= 3 ? low : 'Draw: deck or throw pile', 'down');
     }
     case 'ACT': {
       if (c.fruit?.reason) return h(c.fruit.reason);
       if (c.fruit && !c.pending) return h(c.fruit.firstTime ? FRUIT.anyStrength : FRUIT.tapTarget, 'up');
-      if (c.pending === 'strengthen') return h('Strengthen: your tile takes the higher number', 'down');
+      if (c.pending === 'strengthen') return h('Strengthen: the higher wins', 'down');
       if (c.pending === 'drawn') return h('Confirm, or draw it again', 'down');
-      if (c.pending) return h('Confirm, or tap the spot again', 'down');
+      if (c.pending) return h('Confirm, or tap it again', 'down');
       if (c.drawing) {
-        if (c.drawing.fine) return h("Click to start your bloom, click to finish", "up");
-        return h(`Paint ${c.drawing.n} touching hexes for your bloom`, 'up');
+        if (c.drawing.fine) return h('Click, then click to finish', 'up');
+        return h(`Paint ${c.drawing.n} touching hexes`, 'up');
       }
       if (c.card) {
         const { grow, replace, strengthen } = c.card;
-        if (!grow && !replace && !strengthen) return h("That card can't grow anywhere now");
-        if (!c.card.single) return h('Tap a glowing hex to grow there', 'up');
-        return h(['Tap a glowing hex', replace ? '⇆ replaces' : '', strengthen ? '+ strengthens' : ''].filter(Boolean).join(' · '), 'up');
+        if (!grow && !replace && !strengthen) return h("That card can't grow now");
+        if (!c.card.single) return h('Tap a glowing hex', 'up');
+        if (replace && strengthen) return h('Tap: ⇆ replace, + strengthen', 'up');
+        if (replace) return h('Tap a hex · ⇆ replaces', 'up');
+        if (strengthen) return h('Tap a hex · + strengthens', 'up');
+        return h('Tap a glowing hex', 'up');
       }
       if (c.kindPicked) return h('Tap a glowing hex', 'up');
-      if (c.hexWithNoMove) return h('Nothing grows there right now');
-      if (c.handEmpty) return h('No cards left. Tap “End turn”', 'down');
+      if (c.hexWithNoMove) return h('Nothing grows there now');
+      if (c.handEmpty) return h('No cards: tap “End turn”', 'down');
       // v0.8: the sprout (or a Fruit card) is used: say so, and point at the throw
       if (c.grew && !c.canSprout) {
         const done = c.grew === 'fruit' ? 'Fruit used' : 'Sprouted';
-        return h(c.canCombo ? `${done} · Bloom, or “Throw a card”` : `${done} · Next: “Throw a card”`, 'down');
+        return h(c.canCombo ? `${done} · Bloom or Throw` : `${done} · Throw a card`, 'down');
       }
       if (!c.canCombo && c.bloomBlocked) return h(BLOOM.tooFew(c.bloomBlocked));
       if (c.canSprout && c.fruitReady) return h(FRUIT.orSprout, 'down');
       if (c.canSprout) return h(c.words.tapHint, 'down');
-      if (c.canCombo) return h('Bloom, or “Throw a card”', 'down');
-      return h('Nothing can grow. Tap “Throw a card”', 'down');
+      if (c.canCombo) return h('Bloom, or Throw a card', 'down');
+      return h('Nothing can grow: Throw', 'down');
     }
     case 'DISCARD':
-      return h(c.throwEndsTurn ? 'Throw 1 card to end your turn' : 'Throw 1 card', 'down');
+      return h(c.throwEndsTurn ? 'Throw 1 card to end turn' : 'Throw 1 card', 'down');
     case 'KNOCK':
-      return h('Knock to end the game soon, or end turn', 'down');
+      return h('Knock, or end your turn', 'down');
     case 'ROT_PICK':
-      return h(`Tap ${OPP.theirs} tile that rots`, 'up');
+      return h('Pick their tile that rots', 'up');
     default:
       return h('');
   }
 };
+
+/** Positioning pass: the everyday hints (the draw, the sprout, the throw), quiet once learned. */
+const ROUTINE = [/^Draw/, /^Tap a card to sprout it$/, /^Throw 1 card/, /^Sprout, or play Fruit$/];
+export const isRoutineHint = (text: string) => ROUTINE.some((r) => r.test(text));
+
+/** Full weight for the first 3 turns; then quiet, unless the player seems stuck or it's unusual. */
+export const STUCK_MS = 6000;
+export const hintWeight = (o: { myTurns: number; idleMs: number; routine: boolean }): 'full' | 'quiet' =>
+  o.myTurns <= 3 || !o.routine || o.idleMs >= STUCK_MS ? 'full' : 'quiet';

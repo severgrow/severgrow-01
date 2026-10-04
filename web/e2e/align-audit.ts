@@ -105,7 +105,8 @@ const measure = (page: Page, viewport: string) =>
     // the drawn board: tiles, homes and the ground (svg groups: their painted extent)
     const board = union([rect(q('.l-tiles')), rect(q('.l-homes')), rect(q('.l-base'))]);
     const zone = rect(q('#board-wrap'));
-    const piles = rect(q('.piles'));
+    // the pile pair: the deck and the throw pile together (positioning pass: they flank the hint)
+    const piles = union([rect(q('#deck')), rect(q('#discard'))]);
     const hintEl = q('#hint .hint-text') ?? q('#hint');
     const hint = hintEl && (hintEl.textContent ?? '').trim() ? rect(hintEl) : null;
     const fan = union([...document.querySelectorAll('#hand .card')].map(rect));

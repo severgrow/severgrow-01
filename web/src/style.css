@@ -314,7 +314,9 @@ button {
   max-width: 760px;
   justify-self: center;
   display: grid;
-  grid-template-columns: 44px 1fr auto 1fr 44px;
+  /* Positioning pass: equal side columns whatever their content, so the turn pill sits exactly
+     on the centre line ([menu] You ◯ 0 | pill | 0 ◆ Opponent [history]) */
+  grid-template-columns: 44px minmax(0, 1fr) auto minmax(0, 1fr) 44px;
   align-items: center;
   gap: 4px;
   padding: 6px;
@@ -324,6 +326,9 @@ button {
   align-items: center;
   gap: 7px;
   font-size: 0.9rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .score.bot {
   justify-content: flex-end;
@@ -2912,10 +2917,10 @@ svg.usable .hex-cell {
 /* narrow phones (under ~385px, e.g. 375px iPhone SE / mini, 360px Android): the score bar
    drops the "You" / "Opponent" words (the marks, colours and aria-labels still say whose score
    it is), so the history button stays on screen */
-@media (max-width: 385px) {
-  .hud .score .who {
-    display: none;
-  }
+/* Positioning pass: the words go only when they don't fit (main.ts measures: a 360px phone with
+   Large text, long scores), both at once so the two sides stay mirrored; never truncated */
+.hud.names-off .score .who {
+  display: none;
 }
 
 /* a two-line button (Continue): the name, and a small line under it */
@@ -4357,8 +4362,8 @@ html.final-turns .game::after {
 .ctool.tr { right: 0; top: 0; }
 .ctool.bl { left: 0; bottom: 0; }
 .ctool.br { right: 0; bottom: 0; }
-/* v0.8: the "?" (how to play) sits in the board's lower-right corner; the Skip button takes
-   that corner only while an animation plays */
+/* the "?" (how to play) in the board's lower-right corner, paired with Replay (or Skip while an
+   animation plays) in the lower-left one: no tool is ever alone in its row */
 .ctool.help {
   right: 0;
   bottom: 0;
@@ -4367,8 +4372,9 @@ html.final-turns .game::after {
   line-height: 1;
   padding-top: 2px; /* the font's "?" sits high: nudge it to the optical centre */
 }
-#tool-skip:not([hidden]) ~ .ctool.help {
-  display: none;
+/* Replay with no turn to replay yet: still in its slot, quieter */
+.ctool.off {
+  opacity: 0.45;
 }
 .ctool[hidden] {
   display: none;
@@ -4919,4 +4925,166 @@ html.align-overlay::before {
 .lab-align {
   display: block;
   margin: 4px 0 12px;
+}
+
+/* =====================================================================
+   Positioning pass: the symmetric dock (logic/layout.ts computes the same boxes)
+   Two rows, both centred on the dock's centre line:
+     [ hint | deck + throw pile | moves ]   (the forecast bar covers it while a move waits)
+     [ Undo | hand fan          | Sort  ]   (fixed slots: either can come and go, nothing moves)
+   ===================================================================== */
+.dock {
+  grid-template-rows: var(--row-table, 84px) var(--row-hand, 118px);
+}
+.dock > .table-row {
+  position: relative;
+  display: grid;
+  /* [ . | deck | hint over moves | throw pile | . ]: the pair mirrored round the centre column */
+  grid-template-columns: minmax(0, 1fr) var(--pile-col, 72px) var(--centre-w, 176px) var(--pile-col, 72px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+  height: var(--row-table, 84px);
+  padding: 0;
+}
+.dock .table-row > .piles {
+  display: contents;
+}
+.dock .table-row > .piles > .pile {
+  justify-self: stretch;
+  min-width: 0;
+}
+.dock .table-row > .piles > .deck {
+  grid-column: 2;
+  grid-row: 1 / -1;
+}
+.dock .table-row > .piles > .discard {
+  grid-column: 4;
+  grid-row: 1 / -1;
+}
+/* the hint: one short line over the moves, quieter once learned */
+.dock .table-row > .hint-line {
+  grid-column: 3;
+  grid-row: 2;
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  line-height: 18px;
+  height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  color: var(--c-text);
+  font-weight: 600;
+  transition: color var(--dur-quick, 0.2s) ease-out;
+}
+.dock .table-row > .hint-line.quiet {
+  color: var(--c-muted);
+  font-weight: 400;
+}
+.dock .pile-card {
+  --pile-h: var(--pile-card-h, 62px);
+}
+/* the moves: one centred row under the hint */
+.dock .table-row > .moves {
+  grid-column: 3;
+  grid-row: 3;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+}
+.dock .table-row > .moves .btn {
+  padding: 0 10px;
+  font-size: 14px;
+}
+.dock .table-row > .moves .step-note {
+  font-size: 14px;
+  text-align: center;
+}
+/* the forecast bar covers the whole pile row while a move waits for Confirm */
+.dock .table-row > .forecast-slot {
+  position: absolute;
+  inset: 0 12px;
+  padding: 0;
+  pointer-events: none;
+}
+.dock .table-row > .forecast-slot > .confirm {
+  inset: 6px 0;
+  pointer-events: auto;
+  background: var(--c-surface);
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 4px;
+}
+.dock.confirming .table-row > :not(.forecast-slot) {
+  visibility: hidden;
+}
+/* the hand row: two equal fixed slots around a centred fan */
+.dock > .hand-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4px 28px minmax(0, 1fr) 28px 4px;
+  align-items: center;
+  height: var(--row-hand, 118px);
+  min-height: 0;
+}
+.dock .hand-row > #hand {
+  grid-column: 3;
+  height: 100%;
+  padding: 4px 0 0;
+  box-sizing: border-box;
+  justify-content: center;
+  min-width: 0;
+}
+.dock .hand-row > .undo-slot {
+  grid-column: 2;
+}
+.dock .hand-row > .hand-sort,
+.dock .hand-row > .hand-sort.icon-sort {
+  grid-column: 4;
+  position: relative;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+}
+.hand-slot,
+.hand-sort.icon-sort.hand-slot {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-bg) 70%, var(--c-surface));
+  color: var(--c-muted);
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
+}
+.hand-slot .i {
+  width: 16px;
+  height: 16px;
+}
+/* a 44pt touch area around the 28pt button */
+.hand-slot::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+/* a slot keeps its place when its button is away: nothing moves */
+.dock .hand-row > .hand-slot[hidden] {
+  display: grid;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* Undo and Sort when there is nothing to do: still in their slots, quieter */
+.hand-slot:disabled {
+  opacity: 0.35;
+  cursor: default;
 }

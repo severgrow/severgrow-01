@@ -151,3 +151,36 @@ describe('shadows stay inside the hex (one footprint for every tile type)', () =
     }
   });
 });
+
+// Positioning pass, Step 4: rotation and layout never change the game. The same game, played by
+// tapping hexes on screen at every rotation in both families (each tap found by hit-testing the
+// tile's on-screen centre), ends in exactly the same state.
+describe('state equivalence: the board rotation is display only', () => {
+  it('a whole game played by on-screen taps ends identically at every rotation', async () => {
+    const { apply, legalActions: legal, viewFor: vf, newGame: ng, coordKey: ck } = await import('../../src/engine/index.js');
+    const { GreedyBot } = await import('../../src/bots/GreedyBot.js');
+    const run = (o: Orient, k: number) => {
+      setOrient(o);
+      setRotation(k);
+      let s = ng(77);
+      const all = new Set(Object.keys(s.board));
+      for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
+        const a = GreedyBot.chooseAction(vf(s, s.actor));
+        // every hex a move names goes to the screen and back through the hit test
+        const viaScreen = (c: { q: number; r: number }) => {
+          const p = centerOf(ck(c));
+          const key = hexAtPoint(p.x, p.y, all)!;
+          const [q, r] = key.split(',').map(Number) as [number, number];
+          return { q, r };
+        };
+        const b: typeof a =
+          a.t === 'Bloom' ? { ...a, hexes: a.hexes.map(viaScreen) } : a.t === 'Sprout' ? { ...a, coord: viaScreen(a.coord) } : a.t === 'PlayFruit' ? { ...a, target: viaScreen(a.target) } : a;
+        expect(legal(vf(s, s.actor)).some((x) => JSON.stringify(x) === JSON.stringify(b))).toBe(true);
+        s = apply(s, b);
+      }
+      return JSON.stringify(s);
+    };
+    const ref = run('pointy', 0);
+    for (const o of FAMILIES) for (let k = 0; k < 6; k++) expect(run(o, k)).toBe(ref);
+  });
+});
