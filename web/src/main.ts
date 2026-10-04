@@ -1615,7 +1615,11 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 
 /** The dock's one-line hint (overhaul item 13 shortens and sharpens it). */
 function dockHint(v: View): Hint {
-  return session ? hintFor(hintCtx(v)) : { text: '', arrow: null };
+  if (!session) return { text: '', arrow: null };
+  const h = hintFor(hintCtx(v));
+  // the test copy: no Confirm box; a second tap on the card or the hex places the move
+  if (IS_TEST && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
+  return h;
 }
 
 // ---------- the layout (overhaul items 1-2): fixed dock, board fits the rest ----------
@@ -2108,7 +2112,8 @@ function renderControls(v: View, advice: Advice | null) {
     const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
     info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
-    $('confirm').hidden = false;
+    // the test copy: no Confirm box (a second tap on the card or the hex places the move)
+    $('confirm').hidden = IS_TEST;
   }
 }
 
@@ -2438,6 +2443,8 @@ function onCardTap(id: number) {
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn()) return;
+  // the test copy: no Confirm box; tapping a card of the waiting move again places it
+  if (IS_TEST && session.pending && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;

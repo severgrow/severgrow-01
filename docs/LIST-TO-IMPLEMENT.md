@@ -14,6 +14,15 @@ full `npm run check`, then the user's go-ahead. Tick an item off when it is on `
       move it into `web/src/style.css` and add a layout check (the panel never overlaps the
       piles, the hand or the header at 1280x800, 1440x900, 1600x980, 1920x1080).
 
+- [ ] **No Confirm box: tap again to place.** When a move waits for confirmation, no box with
+      the forecast and Cancel/Confirm appears. Tapping the same card or the same hex again places
+      the move; tapping another card or hex changes the choice; Undo still takes it back after.
+      The hint line says "Tap again to place it". Now in the test copy (`web/src/main.ts`, the
+      lines marked "the test copy: no Confirm box"). On main: decide where the risk warning
+      ("Your opponent could cut 4 of yours") goes now that the box is gone (the board's -3 badges
+      already show it), update the e2e tests that click `#confirm-play`, and the coach's
+      "Confirm" step.
+
 ## Lab ideas that could become real features
 
 - [ ] **Watch a game** (two opponents play each other). Could be a menu option in the main
