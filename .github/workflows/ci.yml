@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # every branch except dev: the test copy (dev) skips the strict checks for speed; they run
+  # on main, on pull requests and before anything is locked in (docs/RELEASES.md)
   push:
+    branches-ignore: [dev]
   pull_request:
 
 jobs:

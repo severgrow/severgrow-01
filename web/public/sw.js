@@ -21,6 +21,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  // the test copy (/test/) is never cached or served by the live game's worker
+  if (/\/test(\/|$)/.test(new URL(req.url).pathname.slice(new URL(self.registration.scope).pathname.length - 1))) return;
   if (req.mode === 'navigate') {
     e.respondWith(
       fetch(req)

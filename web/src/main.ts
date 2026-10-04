@@ -1,3 +1,5 @@
+// first: the release channel (the test copy keeps its own storage)
+import { IS_TEST } from './channel.js';
 // Severgrow in the browser. You (player 1) against GreedyBot. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -3113,7 +3115,8 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Install as an app and play offline (the service worker caches the page's own files).
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+// the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
+if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* offline play is a bonus; the page works without it */
