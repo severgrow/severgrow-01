@@ -34,6 +34,8 @@ One line each: where the brief left room, what was chosen and why.
 - Step 4: the Strangle finish is pulse 380ms, hold 260ms, smother/wither 820ms, bloom/roar 480ms (1.94s at Normal), scaled down by speed; Reduce motion shows only the smother/wither (500ms).
 - Step 4: home sounds: tree tap = soft rustle and a warm note; volcano tap = low rumble with crackles; smothered = a breathy sigh; withered = a low grind. All go through the existing sound toggle.
 - Step 4: the strangled volcano keeps its ashen crater visible above the moss (the first draft hid it under a flat green triangle).
+- Step 5: the one-tap suggestion ranks Blooms through the tapped hex by tiles gained, then opponent tiles replaced or cut, then the fewest of my tiles left open to a cut, then engine order (deterministic).
+- Step 5: the first painting tip loops a finger over a bent cluster of three hexes (not a straight strip), because a Bloom can be any connected shape.
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 

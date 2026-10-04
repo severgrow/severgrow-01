@@ -180,11 +180,11 @@ until its first move appears, and only while it is really still choosing.
   a card shows only where it can sprout, and tapping a spot plays it (a card with only one
   spot plays with that single tap). There is no "Throw a card" button until you have
   sprouted; a small **Skip sprout** link stays, because sprouting is optional in the rules.
-  After the sprout the game goes on to "Tap a card to throw it" by itself (or shows "Throw a
-  card" when a line or clump is still possible).
-- **Combos have buttons** ("Grow a line of 3", "Grow a clump of 3"): tap one (a card too, if you
-  want particular cards), then **draw it on the board** (see "Drawing a line or clump" below).
-  There is no "Other way" button any more.
+  After the sprout the game goes on to "Tap a card to throw it" by itself (or shows "Bloom, or
+  “Throw a card”" when a Bloom is still possible).
+- **Bloom has buttons** ("Bloom 3 tiles", "Bloom 4 tiles", "Bloom 3 tiles, keep the other"): tap
+  one (a card too, if you want particular cards), then **paint it on the board** (see "Painting a
+  Bloom" below).
 - **Cancel** always clears your choice. Esc does the same on a keyboard (while drawing, Esc first
   clears the shape, then the choice).
 - **Steps 1 2 3: Draw, Grow, Throw.** The tip for the current step hides behind the
@@ -277,51 +277,62 @@ target, Confirm).
 
 Screenshots (390 px wide): `docs/screens/fruit-strengthen/`.
 
-## Drawing a line or clump (polish pass 3)
+## Painting a Bloom (v0.7)
 
-After choosing "Grow a line of N" or "Grow a clump of N" you draw it on the board; "Other way" is
-gone. Touch, mouse and pen share one code path (pointer events).
-- **The board shows where to start**: for a line, the hexes next to your network that have at least
-  one legal direction; for a clump, every legal hex. The rest dims. A hint says "Drag across the
-  board to draw your line" / "Drag over hexes to draw your clump" ("Click where your line starts,
-  then click to finish" with a mouse). Cancel is always there.
-- **One place only?** It shows straight away as a ready preview with Confirm.
-- **A line**: touch a start and drag. As soon as the drag clearly points along one of the 6
-  directions (a small dead zone, a little hysteresis so it does not flicker), the ghost shows all
-  N tiles with their numbers rising from the start. Moving the finger turns it. A blocked part
-  (rock, your own tile, a stronger tile, the edge) shows in a "can't" style with the reason above
-  the board; lifting there only gives a small shake. Touching just the start shows arrows for the
-  legal directions. Starting at the far end and dragging back works too; if both ends touch your
-  network, the end where your finger started is the start.
-- **A clump**: touch any legal hex and drag; each new legal hex that touches the shape (any hex of
-  it, so a Y or a triangle is possible) is added; others are skipped without breaking the drag;
-  moving back onto the previous hex removes the last one; a counter shows "2/3". Tapping hexes
-  works too (tap the last one to remove it). Lifting early keeps the shape ("2/3: keep going,
-  from any hex of the shape") with a Clear button; a full shape that does not touch your tiles
-  says "Your clump needs to touch your tiles".
+A Bloom (3 or 4 cards of one number in different suits, or 3 or 4 in a row in one suit) grows that
+many tiles in any connected shape, as long as one of them touches your tiles; each tile keeps its
+own card's number. After choosing "Bloom N tiles" you **paint** the shape. Touch, mouse and pen
+share one code path (pointer events).
+- **The board shows where to start**: every hex that can be part of a legal Bloom glows calmly;
+  the rest dims. The hint says "Paint N touching hexes for your bloom" ("Click to start your
+  bloom, click to finish" with a mouse).
+- **Numbers follow the paint order**: the first hex painted gets the lowest card, the next the
+  next one, so the numbers appear in translucent ghosts as you paint. **Reverse** flips the order
+  (the highest card goes first); the ghosts update at once.
+- **A hex that can't take its number** shows why under the counter: "1/3 · Needs a 6 or higher"
+  (an opponent tile as strong or stronger), never a silent refusal.
+- **One tap suggestion**: the first tap on a legal hex fills in the best-ranked Bloom through it
+  (most tiles gained, then the most opponent tiles replaced or cut, then the fewest of your tiles left open to a cut) as a
+  ready preview; keep painting to change it.
+- **Paint** by dragging over touching hexes, or tap them one by one; moving back onto the previous
+  hex removes it; a counter shows "2/3". Lifting early keeps the shape with a Clear button.
 - **Fast fingers**: every hex the finger's path crosses between two pointer events is added, in
   order; the hit area is a little smaller than each hex so corners never slip into a neighbour.
-  The counter and the result chip sit in a small card above the board, never under the finger.
   Each added hex gives a light haptic tick and a soft rising note (Vibration and Sound toggles).
-  Lifting the finger outside the board, or a second finger, cancels; pinch and scroll are blocked
-  only while drawing.
-- **On release** (or the second click): with **Confirm moves** on, the result chip appears with
-  Confirm and Cancel; with it off, the move is placed at once. Settings → Confirm moves: **Auto**
-  (on for touch screens, off with a mouse), On, Off.
-- **With a mouse**: click a start; the shape follows the mouse (a line snaps to the nearest
-  direction; a clump grows from the start towards the pointer along the shortest legal path, then
-  the nearest legal hexes, always the same for the same pointer), with the result chip live;
-  click again to finish. Esc or right-click cancels. Dragging with the mouse works like a finger.
-- **Keyboard**: Tab to the board, arrows move a cursor hex, Enter starts or adds, Backspace removes
-  the last hex, Esc cancels, Enter on a ready shape confirms. A screen reader hears "2 of 3 hexes
-  chosen" and the result chip.
-- **Placement list** (Settings, off by default): an opt-in step-through list of every legal
-  placement for the chosen combo, for anyone who prefers not to draw.
-- **First time**: a small tip with a looping ghost finger on a mini hex strip ("Drag over hexes to
-  draw your clump or line. On a computer, click to start and click to finish."), re-openable from
-  How to play; no animation with Reduce motion.
-- **The coach's "Show me"**: points at the line or clump button, then shows its placement on the
-  board, ready to confirm.
+  Lifting outside the board, or a second finger, cancels.
+- **Confirm and Undo**: with **Confirm moves** on, the result chip appears with Confirm and
+  Cancel; otherwise the Bloom is placed at once, and Undo takes it back until you throw.
+- **With a mouse**: click to start; the shape grows toward the pointer along the shortest legal
+  path; click again to finish. Esc or right-click cancels.
+- **Keyboard**: arrows move a cursor hex, Enter starts or adds, Backspace removes the last hex,
+  Esc cancels, Enter on a ready shape confirms.
+- **The Bloom itself** pops outward from its first hex as a quick staggered ripple, each tile with
+  a rising note, so a Bloom of 4 plays a little scale.
+- **Blocked by space**: when the cards could bloom but there are too few free hexes by your tiles,
+  the hint says "Too few free hexes by your tiles to bloom N".
+- **First time**: a small tip with a looping finger painting a bent cluster of three hexes ("Paint
+  your bloom: drag over touching hexes, or tap them one by one. On a computer, click to start and
+  click to finish."); no animation with Reduce motion.
+
+## The homes (v0.7)
+
+Your home is a small gnarled **tree** (round, soft shapes; a mint circle glows in its hollow); the
+opponent's is a faceted basalt **volcano** (angular; a red-orange diamond crater). Shape alone
+tells them apart in greyscale. They stand upright on their tiles in both board orientations and
+never cover a neighbour's number.
+- **Idle**: the canopy sways a little and a leaf falls now and then; the smoke curls and an ember
+  pops. Off with Reduce motion or Effects Low; Material detail Low draws them flat.
+- **Danger** (4 or more of the 6 sides blocked, at least one by the other side): the tree's
+  leaves tremble, the volcano rumbles, and a ring shows which sides are blocked, with "4/6".
+  Never flashing. "Home in danger" shows in the header.
+- **Tap**: the tree's heartbeat and a rustle, or the volcano's thump and a rumble, and the tile
+  card: "Your tree. Your home: everything you own must stay connected to it. 2 of 6 sides
+  blocked." / "Opponent's volcano. Surround all 6 sides to win at once. 3 of 6 sides blocked."
+- **Strangle finish** (at most 2.0 s at Normal; tap or Skip jumps to the end): the surrounding
+  tiles pulse inward, a slow beat, then the volcano is smothered by moss (a sigh) while the tree
+  blooms, or the tree withers (a grind) while the volcano roars.
+- **Lab**: `?lab=1` shows every state in every palette, both orientations, at three sizes, in
+  greyscale and at 25%.
 
 ## Words
 
@@ -375,7 +386,7 @@ engine events.
 
 | Moment | What you see and hear |
 | --- | --- |
-| Growth | tiles pop in a ripple; each makes a short rising note, so a long line plays a little scale |
+| Growth | tiles pop in a ripple; each makes a short rising note, so a Bloom plays a little scale |
 | Replacing a bot tile | it dissolves into sparks as yours takes its place |
 | The cut | the vein flashes and snaps (a sharp snap), cut-off tiles go grey and wither outward from the cut, shedding a few motes, and "−4 tiles" floats up |
 | Place, then cut | both play back to back, the second a little higher in pitch |

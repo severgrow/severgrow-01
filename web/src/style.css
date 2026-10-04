@@ -3751,8 +3751,46 @@ html[data-layout='side'] .dock-overlays {
   font-size: 0.8rem;
   line-height: 1.2;
 }
+/* Step 5: the first painting tip shows a small finger painting a bent cluster of three hexes
+   (a Bloom can be any connected shape), beside the text */
+.dock-overlays > .first-tip:has(#first-tip-demo:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) 46px auto;
+}
 .dock-overlays .first-tip .draw-demo {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 46px;
+  height: 40px;
+  margin: 0;
+  display: block;
+}
+.dock-overlays .first-tip .draw-demo[hidden] {
   display: none;
+}
+.dock-overlays #first-tip-ok {
+  grid-column: -2;
+}
+.dock-overlays .first-tip .draw-demo i {
+  position: absolute;
+  width: 16px;
+  height: 18px;
+}
+.dock-overlays .first-tip .draw-demo i:nth-child(1) { left: 2px; top: 20px; }
+.dock-overlays .first-tip .draw-demo i:nth-child(2) { left: 19px; top: 20px; }
+.dock-overlays .first-tip .draw-demo i:nth-child(3) { left: 27px; top: 5px; }
+.dock-overlays .first-tip .draw-demo .finger {
+  width: 12px;
+  height: 12px;
+  left: 4px;
+  top: 23px;
+  animation-name: demo-finger-bend;
+}
+@keyframes demo-finger-bend {
+  0%, 10% { transform: translate(0, 0); opacity: 0; }
+  20% { transform: translate(0, 0); opacity: 1; }
+  40% { transform: translate(17px, 0); opacity: 1; }
+  60% { transform: translate(25px, -15px); opacity: 1; }
+  80%, 100% { transform: translate(25px, -15px); opacity: 0; }
 }
 .dock.confirming .dock-overlays > .coach {
   padding: 2px 10px;
@@ -4908,3 +4946,5 @@ html.final-turns .game::after {
   width: 24px;
   height: 25px;
 }
+.dock-overlays .first-tip .draw-demo i:nth-child(2) { animation-delay: 0.48s; }
+.dock-overlays .first-tip .draw-demo i:nth-child(3) { animation-delay: 0.96s; }
