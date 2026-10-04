@@ -5023,3 +5023,27 @@ body.paused #board * {
 .dock:has(#tool-undo:not([hidden])) .dock-overlays {
   right: 120px;
 }
+/* the Bloom choices never run off a narrow screen: capped to the viewport, long labels wrap */
+.bloom-options {
+  max-width: calc(100vw - 24px);
+  min-width: min(220px, calc(100vw - 24px));
+}
+.bloom-options .btn {
+  white-space: normal;
+  text-align: left;
+  height: auto;
+  min-height: var(--h-btn);
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+/* anchor the Bloom choices to the full-width piles row (not the moves area), so the list can
+   use the whole width of a narrow screen */
+.dock .table-row {
+  position: relative;
+}
+.dock .moves {
+  position: static;
+}
+.dock .bloom-options {
+  right: 8px;
+}
