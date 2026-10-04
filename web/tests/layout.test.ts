@@ -3,7 +3,7 @@
 // gap around the board is over 16pt, and the corner tools never cover a tile.
 import { afterEach, describe, expect, it } from 'vitest';
 import { allCoords, coordKey } from '../../src/engine/index.js';
-import { BOARD_MARGIN, HEIGHTS, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps } from '../src/logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, SIDE_GAP, MAX_GAP, MAX_HAND, MIN_SLICE, SORT_W, TOOL, boardUnits, computeLayout, overlaps } from '../src/logic/layout.js';
 import type { Box, Layout, Viewport } from '../src/logic/layout.js';
 import { setOrient } from '../src/logic/orient.js';
 import { cornerPts } from '../src/ui/geom.js';
@@ -149,6 +149,21 @@ describe('v0.8 UI pass: a bigger board, bigger piles, "?" on the board', () => {
       expect(b.y + b.h).toBeGreaterThan(l.zone.y + l.zone.h - TOOL.hit - 8);
       expect(coversTile(b, tilePolys(l))).toBe(false);
       expect(overlaps(b, l.dock)).toBe(false);
+    });
+  }
+});
+
+// v0.8.1: on desktop (side layout) the dock had spare height but its rows touched: the piles sat
+// on the hand. The rows now have SIDE_GAP between them, and the dock box counts it.
+describe('desktop side layout: air between the dock rows', () => {
+  for (const [w, h] of [[1000, 620], [1280, 800], [1440, 900], [1920, 1080]] as const) {
+    it(`${w}x${h}: the dock counts a gap of at least 16pt between its rows and still fits`, () => {
+      const l = computeLayout({ w, h });
+      expect(l.mode).toBe('side');
+      expect(SIDE_GAP).toBeGreaterThanOrEqual(16);
+      expect(l.dock.h).toBeGreaterThanOrEqual(l.rows.forecast + l.rows.table + l.rows.hand + 2 * SIDE_GAP);
+      expect(l.dock.y + l.dock.h).toBeLessThanOrEqual(h);
+      expect(overlaps(l.board, l.dock)).toBe(false);
     });
   }
 });

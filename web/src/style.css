@@ -3165,6 +3165,12 @@ html[data-layout='side'] .play {
 }
 html[data-layout='side'] .dock {
   align-self: center;
+  /* v0.8.1: air between the hint, the piles and the hand (SIDE_GAP in logic/layout.ts) */
+  row-gap: 20px;
+}
+/* and a clear gap between the deck and the throw pile */
+html[data-layout='side'] .dock .piles {
+  gap: 24px;
 }
 html[data-layout='side'] .dock-overlays {
   bottom: auto;
