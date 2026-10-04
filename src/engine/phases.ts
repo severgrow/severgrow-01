@@ -67,9 +67,11 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
   if (s.config.reshuffleDiscard) {
     // the deck never ends the game: only the turn limit does (a hand may stay short)
     if (refilled.deck.length === 0) refilled = reshuffleDiscard(refilled);
-    if (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer) {
+    // every card is on the board or in a hand: nothing is left to draw, so the game ends
+    const nothingToDraw = refilled.deck.length === 0 && refilled.discard.length === 0;
+    if (nothingToDraw || (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer)) {
       const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
-      return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, 'turn_limit'));
+      return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, nothingToDraw ? undefined : 'turn_limit'));
     }
     return passTurn(refilled);
   }

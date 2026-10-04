@@ -10,8 +10,10 @@ import type { BoardCtx, Player, View } from '../../../src/engine/index.js';
 export const turnsLeft = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>): number => {
   const max = v.config.maxTurnsPerPlayer;
   const byLimit = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : Infinity;
-  const byDeck = Math.max(1, Math.ceil(v.deckCount / 2));
-  return Math.max(1, Math.min(byLimit, byDeck));
+  // the Lab: with reshuffle on the deck never runs out, so the turn limit is the only clock
+  const byDeck = v.config.reshuffleDiscard ? Infinity : Math.max(1, Math.ceil(v.deckCount / 2));
+  const left = Math.max(1, Math.min(byLimit, byDeck));
+  return Number.isFinite(left) ? left : 99;
 };
 
 /** Overhaul item 15: how near the end is (at most this many of my turns are left, by the turn limit). */
@@ -26,7 +28,7 @@ export const finalTurns = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>)
   const max = v.config.maxTurnsPerPlayer;
   const left = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : null; // this turn included
   if (left !== null && left <= FINAL_TURNS) return { final: true, turnsLeft: left, reason: 'limit', banner: left <= 1 ? 'Last turn' : `Last ${left} turns` };
-  if (v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Deck empty: last turn' : 'The deck is running low' };
+  if (!v.config.reshuffleDiscard && v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Deck empty: last turn' : 'The deck is running low' };
   return { final: false, turnsLeft: left, reason: null, banner: null };
 };
 
