@@ -1912,7 +1912,11 @@ function renderControls(v: View, advice: Advice | null) {
     const end = legal.find((a) => a.t === 'EndAct')!;
     const note = document.createElement('span');
     note.className = 'note empty-reason';
-    note.textContent = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    // positioning pass: one short line in the centre column; the full reason on hover and for
+    // screen readers
+    note.textContent = NOTHING_TO_PLAY;
+    note.title = `${NOTHING_TO_PLAY}. ${emptyReason(v.hand)}`;
+    note.setAttribute('aria-label', note.title);
     moves.append(note, button('Continue', 'primary empty-continue', () => humanPlay(end), 'Continue to the Throw step'));
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.

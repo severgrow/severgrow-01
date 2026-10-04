@@ -5157,3 +5157,28 @@ html.align-overlay::before {
 .hud .score.bot .who {
   justify-self: end;
 }
+/* an empty Grow step with auto-skip off: the reason takes the hint's place, Continue under it,
+   both in the centre column */
+.dock .table-row:has(.empty-reason) > .hint-line {
+  display: none;
+}
+.dock .table-row > .moves:has(.empty-reason) {
+  grid-row: 2 / 4;
+  flex-direction: column;
+  gap: 4px;
+}
+.dock .table-row > .moves .empty-reason {
+  white-space: normal;
+  text-align: center;
+  font-size: 13px;
+  line-height: 16px;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dock .table-row > .moves .empty-continue {
+  min-height: 36px;
+  height: 36px;
+}
