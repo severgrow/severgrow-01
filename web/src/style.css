@@ -4877,3 +4877,34 @@ html.final-turns .game::after {
 .dock:has(#tool-undo:not([hidden])) .dock-overlays {
   right: 104px;
 }
+/* Step 4: the homes in the lab */
+.lab-home-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.lab-home-row figure {
+  margin: 0;
+  text-align: center;
+}
+.lab-home-row figcaption {
+  font-size: 10px;
+  color: var(--c-muted);
+  max-width: 96px;
+}
+.lab-home {
+  width: 96px;
+  height: 101px;
+}
+.lab-home-row.grey svg {
+  filter: grayscale(1);
+}
+.lab-home-row.pt40 .lab-home {
+  width: 40px;
+  height: 42px;
+}
+.lab-home-row.tiny .lab-home {
+  width: 24px;
+  height: 25px;
+}

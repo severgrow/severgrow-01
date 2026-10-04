@@ -66,31 +66,30 @@ const volcano = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => 
   const v = landmarkVariant(key);
   const rich = look.textures;
   el('ellipse', { cx: 1.5, cy: 13.5, rx: 15, ry: 3.4, class: 'lm-shadow', fill: c.shadow }, g);
-  // the cone: dark layered basalt, faceted, lit from the top left
-  el('path', { d: 'M-16,12 L-8.5,-11 L-5,-15 L5,-15 L8.5,-11 L16,12 Z', class: 'lm-cone', fill: c.fireCrust }, g);
-  el('path', { d: 'M-16,12 L-8.5,-11 L-5,-15 L-1,-3 L-5,12 Z', class: 'lm-facet-lit', fill: c.rock }, g);
-  el('path', { d: 'M5,-15 L8.5,-11 L16,12 L7,12 L2,-2 Z', class: 'lm-facet-dark', fill: c.rockDark }, g);
+  // the cone: dark layered basalt, faceted, lit from the top left, as tall as the tree so the two
+  // homes read as equals; a light rim keeps the silhouette clear on its own dark lava tile
+  const cone = 'M-16.5,12 L-9,-18 L-5,-23 L5,-23 L9,-18 L16.5,12 Z';
+  el('path', { d: cone, class: 'lm-cone', fill: c.fireCrust }, g);
+  el('path', { d: 'M-16.5,12 L-9,-18 L-5,-23 L-1,-8 L-5,12 Z', class: 'lm-facet-lit', fill: c.rockLight }, g);
+  el('path', { d: 'M5,-23 L9,-18 L16.5,12 L7,12 L2,-6 Z', class: 'lm-facet-dark', fill: c.rockDark }, g);
+  el('path', { d: cone, class: 'lm-rim', fill: 'none', stroke: c.rimLight, 'stroke-opacity': 0.55, 'stroke-width': 1.2, 'stroke-linejoin': 'round' }, g);
   if (rich) {
     // layers in the basalt
-    for (const y of [2, 7.5] as const) el('path', { d: `M${f(-14.4 + (12 - y) * 0.0)},${y} L14.6,${y + 0.6}`, stroke: c.rockDark, 'stroke-width': 0.7, 'stroke-opacity': 0.7 }, g);
+    for (const y of [-2, 5.5] as const) el('path', { d: `M${f(-15 + (12 - y) * 0.25)},${y} L${f(15 - (12 - y) * 0.25)},${y + 0.6}`, stroke: c.rockDark, 'stroke-width': 0.7, 'stroke-opacity': 0.7 }, g);
   }
   // two or three lava rivulets running down the sides
   const riv = el('g', { class: 'lm-rivulets', fill: 'none', stroke: c.fire, 'stroke-linecap': 'round' }, g);
-  const paths = [
-    'M-3,-14 Q-6,-6 -9,1',
-    'M3.5,-14 Q5,-6 9,4',
-    'M0.5,-13 Q-1,-4 1,6',
-  ];
-  for (const d of paths.slice(0, 2 + (v.form === 2 ? 1 : 0))) el('path', { d, 'stroke-width': 1.3 }, riv);
+  const paths = ['M-3,-22 Q-7,-10 -10,0', 'M3.5,-22 Q6,-10 10,3', 'M0.5,-21 Q-1,-8 1,6'];
+  for (const d of paths.slice(0, 2 + (v.form === 2 ? 1 : 0))) el('path', { d, 'stroke-width': 1.5 }, riv);
   // the crater: the opponent's shape marker, a glowing DIAMOND (red-orange, never amber)
-  el('path', { d: 'M0,-20 L6.2,-15 L0,-10.5 L-6.2,-15 Z', class: 'lm-crater', fill: c.fire }, g);
-  el('path', { d: 'M0,-17.6 L3.4,-15 L0,-12.6 L-3.4,-15 Z', class: 'lm-crater-hot', fill: c.fireTip }, g);
+  el('path', { d: 'M0,-29.5 L7.5,-23 L0,-17 L-7.5,-23 Z', class: 'lm-crater', fill: c.fire }, g);
+  el('path', { d: 'M0,-26.5 L4.2,-23 L0,-19.8 L-4.2,-23 Z', class: 'lm-crater-hot', fill: c.fireTip }, g);
   // a thin wisp of smoke
-  el('path', { d: `M0.5,-21 C${f(-3 + v.lean * 2)},-25 4,-29 ${f(0.5 + v.lean * 2)},-34 S-2,-37 ${f(1.5 + v.lean)},-38.5`, class: 'lm-smoke', fill: 'none', stroke: c.rockLight, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
+  el('path', { d: `M0.5,-30 C${f(-3 + v.lean * 2)},-32 4,-34 ${f(0.5 + v.lean * 2)},-36 S-2,-38 ${f(1.5 + v.lean)},-39`, class: 'lm-smoke', fill: 'none', stroke: c.rockLight, 'stroke-width': 1.6, 'stroke-linecap': 'round' }, g);
   // an ember that pops now and then (idle motion only)
-  el('circle', { cx: 2, cy: -19, r: 0.9, class: 'lm-ember', fill: c.fireHot }, g);
-  // moss smothering the cone (only shown when strangled)
-  el('path', { d: 'M-16.5,12.5 C-12,0 -7,-13 0,-16 C7,-13 12,0 16.5,12.5 Z', class: 'lm-smother', fill: c.moss }, g);
+  el('circle', { cx: 2, cy: -27, r: 0.9, class: 'lm-ember', fill: c.fireHot }, g);
+  // moss creeping up the cone (only shown when strangled); the ashen crater stays visible above it
+  el('path', { d: 'M-17,12.5 C-15,2 -12,-8 -8,-15 C-4,-12 -2,-16 0,-14 C3,-17 5,-12 8,-15 C12,-8 15,2 17,12.5 Z', class: 'lm-smother', fill: c.moss, stroke: c.mossDeep, 'stroke-width': 0.8 }, g);
   g.style.setProperty('--lm-phase', `${(v.phase * -7).toFixed(2)}s`);
 };
 

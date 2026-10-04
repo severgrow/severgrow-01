@@ -25,6 +25,15 @@ One line each: where the brief left room, what was chosen and why.
 - The pill's clock "X turns left" is the smaller of the turn limit and half the deck (each round takes at least one card per player); the old unused end-of-game note was deleted.
 - Gold hexes: a soft amber tint, a fine grain of tiny dots, a thin edge and the "2" badge (no stripes).
 - Pile cards reuse the hand's card component scaled to the piles row (1:1.42); in the Draw step they glow softly and lift 2pt instead of a thick outline.
+- Step 3: on tall phones the board is width-limited; spare height goes to the piles (up to +40pt) then the message row (up to +40pt), so no gap between zones exceeds 16pt.
+- Step 3: the coach and first-time tips stop 104px short of the right edge while Undo shows, so they never cover the Undo chip.
+- Step 4: my home is a small gnarled tree (round, soft shapes, a mint circle in its hollow); the opponent's is a faceted basalt volcano (angular, a red-orange diamond crater): shape alone tells them apart in greyscale.
+- Step 4: the volcano is drawn as tall as the tree (peak at the same rise) with a thin light rim, so it stays readable on its dark lava tile and at 40pt.
+- Step 4: the danger ring is drawn in the other side's colour on the blocked sides (red on my tree, mint on the volcano), with "N/6" under the tile; it never flashes.
+- Step 4: idle motion (sway, falling leaf, smoke, breathing crater, embers) runs only with motion on and Effects above Low; Material detail Low draws the landmarks flat (no highlights, flowers or basalt layers).
+- Step 4: the Strangle finish is pulse 380ms, hold 260ms, smother/wither 820ms, bloom/roar 480ms (1.94s at Normal), scaled down by speed; Reduce motion shows only the smother/wither (500ms).
+- Step 4: home sounds: tree tap = soft rustle and a warm note; volcano tap = low rumble with crackles; smothered = a breathy sigh; withered = a low grind. All go through the existing sound toggle.
+- Step 4: the strangled volcano keeps its ashen crater visible above the moss (the first draft hid it under a flat green triangle).
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 
