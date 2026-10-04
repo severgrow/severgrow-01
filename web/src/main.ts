@@ -1603,7 +1603,21 @@ function hintCtx(v: View): HintCtx {
       return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
     })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
+    fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
+    grew: grewThisTurn(),
   };
+}
+
+/** v0.8: what used my sprout this turn (a Fruit card uses it too): the last such move since my draw. */
+function grewThisTurn(): null | 'sprout' | 'fruit' {
+  const log = session!.log;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const a = log[i]!;
+    if (a.t === 'Draw' || a.t === 'EndAct' || a.t === 'Discard') return null;
+    if (a.t === 'PlayFruit') return 'fruit';
+    if (a.t === 'Sprout') return 'sprout';
+  }
+  return null;
 }
 
 /**

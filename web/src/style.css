@@ -4178,56 +4178,45 @@ html.final-turns .game::after {
   pointer-events: none;
 }
 
-/* ---------- v0.6 Fruit cards ---------- */
-/* Bone-cream face, a mushroom with spores, a small "Fruit" print, a thin pearly edge and a
-   low-key raised look. No suit colour (and no amber, mint or coral). */
+/* ---------- v0.6 Fruit cards (v0.8 UI pass: one of the family) ---------- */
+/* The same card as the numbered ones (face, border, depth, corners, inner frame), in its own
+   bone cream (no suit, gold or player colour): a small mushroom where the number sits, a big
+   one where the suit sits. */
 .card.fruit {
-  --card-bg: linear-gradient(160deg, #f4ecdb 0%, #ebe0c8 55%, #e2d5ba 100%);
-  --card-ink: #4a3a2a;
-  background: var(--card-bg);
-  color: var(--card-ink);
-  border-color: transparent;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -2px 3px rgb(90 70 40 / 0.12), 0 1px 2px rgb(0 0 0 / 0.25);
-  grid-template-rows: 1fr auto;
-  align-items: center;
+  --suit: #eadfc4;
 }
-.card.fruit::before {
-  /* the thin pearly (iridescent) edge */
-  content: '';
-  position: absolute;
-  inset: -1.5px;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: conic-gradient(from 210deg, #d9d2ec, #cfe3ea, #efe7cf, #e6d6e8, #d6e6dc, #d9d2ec);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
+.card.fruit .c-num,
+.card.fruit .c-suit {
+  color: var(--suit);
 }
-.card.fruit .c-fruit {
-  font-size: calc(var(--ch) * 0.42);
-  line-height: 1;
-  display: grid;
-  place-items: center;
+.card.fruit::after {
+  border: 1.5px solid color-mix(in srgb, var(--suit) 60%, transparent) !important;
 }
-.card.fruit .c-print {
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.75;
+.card.fruit .c-idx {
+  display: block;
+  line-height: 0;
+  padding-top: calc(var(--cw) * 0.04);
 }
-.pile-top.card.fruit .c-fruit {
-  font-size: calc(var(--ch) * 0.36);
+.card.fruit .c-idx svg {
+  width: calc(var(--cw) * 0.3);
+  height: calc(var(--cw) * 0.3);
+}
+/* the mushroom is the card's identity: a little bigger than a suit icon */
+.card.fruit .c-fruit svg,
+.dock .pile-top.card.fruit .c-fruit svg {
+  width: calc(var(--cw) * 0.58);
+  height: calc(var(--cw) * 0.58);
 }
 /* in the hand: a small gap before the Fruit cards, a soft glow when one has a target */
 .hand .card.fruit-gap {
   margin-left: calc(min(-6px, calc((100% - 28px - var(--n) * var(--cw)) / max(var(--n) - 1, 1))) + 6px);
 }
 .hand .card.fruit.fruit-ready {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.35), 0 0 10px 2px color-mix(in srgb, #e9e2f4 55%, transparent);
-}
-.hand .card.fruit.dim {
-  opacity: 0.55;
+  border-color: color-mix(in srgb, var(--suit) 80%, var(--c-line));
+  box-shadow:
+    inset 1px 1px 0 color-mix(in srgb, var(--m-rimLight, #fff) calc(var(--m-rim, 0.3) * 60%), transparent),
+    1px 4px 7px -3px color-mix(in srgb, #000 75%, transparent),
+    0 0 10px 1px color-mix(in srgb, var(--suit) 45%, transparent);
 }
 .piles {
   position: relative;
@@ -4235,7 +4224,7 @@ html.final-turns .game::after {
 
 @media (prefers-reduced-motion: reduce) {
   .hand .card.fruit.fruit-ready {
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 0 0 2px #d9d2ec;
+    box-shadow: 0 0 0 2px var(--suit);
   }
 }
 /* a Fruit card's targets: a calm pearly dashed ring (any strength), no colour alarm */
@@ -4490,15 +4479,16 @@ html.final-turns .game::after {
 }
 .landmark .lm-sprite {
   transform-box: fill-box;
-  transform-origin: 50% 100%;
+  transform-origin: 50% 50%;
 }
 .lm-heart {
   fill: var(--c-you);
   opacity: 0.85;
 }
 .lm-tree .lm-canopy {
+  /* v0.8: seen from above, the canopy breathes and turns a touch around its centre */
   transform-box: fill-box;
-  transform-origin: 50% 100%;
+  transform-origin: 50% 50%;
 }
 .lm-shadow {
   opacity: 0.34;
@@ -4513,8 +4503,8 @@ html.final-turns .game::after {
 .lm-smother {
   opacity: 0;
   transform-box: fill-box;
-  transform-origin: 50% 100%;
-  transform: scaleY(0);
+  transform-origin: 50% 50%;
+  transform: scale(0.3);
 }
 /* the ring: one segment per side, lit when that side is blocked */
 .lm-ring {
@@ -4568,13 +4558,13 @@ html.final-turns .game::after {
   animation-delay: var(--lm-phase, 0s);
 }
 @keyframes lm-sway {
-  0%, 100% { transform: rotate(-1.6deg); }
-  50% { transform: rotate(1.6deg); }
+  0%, 100% { transform: rotate(-1.2deg) scale(1); }
+  50% { transform: rotate(1.2deg) scale(1.015); }
 }
 @keyframes lm-leaf {
   0%, 82% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
   85% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-6px, 26px) rotate(160deg); }
+  100% { opacity: 0; transform: translate(5px, 6px) rotate(160deg); }
 }
 @keyframes lm-smoke {
   0%, 100% { transform: translate(0, 0); opacity: 0.32; }
@@ -4597,7 +4587,6 @@ html.final-turns .game::after {
   animation: lm-tremble 0.5s ease-in-out infinite;
 }
 .landmark.danger.lm-volcano .lm-smoke {
-  stroke-width: 2.6;
   opacity: 0.6;
 }
 .landmark.worried.lm-volcano .lm-sprite {
@@ -4634,7 +4623,7 @@ html.final-turns .game::after {
 /* strangled: the volcano smothered by moss (smoke stops, the crater dies to ash); the tree withers */
 .landmark.strangled.lm-volcano .lm-smother {
   opacity: 0.94;
-  transform: scaleY(1);
+  transform: scale(1);
   transition: transform 0.82s cubic-bezier(0.3, 0.8, 0.3, 1), opacity 0.4s ease-out;
 }
 .landmark.strangled.lm-volcano .lm-smoke,
@@ -4661,7 +4650,7 @@ html.final-turns .game::after {
   opacity: 0;
 }
 .landmark.strangled.lm-tree .lm-canopy {
-  transform: translateY(1.5px) scaleY(0.94);
+  transform: scale(0.92);
   animation: none;
 }
 /* the winner: a bright bloom of petals (tree) or an ember burst (volcano), once */

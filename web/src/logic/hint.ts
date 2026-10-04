@@ -34,6 +34,10 @@ export type HintCtx = {
   /** v0.7: I hold cards that can bloom, but no Bloom fits on the board (the smallest group's size) */
   bloomBlocked?: number | null;
   throwEndsTurn: boolean;
+  /** v0.8: a Fruit card in my hand can be played now (offered next to the sprout) */
+  fruitReady?: boolean;
+  /** v0.8: what used the turn's sprout so far (a Fruit card uses it too), or null */
+  grew?: null | 'sprout' | 'fruit';
 };
 
 const h = (text: string, arrow: HintArrow = null): Hint => ({ text, arrow });
@@ -66,7 +70,13 @@ export const hintFor = (c: HintCtx): Hint => {
       if (c.kindPicked) return h('Tap a glowing hex', 'up');
       if (c.hexWithNoMove) return h('Nothing grows there right now');
       if (c.handEmpty) return h('No cards left. Tap “End turn”', 'down');
+      // v0.8: the sprout (or a Fruit card) is used: say so, and point at the throw
+      if (c.grew && !c.canSprout) {
+        const done = c.grew === 'fruit' ? 'Fruit used' : 'Sprouted';
+        return h(c.canCombo ? `${done} · Bloom, or “Throw a card”` : `${done} · Next: “Throw a card”`, 'down');
+      }
       if (!c.canCombo && c.bloomBlocked) return h(BLOOM.tooFew(c.bloomBlocked));
+      if (c.canSprout && c.fruitReady) return h(FRUIT.orSprout, 'down');
       if (c.canSprout) return h(c.words.tapHint, 'down');
       if (c.canCombo) return h('Bloom, or “Throw a card”', 'down');
       return h('Nothing can grow. Tap “Throw a card”', 'down');

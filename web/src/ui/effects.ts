@@ -26,10 +26,13 @@ export const removeAfter = (a: Animation | null, node: Element, fallbackMs: numb
 /** The class for a card's look: its suit (s0-s3), or `fruit` for a v0.6 Fruit card. */
 export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c.suit}`);
 
-/** A card's face: number and suit, or (a Fruit card) the mushroom and a small "Fruit" print. */
+/**
+ * A card's face: number and suit, or (a Fruit card, v0.8 UI pass) the same two parts with the
+ * mushroom in both places: a small corner index where the number sits, a big icon where the suit sits.
+ */
 export const cardFace = (c: Card) =>
   c.suit === null
-    ? `<span class="c-fruit">${FRUIT_SVG}</span><span class="c-print">${FRUIT.print}</span>`
+    ? `<span class="c-num c-idx" aria-hidden="true">${FRUIT_SVG}</span><span class="c-suit c-fruit" title="${FRUIT.print}">${FRUIT_SVG}</span>`
     : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
 
 export const shakeFrames = (a: number): Keyframe[] => [

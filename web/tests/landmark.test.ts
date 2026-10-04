@@ -1,6 +1,6 @@
 // Step 4: the two homes as landmarks (my tree, the opponent's volcano). Pure logic: the
-// landmark's box on its tile (upright, rising at most a quarter tile above it, never over a
-// neighbour's number or a Bloom ghost's number, in both orientations and at any tile size),
+// landmark's box on its tile (v0.8: top-down, inside its own hex; never over a neighbour's
+// number or a Bloom ghost's number, in both orientations and at any tile size),
 // deterministic variation, which idle motions run, the danger state, and the Strangle finish
 // timeline (capped at 2.0 s at Normal speed, skippable, calm with Reduce motion).
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,17 +24,28 @@ const circleHitsBox = (cx: number, cy: number, r: number, b: { x0: number; y0: n
   return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
 };
 
+/** Inside a hex of size S centred at 0,0 (flat: points left-right; pointy: points up-down). */
+const insideHex = (x: number, y: number, S: number, o: 'pointy' | 'flat') => {
+  const [u, v] = o === 'flat' ? [x, y] : [y, x];
+  const ax = Math.abs(u);
+  const ay = Math.abs(v);
+  return ay <= (Math.sqrt(3) / 2) * S + 1e-9 && Math.sqrt(3) * ax + ay <= Math.sqrt(3) * S + 1e-9;
+};
+
 describe('the landmark on its tile', () => {
   for (const o of ['pointy', 'flat'] as const) {
     for (const kind of ['tree', 'volcano'] as const) {
-      it(`${o}, ${kind}: upright, at most a quarter tile above the tile, never over a neighbour's number`, () => {
+      it(`${o}, ${kind}: drawn top-down inside its own tile (v0.8), never over a neighbour's number`, () => {
         setOrient(o);
         for (const S of [18, 30, 44]) {
           const b = landmarkBox(kind, o, S);
-          const tileH = o === 'pointy' ? 2 * S : Math.sqrt(3) * S;
-          // it rises at most 25% of the tile height above the tile's top
-          expect(-b.y0).toBeLessThanOrEqual(tileH / 2 + 0.25 * tileH + 1e-9);
-          expect(b.x1 - b.x0).toBeGreaterThan(0.6 * S); // still a real landmark
+          // v0.8 UI pass: the whole box lies inside its own hex (all four corners), so it never
+          // rises above the tile or reaches into a neighbour
+          for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]] as const) {
+            expect(insideHex(x, y, S, o), `${o} ${kind} S=${S} corner ${x},${y}`).toBe(true);
+          }
+          expect(b.x1 - b.x0).toBeGreaterThan(1.1 * S); // still a real landmark: most of the tile
+          expect(b.y1 - b.y0).toBeGreaterThan(1.0 * S);
           const plate = numberPlate(S);
           const c = centerOf('0,0');
           for (const d of DIRECTIONS) {

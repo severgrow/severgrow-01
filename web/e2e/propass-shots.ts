@@ -119,8 +119,8 @@ for (const size of SIZES) {
     const idle = await open(size, { state: stateWith({}, [[0, 6], [1, 6], [2, 6]]), settings: { reduceMotion: true } });
     const c1 = await hexCenter(idle, '-2,2');
     const c2 = await hexCenter(idle, '2,-2');
-    await shot(idle, '4-tree-idle', size, { x: c1.x - 60, y: c1.y - 80, width: 120, height: 130 });
-    await shot(idle, '4-volcano-idle', size, { x: c2.x - 60, y: c2.y - 80, width: 120, height: 130 });
+    await shot(idle, '4-tree-idle', size, { x: c1.x - 60, y: c1.y - 60, width: 120, height: 120 });
+    await shot(idle, '4-volcano-idle', size, { x: c2.x - 60, y: c2.y - 60, width: 120, height: 120 });
     await idle.touchscreen.tap(c1.x, c1.y);
     await idle.waitForTimeout(150);
     await shot(idle, '4-tree-tapped-card', size);

@@ -141,7 +141,7 @@ export const FRUIT = Object.freeze({
   /** the one-time tip (re-openable from How to play) */
   tip: `Fruit cards: play one on an ${lower} tile that touches yours to remove it, even a 9.`,
   /** How to play (HTML) */
-  howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. Play as many as you hold. A Fruit card never makes a combo or a sprout; you can throw it, and then ${OPP.the} can take it.`,
+  howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. A Fruit card uses your sprout for the turn (one sprout or one Fruit card per turn; a Bloom is still fine). It never makes a combo; you can throw it, and then ${OPP.the} can take it.`,
   /** first time a Fruit card is picked */
   anyStrength: 'Any strength: even a 9 can go.',
   /** the hint while a Fruit card is picked */
@@ -153,6 +153,10 @@ export const FRUIT = Object.freeze({
   /** why a held Fruit card has nothing to do */
   noTarget: `No ${lower} tile touches yours.`,
   notNow: 'Play it in your Grow step.',
+  /** v0.8: a Fruit card uses the turn's sprout */
+  used: 'Sprout used this turn. Fruit is back next turn.',
+  /** v0.8: the Grow step's first hint when a Fruit card is playable */
+  orSprout: 'Sprout a card, or play your Fruit card',
   /** the burst banner */
   banner: 'Fruited!',
   /** a move, in plain words */

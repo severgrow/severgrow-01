@@ -170,3 +170,31 @@ describe('the hint line with a picked Fruit card (self-review fix)', () => {
     expect(hintFor({ ...base, fruit: null }).text).toBe("That card can't grow anywhere now");
   });
 });
+
+// v0.8 UI pass: the Fruit card is one of the family: the same parts as a numbered card (a corner
+// index where the number sits, a centred icon where the suit sits), the mushroom as its identity
+describe('the Fruit card face (v0.8 UI pass)', () => {
+  it('has the same two parts as a numbered card: a corner index and a centred icon', async () => {
+    const { cardFace } = await import('../src/ui/effects.js');
+    const { FRUIT_SVG } = await import('../src/ui/icons.js');
+    const f = cardFace(fruitCard(72));
+    const n = cardFace(num(1, 0, 3));
+    expect(n).toMatch(/class="c-num num"/);
+    expect(n).toMatch(/class="c-suit"/);
+    expect(f).toMatch(/class="c-num c-idx"/);
+    expect(f).toMatch(/class="c-suit c-fruit"/);
+    expect(f.split(FRUIT_SVG).length - 1).toBe(2); // the corner index and the big icon
+    expect(f).not.toMatch(/c-print/);
+  });
+});
+
+describe('a held Fruit card once the turn\'s sprout is used (v0.8)', () => {
+  it('is not ready and says why: the sprout is used, it is back next turn', () => {
+    const s = at(tiles, [fruitCard(72), num(1, 0, 3)]);
+    const v = { ...viewFor(s, 0), sproutsThisTurn: 1 };
+    const st = fruitCardState(v, legalActions(v), 72);
+    expect(st.ready).toBe(false);
+    expect(st.reason).toBe(FRUIT.used);
+    expect(FRUIT.used).toMatch(/next turn/);
+  });
+});
