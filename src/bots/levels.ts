@@ -2,7 +2,7 @@
 // original GreedyBot, unchanged. All levels read only their own View, are pure and
 // deterministic: the same (view, level, seed) always gives the same action. Search
 // budgets are counted in iterations, never in time.
-import { bestMeldPartition, createCards, legalActions, mulberry32, score } from '../engine/index.js';
+import { bestMeldPartition, coordKey, createCards, legalActions, mulberry32, score } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import { lookBlooms, shortlistBlooms } from './bloomLook.js';
 import { simulate } from './evaluate.js';
@@ -44,9 +44,15 @@ export type LevelConfig = {
   fruitRandomRate: number;
   /** v0.6: chance per Throw step of throwing a Fruit card away (levels 1-2). */
   fruitThrowRate: number;
+  /** v0.7: how it picks a Bloom: 'random' (any legal one), 'quick' (the quick look only), 'full' (the full evaluation). */
+  bloomBand: 'random' | 'quick' | 'full';
+  /** v0.7: chance of not blooming when it would (levels 1-3). */
+  bloomSkip: number;
+  /** v0.7: holds a plain 3-card Bloom when the unseen cards make a Bloom of 4 likely (levels 8-9). */
+  bloomHold: boolean;
 };
 
-const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0, fruitRandomRate: 0, fruitThrowRate: 0 } as const;
+const base = { mistakeRate: 0, topN: 1, skipGrowth: 0, dangerWeight: WEIGHTS.exposure, pressureWeight: WEIGHTS.pressure, cardDenial: false, discardStyle: 'greedy', replyWeight: 0.5, lookahead: 0, searchIterations: 0, strengthenTier: 3, fruitTier: 3, whimRate: 0, fruitRandomRate: 0, fruitThrowRate: 0, bloomBand: 'full', bloomSkip: 0, bloomHold: false } as const;
 
 /** Tuned with the ladder simulation (docs/LADDER.md). */
 export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
@@ -56,20 +62,23 @@ export const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
   // 7-8 full evaluation; 9 also the opponent's unseen Fruit cards.
   // v0.6 Fruit cards: 1-3 play one on a random target at a random moment (1-2 sometimes throw
   // one away); 4-6 simple rules; 7-8 full evaluation; 9 also counts the unseen Fruit cards.
-  1: { ...base, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.35, fruitThrowRate: 0.25 },
-  2: { ...base, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.3, fruitThrowRate: 0.15 },
-  3: { ...base, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084, strengthenTier: 1, fruitTier: 0, fruitRandomRate: 0.3 },
-  4: { ...base, mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135, strengthenTier: 1, fruitTier: 2 },
-  5: { ...base, mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18, strengthenTier: 2, fruitTier: 2 },
-  6: { ...base, mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255, strengthenTier: 2, fruitTier: 2 },
+  // v0.7 Blooms: 1-3 a random legal Bloom, and sometimes none (45%, 35%, 25%); 4-6 the best
+  // quick look (tiles, gold, strongest replacement, compact); 7-9 the full evaluation, and 8-9
+  // hold a plain 3-card Bloom when the unseen cards make a Bloom of 4 likely.
+  1: { ...base, bloomBand: 'random', bloomSkip: 0.45, mistakeRate: 0.855, topN: 8, skipGrowth: 0.57, dangerWeight: 0.03, pressureWeight: 0.015, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.35, fruitThrowRate: 0.25 },
+  2: { ...base, bloomBand: 'random', bloomSkip: 0.35, mistakeRate: 0.765, topN: 7, skipGrowth: 0.51, dangerWeight: 0.09, pressureWeight: 0.045, strengthenTier: 0, fruitTier: 0, whimRate: 0.03, fruitRandomRate: 0.3, fruitThrowRate: 0.15 },
+  3: { ...base, bloomBand: 'random', bloomSkip: 0.25, mistakeRate: 0.648, topN: 6, skipGrowth: 0.432, dangerWeight: 0.168, pressureWeight: 0.084, strengthenTier: 1, fruitTier: 0, fruitRandomRate: 0.3 },
+  4: { ...base, bloomBand: 'quick', mistakeRate: 0.495, topN: 5, skipGrowth: 0.33, dangerWeight: 0.27, pressureWeight: 0.135, strengthenTier: 1, fruitTier: 2 },
+  5: { ...base, bloomBand: 'quick', mistakeRate: 0.36, topN: 4, skipGrowth: 0.24, dangerWeight: 0.36, pressureWeight: 0.18, strengthenTier: 2, fruitTier: 2 },
+  6: { ...base, bloomBand: 'quick', mistakeRate: 0.135, topN: 3, skipGrowth: 0.09, dangerWeight: 0.51, pressureWeight: 0.255, strengthenTier: 2, fruitTier: 2 },
   7: { ...base }, // GreedyBot (v0.5: with the full Strengthen and Fruit evaluation)
   // 8: keeps its strong cards and combos when throwing (level 7's weak spot), but still
   //    slips now and then (v0.5 ladder: 0.45 slipped too often, 57.4% vs 7; 0.15 gives
   //    68.4% vs 7 and still loses to 9, 35.7%; docs/LADDER.md).
-  8: { ...base, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 },
+  8: { ...base, bloomHold: true, discardStyle: 'keepHigh', mistakeRate: 0.15, topN: 3 },
   // 9: plans its whole turn, keeps strong cards, throws what helps the opponent least,
   //    and imagines 6 possible opponent hands to judge their best reply.
-  9: { ...base, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
+  9: { ...base, bloomHold: true, lookahead: 1, discardStyle: 'keepHigh', cardDenial: true, searchIterations: 6, replyWeight: 0.3, strengthenTier: 4, fruitTier: 4 },
 };
 
 /** A 32-bit seed for the bot's choices, from public numbers only (FNV-1a over the inputs). */
@@ -200,7 +209,64 @@ export const decideLevelAction = (v: View, level: Level, seed: number): Decision
 };
 
 const withReason = (s: Scored): Decision =>
-  s.facts.kind === 'strengthen' || s.facts.kind === 'fruit' ? { action: s.action, reason: s.facts.reason ?? '' } : { action: s.action };
+  s.facts.kind === 'strengthen' || s.facts.kind === 'fruit'
+    ? { action: s.action, reason: s.facts.reason ?? '' }
+    : s.facts.kind === 'bloom'
+      ? { action: s.action, reason: `full evaluation: the best Bloom (score ${s.score.toFixed(2)})` }
+      : { action: s.action };
+
+/** A plain 3-card Bloom is held when the unseen cards give at least this chance of a 4 soon. */
+export const HOLD_CHANCE = 0.2;
+/** ...and the best move without it costs at most this much (about two tiles). */
+export const HOLD_MARGIN = 2.5;
+
+/**
+ * v0.7: the chance that waiting turns these 3 Bloom cards into a Bloom of 4: the unseen cards
+ * (not in my hand, not thrown) that would join it ("outs"), over my next draws (at most 3, fewer
+ * near the end). Public information only.
+ */
+export const holdChance = (v: View, cards: readonly Card[]): { outs: number; chance: number } => {
+  const unseen = unseenCards(v).filter((c) => c.suit !== null);
+  const isSet = cards.every((c) => c.rank === cards[0]!.rank);
+  const suits = new Set(cards.map((c) => c.suit));
+  const lo = Math.min(...cards.map((c) => c.rank));
+  const hi = Math.max(...cards.map((c) => c.rank));
+  const outs = unseen.filter((c) => (isSet ? c.rank === cards[0]!.rank && !suits.has(c.suit) : c.suit === cards[0]!.suit && (c.rank === lo - 1 || c.rank === hi + 1))).length;
+  const max = v.config.maxTurnsPerPlayer;
+  const byLimit = max > 0 ? max - Math.ceil(v.turnNumber / 2) : Infinity;
+  const byDeck = Math.floor(v.deckCount / 2);
+  const draws = Math.max(0, Math.min(3, byLimit, byDeck));
+  const chance = unseen.length && draws ? 1 - (1 - outs / unseen.length) ** draws : 0;
+  return { outs, chance };
+};
+
+/** The level's Bloom band applied to its chosen move (levels 1-6 and the holding of 8-9). */
+const bloomBand = (v: View, c: LevelConfig, ranked: readonly Scored[], pick: Scored, seed: number): Decision => {
+  const b = pick.action;
+  if (v.phase !== 'ACT' || b.t !== 'Bloom' || pick.score >= WEIGHTS.win / 2) return withReason(pick);
+  // (its own random stream, so the rest of the bot's choices are not shifted by it)
+  const br = mulberry32(seed ^ 0x68e31da4);
+  const other = () => ranked.find((r) => r.action.t !== 'Bloom' && r.score > NEVER / 2);
+  if (c.bloomBand === 'random') {
+    const alt = other();
+    if (alt && br() < c.bloomSkip) return { action: alt.action, reason: 'skipped a bloom (levels 1-3 sometimes do)' };
+    const looks = lookBlooms(v);
+    return { action: looks[Math.floor(br() * looks.length)]!.action, reason: `a random bloom (levels 1-3: one of ${looks.length})` };
+  }
+  if (c.bloomBand === 'quick') return { action: lookBlooms(v)[0]!.action, reason: 'best quick look (levels 4-6: tiles, gold, strongest replacement, compact)' };
+  if (c.bloomHold && b.cards.length === 3 && b.hexes.every((h) => !v.board[coordKey(h)])) {
+    const cards = b.cards.map((id) => v.hand.find((h) => h.id === id)!);
+    const h = holdChance(v, cards);
+    const alt = ranked.find((r) => r.action.t !== 'Bloom' && r.action.t !== 'EndAct' && r.score > NEVER / 2 && !usesAny(r.action, b.cards));
+    if (alt && h.chance >= HOLD_CHANCE && alt.score >= pick.score - HOLD_MARGIN) {
+      return { action: alt.action, reason: `holds ${cards.map((x) => x.rank).join('-')} for a Bloom of 4 (${h.outs} unseen cards would join it, ${Math.round(h.chance * 100)}% soon)` };
+    }
+  }
+  return withReason(pick);
+};
+
+const usesAny = (a: Action, ids: readonly number[]) =>
+  (a.t === 'Sprout' && ids.includes(a.card)) || (a.t === 'Bloom' && a.cards.some((x) => ids.includes(x))) || ((a.t === 'PlayFruit' || a.t === 'Discard') && ids.includes(a.card));
 
 /** A move for any knob settings (used by the levels and by the ladder's tuning runs). */
 export const chooseWithConfig = (v: View, c: LevelConfig, seed: number): Action => decideWithConfig(v, c, seed).action;
@@ -301,7 +367,7 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
   if (c.mistakeRate > 0 && ranked.length > 1 && rng() < c.mistakeRate) {
     const ok = ranked.filter((r) => r.score > NEVER / 2);
     const n = Math.min(c.topN, ok.length);
-    if (n > 1) return withReason(ok[1 + Math.floor(rng() * (n - 1))]!);
+    if (n > 1) return bloomBand(v, c, ranked, ok[1 + Math.floor(rng() * (n - 1))]!, seed);
   }
-  return withReason(ranked[0]!);
+  return bloomBand(v, c, ranked, ranked[0]!, seed);
 };

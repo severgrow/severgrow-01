@@ -26,6 +26,10 @@ default (see the appendix).
   resolution `bloom`. Any number per Grow step, in any order with Sprout, Strengthen and Fruit cards.
 - **Removed:** the two old combo actions, directions, straight-line placement and the one-bend option. See
   "Retired rules" at the end. Everything else is unchanged.
+- **Bots (bots-v0.9):** levels 1-3 bloom at random (seeded) and sometimes skip a Bloom; 4-6 pick
+  by a quick look (tiles, gold, strongest replacement, compact); 7-9 fully score a short list of
+  10, and 8-9 may hold a plain 3-card Bloom when the unseen cards make a Bloom of 4 likely
+  (`docs/BOT-TACTICS.md`).
 
 **v0.6: Seed mode removed, Fruit cards** (rules version `v0.6-fruit-cards`, bot version `bots-v0.8`)
 - **Seed mode is gone.** The one-card move is the Sprout everywhere: a card's number becomes the
@@ -499,7 +503,8 @@ ends 7.8% of games. Sprout means a hand with no combo can still grow from turn 1
 are pure and deterministic (same view, level and seed, same move), and count search in
 iterations, never time. Level 7 is GreedyBot; levels 1-6 add sloppiness to it; level 8 throws
 better; level 9 plans its turn and imagines the opponent's reply. Each level judges
-Strengthen and Fruit at its own skill (`docs/BOT-TACTICS.md`).
+Strengthen, Fruit cards and Blooms at its own skill (`docs/BOT-TACTICS.md`; v0.7 Bloom bands:
+1-3 random, 4-6 quick look, 7-9 full evaluation, 8-9 holding).
 
 Ladder (800 games per pairing, starts swapped; `docs/LADDER.md`): every level beats the one
 below in 64-72% of games (target 58%), level 9 beats level 7 in 76.8% (target 65%), and

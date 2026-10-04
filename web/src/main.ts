@@ -1460,7 +1460,7 @@ function applyLayout() {
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
   const key = `${w}x${h}r${radius}`;
-  // phones: the board sits just above the toolbar (board.setup resets this, so set it every time)
+  // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;

@@ -3199,48 +3199,6 @@ svg.usable .hex-cell {
 .dock > * {
   min-height: 0;
 }
-/* the board tools: one slim row with labels (item 4) */
-.toolbar {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-}
-.tool {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--c-line);
-  background: color-mix(in srgb, var(--c-bg) 80%, transparent);
-  color: var(--c-muted);
-  font: inherit;
-  font-size: 0.78rem;
-  cursor: pointer;
-  position: relative;
-  white-space: nowrap;
-}
-.tool::after {
-  /* a 44px tall hit area around a slim pill */
-  content: '';
-  position: absolute;
-  inset: -6px -2px;
-}
-.tool[aria-pressed='true'] {
-  color: var(--c-bg);
-  background: var(--c-text);
-  border-color: var(--c-text);
-}
-.tool .i {
-  width: 16px;
-  height: 16px;
-}
-.tool[hidden] {
-  display: none;
-}
 /* the hint line: always one line, never changes the dock */
 .hint-line {
   margin: 0;
@@ -3417,7 +3375,7 @@ html[data-layout='side'] .dock-overlays {
   inset: -11px -6px;
 }
 
-/* phones: the board sits just above the toolbar; spare height becomes headroom at the top */
+/* phones: the board sits just above the dock; spare height becomes headroom at the top */
 html[data-layout='stack'] .board-wrap {
   padding-bottom: 6px;
 }
@@ -3606,47 +3564,8 @@ html[data-layout='stack'] .board-wrap {
 #deck[data-count='last'] .pile-label {
   color: var(--c-gold, var(--c-accent));
 }
-/* overhaul item 13: the hint's tiny arrow, bobbing gently toward where to tap */
-.hint-arrow {
-  display: inline-block;
-  margin-right: 6px;
-  color: var(--c-accent);
-  font-size: 0.8rem;
-  animation: hint-bob-down 1.6s ease-in-out infinite;
-}
-.hint-arrow.up {
-  animation-name: hint-bob-up;
-}
-@keyframes hint-bob-down {
-  50% {
-    transform: translateY(2px);
-  }
-}
-@keyframes hint-bob-up {
-  50% {
-    transform: translateY(-2px);
-  }
-}
-.reduce-motion .hint-arrow {
-  animation: none;
-}
-/* overhaul item 9: Undo sits in the toolbar; dim when there is nothing to take back, a dot when there is */
-.tool:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
-.tool.undo.ready::before {
-  content: '';
-  position: absolute;
-  top: 3px;
-  right: 5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--c-accent);
-}
 /* The coach and the first-time tips sit over the dock's hint and forecast rows (never over
-   the board, the toolbar, the piles or the hand), in a compact form. While a Confirm bar is up
+   the board, the piles or the hand), in a compact form. While a Confirm bar is up
    they shrink to one line over the hint row, so Confirm stays reachable. One at a time. */
 .dock-overlays,
 html[data-layout='side'] .dock-overlays {
@@ -3830,7 +3749,6 @@ html[data-layout='side'] .dock-overlays {
 }
 /* Primary = .btn.primary (one per moment), Secondary = .btn.ghost, Tertiary = .btn.link */
 .btn:active:not(:disabled),
-.tool:active:not(:disabled),
 .seg-btn:active,
 .chip:active,
 .icon-only:active,
@@ -3839,7 +3757,6 @@ html[data-layout='side'] .dock-overlays {
   transition: transform var(--press-ms) ease-out, box-shadow var(--press-ms) ease-out;
 }
 .reduce-motion .btn:active,
-.reduce-motion .tool:active,
 .reduce-motion .seg-btn:active,
 .reduce-motion .chip:active,
 .reduce-motion .icon-only:active,
