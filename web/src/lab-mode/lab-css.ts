@@ -38,4 +38,69 @@ export const LAB_CSS = `
 /* while watching, my seat is not mine: no taps on the board, hand or piles */
 body.lab-watching #board-wrap, body.lab-watching #hand, body.lab-watching .dock { pointer-events: none; }
 body.lab-watching .dock { opacity: 0.55; }
+
+/* ---- desktop (side layout): the coach and first-time tips get the empty space above the
+   piles, at full size, instead of a squeezed strip over the deck. Test copy only for now:
+   on docs/LIST-TO-IMPLEMENT.md to bring to the main game. ---- */
+html[data-layout='side'] .dock-overlays {
+  top: auto;
+  bottom: calc(100% + 18px);
+  left: 0;
+  right: 0;
+  height: auto;
+  max-height: min(42vh, 360px);
+  justify-content: flex-end;
+}
+html[data-layout='side'] .dock-overlays > .coach,
+html[data-layout='side'] .dock-overlays > .first-tip {
+  padding: 14px 16px 16px;
+  font-size: 1rem;
+  border-radius: 14px;
+}
+html[data-layout='side'] .dock-overlays > .coach:not([hidden]) {
+  display: block;
+}
+html[data-layout='side'] .dock-overlays .coach-head {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+html[data-layout='side'] .dock-overlays .coach-head > .i,
+html[data-layout='side'] .dock-overlays .coach-head > b {
+  display: inline-flex;
+}
+html[data-layout='side'] .dock-overlays .coach-main {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+}
+html[data-layout='side'] .dock-overlays .tip {
+  display: block;
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+html[data-layout='side'] .dock-overlays #coach-why {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+html[data-layout='side'] .dock-overlays .coach-actions {
+  margin-top: 12px;
+  gap: 8px;
+}
+html[data-layout='side'] .dock-overlays .coach-actions .btn {
+  min-height: 40px;
+  font-size: 0.95rem;
+}
+/* with the coach on, the dock sits low in its column so the coach has the room above it */
+html[data-layout='side'] .dock:has(#coach:not([hidden])) {
+  align-self: end;
+  margin-bottom: 12px;
+}
+html[data-layout='side'] .dock:has(#coach:not([hidden])) .dock-overlays {
+  max-height: calc(100vh - var(--dock-h, 360px) - 110px);
+}
 `;
