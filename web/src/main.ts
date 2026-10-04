@@ -47,7 +47,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { HEIGHTS, computeLayout } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, computeLayout } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -82,8 +82,9 @@ import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { fillIcons } from './ui/icons.js';
+import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
-import { getOrient, setOrient } from './logic/orient.js';
+import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
@@ -1537,7 +1538,7 @@ function applyLayout() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
-  const key = `${w}x${h}r${radius}`;
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
@@ -1547,9 +1548,17 @@ function applyLayout() {
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
   document.documentElement.dataset.orient = l.orient;
-  if (l.orient !== getOrient()) {
+  // Positioning pass: the board also turns (steps of 60 degrees) so the homes sit on the centre
+  // line, and the tile centres snap to device pixels (every gap the same); display only
+  const cfg = session?.state.config ?? newGame(1).config;
+  const rot = homeRotation(l.orient, cfg, HUMAN);
+  const grid = 1 / (l.scale * (window.devicePixelRatio || 1));
+  const familyChanged = l.orient !== getOrient();
+  if (familyChanged || rot !== getRotation() || Math.abs(grid - getPixelGrid()) > 1e-9) {
     setOrient(l.orient);
-    photosForOrientation();
+    setRotation(rot);
+    setPixelGrid(grid);
+    if (familyChanged) photosForOrientation();
     if (session) {
       board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
       lastAmbBoard = null;
@@ -1564,6 +1573,7 @@ function applyLayout() {
   root.setProperty('--race-h', px(HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
+  root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
   for (const [k, v] of Object.entries(l.rows)) root.setProperty(`--row-${k}`, px(v));
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));

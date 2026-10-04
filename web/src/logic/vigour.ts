@@ -8,7 +8,8 @@
 // border (a band about a third of a tile wide), so there is no seam.
 import type { ThemeId } from './themes.js';
 import { materialsOf } from './materials.js';
-import { toBoard, toScreen } from './orient.js';
+import { toBoard } from './orient.js';
+import { latticeCentre } from '../ui/geom.js';
 
 /** t = (strength - 1) / (maxRank - 1), clamped to 0..1. */
 export const vigour = (strength: number, maxRank: number): number =>
@@ -136,7 +137,8 @@ export const hexAt = (sx: number, sy: number): { q: number; r: number } => {
   else if (dr > ds) r = -q - s;
   return { q: q + 0, r: r + 0 };
 };
-export const centreOf = (q: number, r: number) => toScreen(S * SQ3 * (q + r / 2), S * 1.5 * r);
+/** A hex's centre in screen units: the board's own (rotated, pixel-snapped) lattice. */
+export const centreOf = (q: number, r: number) => latticeCentre(q, r);
 const NB: readonly [number, number][] = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
 /** Width of the blend band across a shared border, board units (about a third of a tile). */

@@ -2,6 +2,19 @@
 
 One line each: where the brief left room, what was chosen and why.
 
+## Positioning pass (v0.8.1)
+
+- "Points-up/down family" in the brief: on phones the board already uses the family that gives bigger tiles, which is points left-right in the code ("flat"). I kept that family; its neighbour directions include straight up, so the homes can be exactly vertical.
+- Home axis: the board turns in steps of 60 degrees within its family. This is display only: engine coordinates, saves and replays never change.
+  - Phones: the volcano is at the top and the tree at the bottom, on the centre line.
+  - Points-up-down boards (the 768x1024 tablet and desktop, where that family gives tiles 8% bigger: 107 vs 99pt): my tree on the left, the volcano on the right, level.
+- Equal gaps: the two lattice vectors are rounded to whole device pixels once, and every centre is built from them.
+  - Of the roundings next to the true vectors, the one with the most equal neighbour distances wins.
+  - Drift is at most 1.5 device pixels per step out from the centre, symmetric, so the board stays centred.
+  - The painted world uses the same lattice.
+- The board's area now matches the layout exactly. The CSS had an 8px margin against the layout's 4px, plus a 6px bottom padding that lifted the board 3px.
+- Footprint: rock shadows and edges, tile contact shadows and the home mounds' contact shadows now stay inside their own hex, still offset down-right (away from the top-left light). Grass and lava pictures still overlap their neighbours by design (one lawn), so I left that as it is.
+
 ## v0.8 UI pass
 
 - Rule (asked for by the user): a Fruit card uses the turn's Sprout, so a turn has one Sprout, one Strengthen or one Fruit card. Blooms are unaffected. The error for a second one is `SPROUT_LIMIT`, the same as a second Sprout. `fruitUsesSprout: false` brings back v0.6/v0.7 play (the legacy test preset uses it, since it has no Sprouts at all).

@@ -3160,8 +3160,12 @@ svg.usable .hex-cell {
 html[data-layout='side'] .play {
   grid-template-columns: minmax(0, 1fr) var(--dock-w, 380px);
   grid-template-rows: minmax(0, 1fr);
-  gap: 16px;
-  padding: 0 16px 12px;
+  /* the same margins as the layout's zones (logic/layout.ts) */
+  gap: var(--board-margin, 4px);
+  padding: 0 var(--board-margin, 4px) var(--board-margin, 4px);
+}
+html[data-layout='side'] .board-wrap {
+  margin: 0;
 }
 html[data-layout='side'] .dock {
   align-self: center;
@@ -3248,8 +3252,10 @@ html[data-layout='side'] .dock-overlays {
 }
 
 /* phones: the board sits just above the dock; spare height becomes headroom at the top */
+/* Positioning pass: the board's area is exactly the layout's zone (logic/layout.ts): the same
+   side margin, no extra padding (the old 6px at the bottom lifted the board 3px) */
 html[data-layout='stack'] .board-wrap {
-  padding-bottom: 6px;
+  margin: 0 var(--board-margin, 4px);
 }
 
 /* ---- overhaul item 7: calm legal-hex highlights ----

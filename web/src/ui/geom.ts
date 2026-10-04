@@ -1,6 +1,7 @@
 // Shared hex geometry and SVG helpers for the board, the materials and the lab.
 import { parseKey } from '../../../src/engine/index.js';
-import { toScreen } from '../logic/orient.js';
+import { getOrient, getRotation, toScreen } from '../logic/orient.js';
+import { snapBasis } from '../logic/pixelgrid.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
 
@@ -49,10 +50,32 @@ export const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = 
   return e;
 };
 
-/** A hex's centre on screen (board orientation applied: logic/orient.ts). */
+let quantum = 0;
+let basis: ReturnType<typeof snapBasis> | null = null;
+let basisFor = '';
+/**
+ * Positioning pass: one device pixel in screen units (0: no rounding). Tile centres then sit on
+ * device pixels with every gap the same (logic/pixelgrid.ts). The page sets it from the layout.
+ */
+export const setPixelGrid = (q: number) => {
+  quantum = q > 0 ? q : 0;
+  basis = null;
+};
+export const getPixelGrid = () => quantum;
+
+/** A hex's centre on screen (board orientation and rotation applied: logic/orient.ts). */
 export const centerOf = (key: string) => {
   const c = parseKey(key);
-  return toScreen(S * SQ3 * (c.q + c.r / 2), S * 1.5 * c.r);
+  return latticeCentre(c.q, c.r);
+};
+/** The same, from axial q, r (the painted world uses it per hex: no key parsing). */
+export const latticeCentre = (q: number, r: number) => {
+  const tag = `${getOrient()}:${getRotation()}:${quantum}`;
+  if (!basis || basisFor !== tag) {
+    basis = snapBasis(quantum);
+    basisFor = tag;
+  }
+  return { x: q * basis.a.x + r * basis.b.x + 0, y: q * basis.a.y + r * basis.b.y + 0 };
 };
 
 export const hash = (s: string) => {
