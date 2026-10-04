@@ -186,13 +186,23 @@ for (const [w, h] of [[360, 640], [390, 844], [430, 932], [768, 1024], [1280, 80
 // ---- 5. Smoother mode: on a very slow device a big cut switches effects to Low, once, with a note ----
 {
   const { state, action } = cutPosition(9);
-  const { page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } });
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 20 });
-  await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
-  await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-  const shown = await page.locator('#smoother').isVisible();
+  // The detector counts frames between 20 ms and 500 ms; how slow a throttled frame is depends
+  // on the machine, so try a few slow-downs (each on a fresh page) until frames land in that band.
+  let page: Page | null = null;
+  let errors: string[] = [];
+  let shown = false;
+  for (const rate of [20, 10, 6, 40]) {
+    if (page) await page.close();
+    ({ page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } }));
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+    await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
+    await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    shown = await page.locator('#smoother').isVisible();
+    if (shown) break;
+  }
+  page = page!;
   const low = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'low';
   if (shown) await page.click('#smoother-undo');
   const back = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'normal';
