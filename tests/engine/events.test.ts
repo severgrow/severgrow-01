@@ -55,7 +55,7 @@ describe('events (spec 12, step 18)', () => {
       const { states } = playLog(seed, 400, LEGACY_V03);
       for (const e of states.at(-1)!.history!) seen.add(e.t);
     }
-    for (const t of ['Draw', 'MeldRun', 'MeldSet', 'Overgrow', 'Discard', 'RotCount', 'Sever', 'GameEnd']) {
+    for (const t of ['Draw', 'Bloom', 'Overgrow', 'Discard', 'RotCount', 'Sever', 'GameEnd']) {
       expect(seen).toContain(t);
     }
   });
@@ -102,9 +102,9 @@ describe('events (spec 12, step 18)', () => {
         const after = states[i]!;
         for (const e of newEvents(before, after)) {
           const p = 'player' in e ? e.player : 0;
-          if (e.t === 'MeldRun' || e.t === 'MeldSet') {
-            const ranks = e.cards.map((id) => cards.get(id)!.rank).sort((a, b) => a - b);
-            e.hexes.forEach((h, j) => (board[coordKey(h)] = { owner: p, strength: e.t === 'MeldSet' ? ranks[0]! : ranks[j]! }));
+          if (e.t === 'Bloom') {
+            // v0.7: hexes[j] received cards[j], with that card's own number
+            e.hexes.forEach((h, j) => (board[coordKey(h)] = { owner: p, strength: cards.get(e.cards[j]!)!.rank }));
           }
           if (e.t === 'Sprout') board[coordKey(e.coord)] = { owner: p, strength: cards.get(e.card)!.rank };
           if (e.t === 'Strengthen') board[coordKey(e.coord)] = { owner: p, strength: e.newStrength };

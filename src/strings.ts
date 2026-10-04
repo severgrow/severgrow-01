@@ -74,6 +74,27 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 });
 
 
+/** v0.7: the only combo, "Bloom", in one place. */
+export const BLOOM = Object.freeze({
+  Name: 'Bloom',
+  name: 'bloom',
+  /** the move button: "Bloom 3 tiles" / "Bloom 4 tiles" */
+  button: (n: number) => `Bloom ${n} tiles`,
+  /** when the group is longer than the bloom: "Bloom 3 tiles, keep the other" */
+  buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
+  /** How to play (HTML) */
+  howto:
+    " Three or four cards that go together (the same number in different suits, or numbers in a row in one suit) can <b>bloom</b>. They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card's number.",
+  /** the general hint */
+  hint: 'You can bloom with cards that match or follow on.',
+  /** why a held group cannot bloom right now */
+  tooFew: (n: number) => `Not enough free hexes next to your tiles to bloom ${n}.`,
+  /** the move list and the log */
+  suggest: (n: number, hexes: string) => `Bloom ${n} tiles at ${hexes}`,
+  youDid: (n: number) => `You bloomed ${n} tiles`,
+  oppDid: (n: number) => `${OPP.The} bloomed ${n} tiles`,
+});
+
 /** The words for v0.6 Fruit cards, in one place. */
 export const FRUIT = Object.freeze({
   /** "Fruit card" */

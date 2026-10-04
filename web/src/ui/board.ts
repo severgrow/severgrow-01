@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { DIRECTIONS, allCoords, coordKey, parseKey, rootCoord } from '../../../src/engine/index.js';
+import { allCoords, coordKey, rootCoord } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -87,11 +87,12 @@ export type DrawHandlers = {
   cancel: () => void;
 };
 
-/** What the drawing ghost shows: tiles (with numbers; "can't" style when not ok), direction arrows, a cursor. */
+/** What the painting ghost shows: tiles (with numbers; "can't" style when not ok), unavailable hexes, a cursor. */
 export type GhostView = {
   tiles: { key: string; strength: number; ok: boolean }[];
   blocked: boolean;
-  arrows: { from: string; dirs: number[] } | null;
+  /** hexes this Bloom uses that cannot take the number they would get now (marked, with a reason elsewhere) */
+  unavailable?: string[];
   cursor: string | null;
 };
 
@@ -180,21 +181,11 @@ export class BoardView {
       const { x, y } = centerOf(t.key);
       el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
     }
-    if (g.arrows) {
-      const c = centerOf(g.arrows.from);
-      for (const d of g.arrows.dirs) {
-        const nb = DIRECTIONS[d]!;
-        const n = centerOf(coordKey({ q: parseKey(g.arrows.from).q + nb.q, r: parseKey(g.arrows.from).r + nb.r }));
-        const ang = (Math.atan2(n.y - c.y, n.x - c.x) * 180) / Math.PI;
-        const ax = c.x + (n.x - c.x) * 0.62;
-        const ay = c.y + (n.y - c.y) * 0.62;
-        el('path', { d: 'M-5,-5 L3,0 L-5,5', class: 'draw-arrow', transform: `translate(${ax.toFixed(1)},${ay.toFixed(1)}) rotate(${ang.toFixed(0)})`, 'data-dir': d }, layer);
-      }
-    }
+    for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
     if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
   }
 
-  /** A small shake of the ghost: lifting the finger on a blocked line does nothing else. */
+  /** A small shake of the ghost: lifting the finger on a shape that can't be placed does nothing else. */
   shake(reduceMotion: boolean) {
     if (reduceMotion) return;
     this.layers.draw.animate?.([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 220 });

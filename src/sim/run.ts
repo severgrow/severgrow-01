@@ -60,9 +60,9 @@ const canStrangle = (s: State, acts: Action[]): boolean => {
   const v = viewFor(s, s.actor);
   const ring = new Set(allNeighbors(rootCoord(s.actor === 0 ? 1 : 0, s.config.rootStyle, s.config.boardRadius)).map(coordKey));
   return acts.some((a) => {
-    const hexes = a.t === 'MeldSet' ? a.hexes : a.t === 'MeldRun' ? [a.start] : a.t === 'PlayFruit' ? [a.target] : null;
+    const hexes = a.t === 'Bloom' ? a.hexes : a.t === 'PlayFruit' ? [a.target] : null;
     if (!hexes) return false;
-    if (a.t === 'MeldSet' && !hexes.some((h) => ring.has(coordKey(h)))) return false;
+    if (a.t === 'Bloom' && !hexes.some((h) => ring.has(coordKey(h)))) return false;
     return simulate(v, a)?.wins ?? false;
   });
 };
@@ -105,7 +105,7 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
     rec.decisions++;
     rec.legalActionsSum += legal.length;
     if (canStrangle(s, legal)) rec.strangleChances++;
-    if (s.phase === 'ACT' && !choiceSeen.has(s.turnNumber) && legal.some((x) => x.t === 'MeldRun' || x.t === 'MeldSet' || x.t === 'Sprout')) {
+    if (s.phase === 'ACT' && !choiceSeen.has(s.turnNumber) && legal.some((x) => x.t === 'Bloom' || x.t === 'Sprout')) {
       choiceSeen.add(s.turnNumber);
       rec.choiceTurns++;
     }
@@ -116,7 +116,7 @@ export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial
     const turn = before.turnNumber;
     while (rec.tilesByTurn.length < turn) rec.tilesByTurn.push(0);
     for (const e of s.history!.slice(before.history!.length)) {
-      if (e.t === 'MeldRun' || e.t === 'MeldSet') {
+      if (e.t === 'Bloom') {
         rec.melds++;
         rec.tilesPlaced += e.hexes.length;
         rec.tilesByTurn[turn - 1]! += e.hexes.length;

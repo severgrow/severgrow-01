@@ -37,7 +37,7 @@ describe('Undo, then play again (a bug found by the overhaul browser test)', () 
       for (let i = 0; i < 400 && s.state.phase !== 'GAME_OVER'; i++) {
         const who = s.state.actor;
         if (who === 0 && s.state.phase === 'ACT') {
-          const moves = legalActions(viewFor(s.state, 0)).filter((a) => a.t === 'Sprout' || a.t === 'MeldRun' || a.t === 'MeldSet');
+          const moves = legalActions(viewFor(s.state, 0)).filter((a) => a.t === 'Sprout' || a.t === 'Bloom');
           if (moves.length >= 2) {
             // resume here, as after reloading the page mid-turn (no draw recorded for this turn)
             const r = new Session(s.state, 0);

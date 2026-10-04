@@ -1,38 +1,29 @@
-// UI polish pass 3, Part 4: draw your placement. A line (a run, "Hypha") or a clump (a set,
-// "Bloom") is drawn on the board: drag a finger (or the mouse) over the hexes, or click once
-// to start and once to finish. Pure functions only: the page turns pointer positions into
-// board coordinates and asks these what the shape is and which of the engine's legal
-// actions it matches. Nothing here changes the game; a shape that matches no legal action
-// can never be committed.
+// v0.7: painting a Bloom. The player paints a connected cluster of hexes on the board: drag a
+// finger (or the mouse) over legal hexes, tap them one by one, or (desktop) click once to start
+// and once to finish. For a run the numbers follow the paint order (lowest first; "Reverse"
+// flips it). Pure functions only: the page turns pointer positions into hex keys and asks
+// these what the shape is and which of the engine's legal Blooms it matches. Nothing here
+// changes the game; a shape that matches no legal Bloom can never be committed.
 import { DIRECTIONS, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
-import type { Action, Coord, View } from '../../../src/engine/index.js';
-import { moveCards } from '../../../src/playtest/names.js';
-import { bestFirst, kindOf } from './interaction.js';
+import type { Action, View } from '../../../src/engine/index.js';
+import { simulate, threats } from '../../../src/bots/evaluate.js';
+import { kindOf } from './interaction.js';
 import type { Sel } from './interaction.js';
 import { S, centerOf } from '../ui/geom.js';
 
-type Run = Extract<Action, { t: 'MeldRun' }>;
-type Set_ = Extract<Action, { t: 'MeldSet' }>;
-export type Meld = Run | Set_;
+export type Bloom = Extract<Action, { t: 'Bloom' }>;
+/** Kept for the callers that still say "meld": a Bloom is the only combo. */
+export type Meld = Bloom;
 export type Pt = { x: number; y: number };
 
-// ---------- geometry ----------
+// ---------- geometry (board units; the page maps the screen to these in either orientation) ----------
 
 /** The hit area is a little smaller than the hex, so a finger at a corner never slips into a neighbour. */
 export const HIT = 0.85;
-/** How far a drag must go (board units) before it picks a direction. */
-export const DEAD_ZONE = S * 0.3;
-/** Extra degrees the current direction keeps before a drag flips to the next one. */
-export const HYSTERESIS = 8;
 
 const SQ3 = Math.sqrt(3);
 const INRADIUS = (S * SQ3) / 2;
 const NORMALS: readonly Pt[] = [0, 60, 120].map((d) => ({ x: Math.cos((d * Math.PI) / 180), y: Math.sin((d * Math.PI) / 180) }));
-/** Screen angle of each engine direction (screen y grows downwards). */
-const DIR_ANGLE = DIRECTIONS.map((d) => {
-  const c = centerOf(coordKey(d));
-  return (Math.atan2(c.y, c.x) * 180) / Math.PI;
-});
 
 export const pixelOf = (key: string): Pt => centerOf(key);
 
@@ -72,201 +63,161 @@ export const hexesAlong = (a: Pt, b: Pt, keys: ReadonlySet<string>): string[] =>
   return out;
 };
 
-const angleDiff = (a: number, b: number) => {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
-};
+// ---------- the chosen Bloom ----------
 
-/** The direction (0-5) a drag points along, with a dead zone and a little hysteresis; `prev` is kept while unsure. */
-export const snapDir = (dx: number, dy: number, prev: number | null, deadZone = DEAD_ZONE): number | null => {
-  if (Math.hypot(dx, dy) < deadZone) return prev;
-  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-  if (prev !== null && angleDiff(ang, DIR_ANGLE[prev]!) <= 30 + HYSTERESIS) return prev;
-  let best = 0;
-  for (let d = 1; d < 6; d++) if (angleDiff(ang, DIR_ANGLE[d]!) < angleDiff(ang, DIR_ANGLE[best]!)) best = d;
-  return best;
-};
+/**
+ * One card group to bloom (a kind "bloom-N-ids"): its numbers in ascending order, whether it
+ * is a run (different numbers: the paint order matters), and every legal Bloom of it.
+ */
+export type Combo = { kind: string; n: number; ranks: number[]; run: boolean; actions: Bloom[]; hexes: Set<string>; byKey: Map<string, Bloom> };
 
-/** The direction from one hex towards another (desktop hover, keyboard), or null for the same hex. */
-export const dirToward = (from: string, to: string): number | null => {
-  if (from === to) return null;
-  const a = centerOf(from);
-  const b = centerOf(to);
-  return snapDir(b.x - a.x, b.y - a.y, null, 0);
-};
+/** The lookup key of a Bloom: its hexes in card order (a set: in any order, so sorted). */
+const keyOf = (hexes: readonly string[], run: boolean) => (run ? hexes.join(' ') : [...hexes].sort().join(' '));
 
-// ---------- the chosen combo ----------
-
-export type Combo = { kind: 'line' | 'clump'; n: number; actions: Meld[] };
-
-const sameCard = (v: View, a: number, b: number) => {
-  const x = v.hand.find((c) => c.id === a);
-  const y = v.hand.find((c) => c.id === b);
-  return !!x && !!y && x.suit === y.suit && x.rank === y.rank;
-};
-
-/** The legal placements for the chosen line or clump (and the picked card, if any), best first. */
+/** The legal Blooms of the picked group (sel.kind), or null when no Bloom kind is picked. */
 export const comboFor = (v: View, legal: readonly Action[], sel: Sel): Combo | null => {
   const kind = sel.kind;
-  if (!kind || !(kind.startsWith('line-') || kind.startsWith('clump-'))) return null;
-  const actions = legal.filter(
-    (a): a is Meld => (a.t === 'MeldRun' || a.t === 'MeldSet') && kindOf(a) === kind && (sel.card === null || moveCards(a).some((id) => sameCard(v, sel.card!, id))),
-  );
+  if (!kind?.startsWith('bloom-')) return null;
+  const actions = legal.filter((a): a is Bloom => a.t === 'Bloom' && kindOf(a) === kind);
   if (!actions.length) return null;
-  return { kind: kind.startsWith('line') ? 'line' : 'clump', n: Number(kind.split('-')[1]), actions: bestFirst(v, actions) as Meld[] };
+  const ranks = actions[0]!.cards.map((id) => v.hand.find((c) => c.id === id)?.rank ?? 0);
+  const run = new Set(ranks).size > 1;
+  const byKey = new Map<string, Bloom>();
+  for (const a of actions) byKey.set(keyOf(a.hexes.map(coordKey), run), a);
+  return { kind, n: ranks.length, ranks, run, actions, hexes: new Set(actions.flatMap((a) => a.hexes.map(coordKey))), byKey };
 };
 
-const runKeys = (start: Coord, dir: number, n: number): string[] =>
-  Array.from({ length: n }, (_, i) => coordKey({ q: start.q + DIRECTIONS[dir]!.q * i, r: start.r + DIRECTIONS[dir]!.r * i }));
-const hexesOf = (a: Meld): string[] => (a.t === 'MeldRun' ? runKeys(a.start, a.dir, a.cards.length) : a.hexes.map(coordKey));
-const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((k) => b.includes(k));
-const ranksOf = (v: View, a: Meld) => a.cards.map((id) => v.hand.find((c) => c.id === id)?.rank ?? 0).sort((x, y) => x - y);
+/** The number the i-th painted hex receives (lowest first; Reverse: highest first). */
+export const rankAt = (c: Combo, i: number, reverse: boolean): number => (reverse ? c.ranks[c.n - 1 - i]! : c.ranks[i]!);
 
-/** Where a drawing may start: for a line, the start hexes (next to my network); for a clump, every legal hex. */
-export const drawStarts = (combo: Combo): Set<string> =>
-  combo.kind === 'line' ? new Set(combo.actions.map((a) => coordKey((a as Run).start))) : clumpHexes(combo);
+/** The hexes in card order for a full painted shape. */
+const cardOrder = (_c: Combo, shape: readonly string[], reverse: boolean): string[] => (reverse ? [...shape].reverse() : [...shape]);
 
-/** For a line, a drag may also start at the far end of a legal line (and come back to the network). */
-export const lineEnds = (combo: Combo): Set<string> => {
+/** The legal Bloom painted exactly like this (a run: in this order), or null. */
+export const paintMatch = (c: Combo, shape: readonly string[], reverse = false): Bloom | null =>
+  shape.length === c.n ? (c.byKey.get(keyOf(cardOrder(c, shape, reverse), c.run)) ?? null) : null;
+
+const touches = (shape: readonly string[], key: string) => shape.some((k) => hexDistance(parseKey(k), parseKey(key)) === 1);
+
+/** The order in which a Bloom's hexes are painted (paint position i gets rankAt(i)). */
+const paintOrder = (_c: Combo, a: Bloom, reverse: boolean): string[] => {
+  const ks = a.hexes.map(coordKey);
+  return reverse ? ks.reverse() : ks;
+};
+
+/**
+ * The hexes that can legally come next: each one keeps the shape inside some legal Bloom (a
+ * run: with the number it would receive) and touches the shape. Empty shape: the legal starts.
+ */
+export const drawNext = (c: Combo, shape: readonly string[], reverse = false): Set<string> => {
   const out = new Set<string>();
-  for (const a of combo.actions as Run[]) {
-    const ks = hexesOf(a);
-    out.add(ks[0]!);
-    out.add(ks.at(-1)!);
+  const m = shape.length;
+  if (m >= c.n) return out;
+  for (const a of c.actions) {
+    if (!c.run) {
+      const ks = a.hexes.map(coordKey);
+      if (!shape.every((k) => ks.includes(k))) continue;
+      for (const k of ks) if (!shape.includes(k) && (m === 0 || touches(shape, k))) out.add(k);
+      continue;
+    }
+    const order = paintOrder(c, a, reverse);
+    if (!shape.every((k, i) => order[i] === k)) continue;
+    const k = order[m]!;
+    if (m === 0 || touches(shape, k)) out.add(k);
   }
   return out;
 };
 
-/** Every one placement the combo has, if it has exactly one place to go (a ready preview), else null. */
-export const onlyPlacement = (combo: Combo): Meld | null => {
-  const places = new Set(combo.actions.map((a) => [...hexesOf(a)].sort().join(' ')));
-  return places.size === 1 ? combo.actions[0]! : null;
-};
-
-// ---------- lines ----------
-
-export type GhostTile = { key: string; strength: number; ok: boolean };
-export type Ghost = { tiles: GhostTile[]; action: Meld | null; reason: string | null };
+/** Where a painting may start. */
+export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c, [], reverse);
 
 /**
- * The line drawn from `start` in direction `dir`: all N tiles at once with their numbers, the
- * matching legal action (the same hexes; when both ends could start, the finger's end), or
- * what blocks it.
+ * Hexes next to the shape (or any start, when empty) that some Bloom of this group uses but
+ * that cannot take the number they would receive now, each with a short reason.
  */
-export const lineGhost = (v: View, combo: Combo, start: string, dir: number): Ghost => {
-  const n = combo.n;
-  const ks = runKeys(parseKey(start), dir, n);
-  const match = (combo.actions as Run[]).filter((a) => sameSet(hexesOf(a), ks));
-  const action = match.find((a) => coordKey(a.start) === start) ?? match[0] ?? null;
-  if (action) {
-    const order = hexesOf(action);
-    const ranks = ranksOf(v, action);
-    return { tiles: ks.map((key) => ({ key, strength: ranks[order.indexOf(key)]!, ok: true })), action, reason: null };
+export const unavailable = (v: View, c: Combo, shape: readonly string[], reverse = false): Map<string, string> => {
+  const out = new Map<string, string>();
+  if (shape.length >= c.n) return out;
+  const next = drawNext(c, shape, reverse);
+  const want = rankAt(c, shape.length, reverse);
+  for (const k of c.hexes) {
+    if (shape.includes(k) || next.has(k) || (shape.length > 0 && !touches(shape, k))) continue;
+    const t = v.board[k];
+    if (t && t.owner !== v.player && !t.root && t.strength >= want) out.set(k, `Needs a ${t.strength + 1} or higher`);
   }
-  const ranks = ranksOf(v, combo.actions[0]!);
-  const on = ks.filter((k) => k in v.board);
-  if (on.length < n) return { tiles: on.map((key) => ({ key, strength: ranks[ks.indexOf(key)]!, ok: false })), action: null, reason: 'The line runs off the board' };
-  let reason: string | null = null;
-  const tiles = ks.map((key, i) => {
-    const t = v.board[key];
-    const why = v.terrain[key] === 'rock' ? 'Rock is in the way' : t?.root ? 'A root is in the way' : t && t.owner === v.player ? 'Your own tile is in the way' : t && t.strength >= ranks[i]! ? 'A stronger tile is in the way' : null;
-    reason ??= why;
-    return { key, strength: ranks[i]!, ok: why === null };
-  });
-  return { tiles, action: null, reason: reason ?? 'A line must start next to your tiles' };
+  return out;
 };
 
-/** The legal directions from a hex (it may be the start or the far end of a line). */
-export const lineArrows = (combo: Combo, from: string): number[] => {
-  const out = new Set<number>();
-  for (const a of combo.actions as Run[]) {
-    const ks = hexesOf(a);
-    if (ks[0] === from) out.add(a.dir);
-    if (ks.at(-1) === from) out.add((a.dir + 3) % 6);
-  }
-  return [...out].sort((x, y) => x - y);
+/** Every one placement the group has, if it has exactly one place to go (a ready preview), else null. */
+export const onlyPlacement = (c: Combo): Bloom | null => {
+  const places = new Set(c.actions.map((a) => a.hexes.map(coordKey).sort().join(' ')));
+  return places.size === 1 && c.actions.length === 1 ? c.actions[0]! : null;
 };
 
-// ---------- clumps ----------
-
-/** Every hex some legal clump uses. */
-export const clumpHexes = (combo: Combo): Set<string> => new Set(combo.actions.flatMap(hexesOf));
-
-const touches = (shape: readonly string[], key: string) => shape.some((k) => hexDistance(parseKey(k), parseKey(key)) === 1);
+// ---------- painting ----------
 
 /**
- * A drag enters a hex: a new legal hex touching any hex of the shape is added (so a Y or a
- * triangle is possible); moving back onto the hex before the last removes the last one;
- * anything else (illegal, not touching, already in, or the shape is full) is ignored.
+ * A drag enters a hex: a legal next hex is added; moving back onto the hex before the last
+ * removes the last one; anything else (illegal, not touching, already in, the shape is
+ * full) is ignored.
  */
-export const clumpEnter = (shape: readonly string[], key: string, combo: Combo): string[] => {
+export const paintEnter = (c: Combo, shape: readonly string[], key: string, reverse = false): string[] => {
   if (shape.length >= 2 && key === shape.at(-2)) return shape.slice(0, -1);
-  if (shape.includes(key) || shape.length >= combo.n || !clumpHexes(combo).has(key)) return [...shape];
-  if (shape.length > 0 && !touches(shape, key)) return [...shape];
-  return [...shape, key];
+  if (shape.includes(key) || shape.length >= c.n) return [...shape];
+  return drawNext(c, shape, reverse).has(key) ? [...shape, key] : [...shape];
 };
 
 /** Tapping: tap to add (same rules), tap the last one to remove it. */
-export const clumpTap = (shape: readonly string[], key: string, combo: Combo): string[] => {
+export const paintTap = (c: Combo, shape: readonly string[], key: string, reverse = false): string[] => {
   if (shape.at(-1) === key) return shape.slice(0, -1);
   if (shape.includes(key)) return [...shape];
-  return clumpEnter(shape, key, combo);
+  return paintEnter(c, shape, key, reverse);
 };
 
-/** The legal action with exactly these hexes (any drawing order), or null. */
-export const clumpMatch = (combo: Combo, shape: readonly string[]): Meld | null =>
-  shape.length === combo.n ? (combo.actions.find((a) => sameSet(hexesOf(a), shape)) ?? null) : null;
-
-/** Why a clump cannot be confirmed yet, in plain words, or null when it can. */
-export const clumpProblem = (v: View, combo: Combo, shape: readonly string[]): string | null => {
-  if (shape.length < combo.n) return `${shape.length}/${combo.n}: keep going, from any hex of the shape`;
-  if (clumpMatch(combo, shape)) return null;
-  const touchesMine = shape.some((k) => touches(Object.keys(v.board).filter((x) => v.board[x]?.owner === v.player), k));
-  return touchesMine ? "That shape can't be placed" : 'Your clump needs to touch your tiles';
+/** Why the shape cannot be confirmed yet, in plain words ("2/3"), or null when it can. */
+export const paintProblem = (v: View, c: Combo, shape: readonly string[], reverse = false): string | null => {
+  if (shape.length < c.n) return `${shape.length}/${c.n}`;
+  if (paintMatch(c, shape, reverse)) return null;
+  const mine = Object.keys(v.board).filter((x) => v.board[x]?.owner === v.player);
+  return shape.some((k) => touches(mine, k)) ? "That shape can't be placed" : 'Your bloom needs to touch your tiles';
 };
 
-/** The clump's ghost: each hex with the set's strength. */
-export const clumpGhost = (v: View, combo: Combo, shape: readonly string[]): Ghost => {
-  const rank = ranksOf(v, combo.actions[0]!)[0]!;
-  const legal = clumpHexes(combo);
-  const action = clumpMatch(combo, shape);
-  return { tiles: shape.map((key) => ({ key, strength: rank, ok: legal.has(key) })), action, reason: action ? null : clumpProblem(v, combo, shape) };
+export type GhostTile = { key: string; strength: number; ok: boolean };
+export type Ghost = { tiles: GhostTile[]; action: Bloom | null; reason: string | null };
+
+/** The painted shape's ghost: each hex with the number it receives. */
+export const paintGhost = (v: View, c: Combo, shape: readonly string[], reverse = false): Ghost => {
+  const action = paintMatch(c, shape, reverse);
+  return {
+    tiles: shape.map((key, i) => ({ key, strength: rankAt(c, i, reverse), ok: true })),
+    action,
+    reason: action ? null : paintProblem(v, c, shape, reverse),
+  };
 };
+
+/** The painted order of a legal Bloom (to show a suggestion as if painted: lowest number first). */
+export const shapeOf = (c: Combo, a: Bloom, reverse = false): string[] => paintOrder(c, a, reverse);
+
+// ---------- the one-tap suggestion ----------
 
 /**
- * The desktop clump, grown from the start towards the hovered hex, deterministically: the
- * shortest legal path towards it (to the legal hex nearest it), cut to N; if shorter, filled
- * with the legal hexes nearest the hover, then nearest the start, then in key order.
+ * The suggested Bloom that includes `key`: among every legal Bloom of `blooms` on that hex,
+ * the most tiles gained, then the most opponent tiles replaced or cut, then the fewest of my
+ * tiles left open to a cut, then the engine's fixed order. Null if none uses the hex.
  */
-export const growClump = (combo: Combo, start: string, hover: string): string[] => {
-  const legal = clumpHexes(combo);
-  if (!legal.has(start)) return [];
-  const dist = (a: string, b: string) => hexDistance(parseKey(a), parseKey(b));
-  const byNear = (a: string, b: string) => dist(a, hover) - dist(b, hover) || dist(a, start) - dist(b, start) || (a < b ? -1 : a > b ? 1 : 0);
-  const goal = legal.has(hover) ? hover : [...legal].sort(byNear)[0]!;
-  // breadth-first over legal hexes, neighbours in the engine's direction order
-  const prev = new Map<string, string | null>([[start, null]]);
-  const queue = [start];
-  while (queue.length && !prev.has(goal)) {
-    const cur = queue.shift()!;
-    for (const d of DIRECTIONS) {
-      const c = parseKey(cur);
-      const nk = coordKey({ q: c.q + d.q, r: c.r + d.r });
-      if (legal.has(nk) && !prev.has(nk)) {
-        prev.set(nk, cur);
-        queue.push(nk);
-      }
-    }
-  }
-  const path: string[] = [];
-  for (let k: string | null | undefined = prev.has(goal) ? goal : start; k; k = prev.get(k)) path.unshift(k);
-  const shape = path.slice(0, combo.n);
-  while (shape.length < combo.n) {
-    const next = [...legal].filter((k) => !shape.includes(k) && touches(shape, k)).sort(byNear)[0];
-    if (!next) break;
-    shape.push(next);
-  }
-  return shape;
+export const suggestBloom = (v: View, blooms: readonly Bloom[], key: string): Bloom | null => {
+  const on = blooms.filter((a) => a.hexes.some((h) => coordKey(h) === key));
+  if (!on.length) return null;
+  const scored = on.map((a, i) => {
+    const sim = simulate(v, a)!;
+    return { a, i, gained: sim.placed - sim.taken - sim.myLoss, hits: sim.taken + sim.botCut, sim };
+  });
+  scored.sort((x, y) => y.gained - x.gained || y.hits - x.hits || x.i - y.i);
+  // the exposure check is the costly one: only for the tied leaders
+  const top = scored.filter((s) => s.gained === scored[0]!.gained && s.hits === scored[0]!.hits).slice(0, 24);
+  const exposed = (s: (typeof scored)[number]) => threats({ config: v.config, terrain: v.terrain, board: s.sim.board }, v.player)[0]?.loss ?? 0;
+  const best = top.map((s) => ({ s, e: exposed(s) })).sort((x, y) => x.e - y.e || x.s.i - y.s.i)[0]!;
+  return best.s.a;
 };
 
 // ---------- desktop: one click to start, one to finish (the keyboard uses the same machine) ----------
@@ -276,21 +227,32 @@ export const DESK_IDLE: Desk = Object.freeze({ phase: 'idle' }) as Desk;
 export const deskCancel = (): Desk => DESK_IDLE;
 export const deskHover = (d: Desk, key: string): Desk => (d.phase === 'live' ? { ...d, hover: key } : d);
 
-/** The live shape while the desktop drawing follows the mouse. */
-export const deskShape = (v: View, combo: Combo, d: Desk): Ghost => {
-  if (d.phase !== 'live') return { tiles: [], action: null, reason: null };
-  if (combo.kind === 'clump') return clumpGhost(v, combo, growClump(combo, d.start, d.hover));
-  const dir = dirToward(d.start, d.hover);
-  return dir === null ? { tiles: [{ key: d.start, strength: ranksOf(v, combo.actions[0]!)[0]!, ok: true }], action: null, reason: null } : lineGhost(v, combo, d.start, dir);
+/**
+ * The desktop shape, grown from the start towards the hovered hex, deterministically: each
+ * next hex is the legal next hex nearest the hover (then nearest the start, then key order).
+ */
+export const growToward = (c: Combo, start: string, hover: string, reverse = false): string[] => {
+  if (!drawStarts(c, reverse).has(start)) return [];
+  const dist = (a: string, b: string) => hexDistance(parseKey(a), parseKey(b));
+  const shape = [start];
+  while (shape.length < c.n) {
+    const next = [...drawNext(c, shape, reverse)].sort((a, b) => dist(a, hover) - dist(b, hover) || dist(a, start) - dist(b, start) || (a < b ? -1 : a > b ? 1 : 0))[0];
+    if (!next) break;
+    shape.push(next);
+  }
+  return shape;
 };
 
-/** A click: the first one starts on a legal hex; the second one finishes a legal shape (else keeps drawing). */
-export const deskClick = (d: Desk, key: string, v: View, combo: Combo): { desk: Desk; finish: Meld | null } => {
-  if (d.phase === 'idle') {
-    const ok = combo.kind === 'line' ? lineEnds(combo).has(key) : clumpHexes(combo).has(key);
-    return { desk: ok ? { phase: 'live', start: key, hover: key } : d, finish: null };
-  }
-  const shape = deskShape(v, combo, deskHover(d, key));
+/** The live shape while the desktop painting follows the mouse. */
+export const deskShape = (v: View, c: Combo, d: Desk, reverse = false): Ghost => {
+  if (d.phase !== 'live') return { tiles: [], action: null, reason: null };
+  return paintGhost(v, c, growToward(c, d.start, d.hover, reverse), reverse);
+};
+
+/** A click: the first one starts on a legal hex; the second one finishes a legal shape (else keeps painting). */
+export const deskClick = (d: Desk, key: string, v: View, c: Combo, reverse = false): { desk: Desk; finish: Bloom | null } => {
+  if (d.phase === 'idle') return { desk: drawStarts(c, reverse).has(key) ? { phase: 'live', start: key, hover: key } : d, finish: null };
+  const shape = deskShape(v, c, deskHover(d, key), reverse);
   return shape.action ? { desk: DESK_IDLE, finish: shape.action } : { desk: deskHover(d, key), finish: null };
 };
 
@@ -315,36 +277,12 @@ export const keyStep = (cursor: string, key: string, keys: ReadonlySet<string>):
   return keys.has(next) ? next : cursor;
 };
 
-// ---------- UI overhaul item 7: calm highlights ----------
-
-/**
- * While drawing, the hexes that can legally come next. A line (shape = [start, ...]): every
- * hex of a legal line from that start not drawn yet. A clump: every hex that, added to the
- * shape, still fits inside some legal clump and touches the shape.
- */
-export const drawNext = (combo: Combo, shape: readonly string[]): Set<string> => {
-  const out = new Set<string>();
-  if (shape.length === 0) return drawStarts(combo);
-  if (combo.kind === 'line') {
-    for (const a of combo.actions as Run[]) {
-      const ks = hexesOf(a);
-      if (ks[0] !== shape[0] && ks.at(-1) !== shape[0]) continue;
-      for (const k of ks) if (!shape.includes(k)) out.add(k);
-    }
-    return out;
-  }
-  if (shape.length >= combo.n) return out;
-  for (const a of combo.actions) {
-    const ks = hexesOf(a);
-    if (!shape.every((k) => ks.includes(k))) continue;
-    for (const k of ks) if (!shape.includes(k) && touches(shape, k)) out.add(k);
-  }
-  return out;
-};
-
 /** How bright a legal hex is from the pointer's distance (board units): 1 under it, 0 beyond `radius`, smooth between. */
 export const proximity = (distance: number, radius = S * 3.2): number => {
   if (!(distance >= 0)) return 0;
   const t = Math.max(0, 1 - distance / radius);
   return t * t * (3 - 2 * t);
 };
+
+/** The six neighbour directions (kept for the keyboard and tests). */
+export const NEIGHBOUR_DIRS = DIRECTIONS;

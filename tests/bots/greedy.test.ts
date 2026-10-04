@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, View } from '../../src/engine/index.js';
 import { GreedyBot, createGreedyBot, rankActions } from '../../src/bots/GreedyBot.js';
+import { BLOOM_SHORTLIST, lookBlooms, shortlistBlooms } from '../../src/bots/bloomLook.js';
 import { fixture, randomPlay } from '../helpers.js';
 import { LEGACY_V03 } from '../legacy.js';
 
@@ -31,7 +32,18 @@ describe('GreedyBot (spec 16)', () => {
         if (s.phase === 'GAME_OVER') return;
         const v = viewFor(s, s.actor);
         const ranked = rankActions(v);
-        expect(ranked.map((r) => key(r.action)).sort()).toEqual(legalActions(v).map(key).sort());
+        const legal = legalActions(v);
+        // v0.7: every legal non-Bloom move once; Blooms: the quick look sees every legal one, the
+        // ranking fully scores a short list of them (all legal, none twice, the quick look's best first)
+        expect(ranked.filter((r) => r.action.t !== 'Bloom').map((r) => key(r.action)).sort()).toEqual(legal.filter((a) => a.t !== 'Bloom').map(key).sort());
+        const blooms = legal.filter((a) => a.t === 'Bloom').map(key);
+        const looks = lookBlooms(v);
+        expect(looks.map((l) => key(l.action)).sort()).toEqual([...blooms].sort());
+        const rankedBlooms = ranked.filter((r) => r.action.t === 'Bloom').map((r) => key(r.action));
+        expect(new Set(rankedBlooms).size).toBe(rankedBlooms.length);
+        expect(rankedBlooms.length).toBe(Math.min(BLOOM_SHORTLIST, blooms.length === 0 ? 0 : shortlistBlooms(looks, BLOOM_SHORTLIST).length));
+        for (const b of rankedBlooms) expect(blooms).toContain(b);
+        if (looks.length) expect(rankedBlooms).toContain(key(looks[0]!.action));
         for (let i = 1; i < ranked.length; i++) expect(ranked[i - 1]!.score).toBeGreaterThanOrEqual(ranked[i]!.score);
         expect(GreedyBot.chooseAction(v)).toEqual(ranked[0]!.action);
         checked++;
@@ -93,18 +105,18 @@ describe('GreedyBot (spec 16)', () => {
     // P2's root (2,-2): four rock neighbours, P1 on (1,-1); only (1,-2) is open.
     // A Bloom on (1,-2), (0,-1), (0,-2) closes the ring and wins.
     const best = rankActions(viewFor(s, 0))[0]!;
-    expect(best.facts.kind).toBe('meld');
-    expect(best.facts.kind === 'meld' && best.facts.move.wins).toBe(true);
+    expect(best.facts.kind).toBe('bloom');
+    expect(best.facts.kind === 'bloom' && best.facts.move.wins).toBe(true);
   });
 
-  it('meld facts: points, gold hexes, takeovers and cut-offs', () => {
+  it('bloom facts: points, gold hexes, takeovers and cut-offs', () => {
     const run = [card(1, 0, 3), card(2, 0, 4), card(3, 0, 5), card(4, 1, 1)];
     const s = stateWith({ phase: 'ACT', hand: run, rich: ['0,0'], tiles: { '0,0': [1, 1], '1,-1': [1, 1], '-1,0': [1, 1] } });
     const v = viewFor(s, 0);
-    const r = rankActions(v).find((x) => key(x.action) === key({ t: 'MeldRun', cards: [1, 2, 3], start: { q: -1, r: 1 }, dir: 1 }))!;
-    expect(r.facts.kind).toBe('meld');
-    if (r.facts.kind !== 'meld') return;
-    expect(r.facts.move).toMatchObject({ placed: 3, onRich: 1, taken: 2, botCut: 1, points: 4, toward: true, wins: false });
+    const r = rankActions(v).find((x) => key(x.action) === key({ t: 'Bloom', cards: [1, 2, 3], hexes: [{ q: -1, r: 1 }, { q: 0, r: 0 }, { q: 1, r: -1 }] }))!;
+    expect(r.facts.kind).toBe('bloom');
+    if (r.facts.kind !== 'bloom') return;
+    expect(r.facts.move).toMatchObject({ placed: 3, onRich: 1, taken: 2, botCut: 1, points: 4, wins: false });
   });
 
   it('EndAct is chosen when there is nothing to play (no combos, no Sprout)', () => {
@@ -117,7 +129,7 @@ describe('GreedyBot (spec 16)', () => {
     const hand = [card(7, 0, 7), card(8, 0, 8), card(9, 0, 9), card(1, 3, 1), card(2, 3, 2), card(3, 3, 3), card(20, 2, 5)];
     const s = stateWith({ phase: 'ACT', hand });
     const best = rankActions(viewFor(s, 0))[0]!;
-    expect(best.action.t).toBe('MeldRun');
-    expect(best.action.t === 'MeldRun' && [...best.action.cards].sort()).toEqual([1, 2, 3]);
+    expect(best.action.t).toBe('Bloom');
+    expect(best.action.t === 'Bloom' && [...best.action.cards].sort()).toEqual([1, 2, 3]);
   });
 });

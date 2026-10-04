@@ -8,13 +8,13 @@ const c = (q: number, r: number) => ({ q, r });
 describe('game-over highlights', () => {
   it('biggest cut, biggest single move and most tiles at once, from the game history', () => {
     const history: Event[] = [
-      { t: 'MeldRun', player: 0, cards: [1, 2, 3], hexes: [c(0, 0), c(1, 0), c(2, 0)] },
+      { t: 'Bloom', player: 0, cards: [1, 2, 3], hexes: [c(0, 0), c(1, 0), c(2, 0)] },
       { t: 'Overgrow', player: 0, coord: c(2, 0), oldOwner: 1, oldStrength: 2, newStrength: 3 },
       { t: 'Sever', player: 1, coords: [c(3, 0), c(4, 0), c(5, 0), c(6, 0)] },
       { t: 'Discard', player: 0, card: 9 },
       { t: 'Sprout', player: 1, card: 5, coord: c(0, 1) },
       { t: 'Sever', player: 0, coords: [c(1, 1), c(2, 1)] },
-      { t: 'MeldSet', player: 1, cards: [6, 7, 8, 10], hexes: [c(0, 2), c(1, 2), c(2, 2), c(3, 2)] },
+      { t: 'Bloom', player: 1, cards: [6, 7, 8, 10], hexes: [c(0, 2), c(1, 2), c(2, 2), c(3, 2)] },
     ];
     const h = gameHighlights(history, 0);
     expect(h.map((x) => x.title)).toEqual(['Biggest cut', 'Biggest single move', 'Most tiles at once']);

@@ -3,7 +3,7 @@ import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js
 import type { Action, Card, State, View } from '../../src/engine/index.js';
 import { chooseAction } from '../src/bot.js';
 import { hexName, moveSentence } from '../src/names.js';
-import { fixture } from '../../tests/helpers.js';
+import { chain, fixture } from '../../tests/helpers.js';
 
 const viewWith = (hand: Card[], opts: Parameters<typeof fixture>[0] = {}, patch: Partial<State> = {}): View => {
   const f = fixture(opts);
@@ -23,22 +23,12 @@ describe('moveSentence: one plain sentence per move', () => {
     expect(hexName({ q: -1, r: 1 }, 3)).toBe('E3');
   });
 
-  it('a line toward the bot, with points', () => {
+  it('a Bloom from a run, with points', () => {
     const v = viewWith(run, { rich: ['0,0'] });
-    expect(moveSentence(v, { t: 'MeldRun', cards: [1, 2, 3], start: { q: -1, r: 1 }, dir: 1 })).toBe(
-      'Grow a line of 3 tiles from E3 toward your opponent (+4 points)',
-    );
+    expect(moveSentence(v, { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: -1, r: 1 }, 1, 3) })).toBe('Bloom 3 tiles at C4, D4, E3 (+4 points)');
   });
 
-  it('a line that keeps the same distance from the bot goes sideways', () => {
-    const v = viewWith(run);
-    // (-2,3), (-1,3), (0,3) along the bottom edge.
-    expect(moveSentence(v, { t: 'MeldRun', cards: [1, 2, 3], start: { q: -2, r: 3 }, dir: 0 })).toBe(
-      'Grow a line of 3 tiles from G2 sideways (+3 points)',
-    );
-  });
-
-  it('a clump, with takeovers and cut-offs spelled out', () => {
+  it('a Bloom from a set, with takeovers and cut-offs spelled out', () => {
     const set = [
       { id: 1, suit: 0 as const, rank: 6 },
       { id: 2, suit: 1 as const, rank: 6 },
@@ -48,8 +38,8 @@ describe('moveSentence: one plain sentence per move', () => {
     // Bot arm root-(1,-1)-(1,0)-(0,1), with (0,2) hanging only off (0,1).
     const v = viewWith(set, { tiles: { '0,1': [1, 2], '0,2': [1, 2], '1,0': [1, 2], '1,-1': [1, 2] } });
     expect(
-      moveSentence(v, { t: 'MeldSet', cards: [1, 2, 3], hexes: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: -1, r: 2 }] }),
-    ).toBe('Grow a clump of 3 tiles at E3, E4, F3, taking 1 opponent tile and cutting off 1 more (+3 points)');
+      moveSentence(v, { t: 'Bloom', cards: [1, 2, 3], hexes: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: -1, r: 2 }] }),
+    ).toBe('Bloom 3 tiles at E3, E4, F3, taking 1 opponent tile and cutting off 1 more (+3 points)');
   });
 
   it('simple moves', () => {

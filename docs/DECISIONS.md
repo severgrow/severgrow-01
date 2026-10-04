@@ -1,3 +1,18 @@
+# Decisions (Bloom, layout, homes, polish: v0.7)
+
+One line each: where the brief left room, what was chosen and why.
+
+- "Never a straight line" is read as "never has to be one": the brief also says "no shape restrictions beyond being connected", so a straight chain is one legal shape among many.
+- The action is a clean rename: `Bloom { cards, hexes }` replaces both old actions; the engine accepts the cards in any order (`hexes[i]` gets `cards[i]`); `legalActions` lists runs with the cards ascending.
+- `legalActions` stays exhaustive: a set once per hex set, a run once per legal assignment. The worst case measured (a four of a kind plus a 4-card run, a wide network) is about 6,200 Blooms, listed in about 25 ms, so no cap was needed; `bloomChoices` gives the compact form (group, cluster, assignments).
+- Five or more cards of a run: only runs of exactly 3 or 4 consecutive cards are listed (the brief's "any 3 or 4 consecutive cards").
+- Error codes: a wrong size is `BLOOM_WRONG_SIZE`; cards with two numbers and mixed suits are `RUN_MIXED_SUITS` (neither a set nor a run); the old set/run codes stay for the other cases and for the parked deadwood rule.
+- `bloomMustTouchNetwork: false` (engine only) simply skips the touching check; nothing in the page offers it.
+- Bots fully score a short list of Blooms after a quick look at every legal one (10 by default): the best quick scores, the clusters most joined to my network (they protect thin links) and the strongest takeovers, so one purpose never crowds out another.
+- Each card group is its own move kind; the moves row shows one button per family (a number for sets, a suit for runs) and size: a set keeps the card that fits the rest of the hand best, a run blooms its highest numbers; a picked card narrows it.
+- Painting: the first tap on an empty shape also shows the suggested Bloom through that hex (with Confirm); tapping on keeps painting one hex at a time, so every Bloom can still be made by taps alone.
+- The hint for a mouse says "Click to start your bloom, click to finish" (the longer wording did not fit one line on a 360px phone).
+
 # Decisions (Seed removal and Fruit cards, v0.6)
 
 One line each: where the brief left room, what was chosen and why.

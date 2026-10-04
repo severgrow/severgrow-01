@@ -16,7 +16,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   rotThreshold: 20,
   rotStep: 8,
   forbidRedundantDiscard: true,
-  allowHyphaOneBend: false,
+  bloomMustTouchNetwork: true,
   rootsScore: false,
   maxRank: 9,
   sproutsPerTurn: 1,
@@ -52,7 +52,7 @@ const NUMBER_MIN: Record<string, number> = {
 const BOOLEAN_KEYS = [
   'knockGivesFinalTurn',
   'forbidRedundantDiscard',
-  'allowHyphaOneBend',
+  'bloomMustTouchNetwork',
   'rootsScore',
   'allowStrengthen',
   'fruitRootCountsAsTouch',
@@ -89,9 +89,6 @@ export const resolveConfig = (overrides: Partial<RulesConfig> = {}): RulesConfig
     throw new ConfigError('ROCK_COUNT_NOT_EVEN', `rockCount must be even (pairs), got ${c.rockCount}`);
   }
   if (c.handSize < 3) throw new ConfigError('HAND_SIZE_TOO_SMALL', `handSize must be >= 3`);
-  if (c.allowHyphaOneBend) {
-    throw new ConfigError('NOT_IMPLEMENTED', 'allowHyphaOneBend is not implemented until Milestone C');
-  }
 
   const deckSize = SUITS.length * (c.maxRank - MIN_RANK + 1) * c.copiesPerCard + c.fruitCardCount;
   // Two hands, a starting discard, and at least one card left to draw.

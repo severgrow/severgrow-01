@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hexDistance, isAdjacent, parseKey } from '../../src/engine/index.js';
+import { hexDistance, parseKey } from '../../src/engine/index.js';
 import type { Tile } from '../../src/engine/index.js';
 import { AnimQueue, applyStep, buildSteps, captionFor } from '../src/logic/anim.js';
 import type { Step } from '../src/logic/anim.js';
@@ -43,21 +43,21 @@ describe('animation queue from engine events', () => {
     expect(mine).toBeGreaterThan(0);
   });
 
-  it('a line unrolls tile by tile from its start; clumps bloom; Sprout pops', () => {
+  it('a Bloom ripples out from its first hex; Sprout pops', () => {
     const styles = new Set<string>();
     for (const p of played) {
       for (const s of buildSteps(p.before, p.action, p.after, 0)) {
         if (s.k !== 'grow') continue;
         styles.add(s.style);
-        if (p.action.t === 'MeldRun') {
-          expect(s.style).toBe('line');
-          for (let i = 1; i < s.tiles.length; i++) expect(isAdjacent(parseKey(s.tiles[i - 1]!.key), parseKey(s.tiles[i]!.key))).toBe(true);
+        if (p.action.t === 'Bloom') {
+          expect(s.style).toBe('bloom');
+          // the tiles are the Bloom's hexes, in card order (the ripple starts at the first)
+          expect(s.tiles.map((t) => t.key)).toEqual(p.action.hexes.map((h) => `${h.q},${h.r}`));
         }
-        if (p.action.t === 'MeldSet') expect(s.style).toBe('bloom');
         if (p.action.t === 'Sprout') expect(s.style).toBe('sprout');
       }
     }
-    expect([...styles].sort()).toEqual(['bloom', 'line', 'sprout']);
+    expect([...styles].sort()).toEqual(['bloom', 'sprout']);
   });
 
   it('a cut withers in a ripple outward from where it was cut, with a caption', () => {
@@ -99,13 +99,13 @@ describe('animation queue from engine events', () => {
   });
 
   it('steps are plain data (safe to replay later)', () => {
-    const p = played.find((x) => x.action.t === 'MeldRun')!;
+    const p = played.find((x) => x.action.t === 'Bloom')!;
     const steps: Step[] = buildSteps(p.before, p.action, p.after, 0);
     expect(JSON.parse(JSON.stringify(steps))).toEqual(steps);
   });
 
   it('peek shows the next step without changing the shown board', () => {
-    const p = played.find((x) => x.action.t === 'MeldRun')!;
+    const p = played.find((x) => x.action.t === 'Bloom')!;
     const q = new AnimQueue(p.before.board);
     q.push(buildSteps(p.before, p.action, p.after, 0));
     const first = q.peek();

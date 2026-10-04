@@ -41,6 +41,18 @@ export const validateSet = (cards: readonly Card[]): Card[] => {
   return [...cards];
 };
 
+/**
+ * v0.7 Bloom cards: a set (3-4 cards, one number, different suits) or a run (3-4 cards, one
+ * suit, numbers in a row, no wraparound). Returns the kind and the cards in ascending order
+ * (ties by id). Throws IllegalActionError.
+ */
+export const validateBloom = (cards: readonly Card[]): { kind: 'set' | 'run'; cards: Card[] } => {
+  numbered(cards);
+  if (cards.length < 3 || cards.length > 4) throw new IllegalActionError('BLOOM_WRONG_SIZE', 'a bloom is 3 or 4 cards');
+  if (cards.every((c) => c.rank === cards[0]!.rank)) return { kind: 'set', cards: byRank(validateSet(cards)) };
+  return { kind: 'run', cards: validateRun(cards) };
+};
+
 const passes = (fn: () => unknown): boolean => {
   try {
     fn();

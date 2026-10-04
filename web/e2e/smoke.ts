@@ -11,7 +11,7 @@ import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
 import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/interaction.js';
-import { drawMeld } from './drawing.js';
+import { chooseBloom, drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 
@@ -78,7 +78,7 @@ const newGame = async (page: Page, level = 7) => {
 /** Picks the demo move's card: a line or clump needs its button first (a card tap alone picks Sprout). */
 type Pick = { action: CutDemo['action']; card: number; hex: string; option: number };
 const pickCard = async (page: Page, d: Pick) => {
-  if (d.action.t === 'MeldRun' || d.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(d.action)}"]`);
+  if (d.action.t === 'Bloom') await chooseBloom(page, d.action);
   await page.click(`#hand [data-card="${d.card}"]`);
 };
 
@@ -87,7 +87,7 @@ const startMove = async (page: Page, d: Pick) => {
   const before = (await getState(page))!.history?.length ?? 0;
   await pickCard(page, d);
   if (((await getState(page))!.history?.length ?? 0) > before) return; // the card's only spot: played at once
-  const meld = d.action.t === 'MeldRun' || d.action.t === 'MeldSet';
+  const meld = d.action.t === 'Bloom';
   if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, d.action);
   else if (!(await page.locator('#confirm-play').isVisible())) await tapHex(page, d.hex);
   if (((await getState(page))!.history?.length ?? 0) > before) return; // a drawn move with Confirm moves off: placed at once
@@ -258,7 +258,7 @@ for (const theme of THEMES) {
     if (dir) await page.screenshot({ path: `${dir}/${size}-midgame.jpg`, quality: 82 });
     const histBefore = ((await getState(page))!.history?.length ?? 0);
     await pickCard(page, demo);
-    const meld = demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet';
+    const meld = demo.action.t === 'Bloom';
     if (meld && !(await page.locator('#confirm-play').isVisible())) await drawMeld(page, demo.action);
     // A clear choice plays at once (no Confirm); a double tap on the spot must still play once.
     if (!meld && ((await getState(page))!.history?.length ?? 0) === histBefore && !(await page.locator('#confirm-play').isVisible())) {

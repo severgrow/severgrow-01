@@ -12,9 +12,9 @@ describe('sim: one game record', () => {
     const h = end.history!;
     expect(g.result).toEqual(end.result);
     expect(g.turns).toBe(end.turnNumber);
-    expect(g.melds).toBe(h.filter((e) => e.t === 'MeldRun' || e.t === 'MeldSet').length);
+    expect(g.melds).toBe(h.filter((e) => e.t === 'Bloom').length);
     // Tiles placed = combo tiles + one per Sprout (v0.4).
-    expect(g.tilesPlaced).toBe(h.reduce((n, e) => n + (e.t === 'MeldRun' || e.t === 'MeldSet' ? e.hexes.length : e.t === 'Sprout' ? 1 : 0), 0));
+    expect(g.tilesPlaced).toBe(h.reduce((n, e) => n + (e.t === 'Bloom' ? e.hexes.length : e.t === 'Sprout' ? 1 : 0), 0));
     expect(g.overgrows).toBe(h.filter((e) => e.t === 'Overgrow').length);
     expect(g.severedTiles).toBe(h.reduce((n, e) => n + (e.t === 'Sever' ? e.coords.length : 0), 0));
     expect(g.fruitUses).toBe(h.filter((e) => e.t === 'FruitCard').length);

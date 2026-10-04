@@ -2910,13 +2910,11 @@ svg.usable .hex-cell {
 .draw-ghost.blocked:not(.cant) .ghost-tile {
   fill-opacity: 0.22;
 }
-.draw-arrow {
-  fill: none;
-  stroke: var(--c-text);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.85;
+.draw-unavailable {
+  fill: color-mix(in srgb, var(--c-bg) 55%, transparent);
+  stroke: color-mix(in srgb, var(--c-text) 40%, transparent);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 3;
   pointer-events: none;
 }
 .draw-cursor {

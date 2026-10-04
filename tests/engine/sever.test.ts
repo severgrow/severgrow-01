@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPlacement, connectedKeys, coordKey, planSet, sever } from '../../src/engine/index.js';
+import { applyPlacement, connectedKeys, coordKey, planBloom, sever } from '../../src/engine/index.js';
 import type { Card } from '../../src/engine/index.js';
 import { card, clone, fixture, tilesOf } from '../helpers.js';
 
@@ -24,7 +24,7 @@ describe('sever', () => {
     // P1 arm: root(-2,2) - (-1,1) - (0,0) - (1,0) - (2,0). (0,0) is the chokepoint.
     const f = fixture({ tiles: { '-1,1': [0, 3], '0,0': [0, 1], '1,0': [0, 2], '2,0': [0, 2] } });
     const set5: Card[] = [card(1, 0, 5), card(2, 1, 5), card(3, 2, 5)];
-    const p = planSet(f, 1, set5, [1, 2, 3], [{ q: 0, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -2 }]);
+    const p = planBloom(f, 1, set5, [1, 2, 3], [{ q: 0, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -2 }]);
     const placed = applyPlacement(f.board, p);
     const out = sever(placed.board, f.config, 1);
     expect(out.severed).toEqual([{ player: 0, coords: [{ q: 1, r: 0 }, { q: 2, r: 0 }] }]);

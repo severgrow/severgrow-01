@@ -7,11 +7,11 @@ import { Session } from '../src/logic/session.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { findState } from './ui-helpers.js';
 
-const isBoard = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout';
+const isBoard = (a: Action) => a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit';
 /** The first position from `seed` on (trying later seeds if needed) with two kinds of moves. */
 const actState = (seed: number): State => {
   for (let k = seed; k < seed + 50; k++) {
-    const s = findState(k, (x) => x.actor === 0 && x.phase === 'ACT' && x.turnNumber >= 5 && new Set(legalActions(viewFor(x, 0)).filter(isBoard).map(kindOf)).size >= 2);
+    const s = findState(k, (x) => x.actor === 0 && x.phase === 'ACT' && x.turnNumber >= 5 && new Set(legalActions(viewFor(x, 0)).filter((a) => a.t === 'Bloom' || a.t === 'Sprout').map(kindOf)).size >= 2);
     if (s) return s;
   }
   throw new Error('no position found');
@@ -62,15 +62,23 @@ describe('tap a card, then a hex', () => {
   });
 
   it('selFor picks exactly a given move (used by the coach\'s "Show me")', () => {
-    for (const a of legal.filter(isBoard)) expect(pendingAction(v, legal, selFor(v, legal, a))).toEqual(a);
+    // v0.7: a Bloom is chosen by painting it (there can be hundreds per hex); the tap model
+    // offers the best Bloom of each kind on a hex, and that is what selFor reaches
+    for (const a of legal.filter(isBoard)) {
+      const got = pendingAction(v, legal, selFor(v, legal, a))!;
+      if (a.t !== 'Bloom') expect(got).toEqual(a);
+      else {
+        expect(got.t).toBe('Bloom');
+        expect(kindOf(got)).toBe(kindOf(a));
+        expect(touchesHex(got, coordKey(a.hexes[0]!))).toBe(true);
+      }
+    }
   });
 
   it('move kinds have plain names', () => {
-    expect(kindLabel('line-3')).toBe('Grow a line of 3');
-    expect(kindLabel('clump-4')).toBe('Grow a clump of 4');
-    // several buttons in a row: short words (the full ones stay the accessible name)
-    expect(shortKindLabel('line-3')).toBe('Line of 3');
-    expect(shortKindLabel('clump-4')).toBe('Clump of 4');
+    expect(kindLabel('bloom-3-1.2.3')).toBe('Bloom 3 tiles');
+    expect(kindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
+    expect(shortKindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
     expect(kindLabel('sprout')).toBe('Sprout one tile');
   });
 
@@ -186,7 +194,7 @@ describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one
     expect(targetHexes(v, legal, sel)).toEqual(sprouts);
   });
 
-  it('a chosen line or clump is kept; a hex picked first is kept (it shows the best move there)', () => {
+  it('a chosen Bloom is kept; a hex picked first is kept (it shows the best move there)', () => {
     const kinds = kindsAvailable(v, legal, EMPTY_SEL).map((k) => k.kind).filter((k) => k !== 'sprout');
     expect(kinds.length).toBeGreaterThan(0);
     const withKind = tapKind(EMPTY_SEL, kinds[0]!);
@@ -202,7 +210,7 @@ describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one
     expect(sel).toMatchObject({ card: null, kind: null });
   });
 
-  it('the move buttons no longer offer "Sprout one tile" (lines and clumps stay)', () => {
+  it('the move buttons no longer offer "Sprout one tile" (Blooms stay)', () => {
     expect(kindsAvailable(v, legal, EMPTY_SEL).some((k) => k.kind === 'sprout')).toBe(true); // still a kind of move
     const shown = moveButtons(v, legal, EMPTY_SEL).map((k) => k.kind);
     expect(shown).not.toContain('sprout');
@@ -251,7 +259,7 @@ describe('no Confirm for a clear choice (Undo can take it back)', () => {
 
 describe('Grow step: sprout first, then throw (a small "Skip sprout" link keeps the rules as they are)', () => {
   const sprout: Action = { t: 'Sprout', card: 1, coord: { q: 0, r: 0 } };
-  const line: Action = { t: 'MeldRun', cards: [1, 2, 3], hexes: [] } as unknown as Action;
+  const line: Action = { t: 'Bloom', cards: [1, 2, 3], hexes: [] };
   const end: Action = { t: 'EndAct' };
 
   it('while a sprout is possible: "Pick a card to sprout", no Throw button, a small Skip link', () => {

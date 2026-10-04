@@ -1,10 +1,10 @@
 // Plain-language names for hexes, cards and moves.
-import { DIRECTIONS, SUIT_NAMES, coordKey, hexDistance, rootCoord } from '../engine/index.js';
-import type { Action, Card, Coord, Player, View } from '../engine/index.js';
+import { SUIT_NAMES, coordKey } from '../engine/index.js';
+import type { Action, Card, Coord, View } from '../engine/index.js';
 import { simulate } from '../bots/evaluate.js';
 import type { Simulation } from '../bots/evaluate.js';
 import { hexName } from './names-core.js';
-import { FRUIT, OPP, SPROUT } from '../strings.js';
+import { BLOOM, FRUIT, OPP, SPROUT } from '../strings.js';
 
 export { hexName };
 
@@ -33,21 +33,10 @@ export const moveSentence = (v: View, a: Action): string => {
   switch (a.t) {
     case 'Draw':
       return a.from === 'deck' ? 'Draw a card from the deck' : `Take the ${cardName(v.discard.at(-1)!)} from the throw pile`;
-    case 'MeldRun': {
-      const sim = simulate(v, a)!;
-      const opp: Player = v.player === 0 ? 1 : 0;
-      const target = rootCoord(opp, v.config.rootStyle, R);
-      const d = DIRECTIONS[a.dir]!;
-      const tip = { q: a.start.q + d.q * (a.cards.length - 1), r: a.start.r + d.r * (a.cards.length - 1) };
-      const before = hexDistance(a.start, target);
-      const after = hexDistance(tip, target);
-      const way = after < before ? `toward ${OPP.the}` : after > before ? `away from ${OPP.the}` : 'sideways';
-      return `Grow a line of ${a.cards.length} tiles from ${hn(a.start)} ${way}${effects(sim)}${pointsText(sim)}`;
-    }
-    case 'MeldSet': {
+    case 'Bloom': {
       const sim = simulate(v, a)!;
       const names = a.hexes.map(hn).sort((x, y) => x[0]!.localeCompare(y[0]!) || Number(x.slice(1)) - Number(y.slice(1)));
-      return `Grow a clump of ${a.hexes.length} tiles at ${names.join(', ')}${effects(sim)}${pointsText(sim)}`;
+      return `${BLOOM.suggest(a.hexes.length, names.join(', '))}${effects(sim)}${pointsText(sim)}`;
     }
     case 'Sprout': {
       const sim = simulate(v, a)!;
@@ -75,12 +64,7 @@ export const moveSentence = (v: View, a: Action): string => {
 /** Hexes a move touches, for highlighting and for the hex filter. */
 export const moveHexes = (a: Action): Coord[] => {
   switch (a.t) {
-    case 'MeldRun':
-      return Array.from({ length: a.cards.length }, (_, i) => ({
-        q: a.start.q + DIRECTIONS[a.dir]!.q * i,
-        r: a.start.r + DIRECTIONS[a.dir]!.r * i,
-      }));
-    case 'MeldSet':
+    case 'Bloom':
       return a.hexes;
     case 'Sprout':
       return [a.coord];
@@ -95,7 +79,7 @@ export const moveHexes = (a: Action): Coord[] => {
 
 /** Card ids a move uses. */
 export const moveCards = (a: Action): number[] => {
-  if (a.t === 'MeldRun' || a.t === 'MeldSet') return a.cards;
+  if (a.t === 'Bloom') return a.cards;
   if (a.t === 'Sprout' || a.t === 'PlayFruit') return [a.card];
   if (a.t === 'Discard') return [a.card];
   return [];

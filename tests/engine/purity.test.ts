@@ -6,8 +6,7 @@ import {
   isStrangled,
   isValidRun,
   isValidSet,
-  planRun,
-  planSet,
+  planBloom,
   sever,
   strangleOutcome,
   strangledPlayers,
@@ -16,7 +15,7 @@ import {
   validateSet,
 } from '../../src/engine/index.js';
 import type { Card } from '../../src/engine/index.js';
-import { card, clone, codeOf, fixture } from '../helpers.js';
+import { chain, card, clone, codeOf, fixture } from '../helpers.js';
 
 /**
  * Section 2.2 / 14.14: no step 7-10 function mutates its input, on success or
@@ -74,34 +73,34 @@ describe('purity: meld validation', () => {
 });
 
 describe('purity: placement', () => {
-  it('planRun does not mutate ctx, hand, ids or start (success)', () => {
+  it('planBloom (a run) does not mutate ctx, hand, ids or start (success)', () => {
     const f = busy();
     const ids = [3, 4, 5];
     const start = { q: -1, r: 2 };
-    assertPure([f, hand, ids, start], () => planRun(f, 0, hand, ids, start, 0));
+    assertPure([f, hand, ids, start], () => planBloom(f, 0, hand, ids, chain(start, 0, ids.length)));
   });
 
-  it('planRun does not mutate anything on failure (atomic: hand and board intact)', () => {
+  it('planBloom (a run) does not mutate anything on failure (atomic: hand and board intact)', () => {
     const f = busy();
     const ids = [3, 4, 5];
     const start = { q: -1, r: 1 }; // own tile
-    assertPure([f, hand, ids, start], () => planRun(f, 0, hand, ids, start, 1));
-    expect(codeOf(() => planRun(f, 0, hand, ids, start, 1))).toBe('OWN_TILE');
+    assertPure([f, hand, ids, start], () => planBloom(f, 0, hand, ids, chain(start, 1, ids.length)));
+    expect(codeOf(() => planBloom(f, 0, hand, ids, chain(start, 1, ids.length)))).toBe('OWN_TILE');
   });
 
-  it('planSet does not mutate ctx, hand, ids or hexes (success and failure)', () => {
+  it('planBloom (a set) does not mutate ctx, hand, ids or hexes (success and failure)', () => {
     const f = fixture();
     const ids = [1, 2, 3];
     const good = [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }];
-    assertPure([f, set, ids, good], () => planSet(f, 0, set, ids, good));
+    assertPure([f, set, ids, good], () => planBloom(f, 0, set, ids, good));
     const bad = [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 3, r: 3 }];
-    assertPure([f, set, ids, bad], () => planSet(f, 0, set, ids, bad));
-    expect(codeOf(() => planSet(f, 0, set, ids, bad))).toBe('HEXES_NOT_CONNECTED');
+    assertPure([f, set, ids, bad], () => planBloom(f, 0, set, ids, bad));
+    expect(codeOf(() => planBloom(f, 0, set, ids, bad))).toBe('HEXES_NOT_CONNECTED');
   });
 
   it('applyPlacement does not mutate board or placement; output shares no tile it changed', () => {
     const f = busy();
-    const placement = planRun(f, 0, hand, [3, 4, 5], { q: -1, r: 2 }, 0);
+    const placement = planBloom(f, 0, hand, [3, 4, 5], chain({ q: -1, r: 2 }, 0, 3));
     assertPure([f.board, placement], () => applyPlacement(f.board, placement));
     const out = applyPlacement(f.board, placement);
     expect(out.board).not.toBe(f.board);

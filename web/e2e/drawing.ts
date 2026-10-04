@@ -1,9 +1,11 @@
-// Browser-test helper (polish pass 3): makes a line or clump the way a person would, by
-// drawing it on the board with the mouse. A line: click its start, then click its far end.
-// A clump: press on a hex and drag through the others (lifting and starting again from the
-// shape whenever the next hex does not touch the last one).
+// Browser-test helper (v0.7): paints a Bloom the way a person would. The Bloom's button must
+// already be chosen. A run's numbers follow the paint order (lowest first), so its hexes are
+// painted in card order, or (if that order does not grow as one shape) reversed with the
+// Reverse toggle. A set is painted from its first hex outward. Each new hex is reached by
+// dragging from a hex of the shape that touches it (lifting and starting a new stroke when the
+// last one does not).
 import type { Page } from 'playwright-core';
-import { DIRECTIONS, coordKey, hexDistance, parseKey } from '../../src/engine/index.js';
+import { coordKey, hexDistance, parseKey } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 
 export const hexCenter = async (page: Page, key: string) => {
@@ -12,43 +14,61 @@ export const hexCenter = async (page: Page, key: string) => {
 };
 
 const adjacent = (a: string, b: string) => hexDistance(parseKey(a), parseKey(b)) === 1;
+const grows = (order: readonly string[]) => order.every((k, i) => i === 0 || order.slice(0, i).some((x) => adjacent(x, k)));
 
-/** Draws `a` (a MeldRun or MeldSet) on the board; the line or clump button must already be chosen. */
-export const drawMeld = async (page: Page, a: Action) => {
-  if (a.t === 'MeldRun') {
-    const d = DIRECTIONS[a.dir]!;
-    const n = a.cards.length - 1;
-    const s = await hexCenter(page, coordKey(a.start));
-    const e = await hexCenter(page, coordKey({ q: a.start.q + d.q * n, r: a.start.r + d.r * n }));
-    await page.mouse.click(s.x, s.y);
-    await page.mouse.move(e.x, e.y, { steps: 4 });
-    await page.mouse.click(e.x, e.y);
-    return;
+/** The paint order for a Bloom (and whether Reverse is needed), or null if it cannot be painted. */
+export const paintPlan = (a: Action, ranks: readonly number[]): { order: string[]; reverse: boolean } | null => {
+  if (a.t !== 'Bloom') return null;
+  const hexes = a.hexes.map(coordKey);
+  const isSet = ranks.every((r) => r === ranks[0]);
+  if (isSet) {
+    const out = [hexes[0]!];
+    while (out.length < hexes.length) out.push(hexes.find((k) => !out.includes(k) && out.some((x) => adjacent(x, k)))!);
+    return { order: out, reverse: false };
   }
-  if (a.t !== 'MeldSet') throw new Error('not a line or clump');
-  const left = a.hexes.map(coordKey);
-  const shape = [left.shift()!];
-  let cur = shape[0]!;
+  if (grows(hexes)) return { order: hexes, reverse: false };
+  const back = [...hexes].reverse();
+  return grows(back) ? { order: back, reverse: true } : null;
+};
+
+/** Paints `a` on the board with the mouse (or a touch-like drag). Returns false if it cannot be painted. */
+export const drawMeld = async (page: Page, a: Action): Promise<boolean> => {
+  if (a.t !== 'Bloom') throw new Error('not a Bloom');
+  const ranks = (await page.evaluate(
+    `(() => { const s = window.__severgrow.state(); const h = s.hands[s.actor]; return ${JSON.stringify(a.cards)}.map((id) => h.find((c) => c.id === id).rank); })()`,
+  )) as number[];
+  const plan = paintPlan(a, ranks);
+  if (!plan) return false;
+  if (plan.reverse) await page.click('#moves .draw-reverse');
+  const order = plan.order;
+  const shape = [order[0]!];
+  let cur = order[0]!;
   let p = await hexCenter(page, cur);
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
-  while (left.length) {
-    let i = left.findIndex((k) => adjacent(k, cur));
-    if (i < 0) {
-      // start a new stroke from a hex of the shape that touches one still to add
-      i = left.findIndex((k) => shape.some((s) => adjacent(k, s)));
-      const from = shape.find((s) => adjacent(left[i]!, s))!;
+  for (const next of order.slice(1)) {
+    if (!adjacent(cur, next)) {
+      const from = shape.find((s) => adjacent(next, s))!;
       await page.mouse.up();
       p = await hexCenter(page, from);
       await page.mouse.move(p.x, p.y);
       await page.mouse.down();
       cur = from;
     }
-    const next = left.splice(i, 1)[0]!;
     const q = await hexCenter(page, next);
     await page.mouse.move(q.x, q.y, { steps: 6 });
     shape.push(next);
     cur = next;
   }
   await page.mouse.up();
+  return true;
+};
+
+/** Picks the exact card group of a Bloom: its family's button, then (if the button chose another group of that family) the test hook. */
+export const chooseBloom = async (page: Page, a: Action) => {
+  if (a.t !== 'Bloom') return;
+  const kind = `bloom-${a.cards.length}-${[...a.cards].sort((x, y) => x - y).join('.')}`;
+  const btn = page.locator(`#moves [data-kinds~="${kind}"]`);
+  if (await btn.count()) await btn.first().click();
+  await page.evaluate(`window.__severgrow.pickKind(${JSON.stringify(kind)})`);
 };

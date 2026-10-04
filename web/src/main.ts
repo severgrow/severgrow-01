@@ -15,27 +15,25 @@ import { growControls, isBoardAction, kindOf, moveButtons, onlyChoice, playNow, 
 import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
-  clumpEnter,
-  clumpGhost,
-  clumpHexes,
-  clumpMatch,
-  clumpProblem,
-  clumpTap,
   comboFor,
   deskClick,
   deskHover,
   deskShape,
+  drawNext,
+  drawStarts,
+  growToward,
   hexAtPoint,
   hexesAlong,
   keyStep,
-  lineArrows,
-  lineEnds,
-  lineGhost,
   onlyPlacement,
-  pixelOf,
-  snapDir,
-  drawNext,
+  paintEnter,
+  paintGhost,
+  paintMatch,
+  paintProblem,
+  paintTap,
   proximity,
+  suggestBloom,
+  unavailable,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
@@ -644,7 +642,7 @@ function scheduleBot() {
     const i = botPlan ? botPlan.keys.indexOf(posKey(st)) : -1;
     const action = i >= 0 ? botPlan!.actions[i]! : await askFor(st);
     // A short think before the bot's turn and before each tile move; housekeeping is quick.
-    const grows = action.t === 'MeldRun' || action.t === 'MeldSet' || action.t === 'Sprout';
+    const grows = action.t === 'Bloom' || action.t === 'Sprout';
     const beat = i >= 0 ? botPlan!.beats.think[i]! : (grows ? 300 : 90) * timeScale();
     quickShow = i >= 0 && botPlan!.beats.quick ? botPlan!.beats : null;
     const left = beat - (performance.now() - started);
@@ -905,15 +903,16 @@ async function playStep(step: Step, my: number) {
       const b = mo.budget;
       await anticipate(mo, f, my);
       if (!show()) return;
-      const per = (step.style === 'line' ? 140 : step.style === 'bloom' ? 110 : 0) * f;
-      const cx = step.tiles.reduce((s, t) => s + centerOf(t.key).x, 0) / step.tiles.length;
-      const cy = step.tiles.reduce((s, t) => s + centerOf(t.key).y, 0) / step.tiles.length;
+      const per = (step.style === 'bloom' ? 60 : 0) * f;
+      // v0.7: a Bloom pops outward from its first hex (the lowest number), a quick staggered ripple
+      const cx = centerOf(step.tiles[0]!.key).x;
+      const cy = centerOf(step.tiles[0]!.key).y;
       const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       step.tiles.forEach((t, i) => {
         const tileEl = board.tile(t.key);
         const p = centerOf(t.key);
-        const delay = step.style === 'line' ? i * per : step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
+        const delay = step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
         last = Math.max(last, delay);
         const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
         // Squash and stretch: a quick pop that overshoots and settles.
@@ -1493,13 +1492,13 @@ function hintCtx(v: View): HintCtx {
         ? { firstTime: false, reason: fruitCardState(v, session!.legal, sel.card!).reason }
         : null,
     pending: !pending ? null : sproutKind(v, pending) === 'strengthen' ? 'strengthen' : dc ? 'drawn' : 'board',
-    drawing: dc ? { kind: dc.kind, n: dc.n, fine: finePointer() } : null,
+    drawing: dc ? { n: dc.n, fine: finePointer() } : null,
     card: kinds ? { single: sel.kind === 'sprout', grow: kinds.has('grow'), replace: kinds.has('replace'), strengthen: kinds.has('strengthen') } : null,
     kindPicked: sel.kind !== null,
     hexWithNoMove: sel.hex !== null,
     handEmpty: v.hand.length === 0,
     canSprout: session!.legal.some((a) => a.t === 'Sprout'),
-    canCombo: session!.legal.some((a) => a.t === 'MeldRun' || a.t === 'MeldSet'),
+    canCombo: session!.legal.some((a) => a.t === 'Bloom'),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
   };
 }
@@ -1709,7 +1708,7 @@ function renderControls(v: View, advice: Advice | null) {
   const sel = session.sel;
   const pending = session.pending;
   const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
-  const coachKind = advice && (advice.action.t === 'MeldRun' || advice.action.t === 'MeldSet') ? kindOf(advice.action) : null;
+  const coachKind = advice && advice.action.t === 'Bloom' ? kindOf(advice.action) : null;
 
   if (v.phase === 'DRAW') {
     // Nothing here: the two piles glow and say "Tap to draw" / "Tap to take".
@@ -1732,6 +1731,7 @@ function renderControls(v: View, advice: Advice | null) {
         render();
       });
       b.dataset.kind = k.kind;
+      b.dataset.kinds = k.kinds.join(' ');
       if (kindButtons.length > 1) b.setAttribute('aria-label', k.label);
       b.setAttribute('aria-pressed', String(on));
       moves.append(b);
@@ -1752,7 +1752,13 @@ function renderControls(v: View, advice: Advice | null) {
   }
   const dc = drawCombo();
   if (dc && !pending) {
-    if (dc.kind === 'clump' && draw.shape.length > 0) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+    if (draw.shape.length > 0 || draw.suggested) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));
+    // a run: which end gets the lowest number (a set has one number: no toggle)
+    if (dc.run) {
+      const b = button('Reverse', `ghost draw-reverse${draw.reverse ? ' on' : ''}`, () => toggleReverse(), 'Reverse the numbers: highest on the first hex');
+      b.setAttribute('aria-pressed', String(draw.reverse));
+      moves.append(b);
+    }
   }
   if (dc && settings.placementList) {
     // an opt-in accessibility list: step through every legal placement of this combo
@@ -2142,35 +2148,29 @@ function onCardTap(id: number) {
   maybeAutoPlay();
 }
 
-// ---------- drawing a line or clump (polish pass 3) ----------
+// ---------- painting a Bloom (v0.7) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
-type DrawUi = { shape: string[]; dir: number | null; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean };
-const DRAW0: DrawUi = { shape: [], dir: null, desk: DESK_IDLE, ptr: null, msg: null };
+type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean; suggested?: boolean };
+const DRAW0: DrawUi = { shape: [], reverse: false, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
 const finePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
 
-/** The chosen line or clump while drawing is possible (my Grow step, a combo picked), else null. */
+/** The picked Bloom while painting is possible (my Grow step, a Bloom picked), else null. */
 let comboMemo: { state: unknown; sel: unknown; combo: Combo | null } | null = null;
 function drawCombo(): Combo | null {
   if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return null;
-  // worked out once per position and selection (it scores every placement), not on every pointer move
+  // worked out once per position and selection, not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
 }
 
-/** The ghost of the shape being drawn right now (null when nothing is drawn). */
+/** The ghost of the shape being painted right now (null when nothing is painted). */
 function drawGhostNow(c: Combo): DrawGhost | null {
   const v = session!.view;
-  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk);
-  if (c.kind === 'line') {
-    const start = draw.shape[0];
-    if (!start) return null;
-    if (draw.dir === null) return { tiles: [], action: null, reason: null };
-    return lineGhost(v, c, start, draw.dir);
-  }
-  return draw.shape.length ? clumpGhost(v, c, draw.shape) : null;
+  if (draw.desk.phase === 'live') return deskShape(v, c, draw.desk, draw.reverse);
+  return draw.shape.length ? paintGhost(v, c, draw.shape, draw.reverse) : null;
 }
 
 /** Repaints only the ghost layer and the info card (no full board redraw), once per frame. */
@@ -2180,12 +2180,12 @@ function paintDraw() {
     const c = drawCombo();
     if (!c || !session) return;
     const g = session.presetMove ? null : drawGhostNow(c);
-    const lineStart = c.kind === 'line' ? (draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]) : undefined;
-    const showArrows = lineStart && (draw.desk.phase === 'live' ? draw.desk.hover === draw.desk.start : draw.dir === null);
-    board.ghost(g || showArrows ? {
+    const shape = draw.desk.phase === 'live' ? growToward(c, draw.desk.start, draw.desk.hover, draw.reverse) : draw.shape;
+    const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
+    board.ghost(g || blocked.length ? {
       tiles: g?.tiles ?? [],
-      blocked: !!g && !g.action && g.tiles.length > 0,
-      arrows: showArrows ? { from: lineStart!, dirs: lineArrows(c, lineStart!) } : null,
+      blocked: !!g && !g.action && g.tiles.length === c.n,
+      unavailable: blocked,
       cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
     } : null);
     renderDrawInfo(c, g);
@@ -2200,14 +2200,13 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   if (session!.presetMove) text = '';
   else if (g?.action) {
     const pv = previewMove(v, g.action);
-    text = `${c.kind === 'clump' ? `${c.n}/${c.n} · ` : ''}${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
-  } else if (c.kind === 'clump' && draw.shape.length) text = clumpProblem(v, c, draw.shape) ?? '';
-  else if (g?.reason) text = g.reason;
+    text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+  } else if (g?.reason) text = g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;
   box.hidden = !text;
-  const n = c.kind === 'clump' ? draw.shape.length : g?.tiles.length ?? 0;
-  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : c.kind === 'clump' && n ? `${n} of ${c.n} hexes chosen` : '';
+  const n = g?.tiles.length ?? 0;
+  $('draw-live').textContent = g?.action ? `${n} of ${c.n} hexes chosen. ${previewMove(v, g.action)?.chip ?? ''}` : n ? `${n} of ${c.n} hexes chosen` : '';
 }
 
 /** A soft rising tick and a light haptic for each hex added (Sound and Vibration toggles). */
@@ -2217,14 +2216,32 @@ function drawTick(i: number) {
 }
 
 function cancelDraw(msg: string | null = null) {
-  draw = { ...DRAW0, msg };
+  if (draw.suggested) session?.preset(null);
+  draw = { ...DRAW0, reverse: draw.reverse, msg };
   board.ghost(null);
+  render();
+}
+
+/** Flips which end of a run gets the lowest number (only shown for runs). */
+function toggleReverse() {
+  const c = drawCombo();
+  if (!c) return;
+  if (draw.suggested) session!.preset(null);
+  draw = { ...draw, reverse: !draw.reverse, suggested: false };
+  // keep only the part of the shape that still fits the flipped numbers
+  const kept: string[] = [];
+  for (const k of draw.shape) {
+    const next = paintEnter(c, kept, k, draw.reverse);
+    if (next.length === kept.length) break;
+    kept.push(k);
+  }
+  draw = { ...draw, shape: kept };
   render();
 }
 
 /** A finished shape: placed at once, or shown with Confirm (the "Confirm moves" setting). */
 function finishDraw(a: Meld) {
-  draw = { ...DRAW0 };
+  draw = { ...DRAW0, reverse: draw.reverse };
   board.ghost(null);
   if (asksConfirm(a)) {
     session!.preset(a);
@@ -2232,26 +2249,42 @@ function finishDraw(a: Meld) {
   } else humanPlay(a);
 }
 
-/** A tap or click on a hex while drawing (no drag): the two-click machine, or clump tapping. */
+/**
+ * A tap on a hex while painting (no drag). The first tap on an empty shape also shows the
+ * suggested Bloom through that hex (with its result chip and Confirm); tapping on adds hexes
+ * one by one (every Bloom can be made by taps alone); a mouse uses the two-click machine.
+ */
 function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
-  if (c.kind === 'line' || (type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
-    const r = deskClick(draw.desk, key, v, c);
+  if ((type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
+    const r = deskClick(draw.desk, key, v, c, draw.reverse);
     if (r.finish) return finishDraw(r.finish);
-    // a tap on another legal start begins again from there
-    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && (c.kind === 'line' ? lineEnds(c) : clumpHexes(c)).has(key) && !deskShape(v, c, r.desk).action) {
-      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [], dir: null };
-    } else draw = { ...draw, desk: r.desk, shape: [], dir: null };
+    // a click on another legal start begins again from there
+    if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && drawStarts(c, draw.reverse).has(key) && !deskShape(v, c, r.desk, draw.reverse).action) {
+      draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [] };
+    } else draw = { ...draw, desk: r.desk, shape: [] };
     if (r.desk.phase === 'live' && draw.desk.phase === 'live') drawTick(0);
     paintDraw();
     return;
   }
-  const next = clumpTap(draw.shape, key, c);
+  if (draw.suggested) session!.preset(null);
+  const next = paintTap(c, draw.shape, key, draw.reverse);
   if (next.length > draw.shape.length) drawTick(next.length - 1);
-  draw = { ...draw, shape: next, msg: null };
-  const m = clumpMatch(c, next);
+  else if (next.length === draw.shape.length && !draw.shape.includes(key)) draw = { ...draw, msg: unavailable(v, c, draw.shape, draw.reverse).get(key) ?? null };
+  draw = { ...draw, shape: next, suggested: false, msg: next.length !== draw.shape.length ? null : draw.msg };
+  const m = paintMatch(c, next, draw.reverse);
   if (m) return finishDraw(m);
-  paintDraw();
+  // the one-tap suggestion: a first tap shows the best Bloom through this hex, ready to confirm
+  if (next.length === 1 && draw.shape.length === 1) {
+    const s = suggestBloom(v, c.actions, key);
+    if (s) {
+      session!.preset(s);
+      draw = { ...draw, suggested: true };
+      render();
+      return;
+    }
+  }
+  render();
 }
 
 const drawHandlers = {
@@ -2259,29 +2292,26 @@ const drawHandlers = {
     const c = drawCombo();
     if (!c || !session) return;
     if (e.button === 2) return cancelDraw();
-    // a second finger (a pinch, a scroll) cancels the drawing
+    // a second finger (a pinch, a scroll) cancels the painting
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
-    if (session.presetMove) {
-      // drawing again over a waiting preview: the preview goes (and the one-placement shortcut
-      // does not bring it straight back while this drawing is on)
+    const keys = new Set(board.boardKeys);
+    const key = hexAtPoint(p.x, p.y, keys);
+    if (session.presetMove && !draw.suggested) {
+      // painting again over a waiting preview: the preview goes (and the one-placement shortcut
+      // does not bring it straight back while this painting is on)
       session.preset(null);
       draw = { ...draw, redraw: true };
       render();
     }
-    const keys = new Set(board.boardKeys);
-    const key = hexAtPoint(p.x, p.y, keys);
     draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
-    if (draw.desk.phase === 'live') return; // a live two-click shape finishes where the pointer is released
-    if (!key) return;
-    if (c.kind === 'line' && lineEnds(c).has(key) && draw.desk.phase === 'idle') draw = { ...draw, shape: [key], dir: null, msg: null };
-    // a clump hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
+    // a hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
     paintDraw();
   },
   move(p: Pt, e: PointerEvent) {
     const c = drawCombo();
     if (!c) return;
     const keys = new Set(board.boardKeys);
-    // after a first click (or tap) the live shape follows the pointer, button held or not
+    // after a first click the live shape follows the pointer, button held or not
     if (draw.desk.phase === 'live') {
       const k = hexAtPoint(p.x, p.y, keys);
       if (k && k !== draw.desk.hover) {
@@ -2291,20 +2321,22 @@ const drawHandlers = {
       if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
       return;
     }
-    if (!draw.ptr) return;
-    if (e.pointerId !== draw.ptr.id) return;
+    if (!draw.ptr || e.pointerId !== draw.ptr.id) return;
     const ptr = draw.ptr;
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
       ptr.moved = true;
-      // a drag on a clump begins with the hex it started on
-      if (c.kind === 'clump' && ptr.downKey && !draw.shape.includes(ptr.downKey)) {
-        const next = clumpEnter(draw.shape, ptr.downKey, c);
+      // a drag begins with the hex it started on (a drag from a suggestion reshapes it)
+      if (draw.suggested) {
+        session!.preset(null);
+        draw = { ...draw, suggested: false, shape: ptr.downKey && draw.shape[0] === ptr.downKey ? [ptr.downKey] : [] };
+      }
+      if (ptr.downKey && !draw.shape.includes(ptr.downKey)) {
+        const next = paintEnter(c, draw.shape, ptr.downKey, draw.reverse);
         if (next.length > draw.shape.length) drawTick(next.length - 1);
         draw = { ...draw, shape: next, msg: null };
       }
     }
-    // only hexes the finger moves INTO count (not the one it is already on): so starting a
-    // new stroke on a hex of the shape never reads as "dragging back"
+    // only hexes the finger moves INTO count (fast swipes are sampled so none is skipped)
     const entered: string[] = [];
     for (const k of hexesAlong(ptr.last, p, keys)) {
       if (k === ptr.cur) continue;
@@ -2313,22 +2345,15 @@ const drawHandlers = {
     }
     ptr.last = p;
     if (!ptr.moved) return;
-    if (c.kind === 'line' && draw.shape[0]) {
-      const o = pixelOf(draw.shape[0]);
-      const dir = snapDir(p.x - o.x, p.y - o.y, draw.dir);
-      if (dir !== draw.dir) {
-        draw = { ...draw, dir };
-        if (dir !== null) drawTick(c.n - 1);
-      }
-    } else if (c.kind === 'clump') {
-      let shape = draw.shape;
-      for (const k of entered) {
-        const next = clumpEnter(shape, k, c);
-        if (next.length > shape.length) drawTick(next.length - 1);
-        shape = next;
-      }
-      draw = { ...draw, shape };
+    let shape = draw.shape;
+    let msg = draw.msg;
+    for (const k of entered) {
+      const next = paintEnter(c, shape, k, draw.reverse);
+      if (next.length > shape.length) drawTick(next.length - 1);
+      else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+      shape = next;
     }
+    draw = { ...draw, shape, msg };
     paintDraw();
   },
   up(p: Pt, e: PointerEvent, inside: boolean) {
@@ -2341,7 +2366,7 @@ const drawHandlers = {
       return;
     }
     // lifting the finger outside the board: nothing is placed
-    if (!inside) return cancelDraw('Drawing cancelled');
+    if (!inside) return cancelDraw('Painting cancelled');
     // a live two-click shape dragged and released: it finishes where it was released
     if (draw.desk.phase === 'live') {
       const k = hexAtPoint(p.x, p.y, new Set(board.boardKeys)) ?? draw.desk.hover;
@@ -2349,11 +2374,12 @@ const drawHandlers = {
     }
     const g = drawGhostNow(c);
     if (g?.action) return finishDraw(g.action);
-    if (c.kind === 'line') {
-      if (draw.dir !== null) board.shake(settings.reduceMotion);
-      draw = { ...draw, shape: [], dir: null, msg: g?.reason ?? null };
-    } else if (draw.shape.length === c.n) draw = { ...draw, msg: clumpProblem(session!.view, c, draw.shape) };
-    paintDraw();
+    // released early: the partial shape stays (with Clear); a full shape that can't go shakes
+    if (draw.shape.length === c.n) {
+      board.shake(settings.reduceMotion);
+      draw = { ...draw, msg: paintProblem(session!.view, c, draw.shape, draw.reverse) };
+    }
+    render();
   },
   cancel() {
     if (draw.ptr || draw.shape.length || draw.desk.phase === 'live') cancelDraw();
@@ -2806,6 +2832,12 @@ document.addEventListener('keydown', (e) => {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
   canUndo: () => !!session?.canUndo,
+  /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
+  pickKind: (kind: string) => {
+    if (!session) return;
+    session.sel = { ...session.sel, kind };
+    render();
+  },
   /** tests only (filmstrip): play this action for this player, as if chosen */
   playFor: (a: Action, who: Player) => {
     const p = session?.play(a, who);

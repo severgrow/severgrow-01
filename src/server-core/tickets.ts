@@ -28,7 +28,7 @@ export const issueTicket = (p: { id: string; playerId: string; seed: number; lev
 
 const same = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 /** Accepts only plain objects with a known move type (anything else is junk). */
-const MOVE_TYPES = new Set(['Draw', 'MeldRun', 'MeldSet', 'Sprout', 'PlayFruit', 'EndAct', 'Discard', 'Knock', 'Continue', 'RotPick']);
+const MOVE_TYPES = new Set(['Draw', 'Bloom', 'Sprout', 'PlayFruit', 'EndAct', 'Discard', 'Knock', 'Continue', 'RotPick']);
 const looksLikeAction = (a: unknown): a is Action => !!a && typeof a === 'object' && !Array.isArray(a) && MOVE_TYPES.has((a as { t?: unknown }).t as string);
 
 export type Verified = { ok: true; scores: [number, number] } | Fail;

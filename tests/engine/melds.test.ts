@@ -14,7 +14,7 @@ const ASH = 1;
 const DEW = 2;
 const EMBER = 3;
 
-describe('runs (Hypha cards)', () => {
+describe('runs (numbers in a row, one suit)', () => {
   it('accepts 3+ consecutive ranks of one suit', () => {
     expect(isValidRun([card(1, MOSS, 3), card(2, MOSS, 4), card(3, MOSS, 5)])).toBe(true);
     expect(isValidRun([1, 2, 3, 4, 5, 6, 7, 8, 9].map((r) => card(r, ASH, r)))).toBe(true);

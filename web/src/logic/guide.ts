@@ -39,7 +39,7 @@ export const guideTarget = (
   if (same(pending, goal)) return { kind: 'confirm' };
   if (goal.t === 'Discard') return { kind: 'card', id: goal.card };
   if (!isBoardAction(goal)) return { kind: 'button' };
-  // A line or clump: tap its button first (a plain card tap would pick Sprout). Then the
+  // A Bloom: tap its button first (a plain card tap would pick Sprout). Then the
   // coach shows its placement on the board, ready to confirm (a drag cannot be pointed at).
   const goalKind = kindOf(goal)!;
   const copyOf = (id: number) => (x: number) => {
@@ -47,7 +47,7 @@ export const guideTarget = (
     const d = v.hand.find((h) => h.id === x);
     return !!c && !!d && c.suit === d.suit && c.rank === d.rank;
   };
-  if (goal.t === 'MeldRun' || goal.t === 'MeldSet') {
+  if (goal.t === 'Bloom') {
     if (sel.kind !== goalKind) return sel.kind === null && sel.card === null && sel.hex === null ? { kind: 'kind', move: goalKind } : { kind: 'cancel' };
     if (sel.card !== null && !goal.cards.some(copyOf(sel.card))) return { kind: 'cancel' };
     return { kind: 'preset' };

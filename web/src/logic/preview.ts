@@ -1,7 +1,7 @@
 // What a move would do, before it is played: ghost tiles in the exact places they
 // grow, a short result chip, and a warning when it opens a big cut for the bot.
 // Read-only: uses the engine's public planning functions and never changes the view.
-import { coordKey, planRun, planSet, planSprout } from '../../../src/engine/index.js';
+import { coordKey, planBloom, planSprout } from '../../../src/engine/index.js';
 import type { Action, Player, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { OPP } from '../../../src/strings.js';
@@ -34,15 +34,10 @@ export const chipText = (p: { placed: number; replaced: number; cuts: number; wi
 };
 
 export const previewMove = (v: View, a: Action): Preview | null => {
-  if (a.t !== 'MeldRun' && a.t !== 'MeldSet' && a.t !== 'Sprout') return null;
+  if (a.t !== 'Bloom' && a.t !== 'Sprout') return null;
   const p = v.player;
   const opp: Player = p === 0 ? 1 : 0;
-  const plan =
-    a.t === 'MeldRun'
-      ? planRun(v, p, v.hand, a.cards, a.start, a.dir)
-      : a.t === 'MeldSet'
-        ? planSet(v, p, v.hand, a.cards, a.hexes)
-        : planSprout(v, p, v.hand, a.card, a.coord);
+  const plan = a.t === 'Bloom' ? planBloom(v, p, v.hand, a.cards, a.hexes) : planSprout(v, p, v.hand, a.card, a.coord);
   const sim = simulate(v, a)!;
   if (plan.strengthen) {
     const t = plan.tiles[0]!;

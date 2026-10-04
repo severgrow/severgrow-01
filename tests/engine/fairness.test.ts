@@ -22,7 +22,7 @@ import { stateHash } from '../hash.js';
 const placesOf = (s: State): number[] => {
   const played: number[] = [];
   for (const e of s.history ?? []) {
-    if (e.t === 'MeldRun' || e.t === 'MeldSet') played.push(...e.cards);
+    if (e.t === 'Bloom') played.push(...e.cards);
     if (e.t === 'Sprout' || e.t === 'Strengthen' || e.t === 'FruitCard') played.push(e.card); // a played Fruit card leaves the game
   }
   return [...s.hands[0], ...s.hands[1], ...s.deck, ...s.discard].map((c) => c.id).concat(played);

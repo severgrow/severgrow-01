@@ -5,7 +5,7 @@ import { SWEEPS, formatSweepTable, runSweeps } from '../../src/sim/sweeps.js';
 describe('sweeps (spec 17, step 23)', () => {
   it('cover every dimension the spec lists', () => {
     const names = SWEEPS.map((s) => s.name);
-    for (const n of ['rootStyle', 'rot', 'knockDeadwood', 'knockGivesFinalTurn', 'copiesPerCard', 'allowHyphaOneBend', 'fruitCardCount']) {
+    for (const n of ['rootStyle', 'rot', 'knockDeadwood', 'knockGivesFinalTurn', 'copiesPerCard', 'fruitCardCount']) {
       expect(names).toContain(n);
     }
     const knock = SWEEPS.find((s) => s.name === 'knockDeadwood')!;
@@ -14,12 +14,9 @@ describe('sweeps (spec 17, step 23)', () => {
     expect(fruit.variants.map((v) => v.config.fruitCardCount)).toEqual([0, 2, 4, 6]);
   });
 
-  it('every runnable variant is a valid config; the bend sweep is marked as skipped', () => {
+  it('every variant is a valid config (v0.7: none is skipped)', () => {
     for (const s of SWEEPS) {
-      if (s.skipped) {
-        expect(s.name).toBe('allowHyphaOneBend');
-        continue;
-      }
+      expect(s.skipped).toBeUndefined();
       for (const v of s.variants) expect(() => resolveConfig(v.config)).not.toThrow();
     }
   });

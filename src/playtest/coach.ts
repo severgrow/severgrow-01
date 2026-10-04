@@ -8,7 +8,7 @@ import { rankActions } from '../bots/GreedyBot.js';
 import type { MoveFacts, Scored } from '../bots/GreedyBot.js';
 import { threats } from '../bots/evaluate.js';
 import { cardName, hexName, moveCards, moveHexes, moveSentence } from './names.js';
-import { FRUIT, OPP, SPROUT } from '../strings.js';
+import { BLOOM, FRUIT, OPP, SPROUT } from '../strings.js';
 
 /** How many player actions the coach helps with at the start of a game. */
 export const COACH_STEPS = 15;
@@ -117,7 +117,7 @@ const fruitOn = (v: View) => v.config.fruitCardCount > 0;
 type Ctx = { v: View; ranked: Scored[]; say: (w: string) => string };
 
 const boardFacts = (ranked: Scored[]): MoveFacts[] =>
-  ranked.flatMap((r) => (r.facts.kind === 'meld' || r.facts.kind === 'fruit' || r.facts.kind === 'sprout' ? [r.facts.move] : []));
+  ranked.flatMap((r) => (r.facts.kind === 'bloom' || r.facts.kind === 'fruit' || r.facts.kind === 'sprout' ? [r.facts.move] : []));
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -134,8 +134,8 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   },
   combos: {
     active: () => true,
-    fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'meld'),
-    text: ({ say }) => `A ${say('combo')}: one suit in a row (3-4-5) grows a line; one number grows a clump.`,
+    fits: ({ v, ranked }) => v.phase === 'ACT' && ranked.some((r) => r.facts.kind === 'bloom'),
+    text: () => BLOOM.hint,
   },
   sprout: {
     active: ({ v }) => v.config.sproutsPerTurn > 0,
@@ -219,7 +219,7 @@ const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   if (m.onRich > 0) {
     reasons.push(m.onRich === 1 ? `This ${say('gold hex')} is worth 2 points.` : `These ${m.onRich} gold hexes are worth 2 points each.`);
   }
-  if (m.placed > 0) reasons.push(m.toward ? `This grows ${m.placed} tiles toward ${OPP.theirs} root.` : `This grows ${m.placed} new tiles for you.`);
+  if (m.placed > 0) reasons.push(`This grows ${m.placed} new tiles for you.`);
   const why = reasons.slice(0, 2);
   if (m.exposureAfter > m.exposureBefore && m.weakSpot) {
     const spot = hexName(parseKey(m.weakSpot), v.config.boardRadius);
@@ -232,7 +232,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
   const { v, say, ranked } = c;
   const f = best.facts;
   switch (f.kind) {
-    case 'meld':
+    case 'bloom':
     case 'fruit':
       return whyBoard(c, f.move, f.kind === 'fruit');
     case 'sprout':
@@ -261,7 +261,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
       return why;
     }
     case 'endAct': {
-      if (!f.meldsAvailable) return [`You have no ${say('combo')} left to play. Keep collecting matching cards.`];
+      if (!f.bloomsAvailable) return [`You have no ${say('combo')} left to play. Keep collecting matching cards.`];
       const bestMeld = boardFacts(ranked).find(() => true);
       if (bestMeld && bestMeld.exposureAfter > bestMeld.exposureBefore) {
         return [`Your ${say('combo')} would leave a ${say('weak spot')} ${OPP.the} could cut. Keep it for a better moment.`];

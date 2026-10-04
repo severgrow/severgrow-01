@@ -34,7 +34,7 @@ const moments = (): HintCtx[] => {
     for (const deckCount of [0, 1, 2, 3, 4, 40]) for (const canTakeThrow of [true, false]) out.push({ ...b, phase: 'DRAW', deckCount, canTakeThrow });
     for (const firstTime of [true, false]) out.push({ ...b, fruit: { firstTime } });
     for (const pending of ['strengthen', 'drawn', 'board'] as const) out.push({ ...b, pending });
-    for (const kind of ['line', 'clump'] as const) for (const fine of [true, false]) out.push({ ...b, drawing: { kind, n: 4, fine } });
+    for (const n of [3, 4]) for (const fine of [true, false]) out.push({ ...b, drawing: { n, fine } });
     for (const single of [true, false]) for (const grow of [true, false]) for (const replace of [true, false]) for (const strengthen of [true, false]) out.push({ ...b, card: { single, grow, replace, strengthen } });
     out.push({ ...b, kindPicked: true }, { ...b, hexWithNoMove: true }, { ...b, handEmpty: true }, { ...b, canSprout: false }, { ...b, canSprout: false, canCombo: false });
     out.push({ ...b, phase: 'DISCARD', throwEndsTurn: true });
@@ -70,7 +70,7 @@ describe('the hint line', () => {
     expect(hintFor({ ...base, canSprout: false, canCombo: false }).text).toMatch(/Nothing can grow/);
     // the single-card move is once per turn: once used, the hint stops offering it
     expect(hintFor({ ...base, canSprout: false }).text).not.toBe(SPROUT.tapHint);
-    expect(hintFor({ ...base, canSprout: false }).text).toMatch(/line or clump/);
+    expect(hintFor({ ...base, canSprout: false }).text).toMatch(/Bloom/);
   });
 
   it('the single-tile move is always called Sprout', () => {

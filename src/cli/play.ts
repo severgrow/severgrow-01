@@ -55,7 +55,7 @@ export const runTerminalGame = async (io: TerminalIO): Promise<State> => {
     if (s.actor === 1) {
       const a = GreedyBot.chooseAction(viewFor(s, 1));
       s = apply(s, a);
-      io.print(`Bot: ${a.t}${a.t === 'MeldRun' || a.t === 'MeldSet' ? ` (${a.cards.length} tiles)` : a.t === 'Sprout' ? ' (1 tile)' : ''}`);
+      io.print(`Bot: ${a.t}${a.t === 'Bloom' ? ` (${a.cards.length} tiles)` : a.t === 'Sprout' ? ' (1 tile)' : ''}`);
       continue;
     }
     const v = viewFor(s, 0);

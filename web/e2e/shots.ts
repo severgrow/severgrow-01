@@ -7,8 +7,7 @@ import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { THEME_IDS } from '../src/logic/themes.js';
 import { cutDemo, goldDemo } from './positions.js';
-import { kindOf } from '../src/logic/interaction.js';
-import { drawMeld } from './drawing.js';
+import { chooseBloom, drawMeld } from './drawing.js';
 
 const dir = process.argv.find((a) => a.startsWith('--dir='))?.slice(6) ?? 'docs/screens';
 mkdirSync(dir, { recursive: true });
@@ -87,10 +86,10 @@ for (const id of THEME_IDS) {
 // A frame in the middle of a big cut.
 {
   const page = await open({ palette: 'soil', speed: 'slow' }, demo.state);
-  if (demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet') await page.click(`#moves [data-kind="${kindOf(demo.action)}"]`).catch(() => {});
+  if (demo.action.t === 'Bloom') await chooseBloom(page, demo.action);
   await page.click(`#hand [data-card="${demo.card}"]`).catch(() => {});
   if (!(await page.locator('#confirm-play').isVisible())) {
-    if (demo.action.t === 'MeldRun' || demo.action.t === 'MeldSet') await drawMeld(page, demo.action);
+    if (demo.action.t === 'Bloom') await drawMeld(page, demo.action);
     else {
       const b = await page.locator(`.hex-cell[data-key="${demo.hex}"] path.hex`).boundingBox();
       if (b) await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);

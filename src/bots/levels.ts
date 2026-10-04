@@ -4,6 +4,7 @@
 // budgets are counted in iterations, never in time.
 import { bestMeldPartition, createCards, legalActions, mulberry32, score } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
+import { lookBlooms, shortlistBlooms } from './bloomLook.js';
 import { simulate } from './evaluate.js';
 import { WEIGHTS, rankActions } from './GreedyBot.js';
 import type { Scored, Weights } from './GreedyBot.js';
@@ -86,8 +87,8 @@ export const botSeed = (gameSeed: number, level: number, turnNumber: number, act
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 /** Moves that change the board in my Grow step (v0.6: a Fruit card too). */
-const growing = (a: Action) => a.t === 'MeldRun' || a.t === 'MeldSet' || a.t === 'Sprout' || a.t === 'PlayFruit';
-const usedCards = (a: Action): number[] => (a.t === 'Sprout' || a.t === 'PlayFruit' ? [a.card] : a.t === 'MeldRun' || a.t === 'MeldSet' ? a.cards : []);
+const growing = (a: Action) => a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit';
+const usedCards = (a: Action): number[] => (a.t === 'Sprout' || a.t === 'PlayFruit' ? [a.card] : a.t === 'Bloom' ? a.cards : []);
 
 /** The bot's own view after one of its growing moves (needs nothing hidden). */
 const viewAfter = (v: View, a: Action): View | null => {
@@ -151,7 +152,9 @@ const opponentView = (after: View, hand: Card[]): View => {
  */
 const replyDamage = (oppView: View): number => {
   let worst = 0;
-  for (const a of legalActions(oppView)) {
+  // (v0.7: Blooms through the quick look's short list, not all of them)
+  const blooms = shortlistBlooms(lookBlooms(oppView), REPLY_BLOOMS).map((l) => l.action as Action);
+  for (const a of [...blooms, ...legalActions(oppView).filter((x) => x.t !== 'Bloom')]) {
     if (!growing(a)) continue;
     const sim = simulate(oppView, a);
     if (!sim) continue;
@@ -177,6 +180,8 @@ const usefulness = (c: Card, unseen: readonly Card[]): number =>
   unseen.filter((u) => u.id !== c.id && ((u.rank === c.rank && u.suit !== c.suit) || (u.suit === c.suit && Math.abs(u.rank - c.rank) <= 2))).length;
 
 const CANDIDATES = 6;
+/** Blooms the imagined opponent reply considers (the quick look's best). */
+const REPLY_BLOOMS = 6;
 
 /** A bot decision, with a short plain-words reason for Strengthen and Fruit (debug only). */
 export type Decision = { action: Action; reason?: string };

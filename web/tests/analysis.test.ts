@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, State, View } from '../../src/engine/index.js';
 import { cutLoss, dangerWarning, simulate, threats } from '../src/analysis.js';
-import { fixture } from '../../tests/helpers.js';
+import { chain, fixture } from '../../tests/helpers.js';
 
 const view = (f: ReturnType<typeof fixture>, hand: Card[] = []): View => {
   const base = newGame(1);
@@ -50,16 +50,16 @@ describe('threats and the danger warning', () => {
       { id: 9, suit: 3, rank: 9 },
     ];
     const v = view(f, hand);
-    const risky: Action = { t: 'MeldRun', cards: [1, 2, 3], start: { q: 0, r: 0 }, dir: 0 }; // hangs off (-1,1)
+    const risky: Action = { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: 0, r: 0 }, 0, 3) }; // hangs off (-1,1)
     expect(dangerWarning(v, risky)).toMatch(/could cut off 4 of your tiles/);
-    const safe: Action = { t: 'MeldRun', cards: [1, 2, 3], start: { q: -2, r: 1 }, dir: 2 }; // hangs off the root
+    const safe: Action = { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: -2, r: 1 }, 2, 3) }; // hangs off the root
     expect(dangerWarning(v, safe)).toBeNull();
   });
 });
 
 describe('simulate', () => {
   it('reports tiles placed, points, takeovers and cut-offs', () => {
-    // Bot arm (1,-1)-(0,0)-(-1,0); my hypha from (-1,1) takes (0,0) and (1,-1), cutting (-1,0).
+    // Bot arm (1,-1)-(0,0)-(-1,0); my run bloom from (-1,1) takes (0,0) and (1,-1), cutting (-1,0).
     const f = fixture({ rich: ['0,0'], tiles: { '0,0': [1, 1], '1,-1': [1, 1], '-1,0': [1, 1] } });
     const hand: Card[] = [
       { id: 1, suit: 0, rank: 3 },
@@ -67,7 +67,7 @@ describe('simulate', () => {
       { id: 3, suit: 0, rank: 5 },
       { id: 4, suit: 1, rank: 1 },
     ];
-    const r = simulate(view(f, hand), { t: 'MeldRun', cards: [1, 2, 3], start: { q: -1, r: 1 }, dir: 1 })!;
+    const r = simulate(view(f, hand), { t: 'Bloom', cards: [1, 2, 3], hexes: chain({ q: -1, r: 1 }, 1, 3) })!;
     expect(r).toMatchObject({ placed: 3, taken: 2, botCut: 1, myLoss: 0, points: 4, botPointsLost: 4, wins: false });
   });
 });
