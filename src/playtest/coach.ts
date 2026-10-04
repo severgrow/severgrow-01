@@ -79,7 +79,7 @@ export type Advice = {
 // ---------- words ----------
 
 const GLOSSARY: Record<string, string> = {
-  root: 'the big round bulb you start from',
+  home: 'your tree, where your network starts',
   'throw pile': 'cards already thrown',
   deck: 'the face-down pile',
   combo: '3+ cards played together',
@@ -125,7 +125,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   goal: {
     active: () => true,
     fits: () => true,
-    text: ({ say }) => `Grow tiles out from your ${say('root')}. Keep every tile joined to it.`,
+    text: ({ say }) => `Grow tiles out from your ${say('home')}. Keep every tile joined to it.`,
   },
   draw: {
     active: () => true,
@@ -156,7 +156,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
     active: () => true,
     fits: ({ v }) =>
       threats(v, v.player).length > 0 || Object.values(v.board).filter((t) => t?.owner === v.player && !t.root).length >= 3,
-    text: ({ say }) => `Cut off from your root, a tile ${say('withers')}. Guard each ${say('weak spot')}.`,
+    text: ({ say }) => `Cut off from your home, a tile ${say('withers')}. Guard each ${say('weak spot')}.`,
   },
   cutting: {
     active: () => true,
@@ -192,7 +192,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
       const near = Object.entries(v.board).some(([k, t]) => t?.owner === v.player && hexDistance(parseKey(k), target) <= 2);
       return near || boardFacts(ranked).some((m) => m.wins);
     },
-    text: ({ say }) => `Win at once: ${say('strangle')} ${OPP.theirs} root.`,
+    text: ({ say }) => `Win at once: ${say('strangle')} ${OPP.theirs} home.`,
   },
   planning: {
     active: () => true,
@@ -211,7 +211,7 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : `${n} 
 const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   const { say, v } = c;
   const reasons: string[] = [];
-  if (m.wins) reasons.push(`This surrounds ${OPP.theirs} root, so you win right away.`);
+  if (m.wins) reasons.push(`This surrounds ${OPP.theirs} home, so you win right away.`);
   if (isFruit) reasons.push(`A Fruit card removes an ${OPP.noun} tile, whatever its number.`);
   if (m.botCut > 0) reasons.push(`This cuts ${OPP.theirs} link and removes ${m.taken + m.botCut} of their tiles.`);
   if (m.exposureAfter < m.exposureBefore) reasons.push(`This fixes a ${say('weak spot')} in your network.`);
@@ -321,9 +321,9 @@ export const coachAdvice = (input: CoachInput, choice = 0): Advice | null => {
 };
 
 const BULLETS: Record<TipId, string> = {
-  goal: 'Keep every tile joined to your root.',
+  goal: 'Keep every tile joined to your home.',
   draw: 'Take from the throw pile only if it makes a combo.',
-  combos: 'Cards of one suit in a row grow lines; same numbers grow clumps.',
+  combos: 'Cards that match or follow on can bloom.',
   sprout: 'No combo? Sprout one card as one tile.',
   strength: `A stronger tile can replace a weaker ${OPP.noun} tile.`,
   gold: 'Gold hexes are worth 2 points.',
@@ -333,7 +333,7 @@ const BULLETS: Record<TipId, string> = {
   knock: 'Knock only when you are clearly ahead.',
   fruit: `Save Fruit cards for an ${OPP.noun} tile you cannot replace.`,
   strengthen: 'Strengthen the tile that holds many others up.',
-  strangle: `Surround ${OPP.theirs} root to win at once.`,
+  strangle: `Surround ${OPP.theirs} home to win at once.`,
   planning: `Before a big move, check what ${OPP.the} could cut.`,
 };
 const SUMMARY_PRIORITY: readonly TipId[] = [

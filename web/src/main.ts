@@ -2,7 +2,7 @@
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -86,7 +86,8 @@ import { onPhotosReady, warmPhotos } from './ui/photo.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { FRUIT, GAME_TITLE, OPP, SPROUT } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT } from '../../src/strings.js';
+import { homeSides } from './logic/home.js';
 import { debugLines, isDebug } from './logic/debug.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 import type { Beats } from './logic/emptyturn.js';
@@ -362,8 +363,8 @@ function renderHowTo() {
   $('howto-body').innerHTML = [
     `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b> 3 or more cards in a row of one suit grow a <b>line</b>. 3 or more cards with the same number grow a <b>clump</b>.${sprout ? words.howto : ''}</p>`,
-    `<p><b>Lines and clumps:</b> ${TIPS.draw.text} <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
+    `<p><b>Grow:</b>${BLOOM.howto}${sprout ? words.howto : ''}</p>`,
+    `<p><b>Painting a bloom:</b> ${TIPS.draw.text} For numbers in a row, the lowest goes on the first hex you paint; “Reverse” flips it. <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
     `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
     ...(cfg?.allowStrengthen ?? true
       ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
@@ -371,8 +372,8 @@ function renderHowTo() {
     ...((cfg?.fruitCardCount ?? 4) > 0
       ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Fruit card on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
-    '<p><b>Stay joined:</b> every tile must link back to your root (the big bulb). Lose a link and everything past it is cut off.</p>',
-    `<p><b>Win early:</b> surround ${OPP.theirs} root so it can't grow.</p>`,
+    '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
+    `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
     `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
@@ -1499,6 +1500,10 @@ function hintCtx(v: View): HintCtx {
     handEmpty: v.hand.length === 0,
     canSprout: session!.legal.some((a) => a.t === 'Sprout'),
     canCombo: session!.legal.some((a) => a.t === 'Bloom'),
+    bloomBlocked: (() => {
+      const groups = bloomGroups(v.hand);
+      return groups.length ? Math.min(...groups.map((g) => g.cards.length)) : null;
+    })(),
     throwEndsTurn: v.phase === 'DISCARD' && discardEndsTurn(v),
   };
 }
@@ -1648,12 +1653,15 @@ function renderTooltip(v: View) {
   else {
     const mine = t.owner === HUMAN;
     const who = mine ? 'Your' : OPP.Label;
-    if (t.root) html = `<b>${name} · ${who} root</b><span>It can never be taken.</span>`;
+    if (t.root) {
+      const sides = homeSides(v, t.owner);
+      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.blocked)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.blocked)}</span>`;
+    }
     else {
       const loss = cutLoss(v, key).length;
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} root. ${lose}</span>`;
+      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -2201,7 +2209,7 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   else if (g?.action) {
     const pv = previewMove(v, g.action);
     text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
-  } else if (g?.reason) text = g.reason;
+  } else if (g?.reason) text = draw.msg ? `${g.reason} · ${draw.msg}` : g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;
   box.hidden = !text;
@@ -2256,7 +2264,7 @@ function finishDraw(a: Meld) {
  */
 function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
-  if ((type === 'mouse' && draw.shape.length === 0) || draw.desk.phase === 'live') {
+  if (((type === 'mouse' || type === 'keyboard') && draw.shape.length === 0) || draw.desk.phase === 'live') {
     const r = deskClick(draw.desk, key, v, c, draw.reverse);
     if (r.finish) return finishDraw(r.finish);
     // a click on another legal start begins again from there
@@ -2349,8 +2357,10 @@ const drawHandlers = {
     let msg = draw.msg;
     for (const k of entered) {
       const next = paintEnter(c, shape, k, draw.reverse);
-      if (next.length > shape.length) drawTick(next.length - 1);
-      else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
+      if (next.length > shape.length) {
+        drawTick(next.length - 1);
+        msg = null;
+      } else if (next.length === shape.length && !shape.includes(k)) msg = unavailable(session!.view, c, shape, draw.reverse).get(k) ?? msg;
       shape = next;
     }
     draw = { ...draw, shape, msg };

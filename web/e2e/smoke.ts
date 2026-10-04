@@ -563,10 +563,14 @@ const bannedWords = (page: Page, re: string, allow: readonly string[]): Promise<
   })()`);
 const botWords = (page: Page) => bannedWords(page, '\\bbots?\\b', BOT_ALLOWLIST);
 const seedWords = (page: Page) => bannedWords(page, SEED_RE, []);
+// v0.7: the old combo words and the generic "root" never show either (no allowlist)
+const oldWords = (page: Page) => bannedWords(page, '\\b(?:clumps?|hyphae?|grow a line|line of|roots?)\\b', []);
 {
   const found: string[] = [];
   const seeds: string[] = [];
+  const olds: string[] = [];
   const scan = async (page: Page, where: string) => {
+    olds.push(...(await oldWords(page)).map((f) => `${where} · ${f}`));
     found.push(...(await botWords(page)).map((f) => `${where} · ${f}`));
     seeds.push(...(await seedWords(page)).map((f) => `${where} · ${f}`));
   };
@@ -646,6 +650,7 @@ const seedWords = (page: Page) => bannedWords(page, SEED_RE, []);
   await endPage.close();
   check('the word "bot" never shows: text, aria-labels, alt and title text, every state', found.length === 0 && errors.length === 0, found.slice(0, 3).join(' | ') || errors.slice(0, 2).join(' | '));
   check('the words "seed" and "plant" never show: text, aria-labels, alt and title text, every state', seeds.length === 0, seeds.slice(0, 3).join(' | '));
+  check('"clump", "hypha", "grow a line", "line of" and "root" never show: text, aria-labels, alt and title text, every state', olds.length === 0, olds.slice(0, 3).join(' | '));
   // the allowlisted ?debug=1 page shows the game's random number, and the normal page does not
   const dbg = await openPage('soil', 'phone', { speed: 'skip' }, undefined, '?seed=4242&debug=1');
   await idle(dbg.page).catch(() => {});

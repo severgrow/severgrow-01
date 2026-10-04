@@ -1,7 +1,7 @@
 // The dock's hint line (UI overhaul item 13): one short line saying what to do next, with a
 // tiny arrow toward where to do it (up: the board; down: the hand and the piles). It also says
 // why a move is not available. Pure: the page passes a small summary of the moment.
-import { FRUIT, OPP } from '../../../src/strings.js';
+import { BLOOM, FRUIT, OPP } from '../../../src/strings.js';
 import type { MoveWords } from '../../../src/strings.js';
 
 /** The longest hint allowed: it must fit one line on a 360px-wide phone. */
@@ -31,6 +31,8 @@ export type HintCtx = {
   canSprout: boolean;
   /** a Bloom can still be played */
   canCombo: boolean;
+  /** v0.7: I hold cards that can bloom, but no Bloom fits on the board (the smallest group's size) */
+  bloomBlocked?: number | null;
   throwEndsTurn: boolean;
 };
 
@@ -64,6 +66,7 @@ export const hintFor = (c: HintCtx): Hint => {
       if (c.kindPicked) return h('Tap a glowing hex', 'up');
       if (c.hexWithNoMove) return h('Nothing grows there right now');
       if (c.handEmpty) return h('No cards left. Tap “End turn”', 'down');
+      if (!c.canCombo && c.bloomBlocked) return h(BLOOM.tooFew(c.bloomBlocked));
       if (c.canSprout) return h(c.words.tapHint, 'down');
       if (c.canCombo) return h('Bloom, or “Throw a card”', 'down');
       return h('Nothing can grow. Tap “Throw a card”', 'down');

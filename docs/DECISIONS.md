@@ -12,6 +12,9 @@ One line each: where the brief left room, what was chosen and why.
 - Each card group is its own move kind; the moves row shows one button per family (a number for sets, a suit for runs) and size: a set keeps the card that fits the rest of the hand best, a run blooms its highest numbers; a picked card narrows it.
 - Painting: the first tap on an empty shape also shows the suggested Bloom through that hex (with Confirm); tapping on keeps painting one hex at a time, so every Bloom can still be made by taps alone.
 - The hint for a mouse says "Click to start your bloom, click to finish" (the longer wording did not fit one line on a 360px phone).
+- Home wording: the code keeps "root"; the player reads "home", and tile cards and captions say "Your tree" and "Opponent's volcano" (strings: HOME). The coach's glossary word is now "home".
+- The blocked-Bloom hint reads "Too few free hexes by your tiles to bloom 3" (it must fit one line); it shows when a held group has no legal Bloom and nothing is picked.
+- Word scans: the old combo words and "root"/"roots" are banned with no player-facing allowlist; the only exemption is the scanners themselves (web/tests/bloom-words.test.ts and the scan line in web/e2e/smoke.ts), which must name the banned words.
 
 # Decisions (Seed removal and Fruit cards, v0.6)
 

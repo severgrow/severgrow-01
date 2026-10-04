@@ -74,6 +74,24 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 });
 
 
+/** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
+export const HOME = Object.freeze({
+  word: 'home',
+  Word: 'Home',
+  /** the tile card and captions */
+  mine: 'Your tree',
+  theirs: `${OPPONENT_LABEL}'s volcano`,
+  danger: 'Home in danger',
+  cutOff: 'Tiles cut off from your home wither',
+  surround: `Surround ${OPP.theirs} home to win at once`,
+  /** the tile card when a home is tapped */
+  tapMine: (blocked: number) => `Your home: everything you own must stay connected to it. ${blocked} of 6 sides blocked.`,
+  tapTheirs: (blocked: number) => `Surround all 6 sides to win at once. ${blocked} of 6 sides blocked.`,
+  /** the Strangle captions */
+  mineSurrounded: 'Your tree is surrounded!',
+  theirsSurrounded: `${OPPONENT_LABEL}'s volcano is surrounded!`,
+});
+
 /** v0.7: the only combo, "Bloom", in one place. */
 export const BLOOM = Object.freeze({
   Name: 'Bloom',
@@ -88,7 +106,7 @@ export const BLOOM = Object.freeze({
   /** the general hint */
   hint: 'You can bloom with cards that match or follow on.',
   /** why a held group cannot bloom right now */
-  tooFew: (n: number) => `Not enough free hexes next to your tiles to bloom ${n}.`,
+  tooFew: (n: number) => `Too few free hexes by your tiles to bloom ${n}`,
   /** the move list and the log */
   suggest: (n: number, hexes: string) => `Bloom ${n} tiles at ${hexes}`,
   youDid: (n: number) => `You bloomed ${n} tiles`,
@@ -106,7 +124,7 @@ export const FRUIT = Object.freeze({
   /** the one-time tip (re-openable from How to play) */
   tip: `Fruit cards: play one on an ${lower} tile that touches yours to remove it, even a 9.`,
   /** How to play (HTML) */
-  howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your root counts): that tile is removed, even a 9, and anything that hung on it is cut off. Play as many as you hold. A Fruit card never makes a combo or a sprout; you can throw it, and then ${OPP.the} can take it.`,
+  howto: ` <b>Fruit cards</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. Play as many as you hold. A Fruit card never makes a combo or a sprout; you can throw it, and then ${OPP.the} can take it.`,
   /** first time a Fruit card is picked */
   anyStrength: 'Any strength: even a 9 can go.',
   /** the hint while a Fruit card is picked */

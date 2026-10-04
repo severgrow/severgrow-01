@@ -15,9 +15,9 @@ export const resultReason = (r: GameResult, me: Player): string => {
   const tie = r.scores[0] === r.scores[1] ? ` A tie goes to ${OPP.the}.` : '';
   switch (r.reason) {
     case 'double_strangle':
-      return 'Both roots were surrounded at once.';
+      return 'Both homes were surrounded at once.';
     case 'strangle':
-      return won ? `You surrounded ${OPP.theirs} root.` : `${OPP.The} surrounded your root.`;
+      return won ? `You surrounded ${OPP.theirs} home.` : `${OPP.The} surrounded your home.`;
     case 'knock':
       if (!r.undercut) return won ? 'You knocked and stayed ahead.' : `${OPP.The} knocked and stayed ahead.`;
       return other(r.winner!) === me ? 'You knocked but did not finish ahead.' : `${OPP.The} knocked and you held on.`;

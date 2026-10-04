@@ -119,7 +119,7 @@ export const riskLines = (f: Forecast, rules = CONFIRM_RULES): { reason: RiskRea
       case 'lastCard':
         return { reason, icon: '▢', text: 'Uses your last card' };
       case 'root':
-        return { reason, icon: '◉', text: 'Your root gets boxed in' };
+        return { reason, icon: '◉', text: 'Your home gets boxed in' };
     }
   });
 

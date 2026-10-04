@@ -78,3 +78,15 @@ describe('the hint line', () => {
     expect(SPROUT.tapHint).toMatch(/sprout/i);
   });
 });
+
+describe('v0.7: a Bloom held but blocked by the board', () => {
+  it('says so in the hint line (fits one line)', async () => {
+    const { hintFor } = await import('../src/logic/hint.js');
+    const { SPROUT, BLOOM } = await import('../../src/strings.js');
+    const base = { phase: 'ACT', myTurn: true, busy: false, words: SPROUT, deckCount: 40, canTakeThrow: false, fruit: null, pending: null, drawing: null, card: null, kindPicked: false, hexWithNoMove: false, handEmpty: false, canSprout: true, canCombo: false, throwEndsTurn: false } as const;
+    const t = hintFor({ ...base, bloomBlocked: 3 }).text;
+    expect(t).toBe(BLOOM.tooFew(3));
+    expect(t.length).toBeLessThanOrEqual(46);
+    expect(hintFor({ ...base, canCombo: true, bloomBlocked: 3 }).text).not.toBe(BLOOM.tooFew(3));
+  });
+});

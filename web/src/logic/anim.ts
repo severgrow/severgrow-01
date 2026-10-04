@@ -5,7 +5,7 @@
 import { coordKey, eventsOf, hexDistance, parseKey, scores } from '../../../src/engine/index.js';
 import type { Action, Card, GameResult, Player, State, Tile } from '../../../src/engine/index.js';
 import { cardName } from '../../../src/playtest/names.js';
-import { FRUIT, OPP } from '../../../src/strings.js';
+import { FRUIT, HOME, OPP } from '../../../src/strings.js';
 
 export type Board = Record<string, Tile | null>;
 export type GrowTile = { key: string; strength: number; replaced: boolean };
@@ -175,7 +175,7 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
       return taken > 0 ? `${OPP.The} grew ${tiles(s.tiles.length)}, taking ${taken} of yours` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
     }
     case 'strangle':
-      return s.loser === viewer ? 'Your root is surrounded!' : `${OPP.Theirs} root is surrounded!`;
+      return s.loser === viewer ? HOME.mineSurrounded : HOME.theirsSurrounded;
     case 'strengthen':
       return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
     case 'fruit':
