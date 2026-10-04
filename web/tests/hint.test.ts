@@ -90,3 +90,26 @@ describe('v0.7: a Bloom held but blocked by the board', () => {
     expect(hintFor({ ...base, canCombo: true, bloomBlocked: 3 }).text).not.toBe(BLOOM.tooFew(3));
   });
 });
+
+// v0.8 UI pass: with the step bar gone, the hint line carries the turn: what I can do after the
+// draw (sprout, a Fruit card, a Bloom), what used the turn's sprout, and that Throw is next
+describe('v0.8: the hint line carries the turn (no step bar)', () => {
+  it('after the draw, a playable Fruit card is offered next to the sprout', () => {
+    const t = hintFor({ ...base, fruitReady: true }).text;
+    expect(t).toMatch(/sprout/i);
+    expect(t).toMatch(/Fruit/);
+    expect(t.length).toBeLessThanOrEqual(HINT_MAX);
+  });
+  it('once a Fruit card or a sprout used the turn, it says so, and points at the throw', () => {
+    for (const grew of ['fruit', 'sprout'] as const) {
+      for (const canCombo of [true, false]) {
+        const t = hintFor({ ...base, canSprout: false, canCombo, grew }).text;
+        expect(t).toMatch(grew === 'fruit' ? /Fruit used/ : /Sprouted/);
+        expect(t).toMatch(/Throw/);
+        if (canCombo) expect(t).toMatch(/Bloom/);
+        expect(t).not.toMatch(/Nothing can grow/);
+        expect(t.length).toBeLessThanOrEqual(HINT_MAX);
+      }
+    }
+  });
+});

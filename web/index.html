@@ -80,14 +80,6 @@
       </header>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>
-      <div class="steps-row">
-        <ol id="steps" class="steps" aria-label="Your turn, step by step">
-          <li data-step="DRAW"><span class="n">1</span>Draw</li>
-          <li data-step="ACT"><span class="n">2</span>Grow</li>
-          <li data-step="DISCARD"><span class="n">3</span>Throw</li>
-        </ol>
-        <button id="hint-btn" class="help-btn" type="button" aria-label="Show a tip" aria-expanded="false">?</button>
-      </div>
 
       <div class="play">
         <div class="board-wrap" id="board-wrap">
@@ -107,6 +99,7 @@
             <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
             <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
             <button id="tool-skip" class="ctool br" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
+            <button id="hint-btn" class="ctool help" type="button" aria-label="How to play" aria-expanded="false" data-tip="How to play">?</button>
             <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
           </div>
         </div>
@@ -148,7 +141,6 @@
                 <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
                 <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
               </button>
-              <span id="fruit-chip" class="fruit-chip" role="status" hidden></span>
             </div>
             <div id="moves" class="moves" role="group" aria-label="Moves"></div>
           </div>

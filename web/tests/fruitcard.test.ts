@@ -8,7 +8,7 @@ import type { Card, Player, State } from '../../src/engine/index.js';
 import { FRUIT } from '../../src/strings.js';
 import { fixture } from '../../tests/helpers.js';
 import { EMPTY_SEL, onlyChoice, tapCard, tapHex, targetHexes } from '../src/logic/interaction.js';
-import { fruitCardState, fruitOffer, hexTapIntent, unseenChip } from '../src/logic/fruitcard.js';
+import { fruitCardState, fruitOffer, hexTapIntent } from '../src/logic/fruitcard.js';
 import { handOrder } from '../src/logic/hand.js';
 
 const fruitCard = (id: number): Card => ({ id, suit: null, rank: 0 });
@@ -84,14 +84,9 @@ describe('a tap on an opponent tile', () => {
   });
 });
 
-describe('the chip near the deck: "Fruit cards unseen: n"', () => {
-  it('counts from public information only, and hides with no Fruit cards in the game', () => {
-    const g = newGame(9);
-    expect(unseenChip(viewFor(g, 0))).toBe(FRUIT.unseen(viewFor(g, 0).fruitUnseen));
-    expect(FRUIT.unseen(2)).toBe('Fruit cards unseen: 2');
-    expect(unseenChip(viewFor(newGame(9, { fruitCardCount: 0 }), 0))).toBeNull();
-  });
-
+// v0.8 UI pass: the "Fruit cards unseen" chip is gone (no hidden-information indicator); the
+// engine still tracks the public count (the bots use it)
+describe('the public Fruit-unseen count (engine only, no chip)', () => {
   it('drops when a Fruit card is played', () => {
     const s = at(tiles, [fruitCard(72), num(1, 0, 3)]);
     const before = viewFor(s, 1).fruitUnseen;
@@ -134,7 +129,12 @@ describe('state equivalence with Fruit cards (Step 7)', () => {
     const { Session } = await import('../src/logic/session.js');
     // their 9 at (1,0) holds (2,0)=5 and (3,-1)=4; (1,-1)=9 stays joined
     const s0 = at({ '-1,1': [0, 2], '0,0': [0, 2], '1,-1': [1, 9], '1,0': [1, 9], '2,0': [1, 5], '3,-1': [1, 4] }, [fruitCard(72), fruitCard(73), num(1, 0, 3)]);
-    const s = { ...s0, history: [] } as State;
+    // v0.8: one Fruit card per turn (it uses the turn's Sprout): the second is refused
+    const one1 = new Session({ ...s0, history: [] } as State);
+    expect(one1.play({ t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } }, 0)).toBeTruthy();
+    expect(one1.play({ t: 'PlayFruit', card: 73, target: { q: 1, r: -1 } }, 0)).toBeNull();
+    // two in a row (the option off, as in v0.6) to check the replay and a double Undo
+    const s = { ...s0, config: { ...s0.config, fruitUsesSprout: false }, history: [] } as State;
     const session = new Session(s);
     for (const target of [{ q: 1, r: 0 }, { q: 1, r: -1 }]) {
       const before = session.state;
@@ -168,5 +168,33 @@ describe('the hint line with a picked Fruit card (self-review fix)', () => {
     expect(hintFor({ ...base, fruit: { firstTime: false } }).text).toBe(FRUIT.tapTarget);
     expect(hintFor({ ...base, fruit: { firstTime: false, reason: FRUIT.noTarget } }).text).toBe(FRUIT.noTarget);
     expect(hintFor({ ...base, fruit: null }).text).toBe("That card can't grow anywhere now");
+  });
+});
+
+// v0.8 UI pass: the Fruit card is one of the family: the same parts as a numbered card (a corner
+// index where the number sits, a centred icon where the suit sits), the mushroom as its identity
+describe('the Fruit card face (v0.8 UI pass)', () => {
+  it('has the same two parts as a numbered card: a corner index and a centred icon', async () => {
+    const { cardFace } = await import('../src/ui/effects.js');
+    const { FRUIT_SVG } = await import('../src/ui/icons.js');
+    const f = cardFace(fruitCard(72));
+    const n = cardFace(num(1, 0, 3));
+    expect(n).toMatch(/class="c-num num"/);
+    expect(n).toMatch(/class="c-suit"/);
+    expect(f).toMatch(/class="c-num c-idx"/);
+    expect(f).toMatch(/class="c-suit c-fruit"/);
+    expect(f.split(FRUIT_SVG).length - 1).toBe(2); // the corner index and the big icon
+    expect(f).not.toMatch(/c-print/);
+  });
+});
+
+describe('a held Fruit card once the turn\'s sprout is used (v0.8)', () => {
+  it('is not ready and says why: the sprout is used, it is back next turn', () => {
+    const s = at(tiles, [fruitCard(72), num(1, 0, 3)]);
+    const v = { ...viewFor(s, 0), sproutsThisTurn: 1 };
+    const st = fruitCardState(v, legalActions(v), 72);
+    expect(st.ready).toBe(false);
+    expect(st.reason).toBe(FRUIT.used);
+    expect(FRUIT.used).toMatch(/next turn/);
   });
 });

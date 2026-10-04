@@ -10,6 +10,8 @@ export const LEGACY_V03: Partial<RulesConfig> = {
   maxRank: 9,
   copiesPerCard: 2,
   sproutsPerTurn: 0,
+  // v0.8: with no Sprouts at all, Fruit cards keep their own (unlimited) use
+  fruitUsesSprout: false,
   allowStrengthen: false,
   maxTurnsPerPlayer: 0,
   rotEnabled: true,

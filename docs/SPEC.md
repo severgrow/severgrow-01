@@ -1,4 +1,4 @@
-# SEVERGROW: Engine Spec v0.7 (one game)
+# SEVERGROW: Engine Spec v0.8 (one game)
 
 > **Grow a living network. Keep it connected. Cut theirs.**
 
@@ -11,6 +11,17 @@ default (see the appendix).
 ---
 
 ## Changelog
+
+**v0.8: a Fruit card uses the turn's Sprout** (rules version `v0.8-fruit-sprout`, bot version `bots-v0.10`)
+- **One of three per Grow step:** a Sprout, a Strengthen or a Fruit card (they share the turn's
+  `sproutsPerTurn` allowance, 1). After a Fruit card no Sprout, Strengthen or second Fruit card
+  follows this turn (`SPROUT_LIMIT`), and after a Sprout or Strengthen no Fruit card. Blooms are
+  unaffected (any number, before or after). Config `fruitUsesSprout` (default on; off = the v0.6
+  rule, kept for the tests and the old v0.3 preset with no Sprouts).
+- Bots: a Fruit card that opens a Strangle now counts only a Bloom to finish it this turn.
+- UI only, no rules: the Draw / Grow / Throw bar is gone (the current action shows on the board
+  and in the dock); the "Fruit cards unseen" chip is removed (the count is no longer shown).
+  Everything else is unchanged.
 
 **v0.7: Bloom is the only combo** (rules version `v0.7-bloom`, bot version `bots-v0.9`)
 - **One combo, Bloom.** It replaces both old combos (the straight line from a run and the clump
@@ -174,6 +185,7 @@ type RulesConfig = {
   strengthenLimitPerGame: number; // v0.5, -1 = no limit; default set by simulation (11.3)
   fruitCardCount: number;       // v0.6: 4 (Fruit cards in the deck; 0 = none)
   fruitRootCountsAsTouch: boolean; // v0.6: true (my root counts as touching a Fruit target)
+  fruitUsesSprout: boolean;     // v0.8: true (a Fruit card uses the turn's Sprout)
   rockCount: number;            // 4 (even)
   richCount: number;            // 5 (odd: centre + pairs)
   forbidRedundantDiscard: boolean; // true
@@ -252,8 +264,8 @@ in a Knock final turn (appendix). The discard pile may be empty (after an empty-
 only the deck draw is legal. Records `drawnFromDiscard`.
 
 ### 6.2 ACT
-Any number of `Bloom`, up to `sproutsPerTurn` `Sprout` per turn and any number of `PlayFruit`, in
-any order, then `EndAct`. Bloomed and sprouted cards leave the hand permanently; a move may use the last card.
+Any number of `Bloom` and up to `sproutsPerTurn` of `Sprout` and `PlayFruit` together (v0.8,
+`fruitUsesSprout`; a Strengthen is a Sprout), in any order, then `EndAct`. Bloomed and sprouted cards leave the hand permanently; a move may use the last card.
 After **each** placement: Sever, then the Strangle check.
 
 ### 6.3 DISCARD
@@ -339,7 +351,8 @@ one is an enemy tile. One strangled root: its owner loses at once (`strangle`). 
   card has no suit and no number (`suit: null`, `rank: 0`); the deal and every draw stay fully
   random. It can never be in a combo, sprout or strengthen (`NOT_A_NUMBER_CARD`), and is not wild.
 - Legal only in `ACT`, with a Fruit card from the mover's hand (`CARD_NOT_IN_HAND`,
-  `NOT_A_FRUIT_CARD`). No limit per turn or per game; it does not use the turn's Sprout.
+  `NOT_A_FRUIT_CARD`). v0.8: it uses the turn's Sprout (`fruitUsesSprout`, default on;
+  `SPROUT_LIMIT` when the Sprout is used). No limit per game.
 - `target`: an enemy non-root tile (`FRUIT_TARGET_NOT_ENEMY`, `FRUIT_TARGET_ROOT`, `OFF_BOARD`)
   touched by one of the mover's tiles; the mover's root counts when `fruitRootCountsAsTouch`
   (`FRUIT_TARGET_NOT_TOUCHED`). Its strength is ignored, so a 9 can be removed.
@@ -617,6 +630,35 @@ Fruit cards played per game 3.49. Comeback (behind at half time, still won) 36.2
 Targets (guides): nothing to play after turn 3 under 60%: pass (0.0%: Sprout and Strengthen
 almost always leave a move; no lever needed); first player 46-54%: pass (53.0%); Strangle under
 15%: pass (4.5%); game length within 15% of the current default: pass (−1%).
+
+### 11.6 Fruit card uses the Sprout (v0.8)
+
+400 games, level 7 against level 7, one game per seed (`npx tsx src/sim/bloomsim.ts`), with a
+Fruit card using the turn's Sprout. The v0.7 numbers (1,000 games, 11.5) are in brackets.
+
+| Measure | v0.8 | (v0.7) |
+| --- | --- | --- |
+| Fruit cards played per game | 1.86 | (3.49) |
+| Game length, turns per player | 10.57 | (9.61) |
+| Ends by Strangle | 2.5% | (4.5%) |
+| First player wins | 55.3% | (53.0%) |
+| Comeback (behind at half time, still won) | 37.5% | (36.2%) |
+| Blooms per game | 7.15 | (7.18) |
+| Tiles placed per turn, turns 1-5 | 1.94 | (2.02) |
+| Nothing to play after turn 3 | 0.0% | (0.0%) |
+
+Fruit cards are played about half as often: one now costs the turn's Sprout. Games run about
+10% longer, since fewer tiles are removed. Bloom play is unchanged.
+
+Against the guides:
+- game length within 15% of the default: pass (+10%);
+- Strangle under 15%: pass;
+- nothing to play: pass;
+- first player 46-54%: just over (55.3%).
+
+The first-player figure has a standard error of about ±2.5 points at 400 games, so it is not
+clearly different from v0.7's 53.0%. It is noted, and no lever was changed: the brief allows no
+balance changes beyond this rule. A longer run or a ladder can confirm it.
 
 ---
 

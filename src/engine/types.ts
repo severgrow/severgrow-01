@@ -32,6 +32,8 @@ export type RulesConfig = {
   maxRank: number;
   /** v0.4: Sprout moves allowed per turn (0 = off). */
   sproutsPerTurn: number;
+  /** v0.8: a Fruit card uses the turn's Sprout (like Strengthen): one of Sprout, Strengthen or Fruit card per Grow step. */
+  fruitUsesSprout: boolean;
   /** v0.4: the game ends after this many turns each (0 = no limit). */
   maxTurnsPerPlayer: number;
   /** v0.5: a Sprout may raise one of my own weaker tiles (Strengthen). */

@@ -123,3 +123,32 @@ describe('three fixed zones, nothing overlaps', () => {
     expect(boardUnits(4).w).toBeGreaterThan(boardUnits(3).w);
   });
 });
+
+// v0.8 UI pass: the Draw / Grow / Throw bar is gone, its height (and the landmarks' headroom:
+// the homes are now drawn top-down inside their hex) goes to the board; the piles row grows; the
+// "?" sits in the board zone's lower-right corner.
+const V07: Record<string, number> = { '360x640': 47.6, '390x844': 56.8, '430x932': 62.9 };
+describe('v0.8 UI pass: a bigger board, bigger piles, "?" on the board', () => {
+  it('no step bar: the header is the score bar and the race bar only', () => {
+    const l = computeLayout({ w: 390, h: 844 });
+    expect(l.header.h).toBe(HEIGHTS.hud + HEIGHTS.race);
+    expect('steps' in HEIGHTS).toBe(false);
+  });
+  for (const v of PHONES) {
+    it(`${v.w}x${v.h}: tiles bigger than v0.7 (${V07[`${v.w}x${v.h}`]}pt)`, () => {
+      expect(computeLayout(v).hexPx).toBeGreaterThan(V07[`${v.w}x${v.h}`]! * 1.03);
+    });
+    it(`${v.w}x${v.h}: the piles row is at least 84pt (pile cards about a fifth bigger than v0.7)`, () => {
+      expect(computeLayout(v).rows.table).toBeGreaterThanOrEqual(84);
+    });
+    it(`${v.w}x${v.h}: the "?" is in the board zone's lower-right corner, never over a tile or the dock`, () => {
+      const l = computeLayout(v);
+      const b = l.tools.help;
+      expect(b.w).toBe(TOOL.hit);
+      expect(b.x + b.w).toBeGreaterThan(l.zone.x + l.zone.w - TOOL.hit - 8);
+      expect(b.y + b.h).toBeGreaterThan(l.zone.y + l.zone.h - TOOL.hit - 8);
+      expect(coversTile(b, tilePolys(l))).toBe(false);
+      expect(overlaps(b, l.dock)).toBe(false);
+    });
+  }
+});

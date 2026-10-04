@@ -19,6 +19,8 @@ export const fruitCardState = (v: View, legal: readonly Action[], cardId: number
   if (fruitMoves(legal).length > 0) return { ready: true, reason: null };
   if (v.phase === 'DISCARD' && v.actor === v.player) return { ready: false, reason: null };
   if (v.phase !== 'ACT' || v.actor !== v.player) return { ready: false, reason: FRUIT.notNow };
+  // v0.8: a Fruit card uses the turn's sprout; once that is used, it waits for the next turn
+  if (v.config.fruitUsesSprout && v.sproutsThisTurn >= v.config.sproutsPerTurn) return { ready: false, reason: FRUIT.used };
   return { ready: false, reason: FRUIT.noTarget };
 };
 
@@ -29,9 +31,6 @@ export const fruitOffer = (v: View, legal: readonly Action[], key: string): { la
   const top = (v.board[key]?.strength ?? 0) >= v.config.maxRank;
   return { label: FRUIT.use, note: top ? FRUIT.topRank : null, action };
 };
-
-/** The chip near the deck, or null when the game has no Fruit cards. */
-export const unseenChip = (v: View): string | null => (v.config.fruitCardCount > 0 ? FRUIT.unseen(v.fruitUnseen) : null);
 
 /**
  * What a tap on hex `key` means in my Grow step: `tilecard` opens the tile card (an opponent

@@ -24,6 +24,7 @@ describe('DEFAULT_CONFIG', () => {
       strengthenLimitPerGame: 2, // chosen by simulation (SPEC 11.3)
       fruitCardCount: 4, // v0.6: 4 Fruit cards in the deck
       fruitRootCountsAsTouch: true, // v0.6: my root counts as touching a Fruit target
+      fruitUsesSprout: true, // v0.8: a Fruit card uses the turn's Sprout
       rotEnabled: false,
       knockEnabled: false,
     });

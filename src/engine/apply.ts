@@ -98,11 +98,13 @@ const endAct = (s: State): State => (s.hands[s.turnPlayer].length === 0 ? afterD
 /** v0.6 PlayFruit: the target goes, the card leaves the game; then cut and Strangle checks. */
 const playFruit = (s: State, a: Extract<Action, { t: 'PlayFruit' }>): State => {
   const p = s.turnPlayer;
+  // v0.8: a Fruit card uses the turn's Sprout
+  if (s.config.fruitUsesSprout && s.sproutsThisTurn >= s.config.sproutsPerTurn) fail('SPROUT_LIMIT', `a Fruit card uses the turn's sprout (at most ${s.config.sproutsPerTurn} per turn)`);
   const plan = planFruitCard(s, p, s.hands[p], a.card, a.target);
   const hand = s.hands[p].filter((c) => c.id !== plan.card.id);
   const board = removeTiles(s.board, [plan.target]);
   const res = { ...emptyResolution(), fruit: { card: plan.card.id, target: { ...plan.target }, strength: plan.strength } };
-  const next: State = { ...s, board, hands: setHand(s, p, hand), fruitPlayed: s.fruitPlayed + 1, fruitKnown: knownAfter(s, p, hand) };
+  const next: State = { ...s, board, hands: setHand(s, p, hand), fruitPlayed: s.fruitPlayed + 1, fruitKnown: knownAfter(s, p, hand), sproutsThisTurn: s.config.fruitUsesSprout ? s.sproutsThisTurn + 1 : s.sproutsThisTurn };
   return severAndStrangle(next, p, res);
 };
 

@@ -11,23 +11,12 @@ export type Box = { x0: number; y0: number; x1: number; y1: number };
 export const numberPlate = (S = 30) => ({ dy: -0.06 * S, r: 0.34 * S });
 
 /**
- * The landmark's box, relative to its tile's centre (screen units, y down). Upright in both
- * orientations; it may rise up to a quarter of the tile height above the tile's top, never
- * over a neighbouring tile's number plate (or a Bloom ghost's number, drawn at the same place).
- * Where it would, it is narrowed (pointy hexes have neighbours up-left and up-right).
+ * The landmark's box, relative to its tile's centre (screen units, y down). v0.8 UI pass: the
+ * homes are drawn top-down (a tree canopy seen from above, a volcano's crater from a 3/4 aerial
+ * view), so the box lies wholly inside the home's own hex in both orientations: it never rises
+ * above the tile and never reaches a neighbour's number plate or a Bloom ghost's number.
  */
-export const landmarkBox = (kind: LandmarkKind, orient: Orient, S = 30): Box => {
-  const tileH = orient === 'pointy' ? 2 * S : Math.sqrt(3) * S;
-  const top = -tileH / 2;
-  const rise = 0.25 * tileH;
-  // flat hexes: the neighbour above is straight up, so the full rise is free and the width
-  // only has to stay inside the tile; pointy: the up-left/up-right numbers limit the width
-  // near the top, so the landmark is a little narrower and rises a little less
-  const width = kind === 'tree' ? 1.12 : 1.18;
-  if (orient === 'flat') return { x0: -width * S * 0.5, y0: top - rise, x1: width * S * 0.5, y1: 0.55 * S };
-  const half = Math.min(width * 0.5, 0.48) * S;
-  return { x0: -half, y0: top - rise * 0.55, x1: half, y1: 0.55 * S };
-};
+export const landmarkBox = (_kind: LandmarkKind, _orient: Orient, S = 30): Box => ({ x0: -0.6 * S, y0: -0.6 * S, x1: 0.6 * S, y1: 0.56 * S });
 
 /** A small, deterministic look for a home from its tile's key (never Math.random). */
 export const landmarkVariant = (key: string) => {

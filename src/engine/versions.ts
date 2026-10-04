@@ -4,7 +4,7 @@
 import { DEFAULT_CONFIG } from './config.js';
 import type { RulesConfig } from './types.js';
 
-export const CURRENT_RULES_VERSION = 'v0.7-bloom';
+export const CURRENT_RULES_VERSION = 'v0.8-fruit-sprout';
 
 /** Every rules version still accepted, by name: just the current one, a frozen copy of the defaults. */
 export const RULES_VERSIONS: Readonly<Record<string, Readonly<RulesConfig>>> = Object.freeze({

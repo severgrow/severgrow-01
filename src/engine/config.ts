@@ -25,6 +25,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   strengthenLimitPerGame: 2,
   fruitCardCount: 4,
   fruitRootCountsAsTouch: true,
+  fruitUsesSprout: true,
   rotEnabled: false,
   knockEnabled: false,
 });
@@ -56,6 +57,7 @@ const BOOLEAN_KEYS = [
   'rootsScore',
   'allowStrengthen',
   'fruitRootCountsAsTouch',
+  'fruitUsesSprout',
   'rotEnabled',
   'knockEnabled',
 ] as const;
