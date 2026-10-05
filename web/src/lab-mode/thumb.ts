@@ -70,7 +70,6 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
     h3,
     seg('Thumb layout', 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
     seg('Hand side', 'hand-side-seg', [['right', 'Right'], ['left', 'Left']], () => prefs.side, (v) => (prefs = { ...prefs, side: v === 'left' ? 'left' : 'right' })),
-    seg('Idle tip', 'idle-tip-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.idleTip ? 'on' : 'off'), (v) => (prefs = { ...prefs, idleTip: v === 'on' })),
   );
   body?.prepend(box);
   paintAll();

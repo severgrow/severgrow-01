@@ -17,6 +17,7 @@ import { drawLandmark, setLandmarkState } from './ui/landmarks.js';
 import { el } from './ui/geom.js';
 import type { Orient } from './logic/orient.js';
 
+declare const __CHANNEL__: string;
 const k = (q: number, r: number) => coordKey({ q, r });
 
 export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
@@ -170,4 +171,6 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     }
   }
   document.body.appendChild(page);
+  // the test copy: the font bake-off at the top (its fonts load only here)
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') void import('./lab-mode/fontbake.js').then((m) => m.bakeOff(page));
 };

@@ -9,6 +9,7 @@ import type { HomesMode, MapResult } from './boardgen.js';
 import { CLASSIC, PRESETS, decodeSetup, encodeSetup, isClassic, mapOf, sanitize, shortCode, toOverrides } from './setup.js';
 import type { LabSetup } from './setup.js';
 import { installCamera } from './camera.js';
+import { fontChoice, setFont } from './fonts.js';
 import { LAB_CSS } from './lab-css.js';
 
 export type LabHooks = {
@@ -193,6 +194,12 @@ export const mountLab = (hooks: LabHooks) => {
         ${check('reshuffle', 'Reshuffle the throw pile when the deck runs out')}
         ${num('turns', 'Turns each', s.reshuffle ? 10 : 0, 200, '', s.reshuffle ? '' : 'until the deck runs out')}
         <p class="muted small">${s.reshuffle ? 'With reshuffle on, the turn limit is the only clock.' : 'The game ends at the turn limit or when the deck runs out, whichever comes first.'}</p>
+        <h3>Font</h3>
+        <div class="lab-font seg" role="radiogroup" aria-label="Font">
+          <button type="button" class="seg-btn${fontChoice() === 'new' ? ' on' : ''}" role="radio" aria-checked="${fontChoice() === 'new'}" data-lab="font-new">New</button>
+          <button type="button" class="seg-btn${fontChoice() === 'previous' ? ' on' : ''}" role="radio" aria-checked="${fontChoice() === 'previous'}" data-lab="font-previous">Previous</button>
+        </div>
+        <p class="muted small">New: Bricolage Grotesque (words, numbers) and Figtree (text). Previous: Alegreya Sans.</p>
         <h3>Opponent</h3>
         ${num('level', 'Level', 1, 9)}
         <h3>Watch a game</h3>
@@ -284,6 +291,13 @@ export const mountLab = (hooks: LabHooks) => {
       }
       goDesign(true);
     } else if (what === 'design-off') goDesign(false);
+    else if (what === 'font-new' || what === 'font-previous') {
+      setFont(what === 'font-new' ? 'new' : 'previous');
+      const keep = sheet.scrollTop;
+      render();
+      sheet.scrollTop = keep;
+      window.dispatchEvent(new Event('resize'));
+    }
     else if (what === 'copy') {
       const url = `${location.origin}${location.pathname}#lab=${encodeSetup(s)}`;
       msg(url);

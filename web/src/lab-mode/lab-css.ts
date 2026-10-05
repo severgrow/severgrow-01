@@ -602,4 +602,309 @@ html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand-slot {
 .reduce-motion html[data-thumb] .dock .hand-row > .hand .card {
   transition: none;
 }
+
+/* ---- step guidance (test copy): the step's word on the map, the step's controls as the hero.
+   Only transform and opacity move (plus the cue's letter-spacing as it enters). ---- */
+:root {
+  --gd-cream: 243, 230, 196;
+}
+.step-cue {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 100ms ease-out;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  color: var(--c-text);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+.step-cue[data-level='hi'] {
+  opacity: 0.6;
+  transition: opacity 260ms ease-out;
+}
+.step-cue[data-level='lo'] {
+  opacity: 0.35;
+  transition: opacity 900ms ease-in-out;
+}
+.step-cue.faint:not([data-level='off']) {
+  opacity: 0.2;
+}
+html[data-guide='off'] .step-cue {
+  display: none;
+}
+.cue-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  animation: cue-breathe 2.4s ease-in-out infinite;
+}
+.step-cue.enter .cue-in {
+  animation:
+    cue-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
+    cue-breathe 2.4s ease-in-out 220ms infinite;
+}
+@keyframes cue-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    letter-spacing: 0.24em;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    letter-spacing: 0.05em;
+  }
+}
+/* breathing: plus or minus 8% */
+@keyframes cue-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.84;
+  }
+}
+/* one soft pass of light across the letters, once, as the words arrive */
+.cue-text {
+  position: relative;
+}
+.cue-text::after {
+  content: attr(data-t);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  text-shadow: none;
+  background: linear-gradient(100deg, transparent 0 40%, rgba(255, 250, 235, 0.95) 50%, transparent 60% 100%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0;
+}
+.step-cue.enter .cue-text::after {
+  animation: cue-sweep 800ms ease-in-out 200ms 1 both;
+}
+@keyframes cue-sweep {
+  0% {
+    opacity: 1;
+    background-position: 100% 0;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    background-position: 0% 0;
+  }
+}
+/* Draw and Throw: a small chevron nudging toward the pile */
+.cue-chev {
+  display: none;
+  position: relative;
+  width: 0.5em;
+  height: 0.5em;
+  transform: rotate(var(--chev-a, 90deg));
+  animation: cue-nudge 1.8s ease-in-out infinite;
+}
+.cue-chev::before {
+  content: '';
+  position: absolute;
+  inset: 0.08em;
+  border-top: 0.11em solid currentColor;
+  border-right: 0.11em solid currentColor;
+  border-radius: 0.04em;
+  transform: rotate(45deg);
+}
+.step-cue[data-step='draw'] .cue-chev,
+.step-cue[data-step='throw'] .cue-chev {
+  display: inline-block;
+}
+html[data-guide='subtle'] .cue-chev {
+  display: none !important;
+}
+@keyframes cue-nudge {
+  0%,
+  100% {
+    transform: rotate(var(--chev-a, 90deg)) translateX(0);
+  }
+  50% {
+    transform: rotate(var(--chev-a, 90deg)) translateX(4px);
+  }
+}
+
+/* the piles' effects: a cream halo, one ring, a chip (never take a tap) */
+.gd-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.gd-halo,
+.gd-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--radius, 12px) * 0.6);
+  opacity: 0;
+  transition: opacity 110ms ease-out;
+}
+.gd-halo {
+  box-shadow:
+    0 0 0 1.5px rgba(var(--gd-cream), 0.7),
+    0 0 27px 2px rgba(var(--gd-cream), 0.75);
+}
+.gd-ring {
+  border: 2px solid rgba(var(--gd-cream), 0.75);
+}
+.gd-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  transform: translateX(-50%);
+  width: 88%;
+  padding: 2px 1px;
+  border-radius: 8px;
+  background: rgba(var(--gd-cream), 0.94);
+  color: #2b2417;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 110ms ease-out;
+}
+html[data-guide='subtle'] .gd-fx {
+  opacity: 0.5;
+}
+html[data-guide='subtle'] .gd-ring {
+  display: none;
+}
+html[data-guide='off'] .gd-fx {
+  display: none;
+}
+/* tired eyes: after 6s of waiting the pulses run at half strength (back after 10s of rest) */
+html.gd-tired .gd-fx {
+  opacity: 0.5;
+}
+html.gd-tired[data-guide='subtle'] .gd-fx {
+  opacity: 0.25;
+}
+
+/* DRAW: both piles are the hero; the hand steps back to 75%; the board stays as it is */
+html[data-step='draw']:not([data-guide='off']) .pile.ready .gd-halo {
+  opacity: 1;
+  animation: gd-halo 1.6s ease-in-out infinite;
+}
+html[data-step='draw']:not([data-guide='off']) .pile.ready .pile-card {
+  animation: gd-lift 1.6s ease-in-out infinite;
+}
+html[data-step='draw']:not([data-guide='off']) .pile.ready .gd-ring {
+  animation: gd-ring 2.5s ease-out infinite;
+}
+html.gd-early[data-step='draw']:not([data-guide='off']) .pile.ready .gd-chip {
+  opacity: 1;
+}
+html[data-step='draw']:not([data-guide='off']) .hand .card,
+html[data-step='draw']:not([data-guide='off']) .dock .hand-row > .hand .card.dim {
+  opacity: 0.75;
+}
+@keyframes gd-halo {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes gd-lift {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.04);
+  }
+}
+@keyframes gd-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}
+
+/* THROW: every card faintly lit; the throw pile is the target; the deck steps back */
+html[data-step='throw']:not([data-guide='off']) .hand .card {
+  outline: 1.5px solid rgba(var(--gd-cream), 0.32);
+  outline-offset: 0;
+}
+html[data-step='throw']:not([data-guide='off']) #discard .gd-halo {
+  opacity: 0.6;
+}
+html[data-step='throw']:not([data-guide='off']) #discard .gd-ring {
+  animation: gd-ring 2.5s ease-out infinite;
+}
+html.gd-picked[data-step='throw']:not([data-guide='off']) #discard .gd-chip {
+  opacity: 1;
+}
+html[data-step='throw']:not([data-guide='off']) #deck {
+  opacity: 0.45;
+}
+
+/* the opponent's turn: calm; piles and hand at 70%, nothing pulses */
+html[data-step='opp']:not([data-guide='off']) .dock .pile,
+html[data-step='opp']:not([data-guide='off']) .hand .card {
+  opacity: 0.7;
+}
+html[data-step='opp']:not([data-guide='off']) .pile .pile-card {
+  animation: none;
+}
+
+/* the old pile hints under the piles: the chips say it now */
+html:not([data-guide='off']) .pile-hint {
+  visibility: hidden;
+}
+
+.reduce-motion .cue-in,
+.reduce-motion .step-cue.enter .cue-in,
+.reduce-motion .step-cue.enter .cue-text::after,
+.reduce-motion .cue-chev,
+.reduce-motion .gd-halo,
+.reduce-motion .gd-ring,
+.reduce-motion html .pile.ready .pile-card,
+html.reduce-motion .pile.ready .pile-card,
+html.reduce-motion .gd-halo,
+html.reduce-motion .gd-ring {
+  animation: none !important;
+}
+html.reduce-motion .gd-ring {
+  display: none;
+}
+
+/* Large text: the stacked move buttons keep the whole name (a little smaller, two lines if needed) */
+html.large-text[data-thumb] .dock .table-row > .moves .btn,
+html.large-text[data-thumb] .dock .table-row > .moves .btn.skip {
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  white-space: normal;
+  line-height: 1.05;
+  text-overflow: clip;
+}
 `;

@@ -25,6 +25,28 @@ text, 800 for numbers and titles. The audit found one stray serif (the "i" info 
 Georgia); it now uses the game font. The dock uses at most three text sizes: 15px (hint line,
 move buttons, Undo), 12px (pile counts, chips), and the card numerals.
 
+### Type in the test copy (step guidance + new font, 2026-10-05; live game unchanged)
+
+Three tokens: `--font` (UI text), `--font-display` (step words, headings, the turn, the menu's
+scores), `--font-num` (tile numbers, card numbers, scores, pile counts, badges). All numbers use
+tabular, lining figures (`tnum`, `lnum`), so counts never jiggle.
+
+| Token | Font | Weights | File (subset, woff2) | Licence |
+|---|---|---|---|---|
+| display, numbers | **Bricolage Grotesque** (variable) | 200-800 axis; used 700-800 | `web/src/fonts/new/bricolage-grotesque-wght.woff2`, 24.2 KB | SIL OFL 1.1 (`LICENSE-bricolage-grotesque.txt`) |
+| text | **Figtree** (variable) | 300-900 axis; used 500-700 | `web/src/fonts/new/figtree-wght.woff2`, 11.0 KB | SIL OFL 1.1 (`LICENSE-figtree.txt`) |
+
+- Total 35.2 KB (budget 120 KB). Subset to Basic Latin plus the symbols the game prints
+  (· × – — ‘ ’ “ ” … − ≤ → ° ±); only the weight axis is kept (Bricolage's width and optical-size
+  axes were dropped). `font-display: swap`; the display font is preloaded; metric-matched
+  fallbacks (`Bricolage Fallback` 111% of Arial, `Figtree Fallback` 100%) so lines don't jump.
+- Sizes: the body text goes from 1.0625rem (Alegreya ran small) to 1rem (Figtree is about 14%
+  wider); every other size follows the existing scale. The on-map step word: 1.55rem, 800,
+  uppercase, +0.05em tracking.
+- "Font: New / Previous" in the Lab sheet switches back to Alegreya Sans instantly.
+- Bake-off: the material lab (`?lab=1`, test copy) shows the four candidates side by side;
+  the losing candidates' files (`web/src/fonts/bakeoff/`, OFL) load only on that page.
+
 ## Icons
 
 Line icons drawn in code (`web/src/ui/icons.ts`): a 24x24 grid, 2px stroke, round caps and

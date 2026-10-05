@@ -537,6 +537,8 @@ function dealIn() {
 }
 
 /** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
+/** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
+let guideMod: ReturnType<typeof import('./lab-mode/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
 const REPLAY_BUTTON = !IS_TEST;
@@ -583,6 +585,8 @@ let lab: {
 // (the build constant itself, so the live build drops the Lab's code entirely)
 declare const __CHANNEL__: string;
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  // the new type (Bricolage Grotesque + Figtree), unless the Lab says "Previous"
+  void import('./lab-mode/fonts.js').then((f) => f.applyFont());
   void import('./lab-mode/thumb.js').then((t) => {
     thumbMod = t.mountThumb({
       relayout: () => {
@@ -595,6 +599,11 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
     layoutKey = '';
     applyLayout();
     if (session) render();
+    // the step guidance (its setting sits under the phone layout rows)
+    void import('./lab-mode/guide.js').then((g) => {
+      guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
+      if (session) render();
+    });
   });
   void import('./lab-mode/panel.js').then((m) => {
     lab = m.mountLab({
@@ -1597,7 +1606,13 @@ function render() {
   if (IS_TEST && thumbLayout) checkOverlap(v);
   // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)
-  if (IS_TEST && thumbMod) thumbMod.tip(myTurn() && !busy() && !watching && !draw.shape.length && !draw.ptr ? dockHint(v).text : null, !!thumbLayout);
+  if (IS_TEST && guideMod) {
+    // the step, from the game's own state: whose turn it is and the phase
+    const st = session.state;
+    const over = st.phase === 'GAME_OVER';
+    const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
+    guideMod.update({ step, turn: st.turnNumber, myTurns: Math.ceil(st.turnNumber / 2), picked: session.sel.card !== null });
+  }
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);

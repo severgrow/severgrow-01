@@ -8,6 +8,21 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Step guidance (cue at step start, per-step focus) and new font
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- The step's word appears on the map as soon as a step starts ("Draw a card", "Play or skip",
+  "Throw one card", "Opponent"), bright then settling, with a short premium entrance; the step's
+  controls become the hero (Draw: both piles glow, lift, ring and "Tap to draw" chips for the
+  first 3 turns, hand at 75%; Throw: cards faintly lit, throw pile as the target, deck dimmed;
+  Opponent: calm, piles and hand at 70%). Setting "Step guidance: Full / Subtle / Off" replaces
+  "Idle tip".
+- New type: Bricolage Grotesque (words and numbers) + Figtree (text), 35 KB, tabular numbers;
+  Lab sheet "Font: New / Previous"; bake-off in the material lab (?lab=1).
+- Check before locking in: every step on a phone; Reduce motion; Large text and the longest
+  labels; tile numbers on every material and palette; left-hand mode; Subtle and Off settings;
+  the font file size and load time on a slow connection (and the brief Alegreya flash before
+  the swap).
+
 ### Reload once when a cached page names removed files
 - Date: 2026-10-05 · In test only
 - After a redeploy, a page cached by GitHub Pages (up to 10 minutes) can name script and style

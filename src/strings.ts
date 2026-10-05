@@ -166,3 +166,15 @@ export const FRUIT = Object.freeze({
   oppTook: `${OPPONENT_LABEL} took the Fruit card`,
   youTook: 'You took the Fruit card',
 });
+
+/** The test copy's step guidance: the word on the map when a step starts (at most ~24 letters). */
+export const STEP_CUE = Object.freeze({
+  draw: 'Draw a card',
+  grow: 'Play or skip',
+  throw: 'Throw one card',
+  opp: OPP.label,
+  /** the small chips on the piles (Draw step) and the throw pile (Throw step) */
+  chipDeck: 'Tap to draw',
+  chipTake: 'Tap to take',
+  chipThrow: 'Throw here',
+});
