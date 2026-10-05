@@ -273,4 +273,66 @@ html[data-thumb] .dock-overlays > .coach {
 .thumb-settings h3 {
   margin-top: 4px;
 }
+
+/* ---- thumb layout v2 ---- */
+/* the piles' label and count: one under the other (the narrower piles of v2) */
+html[data-thumb] .dock .table-row .pile-meta {
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.1;
+}
+html[data-thumb] .dock .pile-label {
+  font-size: 0.66rem;
+}
+
+/* smart overlap: the board reaches under the fan's band (only where nothing is under a card) */
+html[data-thumb][data-fan-over] .board-wrap {
+  margin-bottom: calc(-1 * var(--t-overlap, 0px));
+}
+html[data-thumb] .dock {
+  z-index: 2;
+}
+/* a fan lying over the map is see-through (55%) until I touch the fan or a card */
+html[data-thumb][data-fan-over] .dock .hand-row > .hand .card {
+  opacity: 0.55;
+  transition: opacity 120ms ease-out;
+}
+html[data-thumb][data-fan-over].fan-awake .dock .hand-row > .hand .card,
+html[data-thumb][data-fan-over] .dock .hand-row > .hand .card.lifted {
+  opacity: 1;
+}
+/* the board taking a new size: a short crossfade */
+.relayout-fade .board {
+  animation: relayout-fade 220ms ease-out;
+}
+@keyframes relayout-fade {
+  from {
+    opacity: 0.35;
+  }
+}
+.reduce-motion .relayout-fade .board {
+  animation: none;
+}
+/* the move buttons: a fixed slot between the piles and Undo/Sort; compact; "Skip sprout" is a
+   small pill, there only when it is useful */
+html[data-thumb] .dock .table-row > .moves {
+  align-content: center;
+  align-items: center;
+  justify-content: center;
+}
+html[data-thumb] .dock .table-row > .moves .btn {
+  min-height: 36px;
+  height: auto;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  line-height: 1.15;
+}
+html[data-thumb] .dock .table-row > .moves .btn.skip {
+  min-height: 32px;
+  border: 1.5px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+  text-decoration: none;
+  padding: 2px 12px;
+}
 `;

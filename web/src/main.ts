@@ -4,7 +4,7 @@ import { IS_TEST } from './channel.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -49,7 +49,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, computeLayout, fanSlots, setBoardShape, THUMB } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, boardUnits, computeLayout, fanSlots, setBoardShape, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -531,6 +531,9 @@ function dealIn() {
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
+/** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
+let thumbOverlap = 0;
+let overlapFor: unknown = null;
 // the Lab (test copy only: this import is dropped from the live build)
 let lab: {
   overrides: () => Partial<RulesConfig>;
@@ -570,8 +573,86 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   });
 }
 
+/**
+ * Thumb layout v2, smart overlap (test copy only): the board may reach under the fan's band by
+ * up to 15% of its height, but only where every hex under a card is empty or rock, far from
+ * anything that could be played there this turn (my network: 4 hexes, a Bloom's reach; the
+ * opponent's: 1), with no tile, home, gold hex, target highlight or Bloom painting under a card.
+ * Worked out when the board changes (not every frame); a change re-lays the page with a short
+ * crossfade. Anything that would end up under a card cancels it at once.
+ */
+function checkOverlap(v: View) {
+  if (!session || !thumbLayout) return;
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
+  const cfg = session.state.config;
+  const maxHand = cfg.handSize + 1;
+  const side = thumbLayout.side;
+  // things under a card right now (highlights, a Bloom being painted) cancel it whatever the board
+  const live = new Set<string>([...(session.sel.card !== null || session.sel.kind !== null ? targetHexes(v, session.legal, session.sel) : []), ...draw.shape]);
+  const key = session.state;
+  if (overlapFor === key && live.size === 0) return;
+  overlapFor = key;
+  const st = session.state;
+  const mine: { q: number; r: number }[] = [];
+  const theirs: { q: number; r: number }[] = [];
+  for (const [k, t] of Object.entries(st.board)) if (t) (t.owner === HUMAN ? mine : theirs).push(parseKey(k));
+  const forbidden = (k: string) => {
+    const c = parseKey(k);
+    if (st.board[k] || st.terrain[k] === 'rich' || live.has(k)) return true;
+    return mine.some((m) => hexDistance(m, c) <= 4) || theirs.some((m) => hexDistance(m, c) <= 1);
+  };
+  const base = computeLayout({ w, h, ...safeArea() }, cfg.boardRadius, maxHand, side, 0);
+  // only worth it when the board is held back by the height (else it can't grow)
+  let pick = 0;
+  if (base.board.w < base.zone.w - 1) {
+    const most = Math.floor(base.board.h * THUMB.overlapMax);
+    for (const f of [1, 0.75, 0.5, 0.25]) {
+      const o = Math.floor(most * f);
+      if (o < 8) continue;
+      const l = computeLayout({ w, h, ...safeArea() }, cfg.boardRadius, maxHand, side, o);
+      if (l.orient !== getOrient()) continue;
+      const u = boardUnits(cfg.boardRadius, l.orient);
+      const t = l.thumb!;
+      const cards = fanSlots(t, maxHand).map((p) => ({ x: l.dock.x + p.x, y: l.dock.y + p.y, a: (-p.rot * Math.PI) / 180 }));
+      const R = S * 0.95 * l.scale;
+      const hw = t.card.w / 2 + R;
+      const hh = t.card.h / 2 + R + THUMB.lift;
+      const under = (k: string) => {
+        const c = centerOf(k);
+        const x = l.board.x + (c.x - u.x0) * l.scale;
+        const y = l.board.y + (c.y - u.y0) * l.scale;
+        return cards.some((cd) => {
+          const dx = x - cd.x;
+          const dy = y - cd.y;
+          const rx = dx * Math.cos(cd.a) - dy * Math.sin(cd.a);
+          const ry = dx * Math.sin(cd.a) + dy * Math.cos(cd.a);
+          return Math.abs(rx) <= hw && Math.abs(ry) <= hh;
+        });
+      };
+      if (Object.keys(st.board).every((k) => !forbidden(k) || !under(k))) {
+        pick = o;
+        break;
+      }
+    }
+  }
+  if (pick !== thumbOverlap) {
+    thumbOverlap = pick;
+    layoutKey = '';
+    // a short crossfade while the board takes its new size
+    const wrap = $('board-wrap');
+    wrap.classList.remove('relayout-fade');
+    void wrap.offsetWidth;
+    wrap.classList.add('relayout-fade');
+    requestAnimationFrame(() => render());
+  }
+}
+
 function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
   watching = IS_TEST ? watch : null;
+  thumbOverlap = 0;
+  overlapFor = null;
   if (IS_TEST) {
     document.body.classList.toggle('lab-watching', !!watching);
     lab?.watchingChanged(watching);
@@ -1422,6 +1503,7 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
+  if (IS_TEST && thumbLayout) checkOverlap(v);
   // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)
   if (IS_TEST && thumbMod) thumbMod.tip(myTurn() && !busy() && !watching && !draw.shape.length && !draw.ptr ? dockHint(v).text : null, !!thumbLayout);
@@ -1667,13 +1749,13 @@ function applyLayout() {
   // the test copy's thumb layout (phones in portrait, the setting on): sized for the game's hand
   const thumbSide = IS_TEST && thumbMod ? thumbMod.side(w, h) : null;
   const maxHand = (shapeCfg?.handSize ?? 7) + 1;
-  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? maxHand : ''}`;
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
-  const l = thumbSide ? computeLayout({ w, h, ...safeArea() }, radius, maxHand, thumbSide) : computeLayout({ w, h, ...safeArea() }, radius);
+  const l = thumbSide ? computeLayout({ w, h, ...safeArea() }, radius, maxHand, thumbSide, thumbOverlap) : computeLayout({ w, h, ...safeArea() }, radius);
   const thumbWas = thumbLayout;
   thumbLayout = l.thumb ?? null;
   if (thumbLayout) {
@@ -1687,8 +1769,14 @@ function applyLayout() {
       r.setProperty(`--t-${name}-h`, `${b.h.toFixed(1)}px`);
     }
     r.setProperty('--t-pile-w', `${t.pileCard.w}px`);
+    r.setProperty('--t-overlap', `${Math.max(0, l.zone.y + l.zone.h - l.dock.y).toFixed(1)}px`);
     r.setProperty('--t-pile-h', `${t.pileCard.h}px`);
-  } else delete document.documentElement.dataset.thumb;
+    if (thumbOverlap > 0) document.documentElement.dataset.fanOver = '1';
+    else delete document.documentElement.dataset.fanOver;
+  } else {
+    delete document.documentElement.dataset.thumb;
+    delete document.documentElement.dataset.fanOver;
+  }
   if (thumbWas !== thumbLayout && session) queueMicrotask(() => render());
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
@@ -2925,6 +3013,18 @@ bind('hand-sort', () => {
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
+// the test copy: a fan lying over the map is see-through until I touch it
+let fanSleep = 0;
+$('dock').addEventListener(
+  'pointerdown',
+  () => {
+    if (!IS_TEST) return;
+    document.documentElement.classList.add('fan-awake');
+    clearTimeout(fanSleep);
+    fanSleep = window.setTimeout(() => document.documentElement.classList.remove('fan-awake'), 3000);
+  },
+  { capture: true, passive: true },
+);
 $('hand').addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse' || settings.reduceMotion) return;
   const card = (e.target as HTMLElement).closest<HTMLElement>('.card');
