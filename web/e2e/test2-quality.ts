@@ -74,6 +74,8 @@ for(const bad of ['{junk',JSON.stringify({v:1,seed:42,actions:[]})]){
   for(let step=0;step<6;step++){
     await p.waitForFunction(()=>{const h=(window as any).__severgrow;return !h.busy()&&h.state()?.actor===0;});
     const before=await p.evaluate(()=>(window as any).__severgrow.state().history.length);
+    await p.click('#test2-help-button');
+    check(await p.locator('#sheet-test2-help').isVisible(), 'tutorial help opens a readable sheet');
     await p.click('#coach-show');await p.waitForTimeout(80);
     for(let j=0;j<6;j++){
       if(!await p.locator('#guide-arrow').isVisible())break;

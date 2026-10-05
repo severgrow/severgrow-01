@@ -24,7 +24,7 @@
 ## KNOWN ISSUES
 
 - Real-device Safari bars/safe areas and Android performance remain unverified.
-- DESIGN/V3 experimental raster flaws remain Dev-only.
+- Optional V3 is now present in Test2 from the concurrently maintained Beta branch; this information pass preserves it and keeps the original look as the default.
 
 ## TEST RESULTS (fresh, not historical)
 
@@ -49,7 +49,7 @@
 | Category | Actual contents / Test2 disposition |
 |---|---|
 | MAIN ONLY | Existing root release, backup engine, legacy type/dock/Confirm/tools and unprefixed saves; preserved on protected Main |
-| DEV ONLY | Experimental development settings, comparison controls and new V3 art; excluded from Test2 |
+| DEV ONLY | Experimental development settings and comparison controls; unavailable in Test2. Optional V3 art is also available in Test2. |
 | SHARED | Deterministic Classic rules, bots 1–9, existing artwork, palettes, cards, game/session/settings logic |
 | LAB ONLY | Custom BoardSpec maps/configs, reshuffle, longer games, presets/share tools; unavailable in Test2 |
 | DESIGN ONLY | Illustrated V2 forest/volcano subclass and public PNG assets; excluded from Test2 bundles |
@@ -59,3 +59,27 @@
 
 ### Concurrent Test2 integration
 Preserved incoming commit 51640aa7 and its optional V3 look; the original look remains the default. Added the V3 browser flow to the independent CI matrix. The default Main game is untouched. This integration requires fresh CI and public verification before it is reported live.
+
+## Test2 information pass — 5 October 2026
+
+### DONE
+- Reviewed the supplied phone screenshots: independent turn/step/discard messages overlapped; coaching was squeezed to 140px, truncating the suggestion and wrapping Show me where into multiple lines.
+- Test2 alone now has one reserved information area above the playable map: large, faint Draw/Grow/Throw text and one subordinate notice. No glass capsules, competing turn pill or duplicate idle message.
+- Moved the original coach/tip nodes into an explicitly opened accessible help sheet. Complete instructions, labelled progress, 44px controls, Show me where, separate coach-off, Escape/Tab and focus return remain available. Teaching yields to an active move, inspection, Pause and results.
+- Routine notices clear on interaction; significant cuts and home danger retain priority. No message node can cover a playable tile.
+- Fixed desktop long Bloom/Skip text overflowing toward the throw pile; wrapping stays inside the existing column. Replayed the affected complete game: 101 UI actions, no failures.
+- Fixed lessons opened from How to play before a game starts, including the previously inactive Bloom Show tip link.
+- Preserved concurrent Beta visual commits without editing their art or renderer. No engine, bot, rule, card, score, save schema or Main source changes in this pass.
+
+### TEST RESULTS
+- Full npm run check: 107 files, 1,133 tests passed and one existing expected failure; typecheck passed.
+- Observed 20 complete browser games: 1,449 human actions (1,407 real UI, 42 assisted), 2,953 total game actions, 3,472 distinct sampled message frames; zero message overlap, blocked control or overflow frames. Complex Bloom actions used the existing session hook; one desktop EndAct initially needed assistance and was fixed/rechecked separately. Original observations remain available in the release review.
+- Test2 critical gameplay: 189 checks across nine viewports passed; information/help: 126 checks passed, including lessons opened before a game; V3: 22 checks passed.
+- HTTPS palette/storage/offline/teaching/recovery: 327 checks passed. Main, Dev and Test2 builds and asset isolation passed; Test2 information/help chunks absent from both other channels.
+
+### IN PROGRESS
+- Publishing the reviewed information change to Main2.0; exact candidate CI and public-site checks must complete before it is reported live.
+
+### NOT YET VERIFIED
+- Real iPhone/Android hardware.
+- Exact newly published information commit on the public URL.
