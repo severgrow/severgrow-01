@@ -8,6 +8,14 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Reload once when a cached page names removed files
+- Date: 2026-10-05 · In test only
+- After a redeploy, a page cached by GitHub Pages (up to 10 minutes) can name script and style
+  files that are gone, so the game shows as bare unstyled text. `web/index.html` now reloads
+  once from a fresh address when its script or stylesheet fails to load.
+- Check before locking in: the live game has the same risk (and an offline worker); keep this
+  or rely on the worker.
+
 ### Zoomed map runs on behind the cards (smart fade)
 - Date: 2026-10-05 · Commit: `d281f9f` · In test only (phones, the thumb layout)
 - When the camera is zoomed in and there is more map below, it is no longer cut off at the deck:

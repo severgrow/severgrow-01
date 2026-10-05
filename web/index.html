@@ -2,6 +2,36 @@
 <html lang="en" data-theme="ink">
   <head>
     <meta charset="utf-8" />
+    <script>
+      // A page cached from an earlier deploy can name script and style files the newest deploy
+      // removed (Pages caches the page for up to 10 minutes): the game then shows as bare text.
+      // If one of them fails to load, reload once from a fresh address (never in a loop).
+      (function () {
+        var u = new URL(location.href);
+        if (u.searchParams.has('_fresh')) {
+          u.searchParams.delete('_fresh');
+          history.replaceState(null, '', u.pathname + u.search + u.hash);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
+          try {
+            if (sessionStorage.getItem('fresh-reload')) return;
+            sessionStorage.setItem('fresh-reload', '1');
+          } catch (_) {
+            return;
+          }
+          var r = new URL(location.href);
+          r.searchParams.set('_fresh', String(Date.now()));
+          location.replace(r.href);
+        }, true);
+        window.addEventListener('load', function () {
+          try {
+            sessionStorage.removeItem('fresh-reload');
+          } catch (_) {}
+        });
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0d0e11" />
     <meta name="description" content="Severor: grow your network, keep it joined to your home, cut your opponent's links." />
