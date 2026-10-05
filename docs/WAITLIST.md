@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Step guidance (cue at step start, per-step focus) and new font
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- Date: 2026-10-05 · Commit: `e461510` · In test only
 - The step's word appears on the map as soon as a step starts ("Draw a card", "Play or skip",
   "Throw one card", "Opponent"), bright then settling, with a short premium entrance; the step's
   controls become the hero (Draw: both piles glow, lift, ring and "Tap to draw" chips for the
