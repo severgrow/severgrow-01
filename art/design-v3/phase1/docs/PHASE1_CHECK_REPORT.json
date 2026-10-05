@@ -1,0 +1,34 @@
+{
+  "phase": "1-style-frame",
+  "textures": {
+    "empty_ground": {
+      "left_right_mae": 0.01839192770421505,
+      "top_bottom_mae": 0.2478841096162796
+    },
+    "gold_ground": {
+      "left_right_mae": 0.1398112028837204,
+      "top_bottom_mae": 0.2000325471162796
+    },
+    "forest_ground_a": {
+      "left_right_mae": 0.5110676884651184,
+      "top_bottom_mae": 0.7275390625
+    },
+    "forest_lush": {
+      "left_right_mae": 0.6368815302848816,
+      "top_bottom_mae": 0.70751953125
+    },
+    "volcano_ground_a": {
+      "left_right_mae": 0.7158203125,
+      "top_bottom_mae": 0.7330729365348816
+    },
+    "volcano_hot": {
+      "left_right_mae": 1.5196939706802368,
+      "top_bottom_mae": 1.3126627206802368
+    }
+  },
+  "tier_sizes": {
+    "lo_mb": 0.4353218078613281,
+    "hi_mb": 0.9387130737304688
+  },
+  "note": "Phase 1 contains only the minimum approved-system assets, not the full prop/FX pack."
+}

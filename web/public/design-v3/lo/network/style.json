@@ -1,20 +1,13 @@
 {
-  "version": "3.0",
-  "purpose": "Art-direction values for code-drawn continuous network paths. Network is the hero surface element.",
-  "units": "board units, hex circumradius = 30",
   "forest": {
     "outline": "#1f2b1e",
     "body": "#587843",
     "highlight": "#b8d173",
-    "shadow": "#172019",
     "widths": {
       "thin": 2.6,
       "normal": 4.4,
       "heavy": 6.8
-    },
-    "strip": "network/forest_vine_strip.webp",
-    "scroll": false,
-    "notes": "Thick living root/vine with bark edge; large forms, no hair-thin tendrils at phone LOD."
+    }
   },
   "volcano": {
     "outline": "#211b19",
@@ -26,20 +19,7 @@
       "thin": 2.6,
       "normal": 4.2,
       "heavy": 6.6
-    },
-    "strip": "network/lava_flow_strip.webp",
-    "scroll": true,
-    "notes": "Molten river inside dark crust. Keep crust visible. Glow is restrained and must not define the geometry."
+    }
   },
-  "continuity": {
-    "structural_rule": "Renderer draws ONE continuous mathematical path per linked pair. The strip only skins that path.",
-    "edge_rule": "Never use two separately capped connector sprites meeting at a hex edge.",
-    "junction_rule": "Branch hubs are local dressing only; structural links remain continuous pairwise paths."
-  },
-  "lod": {
-    "under_40_css_px": "outline + body only; no decorative leaf/crust chips",
-    "40_to_79_css_px": "one highlight layer, no tiny decorations",
-    "80_to_129_css_px": "normal highlight and restrained accents",
-    "130_plus_css_px": "full strip detail, still no micro-noise"
-  }
+  "notes": "Renderer owns one continuous path per linked pair. Strip skins the path; do not cap per-tile connectors."
 }

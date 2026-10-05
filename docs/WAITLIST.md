@@ -21,6 +21,8 @@ go-ahead). Tick an item and add the date when it reaches `main`.
   homes, no props). The development pack (briefs, masters, QA) is in `art/design-v3/`.
 - `BoardView`: drawing steps became overridable methods (same code, same order); the live
   game, the Lab and Design draw exactly as before (web tests 483/483).
+- 2026-10-05: Phase 1 art dropped in (textures, homes, one rock cluster, strips, scars;
+  `art/design-v3/phase1/` keeps its frames and masters). Not approved yet: a revision round first.
 - Check before locking in: the real V3 art (Phase 1 approval first); strip skinning on a straight
   path (the strip carries the organic look); hi tier memory on tablets; the ground repaint time
   on big boards on a real phone.

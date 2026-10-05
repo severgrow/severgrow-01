@@ -3,6 +3,14 @@
  "generated": "npm run skin:manifest",
  "tiers": {
   "lo": [
+   "fx/forest_scar.png",
+   "fx/volcano_scar.png",
+   "homes/forest_tree_canopy.png",
+   "homes/forest_tree_leaves_layer.png",
+   "homes/forest_tree_shadow.png",
+   "homes/volcano_crater.png",
+   "homes/volcano_crater_glow.png",
+   "homes/volcano_smoke_01.png",
    "masks/flat/clarity_gold_zone.png",
    "masks/flat/clarity_number_zone.png",
    "masks/flat/coverage_01.png",
@@ -27,11 +35,28 @@
    "masks/pointy/coverage_08.png",
    "masks/pointy/coverage_09.png",
    "masks/pointy/hex_clip.png",
+   "network/forest_vine_strip.webp",
+   "network/lava_flow_strip.webp",
    "network/style.json",
+   "props/rock/rock_cluster_01.png",
    "states/forest_cutoff_tint.json",
-   "states/volcano_cutoff_tint.json"
+   "states/volcano_cutoff_tint.json",
+   "textures/empty_ground.webp",
+   "textures/forest_ground_a.webp",
+   "textures/forest_lush.webp",
+   "textures/gold_ground.webp",
+   "textures/volcano_ground_a.webp",
+   "textures/volcano_hot.webp"
   ],
   "hi": [
+   "fx/forest_scar.png",
+   "fx/volcano_scar.png",
+   "homes/forest_tree_canopy.png",
+   "homes/forest_tree_leaves_layer.png",
+   "homes/forest_tree_shadow.png",
+   "homes/volcano_crater.png",
+   "homes/volcano_crater_glow.png",
+   "homes/volcano_smoke_01.png",
    "masks/flat/clarity_gold_zone.png",
    "masks/flat/clarity_number_zone.png",
    "masks/flat/coverage_01.png",
@@ -56,9 +81,18 @@
    "masks/pointy/coverage_08.png",
    "masks/pointy/coverage_09.png",
    "masks/pointy/hex_clip.png",
+   "network/forest_vine_strip.webp",
+   "network/lava_flow_strip.webp",
    "network/style.json",
+   "props/rock/rock_cluster_01.png",
    "states/forest_cutoff_tint.json",
-   "states/volcano_cutoff_tint.json"
+   "states/volcano_cutoff_tint.json",
+   "textures/empty_ground.webp",
+   "textures/forest_ground_a.webp",
+   "textures/forest_lush.webp",
+   "textures/gold_ground.webp",
+   "textures/volcano_ground_a.webp",
+   "textures/volcano_hot.webp"
   ]
  }
 }
