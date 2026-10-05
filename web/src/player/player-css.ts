@@ -909,4 +909,17 @@ html.large-text[data-thumb] .dock .table-row > .moves .btn.skip {
   line-height: 1.05;
   text-overflow: clip;
 }
+
+/* When the phone board has no tall free area, retain the full tip beside its button. */
+html[data-thumb] .dock-overlays > .first-tip.teaching-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  row-gap: 0;
+  padding: 8px;
+  align-items: center;
+}
+html[data-thumb] .first-tip.teaching-compact > :not(#first-tip-ok) { grid-column: 1; }
+html[data-thumb] .first-tip.teaching-compact #first-tip-ok { grid-column: 2; grid-row: 1 / span 2; }
+html[data-thumb] .first-tip.teaching-compact #first-tip-text { margin: 0; font-size: 0.8rem; line-height: 1.2; }
 `;

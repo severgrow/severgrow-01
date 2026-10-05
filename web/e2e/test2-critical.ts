@@ -49,6 +49,14 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   const hit = await page.evaluate(([x,y]) => document.elementFromPoint(x!,y!)?.closest('g.hex-cell')?.getAttribute('data-key'), [box.x+box.width/2,box.y+box.height/2]);
   if (hit !== key) console.log(await page.evaluate(([x,y]) => ({hit: document.elementFromPoint(x!,y!)?.outerHTML.slice(0,200),vb: document.querySelector('#board')?.getAttribute('viewBox'),wrap: document.querySelector('#board-wrap')?.getBoundingClientRect().toJSON(),under:getComputedStyle(document.querySelector('#board-wrap')!).getPropertyValue('--cam-under')}), [box.x+box.width/2,box.y+box.height/2]));
   check(hit === key, `${w}: seed219682080 legal target receives hit (${hit})`);
+  const legalKeys = legalActions(viewFor(grown,0)).flatMap(a => a.t==='Sprout' && a.card===action.card ? [`${a.coord.q},${a.coord.r}`] : []);
+  const obscured = await page.evaluate(keys => {
+    const tip=document.querySelector('#first-tip'); if(!tip || (tip as HTMLElement).hidden) return [];
+    const r=tip.getBoundingClientRect();
+    const overlaps=(el:Element)=>{const b=el.getBoundingClientRect();return b.width && r.left<b.right && r.right>b.left && r.top<b.bottom && r.bottom>b.top;};
+    return [...keys.filter(k=>{const el=document.querySelector(`#board .hex-cell[data-key="${k}"]`);return el&&overlaps(el);}), ...[...document.querySelectorAll('#board .landmark')].filter(overlaps).map(e=>'home:'+e.getAttribute('data-key'))];
+  },legalKeys);
+  check(obscured.length===0,`${w}: tip leaves all playable hexes and both homes clear (${obscured})`);
   await target.click();
   check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: first target tap previews`);
   await target.click(); await idle(page);

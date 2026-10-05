@@ -1,6 +1,7 @@
 // Place phone teaching panels in actual screen space, avoiding playable hexes and homes.
 // This changes presentation only; no move or target is suppressed.
 export const placeTeachingPanel = (panel: HTMLElement, targetKeys: Iterable<string>) => {
+  panel.classList.remove('teaching-compact');
   panel.style.removeProperty('position'); panel.style.removeProperty('left');
   panel.style.removeProperty('width');
   panel.style.removeProperty('top'); panel.style.removeProperty('bottom');
@@ -18,7 +19,8 @@ export const placeTeachingPanel = (panel: HTMLElement, targetKeys: Iterable<stri
   const collision = (x: number, y: number) => avoid.some(a=>a.width && x < a.right + 4 && x + r.width > a.left - 4 && y < a.bottom + 4 && y + r.height > a.top - 4);
   if (!collision(r.left, r.top)) return;
   const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
-  for (const width of [r.width, Math.min(r.width, 140)]) {
+  for (const width of [r.width, Math.min(r.width, 140), ...(panel.id === 'first-tip' ? [bounds.width - 16] : [])]) {
+    if (width === bounds.width - 16) panel.classList.add('teaching-compact');
     panel.style.width = `${width}px`; r = panel.getBoundingClientRect();
     const maxY = bounds.bottom - under - r.height - 8;
     for (let y = bounds.top + 8; y <= maxY; y += 8) {
