@@ -49,6 +49,8 @@ export type HomeLayer = {
   dy?: number;
   anim?: 'sway' | 'pulse' | 'drift';
   opacity?: number;
+  /** start the animation this many seconds into its cycle (staggered layers; hidden with Reduce motion) */
+  delay?: number;
 };
 
 /** One player's network look (values from network/style.json override these). */

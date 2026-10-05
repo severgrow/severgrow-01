@@ -79,7 +79,10 @@ export const FOREST_VOLCANO_V3: SkinDef = {
     [
       { src: 'homes/volcano_crater.png', size: 42 },
       { src: 'homes/volcano_crater_glow.png', size: 42, anim: 'pulse' },
+      // three puffs drifting up one after another (one 6 s cycle, 2 s apart)
       { src: 'homes/volcano_smoke_01.png', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
+      { src: 'homes/volcano_smoke_02.png', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
+      { src: 'homes/volcano_smoke_03.png', size: 15, dx: 6, dy: -7, anim: 'drift', opacity: 0.7, delay: 4 },
     ],
   ],
   scars: ['fx/forest_scar.png', 'fx/volcano_scar.png'],

@@ -217,7 +217,7 @@ export class SkinBoardView extends BoardView {
     const art = el('g', { class: 'skin-home-art' });
     body.insertBefore(art, body.firstChild);
     for (const l of layers) {
-      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: 'xMidYMid meet' }, art);
+      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}${l.delay ? ' skin-later' : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: 'xMidYMid meet', ...(l.delay ? { style: `animation-delay:${-l.delay}s` } : {}) }, art);
     }
   }
 
