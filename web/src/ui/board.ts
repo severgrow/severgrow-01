@@ -652,7 +652,7 @@ export class BoardView {
     }
   }
 
-  private mark(g: SVGGElement, x: number, y: number, kind: string) {
+  protected mark(g: SVGGElement, x: number, y: number, kind: string) {
     // the test copy: no owner marks on tiles (moss and lava already say whose tile it is)
     if (IS_TEST) return;
     const r = 3.2;

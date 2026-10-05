@@ -20,7 +20,7 @@ export const propBudget = (tilePx: number, strength9: number) => {
 };
 
 /** Clear zones, board units from the tile centre (geometry.json of the V3 pack). */
-export const CLEAR = { number: { x: 0, y: -1.8, r: 9 }, gold: { x: 17.4, y: 12.6, r: 6 } };
+export const CLEAR = { number: { x: 0, y: -1.8, r: 9 }, gold: { x: 17.4, y: 12.6, r: 6 }, mark: { x: 0, y: 16.8, r: 4.5 } };
 
 export type Placed = { def: PropDef; x: number; y: number; size: number };
 
@@ -45,7 +45,7 @@ export const placeProps = (key: string, defs: PropDef[], count: number, strength
     const half = def.size * (0.85 + hash(`${key}:s${out.length}`) * 0.2) * 0.5;
     const clearOf = (z: { x: number; y: number; r: number }) => Math.hypot(s.x - z.x, s.y - z.y) >= z.r + half;
     // inside the hex: the inscribed circle (apothem 26) less the sprite
-    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.gold) || Math.hypot(s.x, s.y) + half > 25) continue;
+    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.gold) || !clearOf(CLEAR.mark) || Math.hypot(s.x, s.y) + half > 25) continue;
     if (out.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < (p.size + half * 2) * 0.5)) continue;
     out.push({ def, x: s.x, y: s.y, size: half * 2 });
   }

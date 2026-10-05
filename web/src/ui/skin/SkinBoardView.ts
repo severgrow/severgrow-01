@@ -407,6 +407,8 @@ export class SkinBoardView extends BoardView {
     const defs = (cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? [];
     const budget = cut ? Math.min(1, propBudget(this.tilePx(), 9)) : propBudget(this.tilePx(), s9);
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
+    // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
+    this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
     const n = skin.numbers[t.owner];
     el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);
     el('text', { x, y: y - S * 0.06, class: 'num tile-num world skin-num', style: `fill:${n.ink}` }, g).textContent = String(t.strength);
