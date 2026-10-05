@@ -529,6 +529,10 @@ function dealIn() {
 
 /** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
+/** The replay button: hidden in the test copy (its code stays). */
+const REPLAY_BUTTON = !IS_TEST;
+/** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
+if (IS_TEST) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
 /** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
@@ -536,6 +540,7 @@ let thumbOverlap = 0;
 let overlapFor: unknown = null;
 // the Lab (test copy only: this import is dropped from the live build)
 let lab: {
+  camera: ReturnType<typeof import('./lab-mode/camera.js').installCamera>;
   overrides: () => Partial<RulesConfig>;
   thinking: (on: boolean) => void;
   watchingChanged: (w: { level: number; pause: number } | null) => void;
@@ -581,6 +586,39 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
  * Worked out when the board changes (not every frame); a change re-lays the page with a short
  * crossfade. Anything that would end up under a card cancels it at once.
  */
+/**
+ * The test copy's smart camera (lab-mode/camera.ts): what it needs on every render. DEFAULT_TILE
+ * is the classic board's tile (hexagon radius 3) on this screen with the current layout.
+ */
+function feedCamera(v: View) {
+  if (!session || !lab) return;
+  const r = board.svg.getBoundingClientRect();
+  if (r.width === 0) return;
+  // the classic board's drawing area (board units, logic/layout.ts boardUnits for radius 3)
+  const halfLong = Math.sqrt(3) * S * 3 + (Math.sqrt(3) / 2) * S + 2;
+  const halfShort = 1.5 * S * 3 + S + 2;
+  const flat = getOrient() === 'flat';
+  const cw = 2 * (flat ? halfShort : halfLong);
+  const chh = 2 * (flat ? halfLong : halfShort);
+  const defaultTile = Math.sqrt(3) * S * Math.min(r.width / cw, r.height / chh);
+  const shown = queue.board;
+  const tiles = Object.entries(shown).flatMap(([k, t]) => (t ? [{ key: k, owner: t.owner, ...centerOf(k) }] : []));
+  const last = session.state.history?.at(-1);
+  const recent = !last ? [] : last.t === 'Bloom' ? last.hexes.map((c) => centerOf(coordKey(c))) : 'coord' in last && last.coord ? [centerOf(coordKey(last.coord as { q: number; r: number }))] : [];
+  const centres = new Map(Object.keys(v.board).map((k) => [k, centerOf(k)] as const));
+  lab.camera.update(
+    {
+      tiles,
+      me: HUMAN,
+      recent,
+      turnKey: `${session.state.turnNumber}`,
+      defaultTile,
+      canMove: !busy() && !draw.shape.length && !draw.ptr && draw.desk.phase === 'idle',
+    },
+    centres,
+  );
+}
+
 function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
   const vv = window.visualViewport;
@@ -606,7 +644,9 @@ function checkOverlap(v: View) {
   const base = computeLayout({ w, h, ...safeArea() }, cfg.boardRadius, maxHand, side, 0);
   // only worth it when the board is held back by the height (else it can't grow)
   let pick = 0;
-  if (base.board.w < base.zone.w - 1) {
+  // (while the camera is zoomed in, the fan stays below the board: the visible window decides)
+  const camWhole = !lab || lab.camera.isWhole();
+  if (camWhole && base.board.w < base.zone.w - 1) {
     const most = Math.floor(base.board.h * THUMB.overlapMax);
     for (const f of [1, 0.75, 0.5, 0.25]) {
       const o = Math.floor(most * f);
@@ -1511,6 +1551,7 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
+  if (IS_TEST && lab) feedCamera(v);
   if (IS_TEST && thumbLayout) checkOverlap(v);
   // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)
@@ -1955,7 +1996,11 @@ function renderBoard(v: View, advice: Advice | null) {
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
   }
-  if (!busy()) {
+  if (!busy() && IS_TEST) {
+    // the test copy: no weak-spot toggles; my most dangerous weak link always pulses gently
+    // with its "-N" (the opponent's weak links are on their tile card, when tapped)
+    if (v.phase !== 'GAME_OVER') o.pulse = weakSpots(v)[0] ?? null;
+  } else if (!busy()) {
     if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     if (showOpps) o.opps = opportunities(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     // My most dangerous weak link (one the bot could cut next turn) pulses gently.
@@ -1976,13 +2021,13 @@ function renderBoard(v: View, advice: Advice | null) {
     lastAmbKey = ambKey;
     board.ambient(busy() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
   }
-  $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
-  $('tool-targets').setAttribute('aria-pressed', String(showOpps));
+  document.getElementById('tool-weak')?.setAttribute('aria-pressed', String(settings.weakSpots));
+  document.getElementById('tool-targets')?.setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
   const noReplay = session.lastTurnOf(BOT).length === 0;
-  $('tool-replay').hidden = busy();
+  $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
   $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
@@ -2062,6 +2107,8 @@ function renderTooltip(v: View) {
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
       html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
+      // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only
+      if (IS_TEST && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -3118,12 +3165,12 @@ bind('discard', () => {
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
-bind('tool-weak', () => {
+if (!IS_TEST) bind('tool-weak', () => {
   settings = { ...settings, weakSpots: !settings.weakSpots };
   saveSettings();
   render();
 });
-bind('tool-targets', () => {
+if (!IS_TEST) bind('tool-targets', () => {
   showOpps = !showOpps;
   render();
 });
@@ -3168,9 +3215,9 @@ bind('tool-replay', () => replayBotTurn());
   const KEY = 'severgrow.ctools.seen';
   /** The first time the tools show in a game: name each once (shield, then target). */
   firstToolTips = () => {
-    if (store.get(KEY)) return;
+    if (IS_TEST || store.get(KEY)) return;
     store.set(KEY, '1');
-    const tools = ['tool-weak', 'tool-targets'].map((id) => $(id)).filter((b) => !b.hidden);
+    const tools = ['tool-weak', 'tool-targets'].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => !!b && !b.hidden);
     tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
   };
 }

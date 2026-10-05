@@ -372,4 +372,70 @@ html[data-thumb] .dock .table-row > .moves .btn.skip {
   text-decoration: none;
   padding: 2px 12px;
 }
+
+/* ---- the smart camera: edge arrows and the "Whole map" pill ---- */
+/* zoomed in: the map stays inside its own area */
+.cam-zoomed .board {
+  overflow: hidden;
+}
+.cam-arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.cam-arrow {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  padding: 0;
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  color: var(--c-you);
+}
+.cam-arrow.bot {
+  color: var(--c-bot);
+}
+.cam-arrow i {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-top: 3px solid currentColor;
+  border-right: 3px solid currentColor;
+  border-radius: 2px;
+  transform: rotate(calc(var(--a) + 45deg)) translate(2px, -2px);
+  opacity: 0.8;
+}
+.cam-arrow span {
+  position: absolute;
+  transform: translate(calc(cos(var(--a)) * -16px), calc(sin(var(--a)) * -16px));
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 85%, transparent);
+  color: var(--c-bg);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.cam-whole {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--c-line) 80%, transparent);
+  background: color-mix(in srgb, var(--c-bg) 70%, transparent);
+  color: var(--c-text);
+  font: inherit;
+  font-size: 0.8rem;
+}
 `;

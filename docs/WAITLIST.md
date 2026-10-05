@@ -8,6 +8,20 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Camera auto-frame with minimum tile size; weak-spot icons removed; replay hidden
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- The map never shows tiles smaller than the Classic board's tile on that screen (59.4px on a
+  390x844 phone). Big maps zoom to the area where both players have tiles (+2 hexes), with
+  arrows at the edge for tiles off screen and a "Whole map" pill. It moves smoothly (300ms;
+  instant with Reduce motion), never during painting or animations; manual pan/pinch pause it
+  until the next turn.
+- Shield and target icons gone; my worst weak link always pulses with "-N"; the opponent's
+  weak links show on their tile card. The replay button is hidden by a flag.
+- Check before locking in: whole-map fit on Classic; huge maps with far-apart homes; edge
+  arrows; pan and zoom while painting a Bloom; the camera never moving during animations; the
+  tip never covering a home; Large text; left-hand mode; the fan's overlap using the visible
+  window.
+
 ### Thumb layout v3 (piles above the hand in the curve notch, bottom-anchored dock, aligned margins, tip never covers a home)
 - Date: 2026-10-05 · Commit: `7d88857` · In test only (phones held upright, the "Thumb layout"
   setting on; Hand side Left mirrors everything)

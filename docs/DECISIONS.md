@@ -156,3 +156,12 @@ One line each: where the brief left room, what was chosen and why.
 - Thumb layout v3: "never more than 24pt between the map and the dock" wins over centring: a board that already fills the width sits at the bottom of its zone and the spare height goes above it (under the header).
 - Thumb layout v3: the bottom safe area was counted twice (by the screen and inside the dock); the dock now sits on the screen's own safe area, 12pt up. This is the likely cause of the empty band in the iPhone screenshot.
 - Idle tip anchor: up to 51 spots are tried (17 heights x 3 positions); a spot touching a home, a tile, a gold "2", a highlight or a target is never used; the most empty hexes wins; then smaller words (80%, 65%); with no free spot at all, the smallest words at 20% where they cover the least.
+- Weak-spot icons removed (test copy): the shield and target corner buttons, their first-time hints and their toggles are gone. My worst weak link now always pulses with its "-N" badge (it used to need the shield). The opponent's weak links show only on their tile card when tapped ("Opponent weak link: you can reach it now."). Everything the map showed by itself stays.
+- Replay button: hidden in the test copy by a flag (`REPLAY_BUTTON`), code kept; the space it took is gone.
+- Camera: DEFAULT_TILE is the Classic board's tile width fitted into the board's own box on that screen (59.4px at 390x844). MIN = DEFAULT x 1.0, MAX = DEFAULT x 1.4.
+- Camera: if the whole map fits at MIN or bigger, the whole map is shown (it wins over zooming into the action); zooming in to the action area only happens when the whole map would be smaller than MIN.
+- Camera: the hovered/painted hex is not added to the frame because the camera never moves while a Bloom is being painted anyway.
+- Camera: Smart overlap (the map sliding under the piles) only runs when the whole map is shown; when zoomed in, the map is clipped to its own area instead so it never draws over the header or the cards.
+- Camera: hexes and tiles outside the view (plus one hex) are not drawn; the veins, gold badges and background texture are still drawn (they are cheap).
+- Camera: tapping an edge arrow shows that part of the map for 2.5 seconds, then the camera goes back (if it was on auto). Manual zoom goes from the whole map up to 2.8 x DEFAULT.
+- Camera: the pill reads "Whole map" (and "Back to play" when on); it only appears when the map does not already fit.

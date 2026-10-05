@@ -8,7 +8,7 @@ import { SHAPE_LIMITS } from './boardgen.js';
 import type { HomesMode, MapResult } from './boardgen.js';
 import { CLASSIC, PRESETS, decodeSetup, encodeSetup, isClassic, mapOf, sanitize, shortCode, toOverrides } from './setup.js';
 import type { LabSetup } from './setup.js';
-import { installPanZoom } from './panzoom.js';
+import { installCamera } from './camera.js';
 import { LAB_CSS } from './lab-css.js';
 
 export type LabHooks = {
@@ -317,8 +317,8 @@ export const mountLab = (hooks: LabHooks) => {
   fromHash();
   window.addEventListener('hashchange', fromHash);
 
-  // ---------- big boards: pan and zoom ----------
-  installPanZoom(hooks.board, hooks.boardWrap);
+  // ---------- the smart camera (auto-frame, minimum tile size, pan and zoom) ----------
+  const camera = installCamera(hooks.board, hooks.boardWrap, { reduceMotion: () => document.documentElement.classList.contains('reduce-motion'), changed: () => {} });
 
   // ---------- a calm "Thinking" note when the opponent takes over 2 seconds ----------
   const note = document.createElement('div');
@@ -356,6 +356,7 @@ export const mountLab = (hooks: LabHooks) => {
   });
 
   return {
+    camera,
     watchingChanged: (w: { level: number; pause: number } | null) => {
       watched = w;
       showBar();
