@@ -38,6 +38,13 @@ export const SKIN_CSS = `
 .skin-board .skin-tile-smoke { pointer-events: none; opacity: 0; animation: skin-tile-smoke 11s ease-out infinite; }
 @keyframes skin-tile-smoke { 0%, 70%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); } 78% { opacity: 0.75; } 99% { opacity: 0; transform: translate(3px, -12px) scale(1.25); } }
 .reduce-motion .skin-board .skin-lava-glow, .reduce-motion .skin-board .skin-ember, .reduce-motion .skin-board .skin-tile-smoke { display: none; }
+.skin-board .skin-art-link.grow-in { stroke-dasharray: none; animation: skin-link-in calc(0.4s * var(--anim, 1)) ease-out both; transform-box: fill-box; transform-origin: 0 50%; }
+@keyframes skin-link-in { from { transform: scaleX(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.skin-board .skin-vine { transform-box: fill-box; transform-origin: center; animation: skin-vine 6s ease-in-out infinite; }
+@keyframes skin-vine { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.01, 1.08); } }
+.skin-board .skin-lava-flow { pointer-events: none; mix-blend-mode: screen; filter: brightness(1.6) saturate(1.3); opacity: 0; animation: skin-lava 4s ease-in-out infinite; }
+.reduce-motion .skin-board .skin-vine { animation: none; }
+.reduce-motion .skin-board .skin-lava-flow { display: none; }
 .reduce-motion .skin-board .skin-mote { display: none; }
 .reduce-motion .skin-board .skin-later { display: none; }
 .reduce-motion .skin-board .skin-glow, .reduce-motion .skin-board .skin-firefly { display: none; }

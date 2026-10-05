@@ -83,8 +83,8 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   networkStyle: 'network/style.json',
   // built-in values (network/style.json in the tier overrides them)
   network: [
-    { key: 'forest', outline: '#1f2b1e', body: '#587843', highlight: '#b8d173', shadow: '#172019', widths: { thin: 2.6, normal: 4.4, heavy: 6.8 }, strip: 'network/forest_vine_strip.webp', scroll: false },
-    { key: 'volcano', outline: '#211b19', body: '#8f2212', highlight: '#f47a26', hot_core: '#ffd46a', glow: '#d2481a', widths: { thin: 2.6, normal: 4.2, heavy: 6.6 }, strip: 'network/lava_flow_strip.webp', scroll: true },
+    { key: 'forest', outline: '#1f2b1e', body: '#587843', highlight: '#b8d173', shadow: '#172019', widths: { thin: 2.6, normal: 4.4, heavy: 6.8 }, links: 'network/forest/', scroll: false },
+    { key: 'volcano', outline: '#211b19', body: '#8f2212', highlight: '#f47a26', hot_core: '#ffd46a', glow: '#d2481a', widths: { thin: 2.6, normal: 4.2, heavy: 6.6 }, links: 'network/volcano/', scroll: true },
   ],
   homes: [
     [
@@ -98,10 +98,10 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       { src: 'fx/firefly.webp', size: 4, dx: 2, dy: -12, anim: 'firefly', delay: 6 },
     ],
     [
-      { src: 'homes/volcano_crater.webp', size: 52 },
-      // the molten glow, inside the crater's ring of rock
-      { src: 'homes/volcano_crater_glow.webp', size: 32, anim: 'pulse', opacity: 0.75 },
-      // three puffs drifting up one after another (one 6 s cycle, 2 s apart)
+      // three painted volcano hexes (one per home tile), its crater light pulsing, and the three
+      // smoke puffs drifting up one after another (one 6 s cycle, 2 s apart)
+      ...[1, 2, 3].map((n, i) => ({ src: `homes/volcano_home_0${n}.webp`, size: 62, turn: true, variant: i })),
+      { src: 'homes/volcano_crater_glow.webp', size: 30, anim: 'pulse', opacity: 0.6 },
       { src: 'homes/volcano_smoke_01.webp', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
       { src: 'homes/volcano_smoke_02.webp', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
       { src: 'homes/volcano_smoke_03.webp', size: 15, dx: 6, dy: -7, anim: 'drift', opacity: 0.7, delay: 4 },
