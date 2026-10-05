@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Typography v2: Besley (display) + Commissioner (UI), tabular numbers
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)
+- Date: 2026-10-05 · Commit: `fc6a4ec` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)
 - Besley for the SEVEROR wordmark, page and sheet titles, "Pick a level" and the result title;
   Commissioner for everything else; numbers in "Severor Numerals" (Commissioner Bold with equal
   digit widths) so scores and counts never shift. 45 KB of fonts. Audited at 360x640, 390x844,
