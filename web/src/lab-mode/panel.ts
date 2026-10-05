@@ -199,7 +199,7 @@ export const mountLab = (hooks: LabHooks) => {
           <button type="button" class="seg-btn${fontChoice() === 'new' ? ' on' : ''}" role="radio" aria-checked="${fontChoice() === 'new'}" data-lab="font-new">New</button>
           <button type="button" class="seg-btn${fontChoice() === 'previous' ? ' on' : ''}" role="radio" aria-checked="${fontChoice() === 'previous'}" data-lab="font-previous">Previous</button>
         </div>
-        <p class="muted small">New: Fraunces (headline words) and Plus Jakarta Sans (text and numbers). Previous: Alegreya Sans.</p>
+        <p class="muted small">New: Besley (titles) and Commissioner (everything else). Previous: Alegreya Sans (the live game).</p>
         <h3>Opponent</h3>
         ${num('level', 'Level', 1, 9)}
         <h3>Watch a game</h3>

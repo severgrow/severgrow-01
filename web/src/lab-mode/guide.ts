@@ -200,6 +200,17 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
       { capture: true, passive: true },
     );
   document.addEventListener('visibilitychange', () => (document.hidden ? level('off') : armIdle()));
+  // a new screen size (a phone turned, a window resized): the plate finds its spot again
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(() => {
+      if (step && cue.dataset.level !== 'off') {
+        cue.classList.remove('faint');
+        place();
+      }
+    }, 120);
+  });
 
   return {
     /**

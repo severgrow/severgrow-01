@@ -25,27 +25,42 @@ text, 800 for numbers and titles. The audit found one stray serif (the "i" info 
 Georgia); it now uses the game font. The dock uses at most three text sizes: 15px (hint line,
 move buttons, Undo), 12px (pile counts, chips), and the card numerals.
 
-### Type in the test copy (live game unchanged)
+### Type in the test copy: typography v2 (live game unchanged)
 
-Three tokens: `--font` (UI text), `--font-display` (headline words: the step plate, headings, the
-turn), `--font-num` (tile numbers, card numbers, scores, pile counts, badges). All numbers use
-tabular, lining figures (`tnum`, `lnum`), so counts never jiggle.
+Two voices, scoped under `<html class="test-typography-v2">` (test build only; `web/src/lab-mode/fonts.ts`):
 
-| Token | Font | Weights | File (subset, woff2) | Licence |
+- **Besley** (display / brand, about a tenth of the type): the SEVEROR wordmark (800, uppercase,
+  -0.03em, line-height 0.92, `clamp(2.5rem, 7.5vw + 0.9rem, 4.25rem)`), page and sheet titles
+  (700, -0.012em, 1.1), "Pick a level" (`clamp(1.45rem, 2.4vw + 0.9rem, 2rem)`), the welcome
+  card's title, the result title (800, -0.02em, 1.0, `clamp(1.75rem, 3.6vw + 1rem, 3rem)`, balanced
+  lines). Never interface copy or numbers.
+- **Commissioner** (UI / functional): everything else. Body 460 / 1.42; small UI 530; buttons
+  600 (primary and big 660, move buttons 660); the step plate's words 700, its line above 600
+  +0.15em; sheet section labels 600 uppercase +0.09em 0.74rem; pile labels 530; level names 600.
+- **Severor Numerals**: Commissioner Bold's digits made tabular (Commissioner has no tabular
+  figures): each digit's advance set to the widest (the "0"), outlines centred. Loaded with a
+  `unicode-range` for digits and + - , . / % : × −, so letters fall through to Commissioner. Used
+  for every number: tile numbers (700), card numbers, scores, pile counts, level numbers, badges,
+  the result score. Numbers never shift as they change (9 -> 10 -> 11).
+- Tokens: `--font-display`, `--font-ui`, `--font-num`; weights `--w-ui-regular` 460,
+  `--w-ui-medium` 530, `--w-ui-semibold` 600, `--w-ui-strong` 660, `--w-ui-bold` 700,
+  `--w-display` 700, `--w-brand` 800; line heights `--lh-brand` .92, `--lh-display` 1,
+  `--lh-heading` 1.1, `--lh-control` 1, `--lh-body` 1.42, `--lh-small` 1.2; tracking tokens.
+- Gameplay sizes stay fixed (cards, tiles, piles, buttons); only the titles use `clamp()`.
+- Tile numbers: with `dominant-baseline: central` Commissioner's digits sat 0.087em above the
+  em middle (measured; digits 1-9 within 0.01em of each other), so they are lowered by exactly
+  that. Plate, position and safe area unchanged.
+
+| Font | File (subset, woff2) | Weights kept | Size | Licence |
 |---|---|---|---|---|
-| display | **Fraunces**, soft (variable; instanced: SOFT 100, WONK 0, opsz 48) | 400-800 axis; used 650 | `web/src/fonts/new/fraunces-soft-wght.woff2`, 21.9 KB | SIL OFL 1.1 (`LICENSE-fraunces.txt`) |
-| text, numbers | **Plus Jakarta Sans** (variable) | 200-800 axis; used 500-800 | `web/src/fonts/new/plus-jakarta-sans-wght.woff2`, 15.3 KB | SIL OFL 1.1 (`LICENSE-plus-jakarta-sans.txt`) |
+| Besley | `web/src/fonts/v2/besley-wght.woff2` | 600-800 axis | 24.4 KB | SIL OFL 1.1 (`LICENSE-besley.txt`) |
+| Commissioner | `web/src/fonts/v2/commissioner-wght.woff2` | 400-700 axis | 18.6 KB | SIL OFL 1.1 (`LICENSE-commissioner.txt`) |
+| Severor Numerals (from Commissioner 700) | `web/src/fonts/v2/severor-numerals-700.woff2` | 700 | 2.3 KB | SIL OFL 1.1 (modified, renamed) |
 
-- Total 37.2 KB (budget 120 KB). Subset to Basic Latin plus the symbols the game prints
-  (· × – — ‘ ’ “ ” … − ≤ → ° ±), hinting kept (without it small text spaces unevenly on phones).
-  `font-display: swap`; the text font is preloaded; metric-matched fallbacks (`Jakarta Fallback`
-  105% of Arial, `Fraunces Fallback` 103% of Georgia).
-- Sizes: body text 0.97rem (was 1.0625rem for Alegreya Sans, which runs small); the step plate's
-  words 17px / 650, its line above 9.5px / 700 uppercase +0.16em.
-- "Font: New / Previous" in the Lab sheet switches back to Alegreya Sans instantly.
-- Bake-off: the material lab (`?lab=1`, test copy) shows the candidates side by side (E Fraunces
-  Soft + Plus Jakarta Sans, F Manrope, G Outfit + Manrope, A Bricolage Grotesque + Figtree, D
-  Alegreya Sans); the others' files (`web/src/fonts/bakeoff2/`, OFL) load only on that page.
+Total 45.3 KB. Subset to Basic Latin plus the symbols the game prints, hinting kept. Preloaded;
+`font-display: swap`; metric-matched fallbacks (`Besley Fallback` from Georgia, `Commissioner
+Fallback` from Arial). "Font: New / Previous" in the Lab sheet switches back to Alegreya Sans.
+The material lab (`?lab=1`) keeps the earlier candidates for comparison (`web/src/fonts/bakeoff2/`).
 
 ## Icons
 

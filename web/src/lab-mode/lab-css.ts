@@ -455,6 +455,9 @@ html.slim-hud .game > .hud > #hud-history {
 }
 html.slim-hud .game > .hud {
   grid-column: 1;
+  /* the menu button at the screen's left edge on wide screens too (the bar starts after it) */
+  max-width: none;
+  justify-self: stretch;
 }
 html.slim-hud .game > .race {
   grid-row: 1;

@@ -8,6 +8,18 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Typography v2: Besley (display) + Commissioner (UI), tabular numbers
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)
+- Besley for the SEVEROR wordmark, page and sheet titles, "Pick a level" and the result title;
+  Commissioner for everything else; numbers in "Severor Numerals" (Commissioner Bold with equal
+  digit widths) so scores and counts never shift. 45 KB of fonts. Audited at 360x640, 390x844,
+  430x932, 768x1024, 1280x800, 1600x980 and 1920x1080 on the menu, levels, Draw, Grow, Throw,
+  Settings, How to play, Pause, Lab and game over (`web/e2e/typography-audit.ts`, screenshots in
+  `docs/screens/typography/`).
+- Check before locking in: real phones (Safari and Chrome) for weight and hinting at small
+  sizes; tile numbers on every material and palette and in the DESIGN skin; Large text; the
+  result title on long level names; left-hand mode; the font load on a slow connection.
+
 ### Step plate redesign, pile chips removed, font changed (Fraunces + Plus Jakarta Sans)
 - Date: 2026-10-05 · Commit: `61c9478` · In test only (updates "Step guidance ... and new font" below)
 - The step's cue is now a small crafted plate at the top of the map (icon, "Step 1 of 3", the

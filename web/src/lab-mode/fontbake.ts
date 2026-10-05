@@ -12,8 +12,8 @@ import { cardFace } from '../ui/effects.js';
 import { installFonts } from './fonts.js';
 import bricolage from '../fonts/bakeoff2/bricolage-grotesque-wght.woff2?url';
 import figtree from '../fonts/bakeoff2/figtree-wght.woff2?url';
-import manrope from '../fonts/bakeoff2/manrope-wght.woff2?url';
-import outfit from '../fonts/bakeoff2/outfit-wght.woff2?url';
+import fraunces from '../fonts/bakeoff2/fraunces-soft-wght.woff2?url';
+import jakarta from '../fonts/bakeoff2/plus-jakarta-sans-wght.woff2?url';
 
 type Pair = { id: string; name: string; display: string; text: string; num: string; upper?: boolean };
 const PAIRS: Pair[] = [
@@ -32,8 +32,8 @@ export const bakeOff = (page: HTMLElement) => {
   css.textContent = `
 @font-face { font-family: 'Bricolage Grotesque'; src: url('${bricolage}') format('woff2'); font-weight: 200 800; font-display: swap; }
 @font-face { font-family: 'Figtree'; src: url('${figtree}') format('woff2'); font-weight: 300 900; font-display: swap; }
-@font-face { font-family: 'Manrope'; src: url('${manrope}') format('woff2'); font-weight: 200 800; font-display: swap; }
-@font-face { font-family: 'Outfit'; src: url('${outfit}') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Fraunces Soft'; src: url('${fraunces}') format('woff2'); font-weight: 400 800; font-display: swap; }
+@font-face { font-family: 'Plus Jakarta Sans'; src: url('${jakarta}') format('woff2'); font-weight: 200 800; font-display: swap; }
 .fb { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; margin: 16px 0 32px; }
 .fb-col { border: 1px solid var(--c-line); border-radius: 14px; padding: 12px; font-family: var(--fb-text); background: var(--c-surface); min-width: 0; }
 .fb-col h3 { font-family: var(--fb-display); margin: 0 0 8px; font-size: 1.05rem; }
@@ -49,7 +49,7 @@ export const bakeOff = (page: HTMLElement) => {
 .fb-step { font-family: var(--fb-display); font-weight: 650; line-height: 1.15; }
 .fb-plates { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; margin: 6px 0; border-radius: 12px; background: #2a2d29; }
 .fb-cue { position: static; transform: none; --font-display: var(--fb-display); }
-.fb-cue .cue-text { font-family: var(--fb-display); } .fb-cue .cue-kicker { font-family: var(--fb-text); }
+.fb-cue .cue-text { font-family: var(--fb-text); } .fb-cue .cue-kicker { font-family: var(--fb-text); }
 .fb-step.big { font-size: 1.55rem; } .fb-step.small { font-size: 0.9rem; opacity: 0.85; }
 .fb-labels { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; }
 .fb-labels span { font-size: 11px; } .fb-labels span.l12 { font-size: 12px; }
