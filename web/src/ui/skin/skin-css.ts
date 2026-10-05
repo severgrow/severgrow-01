@@ -45,6 +45,22 @@ export const SKIN_CSS = `
 .skin-board .skin-lava-flow { pointer-events: none; mix-blend-mode: screen; filter: brightness(1.6) saturate(1.3); opacity: 0; animation: skin-lava 4s ease-in-out infinite; }
 .reduce-motion .skin-board .skin-vine { animation: none; }
 .reduce-motion .skin-board .skin-lava-flow { display: none; }
+.skin-board .skin-life { pointer-events: none; }
+.skin-board .skin-wander { opacity: 0; animation: skin-wander 30s ease-in-out infinite; }
+@keyframes skin-wander { 0%, 58%, 100% { opacity: 0; } 64%, 92% { opacity: 1; } }
+.skin-board .skin-bob { animation: skin-bob 2s ease-in-out infinite; }
+@keyframes skin-bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(0, -1.6px); } }
+.skin-board .skin-wing { animation: skin-wing 0.35s ease-in-out infinite alternate; }
+@keyframes skin-wing { from { transform: scaleX(1); } to { transform: scaleX(0.25); } }
+.skin-board .skin-spin { animation: skin-spin 6s linear infinite; }
+@keyframes skin-spin { to { transform: rotate(360deg); } }
+.skin-board .skin-flame { opacity: 0; animation: skin-flame 9s ease-out infinite; }
+@keyframes skin-flame { 0%, 80%, 100% { opacity: 0; } 83% { opacity: 1; } 92% { opacity: 0.85; } 97% { opacity: 0; } }
+.skin-board .skin-lick { transform-box: fill-box; transform-origin: 50% 100%; animation: skin-lick 0.5s ease-in-out infinite alternate; }
+@keyframes skin-lick { from { transform: scale(0.85, 0.9) skewX(-4deg); } to { transform: scale(1.05, 1.15) skewX(4deg); } }
+.skin-board .skin-soot { opacity: 0; filter: brightness(0.12) saturate(0); animation: skin-soot 12s ease-out infinite; }
+@keyframes skin-soot { 0%, 72%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); } 78% { opacity: 0.55; } 99% { opacity: 0; transform: translate(3px, -14px) scale(1.4); } }
+.reduce-motion .skin-board .skin-life { display: none; }
 .reduce-motion .skin-board .skin-mote { display: none; }
 .reduce-motion .skin-board .skin-later { display: none; }
 .reduce-motion .skin-board .skin-glow, .reduce-motion .skin-board .skin-firefly { display: none; }

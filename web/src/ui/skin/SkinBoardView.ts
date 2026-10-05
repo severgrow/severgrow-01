@@ -46,6 +46,9 @@ export class SkinBoardView extends BoardView {
   private tints: Record<string, Tint | null> = {};
   /** prop sprites by material, from what this tier has */
   private propDefs: Record<string, PropDef[]> = {};
+  /** butterflies, a leaf, flames and soot around the territories (rebuilt when they change) */
+  private life: SVGGElement | null = null;
+  private lifeSig = '';
   /** painted hex tiles by material, then by strength 1-9 */
   private tileArt: Record<string, string[][]> = {};
   /** props for cut-off tiles and severed hexes, by material */
@@ -109,6 +112,12 @@ export class SkinBoardView extends BoardView {
       el('stop', { offset: 0.62, 'stop-color': n.plate, 'stop-opacity': 0.92 }, gr);
       el('stop', { offset: 1, 'stop-color': n.plate, 'stop-opacity': 0 }, gr);
     });
+    const fg = el('linearGradient', { id: this.id('skin-flame-grad'), x1: 0, y1: 1, x2: 0, y2: 0 }, defs);
+    el('stop', { offset: 0, 'stop-color': '#ffd25a' }, fg);
+    el('stop', { offset: 0.45, 'stop-color': '#ff7a1a' }, fg);
+    el('stop', { offset: 1, 'stop-color': '#c22a0a', 'stop-opacity': 0.2 }, fg);
+    this.life = null;
+    this.lifeSig = '';
     this.paintedSig = '';
     this.paintedPpu = 0;
     this.motes = new Map();
@@ -382,6 +391,100 @@ export class SkinBoardView extends BoardView {
       const g = el('g', { class: `skin-mote ${m.kind}`, style: `animation-duration:${(m.kind === 'rise' ? 4.6 : 7) + h * 2.5}s;animation-delay:${(-h * 9).toFixed(2)}s` }, layer);
       el('image', { href: this.assets.url(m.src), x: x + dx - m.size / 2, y: y + dy - m.size / 2, width: m.size, height: m.size, preserveAspectRatio: 'xMidYMid meet' }, g);
       this.motes.set(id, g);
+        }
+    this.drawLife(board);
+  }
+
+  /**
+   * Life around the territories, now and then: on the player's connected land a few butterflies
+   * and a drifting leaf wander a loose loop over their tiles (sometimes straying past the edge);
+   * around the enemy's land a small flame licks up at a tile's edge or a curl of black smoke rises.
+   * Drawn in vector (no files), rebuilt only when the territories change; the timing follows the
+   * clock, so a rebuild never restarts anything. Off with Reduce motion or on tiny boards.
+   */
+  private drawLife(board: Record<string, Tile | null>) {
+    const on = this.look.motion && (this.tilePx() || 0) >= 40;
+    const sides = [0, 1].map((p) => this.keys.filter((k) => board[k]?.owner === p && this.joinedNow.has(k)).sort());
+    const sig = on ? sides.map((k) => k.join(',')).join('|') : '';
+    if (sig === this.lifeSig && this.life?.isConnected) return;
+    this.lifeSig = sig;
+    this.life?.remove();
+    this.life = null;
+    if (!on) return;
+    const g = (this.life = el('g', { class: 'skin-life', 'aria-hidden': 'true' }, this.layers.glow));
+    const now = performance.now() / 1000;
+    const timing = (dur: number, salt: string) => `animation-duration:${dur.toFixed(2)}s;animation-delay:${(-((now + hash(salt) * dur) % dur)).toFixed(2)}s;`;
+    const smil = (dur: number, salt: string) => ({ dur: `${dur.toFixed(2)}s`, begin: `${(-((now + hash(salt) * dur) % dur)).toFixed(2)}s`, repeatCount: 'indefinite' });
+    // a loose loop over a few of these tiles, with one wide swing beyond the last
+    const loop = (keys: string[], salt: string) => {
+      const set = new Set(keys);
+      let cur = keys[Math.floor(hash(`${salt}:start`) * keys.length)]!;
+      const pts = [centerOf(cur)];
+      for (let i = 0; i < 4; i++) {
+        const next = allNeighbors(parseKey(cur)).map(coordKey).filter((k) => set.has(k));
+        if (!next.length) break;
+        cur = next[Math.floor(hash(`${salt}:${i}`) * next.length)]!;
+        pts.push(centerOf(cur));
+      }
+      const c = pts.reduce((a, p) => ({ x: a.x + p.x / pts.length, y: a.y + p.y / pts.length }), { x: 0, y: 0 });
+      const last = pts[pts.length - 1]!;
+      const ang = Math.atan2(last.y - c.y, last.x - c.x) + (hash(`${salt}:o`) - 0.5);
+      pts.push({ x: last.x + Math.cos(ang) * 46, y: last.y + Math.sin(ang) * 46 });
+      const jit = pts.map((p, i) => ({ x: p.x + (hash(`${salt}:x${i}`) - 0.5) * 30, y: p.y + (hash(`${salt}:y${i}`) - 0.5) * 30 }));
+      const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => `${((a.x + b.x) / 2).toFixed(1)},${((a.y + b.y) / 2).toFixed(1)}`;
+      let d = `M${mid(jit[jit.length - 1]!, jit[0]!)}`;
+      for (let i = 0; i < jit.length; i++) d += `Q${jit[i]!.x.toFixed(1)},${jit[i]!.y.toFixed(1)} ${mid(jit[i]!, jit[(i + 1) % jit.length]!)}`;
+      return d;
+    };
+    const mine = sides[0]!;
+    if (mine.length >= 2) {
+      const colours = [['#fff6c8', '#f2c94c'], ['#f4f1ff', '#b9c7ff'], ['#ffe2ef', '#f5a3c0']] as const;
+      const n = Math.min(3, Math.ceil(mine.length / 5));
+      for (let i = 0; i < n; i++) {
+        const salt = `bfly${i}`;
+        const [a, b] = colours[Math.floor(hash(`${salt}:c`) * colours.length)]!;
+        const show = el('g', { class: 'skin-wander', style: timing(26 + hash(`${salt}:v`) * 14, `${salt}:v`) }, g);
+        const fly = el('g', {}, show);
+        el('animateMotion', { path: loop(mine, salt), ...smil(30 + hash(`${salt}:d`) * 16, `${salt}:d`) }, fly);
+        const bob = el('g', { class: 'skin-bob', style: timing(1.7 + hash(`${salt}:b`), `${salt}:b`) }, el('g', { transform: 'scale(2.1)' }, fly));
+        for (const side of [-1, 1]) {
+          const w = el('g', { class: 'skin-wing', style: `transform-origin:0 0;${timing(0.32 + hash(`${salt}:f`) * 0.1, `${salt}:f`)}` }, bob);
+          el('ellipse', { cx: side * 1.9, cy: -0.9, rx: 2, ry: 1.5, fill: a, stroke: b, 'stroke-width': 0.35 }, w);
+          el('ellipse', { cx: side * 1.4, cy: 1, rx: 1.3, ry: 1.05, fill: b }, w);
+        }
+        el('path', { d: 'M0,-1.6L0,1.8', stroke: '#3a2a1a', 'stroke-width': 0.55, 'stroke-linecap': 'round' }, bob);
+      }
+      const leaf = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[0])?.src;
+      if (leaf && this.assets.has(leaf)) {
+        const salt = 'leaf0';
+        const show = el('g', { class: 'skin-wander', style: timing(34, `${salt}:v`) }, g);
+        const fly = el('g', {}, show);
+        el('animateMotion', { path: loop(mine, salt), ...smil(40, `${salt}:d`) }, fly);
+        const spin = el('g', { class: 'skin-spin', style: timing(5.5, `${salt}:s`) }, fly);
+        el('image', { href: this.assets.url(leaf), x: -4, y: -4, width: 8, height: 8 }, spin);
+      }
+    }
+    const theirs = sides[1]!;
+    if (theirs.length) {
+      const flames = Math.min(4, Math.ceil(theirs.length / 3));
+      for (let i = 0; i < flames; i++) {
+        const k = theirs[Math.floor(hash(`flame${i}:k`) * theirs.length)]!;
+        const { x, y } = centerOf(k);
+        const a = hash(`flame${i}:a`) * Math.PI * 2;
+        const r = 14 + hash(`flame${i}:r`) * 10;
+        const f = el('g', { class: 'skin-flame', transform: `translate(${(x + Math.cos(a) * r).toFixed(1)},${(y + Math.sin(a) * r).toFixed(1)})`, style: timing(6 + hash(`flame${i}:d`) * 7, `flame${i}:d`) }, g);
+        const lick = el('g', { class: 'skin-lick', style: timing(0.45 + hash(`flame${i}:l`) * 0.2, `flame${i}:l`) }, el('g', { transform: 'scale(1.7)' }, f));
+        el('path', { d: 'M0,0C-2.4,-1 -2.2,-4.2 0,-7.5C0.9,-4.6 2.6,-3.3 1.9,-1C1.5,0 0.6,0.3 0,0Z', fill: 'url(#' + this.id('skin-flame-grad') + ')' }, lick);
+        el('path', { d: 'M0,-0.4C-1,-1 -0.9,-2.6 0,-4.2C0.5,-2.8 1.1,-1.8 0.7,-0.8Z', fill: '#fff3b0', opacity: 0.85 }, lick);
+      }
+      const smoke = 'homes/volcano_smoke_01.webp';
+      if (this.assets.has(smoke))
+        for (let i = 0; i < Math.min(2, Math.ceil(theirs.length / 5)); i++) {
+          const k = theirs[Math.floor(hash(`soot${i}:k`) * theirs.length)]!;
+          const { x, y } = centerOf(k);
+          const sm = el('g', { class: 'skin-soot', style: timing(10 + hash(`soot${i}:d`) * 6, `soot${i}:d`) }, g);
+          el('image', { href: this.assets.url(smoke), x: x + (hash(`soot${i}:x`) - 0.5) * 24 - 8, y: y + (hash(`soot${i}:y`) - 0.5) * 18 - 8, width: 16, height: 16 }, sm);
+        }
     }
   }
 
