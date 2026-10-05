@@ -13,12 +13,27 @@ Branch bases when this file was created (2026-10-05):
 
 ## DONE
 
+- 2026-10-05: Owner authorized a third hosted channel at `/test2/` and the necessary narrowly scoped deployment changes. Root remains the Main game; `/test/` remains experimental Dev; `/test2/` is the tested Main2.0 candidate. Main game code and existing saves must remain intact.
+- GitHub branch-write access verified with a non-forced update to the unchanged Main2.0 head.
+- Remote heads rechecked: Main `4833bf000110e3edb148a7264398e2ab81eb4b44`; Dev `fa674ff89e9bc1cae30b84bbf6dd307eb78bcd6b`; onboarding `253273e2ad9351f76bd2dfa9b5d0985ace42b90d`.
+- Prior candidate approvals remain applicable: typography v2, Pro phone layout, Full guidance, desktop coach, slim header, hidden Replay/weak-spot buttons, smart camera/map fade, tap-again with Undo, retained ownership marks. Lab/Watch/DESIGN/font comparison remain development-only.
+
+
 - 2026-10-05: `Main2.0` created from `main` (`4833bf0`). Added `AGENTS.md`,
   `CODEX_START_HERE.md` and this file. Baseline verified (see TEST RESULTS).
 
 ## IN PROGRESS
 
-Work top to bottom. Items marked *(after decisions)* wait for DECISIONS NEEDED.
+First restore the previously exported candidate bundle, or rebuild the candidate from pinned Dev if it cannot be recovered. The previous local candidate (`9f75b402fa2fc802a989baa2542c0e2a25e2128a`) was never published and is not present in the current execution workspace. Its historical test results are not verification of this remote onboarding branch.
+
+Preview release tasks:
+1. Restore/rebuild the candidate and merge the onboarding commit, preserving both histories.
+2. Repeat typecheck, full unit/Classic parity, builds and critical browser checks on the actual resulting commit.
+3. Add isolated Main2.0 storage and scoped offline/cache handling for `/test2/`.
+4. Prepare three-channel deployment retaining root Main and experimental Dev. Prevent subsequent existing deploys from deleting `/test2/`. Do not publish until all candidate checks pass.
+5. Verify the deployed URL and that root/Test save keys are unchanged.
+
+The older ordered checklist below remains the baseline reference.
 
 1. **Merge `dev` into `Main2.0`**
    - `git merge --no-ff origin/dev`, with the pinned SHA in the message.
@@ -57,6 +72,10 @@ Work top to bottom. Items marked *(after decisions)* wait for DECISIONS NEEDED.
 
 ## DECISIONS NEEDED
 
+The feature decisions below were answered in the earlier candidate session (see DONE); do not repeatedly request them. Preview decision 9 is now `/test2/`, with deployment changes authorized. No further gameplay decision is needed for recovery and preview setup.
+
+Historical onboarding questions:
+
 Ask the owner in one message, with a recommendation each. Don't decide these yourself.
 
 | # | Question | Notes / suggested default |
@@ -72,6 +91,9 @@ Ask the owner in one message, with a recommendation each. Don't decide these you
 | 9 | How will the owner preview `Main2.0`? | Pushes don't deploy. Options: local preview only, or a separate preview path (needs a workflow change, so the owner decides). |
 
 ## KNOWN ISSUES
+
+- Current execution environment cannot clone GitHub: both normal clone attempts ended with `network approval was cancelled before a decision was returned`. GitHub plugin read/write access works, but local installation/build/browser verification cannot proceed until repository bytes and dependencies are accessible. This is an environment limit, not a test pass.
+- The previous local workspace and exported bundle/source archive are absent from the current workspace; two Library searches found no recovery copy. No previously completed code has been restored to this remote branch yet.
 
 - `dev`: `tests/engine/config.test.ts` defaults (2 new keys) and 8 golden games fail
   (`docs/LAB-KNOWN-BREAKAGE.md`). Test-channel work ran only a few test files, so the merged full
