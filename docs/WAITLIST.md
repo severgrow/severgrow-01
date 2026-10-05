@@ -67,7 +67,10 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 - Date: 2026-10-05 · In test only
 - After a redeploy, a page cached by GitHub Pages (up to 10 minutes) can name script and style
   files that are gone, so the game shows as bare unstyled text. `web/index.html` now reloads
-  once from a fresh address when its script or stylesheet fails to load.
+  once from a fresh address when its own built script or stylesheet (./assets/) fails to load.
+  Fixed 2026-10-05: the first version also reacted to font preloads and reset itself on every
+  load, so a failing font made the page reload endlessly (fonts flickering on iPhone). Now only
+  the page's own assets count, and never twice within 30 seconds.
 - Check before locking in: the live game has the same risk (and an offline worker); keep this
   or rely on the worker.
 
