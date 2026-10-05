@@ -1,4 +1,4 @@
-// The test copy's typography v2 (loaded only in the test build; the live game keeps Alegreya Sans):
+// Approved typography v2 for Test and Test2; legacy live keeps Alegreya Sans:
 //   Besley (display / brand): the SEVEROR wordmark, page and sheet titles, the result title, the
 //     level selector's heading. About a tenth of the type; never interface copy or numbers.
 //   Commissioner (UI / functional): everything else: buttons, the step plate, cards, labels,

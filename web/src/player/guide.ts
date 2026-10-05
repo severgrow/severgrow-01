@@ -1,4 +1,4 @@
-// The test copy's step guidance (loaded only in the test build): a small crafted plate on the map
+// Approved player step guidance (Test and Test2): a small crafted plate on the map
 // the moment a step starts (an icon, the step's words, three step pips), and the step's own
 // controls as the clear hero (CSS in lab-css.ts, keyed on <html data-step data-guide>). The step
 // comes from the game's own state (main.ts passes the phase and whose turn it is); nothing here

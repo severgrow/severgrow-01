@@ -589,54 +589,59 @@ let lab: {
 let camera: ReturnType<typeof import('./player/camera.js').installCamera> | null = null;
 // Literal build guards keep player enhancements out of the legacy bundle.
 declare const __CHANNEL__: string;
-if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'test2')) {
-  placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
-  void import('./player/player-css.js').then((m) => {
-    const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
-    layoutKey = ''; applyLayout(); if (session) render();
-  });
-  void import('./player/thumb.js').then((t) => {
-    thumbMod = t.mountThumb({
-      relayout: () => {
-        layoutKey = '';
-        render();
-        applyLayout();
-      },
-      reduceMotion: () => settings.reduceMotion,
-    });
-    layoutKey = '';
-    applyLayout();
-    if (session) render();
-    // the step guidance (its setting sits under the phone layout rows)
-    void import('./player/guide.js').then((g) => {
-      guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
+async function mountPlayerEnhancements() {
+  const loads: Promise<unknown>[] = [];
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'test2')) {
+    placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
+    loads.push(import('./player/player-css.js').then((m) => {
+      const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
+      layoutKey = ''; applyLayout(); if (session) render();
+    }));
+    loads.push(import('./player/thumb.js').then((t) => {
+      thumbMod = t.mountThumb({
+        relayout: () => {
+          layoutKey = '';
+          render();
+          applyLayout();
+        },
+        reduceMotion: () => settings.reduceMotion,
+      });
+      layoutKey = '';
+      applyLayout();
       if (session) render();
-    });
-  });
-  camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => {} });
-}
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-  void import('./player/fonts.js').then((f) => f.applyFont());
-  void import('./lab-mode/panel.js').then((m) => {
-    lab = m.mountLab({
-      sheet,
-      play: (_o, level) => startGame(randomSeed(), level as Level),
-      watch: (level, green, pause) => startGame(randomSeed(), level as Level, { level: green as Level, pause }),
-      setWatch: (w) => {
-        watching = w ? { level: w.level as Level, pause: w.pause } : null;
-        document.body.classList.toggle('lab-watching', !!watching);
-        render();
-        scheduleBot();
-      },
-      board: board.svg,
-      boardWrap: $('board-wrap'),
-      camera,
-    });
-  });
-}
+      // the step guidance (its setting sits under the phone layout rows)
+      return import('./player/guide.js').then((g) => {
+        guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
+        if (session) render();
+      });
+    }));
+    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => {} });
+  }
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+    loads.push(import('./player/fonts.js').then((f) => f.applyFont()));
+    loads.push(import('./lab-mode/panel.js').then((m) => {
+      lab = m.mountLab({
+        sheet,
+        play: (_o, level) => startGame(randomSeed(), level as Level),
+        watch: (level, green, pause) => startGame(randomSeed(), level as Level, { level: green as Level, pause }),
+        setWatch: (w) => {
+          watching = w ? { level: w.level as Level, pause: w.pause } : null;
+          document.body.classList.toggle('lab-watching', !!watching);
+          render();
+          scheduleBot();
+        },
+        board: board.svg,
+        boardWrap: $('board-wrap'),
+        camera,
+      });
+    }));
+  }
 
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
-  void import('./player/fonts.js').then((f) => f.applyFont('new'));
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
+    loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
+  }
+
+  await Promise.all(loads);
 }
 
 /**
@@ -2749,7 +2754,7 @@ function onCardTap(id: number) {
 
 // ---------- painting a Bloom (v0.7) ----------
 
-type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null };
+type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null; viewport: string };
 type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean; suggested?: boolean };
 const DRAW0: DrawUi = { shape: [], reverse: false, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
@@ -2902,7 +2907,7 @@ const drawHandlers = {
       draw = { ...draw, redraw: true };
       render();
     }
-    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key };
+    draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key, viewport: `${innerWidth}:${innerHeight}` };
     // a hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
     paintDraw();
   },
@@ -2922,6 +2927,9 @@ const drawHandlers = {
     }
     if (!draw.ptr || e.pointerId !== draw.ptr.id) return;
     const ptr = draw.ptr;
+    // Chromium can synthesize a move in the newly rotated coordinate system
+    // before dispatching resize. It must not count as painting backwards.
+    if (ptr.viewport !== `${innerWidth}:${innerHeight}`) { draw.ptr = null; return; }
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
       ptr.moved = true;
       // a drag begins with the hex it started on (a drag from a suggestion reshapes it)
@@ -3490,16 +3498,21 @@ document.addEventListener('visibilitychange', () => {
 // Install as an app and play offline (the service worker caches the page's own files).
 // the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
 if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => {
+  const registerOffline = () => {
     navigator.serviceWorker.register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2' ? './test2-sw.js' : './sw.js').catch(() => {
       /* offline play is a bonus; the page works without it */
     });
-  });
+  };
+  if (document.readyState === 'complete') registerOffline();
+  else window.addEventListener('load', registerOffline, { once: true });
 }
 
 // Rotation or resize: just redraw (the game itself is untouched).
 let resizeTimer: ReturnType<typeof setTimeout> | undefined;
 window.addEventListener('resize', () => {
+  // A held finger still has the old screen coordinates after rotation. Keep the
+  // painted hexes, but stop this pointer before its release can retrace the shape.
+  draw.ptr = null;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => render(), 80);
 });
@@ -3540,6 +3553,7 @@ document.addEventListener('keydown', (e) => {
   world: () => board.worldStats,
 };
 
+await mountPlayerEnhancements();
 fillIcons();
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 onPhotosReady(() => {

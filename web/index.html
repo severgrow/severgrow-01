@@ -17,9 +17,7 @@
           u.searchParams.delete('_fresh');
           history.replaceState(null, '', u.pathname + u.search + u.hash);
         }
-        window.addEventListener('error', function (e) {
-          var t = e.target;
-          if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
+        function recover() {
           try {
             if (get.call(sessionStorage, key)) return;
             set.call(sessionStorage, key, '1');
@@ -27,7 +25,18 @@
           var r = new URL(location.href);
           r.searchParams.set('_fresh', String(Date.now()));
           location.replace(r.href);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          var src = t && (t.tagName === 'SCRIPT' ? t.src : t.tagName === 'LINK' && t.rel === 'stylesheet' ? t.href : '');
+          if (!src) return;
+          var asset = new URL(src, location.href), base = new URL('./assets/', location.href);
+          if (asset.origin === base.origin && asset.pathname.indexOf(base.pathname) === 0) recover();
         }, true);
+        window.addEventListener('vite:preloadError', function () {
+          // Let Vite reject startup: suppressing the error would mark a partial app ready.
+          recover();
+        });
         // A failed load also fires window.load: only a working app resets recovery.
         window.addEventListener('severor-ready', function () {
           try { remove.call(sessionStorage, key); } catch (_) {}

@@ -19,15 +19,15 @@ export const placeTeachingPanel = (panel: HTMLElement, targetKeys: Iterable<stri
   if (!collision(r.left, r.top)) return;
   const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
   for (const width of [r.width, Math.min(r.width, 140)]) {
-  panel.style.width = `${width}px`; r = panel.getBoundingClientRect();
-  const maxY = bounds.bottom - under - r.height - 8;
-  for (let y = bounds.top + 8; y <= maxY; y += 8) {
-    for (const x of [bounds.left + 8, bounds.right - r.width - 8, bounds.left + (bounds.width-r.width)/2]) {
-      if (x < 0 || x + r.width > innerWidth || collision(x,y)) continue;
-      panel.style.position = 'fixed'; panel.style.left = `${x}px`;
-      panel.style.top = `${y}px`; panel.style.bottom = 'auto';
-      return;
+    panel.style.width = `${width}px`; r = panel.getBoundingClientRect();
+    const maxY = bounds.bottom - under - r.height - 8;
+    for (let y = bounds.top + 8; y <= maxY; y += 8) {
+      for (const x of [bounds.left + 8, bounds.right - r.width - 8, bounds.left + (bounds.width-r.width)/2]) {
+        if (x < 0 || x + r.width > innerWidth || collision(x,y)) continue;
+        panel.style.position = 'fixed'; panel.style.left = `${x}px`;
+        panel.style.top = `${y}px`; panel.style.bottom = 'auto';
+        return;
+      }
     }
-  }
   }
 };
