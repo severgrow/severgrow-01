@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Pro phone layout: slim header, compact centred hand, control row (nothing overlaps)
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- Date: 2026-10-05 · Commit: `5c75f68` · In test only
 - Header: only the menu button and the score bar. Scores, turn, level, turns left and "What
   happened" are at the top of the menu, without the circle/diamond player marks.
 - Bottom, from the edge up: a compact centred hand (bigger cards, more overlap); one control row
