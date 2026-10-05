@@ -1,17 +1,11 @@
 name: Deploy web game
 
-# Publishes both release channels to GitHub Pages in one bundle:
-#   - main (the live game)  -> the site root
-#   - dev  (the test copy)  -> /test/   (built with CHANNEL=test: the Lab, its own storage)
-# Pages serves one bundle per site, so every run builds both; a push to either branch
-# redeploys the whole site (a dev push through test-copy.yml, so the deploy runs from main). No tests run here (CI guards main and pull requests); this only
-# installs from the lockfile and builds, so a dev push is live in a couple of minutes.
+# One artifact always preserves root Main, experimental Test and the verified Test2 candidate.
 on:
   push:
     branches: [main]
-  # a push to dev (see test-copy.yml): runs from main, so Pages accepts the deploy
   workflow_run:
-    workflows: ['Test copy pushed']
+    workflows: ['Test copy pushed', 'CI']
     types: [completed]
   workflow_dispatch:
 
@@ -26,40 +20,52 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.name == 'Test copy pushed' || github.event.workflow_run.head_branch == 'Main2.0'))
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           path: live
-      - id: hasdev
-        run: |
-          if git ls-remote --exit-code --heads "https://github.com/${{ github.repository }}" dev >/dev/null; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.hasdev.outputs.ok == 'true'
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: dev
           path: dev
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch == 'Main2.0' && github.event.workflow_run.head_sha || 'Main2.0' }}
+          path: candidate
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: '*/package-lock.json'
-      - name: Build the live game (main)
+      - name: Build protected Main
         working-directory: live
         run: npm ci && npm run web:build
-      - name: Build the test copy (dev)
-        if: steps.hasdev.outputs.ok == 'true'
+      - name: Build experimental Test
         working-directory: dev
         run: |
-          # same lockfile as main: reuse its install (saves a minute)
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
           CHANNEL=test npm run web:build
-      - name: Put both in one site
+      - name: Verify and build Test2
+        working-directory: candidate
         run: |
-          mkdir site
-          cp -r live/web/dist/. site/
-          if [ -d dev/web/dist ]; then mkdir -p site/test && cp -r dev/web/dist/. site/test/; fi
+          if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
+          npm run check
+          MAIN_REFERENCE="$GITHUB_WORKSPACE/live" node --import tsx scripts/classic-parity.ts
+          CHANNEL=test2 npm run web:build
+          CHANNEL=test2 node scripts/check-channel-assets.mjs
+          npx playwright-core install --with-deps chromium
+          node --import tsx web/e2e/test2-critical.ts
+      - name: Compose all three versions and isolated offline routing
+        run: |
+          node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
+            "$(git -C live rev-parse HEAD)" "$(git -C dev rev-parse HEAD)" "$(git -C candidate rev-parse HEAD)"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -18,12 +18,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run web:build
+      - run: npm run web:build && node scripts/check-channel-assets.mjs
+      - run: CHANNEL=test npm run web:build
+      - run: CHANNEL=test2 npm run web:build && CHANNEL=test2 node scripts/check-channel-assets.mjs
 
   browser:
     # Plays the built page in a real browser, in every theme (web/e2e/smoke.ts).
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,3 +36,5 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - run: npm run web:build
       - run: npm run e2e
+      - run: CHANNEL=test2 npm run web:build
+      - run: node --import tsx web/e2e/test2-critical.ts

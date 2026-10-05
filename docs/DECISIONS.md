@@ -189,3 +189,23 @@ One line each: where the brief left room, what was chosen and why.
 - Commissioner has no tabular figures, so "Severor Numerals" was made from Commissioner Bold (OFL allows modified versions under another name): every digit gets the "0"'s width with its outline centred. It covers only digits and a few signs (unicode-range), so numbers are steady and letters stay Commissioner. All numbers use it at 700 (card numbers too; the brief allowed 650-700).
 - Typography v2 small corrections: tile numbers lowered 0.087em to the plate's optical centre (measured); the result title balances its lines and scales with clamp() (it left a lone "7!" at 390px); the welcome card's title is Besley (a heading); the sheets' section labels became small uppercase Commissioner labels (they read as labels, not headings); body text 1rem. No component dimensions changed.
 - Also fixed while auditing: the step plate now finds its spot again after a resize or rotation (it could sit off screen); on wide screens the slim header's menu button no longer sits on the score bar.
+
+## 2026-10-05 — Main2.0 candidate release
+
+Apply the owner's approved Besley/Commissioner/Numerals, Pro phone layout, Full guidance,
+desktop coach, slim header/Pause information, tap-again and Undo, smart camera and map fade
+only to Test2. Retain ownership shapes and the existing Main terrain artwork. Lab, Watch,
+DESIGN/V3 and comparisons stay experimental; no engine, bot, balance or scoring changes.
+
+Retain original Classic golden fixtures. Assert disabled Lab metadata defaults before removing
+only `board:null` and `reshuffleDiscard:false` for historical hash comparison; independently
+compare complete games, events, legal actions, bot choices and replay against protected Main.
+
+Wait for required player modules before announcing a working startup. Missing entry/dynamic
+modules may reload once using native, channel-prefixed session storage; only successful startup
+resets the flag. Missing font files/images must not trigger recovery. Phone rotation keeps the
+painted hexes while discarding pointer coordinates from the old viewport. Teaching panels seek
+free screen space so legal targets, homes and the step plate remain visible and tappable.
+
+Publish one combined artifact preserving root Main, current Test, and Test2. The authorized Main
+exception is its Pages workflow alone, plus scoped routing in generated service-worker output.

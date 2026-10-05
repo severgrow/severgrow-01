@@ -6,7 +6,32 @@ into the locked beta (`main`). Nothing here is in the real game yet. When the us
 the strict flow (tests first, full `npm run check`, the checks listed under it, the user's
 go-ahead). Tick an item and add the date when it reaches `main`.
 
-## Waiting
+## Main2.0 integration record (2026-10-05)
+
+Original experiment descriptions below remain the record. Nothing has landed in Main.
+All 14 entries reviewed against pinned Dev fa674ff89e9bc1cae30b84bbf6dd307eb78bcd6b.
+
+| Entry | Main2.0 / Test2 disposition |
+|---|---|
+| Typography v2 | Promoted; required Besley/Commissioner/Numerals |
+| Step plate redesign | Plate promoted; Fraunces/Jakarta superseded |
+| First step guidance + font | Guidance superseded by current plate; Bricolage/Figtree comparison only |
+| Reload once | Promoted with consistent namespaced flag and reset only on working app startup |
+| Map behind cards | Promoted with shared camera viewport calculations |
+| DESIGN | Excluded; Test development only |
+| Pro phone layout | Promoted; slim header on desktop also approved |
+| Camera / weak icons / replay | Promoted; weak tools and Replay hidden |
+| Thumb v3 (v1/v2 history) | Superseded by current Pro layout; hand-side settings retained |
+| Desktop coach | Promoted |
+| Tap again | Promoted, respecting confirmation policy and Undo |
+| No owner marks | Excluded: Test2 RETAINS accessible ownership shapes |
+| Watch | Excluded; Test development only |
+| Lab | Excluded; Test development only; Classic defaults verified against Main |
+
+Final browser/release verification is tracked in MAIN2_PROGRESS.md; promotion is not a claim
+that deployment or real-device checks are complete.
+
+## Original waiting entries
 
 ### Typography v2: Besley (display) + Commissioner (UI), tabular numbers
 - Date: 2026-10-05 · Commit: `fc6a4ec` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)

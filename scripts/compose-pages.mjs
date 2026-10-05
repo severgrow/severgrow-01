@@ -1,0 +1,21 @@
+// Compose all channels in one Pages artifact; patch only offline routing in the Main output.
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const [live, dev, candidate, out, mainSha, devSha, test2Sha] = process.argv.slice(2);
+assert(live && dev && candidate && out && mainSha && devSha && test2Sha);
+mkdirSync(out, { recursive: true });
+cpSync(live, out, { recursive: true });
+cpSync(dev, `${out}/test`, { recursive: true });
+cpSync(candidate, `${out}/test2`, { recursive: true });
+const path = `${out}/sw.js`;
+let sw = readFileSync(path, 'utf8');
+assert(sw.includes("const CACHE = 'severgrow-v1'"), 'Review changed Main worker before adapting deployment');
+sw = sw.replace("const CACHE = 'severgrow-v1'", "const CACHE = 'severgrow-v2-scoped'");
+sw = sw.replace('k !== CACHE', "k.startsWith('severgrow-') && k !== CACHE");
+sw = sw.replace('/\\/test(\\/|$)/', '/\\/test2?(\\/|$)/');
+assert(sw.includes('test2?'), 'Main offline routing must exclude both child channels');
+writeFileSync(path, sw);
+writeFileSync(`${out}/release.json`, JSON.stringify({ main: mainSha, test: devSha, test2: test2Sha }, null, 2));
+writeFileSync(`${out}/test2/release.json`, JSON.stringify({ channel: 'test2', commit: test2Sha, integratedDev: 'fa674ff89e9bc1cae30b84bbf6dd307eb78bcd6b', publishedDev: devSha }, null, 2));
+writeFileSync(`${out}/.nojekyll`, '');
+console.log(`Three-channel artifact: Main ${mainSha}; Dev ${devSha}; Test2 ${test2Sha}`);
