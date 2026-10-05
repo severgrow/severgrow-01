@@ -1,0 +1,916 @@
+{
+  "version": "3.0-phase2",
+  "status": "FINAL_PHASE2_PACK",
+  "errors": [],
+  "warnings": [],
+  "tier_sizes_mb": {
+    "hi": 1.717,
+    "lo": 0.723
+  },
+  "budgets_mb": {
+    "lo": 3,
+    "hi": 8
+  },
+  "seam_errors_hi": {
+    "empty_ground": {
+      "left_right_mae": 0.8527,
+      "top_bottom_mae": 0.6914
+    },
+    "gold_ground": {
+      "left_right_mae": 1.2119,
+      "top_bottom_mae": 1.2686
+    },
+    "forest_ground_a": {
+      "left_right_mae": 1.3317,
+      "top_bottom_mae": 1.5433
+    },
+    "forest_ground_b": {
+      "left_right_mae": 0.4718,
+      "top_bottom_mae": 0.5132
+    },
+    "forest_lush": {
+      "left_right_mae": 1.394,
+      "top_bottom_mae": 1.738
+    },
+    "volcano_ground_a": {
+      "left_right_mae": 0.4032,
+      "top_bottom_mae": 0.4259
+    },
+    "volcano_ground_b": {
+      "left_right_mae": 0.4434,
+      "top_bottom_mae": 0.5526
+    },
+    "volcano_hot": {
+      "left_right_mae": 1.757,
+      "top_bottom_mae": 0.943
+    }
+  },
+  "volcano_hot_40px_test": {
+    "strength_2_mean_heat_score": 11.692,
+    "strength_9_mean_heat_score": 17.025,
+    "difference": 5.333,
+    "ratio_abs": 1.456
+  },
+  "counts": {
+    "forest_props": 12,
+    "volcano_props": 12,
+    "rock_clusters": 4,
+    "forest_wilt_props": 4,
+    "volcano_ash_props": 4,
+    "homes": 8,
+    "fx_pngs": 8
+  },
+  "hi_lo_path_parity": true,
+  "geometry_masks_tints_unchanged": true,
+  "network_style_json_unchanged": true,
+  "checked_files": [
+    {
+      "path": "hi/textures/empty_ground.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/gold_ground.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/forest_ground_a.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/forest_ground_b.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/forest_lush.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/volcano_ground_a.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/volcano_ground_b.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/textures/volcano_hot.webp",
+      "size": [
+        2048,
+        2048
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/empty_ground.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/gold_ground.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/forest_ground_a.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/forest_ground_b.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/forest_lush.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/volcano_ground_a.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/volcano_ground_b.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "lo/textures/volcano_hot.webp",
+      "size": [
+        1024,
+        1024
+      ],
+      "mode": "RGB"
+    },
+    {
+      "path": "hi/props/forest/berry_bush_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/berry_bush_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/fern_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/fern_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/flower_clump_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/flower_clump_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/mushroom_patch_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/mushrooms_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/sapling_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/sapling_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/shrub_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/forest/shrub_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/boulder_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/boulder_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/boulder_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/cinder_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/cinder_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/cinder_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/slab_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/slab_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/slab_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/vent_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/vent_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/volcano/vent_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/berry_bush_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/berry_bush_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/fern_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/fern_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/flower_clump_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/flower_clump_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/mushroom_patch_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/mushrooms_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/sapling_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/sapling_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/shrub_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/forest/shrub_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/boulder_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/boulder_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/boulder_03.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/cinder_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/cinder_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/cinder_03.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/slab_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/slab_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/slab_03.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/vent_01.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/vent_02.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/volcano/vent_03.png",
+      "size": [
+        128,
+        128
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/rock/rock_cluster_01.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/rock/rock_cluster_02.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/rock/rock_cluster_03.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/props/rock/rock_cluster_04.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/rock/rock_cluster_01.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/rock/rock_cluster_02.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/rock/rock_cluster_03.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/props/rock/rock_cluster_04.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/forest_tree_shadow.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/forest_tree_canopy.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/forest_tree_leaves_layer.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/volcano_crater.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/volcano_crater_glow.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/volcano_smoke_01.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/volcano_smoke_02.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/homes/volcano_smoke_03.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/forest_tree_shadow.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/forest_tree_canopy.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/forest_tree_leaves_layer.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/volcano_crater.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/volcano_crater_glow.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/volcano_smoke_01.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/volcano_smoke_02.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/homes/volcano_smoke_03.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/network/forest_vine_strip.webp",
+      "size": [
+        512,
+        64
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 255
+    },
+    {
+      "path": "hi/network/lava_flow_strip.webp",
+      "size": [
+        512,
+        64
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 255
+    },
+    {
+      "path": "lo/network/forest_vine_strip.webp",
+      "size": [
+        256,
+        32
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 255
+    },
+    {
+      "path": "lo/network/lava_flow_strip.webp",
+      "size": [
+        256,
+        32
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 255
+    },
+    {
+      "path": "hi/fx/forest_scar.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "hi/fx/volcano_scar.png",
+      "size": [
+        384,
+        384
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/fx/forest_scar.png",
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    },
+    {
+      "path": "lo/fx/volcano_scar.png",
+      "size": [
+        192,
+        192
+      ],
+      "mode": "RGBA",
+      "border_alpha_max": 0
+    }
+  ]
+}

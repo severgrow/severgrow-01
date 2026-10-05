@@ -30,6 +30,7 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       proxy: { base: '#2f5a32', overlay: '#4f8a3c' },
       clarity: 0.7,
       cutoff: 'states/forest_cutoff_tint.json',
+      cutoffProps: { dir: 'states/forest_wilt_props/', size: 12 },
     },
     volcano: {
       base: ['textures/volcano_ground_a.webp', 'textures/volcano_ground_b.webp'],
@@ -37,6 +38,7 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       proxy: { base: '#2c2523', overlay: '#8f2212' },
       clarity: 0.8,
       cutoff: 'states/volcano_cutoff_tint.json',
+      cutoffProps: { dir: 'states/volcano_ash_props/', size: 12 },
     },
   },
   // every sprite in these folders is used (any file names); rules by name fragment

@@ -18,6 +18,8 @@ export type MaterialDef = {
   clarity: number;
   /** cut-off look: a tint JSON (desaturate, darken, warm/cool shift, dryness/ash, magma reduction) */
   cutoff?: string;
+  /** a folder of props for cut-off tiles and what severed tiles leave (wilted plants, ash) */
+  cutoffProps?: { dir: string; size: number };
 };
 
 export type PropDef = {

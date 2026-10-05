@@ -21,9 +21,10 @@ go-ahead). Tick an item and add the date when it reaches `main`.
   homes, no props). The development pack (briefs, masters, QA) is in `art/design-v3/`.
 - `BoardView`: drawing steps became overridable methods (same code, same order); the live
   game, the Lab and Design draw exactly as before (web tests 483/483).
-- 2026-10-05: Phase 1, then Phase 1b art dropped in (textures, homes, rocks, sample props, strips, scars;
-  `art/design-v3/phase1b/` keeps its frames and masters). Approved for Phase 2 once volcano_hot shows heat.
-- Check before locking in: the real V3 art (Phase 1 approval first); strip skinning on a straight
+- 2026-10-05: the final Phase 2 V3 art is in (8 textures, 12+12 props, 4 rock clusters, home
+  layers, strips, scars, wilt/ash props for cut-off tiles and scars, FX motes not used yet);
+  review material and masters in `art/design-v3/phase2/`.
+- Check before locking in: volcano heat at high strength (readable, could be stronger); the FX motes (unused); strip skinning on a straight
   path (the strip carries the organic look); hi tier memory on tablets; the ground repaint time
   on big boards on a real phone.
 

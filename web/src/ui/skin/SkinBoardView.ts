@@ -46,6 +46,10 @@ export class SkinBoardView extends BoardView {
   private tints: Record<string, Tint | null> = {};
   /** prop sprites by material, from what this tier has */
   private propDefs: Record<string, PropDef[]> = {};
+  /** props for cut-off tiles and severed hexes, by material */
+  private cutoffDefs: Record<string, PropDef[]> = {};
+  /** tiles joined to their home in the board being drawn */
+  private joinedNow = new Set<string>();
   private strips: ({ url: string; w: number; h: number } | null)[] = [null, null];
   private recheck: ReturnType<typeof setTimeout> | undefined;
   private readonly coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -175,6 +179,8 @@ export class SkinBoardView extends BoardView {
     const merge = (n: SkinDef['network'][number]): NetworkLook => ({ ...n, ...(style?.[n.key] ?? {}), widths: { ...n.widths, ...(style?.[n.key]?.widths ?? {}) } });
     this.net = [merge(this.skin.network[0]), merge(this.skin.network[1])];
     this.propDefs = {};
+    this.cutoffDefs = {};
+    for (const [id, m] of Object.entries(this.skin.materials)) if (m.cutoffProps) this.cutoffDefs[id] = a.list(m.cutoffProps.dir).map((src) => ({ src, size: m.cutoffProps!.size }));
     for (const [id, set] of Object.entries(this.skin.props)) {
       this.propDefs[id] = a.list(set.dir).map((src): PropDef => {
         const r = set.rules?.find((x) => src.includes(x.match));
@@ -230,6 +236,7 @@ export class SkinBoardView extends BoardView {
   override render(board: Record<string, Tile | null>, o: Overlay) {
     this.netDefs?.replaceChildren();
     if (!this.wantedTier) this.checkView();
+    this.joinedNow = this.joined(board);
     super.render(board, o);
     this.syncGround(board, o);
   }
@@ -314,6 +321,9 @@ export class SkinBoardView extends BoardView {
       const { x, y } = centerOf(s.key);
       const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
       el('image', { href: this.assets.url(src), x: x - 22, y: y - 22, width: 44, height: 44, class: 'skin-scar', preserveAspectRatio: 'xMidYMid meet' }, g);
+      // what was left behind: one wilted plant or ash heap (big enough tiles only)
+      const left = this.cutoffDefs[this.skin.owners[s.owner]] ?? [];
+      if ((this.tilePx() || 0) >= 40) for (const pr of placeProps(`${s.key}:scar`, left, 1, 9)) this.prop(g, x, y, pr);
     }
   }
 
@@ -348,6 +358,10 @@ export class SkinBoardView extends BoardView {
     this.shownVeins = now;
   }
 
+  private prop(g: SVGGElement, x: number, y: number, pr: ReturnType<typeof placeProps>[number], key = '') {
+    el('image', { href: this.assets.url(pr.def.src), x: x + pr.x - pr.size / 2, y: y + pr.y - pr.size / 2, width: pr.size, height: pr.size, class: `skin-prop${pr.def.anim ? ` skin-${pr.def.anim}` : ''}`, preserveAspectRatio: 'xMidYMid meet', style: `animation-delay:${(-hash(key) * 5).toFixed(2)}s` }, g);
+  }
+
   protected override drawTile(parent: SVGGElement, key: string, t: Tile): SVGGElement {
     const skin = this.skin;
     const g = el('g', { class: `tile ${t.owner === 0 ? 'you' : 'bot'}${t.root ? ' root' : ''} skin-tile`, 'data-key': key }, parent);
@@ -359,10 +373,11 @@ export class SkinBoardView extends BoardView {
     if (t.root) return g;
     const { x, y } = centerOf(key);
     const s9 = this.strength9(t);
-    const defs = this.propDefs[skin.owners[t.owner]] ?? [];
-    for (const pr of placeProps(key, defs, propBudget(this.tilePx(), s9), s9)) {
-      el('image', { href: this.assets.url(pr.def.src), x: x + pr.x - pr.size / 2, y: y + pr.y - pr.size / 2, width: pr.size, height: pr.size, class: `skin-prop${pr.def.anim ? ` skin-${pr.def.anim}` : ''}`, preserveAspectRatio: 'xMidYMid meet', style: `animation-delay:${(-hash(key) * 5).toFixed(2)}s` }, g);
-    }
+    // a tile cut off from its home shows wilted / ashen props instead of its living ones
+    const cut = !this.joinedNow.has(key);
+    const defs = (cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? [];
+    const budget = cut ? Math.min(1, propBudget(this.tilePx(), 9)) : propBudget(this.tilePx(), s9);
+    for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     const n = skin.numbers[t.owner];
     el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);
     el('text', { x, y: y - S * 0.06, class: 'num tile-num world skin-num', style: `fill:${n.ink}` }, g).textContent = String(t.strength);
