@@ -155,12 +155,15 @@ html[data-thumb] .dock .table-row > .moves {
   top: var(--t-moves-y);
   width: var(--t-moves-w);
   height: var(--t-moves-h);
+  min-height: 0;
+  max-height: none;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-start;
-  align-items: flex-end;
-  align-content: flex-end;
-  gap: 6px;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 4px 6px;
+  overflow: visible;
   z-index: 3;
 }
 html[data-thumb] .dock .forecast-slot {
@@ -207,10 +210,10 @@ html[data-thumb] .dock .hand-row > .hand-slot {
 html[data-thumb] .dock .hand-row > .undo-slot { --x: var(--t-undo-x); --y: var(--t-undo-y); --w: var(--t-undo-w); --h: var(--t-undo-h); }
 html[data-thumb] .dock .hand-row > .hand-sort { --x: var(--t-sort-x); --y: var(--t-sort-y); --w: var(--t-sort-w); --h: var(--t-sort-h); }
 
-/* the coach and first-time tips: the free corner over the move buttons (never over the fan) */
+/* the coach and first-time tips: just above the dock, over the board's lower-left edge (never over the cards) */
 html[data-thumb] .dock-overlays {
-  top: var(--t-tips-y);
-  bottom: auto;
+  top: auto;
+  bottom: calc(100% + 6px);
   left: var(--t-tips-x);
   right: auto;
   width: var(--t-tips-w);

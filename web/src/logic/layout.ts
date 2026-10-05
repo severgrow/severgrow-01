@@ -55,7 +55,7 @@ export type Thumb = {
   moves: Box;
   undo: Box;
   sort: Box;
-  /** the coach and first-time tips: the free corner over the move buttons, left of the fan */
+  /** the coach and first-time tips: just above the dock (its y and h: the panel's bottom gap and largest height) */
   tips: Box;
 };
 /** Thumb layout: the visible part of every card along the arc (pt), the outward lift of a
@@ -96,8 +96,9 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     const pilesW = 2 * pileW + 8;
     const pileCard = { w: pileW - 8, h: Math.round((pileW - 8) * 1.42) };
     const pileBoxH = pileCard.h + 26;
-    // first and last card centres: low beside the piles, high at the right edge
-    const sx = edge + pilesW + 6 + hd * 0.8;
+    // first and last card centres: low, about a third of the way across (under the piles),
+    // and high at the right edge, just under the board (the user's touch map)
+    const sx = Math.max(edge + hd * 0.9, Math.round(W * 0.36));
     const ex = W - edge - hd;
     const dx = Math.max(40, ex - sx);
     const need = (maxHand - 1) * slice;
@@ -106,7 +107,9 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     const bottomPad = 8 + sb;
     // a taller dock (the board can't use the height) lets the arc climb further: wider slices
     const dy = Math.max(Math.sqrt(Math.max(0, chord * chord - dx * dx)), minH - (2 * hd + lift + 4 + bottomPad));
-    const h = Math.ceil(Math.max(dy + 2 * hd + lift + 4 + bottomPad, pileBoxH + 52 + bottomPad + 8));
+    // the piles sit in the top-left corner: the lowest card passes under them
+    const pileY = 6;
+    const h = Math.ceil(Math.max(dy + 2 * hd + lift + 4 + bottomPad, pileY + pileBoxH + 8 + 2 * hd + bottomPad));
     // dock-local points (y down): S low, E high
     const S = { x: sx, y: h - bottomPad - hd };
     const E = { x: ex, y: S.y - dy };
@@ -125,19 +128,25 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     let a1 = ang(E);
     if (a1 < a0 - 180) a1 += 360;
     if (a1 > a0 + 180) a1 -= 360;
-    const pileY = h - bottomPad - pileBoxH;
     const deck: Box = { x: edge, y: pileY, w: pileW, h: pileBoxH };
     const discard: Box = { x: edge + pileW + 8, y: pileY, w: pileW, h: pileBoxH };
     const piles: Box = { x: edge, y: pileY, w: pilesW, h: pileBoxH };
-    // the move buttons: a column over the piles, left of the fan (two rows if they need them)
-    const moves: Box = { x: edge, y: Math.max(4, pileY - 124), w: pilesW, h: 120 };
+    // the move buttons: a column under the piles, left of the fan (two rows if they need them);
+    // as tall as the cards below allow (filled in once the slots are known)
+    let moves: Box = { x: edge, y: pileY + pileBoxH + 8, w: pilesW, h: 120 };
     const sort: Box = { x: W - edge - icon, y: h - bottomPad - icon, w: icon, h: icon };
     const undo: Box = { x: W - edge - 2 * icon - 8, y: h - bottomPad - icon, w: icon, h: icon };
-    let t: Thumb = { side: 'right', arc: { cx, cy, r, a0, a1 }, maxHand, slice, card: { w: cw, h: ch }, piles, deck, discard, pileCard, moves, undo, sort, tips: { x: edge, y: 4, w: 0, h: 0 } };
-    // the tips' corner: from the dock's top down to the move buttons, as wide as the fan allows
-    const tipsBottom = moves.y - 6;
-    const fanLeft = Math.min(...fanSlots(t, maxHand).filter((p) => p.y - hd < tipsBottom).map((p) => p.x - hd), W - edge);
-    t = { ...t, tips: { x: edge, y: 4, w: Math.max(pilesW, W * 0.5, fanLeft - edge - 6), h: Math.max(44, tipsBottom - 4) } };
+    // the coach and first-time tips: just above the dock, over the board's lower-left edge,
+    // narrow enough (44%) to stay left of my home at the bottom middle of the board
+    const tips: Box = { x: edge, y: 0, w: Math.round(W * 0.44), h: 200 };
+    let t: Thumb = { side: 'right', arc: { cx, cy, r, a0, a1 }, maxHand, slice, card: { w: cw, h: ch }, piles, deck, discard, pileCard, moves, undo, sort, tips };
+    const under = fanSlots(t, maxHand).filter((p) => p.x - hd < edge + pilesW).map((p) => p.y - hd * 0.75);
+    moves = { ...moves, h: Math.max(44, Math.min(120, Math.min(h, ...under) - 8 - moves.y)) };
+    // and as wide as the cards beside it allow (the fan is further right that high up)
+    const mid = moves.y + moves.h / 2;
+    const beside = fanSlots(t, maxHand).filter((p) => Math.abs(p.y - mid) < hd + moves.h / 2).map((p) => p.x - hd * 0.75 - edge - 6);
+    moves = { ...moves, w: Math.max(pilesW, Math.min(W * 0.62, ...beside)) };
+    t = { ...t, moves };
     if (side === 'left') t = mirrorThumb(t, W);
     // the board above it
     const fit = bestFit(W - 2 * BOARD_MARGIN, avail - h, radius);

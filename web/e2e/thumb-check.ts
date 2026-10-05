@@ -76,12 +76,21 @@ const sliceReport = (page: Page) =>
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return { id, ok: !top?.closest('[data-card]'), w: r.width };
     });
+    // the move buttons: never over the piles, never under a card
+    const pileRects = ['deck', 'discard'].map((id) => document.getElementById(id)!.getBoundingClientRect());
+    const moveBtns = [...document.querySelectorAll<HTMLElement>('#moves > button, #moves > .btn')].filter((b) => b.offsetParent !== null);
+    const movesOk = moveBtns.every((b) => {
+      const r = b.getBoundingClientRect();
+      const overPile = pileRects.some((p) => r.left < p.right && p.left < r.right && r.top < p.bottom && p.top < r.bottom);
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !overPile && !top?.closest('[data-card]');
+    });
     const minStep = cards.slice(1).reduce((m, c, i) => {
       const a = cards[i]!;
       const d = Math.hypot(parseFloat(c.style.getPropertyValue('--fx')) - parseFloat(a.style.getPropertyValue('--fx')), parseFloat(c.style.getPropertyValue('--fy')) - parseFloat(a.style.getPropertyValue('--fy')));
       return Math.min(m, d);
     }, Infinity);
-    return { n: cards.length, cards: out, free, minStep, thumb: document.documentElement.dataset.thumb ?? null };
+    return { n: cards.length, cards: out, free, minStep, movesOk, moveCount: moveBtns.length, thumb: document.documentElement.dataset.thumb ?? null };
   });
 
 for (const [w, h] of [[390, 844], [360, 640]] as const) {
@@ -93,6 +102,7 @@ for (const [w, h] of [[390, 844], [360, 640]] as const) {
     check(`${label}: every card's slice selects that card`, r.cards.every((c) => c.ok), `slice ${r.minStep.toFixed(1)}pt; misses: ${r.cards.map((c, i) => (c.ok ? '' : `#${i + 1}`)).filter(Boolean).join(',') || 'none'}`);
     check(`${label}: no card off screen`, r.cards.every((c) => c.onScreen));
     check(`${label}: piles, Undo and Sort not under the fan`, r.free.every((f) => f.ok), r.free.map((f) => `${f.id} ${f.ok ? 'free' : 'COVERED'}`).join(', '));
+    check(`${label}: move buttons clear of the piles and the cards`, r.movesOk, `${r.moveCount} buttons`);
     check(`${label}: piles at least 56pt wide`, r.free.filter((f) => f.id === 'deck' || f.id === 'discard').every((f) => f.w >= 56));
     // a real tap on the first, middle and last slices picks that card (my Grow step)
     const st = await page.evaluate(() => (window as unknown as { __severgrow: { state: () => { phase: string } } }).__severgrow.state()?.phase);
