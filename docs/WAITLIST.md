@@ -10,6 +10,8 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ### DESIGN: the Lab game with the V2 illustrated forest/volcano skin
 - Date: 2026-10-05 · Commit: `3428aba` · In test only (inside the Lab)
+- Main menu (test copy): **Design** next to **Lab** reopens the page in DESIGN ("Leave Design"
+  there goes back; Continue carries the game over).
 - Lab sheet -> **DESIGN** applies the experiment and reopens the page with `?design=1`: the same
   game, Lab tools, maps and rules, drawn by `DesignBoardView` (`web/src/ui/designBoard.ts`, a
   subclass of `BoardView`). **Leave DESIGN** in the sheet goes back. `BoardView`, the normal Lab
