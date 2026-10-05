@@ -77,8 +77,9 @@ export const FOREST_VOLCANO_V3: SkinDef = {
     // lost tiles (scars): one burnt stump or log on the empty ground, when the folder has sprites
     dead: { dir: 'props/dead/', size: 54 },
   },
-  // the player's side: 25 painted grass hexes, plain grass at 1 up to blossoms and mushrooms at 9
-  tiles: { forest: 'tiles/forest/' },
+  // painted hexes by strength: 25 grass (plain grass at 1 up to blossoms and mushrooms at 9) and
+  // 10 lava (dark rock with thin cracks at 1 up to the crater pool at 9)
+  tiles: { forest: { dir: 'tiles/forest/', base: '#72a61c' }, volcano: { dir: 'tiles/volcano/', base: '#804021', lava: true } },
   networkStyle: 'network/style.json',
   // built-in values (network/style.json in the tier overrides them)
   network: [
