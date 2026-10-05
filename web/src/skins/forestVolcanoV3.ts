@@ -22,7 +22,8 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   materials: {
     // five painted slate textures, mixed in soft patches across the board
     empty: { base: [1, 2, 3, 4, 5].map((n) => `textures/empty_ground_0${n}.webp`), proxy: { base: '#262a28' }, clarity: 0 },
-    gold: { base: ['textures/gold_ground.webp'], proxy: { base: '#4a3d24' }, clarity: 0 },
+    // gold (x2) hexes: the empty ground with a pile of gold nuggets on top (props.gold)
+    gold: { base: [1, 2, 3, 4, 5].map((n) => `textures/empty_ground_0${n}.webp`), proxy: { base: '#262a28' }, clarity: 0 },
     // blocked hexes: the empty ground with a boulder cluster on top (props.rock)
     rock: { base: [1, 2, 3, 4, 5].map((n) => `textures/empty_ground_0${n}.webp`), proxy: { base: '#57534c' }, clarity: 0 },
     forest: {
@@ -70,6 +71,7 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       ],
     },
     rock: { dir: 'props/rock/', size: 58 },
+    gold: { dir: 'props/gold/', size: 50 },
   },
   networkStyle: 'network/style.json',
   // built-in values (network/style.json in the tier overrides them)

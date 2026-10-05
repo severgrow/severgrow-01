@@ -226,18 +226,27 @@ export class SkinBoardView extends BoardView {
     }
   }
 
-  /** Blocked hexes: one calm boulder cluster each (when the skin has them). */
-  /** Blocked hexes: one big boulder cluster each, in a layer over all the ground (it may overhang). */
+  /**
+   * Blocked hexes get one big boulder cluster, gold (x2) hexes one pile of nuggets (picked per hex),
+   * in a layer over all the ground (they may overhang). A gold pile hides once a tile stands on it.
+   */
   private dressRocks() {
-    const defs = this.propDefs[this.skin.cells.rock] ?? [];
     this.layers.base.querySelector('.skin-rocks')?.remove();
     const g = el('g', { class: 'skin-rocks', 'aria-hidden': 'true' }, this.layers.base);
     for (const key of this.keys) {
-      if (this.terrain[key] !== 'rock' || !defs.length) continue;
-      const def = defs[Math.floor(hash(`${key}:rock`) * defs.length)]!;
+      const t = this.terrain[key];
+      if (t !== 'rock' && t !== 'rich') continue;
+      const defs = this.propDefs[this.skin.cells[t]] ?? [];
+      if (!defs.length) continue;
+      const def = defs[Math.floor(hash(`${key}:${t}`) * defs.length)]!;
       const { x, y } = centerOf(key);
-      el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: 'skin-prop', preserveAspectRatio: 'xMidYMid meet' }, g);
+      el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: `skin-prop${t === 'rich' ? ' skin-gold' : ''}`, 'data-key': key, preserveAspectRatio: 'xMidYMid meet' }, g);
     }
+    if (this.lastRender) this.hideTakenGold(this.lastRender[0]);
+  }
+
+  private hideTakenGold(board: Record<string, Tile | null>) {
+    for (const i of this.layers.base.querySelectorAll<SVGImageElement>('.skin-gold')) i.style.display = board[i.dataset.key ?? ''] ? 'none' : '';
   }
 
   // ---------- each render ----------
@@ -247,6 +256,7 @@ export class SkinBoardView extends BoardView {
     if (!this.wantedTier) this.checkView();
     this.joinedNow = this.joined(board);
     super.render(board, o);
+    this.hideTakenGold(board);
     this.syncGround(board, o);
   }
 
