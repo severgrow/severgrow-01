@@ -1,5 +1,5 @@
 // first: the release channel (the test copy keeps its own storage)
-import { IS_TEST, FEATURES } from './channel.js';
+import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
 // Severgrow in the browser. You (player 1) against GreedyBot. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -422,6 +422,10 @@ function sheet(id: string | null) {
     if (id === 'sheet-howto') renderHowTo();
     openSheet.querySelector<HTMLElement>('[data-close], button')?.focus();
   }
+  if (IS_TEST2) {
+    document.documentElement.classList.toggle('test2-information-blocked', !!openSheet);
+    updateTest2Help();
+  }
 }
 
 function renderHowTo() {
@@ -454,7 +458,7 @@ function renderHowTo() {
 /** The 3x3 level screen: number, name, one line, and my wins at that level. */
 document.addEventListener('click', (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]');
-  if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen')) showTip(t.dataset.tip);
+  if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || (IS_TEST2 && t.dataset.tip === 'draw'))) showTip(t.dataset.tip);
 });
 
 function renderLevelGrid() {
@@ -582,6 +586,7 @@ function dealIn() {
 /** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
 /** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
+let test2Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
@@ -682,6 +687,12 @@ async function mountPlayerEnhancements() {
   }
 
   await Promise.all(loads);
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
+    (await import('./player/information.js')).mountInformation();
+    test2Help = (await import('./player/help.js')).mountHelp({ sheet });
+    layoutKey = '';
+    if (session) render();
+  }
 }
 
 /**
@@ -731,7 +742,7 @@ function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
   const vv = window.visualViewport;
   const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight);
+  const h = Math.round(vv?.height ?? window.innerHeight) - (IS_TEST2 ? (settings.largeText ? 84 : 68) : 0);
   const cfg = session.state.config;
   const maxHand = cfg.handSize + 1;
   const side = thumbLayout.side;
@@ -1679,7 +1690,8 @@ function render() {
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
-  if (placeTeachingPanel && thumbLayout) {
+  updateTest2Help();
+  if (!IS_TEST2 && placeTeachingPanel && thumbLayout) {
     const keys = targetHexes(v, session.legal, session.sel);
     requestAnimationFrame(() => {
       placeTeachingPanel?.($('first-tip'), keys);
@@ -1695,6 +1707,11 @@ function render() {
   }
 }
 let autoQueued = false;
+/** Optional teaching yields to the player's move and to other sheets. */
+function updateTest2Help() {
+  test2Help?.update({ blocked: !session || busy() || (!!openSheet && openSheet.id !== 'sheet-test2-help') || !!session?.pending || !!draw.shape.length || cardPinned || session?.state.phase === 'GAME_OVER' });
+}
+
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
 function renderGuide(advice: Advice | null) {
@@ -1920,7 +1937,7 @@ let layoutKey = '';
 function applyLayout() {
   const vv = window.visualViewport;
   const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight);
+  const h = Math.round(vv?.height ?? window.innerHeight) - (IS_TEST2 ? (settings.largeText ? 84 : 68) : 0);
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
@@ -2454,7 +2471,7 @@ function renderRisks(risks: ReturnType<typeof riskLines>) {
 /** First-time tips for Fruit and Strengthen: shown once, until dismissed (re-open from How to play). */
 function renderFirstTip(v: View) {
   const card = $('first-tip');
-  if (!session || openSheet) {
+  if (!session || (openSheet && (!IS_TEST2 || openSheet.id !== 'sheet-test2-help'))) {
     card.hidden = true;
     return;
   }
@@ -2463,7 +2480,7 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen;
+  card.hidden = !tipOpen || (IS_TEST2 && (!myTurn() || busy() || v.phase !== 'ACT'));
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
@@ -2474,6 +2491,14 @@ function showTip(id: FirstTip) {
   tipOpen = id;
   sheet(null);
   render();
+  if (IS_TEST2 && test2Help) {
+    // How to play can open before a game exists; fill this explicit lesson directly.
+    $('first-tip-title').textContent = TIPS[id].title;
+    $('first-tip-text').textContent = TIPS[id].text;
+    $('first-tip-demo').hidden = id !== 'draw';
+    $('first-tip').hidden = false;
+    test2Help.open('tip');
+  }
 }
 
 function renderHand(v: View, advice: Advice | null) {
@@ -2604,7 +2629,7 @@ function renderPiles(v: View, advice: Advice | null) {
 function renderCoach(advice: Advice | null) {
   const box = $('coach');
   const showSummary = settings.coach && coach.step >= COACH_STEPS && !coach.summaryDone && session?.state.phase !== 'GAME_OVER';
-  box.hidden = !(advice || showSummary) || busy();
+  box.hidden = !(advice || showSummary) || busy() || (IS_TEST2 && !myTurn());
   $('coach-advice').hidden = !advice;
   $('coach-summary').hidden = !showSummary || !!advice;
   if (advice) {

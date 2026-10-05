@@ -10,5 +10,6 @@ if (channel !== 'test') {
   for (const marker of ['menu-lab', 'menu-design', 'Apply and play', 'font bake-off', 'forest_strength_', 'lab-presets']) assert(!js.includes(marker), `development code leaked: ${marker}`);
 }
 if (channel === 'live') for (const n of names) assert(!/besley|commissioner|guide-|thumb-|camera-|player-css|fonts-/i.test(n), n);
-if (channel === 'test2') for (const prefix of ['besley-', 'commissioner-', 'guide-', 'thumb-', 'camera-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
+if (channel !== 'test2') for (const n of names) assert(!/^(information|help)-/.test(n), `Test2 information leaked: ${n}`);
+if (channel === 'test2') for (const prefix of ['besley-', 'commissioner-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
 console.log(`${channel}: asset isolation passed (${names.length} files)`);

@@ -210,3 +210,6 @@ free screen space so legal targets, homes and the step plate remain visible and 
 Publish one combined artifact preserving root Main, current Test, and Test2. The authorized Main
 exception is its Pages workflow alone, plus scoped routing in generated service-worker output.
 - V3 look in Test2 (2026-10-05): an option in the menu (V3 / Leave V3, remembered in main2: storage, or ?design=v3). The skinned renderer and V3 art from Dev, loaded only when the look is on; ownership shapes kept on V3 tiles; Lab and Design stay Dev-only. Checked by web/e2e/test2-v3.ts.
+
+### 2026-10-05 — Test2 message hierarchy
+The owner requested fixes to overlapping phase, turn, opponent notices and cramped tips after supplying phone screenshots. Test2 reserves one stable information row above the map, uses faint phase words and one subordinate notice, and opens full lessons/coach explanations only through Help. Original state-owned text and action listeners remain; Main and Dev retain their existing presentation. Twenty browser games are observed, with assisted complex Bloom placements counted explicitly. Long desktop control labels wrap inside their existing column. No gameplay changes.

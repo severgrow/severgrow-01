@@ -32,7 +32,9 @@ try {
     });
     await page.goto('http://localhost:4193/?seed=219682080&design=v3');
     await idle(page);
-    await page.waitForTimeout(1500);
+    // Ground painting and asset decoding are asynchronous, especially under CI load.
+    await page.waitForFunction(() => !!document.querySelector('#board pattern[id$="skin-ground"] image')?.getAttribute('href'), undefined, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelectorAll('#board .landmark.skin-has-art').length === 2, undefined, { timeout: 30000 });
     const info = await page.evaluate(() => {
       const svg = document.querySelector('#board') as SVGSVGElement;
       return { skin: svg.dataset.skin, tier: svg.dataset.tier, ground: !!svg.querySelector('pattern[id$="skin-ground"] image')?.getAttribute('href'), cells: svg.querySelectorAll('g.hex-cell').length, homes: svg.querySelectorAll('.landmark.skin-has-art').length };

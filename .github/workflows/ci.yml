@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, test2-critical, test2-v3]
+        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, test2-critical, test2-v3, test2-information]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -39,8 +39,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
-      - if: matrix.suite != 'test2-critical' && matrix.suite != 'test2-v3'
+      - if: matrix.suite != 'test2-critical' && matrix.suite != 'test2-v3' && matrix.suite != 'test2-information'
         run: npm run web:build
-      - if: matrix.suite == 'test2-critical' || matrix.suite == 'test2-v3'
+      - if: matrix.suite == 'test2-critical' || matrix.suite == 'test2-v3' || matrix.suite == 'test2-information'
         run: CHANNEL=test2 npm run web:build
       - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}
