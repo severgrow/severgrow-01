@@ -8,6 +8,18 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Zoomed map runs on behind the cards (smart fade)
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only (phones, the thumb layout)
+- When the camera is zoomed in and there is more map below, it is no longer cut off at the deck:
+  it shows through behind the piles and the cards under a soft fade. Choosing, drawing or
+  throwing a card: the cards are clear and the map behind faint. Working on the map (a card
+  picked, painting a Bloom, the opponent's turn, a finger on the map): the map behind shows more
+  and the cards and piles go see-through until touched. The camera keeps framing the important
+  part above the cards.
+- Check before locking in: Huge hex and Rhombus zoomed in mid-map; painting a Bloom near the
+  bottom edge of the window; the fade on the light theme/palettes; tile cards (tooltips) near the
+  bottom; Reduce motion; that taps on the cards never reach the map behind.
+
 ### Pro phone layout: slim header, compact centred hand, control row (nothing overlaps)
 - Date: 2026-10-05 · Commit: `5c75f68` · In test only
 - Header: only the menu button and the score bar. Scores, turn, level, turns left and "What

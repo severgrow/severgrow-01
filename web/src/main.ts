@@ -629,7 +629,9 @@ function feedCamera(v: View) {
   const flat = getOrient() === 'flat';
   const cw = 2 * (flat ? halfShort : halfLong);
   const chh = 2 * (flat ? halfLong : halfShort);
-  const defaultTile = Math.sqrt(3) * S * Math.min(r.width / cw, r.height / chh);
+  // (on phones the map runs on under the cards: the window above them is what counts)
+  const winH = r.height - (parseFloat(getComputedStyle($('board-wrap')).getPropertyValue('--cam-under')) || 0);
+  const defaultTile = Math.sqrt(3) * S * Math.min(r.width / cw, winH / chh);
   const shown = queue.board;
   const tiles = Object.entries(shown).flatMap(([k, t]) => (t ? [{ key: k, owner: t.owner, ...centerOf(k) }] : []));
   const last = session.state.history?.at(-1);
@@ -1580,7 +1582,12 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
-  if (IS_TEST && lab) feedCamera(v);
+  if (IS_TEST && lab) {
+    // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
+    const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
+    document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
+    feedCamera(v);
+  }
   if (IS_TEST && thumbLayout) checkOverlap(v);
   // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)

@@ -81,7 +81,7 @@ for (const [w, h] of [[390, 844], [390, 664], [360, 640], [430, 932]] as const) 
     const at = `${tag} turn ${s.turnNumber} ${s.phase}`;
     check(`${tag}: header shows only the menu button`, m.hud.length === 1 && m.hud[0] === 'hud-menu', m.hud.join(','));
     if (m.map) {
-      for (const x of [...m.piles, ...m.tools, ...m.moves, ...m.cards]) check(`${tag}: ${x.n.replace(/\d+$/, '')} never on the map`, x.t >= m.svgBottom - 1, `${at}: top ${x.t.toFixed(0)} vs map ${m.svgBottom.toFixed(0)}`);
+      for (const x of [...m.piles, ...m.tools, ...m.moves, ...m.cards]) check(`${tag}: ${x.n.replace(/\d+$/, '')} never on the map`, x.t >= m.map!.b - 1, `${at}: top ${x.t.toFixed(0)} vs map ${m.map!.b.toFixed(0)}`);
     }
     for (const a of m.tools) for (const b of [...m.piles, ...m.moves, ...m.cards]) check(`${tag}: Undo/Sort never on ${b.n.replace(/\d+$/, '')}`, !hit(a, b), at);
     for (const a of m.moves) for (const b of [...m.piles, ...m.cards]) check(`${tag}: move buttons never on ${b.n.replace(/\d+$/, '')}`, !hit(a, b), at);
@@ -91,7 +91,7 @@ for (const [w, h] of [[390, 844], [390, 664], [360, 640], [430, 932]] as const) 
       const top = Math.min(...m.moves.map((x) => x.t));
       const bot = Math.max(...m.moves.map((x) => x.b));
       const hand = Math.min(...m.cards.map((x) => x.t));
-      const mid = (m.svgBottom + hand) / 2;
+      const mid = (m.map ? m.map.b : m.svgBottom) + (hand - (m.map ? m.map.b : m.svgBottom)) / 2;
       check(`${tag}: move buttons halfway between the map and the hand`, Math.abs((top + bot) / 2 - mid) <= 8, `${at}: buttons centre ${((top + bot) / 2).toFixed(0)}, halfway ${mid.toFixed(0)}`);
     }
     if (shots < 3 && (s.phase === 'ACT' || (s.phase === 'DISCARD' && shots === 2))) {

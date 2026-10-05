@@ -52,6 +52,11 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   const arrows = document.createElement('div');
   arrows.className = 'cam-arrows';
   wrap.appendChild(arrows);
+  // the map behind the cards fades out (more while I choose a card, less while I work on the map)
+  const fade = document.createElement('div');
+  fade.className = 'cam-fade';
+  fade.setAttribute('aria-hidden', 'true');
+  wrap.appendChild(fade);
   const pill = document.createElement('button');
   pill.type = 'button';
   pill.className = 'cam-whole';
@@ -73,24 +78,32 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     view = r;
   };
   const box = () => svg.getBoundingClientRect();
+  /** The map runs on under the cards (phones): the part of the board's box behind the dock (px). */
+  const under = () => parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
+  /** The window the camera frames in: the board's box above the cards (px). */
+  const winPx = () => Math.max(1, box().height - under());
+  /** The view's part that is in the window (board units). */
+  const winOf = (r: Rect): Rect => ({ ...r, h: (r.h * winPx()) / Math.max(1, box().height) });
   /** The view for a centre and a tile size (CSS px), with the svg box's own shape. */
   const viewAt = (cx: number, cy: number, tile: number): Rect => {
     const b = box();
     const s = tile / HEXW; // px per unit
     const w = b.width / s;
     const h = b.height / s;
+    const wh = winPx() / s; // the window above the cards: the framing happens there
     let x = cx - w / 2;
-    let y = cy - h / 2;
+    let y = cy - wh / 2;
     if (base) {
-      // never show past the map's edges when it is bigger than the view; centre it when smaller
+      // never show past the map's edges when it is bigger than the window; centre it when smaller
       x = w >= base.w ? base.x + (base.w - w) / 2 : Math.min(base.x + base.w - w, Math.max(base.x, x));
-      y = h >= base.h ? base.y + (base.h - h) / 2 : Math.min(base.y + base.h - h, Math.max(base.y, y));
+      // (a map shorter than the window sits at its bottom, just above the cards: the layout's equal gaps)
+      y = wh >= base.h ? base.y + base.h - wh : Math.min(base.y + base.h - wh, Math.max(base.y, y));
     }
     return { x, y, w, h };
   };
   const fitTile = (r: Rect) => {
     const b = box();
-    return HEXW * Math.min(b.width / r.w, b.height / r.h);
+    return HEXW * Math.min(b.width / r.w, winPx() / r.h);
   };
   const tileOf = (r: Rect) => HEXW * (box().width / r.w);
 
@@ -125,7 +138,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     const theirs = pts.filter((p) => p.owner !== input!.me);
     const near = (p: { x: number; y: number }) => Math.min(...mineT.map((q) => Math.hypot(p.x - q.x, p.y - q.y)));
     const b = box();
-    const fits = (r: Rect) => (r.w * minT) / HEXW <= b.width && (r.h * minT) / HEXW <= b.height;
+    const fits = (r: Rect) => (r.w * minT) / HEXW <= b.width && (r.h * minT) / HEXW <= winPx();
     let set: { x: number; y: number }[] = [...mineT];
     const pad = S + 6;
     if (!fits(bbox(set, pad))) {
@@ -171,15 +184,19 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     drawArrows();
     hooks.changed();
   };
-  /** Zoomed in: the map is clipped to its own area (never over the header or the dock). */
+  /** The whole map is in the window. */
+  const whole = () => !!view && !!base && view.w >= base.w - 0.5 && winOf(view).h >= base.h - 0.5;
+  /** Zoomed in: the map is clipped to its own area (never over the header); on phones it runs on
+   *  under the cards, faded (cam-under: some of the map is behind the cards now). */
   const clip = () => {
-    const zoomedIn = !!view && !!base && (view.w < base.w - 0.5 || view.h < base.h - 0.5);
-    wrap.classList.toggle('cam-zoomed', zoomedIn);
+    wrap.classList.toggle('cam-zoomed', !whole());
+    const w = view ? winOf(view) : null;
+    const behind = !!w && !!base && under() > 0 && base.y + base.h > w.y + w.h + S * 0.5;
+    document.documentElement.classList.toggle('cam-under', behind);
   };
   const cull = () => {
     if (!view || !base) return;
-    const isWhole = view.w >= base.w - 0.5 && view.h >= base.h - 0.5;
-    if (isWhole) return uncull();
+    if (whole()) return uncull();
     const m = HEXW;
     for (const g of svg.querySelectorAll<SVGGElement>('g.hex-cell, g.tile')) {
       const k = g.dataset.key ?? g.getAttribute('data-key');
@@ -201,14 +218,15 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   const drawArrows = () => {
     arrows.replaceChildren();
     if (!view || !input || wholeOn) return;
-    const inset = 0; // a tile counts as off screen when its centre is outside the view
-    const off = input.tiles.filter((p) => p.x < view!.x + inset || p.x > view!.x + view!.w - inset || p.y < view!.y + inset || p.y > view!.y + view!.h - inset);
+    // a tile counts as off screen when its centre is outside the window (behind the cards counts)
+    const wv = winOf(view);
+    const off = input.tiles.filter((p) => p.x < wv.x || p.x > wv.x + wv.w || p.y < wv.y || p.y > wv.y + wv.h);
     if (!off.length) return;
     const ctm = svg.getScreenCTM();
     const wr = wrap.getBoundingClientRect();
     if (!ctm) return;
-    const cx = view.x + view.w / 2;
-    const cy = view.y + view.h / 2;
+    const cx = wv.x + wv.w / 2;
+    const cy = wv.y + wv.h / 2;
     const groups = new Map<string, CamTile[]>();
     for (const p of off) {
       const a = Math.atan2(p.y - cy, p.x - cx);
@@ -222,8 +240,8 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
       const gy = g.reduce((s, p) => s + p.y, 0) / g.length;
       const a = Math.atan2(gy - cy, gx - cx);
       // where the ray from the view's centre leaves the view (a little inside the edge)
-      const hw = view.w / 2 - S * 0.7;
-      const hh = view.h / 2 - S * 0.7;
+      const hw = wv.w / 2 - S * 0.7;
+      const hh = wv.h / 2 - S * 0.7;
       const tt = Math.min(Math.abs(hw / (Math.cos(a) || 1e-9)), Math.abs(hh / (Math.sin(a) || 1e-9)));
       const ex = cx + Math.cos(a) * tt;
       const ey = cy + Math.sin(a) * tt;
@@ -306,12 +324,13 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     const d = a.length > 1 ? Math.hypot(a[0]!.x - a[1]!.x, a[0]!.y - a[1]!.y) : 0;
     return { cx, cy, d };
   };
-  const zoomed = () => !!view && !!base && (view.w < base.w - 0.5 || view.h < base.h - 0.5);
+  const zoomed = () => !whole();
   const onEmpty = (e: PointerEvent) => !(e.target as Element | null)?.closest?.('[data-key], button');
   wrap.addEventListener(
     'pointerdown',
     (e) => {
       touching++;
+      document.documentElement.classList.add('cam-touch');
       if (e.pointerType === 'mouse') return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 2 || (pts.size === 1 && onEmpty(e) && zoomed())) {
@@ -350,6 +369,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   );
   const end = (e: PointerEvent) => {
     touching = Math.max(0, touching - 1);
+    if (!touching) document.documentElement.classList.remove('cam-touch');
     if (!pts.has(e.pointerId)) return;
     pts.delete(e.pointerId);
     if (gesture) {
@@ -400,7 +420,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
       frame();
     },
     /** True when the whole map is in view (the fan's smart overlap needs that). */
-    isWhole: () => !!view && !!base && view.w >= base.w - 0.5 && view.h >= base.h - 0.5,
+    isWhole: () => whole(),
     /** The tile size shown now (CSS px, centre to centre). */
     tile: () => (view ? tileOf(view) : 0),
     offscreen: () => arrows.childElementCount,

@@ -23,7 +23,10 @@ type Hook = { state: () => State | null; busy: () => boolean; playFor: (a: Actio
 const measure = (page: Page) =>
   page.evaluate(() => {
     const svg = document.getElementById('board') as unknown as SVGSVGElement;
-    const r = svg.getBoundingClientRect();
+    const B = svg.getBoundingClientRect();
+    // the map runs on under the cards: the window above them is what counts
+    const under = parseFloat(getComputedStyle(document.getElementById('board-wrap')!).getPropertyValue('--cam-under')) || 0;
+    const r = { left: B.left, top: B.top, right: B.right, bottom: B.bottom - under, width: B.width, height: B.height - under };
     const S = 30;
     const flat = document.documentElement.dataset.orient === 'flat';
     const halfLong = Math.sqrt(3) * S * 3 + (Math.sqrt(3) / 2) * S + 2;

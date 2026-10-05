@@ -109,7 +109,10 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
    */
   const place = () => {
     if (!wrap) return;
-    const W = wrap.getBoundingClientRect();
+    const B = wrap.getBoundingClientRect();
+    // the map may run on under the cards: the tip stays in the window above them
+    const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
+    const W = { left: B.left, top: B.top, width: B.width, height: Math.max(0, B.height - under) };
     const rect = (e: Element) => e.getBoundingClientRect();
     const avoid = [...wrap.querySelectorAll('g.tile, .landmark, .gold-badge, .l-over > *, .badge')].map(rect).filter((r) => r.width > 0);
     const cells = [...wrap.querySelectorAll('g.hex-cell:not(.rock)')].map(rect);

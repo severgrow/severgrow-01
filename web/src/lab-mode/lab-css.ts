@@ -553,4 +553,50 @@ html[data-thumb] .dock .table-row > .moves .btn.skip {
 html[data-thumb] .dock .pile-label {
   font-size: 12px;
 }
+
+/* ---- the map runs on under the cards (phones): faded, the focus decides how much ---- */
+html[data-thumb] .board-wrap {
+  --cam-under: var(--dock-h, 0px);
+  margin-bottom: calc(-1 * var(--dock-h, 0px));
+}
+html[data-thumb] .board {
+  overflow: hidden;
+}
+.cam-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--cam-under, 0px) + 36px);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--c-bg) 0%, transparent), var(--c-bg) 36px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 220ms ease-out;
+}
+/* choosing a card (or drawing, or throwing): the cards are clear, the map behind them faint */
+html.cam-under .cam-fade {
+  opacity: 0.6;
+}
+/* working on the map (a card picked, painting, the opponent playing, a finger on the map): the
+   map behind shows more and the cards and piles step back until touched */
+html.cam-under[data-focus='map'] .cam-fade,
+html.cam-under.cam-touch .cam-fade {
+  opacity: 0.15;
+}
+html[data-thumb] .dock .hand-row > .hand .card,
+html[data-thumb] .dock .table-row > .piles > .pile,
+html[data-thumb] .dock .hand-row > .hand-slot {
+  transition: opacity 220ms ease-out;
+}
+html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted),
+html.cam-under.cam-touch:not(.fan-awake) .dock .hand-row > .hand .card:not(.lifted),
+html.cam-under[data-focus='map']:not(.fan-awake) .dock .table-row > .piles > .pile,
+html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand-slot {
+  opacity: 0.6;
+}
+.reduce-motion .cam-fade,
+.reduce-motion html[data-thumb] .dock .hand-row > .hand .card {
+  transition: none;
+}
 `;
