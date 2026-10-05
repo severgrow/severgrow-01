@@ -50,6 +50,8 @@ export type LinkOpts = {
   defs: SVGDefsElement;
   /** a whole painted link (picked for this pair), laid once from plate to plate */
   art?: { url: string; aspect: number } | null;
+  /** the id of the 'hotter lava' filter (for the glowing copy of a lava link) */
+  hot?: string;
 };
 
 /** Draws one link into `g`; returns the elements (for the sever animation). */
@@ -147,6 +149,6 @@ const drawArtLink = (g: SVGGElement, p: ReturnType<typeof linkPath>, o: LinkOpts
   const anim = o.motion && !o.loose && o.tilePx >= 40;
   const box = { x: (-len / 2).toFixed(2), y: (-h / 2).toFixed(2), width: len.toFixed(2), height: h.toFixed(2), preserveAspectRatio: 'none' };
   const out: SVGElement[] = [el('image', { href: art.url, ...box, class: `${cls}${anim && !lava ? ' skin-vine' : ''}`, style: `animation-delay:${(-pace * 6).toFixed(2)}s` }, wrap)];
-  if (lava && anim) out.push(el('image', { href: art.url, ...box, class: 'skin-link skin-lava-flow', style: `animation-delay:${(-pace * 4).toFixed(2)}s` }, wrap));
+  if (lava && anim) out.push(el('image', { href: art.url, ...box, class: 'skin-link skin-lava-flow', ...(o.hot ? { filter: `url(#${o.hot})` } : {}), style: `animation-delay:${(-pace * 4).toFixed(2)}s` }, wrap));
   return out;
 };
