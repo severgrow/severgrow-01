@@ -25,7 +25,14 @@ export const SKIN_CSS = `
 .skin-board .skin-mote.fall { animation-name: skin-fall; }
 @keyframes skin-rise { 0% { transform: translate(0, 0) scale(0.6); opacity: 0; } 15% { opacity: 0.9; } 70% { opacity: 0.55; } 100% { transform: translate(3px, -18px) scale(1); opacity: 0; } }
 @keyframes skin-fall { 0% { transform: translate(0, 0) rotate(0deg); opacity: 0; } 15% { opacity: 0.85; } 75% { opacity: 0.6; } 100% { transform: translate(9px, 16px) rotate(140deg); opacity: 0; } }
+.skin-board .skin-glow { mix-blend-mode: screen; opacity: 0; animation: skin-glow 7s ease-in-out infinite; }
+@keyframes skin-glow { 0%, 42%, 100% { opacity: 0; } 58% { opacity: 0.55; } 78% { opacity: 0.12; } }
+.skin-board .skin-breathe { animation: skin-breathe 6.5s ease-in-out infinite; }
+@keyframes skin-breathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.07) saturate(1.06); } }
+.skin-board .skin-firefly { transform-box: fill-box; transform-origin: center; opacity: 0; animation: skin-firefly 9s ease-in-out infinite; }
+@keyframes skin-firefly { 0%, 52%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); } 60% { opacity: 1; transform: translate(1.5px, -2px) scale(1); } 68% { opacity: 0.35; } 76% { opacity: 1; transform: translate(-1px, -6px) scale(0.9); } 90% { opacity: 0; transform: translate(2.5px, -10px) scale(0.6); } }
 .reduce-motion .skin-board .skin-mote { display: none; }
 .reduce-motion .skin-board .skin-later { display: none; }
-.reduce-motion .skin-board .skin-sway, .reduce-motion .skin-board .skin-pulse, .reduce-motion .skin-board .skin-drift, .reduce-motion .skin-board .skin-flow { animation: none; }
+.reduce-motion .skin-board .skin-glow, .reduce-motion .skin-board .skin-firefly { display: none; }
+.reduce-motion .skin-board .skin-breathe, .reduce-motion .skin-board .skin-sway, .reduce-motion .skin-board .skin-pulse, .reduce-motion .skin-board .skin-drift, .reduce-motion .skin-board .skin-flow { animation: none; }
 `;

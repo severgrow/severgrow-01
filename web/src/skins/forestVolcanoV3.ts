@@ -87,11 +87,14 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   ],
   homes: [
     [
-      { src: 'homes/forest_tree_shadow.webp', size: 56, dx: 2, dy: 2.6 },
-      // two looks: the fruit tree (its loose outer leaves sway) or the blossom tree
-      { src: 'homes/forest_tree_canopy.webp', size: 54, variant: 0 },
-      { src: 'homes/forest_tree_leaves_layer.webp', size: 54, anim: 'sway', variant: 0 },
-      { src: 'homes/forest_tree_canopy_blossom.webp', size: 54, variant: 1 },
+      // five painted home trees (one per home tile, picked from it), each a whole hex, turned with
+      // the board; alive but calm: the tile breathes, a soft light swells over the crown now and
+      // then, and three fireflies blink on at different times and drift up
+      ...[1, 2, 3, 4, 5].map((n, i) => ({ src: `homes/forest_home_0${n}.webp`, size: 62, turn: true, anim: 'breathe' as const, variant: i })),
+      { src: 'fx/home_glow.webp', size: 46, dy: -2, anim: 'glow' },
+      { src: 'fx/firefly.webp', size: 4.5, dx: -11, dy: -4, anim: 'firefly' },
+      { src: 'fx/firefly.webp', size: 3.5, dx: 9, dy: 2, anim: 'firefly', delay: 3 },
+      { src: 'fx/firefly.webp', size: 4, dx: 2, dy: -12, anim: 'firefly', delay: 6 },
     ],
     [
       { src: 'homes/volcano_crater.webp', size: 52 },

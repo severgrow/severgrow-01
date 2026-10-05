@@ -233,7 +233,11 @@ export class SkinBoardView extends BoardView {
     const art = el('g', { class: 'skin-home-art' });
     body.insertBefore(art, body.firstChild);
     for (const l of layers) {
-      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}${l.delay ? ' skin-later' : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: 'xMidYMid meet', ...(l.delay ? { style: `animation-delay:${-l.delay}s` } : {}) }, art);
+      // a hex picture turns with the board (inline, about its own centre)
+      const o = toScreen(1, 0);
+      const turn = l.turn ? (Math.atan2(o.y, o.x) * 180) / Math.PI : 0;
+      const style = `${l.delay ? `animation-delay:${-l.delay}s;` : ''}${turn ? `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg);` : ''}`;
+      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}${l.delay ? ' skin-later' : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: l.turn ? 'none' : 'xMidYMid meet', ...(style ? { style } : {}) }, art);
     }
   }
 

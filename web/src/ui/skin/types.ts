@@ -49,8 +49,10 @@ export type HomeLayer = {
   size: number;
   dx?: number;
   dy?: number;
-  anim?: 'sway' | 'pulse' | 'drift';
+  anim?: 'sway' | 'pulse' | 'drift' | 'glow' | 'firefly' | 'breathe';
   opacity?: number;
+  /** a hex-shaped picture: turned with the board so it sits in its hex (pointy-top art) */
+  turn?: boolean;
   /** start the animation this many seconds into its cycle (staggered layers; hidden with Reduce motion) */
   delay?: number;
   /** only in this look of the home (homes with several looks pick one from the home tile, so it never changes mid-game) */
