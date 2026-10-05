@@ -8,6 +8,22 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Pro phone layout: slim header, compact centred hand, control row (nothing overlaps)
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- Header: only the menu button and the score bar. Scores, turn, level, turns left and "What
+  happened" are at the top of the menu, without the circle/diamond player marks.
+- Bottom, from the edge up: a compact centred hand (bigger cards, more overlap); one control row
+  with the deck and throw pile on the left, Undo and Sort on the right and the move buttons
+  ("Bloom ...", "Skip sprout") stacked in the middle; then the map. The move buttons sit exactly
+  halfway between the map and the hand. Smart overlap is off, so nothing ever lies on the map.
+- Checked by `web/e2e/pro-check.ts` at 390x844, 390x664 (Safari with its bars), 360x640 and
+  430x932, at every one of my steps for about 6 turns: no overlaps, buttons halfway, header,
+  menu, no console errors (screenshots in `docs/screens/pro/`).
+- Check before locking in: real iPhone Safari and Chrome (bars shown and hidden); Large text
+  (long button names in the middle slot); left-hand mode; three move buttons at once; a big Lab
+  hand (10+ cards); whether players miss the turn and score in the header; desktop/wide screens
+  (the slim header applies there too).
+
 ### Camera auto-frame with minimum tile size; weak-spot icons removed; replay hidden
 - Date: 2026-10-05 · Commit: `524c375` · In test only
 - The map never shows tiles smaller than the Classic board's tile on that screen (59.4px on a

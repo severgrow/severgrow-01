@@ -438,4 +438,119 @@ html[data-thumb] .dock .table-row > .moves .btn.skip {
   font: inherit;
   font-size: 0.8rem;
 }
+
+/* ---- slim header: only the menu button and the score bar (the rest is in the menu) ---- */
+html.slim-hud .game > .hud {
+  grid-template-columns: 44px minmax(0, 1fr);
+  border-bottom: 0;
+  padding: 0 6px;
+}
+html.slim-hud .game > .hud > .score,
+html.slim-hud .game > .hud > .turn,
+html.slim-hud .game > .hud > #hud-history {
+  display: none;
+}
+html.slim-hud .game > .hud {
+  grid-column: 1;
+}
+html.slim-hud .game > .race {
+  grid-row: 1;
+  grid-column: 1;
+  z-index: 1;
+  align-self: center;
+  height: 10px;
+  margin: 0 16px 0 60px;
+  pointer-events: none;
+}
+html.slim-hud .game > .race .race-fill {
+  height: 6px;
+  border-radius: 3px;
+  opacity: 0.9;
+}
+html.slim-hud .game > .race .race-fill::after {
+  top: -3px;
+  height: 12px;
+}
+/* the menu: the scores and the turn on top (no player marks: the colours say who is who) */
+.gm-status {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.gm-scores {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.gm-scores > span {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.gm-scores b {
+  font-size: 2rem;
+  line-height: 1;
+}
+.gm-scores small {
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+.gm-you b {
+  color: var(--c-you);
+}
+.gm-bot b {
+  color: var(--c-bot);
+}
+.gm-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+.gm-turn b {
+  font-size: 1.05rem;
+}
+.gm-turn.you b {
+  color: var(--c-you);
+}
+.gm-turn.bot b {
+  color: var(--c-bot);
+}
+.gm-turn small {
+  opacity: 0.8;
+}
+
+/* ---- thumb dock v4: the move buttons stacked in the middle of the control row ---- */
+html[data-thumb] .dock .table-row > .moves {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  align-content: center;
+  gap: 8px;
+}
+html[data-thumb] .dock .table-row > .moves .btn,
+html[data-thumb] .dock .table-row > .moves .btn.skip {
+  width: 100%;
+  min-height: 40px;
+  max-width: 200px;
+  align-self: center;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-thumb] .dock .table-row > .moves .btn.skip {
+  border-radius: 20px;
+}
+html[data-thumb] .dock .pile-label {
+  font-size: 12px;
+}
 `;

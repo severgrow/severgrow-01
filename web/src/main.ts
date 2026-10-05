@@ -49,7 +49,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, boardUnits, computeLayout, fanSlots, setBoardShape, THUMB } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -360,7 +360,10 @@ function sheet(id: string | null) {
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
-  if (id === 'sheet-menu') setPaused(true);
+  if (id === 'sheet-menu') {
+    setPaused(true);
+    if (IS_TEST) fillMenuStatus();
+  }
   else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
   if (openSheet) {
@@ -533,6 +536,32 @@ let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t
 const REPLAY_BUTTON = !IS_TEST;
 /** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
 if (IS_TEST) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
+// the test copy: the header keeps only the menu button and the score bar; the scores, the turn
+// and History move into the menu (no player marks there: the colours say who is who)
+if (IS_TEST) {
+  setSlimHud(true);
+  document.documentElement.classList.add('slim-hud');
+  const body = document.querySelector('#sheet-menu .sheet-body');
+  if (body) {
+    const box = document.createElement('div');
+    box.id = 'gm-status';
+    box.className = 'gm-status';
+    box.innerHTML = '<div class="gm-scores"><span class="gm-you"><small>You</small><b class="num" id="gm-score-you">0</b></span><span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span></div><div class="gm-turn" id="gm-turn"></div><button id="gm-history" class="btn ghost" type="button">What happened</button>';
+    box.querySelector('.gm-bot small')!.textContent = OPP.Label;
+    body.prepend(box);
+    box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
+  }
+}
+/** The test copy's menu: the scores and the turn, as the header used to show them. */
+function fillMenuStatus() {
+  const you = document.getElementById('gm-score-you');
+  if (!you) return;
+  you.textContent = $('score-you').textContent;
+  $('gm-score-bot').textContent = $('score-bot').textContent;
+  const turn = $('gm-turn');
+  turn.className = `gm-turn ${$('turn').className}`;
+  turn.innerHTML = $('turn').innerHTML;
+}
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
 /** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
@@ -1853,8 +1882,8 @@ function applyLayout() {
   }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
-  root.setProperty('--hud-h', px(HEIGHTS.hud));
-  root.setProperty('--race-h', px(HEIGHTS.race));
+  root.setProperty('--hud-h', px(IS_TEST ? SLIM_HUD : HEIGHTS.hud));
+  root.setProperty('--race-h', px(IS_TEST ? 0 : HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
