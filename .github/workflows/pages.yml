@@ -81,7 +81,7 @@ jobs:
         working-directory: candidate
         run: |
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
-          npm run check
+          # Exact candidate CI above already passed the full unit/type and browser suites.
           MAIN_REFERENCE="$GITHUB_WORKSPACE/live" node --import tsx scripts/classic-parity.ts
           CHANNEL=test2 npm run web:build
           CHANNEL=test2 node scripts/check-channel-assets.mjs
