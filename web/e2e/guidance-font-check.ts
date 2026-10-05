@@ -23,7 +23,7 @@ const cueTimes: number[] = [];
 
 const overflow = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>('.game button, .game .btn, .hand .card, .pile-label, .pile-count, #step-cue, .gd-chip, #sheet-menu .btn, .gm-status *')]
+    [...document.querySelectorAll<HTMLElement>('.game button, .game .btn, .hand .card, .pile-label, .pile-count, #step-cue .cue-text, #step-cue .cue-kicker, #sheet-menu .btn, .gm-status *')]
       .filter((e) => e.offsetParent && getComputedStyle(e).visibility !== 'hidden' && e.clientWidth > 0)
       .filter((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible' ? true : e.getBoundingClientRect().right > innerWidth + 1 || e.getBoundingClientRect().left < -1)
       .map((e) => `${e.id || e.className}: "${(e.textContent ?? '').trim().slice(0, 20)}" [${Math.round(e.getBoundingClientRect().left)}..${Math.round(e.getBoundingClientRect().right)} of ${innerWidth}; ${e.style.left} ${e.querySelector<HTMLElement>(".cue-in")?.style.fontSize ?? ""}]`),
@@ -56,7 +56,7 @@ for (const [w, h, large] of [[390, 844, false], [360, 640, false], [360, 640, tr
   await waitMine(page);
   await page.waitForTimeout(400);
   const font = await page.evaluate(() => ({ cls: document.documentElement.classList.contains('font-new'), body: getComputedStyle(document.body).fontFamily, loaded: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family) }));
-  check(`${tag}: new font in use`, font.cls && font.body.includes('Figtree') && font.loaded.some((f) => f.includes('Figtree')) && font.loaded.some((f) => f.includes('Bricolage')), `${font.body.split(',')[0]}; loaded ${[...new Set(font.loaded)].join(', ')}`);
+  check(`${tag}: new font in use`, font.cls && font.body.includes('Plus Jakarta Sans') && font.loaded.some((f) => f.includes('Jakarta')) && font.loaded.some((f) => f.includes('Fraunces')), `${font.body.split(',')[0]}; loaded ${[...new Set(font.loaded)].join(', ')}`);
   const steps: string[] = [];
   let step = 0;
   for (let i = 0; i < 12 && steps.length < 4; i++) {

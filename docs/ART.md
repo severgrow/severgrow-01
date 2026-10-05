@@ -25,27 +25,27 @@ text, 800 for numbers and titles. The audit found one stray serif (the "i" info 
 Georgia); it now uses the game font. The dock uses at most three text sizes: 15px (hint line,
 move buttons, Undo), 12px (pile counts, chips), and the card numerals.
 
-### Type in the test copy (step guidance + new font, 2026-10-05; live game unchanged)
+### Type in the test copy (live game unchanged)
 
-Three tokens: `--font` (UI text), `--font-display` (step words, headings, the turn, the menu's
-scores), `--font-num` (tile numbers, card numbers, scores, pile counts, badges). All numbers use
+Three tokens: `--font` (UI text), `--font-display` (headline words: the step plate, headings, the
+turn), `--font-num` (tile numbers, card numbers, scores, pile counts, badges). All numbers use
 tabular, lining figures (`tnum`, `lnum`), so counts never jiggle.
 
 | Token | Font | Weights | File (subset, woff2) | Licence |
 |---|---|---|---|---|
-| display, numbers | **Bricolage Grotesque** (variable) | 200-800 axis; used 700-800 | `web/src/fonts/new/bricolage-grotesque-wght.woff2`, 24.2 KB | SIL OFL 1.1 (`LICENSE-bricolage-grotesque.txt`) |
-| text | **Figtree** (variable) | 300-900 axis; used 500-700 | `web/src/fonts/new/figtree-wght.woff2`, 11.0 KB | SIL OFL 1.1 (`LICENSE-figtree.txt`) |
+| display | **Fraunces**, soft (variable; instanced: SOFT 100, WONK 0, opsz 48) | 400-800 axis; used 650 | `web/src/fonts/new/fraunces-soft-wght.woff2`, 21.9 KB | SIL OFL 1.1 (`LICENSE-fraunces.txt`) |
+| text, numbers | **Plus Jakarta Sans** (variable) | 200-800 axis; used 500-800 | `web/src/fonts/new/plus-jakarta-sans-wght.woff2`, 15.3 KB | SIL OFL 1.1 (`LICENSE-plus-jakarta-sans.txt`) |
 
-- Total 35.2 KB (budget 120 KB). Subset to Basic Latin plus the symbols the game prints
-  (· × – — ‘ ’ “ ” … − ≤ → ° ±); only the weight axis is kept (Bricolage's width and optical-size
-  axes were dropped). `font-display: swap`; the display font is preloaded; metric-matched
-  fallbacks (`Bricolage Fallback` 111% of Arial, `Figtree Fallback` 100%) so lines don't jump.
-- Sizes: the body text goes from 1.0625rem (Alegreya ran small) to 1rem (Figtree is about 14%
-  wider); every other size follows the existing scale. The on-map step word: 1.55rem, 800,
-  uppercase, +0.05em tracking.
+- Total 37.2 KB (budget 120 KB). Subset to Basic Latin plus the symbols the game prints
+  (· × – — ‘ ’ “ ” … − ≤ → ° ±), hinting kept (without it small text spaces unevenly on phones).
+  `font-display: swap`; the text font is preloaded; metric-matched fallbacks (`Jakarta Fallback`
+  105% of Arial, `Fraunces Fallback` 103% of Georgia).
+- Sizes: body text 0.97rem (was 1.0625rem for Alegreya Sans, which runs small); the step plate's
+  words 17px / 650, its line above 9.5px / 700 uppercase +0.16em.
 - "Font: New / Previous" in the Lab sheet switches back to Alegreya Sans instantly.
-- Bake-off: the material lab (`?lab=1`, test copy) shows the four candidates side by side;
-  the losing candidates' files (`web/src/fonts/bakeoff/`, OFL) load only on that page.
+- Bake-off: the material lab (`?lab=1`, test copy) shows the candidates side by side (E Fraunces
+  Soft + Plus Jakarta Sans, F Manrope, G Outfit + Manrope, A Bricolage Grotesque + Figtree, D
+  Alegreya Sans); the others' files (`web/src/fonts/bakeoff2/`, OFL) load only on that page.
 
 ## Icons
 

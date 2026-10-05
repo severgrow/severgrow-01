@@ -10,19 +10,19 @@ import { MATERIAL_TOKENS, materialLook, materialsOf } from '../logic/materials.j
 import { BoardView, NO_OVERLAY } from '../ui/board.js';
 import { cardFace } from '../ui/effects.js';
 import { installFonts } from './fonts.js';
-import fraunces from '../fonts/bakeoff/fraunces-wght.woff2?url';
-import barlowC6 from '../fonts/bakeoff/barlow-condensed-600.woff2?url';
-import barlowC7 from '../fonts/bakeoff/barlow-condensed-700.woff2?url';
-import barlow5 from '../fonts/bakeoff/barlow-500.woff2?url';
-import barlow7 from '../fonts/bakeoff/barlow-700.woff2?url';
+import bricolage from '../fonts/bakeoff2/bricolage-grotesque-wght.woff2?url';
+import figtree from '../fonts/bakeoff2/figtree-wght.woff2?url';
+import manrope from '../fonts/bakeoff2/manrope-wght.woff2?url';
+import outfit from '../fonts/bakeoff2/outfit-wght.woff2?url';
 
 type Pair = { id: string; name: string; display: string; text: string; num: string; upper?: boolean };
 const PAIRS: Pair[] = [
-  { id: 'A', name: 'A: Bricolage Grotesque + Figtree', display: "'Bricolage Grotesque'", text: "'Figtree'", num: "'Bricolage Grotesque'" },
-  { id: 'B', name: 'B: Fraunces + Figtree', display: "'Fraunces'", text: "'Figtree'", num: "'Fraunces'" },
-  { id: 'C', name: 'C: Barlow Condensed + Barlow', display: "'Barlow Condensed'", text: "'Barlow'", num: "'Barlow Condensed'", upper: true },
-  { id: 'D', name: 'D: Alegreya Sans (current)', display: "'Alegreya Sans'", text: "'Alegreya Sans'", num: "'Alegreya Sans'" },
-];
+  { id: 'E', name: 'E: Fraunces Soft + Plus Jakarta Sans (chosen)', display: "'Fraunces Soft'", text: "'Plus Jakarta Sans'", num: "'Plus Jakarta Sans'" },
+  { id: 'F', name: 'F: Manrope', display: "'Manrope'", text: "'Manrope'", num: "'Manrope'" },
+  { id: 'G', name: 'G: Outfit + Manrope', display: "'Outfit'", text: "'Manrope'", num: "'Outfit'" },
+  { id: 'A', name: 'A: Bricolage Grotesque + Figtree (last pick)', display: "'Bricolage Grotesque'", text: "'Figtree'", num: "'Bricolage Grotesque'" },
+  { id: 'D', name: 'D: Alegreya Sans (original)', display: "'Alegreya Sans'", text: "'Alegreya Sans'", num: "'Alegreya Sans'" },
+]
 
 const k = (q: number, r: number) => coordKey({ q, r });
 
@@ -30,11 +30,10 @@ export const bakeOff = (page: HTMLElement) => {
   installFonts();
   const css = document.createElement('style');
   css.textContent = `
-@font-face { font-family: 'Fraunces'; src: url('${fraunces}') format('woff2'); font-weight: 100 900; font-display: swap; }
-@font-face { font-family: 'Barlow Condensed'; src: url('${barlowC6}') format('woff2'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Barlow Condensed'; src: url('${barlowC7}') format('woff2'); font-weight: 700 900; font-display: swap; }
-@font-face { font-family: 'Barlow'; src: url('${barlow5}') format('woff2'); font-weight: 400 500; font-display: swap; }
-@font-face { font-family: 'Barlow'; src: url('${barlow7}') format('woff2'); font-weight: 600 800; font-display: swap; }
+@font-face { font-family: 'Bricolage Grotesque'; src: url('${bricolage}') format('woff2'); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('${figtree}') format('woff2'); font-weight: 300 900; font-display: swap; }
+@font-face { font-family: 'Manrope'; src: url('${manrope}') format('woff2'); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: 'Outfit'; src: url('${outfit}') format('woff2'); font-weight: 100 900; font-display: swap; }
 .fb { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; margin: 16px 0 32px; }
 .fb-col { border: 1px solid var(--c-line); border-radius: 14px; padding: 12px; font-family: var(--fb-text); background: var(--c-surface); min-width: 0; }
 .fb-col h3 { font-family: var(--fb-display); margin: 0 0 8px; font-size: 1.05rem; }
@@ -47,7 +46,10 @@ export const bakeOff = (page: HTMLElement) => {
 .fb-pill small { font-size: 0.78rem; opacity: 0.8; }
 .fb-flag { font-size: 11px; margin: 2px 0 8px; }
 .fb-flag.bad { color: var(--c-bot); font-weight: 700; }
-.fb-step { font-family: var(--fb-display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; line-height: 1.1; }
+.fb-step { font-family: var(--fb-display); font-weight: 650; line-height: 1.15; }
+.fb-plates { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; margin: 6px 0; border-radius: 12px; background: #2a2d29; }
+.fb-cue { position: static; transform: none; --font-display: var(--fb-display); }
+.fb-cue .cue-text { font-family: var(--fb-display); } .fb-cue .cue-kicker { font-family: var(--fb-text); }
 .fb-step.big { font-size: 1.55rem; } .fb-step.small { font-size: 0.9rem; opacity: 0.85; }
 .fb-labels { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; }
 .fb-labels span { font-size: 11px; } .fb-labels span.l12 { font-size: 12px; }
@@ -88,7 +90,8 @@ export const bakeOff = (page: HTMLElement) => {
     col.innerHTML = `<h3>${p.name}</h3>
       <div class="fb-head"><span class="you">You <b class="num">12</b></span><span class="fb-pill"><b>Your turn</b><small>Level 7 · 22 turns left</small></span><span class="bot"><b class="num">14</b> Opponent</span></div>
       <p class="fb-flag"></p>
-      <div class="fb-step big">Draw a card</div><div class="fb-step big">Opponent</div><div class="fb-step small">Throw one card · Play or skip</div>
+      <div class="fb-plates"><div class="step-cue fb-cue" data-level="hi" data-step="draw"><div class="cue-plate"><span class="cue-icon"><svg viewBox="0 0 24 24"><rect x="6.5" y="8" width="11" height="14" rx="2"/><path d="M12 2.5v8M8.8 5.7 12 2.5l3.2 3.2"/></svg></span><span class="cue-words"><span class="cue-kicker">Step 1 of 3</span><span class="cue-text">Draw a card</span></span><span class="cue-pips"><i data-p="draw"></i><i data-p="grow"></i><i data-p="throw"></i></span></div></div><div class="step-cue fb-cue" data-level="hi" data-step="grow"><div class="cue-plate"><span class="cue-icon"><svg viewBox="0 0 24 24"><path d="M12 21v-8"/><path d="M12 13c0-4 2.6-6.6 7-6.6 0 4.2-2.8 6.6-7 6.6Z"/></svg></span><span class="cue-words"><span class="cue-kicker">Step 2 of 3</span><span class="cue-text">Play or skip</span></span><span class="cue-pips"><i data-p="draw"></i><i data-p="grow"></i><i data-p="throw"></i></span></div></div></div>
+      <div class="fb-step big">Throw one card</div><div class="fb-step small">Opponent · Play or skip</div>
       <div class="fb-labels"><span>Deck</span><span>Throw pile</span><span>Skip sprout</span><span>Bloom 3 tiles</span><span class="l12">Opponent</span><span class="l12">22 turns left</span><span class="l12">Whole map</span></div>
       <div class="fb-tab num">1111 · 8888 · 2019</div><div class="fb-tab num">4747 · 0000 · 9631</div>
       <div class="fb-tiles"></div><div class="fb-cards"></div>`;

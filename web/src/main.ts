@@ -1611,7 +1611,7 @@ function render() {
     const st = session.state;
     const over = st.phase === 'GAME_OVER';
     const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
-    guideMod.update({ step, turn: st.turnNumber, myTurns: Math.ceil(st.turnNumber / 2), picked: session.sel.card !== null });
+    guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
   renderGameOver();

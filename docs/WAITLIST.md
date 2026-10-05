@@ -8,6 +8,17 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Step plate redesign, pile chips removed, font changed (Fraunces + Plus Jakarta Sans)
+- Date: 2026-10-05 · Commit: `COMMIT` · In test only (updates "Step guidance ... and new font" below)
+- The step's cue is now a small crafted plate at the top of the map (icon, "Step 1 of 3", the
+  words, three step pips; the opponent's turn in ember colours), with a soft entrance and one pass
+  of light. The "Tap to draw / Tap to take" chips are gone (the piles' highlight is enough).
+- New type: Fraunces, soft (headline words) + Plus Jakarta Sans (text and all numbers), 37 KB;
+  Lab "Font: New / Previous"; bake-off in the material lab (?lab=1).
+- Check before locking in: the plate on every step on a real phone (Safari's blur); where it moves
+  on busy and zoomed maps; Reduce motion; Large text; tile numbers in every palette with the new
+  font; left-hand mode; Subtle and Off; font load time on a slow connection.
+
 ### Step guidance (cue at step start, per-step focus) and new font
 - Date: 2026-10-05 · Commit: `e461510` · In test only
 - The step's word appears on the map as soon as a step starts ("Draw a card", "Play or skip",

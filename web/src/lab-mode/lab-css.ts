@@ -603,146 +603,213 @@ html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand-slot {
   transition: none;
 }
 
-/* ---- step guidance (test copy): the step's word on the map, the step's controls as the hero.
-   Only transform and opacity move (plus the cue's letter-spacing as it enters). ---- */
+/* ---- step guidance (test copy): a crafted plate on the map when a step starts; the step's
+   controls as the hero. Only transform and opacity move (plus the words' tracking as they enter). ---- */
 :root {
   --gd-cream: 243, 230, 196;
 }
 .step-cue {
   position: absolute;
   left: 50%;
-  top: 20%;
+  top: 40px;
   transform: translate(-50%, -50%);
   z-index: 3;
   pointer-events: none;
   opacity: 0;
   transition: opacity 100ms ease-out;
-  font-family: var(--font-display, inherit);
-  font-weight: 800;
-  font-size: 1.55rem;
-  line-height: 1.1;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  color: var(--c-text);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+  --cue-c: var(--gd-cream);
+}
+.step-cue[data-step='grow'] {
+  --cue-c: 140, 214, 150;
+}
+.step-cue[data-step='opp'] {
+  --cue-c: 240, 132, 96;
 }
 .step-cue[data-level='hi'] {
-  opacity: 0.6;
-  transition: opacity 260ms ease-out;
+  opacity: 1;
+  transition: opacity 240ms ease-out;
 }
 .step-cue[data-level='lo'] {
-  opacity: 0.35;
-  transition: opacity 900ms ease-in-out;
+  opacity: 0.72;
+  transition: opacity 1100ms ease-in-out;
 }
 .step-cue.faint:not([data-level='off']) {
-  opacity: 0.2;
+  opacity: 0.45;
 }
 html[data-guide='off'] .step-cue {
   display: none;
 }
-.cue-in {
-  display: inline-flex;
+/* the plate: smoked glass with a fine warm rim, a soft drop and an inner highlight */
+.cue-plate {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 0.35em;
-  animation: cue-breathe 2.4s ease-in-out infinite;
+  gap: 10px;
+  padding: 7px 14px 7px 7px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0) 55%),
+    rgba(17, 19, 17, 0.62);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+  backdrop-filter: blur(10px) saturate(1.25);
+  box-shadow:
+    0 0 0 1px rgba(var(--cue-c), 0.22),
+    0 10px 28px -8px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  overflow: hidden;
 }
-.step-cue.enter .cue-in {
-  animation:
-    cue-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both,
-    cue-breathe 2.4s ease-in-out 220ms infinite;
+/* one soft pass of light across the plate as it arrives */
+.cue-plate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(var(--cue-c), 0.22) 48%, rgba(255, 255, 255, 0.18) 50%, transparent 66%);
+  transform: translateX(-110%);
+  pointer-events: none;
+}
+.step-cue.enter .cue-plate::after {
+  animation: cue-sweep 900ms cubic-bezier(0.4, 0, 0.2, 1) 160ms 1 both;
+}
+@keyframes cue-sweep {
+  to {
+    transform: translateX(110%);
+  }
+}
+.step-cue.enter .cue-plate {
+  animation: cue-enter 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes cue-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
-    letter-spacing: 0.24em;
+    transform: translateY(6px) scale(0.97);
   }
   to {
     opacity: 1;
     transform: none;
-    letter-spacing: 0.05em;
   }
 }
-/* breathing: plus or minus 8% */
-@keyframes cue-breathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.84;
-  }
-}
-/* one soft pass of light across the letters, once, as the words arrive */
-.cue-text {
+/* the icon: a small lit medallion in the step's colour */
+.cue-icon {
   position: relative;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: rgb(var(--cue-c));
+  background: radial-gradient(circle at 50% 35%, rgba(var(--cue-c), 0.3), rgba(var(--cue-c), 0.08) 70%);
+  box-shadow: inset 0 0 0 1px rgba(var(--cue-c), 0.4), 0 0 14px -2px rgba(var(--cue-c), 0.45);
 }
-.cue-text::after {
-  content: attr(data-t);
-  position: absolute;
-  inset: 0;
-  color: transparent;
-  text-shadow: none;
-  background: linear-gradient(100deg, transparent 0 40%, rgba(255, 250, 235, 0.95) 50%, transparent 60% 100%);
-  background-size: 300% 100%;
-  background-position: 100% 0;
-  -webkit-background-clip: text;
-  background-clip: text;
-  opacity: 0;
+.cue-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.step-cue.enter .cue-text::after {
-  animation: cue-sweep 800ms ease-in-out 200ms 1 both;
-}
-@keyframes cue-sweep {
-  0% {
-    opacity: 1;
-    background-position: 100% 0;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    background-position: 0% 0;
-  }
-}
-/* Draw and Throw: a small chevron nudging toward the pile */
-.cue-chev {
-  display: none;
-  position: relative;
-  width: 0.5em;
-  height: 0.5em;
-  transform: rotate(var(--chev-a, 90deg));
-  animation: cue-nudge 1.8s ease-in-out infinite;
-}
-.cue-chev::before {
+.cue-icon::after {
   content: '';
   position: absolute;
-  inset: 0.08em;
-  border-top: 0.11em solid currentColor;
-  border-right: 0.11em solid currentColor;
-  border-radius: 0.04em;
-  transform: rotate(45deg);
+  inset: -1px;
+  border-radius: 50%;
+  box-shadow: 0 0 16px 1px rgba(var(--cue-c), 0.55);
+  opacity: 0;
+  animation: cue-glow 2.4s ease-in-out infinite;
 }
-.step-cue[data-step='draw'] .cue-chev,
-.step-cue[data-step='throw'] .cue-chev {
-  display: inline-block;
-}
-html[data-guide='subtle'] .cue-chev {
-  display: none !important;
-}
-@keyframes cue-nudge {
+@keyframes cue-glow {
   0%,
   100% {
-    transform: rotate(var(--chev-a, 90deg)) translateX(0);
+    opacity: 0.15;
   }
   50% {
-    transform: rotate(var(--chev-a, 90deg)) translateX(4px);
+    opacity: 0.6;
   }
 }
+.cue-words {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+  gap: 2px;
+}
+.cue-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(var(--cue-c), 0.75);
+}
+.cue-text {
+  font-family: var(--font-display, inherit);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #f6f1e4;
+}
+.step-cue.enter .cue-text {
+  animation: cue-track 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes cue-track {
+  from {
+    letter-spacing: 0.12em;
+    opacity: 0.4;
+  }
+  to {
+    letter-spacing: 0.01em;
+    opacity: 1;
+  }
+}
+/* three step pips: done (soft), now (lit, breathing), next (hollow) */
+.cue-pips {
+  display: flex;
+  gap: 5px;
+  margin-left: 4px;
+  padding-left: 11px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  align-self: stretch;
+  align-items: center;
+}
+.cue-pips i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.32);
+}
+.step-cue[data-step='opp'] .cue-pips {
+  display: none;
+}
+.step-cue[data-step='grow'] .cue-pips i[data-p='draw'],
+.step-cue[data-step='throw'] .cue-pips i[data-p='draw'],
+.step-cue[data-step='throw'] .cue-pips i[data-p='grow'] {
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: none;
+}
+.step-cue[data-step='draw'] .cue-pips i[data-p='draw'],
+.step-cue[data-step='grow'] .cue-pips i[data-p='grow'],
+.step-cue[data-step='throw'] .cue-pips i[data-p='throw'] {
+  background: rgb(var(--cue-c));
+  box-shadow: 0 0 8px rgba(var(--cue-c), 0.8);
+  animation: cue-pip 2.4s ease-in-out infinite;
+}
+@keyframes cue-pip {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+}
+html[data-guide='subtle'] .cue-icon::after,
+html[data-guide='subtle'] .cue-pips i {
+  animation: none !important;
+}
 
-/* the piles' effects: a cream halo, one ring, a chip (never take a tap) */
+/* the piles' effects: a cream halo and one ring (never take a tap) */
 .gd-fx {
   position: absolute;
   inset: 0;
@@ -764,23 +831,6 @@ html[data-guide='subtle'] .cue-chev {
 }
 .gd-ring {
   border: 2px solid rgba(var(--gd-cream), 0.75);
-}
-.gd-chip {
-  position: absolute;
-  left: 50%;
-  bottom: 5px;
-  transform: translateX(-50%);
-  width: 88%;
-  padding: 2px 1px;
-  border-radius: 8px;
-  background: rgba(var(--gd-cream), 0.94);
-  color: #2b2417;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 1.1;
-  text-align: center;
-  opacity: 0;
-  transition: opacity 110ms ease-out;
 }
 html[data-guide='subtle'] .gd-fx {
   opacity: 0.5;
@@ -809,9 +859,6 @@ html[data-step='draw']:not([data-guide='off']) .pile.ready .pile-card {
 }
 html[data-step='draw']:not([data-guide='off']) .pile.ready .gd-ring {
   animation: gd-ring 2.5s ease-out infinite;
-}
-html.gd-early[data-step='draw']:not([data-guide='off']) .pile.ready .gd-chip {
-  opacity: 1;
 }
 html[data-step='draw']:not([data-guide='off']) .hand .card,
 html[data-step='draw']:not([data-guide='off']) .dock .hand-row > .hand .card.dim {
@@ -861,7 +908,7 @@ html[data-step='throw']:not([data-guide='off']) #discard .gd-halo {
 html[data-step='throw']:not([data-guide='off']) #discard .gd-ring {
   animation: gd-ring 2.5s ease-out infinite;
 }
-html.gd-picked[data-step='throw']:not([data-guide='off']) #discard .gd-chip {
+html.gd-picked[data-step='throw']:not([data-guide='off']) #discard .gd-halo {
   opacity: 1;
 }
 html[data-step='throw']:not([data-guide='off']) #deck {
@@ -877,18 +924,13 @@ html[data-step='opp']:not([data-guide='off']) .pile .pile-card {
   animation: none;
 }
 
-/* the old pile hints under the piles: the chips say it now */
+/* the old pile hints under the piles: the highlight says it now */
 html:not([data-guide='off']) .pile-hint {
   visibility: hidden;
 }
 
-.reduce-motion .cue-in,
-.reduce-motion .step-cue.enter .cue-in,
-.reduce-motion .step-cue.enter .cue-text::after,
-.reduce-motion .cue-chev,
-.reduce-motion .gd-halo,
-.reduce-motion .gd-ring,
-.reduce-motion html .pile.ready .pile-card,
+html.reduce-motion .step-cue *,
+html.reduce-motion .step-cue *::after,
 html.reduce-motion .pile.ready .pile-card,
 html.reduce-motion .gd-halo,
 html.reduce-motion .gd-ring {
@@ -897,7 +939,6 @@ html.reduce-motion .gd-ring {
 html.reduce-motion .gd-ring {
   display: none;
 }
-
 /* Large text: the stacked move buttons keep the whole name (a little smaller, two lines if needed) */
 html.large-text[data-thumb] .dock .table-row > .moves .btn,
 html.large-text[data-thumb] .dock .table-row > .moves .btn.skip {
