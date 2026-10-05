@@ -6,6 +6,7 @@ on:
     branches: [main]
   workflow_run:
     workflows: ['Test copy pushed', 'CI']
+    branches: [dev, Main2.0]
     types: [completed]
   workflow_dispatch:
 
