@@ -170,3 +170,4 @@ One line each: where the brief left room, what was chosen and why.
 - Pro phone layout: the hand is centred and compact (about 64% of each card shows, at least 34pt), with bigger cards (up to 62pt; 58pt at 390px) and a gentle symmetric curve; small hands stay centred. Left-hand mode mirrors the control row.
 - Pro phone layout: smart overlap (the map sliding under the cards) is off: nothing may sit on the map any more.
 - Pro phone layout: deck and throw pile are a little bigger (52pt cards, 12px labels).
+- DESIGN (V2 skin): the button lives in the Lab sheet and reloads the page with ?design=1 (the drop's subclass is picked when the page starts); broken sprite crops were cleaned rather than shipped, and only whole details are used.

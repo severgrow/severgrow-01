@@ -81,6 +81,7 @@ const theme = () => themeOf(settings.palette);
 const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
+import { DesignBoardView } from './ui/designBoard.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -104,6 +105,10 @@ import type { Beats } from './logic/emptyturn.js';
 const HUMAN: Player = 0;
 const BOT: Player = 1;
 const COACH_KEY_OLD = 'severgrow.coach.enabled';
+const BOOT_PARAMS = new URLSearchParams(location.search);
+// the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
+const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
+if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 
 // ---------- small helpers ----------
 
@@ -172,7 +177,8 @@ let pumping = false;
 let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
-const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k), hold: (k) => pinCard(k) });
+const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
+const board = DESIGN_MODE ? new DesignBoardView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -3495,7 +3501,7 @@ sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
 showSplash();
-const params = new URLSearchParams(location.search);
+const params = BOOT_PARAMS;
 // Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
 // the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too
 {

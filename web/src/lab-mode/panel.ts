@@ -25,6 +25,17 @@ export type LabHooks = {
 };
 
 const ACTIVE_KEY = 'severgrow-lab-active';
+/** DESIGN: the same Lab game drawn with the V2 illustrated skin (?design=1, see ui/designBoard.ts) */
+const IN_DESIGN = new URLSearchParams(location.search).get('design') === '1';
+const DESIGN_PLAY_KEY = 'severgrow-design-play';
+/** Opens the page with or without DESIGN (the game in progress is saved, so it carries over). */
+const goDesign = (on: boolean) => {
+  const q = new URLSearchParams(location.search);
+  if (on) q.set('design', '1');
+  else q.delete('design');
+  const qs = q.toString();
+  location.href = `${location.pathname}${qs ? `?${qs}` : ''}`;
+};
 /** "Watch a game" speeds: the extra pause after each move, in ms */
 const PACES = [1400, 500, 0];
 const PACE_NAMES = ['Slow', 'Normal', 'Fast'];
@@ -190,6 +201,9 @@ export const mountLab = (hooks: LabHooks) => {
         <div class="lab-buttons">
           <button class="btn primary big" type="button" data-lab="play">Apply and play</button>
           <button class="btn big" type="button" data-lab="watch">Watch a game</button>
+          ${IN_DESIGN
+            ? '<button class="btn ghost lab-design on" type="button" data-lab="design-off">Leave DESIGN <small>back to the current look</small></button>'
+            : '<button class="btn big lab-design" type="button" data-lab="design">DESIGN <small>experimental illustrated look</small></button>'}
           <button class="btn ghost" type="button" data-lab="classic">Reset to Classic</button>
           <button class="btn ghost" type="button" data-lab="copy">Copy link</button>
           <button class="btn ghost" type="button" data-lab="save">Save as preset</button>
@@ -259,7 +273,18 @@ export const mountLab = (hooks: LabHooks) => {
       activate(s);
       hooks.sheet(null);
       hooks.watch(s.level, s.watchLevel, PACES[pace]!);
-    } else if (what === 'copy') {
+    } else if (what === 'design') {
+      // apply this experiment and play it in the DESIGN version
+      fromLink = false;
+      activate(s);
+      try {
+        sessionStorage.setItem(DESIGN_PLAY_KEY, String(s.level));
+      } catch {
+        /* storage blocked: DESIGN opens on the menu instead */
+      }
+      goDesign(true);
+    } else if (what === 'design-off') goDesign(false);
+    else if (what === 'copy') {
       const url = `${location.origin}${location.pathname}#lab=${encodeSetup(s)}`;
       msg(url);
       if (navigator.clipboard) void navigator.clipboard.writeText(url).then(() => msg(`Link copied. Anyone who opens it sees this experiment: ${url}`), () => msg(url));
@@ -288,8 +313,8 @@ export const mountLab = (hooks: LabHooks) => {
   menuButtons?.after(line);
   const showLine = () => {
     line.innerHTML = active
-      ? `Test build · <b>${esc(active.name)}</b> <span class="muted">(${shortCode(active)})</span> <button class="btn ghost lab-back" type="button">Back to Classic</button>`
-      : 'Test build · Classic';
+      ? `Test build${IN_DESIGN ? ' · DESIGN' : ''} · <b>${esc(active.name)}</b> <span class="muted">(${shortCode(active)})</span> <button class="btn ghost lab-back" type="button">Back to Classic</button>`
+      : `Test build${IN_DESIGN ? ' · DESIGN' : ''} · Classic`;
     line.querySelector('.lab-back')?.addEventListener('click', () => {
       activate(null);
       s = { ...CLASSIC };
@@ -315,6 +340,18 @@ export const mountLab = (hooks: LabHooks) => {
     hooks.sheet('sheet-lab');
   };
   fromHash();
+
+  // ---------- DESIGN: start the game asked for before the page switched over ----------
+  if (IN_DESIGN) {
+    let level: string | null = null;
+    try {
+      level = sessionStorage.getItem(DESIGN_PLAY_KEY);
+      sessionStorage.removeItem(DESIGN_PLAY_KEY);
+    } catch {
+      /* storage blocked */
+    }
+    if (level) queueMicrotask(() => hooks.play(toOverrides(s), Number(level)));
+  }
   window.addEventListener('hashchange', fromHash);
 
   // ---------- the smart camera (auto-frame, minimum tile size, pan and zoom) ----------
