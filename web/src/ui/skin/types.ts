@@ -101,9 +101,11 @@ export type SkinDef = {
   props: Record<string, PropSet>;
   /**
    * painted hex tiles by material id: a folder of pointy-top hex pictures named `s<strength>_<any>`
-   * (strength 1-9); an owned tile shows one for its strength (nearest painted), instead of props
+   * (strength 1-9); an owned tile shows one for its strength (nearest painted), instead of props.
+   * `base`: the colour under them (their average), so a soft seam between two never shows a dark
+   * line. `lava`: the lava lives (a glow that swells and ebbs, rising embers, a smoke puff now and then)
    */
-  tiles?: Record<string, string>;
+  tiles?: Record<string, { dir: string; base: string; lava?: boolean }>;
   /** the network style file and the built-in values for each player */
   networkStyle: string;
   network: [NetworkLook & { key: string }, NetworkLook & { key: string }];

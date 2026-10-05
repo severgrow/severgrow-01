@@ -132,7 +132,17 @@
    "tiles/forest/s8_92.webp",
    "tiles/forest/s8_95.webp",
    "tiles/forest/s9_94.webp",
-   "tiles/forest/s9_96.webp"
+   "tiles/forest/s9_96.webp",
+   "tiles/volcano/s1_117.webp",
+   "tiles/volcano/s2_118.webp",
+   "tiles/volcano/s3_120.webp",
+   "tiles/volcano/s4_119.webp",
+   "tiles/volcano/s5_121.webp",
+   "tiles/volcano/s6_114.webp",
+   "tiles/volcano/s7_115.webp",
+   "tiles/volcano/s8_112.webp",
+   "tiles/volcano/s8_116.webp",
+   "tiles/volcano/s9_113.webp"
   ],
   "hi": [
    "fx/ash_mote.webp",
@@ -264,7 +274,17 @@
    "tiles/forest/s8_92.webp",
    "tiles/forest/s8_95.webp",
    "tiles/forest/s9_94.webp",
-   "tiles/forest/s9_96.webp"
+   "tiles/forest/s9_96.webp",
+   "tiles/volcano/s1_117.webp",
+   "tiles/volcano/s2_118.webp",
+   "tiles/volcano/s3_120.webp",
+   "tiles/volcano/s4_119.webp",
+   "tiles/volcano/s5_121.webp",
+   "tiles/volcano/s6_114.webp",
+   "tiles/volcano/s7_115.webp",
+   "tiles/volcano/s8_112.webp",
+   "tiles/volcano/s8_116.webp",
+   "tiles/volcano/s9_113.webp"
   ]
  }
 }

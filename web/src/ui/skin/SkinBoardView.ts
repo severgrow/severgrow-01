@@ -188,7 +188,7 @@ export class SkinBoardView extends BoardView {
     this.cutoffDefs = {};
     for (const [id, m] of Object.entries(this.skin.materials)) if (m.cutoffProps) this.cutoffDefs[id] = a.list(m.cutoffProps.dir).map((src) => ({ src, size: m.cutoffProps!.size }));
     this.tileArt = {};
-    for (const [id, dir] of Object.entries(this.skin.tiles ?? {})) {
+    for (const [id, { dir }] of Object.entries(this.skin.tiles ?? {})) {
       const byS: string[][] = Array.from({ length: 10 }, () => []);
       for (const f of a.list(dir)) {
         const m = /\/s([1-9])_[^/]*$/.exec(f);
@@ -435,6 +435,82 @@ export class SkinBoardView extends BoardView {
     el('image', { href: this.assets.url(pr.def.src), x: x + pr.x - pr.size / 2, y: y + pr.y - pr.size / 2, width: pr.size, height: pr.size, class: `skin-prop${pr.def.anim ? ` skin-${pr.def.anim}` : ''}`, preserveAspectRatio: 'xMidYMid meet', style: `animation-delay:${(-hash(key) * 5).toFixed(2)}s` }, g);
   }
 
+  /**
+   * Living lava on a painted lava tile: a brighter copy of the picture whose glow swells and ebbs
+   * (screen blend, so the dark rock barely changes and the lava breathes), embers that spark and
+   * rise now and then (more on hotter tiles), and on strong tiles an occasional smoke puff. Each
+   * tile runs its own pace, and the phase follows the clock, so a redraw never restarts it.
+   */
+  private liveLava(g: SVGGElement, holder: SVGGElement, key: string, src: string, x: number, y: number, sz: number, turn: number, s9: number) {
+    if (!this.look.motion) return;
+    const now = performance.now() / 1000;
+    const phase = (dur: number, salt: string) => `animation-duration:${dur.toFixed(2)}s;animation-delay:${(-((now + hash(`${key}:${salt}`) * dur) % dur)).toFixed(2)}s;`;
+    const rot = turn ? `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg);` : '';
+    el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: 'skin-lava-glow', preserveAspectRatio: 'none', style: rot + phase(3.6 + hash(`${key}:gd`) * 2.6, 'g') }, holder);
+    const embers = s9 >= 7 ? 2 : s9 >= 3 ? 1 : 0;
+    const ember = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[1])?.src;
+    if (ember && this.assets.has(ember))
+      for (let i = 0; i < embers; i++) {
+        const a = hash(`${key}:ea${i}`) * Math.PI * 2;
+        const r = 7 + hash(`${key}:er${i}`) * 13;
+        const e = el('g', { class: 'skin-ember', style: phase(5 + hash(`${key}:ed${i}`) * 4, `e${i}`) }, g);
+        el('image', { href: this.assets.url(ember), x: x + Math.cos(a) * r - 2.2, y: y + Math.sin(a) * r - 2.2, width: 4.4, height: 4.4 }, e);
+      }
+    const smoke = 'homes/volcano_smoke_02.webp';
+    if (s9 >= 6 && this.assets.has(smoke) && hash(`${key}:sm`) < 0.6) {
+      const a = hash(`${key}:sa`) * Math.PI * 2;
+      const sm = el('g', { class: 'skin-tile-smoke', style: phase(9 + hash(`${key}:sd`) * 5, 'sm') }, g);
+      el('image', { href: this.assets.url(smoke), x: x + Math.cos(a) * 10 - 7, y: y + Math.sin(a) * 10 - 7, width: 14, height: 14, opacity: 0.7 }, sm);
+    }
+  }
+
+  /** Which side of hex `key` (0-5, between corners i and i+1) faces the neighbour `nk`. */
+  private sideToward(key: string, nk: string) {
+    const c = centerOf(key);
+    const nc = centerOf(nk);
+    const mx = (c.x + nc.x) / 2;
+    const my = (c.y + nc.y) / 2;
+    const corners = cornerPts(key, S);
+    let best = 0;
+    let bd = Infinity;
+    for (let i = 0; i < 6; i++) {
+      const a = corners[i]!;
+      const b = corners[(i + 1) % 6]!;
+      const dd = Math.hypot((a[0] + b[0]) / 2 - mx, (a[1] + b[1]) / 2 - my);
+      if (dd < bd) (bd = dd), (best = i);
+    }
+    return best;
+  }
+
+  /**
+   * A mask for a painted tile: the hex in six slices (centre to each side); a slice whose side is
+   * shared fades from full at the centre to faint at that side. Slices never overlap, so corners
+   * between two shared sides fade cleanly.
+   */
+  private seamMask(key: string, shared: Set<number>) {
+    const id = `${this.id('seam-')}${key.replace(/[^\w-]/g, '_')}`;
+    const m = el('mask', { id, maskUnits: 'userSpaceOnUse', x: -1e4, y: -1e4, width: 2e4, height: 2e4 }, this.netDefs!);
+    const c = centerOf(key);
+    const corners = cornerPts(key, S * 1.04);
+    const far = cornerPts(key, S * 1.14);
+    for (let i = 0; i < 6; i++) {
+      const sh = shared.has(i);
+      // a shared slice reaches past the side (into the neighbour, which fades the other way)
+      const a = (sh ? far : corners)[i]!;
+      const b = (sh ? far : corners)[(i + 1) % 6]!;
+      let fill = '#fff';
+      if (sh) {
+        const gid = `${id}-${i}`;
+        const gr = el('linearGradient', { id: gid, gradientUnits: 'userSpaceOnUse', x1: c.x, y1: c.y, x2: ((a[0] + b[0]) / 2).toFixed(2), y2: ((a[1] + b[1]) / 2).toFixed(2) }, m);
+        el('stop', { offset: 0.6, 'stop-color': '#fff' }, gr);
+        el('stop', { offset: 1, 'stop-color': '#000' }, gr);
+        fill = `url(#${gid})`;
+      }
+      el('path', { d: `M${c.x.toFixed(2)},${c.y.toFixed(2)}L${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}Z`, fill, stroke: fill === '#fff' ? '#fff' : 'none', 'stroke-width': 0.3 }, m);
+    }
+    return id;
+  }
+
   protected override drawTile(parent: SVGGElement, key: string, t: Tile): SVGGElement {
     const skin = this.skin;
     const g = el('g', { class: `tile ${t.owner === 0 ? 'you' : 'bot'}${t.root ? ' root' : ''} skin-tile`, 'data-key': key }, parent);
@@ -444,15 +520,21 @@ export class SkinBoardView extends BoardView {
     // the ground picture is continuous there), and an outline is drawn only on the sides that face
     // something else (another side, empty ground, rock, the board's edge)
     const big = hexPath(key, S * 1.035, 'flat');
-    el('path', { d: big, class: 'skin-proxy', fill: mat?.proxy.base ?? '#333' }, g);
-    el('path', { d: big, class: 'skin-fill', fill: this.url('skin-ground') }, g);
+    const look = skin.tiles?.[skin.owners[t.owner]];
+    const painted = !!(look && this.tileArt[skin.owners[t.owner]]);
+    el('path', { d: big, class: 'skin-proxy', fill: painted ? look!.base : (mat?.proxy.base ?? '#333') }, g);
+    if (!painted) el('path', { d: big, class: 'skin-fill', fill: this.url('skin-ground') }, g);
     const board = this.lastRender?.[0] ?? {};
     const c = centerOf(key);
     const corners = cornerPts(key, S * 1.0);
     let edge = '';
+    const shared = new Set<number>();
     for (const n of allNeighbors(parseKey(key))) {
       const nk = coordKey(n);
-      if (board[nk]?.owner === t.owner) continue;
+      if (board[nk]?.owner === t.owner) {
+        shared.add(this.sideToward(key, nk));
+        continue;
+      }
       const nc = centerOf(nk);
       const mx = (c.x + nc.x) / 2;
       const my = (c.y + nc.y) / 2;
@@ -481,8 +563,13 @@ export class SkinBoardView extends BoardView {
       if (src) {
         const o = toScreen(1, 0);
         const turn = (Math.atan2(o.y, o.x) * 180) / Math.PI;
-        const sz = S * 2.07;
-        el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: `skin-tile-art${cut ? ' cut' : ''}`, preserveAspectRatio: 'none', ...(turn ? { style: `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg)` } : {}) }, g);
+        // a little larger where it crossfades, so two neighbours overlap across their shared side
+        const sz = S * 2.07 * (shared.size ? 1.1 : 1);
+        // sides shared with the same player fade into the territory's ground below (one continuous
+        // painting), so neighbouring tiles melt into one field; outer sides stay crisp
+        const holder = shared.size && this.netDefs ? el('g', { mask: `url(#${this.seamMask(key, shared)})` }, g) : g;
+        el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: `skin-tile-art${cut ? ' cut' : ''}`, preserveAspectRatio: 'none', ...(turn ? { style: `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg)` } : {}) }, holder);
+        if (look?.lava && !cut) this.liveLava(g, holder, key, src, x, y, sz, turn, s9);
       }
     }
     if (edge) el('path', { d: edge, class: 'tile-edge skin-edge skin-rim' }, g);

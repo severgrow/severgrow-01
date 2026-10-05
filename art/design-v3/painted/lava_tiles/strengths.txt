@@ -1,0 +1,10 @@
+# lava_src_<id> -> strength (1 coolest .. 9 most molten); hextile.py writes tiles/volcano/s<N>_<id>.webp
+1 117
+2 118
+3 120
+4 119
+5 121
+6 114
+7 115
+8 112 116
+9 113
