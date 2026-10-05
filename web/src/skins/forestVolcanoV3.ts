@@ -70,7 +70,8 @@ export const FOREST_VOLCANO_V3: SkinDef = {
         { match: 'vent', minStrength: 5, size: 18, anim: 'pulse' },
       ],
     },
-    rock: { dir: 'props/rock/', size: 58 },
+    // painted to the hex: the image is the hex's corner-to-corner size (the ground reaches 1.035 S)
+    rock: { dir: 'props/rock/', size: 62 },
     // big, so the pile fills the hex (a little dimmer than the raw art, under the owned tiles)
     gold: { dir: 'props/gold/', size: 64 },
     // lost tiles (scars): one burnt stump or log on the empty ground, when the folder has sprites
