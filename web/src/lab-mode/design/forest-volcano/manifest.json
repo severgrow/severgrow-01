@@ -1,0 +1,1302 @@
+{
+  "skin_id": "forest-volcano",
+  "version": "1.0.0",
+  "status": "beta-lab-only",
+  "purpose": "Production-ready modular visual skin pack for Severor Beta/Lab. Do not merge into main/default version until explicitly approved.",
+  "geometry": {
+    "R_board_units": 30,
+    "master_R_px": 256,
+    "master_scale_px_per_board_unit": 8.533333333333333,
+    "bleed_board_units": 3,
+    "bleed_master_px": 25.6,
+    "number_plate": {
+      "center_board_units": [
+        0,
+        -1.8
+      ],
+      "radius_board_units": 10.2
+    },
+    "gold_badge_exclusion": {
+      "center_board_units": [
+        17.4,
+        12.6
+      ],
+      "radius_board_units": 6.2
+    },
+    "pointy": {
+      "true_size_board_units": [
+        51.961524,
+        60
+      ],
+      "true_size_master_px": [
+        443.40500673763256,
+        512.0
+      ],
+      "edge_midpoints_board_units": [
+        [
+          25.980762,
+          0
+        ],
+        [
+          12.990381,
+          22.5
+        ],
+        [
+          -12.990381,
+          22.5
+        ],
+        [
+          -25.980762,
+          0
+        ],
+        [
+          -12.990381,
+          -22.5
+        ],
+        [
+          12.990381,
+          -22.5
+        ]
+      ]
+    },
+    "flat": {
+      "true_size_board_units": [
+        60,
+        51.961524
+      ],
+      "true_size_master_px": [
+        512.0,
+        443.40500673763256
+      ],
+      "edge_midpoints_board_units": [
+        [
+          0,
+          -25.980762
+        ],
+        [
+          22.5,
+          -12.990381
+        ],
+        [
+          22.5,
+          12.990381
+        ],
+        [
+          0,
+          25.980762
+        ],
+        [
+          -22.5,
+          12.990381
+        ],
+        [
+          -22.5,
+          -12.990381
+        ]
+      ]
+    }
+  },
+  "render_order": [
+    "base material",
+    "state overlay",
+    "strength overlay",
+    "network connector",
+    "home landmark",
+    "ambient effect",
+    "existing badges/numbers/marks",
+    "existing dimming/interaction overlays/effects"
+  ],
+  "composition": {
+    "base_selection": "deterministic hash(tile coordinate, owner, skin id) % available base variants",
+    "strength_overlay": "select exact 1-9 overlay; never bake number into art",
+    "detail_selection": "optional deterministic decorative details; keep number and gold zones clear",
+    "connector_selection": "derive direction from actual linked neighbor and current screen orientation; use exact SVG spoke for that edge and load class",
+    "cutoff": "apply faction cutoff overlay and existing game desaturation/state logic",
+    "top_rank": "apply corresponding orientation-specific halo only at strength 9",
+    "home": "home landmark is screen-upright; never rotate it with board"
+  },
+  "connectors": {
+    "start_distance_board_units": 10.4,
+    "edge_straight_band_board_units": 8.66,
+    "bleed_past_edge_board_units": 3,
+    "width_classes_board_units": {
+      "thin": 1.8,
+      "normal": 3.6,
+      "heavy": 6.6
+    },
+    "requirement": "The final 8.66 units to the edge are straight/radial; each spoke crosses the exact true edge midpoint square-on and continues 3 units into bleed. No closed/capped end exists at a linked edge.",
+    "forest": "dark structural outline + green/bark body + screen-space top-left highlight",
+    "volcano": "dark crust outline + red/orange body + yellow hot core; no heavy runtime blur required"
+  },
+  "performance": {
+    "browser_first": true,
+    "mobile_first": true,
+    "guidance": "Raster bases/details are static. Structural connectors are lightweight SVG paths. Avoid per-frame regeneration, heavy filters, and DOM-per-grass-blade rendering."
+  },
+  "assets": [
+    {
+      "path": "BATCH_01.md",
+      "type": "documentation",
+      "bytes": 778,
+      "sha256": "5641e1ac2d6056294a1e5eea140d99cfa09bb215d29993b3d5975dc34f0ec572"
+    },
+    {
+      "path": "BATCH_02.md",
+      "type": "documentation",
+      "bytes": 790,
+      "sha256": "1a1ee25df64425f99fa393720d95aa52c2393fa716e7ceb95110a6b5fca1610c"
+    },
+    {
+      "path": "BATCH_03.md",
+      "type": "documentation",
+      "bytes": 1017,
+      "sha256": "45a478185f3f6f928b980c0d1770c03109583f88eaa1bf523b150fc253553427"
+    },
+    {
+      "path": "BATCH_04.md",
+      "type": "documentation",
+      "bytes": 720,
+      "sha256": "01da41b441010b4e3f665f1fdfce2afe82f7589102c6ee56dcd0af4175976669"
+    },
+    {
+      "path": "BATCH_05.md",
+      "type": "documentation",
+      "bytes": 1010,
+      "sha256": "d7488b0b03134d5399316d333e3fbbe4f7e65fc0d63cac6b854e2f6b349bd525"
+    },
+    {
+      "path": "CLAUDE_IMPLEMENTATION.md",
+      "type": "documentation",
+      "bytes": 4696,
+      "sha256": "ff069c7761de80ebf873670e873022fad0e624556a1becafea80212fb9bd90c1"
+    },
+    {
+      "path": "README.md",
+      "type": "documentation",
+      "bytes": 789,
+      "sha256": "b894d36e60d3c2e55c09526fcf6e8e6385692f4c3823238e4ae7c36def4a87de"
+    },
+    {
+      "path": "asset-index.csv",
+      "type": "documentation",
+      "bytes": 12664,
+      "sha256": "f52df9ba6d35bf98257de0388880089cf4dc45ed907f0b650a7fc8c37844376c"
+    },
+    {
+      "path": "forest/bases/forest_base_01.png",
+      "type": "asset",
+      "bytes": 398663,
+      "sha256": "a6e4b8b47ca55b6141b279f4f161789917af8aa998b486e0731f4468595c5364"
+    },
+    {
+      "path": "forest/bases/forest_base_02.png",
+      "type": "asset",
+      "bytes": 408169,
+      "sha256": "de09cf8fd0f6dd48ae4b5a55687d27c09bd343bccd2301c33214ec6b13219e70"
+    },
+    {
+      "path": "forest/bases/forest_base_03.png",
+      "type": "asset",
+      "bytes": 396783,
+      "sha256": "172e6055d9360031d58165224e8cac167775124b6b8194da954bbcb22d56ce7e"
+    },
+    {
+      "path": "forest/bases/forest_base_04.png",
+      "type": "asset",
+      "bytes": 393114,
+      "sha256": "9077c7af7216567b569b8ad423b0a043e7c8acacfcbbe67d2b479fabd0596398"
+    },
+    {
+      "path": "forest/bases/forest_base_05.png",
+      "type": "asset",
+      "bytes": 397234,
+      "sha256": "516b91c897f62763f14a56be3f570d993eddff30ef903ac1316fb882c7942ab7"
+    },
+    {
+      "path": "forest/bases/forest_base_06.png",
+      "type": "asset",
+      "bytes": 405163,
+      "sha256": "1d98f3f32df0a4932150dc26b95ae6d520b1ea004f49df8bdadfaa0e981eb5b2"
+    },
+    {
+      "path": "forest/berries/berries_01.png",
+      "type": "asset",
+      "bytes": 1610,
+      "sha256": "c08ae550fb47f708501b98a9393a0121af47ef2e99e36499c5b4ac8668f6c640"
+    },
+    {
+      "path": "forest/berries/berries_02.png",
+      "type": "asset",
+      "bytes": 1631,
+      "sha256": "f4addfe52756e7dd886fec9559351b952d7260b7cd7c0f58b6c6e336bfc68427"
+    },
+    {
+      "path": "forest/berries/berries_03.png",
+      "type": "asset",
+      "bytes": 1631,
+      "sha256": "51e2aeaa685e156aa1f37f1efaee7a4ebc38e364c11399efaa919b4ac75c633d"
+    },
+    {
+      "path": "forest/berries/berries_04.png",
+      "type": "asset",
+      "bytes": 1627,
+      "sha256": "e8c84fdd3132f4674d2125e2a7fa5d2ea895447061126af4aed407fcf6153e6b"
+    },
+    {
+      "path": "forest/flowers/flower_01.png",
+      "type": "asset",
+      "bytes": 984,
+      "sha256": "332ead73d83806c3996be0893c25d18100c2b31bbaaf40537c40a9c0cf5404f3"
+    },
+    {
+      "path": "forest/flowers/flower_02.png",
+      "type": "asset",
+      "bytes": 972,
+      "sha256": "114941adcfb6edfbe9c292b9ab3a2f6c70ec7187833a0b4d74cbb6e4db837bd0"
+    },
+    {
+      "path": "forest/flowers/flower_03.png",
+      "type": "asset",
+      "bytes": 983,
+      "sha256": "f3c079660366ede5fa4eaaead03ef2f155be7cfb745662f0f9bc70dc6b871f58"
+    },
+    {
+      "path": "forest/flowers/flower_04.png",
+      "type": "asset",
+      "bytes": 965,
+      "sha256": "a6a98e23343f7d5fd087b5b3de094c90b338005e79fb5320a166f2dca2ff322f"
+    },
+    {
+      "path": "forest/flowers/flower_05.png",
+      "type": "asset",
+      "bytes": 984,
+      "sha256": "6b6cfdd3a23512a672839fb11e7fa9b4570542e4d4565c1c76dc5a304b47c508"
+    },
+    {
+      "path": "forest/flowers/flower_06.png",
+      "type": "asset",
+      "bytes": 977,
+      "sha256": "73f1cedd06184d1e53495c74c01bfbdffdbc46806d5f6888432ae418a6c770f2"
+    },
+    {
+      "path": "forest/flowers/flower_07.png",
+      "type": "asset",
+      "bytes": 983,
+      "sha256": "730fd4e053d1fc76632eb08e5fe253cb1e8c4fa4fe8426532e926af09841874c"
+    },
+    {
+      "path": "forest/forest_strength_01.png",
+      "type": "asset",
+      "bytes": 1838,
+      "sha256": "88267e67d620544542ffb85fbf48cd4078c2a3bfbefda6ea74ecdc7330c1253d"
+    },
+    {
+      "path": "forest/forest_strength_02.png",
+      "type": "asset",
+      "bytes": 2108,
+      "sha256": "88a318db141610662f14487bd98cea3506c9b1d8152bb8cdd46c29c42de0137e"
+    },
+    {
+      "path": "forest/forest_strength_03.png",
+      "type": "asset",
+      "bytes": 2394,
+      "sha256": "341e15af152987ebc9889644cb36317e6c245c971877562ff5efdae34bbda940"
+    },
+    {
+      "path": "forest/forest_strength_04.png",
+      "type": "asset",
+      "bytes": 3205,
+      "sha256": "76b6d7f0629ca392e4b9ca55c3168669c4154db48f5324e20256f7092860d1ec"
+    },
+    {
+      "path": "forest/forest_strength_05.png",
+      "type": "asset",
+      "bytes": 3505,
+      "sha256": "8e6ca5681a5e1c97e06f34127bb9d61ef9a8e0a7bea8b4de39381cca6fc7f858"
+    },
+    {
+      "path": "forest/forest_strength_06.png",
+      "type": "asset",
+      "bytes": 5078,
+      "sha256": "d748c8b4215f5e83486392073cd34468339137cf9733df1a99e884953bfd65aa"
+    },
+    {
+      "path": "forest/forest_strength_07.png",
+      "type": "asset",
+      "bytes": 5664,
+      "sha256": "ad89ab05bef362959532ed14410a30b21bc64dcd6ef9c9920e22e6e5a60544da"
+    },
+    {
+      "path": "forest/forest_strength_08.png",
+      "type": "asset",
+      "bytes": 7435,
+      "sha256": "070177372d173ba6373191294fef9582f2541b73d5941f65595c64ac8c2d8f80"
+    },
+    {
+      "path": "forest/forest_strength_09.png",
+      "type": "asset",
+      "bytes": 7398,
+      "sha256": "ee3b78be8287ccf303247b008eb76b83aa715224e2d4bcaeb8b1923c5ea31e8d"
+    },
+    {
+      "path": "forest/home/forest_home_01.png",
+      "type": "asset",
+      "bytes": 13092,
+      "sha256": "a157a4b335715eeedeed513c0ccce653db9252e940ee912a8d578d9eccebeba8"
+    },
+    {
+      "path": "forest/home/forest_home_02.png",
+      "type": "asset",
+      "bytes": 11700,
+      "sha256": "c9ea664138dc28a20a007355e2c4bcdcffc666ad6d2814927bd0969b197c92d0"
+    },
+    {
+      "path": "forest/home/forest_home_03.png",
+      "type": "asset",
+      "bytes": 13075,
+      "sha256": "987fa9fce889ecc38f0712c37c45b006ce02d239ac8ee17ef9032c332e5393e4"
+    },
+    {
+      "path": "forest/mushrooms/mushroom_01.png",
+      "type": "asset",
+      "bytes": 1315,
+      "sha256": "93018295abc2010a809aa2a4178e947d1d253ec6690fc8a3464032d0100ccc0c"
+    },
+    {
+      "path": "forest/mushrooms/mushroom_02.png",
+      "type": "asset",
+      "bytes": 1091,
+      "sha256": "b4a600c9372248710f9153536256dcfc864b03429fe636f19d071b9fda942f09"
+    },
+    {
+      "path": "forest/mushrooms/mushroom_03.png",
+      "type": "asset",
+      "bytes": 1089,
+      "sha256": "cae4855aac713c486081bf871a9088eb87c7f52aec4d35c7b4e7f167158e66e0"
+    },
+    {
+      "path": "forest/mushrooms/mushroom_04.png",
+      "type": "asset",
+      "bytes": 1092,
+      "sha256": "36fe43e4571f32b717d241b9f5d860063719a22dcda1fcb8feb24b3f50730c96"
+    },
+    {
+      "path": "forest/mushrooms/mushroom_05.png",
+      "type": "asset",
+      "bytes": 1315,
+      "sha256": "3acb5508d2a36e5fea4caafbf77e2b114d5d660893718ad20b5373d77e25541f"
+    },
+    {
+      "path": "forest/network/flat_spoke_0_-90_heavy.svg",
+      "type": "connector",
+      "bytes": 710,
+      "sha256": "ec657ce1ffabd48177fdbf8e954e8b7917d2099321f3844853df4a36528c02c5"
+    },
+    {
+      "path": "forest/network/flat_spoke_0_-90_normal.svg",
+      "type": "connector",
+      "bytes": 709,
+      "sha256": "b23d8333126306ab97932fea585382a8cd7c6fcc37547365bf47ab412782e4a1"
+    },
+    {
+      "path": "forest/network/flat_spoke_0_-90_thin.svg",
+      "type": "connector",
+      "bytes": 709,
+      "sha256": "c5ff6f86a4a9c0da606a9910f939826b450fb6c83330f316d35b7394fd0238ee"
+    },
+    {
+      "path": "forest/network/flat_spoke_1_-30_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "1ca421adf1c310da49406ddabf018ab00e4f84a60c1ece7f7fa175451b63f68f"
+    },
+    {
+      "path": "forest/network/flat_spoke_1_-30_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "061ead65f6e172fb96a0520f2b44624a1669dda80abbb8a145564393825dc2bd"
+    },
+    {
+      "path": "forest/network/flat_spoke_1_-30_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "b23c0127d7fd08fdaaf828370d993468a47a3edff3386dfd532ed30f65f83b7d"
+    },
+    {
+      "path": "forest/network/flat_spoke_2_+30_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "63d84a454d327ad8a03732fb87e1990c46cf43a5e471ad66bff07bb65834bb28"
+    },
+    {
+      "path": "forest/network/flat_spoke_2_+30_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "be073ef9a6ff368c1efaa32fa89972ff6306e05fb7d795516a32ec0d2cbb9dd4"
+    },
+    {
+      "path": "forest/network/flat_spoke_2_+30_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "8375a90fc53043d10b63a434584fa39728ae76eae15de4186d7cf3e4bf3f6c15"
+    },
+    {
+      "path": "forest/network/flat_spoke_3_+90_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "9cc1a0b2b2eeffd3f4b2f2881d86cbe62d05d1320e792b20aa78f82b58f3c753"
+    },
+    {
+      "path": "forest/network/flat_spoke_3_+90_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "1449f752d097376f10491cc5c07ded74985010e19c6844019934395473a4687d"
+    },
+    {
+      "path": "forest/network/flat_spoke_3_+90_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "2a18717c6e088b38316cfc2b3ea8efec38db290882039597b802d9eee9df879d"
+    },
+    {
+      "path": "forest/network/flat_spoke_4_+150_heavy.svg",
+      "type": "connector",
+      "bytes": 716,
+      "sha256": "0d9ed33da89136d70bccc872dce6dba43fa962d2f26b1f938d61da6b854b7747"
+    },
+    {
+      "path": "forest/network/flat_spoke_4_+150_normal.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "30e41de26473ab065222c88b8078c0c2248ddb2feeb2edb0f61256674aa56470"
+    },
+    {
+      "path": "forest/network/flat_spoke_4_+150_thin.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "eba2433ea7af1f9041a916846229130b77e296bd8b9a37927a79a1668b78337c"
+    },
+    {
+      "path": "forest/network/flat_spoke_5_+210_heavy.svg",
+      "type": "connector",
+      "bytes": 716,
+      "sha256": "b517832bc4c3548fbfbddccb9dade1a58fc33baa036fa25b96ce0e00b972af22"
+    },
+    {
+      "path": "forest/network/flat_spoke_5_+210_normal.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "af4861a3d3ad91d3360cd67a80979e93340fddfe4f8531e2e1f916fb77df16d5"
+    },
+    {
+      "path": "forest/network/flat_spoke_5_+210_thin.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "75bd9c7edcf27792f1a6b48497df3ff9909a0ce0c8a99610dd4cbf947144f9d9"
+    },
+    {
+      "path": "forest/network/pointy_spoke_0_+00_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "7fe2f30051afcd1f510cd0b6663174bc6382bc2ddfbce02b398a76c8bc5c5837"
+    },
+    {
+      "path": "forest/network/pointy_spoke_0_+00_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "5c9b22bd91f0caf17459b5a4da1b03d4640e6827939c44fb0cbb755543e8cfc7"
+    },
+    {
+      "path": "forest/network/pointy_spoke_0_+00_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "74d356f6526a021b8e190867ac2dfd888e79e0585af7a08211b9becd61681dfa"
+    },
+    {
+      "path": "forest/network/pointy_spoke_1_+60_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "c4b09bfd54f08b55ae7cb8c16e32e85e17bcd78e6221229c3a66b9663d91b2e9"
+    },
+    {
+      "path": "forest/network/pointy_spoke_1_+60_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "8952ab477ec9fbe1ab4a07c0831c691c3dc60893ea83317f9f8e13a8a5591812"
+    },
+    {
+      "path": "forest/network/pointy_spoke_1_+60_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "304c301c791b0f30d836a7398d8bd6fee79b721d0b46a2ac92e306a434e91921"
+    },
+    {
+      "path": "forest/network/pointy_spoke_2_+120_heavy.svg",
+      "type": "connector",
+      "bytes": 719,
+      "sha256": "ccfb6ff9d60891ff861ced5b2d723f2228b41669978e704e56ee91743eccd7cf"
+    },
+    {
+      "path": "forest/network/pointy_spoke_2_+120_normal.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "f0ff3cc96f45223f2d1d04f4ca701976cc4f0b1191f46e81bce2fa48655a13fa"
+    },
+    {
+      "path": "forest/network/pointy_spoke_2_+120_thin.svg",
+      "type": "connector",
+      "bytes": 718,
+      "sha256": "8f24c5f1f88ccb07b93d68d177ccb1ce187040d4ee63c478929d6a48510782ff"
+    },
+    {
+      "path": "forest/network/pointy_spoke_3_+180_heavy.svg",
+      "type": "connector",
+      "bytes": 710,
+      "sha256": "90567c5118268c8855b61fcf5a8aaa7c9636bb68417493d545279c94f46db7e6"
+    },
+    {
+      "path": "forest/network/pointy_spoke_3_+180_normal.svg",
+      "type": "connector",
+      "bytes": 709,
+      "sha256": "3e4b466c02df2d6e3c46e23409ba4a3f3690838dd8ee4ed4cf26d9a6b644e942"
+    },
+    {
+      "path": "forest/network/pointy_spoke_3_+180_thin.svg",
+      "type": "connector",
+      "bytes": 709,
+      "sha256": "bc82a27d4e2640090fe799baa5e6a0350983c1c463af01a8a8d78079c66c1ec1"
+    },
+    {
+      "path": "forest/network/pointy_spoke_4_+240_heavy.svg",
+      "type": "connector",
+      "bytes": 716,
+      "sha256": "460a69b861dd34c1e39dbf32e7c0041f0a07e7ac395551825fc977c654e916e9"
+    },
+    {
+      "path": "forest/network/pointy_spoke_4_+240_normal.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "22eb0aa8d0d286eba1d31bf773d661ab17a0d7792fe79fa39e3bfc5a5f16e416"
+    },
+    {
+      "path": "forest/network/pointy_spoke_4_+240_thin.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "522cbb83f0d908ecb8b4700dc932ff7bcee5f1323d19aec6cbbef103ac3d6439"
+    },
+    {
+      "path": "forest/network/pointy_spoke_5_+300_heavy.svg",
+      "type": "connector",
+      "bytes": 716,
+      "sha256": "1dcd3acf62ac557b25d471cfb221ca9f25c3812f6dd6508d9681d803993466cf"
+    },
+    {
+      "path": "forest/network/pointy_spoke_5_+300_normal.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "98231dc94c12debaaa7f085ca141d3a3735df244ab7dc7f73965821d9bbd70a3"
+    },
+    {
+      "path": "forest/network/pointy_spoke_5_+300_thin.svg",
+      "type": "connector",
+      "bytes": 715,
+      "sha256": "ba224603568f4bc7e28ccb3797c384e5dbdb37c1e3a88a34322d052105186148"
+    },
+    {
+      "path": "forest/plants/plant_01.png",
+      "type": "asset",
+      "bytes": 5183,
+      "sha256": "c938194a033644c76dfec6290bf5b248bd63cd1fb9fe37bf3a845f22b5a4b33d"
+    },
+    {
+      "path": "forest/plants/plant_02.png",
+      "type": "asset",
+      "bytes": 5614,
+      "sha256": "c26cae2d8529b6e48d4edcbcd2495eb60045b65e561646ad8222edf47c50736d"
+    },
+    {
+      "path": "forest/plants/plant_03.png",
+      "type": "asset",
+      "bytes": 6008,
+      "sha256": "ad330b9f8ffcdd6bec11370fcbd6c7dcf37b0c0b2691eacb37acd6d7a0ac1080"
+    },
+    {
+      "path": "forest/plants/plant_04.png",
+      "type": "asset",
+      "bytes": 5592,
+      "sha256": "23abcd15d50360207874706299e45bdc18980c6d47dbef50ad6d8fb7471d6b61"
+    },
+    {
+      "path": "forest/plants/plant_05.png",
+      "type": "asset",
+      "bytes": 6053,
+      "sha256": "5323945a381deddf99cf1a0597da48616ec56ea5da0918612248f76a5a3390dc"
+    },
+    {
+      "path": "forest/plants/plant_06.png",
+      "type": "asset",
+      "bytes": 6086,
+      "sha256": "847184eff985152c9eea50d48703c97b0a85067d1e0cecfbb0b2e1900327f5f7"
+    },
+    {
+      "path": "forest/plants/plant_07.png",
+      "type": "asset",
+      "bytes": 4498,
+      "sha256": "265e7dc1f6e28cbb8bd750d738ad3b3925bdcf21e013dc0309434e4794a3cad2"
+    },
+    {
+      "path": "forest/plants/plant_08.png",
+      "type": "asset",
+      "bytes": 6204,
+      "sha256": "dd97384d8670a503cd1c7ce014f3a065fc1d3e15610e0c4efa485c9fa942da43"
+    },
+    {
+      "path": "forest/plants/plant_09.png",
+      "type": "asset",
+      "bytes": 5264,
+      "sha256": "e02abbc84a9b0d457cbf5df2ec52a2f441baa8b56875999724f43858af505551"
+    },
+    {
+      "path": "forest/plants/plant_10.png",
+      "type": "asset",
+      "bytes": 4900,
+      "sha256": "fc5fd1c682146d631bb0a18da5ee39abd7eb1efcd9dac1f1382057fd0f14bc6e"
+    },
+    {
+      "path": "forest/plants/plant_11.png",
+      "type": "asset",
+      "bytes": 3635,
+      "sha256": "a0c05aae04ccd155f87743b92dcf7dd7f18efb36b67edb20e197030175233e19"
+    },
+    {
+      "path": "forest/plants/plant_12.png",
+      "type": "asset",
+      "bytes": 4281,
+      "sha256": "7882878935197c02fdae4be88cf212aaf637c468cacb3cb13419f4e059c38589"
+    },
+    {
+      "path": "forest/states/forest_cutoff_overlay.png",
+      "type": "asset",
+      "bytes": 10102,
+      "sha256": "915735171f7bb8e9c9a877238049b81bea6873c0011c8d818cabca0d16f594e8"
+    },
+    {
+      "path": "geometry/connectorGeometry.ts",
+      "type": "geometry",
+      "bytes": 1620,
+      "sha256": "80a571876ff7974cc30997881c4a3ae158403cd5d830810f216d31c4fde00743"
+    },
+    {
+      "path": "geometry/flat-anchors.svg",
+      "type": "geometry",
+      "bytes": 451,
+      "sha256": "3449ddcaeb3d0bf7c8e4b66ec4f76248762c08d36e3adab0989181df529ded49"
+    },
+    {
+      "path": "geometry/flat-mask.svg",
+      "type": "geometry",
+      "bytes": 234,
+      "sha256": "0e66fe455bc6a8314e24b1482afb1cd7e9c4f8cd69239df9a6f771682edbb5af"
+    },
+    {
+      "path": "geometry/flat-safe-zones.svg",
+      "type": "geometry",
+      "bytes": 840,
+      "sha256": "0e5051b97f44b1957ee7cc2b49e3cd32557919b2af53c08ee8ea34b8299aae70"
+    },
+    {
+      "path": "geometry/geometry.json",
+      "type": "geometry",
+      "bytes": 1589,
+      "sha256": "945145be3b6bef43657d763472eeca7a0bca1824975f9df2ec26caf2d2b2710b"
+    },
+    {
+      "path": "geometry/pointy-anchors.svg",
+      "type": "geometry",
+      "bytes": 451,
+      "sha256": "6cf1dfb5f4d492c91bf510f706f588f49fe3a5e03d90d757da4f097c280fbd50"
+    },
+    {
+      "path": "geometry/pointy-mask.svg",
+      "type": "geometry",
+      "bytes": 234,
+      "sha256": "8682e85b034d498e05971aa74715c9f1648ce5f19ec510c23921f8431075baa8"
+    },
+    {
+      "path": "geometry/pointy-safe-zones.svg",
+      "type": "geometry",
+      "bytes": 840,
+      "sha256": "305c1bfe4a3fb53531fdde2c41868d785951ac98be22f2894974542f46c818f1"
+    },
+    {
+      "path": "neutral/bases/rock_base_01.png",
+      "type": "asset",
+      "bytes": 422202,
+      "sha256": "2cc34d1bfc5f35ed3463d09fb8a6610241259e2bb6509d3f5472722eb85a5de2"
+    },
+    {
+      "path": "neutral/bases/rock_base_02.png",
+      "type": "asset",
+      "bytes": 428850,
+      "sha256": "8a484f37235125bc26d6474d9f8d34905a8cf263f184ed223ff1db1a0be28e80"
+    },
+    {
+      "path": "neutral/bases/rock_base_03.png",
+      "type": "asset",
+      "bytes": 422421,
+      "sha256": "b31d5a174060912abfe71b069f5c00022528baf1ef5c4a66aaeda5341b5399ee"
+    },
+    {
+      "path": "neutral/bases/rock_base_04.png",
+      "type": "asset",
+      "bytes": 428043,
+      "sha256": "b209a15f647a506d07286bb634367c1d07480185841c2a47a70cbe2d5b00e17a"
+    },
+    {
+      "path": "neutral/bases/rock_base_05.png",
+      "type": "asset",
+      "bytes": 427505,
+      "sha256": "7af841cbd4c71051aba3502bde8601fcb7fd8b82ce7c583de743cf62eb837104"
+    },
+    {
+      "path": "neutral/bases/rock_base_06.png",
+      "type": "asset",
+      "bytes": 426623,
+      "sha256": "6e886d4f2b5f84ce60f3be46805724974ae56428dd89835eae28133b396d3bc7"
+    },
+    {
+      "path": "neutral/bases/rock_base_07.png",
+      "type": "asset",
+      "bytes": 422888,
+      "sha256": "b2f4d7f64f076eaab794e9b85ecbb7862532944475f129f3b0de4c220c018ab4"
+    },
+    {
+      "path": "neutral/bases/rock_base_08.png",
+      "type": "asset",
+      "bytes": 424307,
+      "sha256": "61036d8e4e2f4250e20481de0d58229bd442964d1e8156694ae52b4d9adddeca"
+    },
+    {
+      "path": "preview/flat_network_qa.png",
+      "type": "asset",
+      "bytes": 451170,
+      "sha256": "e4e8e4373381ba847af688e9e7d9d42d47ff7315eaf0eb88705661933217e308"
+    },
+    {
+      "path": "preview/pointy_network_qa.png",
+      "type": "asset",
+      "bytes": 436536,
+      "sha256": "53cb86d264a6d87382b8faa53f69ebe9e901d67a667398f0b6e2f470092800fb"
+    },
+    {
+      "path": "shared/effects/ember_mote_01.png",
+      "type": "asset",
+      "bytes": 2469,
+      "sha256": "168fff8be5eeebb58411746e36d01f0e3bccbb3b1fac83e51cd846876d128c5f"
+    },
+    {
+      "path": "shared/effects/ember_mote_02.png",
+      "type": "asset",
+      "bytes": 2115,
+      "sha256": "a951e2fa2cebe19a3cb9866e71f122fc403e1bd6b1953bebac53cab1b664addd"
+    },
+    {
+      "path": "shared/effects/ember_mote_03.png",
+      "type": "asset",
+      "bytes": 2528,
+      "sha256": "3373a2bf717b9ec028db3c367fdadce71b0e83c0227e3b0f802bbca5e4a0fcf7"
+    },
+    {
+      "path": "shared/effects/flat_toprank_forest.svg",
+      "type": "asset",
+      "bytes": 466,
+      "sha256": "69cbe7cbe26ab72349eeeaaa208f6cb3c81e3f9a8e2326ff3d76a980b3acf43a"
+    },
+    {
+      "path": "shared/effects/flat_toprank_volcano.svg",
+      "type": "asset",
+      "bytes": 466,
+      "sha256": "3836f00bc9bcf0709457801349b361a8190a4166fd097d17006b1a9034fd498d"
+    },
+    {
+      "path": "shared/effects/leaf_mote_01.png",
+      "type": "asset",
+      "bytes": 408,
+      "sha256": "a79abba17d3c574dac7904bac4cc4e911279644c2f844b6f9bb7d1f91b04cdc8"
+    },
+    {
+      "path": "shared/effects/leaf_mote_02.png",
+      "type": "asset",
+      "bytes": 448,
+      "sha256": "dba819da3a566b5779c17ebdbceab432d672ded43a2df9e4faf82aca4532b239"
+    },
+    {
+      "path": "shared/effects/leaf_mote_03.png",
+      "type": "asset",
+      "bytes": 506,
+      "sha256": "4630f0c1bd873dbcebf292ef9c1d964f0782adb7edfe27ac2f7cd2005e3ae594"
+    },
+    {
+      "path": "shared/effects/pointy_toprank_forest.svg",
+      "type": "asset",
+      "bytes": 466,
+      "sha256": "b3e948c4cd4fa172e5212250dd3dccc8e47c982c490d0760189fa6e258ab66de"
+    },
+    {
+      "path": "shared/effects/pointy_toprank_volcano.svg",
+      "type": "asset",
+      "bytes": 466,
+      "sha256": "c040a16dbe3d9cd2aef44c588ea175c597a7a6183177feab52c909efca7113e5"
+    },
+    {
+      "path": "shared/scars/forest_scar_01.png",
+      "type": "asset",
+      "bytes": 2345,
+      "sha256": "5230f93c30555c35c38ff055c6205a93defe41e294486683b97ae0be271b903b"
+    },
+    {
+      "path": "shared/scars/forest_scar_02.png",
+      "type": "asset",
+      "bytes": 2513,
+      "sha256": "3cc8bf729de82e0699dece3769acc813bd488bedd0b9b2b536bbbaea7cb16a59"
+    },
+    {
+      "path": "shared/scars/forest_scar_03.png",
+      "type": "asset",
+      "bytes": 2387,
+      "sha256": "c5e4c1462515ee7359ee3955532becebcf19c4a772aec86288c48d35a6dac2fa"
+    },
+    {
+      "path": "shared/scars/volcano_scar_01.png",
+      "type": "asset",
+      "bytes": 3500,
+      "sha256": "bc6edf2babca77ff9d82e180741758c555f9a380b705a7e576906eecc56dde52"
+    },
+    {
+      "path": "shared/scars/volcano_scar_02.png",
+      "type": "asset",
+      "bytes": 3466,
+      "sha256": "41cc963424252423d4beec7ad27f22b52dc9bef8d4f090ccf8e4fc0891492dfc"
+    },
+    {
+      "path": "shared/scars/volcano_scar_03.png",
+      "type": "asset",
+      "bytes": 3411,
+      "sha256": "f6bb218d77496b642f702258c924156d9c930bd58ee92a2c336e3bec586c1a0d"
+    },
+    {
+      "path": "volcano/bases/volcano_base_01.png",
+      "type": "asset",
+      "bytes": 410491,
+      "sha256": "8136955af148f576287594d146540b37089a676c4972982f1ad27617449a22bf"
+    },
+    {
+      "path": "volcano/bases/volcano_base_02.png",
+      "type": "asset",
+      "bytes": 419182,
+      "sha256": "981e994f1c347adbc04959350a8783dc2f4494a750694cf63044d8517352d604"
+    },
+    {
+      "path": "volcano/bases/volcano_base_03.png",
+      "type": "asset",
+      "bytes": 419027,
+      "sha256": "24b38b830d714d8721f621cc0af18fec7ba7c0ea718a61c777d9ef8cd666d6b2"
+    },
+    {
+      "path": "volcano/bases/volcano_base_04.png",
+      "type": "asset",
+      "bytes": 401812,
+      "sha256": "362d0e7c091aa1a2b26b96ab70cdee919f0c1f35b221700f4187f6d9531710c8"
+    },
+    {
+      "path": "volcano/bases/volcano_base_05.png",
+      "type": "asset",
+      "bytes": 412719,
+      "sha256": "ccc015fd853c11e51d3992f214f1432c2ab36232cb670328b33860b6a31067e2"
+    },
+    {
+      "path": "volcano/bases/volcano_base_06.png",
+      "type": "asset",
+      "bytes": 405223,
+      "sha256": "e07d737e48af058e4f708cdf8eefacceb8af6b5743eb048ed17645a7f61e7f48"
+    },
+    {
+      "path": "volcano/fissures/fissure_01.png",
+      "type": "asset",
+      "bytes": 1736,
+      "sha256": "02dc3e4f8438315a26f9cd851a9dddda81520b7fb4182043cff80738feb83048"
+    },
+    {
+      "path": "volcano/fissures/fissure_02.png",
+      "type": "asset",
+      "bytes": 1735,
+      "sha256": "e310cf329020c6aef4752034f8098e12473ff1c2ebf182c87a90451734ce9638"
+    },
+    {
+      "path": "volcano/fissures/fissure_03.png",
+      "type": "asset",
+      "bytes": 1105,
+      "sha256": "2c722ca4fca3cd1787ffcc7cc28a61439da8ae19668a813d9d737b7283a122f9"
+    },
+    {
+      "path": "volcano/fissures/fissure_04.png",
+      "type": "asset",
+      "bytes": 1472,
+      "sha256": "58ec15d0d22c01beb91dc8c8eac73288a14e14af2731bd7fc27fea4a5e5a4a0d"
+    },
+    {
+      "path": "volcano/fissures/fissure_05.png",
+      "type": "asset",
+      "bytes": 1297,
+      "sha256": "d35b0d30521f50ae074a04be06ba3861d7f070df2f17c8d1fe0ee1a213d61b67"
+    },
+    {
+      "path": "volcano/fissures/fissure_06.png",
+      "type": "asset",
+      "bytes": 1829,
+      "sha256": "f68bcfd85ce18946dac55873193793ebf9bc9d91a234bbda0203f82fa17da888"
+    },
+    {
+      "path": "volcano/home/volcano_home_01.png",
+      "type": "asset",
+      "bytes": 10448,
+      "sha256": "ca50c38d1e5cadf93685bc67cab0d3efcb498f16f3c243992a946ebcf338655d"
+    },
+    {
+      "path": "volcano/home/volcano_home_02.png",
+      "type": "asset",
+      "bytes": 9245,
+      "sha256": "f2ac4b6b2f1a96723efe0e8b8fdce798155835795acdb75da501ed33a35f5687"
+    },
+    {
+      "path": "volcano/home/volcano_home_03.png",
+      "type": "asset",
+      "bytes": 8798,
+      "sha256": "3cfadf35efca7d8881d164c33f799e243031b65445c8c4b687bd2f1483e52b8d"
+    },
+    {
+      "path": "volcano/network/flat_spoke_0_-90_heavy.svg",
+      "type": "connector",
+      "bytes": 880,
+      "sha256": "66685192b1026c5954131087be2984d80ea231f148fe8b85f611da93ae1d1c8c"
+    },
+    {
+      "path": "volcano/network/flat_spoke_0_-90_normal.svg",
+      "type": "connector",
+      "bytes": 879,
+      "sha256": "a1f3a4bf1b90f2097443dcb9db23a08c797f5b18a4e8ce3d44df94b71bf49b70"
+    },
+    {
+      "path": "volcano/network/flat_spoke_0_-90_thin.svg",
+      "type": "connector",
+      "bytes": 879,
+      "sha256": "f807f23bbed0c22f806a46cc7fb89ebdbff8e101e93cf767a729c2309bc5dda2"
+    },
+    {
+      "path": "volcano/network/flat_spoke_1_-30_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "b5305a1d27d9f905fe2fdab04bf00b39ab9626b9e07e812f8fb32bbf3b2b0e58"
+    },
+    {
+      "path": "volcano/network/flat_spoke_1_-30_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "dc7752faeaa841a8de55d5b15b32c37c346d49564c20acf585aaa5e336616002"
+    },
+    {
+      "path": "volcano/network/flat_spoke_1_-30_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "ec7f0c41a0fa7cf6a35e7d541008f3f9d8de25ce952319668090a6fb88634c3e"
+    },
+    {
+      "path": "volcano/network/flat_spoke_2_+30_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "69d3fa0f148dbca9005fded52c7af5ef3fc6ac8f6a39833e86b0f4dda913e7d6"
+    },
+    {
+      "path": "volcano/network/flat_spoke_2_+30_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "fc3bb5231c088801b0ec2af8f17975ce8562cd73bdc06931b662ff0ba538a5b2"
+    },
+    {
+      "path": "volcano/network/flat_spoke_2_+30_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "a5744b7efe0e18d909d8ee5671faa25d4d5f08631ce7d28e998b71788c152ee0"
+    },
+    {
+      "path": "volcano/network/flat_spoke_3_+90_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "b875c1910d41ea29b1784ba71984aea989e8e353906be2aff988d492d8e775a1"
+    },
+    {
+      "path": "volcano/network/flat_spoke_3_+90_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "51139f0b71aeb7dab300f85fbdc54f763e2455ba3c5d6ca5d3fa21627eb09d5f"
+    },
+    {
+      "path": "volcano/network/flat_spoke_3_+90_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "f7776db30c15039078bd2cf95038b542c246fd2af7e537cb43be4ef641514137"
+    },
+    {
+      "path": "volcano/network/flat_spoke_4_+150_heavy.svg",
+      "type": "connector",
+      "bytes": 888,
+      "sha256": "e4b6b529a82b9ca6fb348b6a3148313d848bae7646044ad800ce8ac03f05edd9"
+    },
+    {
+      "path": "volcano/network/flat_spoke_4_+150_normal.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "782338854ff3a433b525798084927455ff5ac759fa26d8873608257c5faed796"
+    },
+    {
+      "path": "volcano/network/flat_spoke_4_+150_thin.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "248b76c5831fcc76b3f513da08ea7150d8d659f772608c7d4f7d99f2fdf5cd4c"
+    },
+    {
+      "path": "volcano/network/flat_spoke_5_+210_heavy.svg",
+      "type": "connector",
+      "bytes": 888,
+      "sha256": "70c0c9cfbbc97aac45afc863fc76faa358d8f6293b3ea3e383f2b872c6defb16"
+    },
+    {
+      "path": "volcano/network/flat_spoke_5_+210_normal.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "2910d4e9b8640ee3c9bcb6cea34713704f2e4e1dc739ed6c2ed6eb90de218440"
+    },
+    {
+      "path": "volcano/network/flat_spoke_5_+210_thin.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "24ad94c703a2e09037e2cb361d3c7731e577de851a3feaaf46a73df83513262e"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_0_+00_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "2f1fc1bb7fe481e85442f24f17d9c52b7bf726a2ffc217d9d726200e70cff2ce"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_0_+00_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "0bbf194926723e48a33282fb1f1b80cc1503582f0f57738ba7c218d1517228ba"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_0_+00_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "a458f6774ea2886463554826a24c05a5022329d85946a4e254c224a27a7be0f0"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_1_+60_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "390d03462fa3552483b6475cfb19b0cddf8a4f19e54bd91fd3392287571f4247"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_1_+60_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "33879c4b04a75c76010b40c2e7744c7c0691a0a2aee6a9422dbe526833cef3e3"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_1_+60_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "96392d868a1c2cf89786c0eef07aace1ce25ad3796b310977226e3c3c1659eb8"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_2_+120_heavy.svg",
+      "type": "connector",
+      "bytes": 892,
+      "sha256": "733810d179baffc101023ab5edcd3b6524a519d8b77d814435f1799bdf4d4e69"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_2_+120_normal.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "e5375dde44c577e6432e6a460745573b23a176c3c2ffcdba27a5ed60b04fefcc"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_2_+120_thin.svg",
+      "type": "connector",
+      "bytes": 891,
+      "sha256": "66c64ea7c11afb7493b0fd598b54a448e1c00b2e985ab30635108bf31fad9f00"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_3_+180_heavy.svg",
+      "type": "connector",
+      "bytes": 880,
+      "sha256": "36baf85e5b41d3b6b174850da805dfa23b03bdeb6942281237e0fa474a7f6457"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_3_+180_normal.svg",
+      "type": "connector",
+      "bytes": 879,
+      "sha256": "4fccd7c223dc36d48ef89e5fc3c155751e8802e1e44b0e000c39db6c3e70d446"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_3_+180_thin.svg",
+      "type": "connector",
+      "bytes": 879,
+      "sha256": "6f6eeed5bb4f691dbe89b77880e4dfbba0a0c279ea225c4389b8ae97fbf73124"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_4_+240_heavy.svg",
+      "type": "connector",
+      "bytes": 888,
+      "sha256": "9b3125eb3818f41da414b1d5d15b353610ceb6b152375e2a0399d6820070f328"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_4_+240_normal.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "28f71548f4a5fc22bf293b4a41427d5d83d711211a410d884b4c859c1bccf0e1"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_4_+240_thin.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "8e76e0464beb05c3ed0d0d0bf43d6c679f5c896df069ecf44f0707c0e4b8cb0f"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_5_+300_heavy.svg",
+      "type": "connector",
+      "bytes": 888,
+      "sha256": "2244aa5447417e57a45f939dde1811f1f258a32e1b05c139741f6f8e1b53231e"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_5_+300_normal.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "72d6854690c7d69f25c5e9a6a341f28d9fb60f600c41e71327b90e1a63b406e5"
+    },
+    {
+      "path": "volcano/network/pointy_spoke_5_+300_thin.svg",
+      "type": "connector",
+      "bytes": 887,
+      "sha256": "7caf5f86cf024b51f1dfe5b1aea0271784beef5f750ee147717448f2e43f94a3"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_01.png",
+      "type": "asset",
+      "bytes": 1503,
+      "sha256": "114c1430e30f9fe96ecdd233955ed55932ae71ff0ea2eb985c2037b6016811cc"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_02.png",
+      "type": "asset",
+      "bytes": 2276,
+      "sha256": "d2da91be39a1705a7e95bc355e13b2457e57baef451c23661434d5127a259b22"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_03.png",
+      "type": "asset",
+      "bytes": 968,
+      "sha256": "750aa305b68a5835986569b60aa12b2dbf477fede12148e553b92cc09fd20404"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_04.png",
+      "type": "asset",
+      "bytes": 2124,
+      "sha256": "289f1bf76e07b00139c05fadbeb97389609a7a231b8cd70ee0683a90864941b4"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_05.png",
+      "type": "asset",
+      "bytes": 863,
+      "sha256": "d3cc8f47dc8c48a6f0e09b19c8536d7899afb5a01525baaa48762e6a4f124d71"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_06.png",
+      "type": "asset",
+      "bytes": 2033,
+      "sha256": "3183a56bd312160912599a8c62b0e7b35fcfa8ca9b07ca5a87ff1bfaa7accc03"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_07.png",
+      "type": "asset",
+      "bytes": 2078,
+      "sha256": "21fad05b4bb1080e5c3d03988241b089d405d417c80d892c22c88869d436f9be"
+    },
+    {
+      "path": "volcano/rocks/volcanic_rock_08.png",
+      "type": "asset",
+      "bytes": 1977,
+      "sha256": "47122de408d3f6fd83551861ccf3cde3da8efcc9272d1529e9f94c9831cb3f0c"
+    },
+    {
+      "path": "volcano/states/volcano_cutoff_overlay.png",
+      "type": "asset",
+      "bytes": 9473,
+      "sha256": "b6e9163fcb2478c386d5121f8a3012e9b4dd33b12405ad520e4932673118f7a2"
+    },
+    {
+      "path": "volcano/volcano_strength_01.png",
+      "type": "asset",
+      "bytes": 2560,
+      "sha256": "329697cb6916c3c6d0ed743d3ff16d205887ad924f2ee1b0636afac5dc8ae709"
+    },
+    {
+      "path": "volcano/volcano_strength_02.png",
+      "type": "asset",
+      "bytes": 3408,
+      "sha256": "c61a914f31868859b7dad895a7ade1cc778187d2fa71ff530f098daf657ae6fb"
+    },
+    {
+      "path": "volcano/volcano_strength_03.png",
+      "type": "asset",
+      "bytes": 2767,
+      "sha256": "ec0569642acca5b78478a840d29b1bb286e4daaa259ca04eaaddc88e30413612"
+    },
+    {
+      "path": "volcano/volcano_strength_04.png",
+      "type": "asset",
+      "bytes": 4250,
+      "sha256": "16a0367b210b9f1d06162960bfa5ca930480efedfdff3fc401dd9f062ac54804"
+    },
+    {
+      "path": "volcano/volcano_strength_05.png",
+      "type": "asset",
+      "bytes": 4474,
+      "sha256": "ed9b831e8719b6f34f272341a5db049c66be33a34c113dcbd51515ee8978e19d"
+    },
+    {
+      "path": "volcano/volcano_strength_06.png",
+      "type": "asset",
+      "bytes": 5964,
+      "sha256": "7362116bba1c7b244ddc9db53d38ab553387f860ffc5f77367f2289900840487"
+    },
+    {
+      "path": "volcano/volcano_strength_07.png",
+      "type": "asset",
+      "bytes": 4206,
+      "sha256": "06ce69c6a5e1a05d7a5bdd2d13d862501adeede650207fb150d113a6fc599d01"
+    },
+    {
+      "path": "volcano/volcano_strength_08.png",
+      "type": "asset",
+      "bytes": 7407,
+      "sha256": "8a2349d7ba4a0def758bc4f6a657742d2fb46ca0771ed9b523a57d99765d2ed9"
+    },
+    {
+      "path": "volcano/volcano_strength_09.png",
+      "type": "asset",
+      "bytes": 7059,
+      "sha256": "87e54b7ad60fe88c8d233a42444b85576676b1f1a6be747745f3ace65d5f477b"
+    }
+  ]
+}

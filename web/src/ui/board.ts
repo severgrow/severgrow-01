@@ -100,6 +100,39 @@ export type GhostView = {
   cursor: string | null;
 };
 
+/**
+ * An optional visual skin (test copy only: the Lab's DESIGN version). When a board has one, the
+ * skin draws the cells, homes, scars, networks and tiles in its own art; the overlays, badges
+ * and interaction stay the board's own. Without a skin (the live game, the normal Lab) nothing
+ * here runs and the board draws exactly as before.
+ */
+export type SkinLayers = Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks', SVGGElement>;
+export type SkinHost = {
+  svg: SVGSVGElement;
+  defs: SVGDefsElement;
+  layers: SkinLayers;
+  config: RulesConfig;
+  style: ThemeStyle;
+  look: MaterialLook;
+  paletteId: ThemeId;
+  keys: string[];
+  terrain: Record<string, Terrain>;
+  /** a board-unique id and its url(#...) */
+  id: (name: string) => string;
+  url: (name: string) => string;
+};
+export type SkinVein = { a: string; b: string; owner: Player; el: SVGElement };
+export interface BoardSkin {
+  readonly id: string;
+  setup(h: SkinHost): void;
+  /** the art for one board hex (rock, gold, empty), under everything */
+  cell(h: SkinHost, g: SVGGElement, key: string, terrain: Terrain): void;
+  /** a home landmark (kept across renders; setLandmarkState must still work on it) */
+  home(h: SkinHost, player: Player, key: string): SVGGElement;
+  /** scars, networks and tiles for this board; returns the tile groups and the network pieces */
+  render(h: SkinHost, board: Record<string, Tile | null>, o: Overlay): { tiles: Map<string, SVGGElement>; veins: SkinVein[] };
+}
+
 export class BoardView {
   private config!: RulesConfig;
   private style!: ThemeStyle;
@@ -124,6 +157,16 @@ export class BoardView {
   private paletteId: ThemeId = 'soil';
   /** Ids are unique per board, so several boards (the material lab) can share a page. */
   private readonly uid = `b${++boardCount}`;
+  /** the test copy's DESIGN skin (null: the board's own look) */
+  private skin: BoardSkin | null = null;
+  private skinHost: SkinHost | null = null;
+  /** Sets the skin used from the next setup() on (null: the board's own look). */
+  setSkin(skin: BoardSkin | null) {
+    this.skin = skin;
+  }
+  get skinId() {
+    return this.skin?.id ?? null;
+  }
   private id = (name: string) => `${this.uid}-${name}`;
   private url = (name: string) => `url(#${this.id(name)})`;
 
@@ -204,6 +247,9 @@ export class BoardView {
     this.shownVeins = new Set();
     const svg = this.svg;
     svg.replaceChildren();
+    const skin = this.skin;
+    if (skin) svg.dataset.skin = skin.id;
+    else delete svg.dataset.skin;
     const coords = boardCoords(config);
     this.keys = coords.map(coordKey);
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
@@ -232,8 +278,9 @@ export class BoardView {
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
 
     materialDefs(defs, this.id, look);
+    this.world = null;
     // Material pass 2: one world-space picture for every moss and lava tile (seamless).
-    {
+    if (!skin) {
       const vb = svg.viewBox.baseVal;
       const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
       this.world = new WorldLayer(defs, this.id('world'), this.id('world-prev'), { x0: vb.x, y0: vb.y, w: vb.width, h: vb.height }, Math.min(2.4, Math.max(1, dpr * 0.95)));
@@ -260,7 +307,7 @@ export class BoardView {
 
     // Step 3 item 5: no outer frame, rim or corner pins; the board is its tiles (the empty
     // hexes keep their faint soil and a slightly lighter edge, so the grid reads in sunlight)
-    if (look.textures) {
+    if (look.textures && !skin) {
       // soil grain in the empty hexes: a few specks, the same everywhere (one pattern)
       const soil = el('pattern', { id: this.id('soil'), width: 11, height: 11, patternUnits: 'userSpaceOnUse' }, defs);
       for (const [cx, cy, r] of [[2, 3, 0.8], [7.5, 1.5, 0.55], [5, 8, 0.7], [9.5, 6.5, 0.45], [1, 9.5, 0.5]] as const) el('circle', { cx, cy, r, class: 'soil-speck' }, soil);
@@ -280,12 +327,18 @@ export class BoardView {
       draw: el('g', { class: 'l-draw' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
+    this.skinHost = skin ? { svg, defs, layers: this.layers, config, style, look, paletteId, keys: this.keys, terrain, id: this.id, url: this.url } : null;
+    if (skin) {
+      svg.classList.remove('warming');
+      skin.setup(this.skinHost!);
+    }
     for (const key of this.keys) {
       const t = terrain[key] ?? 'normal';
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: `hex ${t}` }, g);
-      drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
-      if (t === 'normal' && look.textures) el('path', { d: hexPath(key, S - 3, style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
+      if (skin) skin.cell(this.skinHost!, g, key, t);
+      else drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
+      if (t === 'normal' && look.textures && !skin) el('path', { d: hexPath(key, S - 3, style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
       if (t === 'rich') {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
@@ -300,6 +353,7 @@ export class BoardView {
     const colors = materialsOf(paletteId).colors;
     this.homeEls = ([0, 1] as const).map((p) => {
       const key = coordKey(homeCoord(p, config));
+      if (skin) return skin.home(this.skinHost!, p, key);
       return drawLandmark(this.layers.homes, p === 0 ? 'tree' : 'volcano', key, centerOf(key), getOrient(), colors, look);
     });
   }
@@ -378,6 +432,13 @@ export class BoardView {
     this.tileEls.clear();
     this.veinEls = [];
     const st = this.style;
+    const maxRank = this.config.maxRank;
+    if (this.skin && this.skinHost) {
+      this.layers.glow.replaceChildren();
+      const r = this.skin.render(this.skinHost, board, o);
+      this.tileEls = r.tiles;
+      this.veinEls = r.veins;
+    } else {
 
     for (const s of o.scars) {
       if (board[s.key]) continue;
@@ -405,13 +466,13 @@ export class BoardView {
     }
     this.shownVeins = now;
 
-    const maxRank = this.config.maxRank;
     for (const key of this.keys) {
       const t = board[key];
       if (!t) continue;
       this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
     }
     this.drawGlows(board);
+    }
     // UX pass: a gold "2" on a hex that holds a tile sits smaller, in the corner, clear of the owner mark
     for (const b of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) b.classList.toggle('on-tile', !!board[b.dataset.key ?? b.getAttribute('data-key') ?? '']);
 
@@ -572,7 +633,7 @@ export class BoardView {
   setGlow(o: GlowOpts, scale = 1) {
     this.glowOpts = o;
     this.glowScale = scale;
-    if (this.lastRender) this.drawGlows(this.lastRender[0]);
+    if (this.lastRender && !this.skin) this.drawGlows(this.lastRender[0]);
   }
 
   /** The slight glow on top-rank tiles: a faint pre-rendered halo, above the tiles, under everything else. */
