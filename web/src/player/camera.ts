@@ -277,7 +277,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     if (!t) return;
     pill.hidden = !(wholeOn || !t.whole);
     pill.textContent = wholeOn ? 'Back to play' : 'Whole map';
-    if (!force && view && Math.abs(view.x - t.rect.x) + Math.abs(view.y - t.rect.y) + Math.abs(view.w - t.rect.w) < 0.5) return settle();
+    if (!force && view && Math.abs(view.x - t.rect.x) + Math.abs(view.y - t.rect.y) + Math.abs(view.w - t.rect.w) + Math.abs(view.h - t.rect.h) < 0.5) return settle();
     show(t.rect);
   };
 
@@ -404,7 +404,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     update(i: CamInput, cellCentres: Map<string, { x: number; y: number }>) {
       input = i;
       centres = cellCentres;
-      const key = i.tiles.map((t) => `${t.key}${t.owner}`).sort().join('|') + `@${i.defaultTile.toFixed(1)}`;
+      const key = i.tiles.map((t) => `${t.key}${t.owner}`).sort().join('|') + `@${i.defaultTile.toFixed(1)}:${box().width.toFixed(1)}:${box().height.toFixed(1)}:${under().toFixed(1)}`;
       if (i.turnKey !== lastTurn) {
         lastTurn = i.turnKey;
         auto = true; // a new turn: auto-framing again (and a manual zoom-out snaps back)
