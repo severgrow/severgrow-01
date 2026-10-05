@@ -8,14 +8,14 @@
 // Art tiers: only one of lo/hi is loaded at a time, picked from the tile's effective size
 // (tier.ts). Anything the skin's files don't have yet falls back (greybox colours from the
 // skin, the board's own home drawings, no props), so final art drops in without code changes.
-import { connectedKeys } from '../../../../src/engine/index.js';
+import { allNeighbors, connectedKeys, coordKey, parseKey } from '../../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../../src/engine/index.js';
 import { looseEdges, networkEdges } from '../../logic/network.js';
 import { getOrient } from '../../logic/orient.js';
 import { vigour } from '../../logic/vigour.js';
 import { BoardView, S, centerOf, el } from '../board.js';
 import type { BoardHandlers, Overlay } from '../board.js';
-import { hash, hexPath } from '../geom.js';
+import { cornerPts, hash, hexPath } from '../geom.js';
 import { SkinAssets } from './assets.js';
 import { GroundPainter } from './ground.js';
 import type { Box, GroundCell, Tint } from './ground.js';
@@ -117,7 +117,7 @@ export class SkinBoardView extends BoardView {
     const mat = this.skin.materials[this.skin.cells[t === 'rich' ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
     el('path', { d, class: 'skin-proxy', fill: mat?.proxy.base ?? '#262a28' }, g);
     el('path', { d, class: `skin-cell ${t}`, fill: this.url('skin-ground') }, g);
-    if (t === 'rock') el('g', { class: 'skin-rock', 'data-key': key }, g);
+    void key;
   }
 
   protected override drawHome(p: Player, key: string): SVGGElement {
@@ -226,12 +226,13 @@ export class SkinBoardView extends BoardView {
   }
 
   /** Blocked hexes: one calm boulder cluster each (when the skin has them). */
+  /** Blocked hexes: one big boulder cluster each, in a layer over all the ground (it may overhang). */
   private dressRocks() {
     const defs = this.propDefs[this.skin.cells.rock] ?? [];
-    for (const g of this.svg.querySelectorAll<SVGGElement>('.skin-rock')) {
-      g.replaceChildren();
-      const key = g.dataset.key!;
-      if (!defs.length) continue;
+    this.layers.base.querySelector('.skin-rocks')?.remove();
+    const g = el('g', { class: 'skin-rocks', 'aria-hidden': 'true' }, this.layers.base);
+    for (const key of this.keys) {
+      if (this.terrain[key] !== 'rock' || !defs.length) continue;
       const def = defs[Math.floor(hash(`${key}:rock`) * defs.length)]!;
       const { x, y } = centerOf(key);
       el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: 'skin-prop', preserveAspectRatio: 'xMidYMid meet' }, g);
@@ -400,9 +401,37 @@ export class SkinBoardView extends BoardView {
     const g = el('g', { class: `tile ${t.owner === 0 ? 'you' : 'bot'}${t.root ? ' root' : ''} skin-tile`, 'data-key': key }, parent);
     const d = hexPath(key, S * 0.995, this.style.tileShape);
     const mat = skin.materials[skin.owners[t.owner]];
-    el('path', { d, class: 'skin-proxy', fill: mat?.proxy.base ?? '#333' }, g);
-    el('path', { d, class: 'skin-fill', fill: this.url('skin-ground') }, g);
-    el('path', { d, class: 'tile-edge skin-edge' }, g);
+    // one territory, not separate tiles: the fill reaches a little past the hex (over the grid gap,
+    // the ground picture is continuous there), and an outline is drawn only on the sides that face
+    // something else (another side, empty ground, rock, the board's edge)
+    const big = hexPath(key, S * 1.035, 'flat');
+    el('path', { d: big, class: 'skin-proxy', fill: mat?.proxy.base ?? '#333' }, g);
+    el('path', { d: big, class: 'skin-fill', fill: this.url('skin-ground') }, g);
+    const board = this.lastRender?.[0] ?? {};
+    const c = centerOf(key);
+    const corners = cornerPts(key, S * 1.0);
+    let edge = '';
+    for (const n of allNeighbors(parseKey(key))) {
+      const nk = coordKey(n);
+      if (board[nk]?.owner === t.owner) continue;
+      const nc = centerOf(nk);
+      const mx = (c.x + nc.x) / 2;
+      const my = (c.y + nc.y) / 2;
+      // the side between the two corners nearest that neighbour's direction
+      let best = 0;
+      let bd = Infinity;
+      for (let i = 0; i < 6; i++) {
+        const a = corners[i]!;
+        const b = corners[(i + 1) % 6]!;
+        const dd = Math.hypot((a[0] + b[0]) / 2 - mx, (a[1] + b[1]) / 2 - my);
+        if (dd < bd) (bd = dd), (best = i);
+      }
+      const a = corners[best]!;
+      const b = corners[(best + 1) % 6]!;
+      edge += `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
+    }
+    if (edge) el('path', { d: edge, class: 'tile-edge skin-edge skin-rim' }, g);
+    void d;
     if (t.root) return g;
     const { x, y } = centerOf(key);
     const s9 = this.strength9(t);
