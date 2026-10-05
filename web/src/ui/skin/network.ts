@@ -48,6 +48,8 @@ export type LinkOpts = {
   fragile: boolean;
   id: string;
   defs: SVGDefsElement;
+  /** a whole painted link (picked for this pair), laid once from plate to plate */
+  art?: { url: string; aspect: number } | null;
 };
 
 /** Draws one link into `g`; returns the elements (for the sever animation). */
@@ -88,6 +90,7 @@ const curvePoints = (p: ReturnType<typeof linkPath>, seed: string, n: number) =>
 
 export const drawLink = (g: SVGGElement, p: ReturnType<typeof linkPath>, o: LinkOpts): SVGElement[] => {
   const L = o.look;
+  if (o.art) return drawArtLink(g, p, o, o.art);
   // a painted strip fades at its edges (no outline under it), so it is drawn wider than a plain stroke
   const w = L.widths[o.width] * (o.strip && !o.loose ? 1.55 : 1);
   const out: SVGElement[] = [];
@@ -123,5 +126,27 @@ export const drawLink = (g: SVGGElement, p: ReturnType<typeof linkPath>, o: Link
       if (L.scroll && o.motion && !o.loose && o.tilePx >= 64) core.classList.add('skin-flow');
     } else if (L.highlight) stroke(curve.d, L.highlight, Math.max(0.5, w * 0.22), { 'stroke-opacity': 0.6 });
   }
+  return out;
+};
+
+/**
+ * A whole painted link: one picture, tucked a little under each number plate and stretched to the
+ * gap (its own waves and leaves make it organic), as thick as the link's load. It lives: a vine
+ * breathes a touch, lava glows brighter and back, each link at its own pace. One or two images
+ * per link, nothing per frame in script.
+ */
+const drawArtLink = (g: SVGGElement, p: ReturnType<typeof linkPath>, o: LinkOpts, art: { url: string; aspect: number }): SVGElement[] => {
+  const len = p.length + 6;
+  const h = Math.min(16, Math.max(7, (len / art.aspect) * (o.width === 'heavy' ? 1.9 : o.width === 'thin' ? 1.3 : 1.6)));
+  const cx = (p.start.x + p.end.x) / 2;
+  const cy = (p.start.y + p.end.y) / 2;
+  const lava = !!o.look.hot_core;
+  const cls = `skin-link skin-art-link${o.grow ? ' grow-in' : ''}${o.loose ? ' loose' : ''}${o.fragile ? ' fragile' : ''}`;
+  const wrap = el('g', { transform: `translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${p.angle.toFixed(2)})` }, g);
+  const pace = h01(o.id);
+  const anim = o.motion && !o.loose && o.tilePx >= 40;
+  const box = { x: (-len / 2).toFixed(2), y: (-h / 2).toFixed(2), width: len.toFixed(2), height: h.toFixed(2), preserveAspectRatio: 'none' };
+  const out: SVGElement[] = [el('image', { href: art.url, ...box, class: `${cls}${anim && !lava ? ' skin-vine' : ''}`, style: `animation-delay:${(-pace * 6).toFixed(2)}s` }, wrap)];
+  if (lava && anim) out.push(el('image', { href: art.url, ...box, class: 'skin-link skin-lava-flow', style: `animation-delay:${(-pace * 4).toFixed(2)}s` }, wrap));
   return out;
 };

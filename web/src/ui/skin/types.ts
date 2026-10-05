@@ -70,6 +70,8 @@ export type NetworkLook = {
   widths: { thin: number; normal: number; heavy: number };
   /** a strip texture (tiles along the path) */
   strip?: string;
+  /** a folder of whole painted links (one picked per linked pair, laid once from plate to plate) */
+  links?: string;
   /** scroll the strip / hot core along the path (flow) */
   scroll?: boolean;
 };

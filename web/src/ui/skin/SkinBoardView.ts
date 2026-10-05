@@ -55,6 +55,8 @@ export class SkinBoardView extends BoardView {
   /** tiles joined to their home in the board being drawn */
   private joinedNow = new Set<string>();
   private strips: ({ url: string; w: number; h: number } | null)[] = [null, null];
+  /** whole painted links for each player (url and aspect) */
+  private linkArt: { url: string; aspect: number }[][] = [[], []];
   private recheck: ReturnType<typeof setTimeout> | undefined;
   private readonly coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
@@ -203,6 +205,13 @@ export class SkinBoardView extends BoardView {
         return { src, size: r?.size ?? set.size, ...(r?.minStrength ? { minStrength: r.minStrength } : {}), ...(anim ? { anim } : {}) };
       });
     }
+    this.linkArt = await Promise.all(
+      this.net.map(async (n) =>
+        n.links
+          ? (await Promise.all(a.list(n.links).map(async (f) => ({ f, img: await a.image(f) })))).flatMap(({ f, img }) => (img ? [{ url: a.url(f), aspect: img.width / img.height }] : []))
+          : [],
+      ),
+    );
     this.strips = await Promise.all(
       this.net.map(async (n) => {
         const img = n.strip ? await a.image(n.strip) : null;
@@ -416,6 +425,7 @@ export class SkinBoardView extends BoardView {
           width: loose ? 'thin' : widthFor(load),
           tilePx,
           strip: this.strips[p] ?? null,
+          art: this.linkArt[p]?.length ? this.linkArt[p]![Math.floor(hash(`${a}|${b}`) * this.linkArt[p]!.length)]! : null,
           motion,
           grow: !loose && fresh && !this.shownVeins.has(id),
           loose,
