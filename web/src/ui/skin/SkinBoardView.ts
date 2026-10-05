@@ -208,8 +208,12 @@ export class SkinBoardView extends BoardView {
   }
 
   /** The home's sprite layers (when every one of them is in this tier), else the board's own drawing. */
-  private dressHome(g: SVGGElement, layers: HomeLayer[]) {
+  private dressHome(g: SVGGElement, all: HomeLayer[]) {
     g.querySelector('.skin-home-art')?.remove();
+    // several looks (variant 0, 1, ...): one per home tile, only among looks this tier has in full
+    const looks = [...new Set(all.map((l) => l.variant ?? -1).filter((v) => v >= 0))].filter((v) => all.filter((l) => l.variant === v).every((l) => this.assets.has(l.src)));
+    const pick = looks.length ? looks[Math.floor(hash(`${g.dataset.key ?? ''}:home`) * looks.length)] : undefined;
+    const layers = all.filter((l) => l.variant === undefined || l.variant === pick);
     const ok = layers.length > 0 && layers.every((l) => this.assets.has(l.src));
     g.classList.toggle('skin-has-art', ok);
     if (!ok) return;
@@ -217,7 +221,7 @@ export class SkinBoardView extends BoardView {
     const art = el('g', { class: 'skin-home-art' });
     body.insertBefore(art, body.firstChild);
     for (const l of layers) {
-      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: 'xMidYMid meet' }, art);
+      el('image', { href: this.assets.url(l.src), x: (l.dx ?? 0) - l.size / 2, y: (l.dy ?? 0) - l.size / 2, width: l.size, height: l.size, class: `skin-home-layer${l.anim ? ` skin-${l.anim}` : ''}${l.delay ? ' skin-later' : ''}`, opacity: l.opacity ?? 1, preserveAspectRatio: 'xMidYMid meet', ...(l.delay ? { style: `animation-delay:${-l.delay}s` } : {}) }, art);
     }
   }
 
