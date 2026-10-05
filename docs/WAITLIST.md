@@ -266,3 +266,4 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 - Date: 2026-10-04 · Commits: `04297e9`, `9afb814`, `4ef2ccd` · In test only
 - Only if a preset proves fun. Needs SPEC changes, new golden games, and the tests listed in
   `docs/LAB-KNOWN-BREAKAGE.md` fixed.
+- **V3 gold piles on x2 hexes** (2026-10-05, dev, in test only): gold hexes use the empty ground plus one of five painted gold-nugget piles (props/gold, lo/hi). Check before locking in: pile hidden under owned tiles, "2" badge still readable, lo/hi budgets.
