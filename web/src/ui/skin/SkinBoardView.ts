@@ -46,6 +46,8 @@ export class SkinBoardView extends BoardView {
   private tints: Record<string, Tint | null> = {};
   /** prop sprites by material, from what this tier has */
   private propDefs: Record<string, PropDef[]> = {};
+  /** painted hex tiles by material, then by strength 1-9 */
+  private tileArt: Record<string, string[][]> = {};
   /** props for cut-off tiles and severed hexes, by material */
   private cutoffDefs: Record<string, PropDef[]> = {};
   /** ambient motes on screen (kept across renders so their motion never restarts) */
@@ -185,6 +187,15 @@ export class SkinBoardView extends BoardView {
     this.propDefs = {};
     this.cutoffDefs = {};
     for (const [id, m] of Object.entries(this.skin.materials)) if (m.cutoffProps) this.cutoffDefs[id] = a.list(m.cutoffProps.dir).map((src) => ({ src, size: m.cutoffProps!.size }));
+    this.tileArt = {};
+    for (const [id, dir] of Object.entries(this.skin.tiles ?? {})) {
+      const byS: string[][] = Array.from({ length: 10 }, () => []);
+      for (const f of a.list(dir)) {
+        const m = /\/s([1-9])_[^/]*$/.exec(f);
+        if (m) byS[Number(m[1])]!.push(f);
+      }
+      if (byS.some((l) => l.length)) this.tileArt[id] = byS;
+    }
     for (const [id, set] of Object.entries(this.skin.props)) {
       this.propDefs[id] = a.list(set.dir).map((src): PropDef => {
         const r = set.rules?.find((x) => src.includes(x.match));
@@ -454,14 +465,28 @@ export class SkinBoardView extends BoardView {
       const b = corners[(best + 1) % 6]!;
       edge += `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
     }
+    const { x, y } = centerOf(key);
+    const s9 = this.strength9(t);
+    const cut = !this.joinedNow.has(key);
+    // a painted hex for this strength (the nearest strength that has one), turned with the board
+    const art = this.tileArt[skin.owners[t.owner]];
+    if (art) {
+      let list: string[] = [];
+      for (let d = 0; d < 9 && !list.length; d++) list = art[s9 - d]?.length ? art[s9 - d]! : (art[s9 + d] ?? []);
+      const src = list[Math.floor(hash(`${key}:tile`) * list.length)];
+      if (src) {
+        const o = toScreen(1, 0);
+        const turn = (Math.atan2(o.y, o.x) * 180) / Math.PI;
+        const sz = S * 2.07;
+        el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: `skin-tile-art${cut ? ' cut' : ''}`, preserveAspectRatio: 'none', ...(turn ? { style: `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg)` } : {}) }, g);
+      }
+    }
     if (edge) el('path', { d: edge, class: 'tile-edge skin-edge skin-rim' }, g);
     void d;
     if (t.root) return g;
-    const { x, y } = centerOf(key);
-    const s9 = this.strength9(t);
-    // a tile cut off from its home shows wilted / ashen props instead of its living ones
-    const cut = !this.joinedNow.has(key);
-    const defs = (cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? [];
+    // a tile cut off from its home shows wilted / ashen props instead of its living ones (painted
+    // tiles carry their own plants, so they get none)
+    const defs = art ? [] : ((cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? []);
     const budget = cut ? Math.min(1, propBudget(this.tilePx(), 9)) : propBudget(this.tilePx(), s9);
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
