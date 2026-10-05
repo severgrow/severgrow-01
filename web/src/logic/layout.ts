@@ -28,6 +28,166 @@ export type Layout = {
   scale: number;
   /** the icon-only corner tools (40pt visible, 44pt hit area), in the zone's corners */
   tools: { weak: Box; targets: Box; replay: Box; help: Box };
+  /** the test copy's "thumb layout" (phones, portrait): the dock's parts, dock-local px */
+  thumb?: Thumb;
+};
+
+/**
+ * The thumb layout (test copy only, phones in portrait): no hint row. The hand is a curved fan
+ * along an arc that rises from near the bottom centre to the right edge, just under the board
+ * (cards held by the right thumb); the deck and the throw pile sit side by side in the lower
+ * left; Undo and Sort in the free bottom-right corner, under the arc. "left" mirrors it all.
+ * Every box is in the dock's own coordinates (0,0 = the dock's top-left corner).
+ */
+export type Thumb = {
+  side: 'right' | 'left';
+  /** the arc the card centres sit on: its centre, radius and the angles (deg, screen y down)
+   *  of the first and last slots for the largest hand */
+  arc: { cx: number; cy: number; r: number; a0: number; a1: number };
+  /** the largest hand the arc is sized for, and the visible slice per card along the arc */
+  maxHand: number;
+  slice: number;
+  card: { w: number; h: number };
+  piles: Box;
+  deck: Box;
+  discard: Box;
+  pileCard: { w: number; h: number };
+  moves: Box;
+  undo: Box;
+  sort: Box;
+  /** the coach and first-time tips: the free corner over the move buttons, left of the fan */
+  tips: Box;
+};
+/** Thumb layout: the visible part of every card along the arc (pt), the outward lift of a
+ *  picked card, the pile column width, and the space kept free at the edges. */
+export const THUMB = { slice: 42, lift: 18, pileW: 60, edge: 8, icon: 44 } as const;
+
+/** The centres, rotations (deg) and outward normals of `n` cards on the thumb arc (dock px). */
+export const fanSlots = (t: Thumb, n: number): { x: number; y: number; rot: number; nx: number; ny: number }[] => {
+  if (n <= 0) return [];
+  const { cx, cy, r, a0, a1 } = t.arc;
+  const span = a1 - a0;
+  // the slice for this hand: the arc's full length shared out, but no wider than 85% of a card
+  // (or the slice, if that is wider): a small hand stays a fan, centred on the arc
+  const full = (Math.abs(span) * Math.PI * r) / 180;
+  const step = n > 1 ? Math.min(Math.max(t.slice, t.card.w * 0.85), full / (n - 1)) : 0;
+  const used = ((step * (n - 1)) / full) * span;
+  const start = a0 + (span - used) / 2;
+  return Array.from({ length: n }, (_, i) => {
+    const a = n > 1 ? start + (used * i) / (n - 1) : a0 + span / 2;
+    const rad = (a * Math.PI) / 180;
+    const nx = Math.cos(rad);
+    const ny = Math.sin(rad);
+    // the card's top points away from the arc's centre (a real fan)
+    return { x: cx + r * nx, y: cy + r * ny, rot: a + 90, nx, ny };
+  });
+};
+
+/**
+ * The thumb dock for a width, its available height (dock plus board zone), the bottom safe area
+ * and the largest hand: the smallest dock that gives every card a slice of THUMB.slice, trying
+ * slightly smaller cards before the board's tiles drop under 44pt.
+ */
+const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius: number, side: 'right' | 'left') => {
+  const { edge, pileW, lift, icon } = THUMB;
+  const build = (cw: number, slice: number, minH = 0) => {
+    const ch = Math.round(cw * 1.42);
+    const hd = Math.hypot(cw, ch) / 2; // a turned card stays inside this radius
+    const pilesW = 2 * pileW + 8;
+    const pileCard = { w: pileW - 8, h: Math.round((pileW - 8) * 1.42) };
+    const pileBoxH = pileCard.h + 26;
+    // first and last card centres: low beside the piles, high at the right edge
+    const sx = edge + pilesW + 6 + hd * 0.8;
+    const ex = W - edge - hd;
+    const dx = Math.max(40, ex - sx);
+    const need = (maxHand - 1) * slice;
+    // a gentle bow (radius 1.3x the chord): the arc is about 2.7% longer than its chord
+    const chord = Math.max(need / 1.0265, dx * 1.12);
+    const bottomPad = 8 + sb;
+    // a taller dock (the board can't use the height) lets the arc climb further: wider slices
+    const dy = Math.max(Math.sqrt(Math.max(0, chord * chord - dx * dx)), minH - (2 * hd + lift + 4 + bottomPad));
+    const h = Math.ceil(Math.max(dy + 2 * hd + lift + 4 + bottomPad, pileBoxH + 52 + bottomPad + 8));
+    // dock-local points (y down): S low, E high
+    const S = { x: sx, y: h - bottomPad - hd };
+    const E = { x: ex, y: S.y - dy };
+    const c = Math.hypot(E.x - S.x, E.y - S.y);
+    const r = 1.3 * c;
+    const mx = (S.x + E.x) / 2;
+    const my = (S.y + E.y) / 2;
+    // the arc's centre lies below-right of the chord (the fan bulges up and to the left)
+    const ux = (E.x - S.x) / c;
+    const uy = (E.y - S.y) / c;
+    const k = Math.sqrt(r * r - (c / 2) * (c / 2));
+    const cx = mx - uy * k;
+    const cy = my + ux * k;
+    const ang = (p: { x: number; y: number }) => (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI;
+    const a0 = ang(S);
+    let a1 = ang(E);
+    if (a1 < a0 - 180) a1 += 360;
+    if (a1 > a0 + 180) a1 -= 360;
+    const pileY = h - bottomPad - pileBoxH;
+    const deck: Box = { x: edge, y: pileY, w: pileW, h: pileBoxH };
+    const discard: Box = { x: edge + pileW + 8, y: pileY, w: pileW, h: pileBoxH };
+    const piles: Box = { x: edge, y: pileY, w: pilesW, h: pileBoxH };
+    // the move buttons: a column over the piles, left of the fan (two rows if they need them)
+    const moves: Box = { x: edge, y: Math.max(4, pileY - 124), w: pilesW, h: 120 };
+    const sort: Box = { x: W - edge - icon, y: h - bottomPad - icon, w: icon, h: icon };
+    const undo: Box = { x: W - edge - 2 * icon - 8, y: h - bottomPad - icon, w: icon, h: icon };
+    let t: Thumb = { side: 'right', arc: { cx, cy, r, a0, a1 }, maxHand, slice, card: { w: cw, h: ch }, piles, deck, discard, pileCard, moves, undo, sort, tips: { x: edge, y: 4, w: 0, h: 0 } };
+    // the tips' corner: from the dock's top down to the move buttons, as wide as the fan allows
+    const tipsBottom = moves.y - 6;
+    const fanLeft = Math.min(...fanSlots(t, maxHand).filter((p) => p.y - hd < tipsBottom).map((p) => p.x - hd), W - edge);
+    t = { ...t, tips: { x: edge, y: 4, w: Math.max(pilesW, W * 0.5, fanLeft - edge - 6), h: Math.max(44, tipsBottom - 4) } };
+    if (side === 'left') t = mirrorThumb(t, W);
+    // the board above it
+    const fit = bestFit(W - 2 * BOARD_MARGIN, avail - h, radius);
+    const hexPx = boardUnits(radius, fit.orient).hexW * fit.scale;
+    return { t, h, hexPx, boardH: boardUnits(radius, fit.orient).h * fit.scale, cw, slice };
+  };
+  /** A board limited by the width can't use all the height: the fan takes the rest (no empty
+   *  strip between the board and the hand), up to 16pt of air either side of the board. */
+  const fill = (b: ReturnType<typeof build>) => {
+    const spare = avail - b.h - b.boardH - 2 * MAX_GAP;
+    return spare > 4 ? build(b.cw, b.slice, b.h + Math.floor(spare)) : b;
+  };
+  // the dock takes at most 60% of the screen (then the slice gives, for very big hands)
+  const maxDock = avail * 0.6;
+  const sizes = [64, 60, 56, 52, 48, 44];
+  // 1) a 42pt slice, cards a little smaller if that keeps the tiles at 44pt or more
+  // 2) a 40pt slice, the same
+  // 3) a 40pt slice within 60% of the screen (the board's tiles go under 44pt)
+  // 4) the slice shrinks (never under 30pt) until the dock fits 60% of the screen
+  for (const slice of [42, 40]) {
+    for (const cw of sizes) {
+      const b = build(cw, slice);
+      if (b.hexPx >= 44 && b.h <= maxDock) return fill(b);
+    }
+  }
+  for (const cw of sizes) {
+    const b = build(cw, 40);
+    if (b.h <= maxDock) return fill(b);
+  }
+  for (let slice = 38; slice >= 30; slice -= 2) {
+    const b = build(44, slice);
+    if (b.h <= maxDock || slice === 30) return fill(b);
+  }
+  return build(44, 30);
+};
+
+const mirrorThumb = (t: Thumb, W: number): Thumb => {
+  const m = (b: Box): Box => ({ ...b, x: W - b.x - b.w });
+  return {
+    ...t,
+    side: 'left',
+    arc: { cx: W - t.arc.cx, cy: t.arc.cy, r: t.arc.r, a0: 180 - t.arc.a0, a1: 180 - t.arc.a1 },
+    piles: m(t.piles),
+    deck: m(t.discard),
+    discard: m(t.deck),
+    moves: m(t.moves),
+    tips: m(t.tips),
+    undo: m(t.sort),
+    sort: m(t.undo),
+  };
 };
 
 /** Fixed heights, CSS px (8pt grid). */
@@ -180,7 +340,7 @@ const toolsIn = (zone: Box): Layout['tools'] => {
   };
 };
 
-export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layout => {
+export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb: 'right' | 'left' | null = null): Layout => {
   const st = v.safeTop ?? 0;
   const sb = v.safeBottom ?? 0;
   const sl = v.safeLeft ?? 0;
@@ -204,6 +364,33 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layo
     const dockH = rows.table + rows.hand + SIDE_GAP + HEIGHTS.bottomPad;
     const dock: Box = { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
     return { mode: 'side', orient: fit.orient, header, zone, board, dock, rows, card, parts: partsIn(dock, rows, card, 'side', maxHand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
+  }
+
+  if (thumb) {
+    // the test copy's thumb layout: one dock, no hint row; the board gets the rest, centred
+    const { t, h } = thumbDock(W, v.h - top, sb, Math.max(5, maxHand), radius, thumb);
+    const dock: Box = { x: sl, y: v.h - h, w: W, h };
+    const zone: Box = { x: sl + BOARD_MARGIN, y: top, w: W - 2 * BOARD_MARGIN, h: dock.y - top };
+    const fit = bestFit(zone.w, zone.h, radius);
+    const u = boardUnits(radius, fit.orient);
+    const bw = u.w * fit.scale;
+    const bh = u.h * fit.scale;
+    const board: Box = { x: zone.x + (zone.w - bw) / 2, y: zone.y + (zone.h - bh) / 2, w: bw, h: bh };
+    const card = { w: t.card.w, h: t.card.h, slice: t.slice };
+    const rows = { table: 0, hand: h };
+    const off = (b: Box): Box => ({ ...b, x: b.x + dock.x, y: b.y + dock.y });
+    const parts: Layout['parts'] = {
+      hint: { x: dock.x, y: dock.y, w: 0, h: 0 },
+      piles: off(t.piles),
+      deck: off(t.deck),
+      discard: off(t.discard),
+      moves: off(t.moves),
+      pileCard: t.pileCard,
+      undo: off(t.undo),
+      fan: { x: dock.x, y: dock.y, w: W, h },
+      sort: off(t.sort),
+    };
+    return { mode: 'stack', orient: fit.orient, header, zone, board, dock, rows, card, parts, hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone), thumb: t };
   }
 
   const card = cardSize(W, maxHand);

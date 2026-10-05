@@ -49,7 +49,8 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, computeLayout, setBoardShape } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, computeLayout, fanSlots, setBoardShape, THUMB } from './logic/layout.js';
+import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -526,6 +527,10 @@ function dealIn() {
   });
 }
 
+/** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
+let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
+/** The thumb layout in use (test copy, phones in portrait), or null. */
+let thumbLayout: Thumb | null = null;
 // the Lab (test copy only: this import is dropped from the live build)
 let lab: {
   overrides: () => Partial<RulesConfig>;
@@ -535,6 +540,19 @@ let lab: {
 // (the build constant itself, so the live build drops the Lab's code entirely)
 declare const __CHANNEL__: string;
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  void import('./lab-mode/thumb.js').then((t) => {
+    thumbMod = t.mountThumb({
+      relayout: () => {
+        layoutKey = '';
+        render();
+        applyLayout();
+      },
+      reduceMotion: () => settings.reduceMotion,
+    });
+    layoutKey = '';
+    applyLayout();
+    if (session) render();
+  });
   void import('./lab-mode/panel.js').then((m) => {
     lab = m.mountLab({
       sheet,
@@ -1404,6 +1422,9 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
+  // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
+  // animation, no Bloom being painted)
+  if (IS_TEST && thumbMod) thumbMod.tip(myTurn() && !busy() && !watching && !draw.shape.length && !draw.ptr ? dockHint(v).text : null, !!thumbLayout);
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);
@@ -1643,13 +1664,32 @@ function applyLayout() {
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
   setBoardShape(shapeCfg?.board ? { cells: shapeCfg.board.cells, rot: (o) => homeRotation(o, shapeCfg, HUMAN) } : null);
-  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}`;
+  // the test copy's thumb layout (phones in portrait, the setting on): sized for the game's hand
+  const thumbSide = IS_TEST && thumbMod ? thumbMod.side(w, h) : null;
+  const maxHand = (shapeCfg?.handSize ?? 7) + 1;
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? maxHand : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time)
   const par = 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
-  const l = computeLayout({ w, h, ...safeArea() }, radius);
+  const l = thumbSide ? computeLayout({ w, h, ...safeArea() }, radius, maxHand, thumbSide) : computeLayout({ w, h, ...safeArea() }, radius);
+  const thumbWas = thumbLayout;
+  thumbLayout = l.thumb ?? null;
+  if (thumbLayout) {
+    document.documentElement.dataset.thumb = thumbLayout.side;
+    const r = document.documentElement.style;
+    const t = thumbLayout;
+    for (const [name, b] of [['deck', t.deck], ['discard', t.discard], ['moves', t.moves], ['undo', t.undo], ['sort', t.sort], ['tips', t.tips]] as const) {
+      r.setProperty(`--t-${name}-x`, `${b.x.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-y`, `${b.y.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-w`, `${b.w.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-h`, `${b.h.toFixed(1)}px`);
+    }
+    r.setProperty('--t-pile-w', `${t.pileCard.w}px`);
+    r.setProperty('--t-pile-h', `${t.pileCard.h}px`);
+  } else delete document.documentElement.dataset.thumb;
+  if (thumbWas !== thumbLayout && session) queueMicrotask(() => render());
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
   document.documentElement.dataset.orient = l.orient;
@@ -2196,8 +2236,21 @@ function renderHand(v: View, advice: Advice | null) {
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
-    b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
-    b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
+    if (thumbLayout) {
+      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward
+      const p = fanSlots(thumbLayout, n)[i]!;
+      b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
+      b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
+      b.style.setProperty('--rot', `${p.rot.toFixed(2)}deg`);
+      b.style.setProperty('--lx', `${(p.nx * THUMB.lift).toFixed(1)}px`);
+      b.style.setProperty('--ly', `${(p.ny * THUMB.lift).toFixed(1)}px`);
+      // each card's number corner stays visible: right hand, later cards on top; left, earlier
+      b.style.zIndex = String(thumbLayout.side === 'left' ? n - i : i + 1);
+    } else {
+      b.style.zIndex = '';
+      b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
+      b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
+    }
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));

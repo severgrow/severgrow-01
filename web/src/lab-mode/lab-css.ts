@@ -103,4 +103,171 @@ html[data-layout='side'] .dock:has(#coach:not([hidden])) {
 html[data-layout='side'] .dock:has(#coach:not([hidden])) .dock-overlays {
   max-height: calc(100vh - var(--dock-h, 360px) - 110px);
 }
+
+/* ---- the thumb layout (phones in portrait; logic/layout.ts computes every box): the hand as a
+   curved fan up to the right edge, the piles in the lower left, no hint row ---- */
+html[data-thumb] .dock {
+  display: block;
+  position: relative;
+  height: var(--dock-h);
+  padding: 0;
+  overflow: visible;
+}
+html[data-thumb] .dock > .table-row,
+html[data-thumb] .dock > .hand-row,
+html[data-thumb] .dock .table-row > .piles {
+  display: contents;
+}
+html[data-thumb] .dock .table-row > .hint-line,
+html[data-thumb] #hint-btn {
+  display: none;
+}
+html[data-thumb] .dock .table-row > .piles > .pile {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  height: var(--h);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+}
+html[data-thumb] .dock .piles > .deck { --x: var(--t-deck-x); --y: var(--t-deck-y); --w: var(--t-deck-w); --h: var(--t-deck-h); }
+html[data-thumb] .dock .piles > .discard { --x: var(--t-discard-x); --y: var(--t-discard-y); --w: var(--t-discard-w); --h: var(--t-discard-h); }
+html[data-thumb] .dock .pile-card {
+  --pile-h: var(--t-pile-h);
+  width: var(--t-pile-w);
+  height: var(--t-pile-h);
+}
+html[data-thumb] .dock .pile-meta {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+html[data-thumb] .dock .table-row > .moves {
+  position: absolute;
+  left: var(--t-moves-x);
+  top: var(--t-moves-y);
+  width: var(--t-moves-w);
+  height: var(--t-moves-h);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: flex-end;
+  align-content: flex-end;
+  gap: 6px;
+  z-index: 3;
+}
+html[data-thumb] .dock .forecast-slot {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 100%;
+}
+/* the fan: every card placed on the arc and turned with it */
+html[data-thumb] .dock .hand-row > .hand {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  padding: 0;
+  pointer-events: none;
+  display: block;
+}
+html[data-thumb] .dock .hand-row > .hand .card,
+html[data-thumb] .dock .hand-row > .hand .card:first-child {
+  position: absolute;
+  margin: 0;
+  left: calc(var(--fx) - var(--cw) / 2);
+  top: calc(var(--fy) - var(--ch) / 2);
+  pointer-events: auto;
+  transform: rotate(var(--rot, 0deg));
+  transform-origin: 50% 50%;
+}
+html[data-thumb] .dock .hand-row > .hand .card.lifted {
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.04);
+}
+html[data-thumb] .dock .hand-row > .hand .card:not(.lifted):hover {
+  transform: rotate(var(--rot, 0deg));
+}
+/* Undo and Sort: icon-only, in the free corner under the arc (within the thumb's reach) */
+html[data-thumb] .dock .hand-row > .hand-slot {
+  position: absolute;
+  margin: 0;
+  width: var(--w);
+  height: var(--h);
+  left: var(--x);
+  top: var(--y);
+  z-index: 2;
+}
+html[data-thumb] .dock .hand-row > .undo-slot { --x: var(--t-undo-x); --y: var(--t-undo-y); --w: var(--t-undo-w); --h: var(--t-undo-h); }
+html[data-thumb] .dock .hand-row > .hand-sort { --x: var(--t-sort-x); --y: var(--t-sort-y); --w: var(--t-sort-w); --h: var(--t-sort-h); }
+
+/* the coach and first-time tips: the free corner over the move buttons (never over the fan) */
+html[data-thumb] .dock-overlays {
+  top: var(--t-tips-y);
+  bottom: auto;
+  left: var(--t-tips-x);
+  right: auto;
+  width: var(--t-tips-w);
+  height: auto;
+  max-height: var(--t-tips-h);
+  justify-content: flex-start;
+  z-index: 4;
+}
+html[data-thumb] .dock-overlays > .coach,
+html[data-thumb] .dock-overlays > .first-tip {
+  max-height: var(--t-tips-h);
+}
+
+html[data-thumb] .dock-overlays > .first-tip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+html[data-thumb] .dock-overlays > .coach {
+  font-size: 0.85rem;
+}
+
+/* the idle tip: the step's words, large and faint over the board; never takes a tap */
+.idle-tip {
+  position: absolute;
+  left: 50%;
+  top: 20%;
+  transform: translate(-50%, -50%);
+  width: min(86%, 420px);
+  text-align: center;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--c-text);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+  padding: 6px 12px;
+  border-radius: 18px;
+  transition: opacity 120ms ease-out;
+}
+.idle-tip.on {
+  opacity: 0.4;
+  transition: opacity 250ms ease-in;
+}
+/* a busy map: a very faint soft plate behind the words */
+.idle-tip.busy {
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0));
+}
+.idle-tip.instant,
+.idle-tip.instant.on {
+  transition: none;
+}
+.thumb-settings h3 {
+  margin-top: 4px;
+}
 `;
