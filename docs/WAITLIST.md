@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Zoomed map runs on behind the cards (smart fade)
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only (phones, the thumb layout)
+- Date: 2026-10-05 · Commit: `d281f9f` · In test only (phones, the thumb layout)
 - When the camera is zoomed in and there is more map below, it is no longer cut off at the deck:
   it shows through behind the piles and the cards under a soft fade. Choosing, drawing or
   throwing a card: the cards are clear and the map behind faint. Working on the map (a card
