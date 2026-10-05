@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Camera auto-frame with minimum tile size; weak-spot icons removed; replay hidden
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only
+- Date: 2026-10-05 · Commit: `524c375` · In test only
 - The map never shows tiles smaller than the Classic board's tile on that screen (59.4px on a
   390x844 phone). Big maps zoom to the area where both players have tiles (+2 hexes), with
   arrows at the edge for tiles off screen and a "Whole map" pill. It moves smoothly (300ms;
