@@ -25,7 +25,11 @@ published at `/test/`). For those tasks only:
   constant). The default game's rules, look and behaviour never change. The test copy uses its
   own storage prefix.
 
-"Lock it in" switches back to the strict flow: run the full `npm run check`, fix every failure
+Every change made in the test copy goes onto `docs/WAITLIST.md` ("Waiting for the locked
+beta"): its name, date, commit, "in test only", and what must be checked before locking in.
+
+"Lock it in": first show the user the waitlist and ask which items to include. Then switch back
+to the strict flow for those items: run the full `npm run check`, fix every failure
 (including the ones in `docs/LAB-KNOWN-BREAKAGE.md`), regenerate goldens only where the rules
 change on purpose, keep the guards (the Lab stays out of the live build), and ask the user for
-the go-ahead before anything reaches `main`.
+the go-ahead before anything reaches `main`. Tick each item off the waitlist when it lands.

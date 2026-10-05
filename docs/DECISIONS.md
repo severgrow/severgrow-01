@@ -135,3 +135,12 @@ One line each: where the brief left room, what was chosen and why.
 - Lab: one finger on empty space pans a zoomed board; one finger on a hex still taps or paints, as before.
 - Lab: "Homes: near centre" picks the pair about 4 steps apart (the shortest distance that gives no warning).
 - Lab: the "bots play each other" feature is called "Watch a game": green (my seat) and red each have a level; "Take over" hands green back to me; watched games are not counted in stats.
+- Thumb layout (TEST): the waitlist already existed as docs/LIST-TO-IMPLEMENT.md; it is renamed docs/WAITLIST.md ("Waiting for the locked beta") and every earlier test change is listed there with its date and commit.
+- Thumb layout: "phone" = touch screen (coarse pointer), portrait, at most 600px wide; the settings live in the test copy's own storage and appear in Settings under "Phone layout (test copy)".
+- Thumb layout: the cards are turned with the arc (a real fan: each card's top points away from the arc's centre); turning them less would shrink the visible slice under 40pt.
+- Thumb layout: when space runs out, the order of give is: slightly smaller cards, then the board's 44pt tiles (the dock may take up to 60% of the height), and only then the slice (never under 30pt). A normal hand (8 cards) keeps 40pt+ slices on a 360x640 phone; its tiles drop to about 38pt. A 10-card hand (Lab only) on 360x640 gets 32pt slices.
+- Thumb layout: the fan is sized for the game's largest hand (hand size + 1); a smaller hand spreads wider (up to 85% of a card per slice) and stays centred on the arc. Spare height (a board limited by the width) goes to the fan, so there is no empty strip.
+- Thumb layout, left hand: the whole layout is mirrored and the cards stack the other way, so every card's number corner stays visible.
+- Thumb layout: the move buttons sit in a column over the piles; the coach and first-time tips in the free corner above them, beside the fan (at least half the screen wide). The "?" button is hidden; How to play was already in the in-game menu.
+- Idle tip: shown only with the thumb layout (where the hint row is gone); placed in the top, middle or bottom third of the board, whichever has the fewest tiles and rocks (ties: top, then bottom); a 15% soft plate only when more than 4 things are under it.
+- The game has no drag-to-throw today (a card is thrown by tapping it, or tapping it and then the throw pile); both still work.
