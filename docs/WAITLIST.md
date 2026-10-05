@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Thumb layout and the idle tip (phones)
-- Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map) · In test only
+- Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map), `ffb332e` (fan packed to the bottom: bigger map) · In test only
 - Phones held upright (touch, portrait, up to 600px wide). The hand is a curved fan rising from
   near the bottom centre to the right edge, the deck and throw pile sit side by side in the top left
   of the card area (just under the board; the user's touch map), the move buttons under them, Undo and Sort in the free bottom-right corner, the "?" button is gone (How to play is in
@@ -21,8 +21,9 @@ go-ahead). Tick an item and add the date when it reaches `main`.
   Check: `web/e2e/thumb-check.ts`; screenshots in `docs/screens/thumb/`.
 - Check before locking in:
   - card tap accuracy on real phones (every visible slice picks its card; 5, 8 and 10 cards);
-  - the 360px width: the board's tiles drop to about 38pt with 8 cards, and a 10-card hand
-    (Lab only) gets 32pt slices instead of 40;
+  - the 360px width: the board's tiles are about 44pt with 8 cards (52px cards), and a
+    10-card hand (Lab only) gets 32pt slices instead of 40;
+  - a picked card at the top of the fan lifts briefly into the gap above the cards (by design);
   - Large text (the move buttons and the tip corner beside the fan);
   - left-hand mode on a real phone;
   - the idle tip on a crowded map (readable? the faint plate only when the map is busy);
