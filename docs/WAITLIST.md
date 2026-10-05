@@ -9,10 +9,10 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Thumb layout and the idle tip (phones)
-- Date: 2026-10-05 · Commit: `7254eeb` · In test only
+- Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map) · In test only
 - Phones held upright (touch, portrait, up to 600px wide). The hand is a curved fan rising from
-  near the bottom centre to the right edge, the deck and throw pile sit side by side in the lower
-  left, Undo and Sort in the free bottom-right corner, the "?" button is gone (How to play is in
+  near the bottom centre to the right edge, the deck and throw pile sit side by side in the top left
+  of the card area (just under the board; the user's touch map), the move buttons under them, Undo and Sort in the free bottom-right corner, the "?" button is gone (How to play is in
   the menu). No hint row: its height goes to the board, and the step's tip shows as large faint
   words over the board after 4 seconds without a touch on my turn. Settings: Thumb layout
   On/Off, Hand side Right/Left (Left mirrors everything), Idle tip On/Off.
@@ -26,7 +26,8 @@ go-ahead). Tick an item and add the date when it reaches `main`.
   - Large text (the move buttons and the tip corner beside the fan);
   - left-hand mode on a real phone;
   - the idle tip on a crowded map (readable? the faint plate only when the map is busy);
-  - the coach and first-time tips in the narrow corner beside the fan.
+  - the coach and first-time tips, now just above the cards over the board's lower-left edge
+    (44% wide, so my home stays visible): does the tutorial coach hide too much of the board?
 
 ### Desktop: a proper coach and tip panel
 - Date: 2026-10-04 · Commit: `dcc76c0` · In test only
