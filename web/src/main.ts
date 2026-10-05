@@ -85,6 +85,20 @@ let DesignView: typeof BoardView = BoardView;
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
+// the V3 look (menu -> V3, or ?design=v3; remembered in this channel's own storage): the same
+// game on the skinned renderer with the V3 art. Its code loads only when the look is on.
+const V3_KEY = 'severgrow.look.v3';
+const V3_MODE = FEATURES.v3 && (() => {
+  const q = new URLSearchParams(location.search).get('design');
+  try {
+    if (q === 'v3') localStorage.setItem(V3_KEY, '1');
+    return q === 'v3' || localStorage.getItem(V3_KEY) === '1';
+  } catch {
+    return q === 'v3';
+  }
+})();
+const v3 = V3_MODE ? await Promise.all([import('./ui/skin/SkinBoardView.js'), import('./skins/forestVolcanoV3.js')]) : null;
+if (V3_MODE) document.documentElement.classList.add('design-v3');
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -181,7 +195,33 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
-const board = DESIGN_MODE ? new DesignView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
+const boardSvg = $('board') as unknown as SVGSVGElement;
+const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3) : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
+// the menu's V3 option: switches the look and reloads (the game in progress is saved)
+if (FEATURES.v3) {
+  const row = document.createElement('div');
+  row.className = 'menu-row';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.id = 'menu-v3';
+  b.className = `btn ghost menu-v3${V3_MODE ? ' on' : ''}`;
+  b.textContent = V3_MODE ? 'Leave V3' : 'V3';
+  b.setAttribute('aria-pressed', String(V3_MODE));
+  b.addEventListener('click', () => {
+    try {
+      if (V3_MODE) localStorage.removeItem(V3_KEY);
+      else localStorage.setItem(V3_KEY, '1');
+    } catch {
+      /* storage blocked: the address carries it */
+    }
+    const u = new URL(location.href);
+    if (V3_MODE) u.searchParams.delete('design');
+    else u.searchParams.set('design', 'v3');
+    location.href = u.pathname + u.search;
+  });
+  row.appendChild(b);
+  document.querySelector('#menu .menu-buttons')?.appendChild(row);
+}
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {

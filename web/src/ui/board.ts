@@ -101,10 +101,10 @@ export type GhostView = {
 };
 
 export class BoardView {
-  private config!: RulesConfig;
-  private style!: ThemeStyle;
-  private keys: string[] = [];
-  private layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
+  protected config!: RulesConfig;
+  protected style!: ThemeStyle;
+  protected keys: string[] = [];
+  protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
   private drawHandlers: DrawHandlers | null = null;
@@ -112,20 +112,20 @@ export class BoardView {
   private glowOpts: GlowOpts = { setting: 'subtle', effects: 'normal', reduceMotion: false };
   private glowScale = 1;
   private glowKeys: Set<string> | null = null;
-  private tileEls = new Map<string, SVGGElement>();
-  private veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
-  private shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
+  protected tileEls = new Map<string, SVGGElement>();
+  protected veinEls: { a: string; b: string; owner: Player; el: SVGElement }[] = [];
+  protected shownVeins = new Set<string>(); // veins on screen last time, to draw new ones on
   private pressTimer: ReturnType<typeof setTimeout> | undefined;
   private pressed: string | null = null;
   private longPressed = false;
-  private look: MaterialLook = FULL_LOOK;
+  protected look: MaterialLook = FULL_LOOK;
   /** Material pass 2: the world-space material picture (null without a canvas). */
-  private world: WorldLayer | null = null;
-  private paletteId: ThemeId = 'soil';
+  protected world: WorldLayer | null = null;
+  protected paletteId: ThemeId = 'soil';
   /** Ids are unique per board, so several boards (the material lab) can share a page. */
   private readonly uid = `b${++boardCount}`;
-  private id = (name: string) => `${this.uid}-${name}`;
-  private url = (name: string) => `url(#${this.id(name)})`;
+  protected id = (name: string) => `${this.uid}-${name}`;
+  protected url = (name: string) => `url(#${this.id(name)})`;
 
   constructor(
     readonly svg: SVGSVGElement,
@@ -233,7 +233,8 @@ export class BoardView {
 
     materialDefs(defs, this.id, look);
     // Material pass 2: one world-space picture for every moss and lava tile (seamless).
-    {
+    this.world = null;
+    if (this.usesWorldLayer()) {
       const vb = svg.viewBox.baseVal;
       const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
       this.world = new WorldLayer(defs, this.id('world'), this.id('world-prev'), { x0: vb.x, y0: vb.y, w: vb.width, h: vb.height }, Math.min(2.4, Math.max(1, dpr * 0.95)));
@@ -284,8 +285,7 @@ export class BoardView {
       const t = terrain[key] ?? 'normal';
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, style.tileShape), class: `hex ${t}` }, g);
-      drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
-      if (t === 'normal' && look.textures) el('path', { d: hexPath(key, S - 3, style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
+      this.drawCell(g, key, t);
       if (t === 'rich') {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
@@ -297,12 +297,27 @@ export class BoardView {
       this.bindHex(g, key);
     }
     // Step 4: the homes as landmarks (my tree, the opponent's volcano), drawn once, kept across renders
-    const colors = materialsOf(paletteId).colors;
-    this.homeEls = ([0, 1] as const).map((p) => {
-      const key = coordKey(homeCoord(p, config));
-      return drawLandmark(this.layers.homes, p === 0 ? 'tree' : 'volcano', key, centerOf(key), getOrient(), colors, look);
-    });
+    this.homeEls = ([0, 1] as const).map((p) => this.drawHome(p, coordKey(homeCoord(p, config))));
+    this.afterSetup(terrain);
   }
+
+  // ---- drawing steps a skinned board (ui/skin/) can replace; these defaults are the board's own look ----
+
+  /** Whether tiles use the painted world layer (Material pass 2). */
+  protected usesWorldLayer() {
+    return true;
+  }
+  /** The material of one empty, gold or rock hex (under everything). */
+  protected drawCell(g: SVGGElement, key: string, t: Terrain) {
+    drawMaterial(materialFor(null, t), 'cell', this.ctx(g, key));
+    if (t === 'normal' && this.look.textures) el('path', { d: hexPath(key, S - 3, this.style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
+  }
+  /** A home landmark (kept across renders; setLandmarkState drives its states). */
+  protected drawHome(p: Player, key: string): SVGGElement {
+    return drawLandmark(this.layers.homes, p === 0 ? 'tree' : 'volcano', key, centerOf(key), getOrient(), materialsOf(this.paletteId).colors, this.look);
+  }
+  /** Called at the end of setup (the layers and homes exist). */
+  protected afterSetup(_terrain: Record<string, Terrain>) {}
 
   /** Step 4: the two home landmarks (index = player), for their states and reactions. */
   homeEls: SVGGElement[] = [];
@@ -316,7 +331,7 @@ export class BoardView {
   }
 
   /** What a material drawer needs for one hex. */
-  private ctx(parent: SVGGElement, key: string, radius = S, strength = 1): DrawCtx {
+  protected ctx(parent: SVGGElement, key: string, radius = S, strength = 1): DrawCtx {
     return { parent, key, look: this.look, shape: this.style.tileShape, url: this.url, radius, strength, maxRank: this.config.maxRank };
   }
 
@@ -361,7 +376,7 @@ export class BoardView {
   }
 
   /** Redraws the networks and overlays for `board`. */
-  private lastRender: [Record<string, Tile | null>, Overlay] | null = null;
+  protected lastRender: [Record<string, Tile | null>, Overlay] | null = null;
 
   render(board: Record<string, Tile | null>, o: Overlay) {
     this.lastRender = [board, o];
@@ -377,15 +392,34 @@ export class BoardView {
     scars.replaceChildren();
     this.tileEls.clear();
     this.veinEls = [];
-    const st = this.style;
 
+    this.drawScars(board, o, scars);
+
+    this.drawVeins(board, o, veins);
+
+    const maxRank = this.config.maxRank;
+    for (const key of this.keys) {
+      const t = board[key];
+      if (!t) continue;
+      this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
+    }
+    this.drawGlows(board);
+    this.renderOverlays(board, o);
+  }
+
+  /** What cut-off tiles leave (empty hexes). */
+  protected drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
     for (const s of o.scars) {
       if (board[s.key]) continue;
       // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's), fading over two turns
       const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
       drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(g, s.key));
     }
+  }
 
+  /** The networks: one vein per linked pair (fills this.veinEls). */
+  protected drawVeins(board: Record<string, Tile | null>, o: Overlay, veins: SVGGElement) {
+    const st = this.style;
     // Veins: thick, glowing links back to the root. Thickness and brightness follow how
     // many tiles depend on each link; fragile links (cutting them removes tiles) are thin
     // and flicker. The bot's fragile links flicker only when "Bot's weak links" is on.
@@ -404,14 +438,13 @@ export class BoardView {
       for (const e of looseEdges(board, this.config, p)) this.vein(g, e.a, e.b, p, 'loose', 0.55, 0.7, false);
     }
     this.shownVeins = now;
+  }
 
+  /** Gold badges on tiles, targets, previews, badges and marks (the same for every skin). */
+  private renderOverlays(board: Record<string, Tile | null>, o: Overlay) {
+    const { over } = this.layers;
+    const st = this.style;
     const maxRank = this.config.maxRank;
-    for (const key of this.keys) {
-      const t = board[key];
-      if (!t) continue;
-      this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
-    }
-    this.drawGlows(board);
     // UX pass: a gold "2" on a hex that holds a tile sits smaller, in the corner, clear of the owner mark
     for (const b of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) b.classList.toggle('on-tile', !!board[b.dataset.key ?? b.getAttribute('data-key') ?? '']);
 
@@ -476,7 +509,7 @@ export class BoardView {
     el('text', { x: x + S * 0.48, y: y - S * 0.5 + 0.5 }, g).textContent = text;
   }
 
-  private vein(g: SVGGElement, a: string, b: string, owner: Player, kind: 'live' | 'fragile' | 'loose', width: number, opacity: number, grow: boolean) {
+  protected vein(g: SVGGElement, a: string, b: string, owner: Player, kind: 'live' | 'fragile' | 'loose', width: number, opacity: number, grow: boolean) {
     const A = centerOf(a);
     const B = centerOf(b);
     const st = this.style;
@@ -537,7 +570,7 @@ export class BoardView {
     }
   }
 
-  private drawTile(parent: SVGGElement, key: string, t: Tile, maxRank: number): SVGGElement {
+  protected drawTile(parent: SVGGElement, key: string, t: Tile, maxRank: number): SVGGElement {
     const st = this.style;
     const who = t.owner === 0 ? 'you' : 'bot';
     const g = el('g', { class: `tile ${who}${t.root ? ' root' : ''} mat-${materialFor(t, 'normal')}`, 'data-key': key }, parent);
@@ -576,7 +609,7 @@ export class BoardView {
   }
 
   /** The slight glow on top-rank tiles: a faint pre-rendered halo, above the tiles, under everything else. */
-  private drawGlows(board: Record<string, Tile | null>) {
+  protected drawGlows(board: Record<string, Tile | null>) {
     const layer = this.layers.glow;
     layer.replaceChildren();
     const now = new Set<string>();
@@ -619,7 +652,7 @@ export class BoardView {
     }
   }
 
-  private mark(g: SVGGElement, x: number, y: number, kind: string) {
+  protected mark(g: SVGGElement, x: number, y: number, kind: string) {
     // the test copy: no owner marks on tiles (moss and lava already say whose tile it is)
     if (!FEATURES.ownershipMarks) return;
     const r = 3.2;

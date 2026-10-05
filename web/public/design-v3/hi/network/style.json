@@ -1,0 +1,25 @@
+{
+  "forest": {
+    "outline": "#1f2b1e",
+    "body": "#587843",
+    "highlight": "#b8d173",
+    "widths": {
+      "thin": 2.6,
+      "normal": 4.4,
+      "heavy": 6.8
+    }
+  },
+  "volcano": {
+    "outline": "#211b19",
+    "body": "#8f2212",
+    "highlight": "#f47a26",
+    "hot_core": "#ffd46a",
+    "glow": "#d2481a",
+    "widths": {
+      "thin": 2.6,
+      "normal": 4.2,
+      "heavy": 6.6
+    }
+  },
+  "notes": "Renderer owns one continuous path per linked pair. Strip skins the path; do not cap per-tile connectors."
+}

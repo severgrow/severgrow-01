@@ -5328,3 +5328,9 @@ html.align-overlay::before {
 .reduce-motion .design-v2-board .design-link.grow-in {
   animation: none;
 }
+
+/* the V3 look option in the menu (test channels) */
+#menu .menu-v3 {
+  border-style: dashed;
+  letter-spacing: 0.06em;
+}

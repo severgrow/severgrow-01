@@ -20,6 +20,8 @@ export const FEATURES = Object.freeze({
   ownershipMarks: !IS_TEST,
   lab: IS_TEST,
   design: IS_TEST,
+  /** the V3 look (skinned renderer, V3 art): an option in the menu of both test channels */
+  v3: modern,
   watch: IS_TEST,
 });
 export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? 'main2:' : '';
