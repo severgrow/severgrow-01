@@ -292,7 +292,7 @@ export class SkinBoardView extends BoardView {
       if (t) {
         const mat = skin.owners[t.owner];
         cells.push({ ...base, material: mat, coverage: this.strength9(t), tint: joined.has(key) ? null : (this.tints[mat] ?? null) });
-      } else if (scars.has(key)) {
+      } else if (scars.has(key) && !this.propDefs.dead?.length) {
         const s = scars.get(key)!;
         const mat = skin.owners[s.owner];
         const age = Math.min(2, s.age ?? 0);
@@ -359,7 +359,17 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
-    // the ground paints what is left (cut-off tint); a scar decal on top when the skin has one
+    // with dead-wood sprites (props.dead): the empty ground and one burnt stump or log per lost hex
+    const dead = this.propDefs.dead ?? [];
+    for (const s of o.scars) {
+      if (board[s.key] || !dead.length) continue;
+      const def = dead[Math.floor(hash(`${s.key}:dead`) * dead.length)]!;
+      const { x, y } = centerOf(s.key);
+      const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
+      el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: 'skin-prop', preserveAspectRatio: 'xMidYMid meet' }, g);
+    }
+    if (dead.length) return;
+    // otherwise the ground paints what is left (cut-off tint); a scar decal on top when the skin has one
     for (const s of o.scars) {
       const src = this.skin.scars?.[s.owner];
       if (board[s.key] || !this.assets.has(src)) continue;
