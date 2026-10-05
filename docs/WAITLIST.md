@@ -8,6 +8,39 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### Thumb layout v2 (gentler fan, map first, smart overlap)
+- Date: 2026-10-05 · Commit: `9fa0846` · In test only (replaces the v1 fan below; same settings)
+- Map first: the board takes the full width and at least 60% of the usable height; the card
+  area is capped at 40% (it now takes 28-40%). The hand is a gentle fan (middle card flat, end
+  cards tilted 7 degrees, a shallow curve, a slight rise to the right) anchored at the right edge
+  above a bottom band: deck and throw pile (left, 52pt wide, label with the count under it), the
+  move buttons ("Skip sprout" as a small pill, only when useful) and Undo/Sort (right, next to
+  the fan). Cards are 25% smaller (48pt wide instead of 64). Hand side Left mirrors it all.
+- Smart overlap: when the board is held back by the height, it may reach under the fan by up to
+  15% of its height, only where every hex under a card is empty or rock and nothing can be
+  played there this turn (4 hexes from my network, 1 from the opponent's); no tile, home, gold
+  hex, target highlight or Bloom painting is ever under a card (any of them cancels it at once).
+  Over the map the cards are 55% see-through until I touch the fan. Worked out when the board
+  changes, with a short crossfade.
+- Tile width (centre to centre): 360x640 classic 44.0 -> 49.9pt, triangle 31.5 -> 38.2pt, tall
+  rectangle 26.0 -> 34.5pt; 390x844 unchanged for boards that already fill the width (classic
+  59.4, triangle 46.8, tall rectangle 38.6pt), rhombus 44.9 -> 54.3pt.
+- Code: `web/src/logic/layout.ts` (thumbDock v2, fanSlots), `web/src/main.ts` (checkOverlap,
+  the see-through fan), `web/src/lab-mode/lab-css.ts` (v2 block). Check: `web/e2e/thumb-check.ts`;
+  screenshots in `docs/screens/thumb2/`.
+- Check before locking in:
+  - tapping every card in a full hand (8 cards: 42pt slices at 390px, 40.5pt at 360px; a
+    10-card Lab hand gets 32-36pt, the map comes first);
+  - the 360px width;
+  - Large text (the pile labels, the move pills);
+  - left-hand mode;
+  - overlap on the triangle and rectangle maps (in the checks, overlap only happened on the
+    classic hexagon at 360x640; the triangle and rectangle stayed below the board because their
+    bottom rows are near the homes or already fill the width);
+  - that no tile is ever hidden under a card (the check found none in 12 layouts);
+  - the board changing size during a game when the overlap turns on or off (crossfade): is it
+    distracting?
+
 ### Thumb layout and the idle tip (phones)
 - Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map), `ffb332e` (fan packed to the bottom: bigger map) · In test only
 - Phones held upright (touch, portrait, up to 600px wide). The hand is a curved fan rising from
