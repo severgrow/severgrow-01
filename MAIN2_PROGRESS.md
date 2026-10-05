@@ -13,6 +13,7 @@
 
 - Candidate uploaded via the connected GitHub app; each published tree matched its tested local tree byte-for-byte. Direct git push has no credential helper, so connector-created commits have distinct author/time hashes while preserving the same parents, complete upstream history and source trees.
 - Main deployment exception `f65811fff679882fcb5625d6e053fcade4af0589` changes only `.github/workflows/pages.yml`; candidate publication waits for successful CI at its exact SHA. Obsolete candidate runs cannot publish.
+- GitHub candidate run `37328923647`: full unit/type/all-channel build job passed; browser job passed smoke 39/39 and painting 25/25, then hit a null box in the existing overhaul driver. Driver now reads a target key atomically and clicks the stable hex with Playwright waiting; all policy/Undo/geometry assertions retained and 13/13 local checks pass (18/18 policy cases). Independent browser suites run on separate CI runners, with fail-fast disabled so every suite reports. No application code changed in this follow-up.
 - Publishing verified Main2.0 and the durable combined Main/Test/Test2 artifact; awaiting actual CI and public-site verification.
 
 ## DECISIONS NEEDED

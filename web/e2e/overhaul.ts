@@ -63,6 +63,15 @@ const open = async (state: State | null, o: { w?: number; h?: number; touch?: bo
 const hook = <T>(page: Page, f: string) => page.evaluate(`window.__severgrow.${f}()`) as Promise<T>;
 const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(document.querySelector(s)!.getBoundingClientRect()), sel);
 
+// Target paths are rebuilt while photos/layout settle. Read the key atomically, then
+// let Playwright wait for the actual hex, instead of dereferencing a transient path box.
+const clickHighlightedTarget = async (page: Page) => {
+  await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy());
+  const key = await page.evaluate(() => document.querySelector('.l-over .target')?.getAttribute('data-key'));
+  if (!key) return;
+  await page.locator(`#board .hex-cell[data-key="${key}"]`).click();
+};
+
 // ---- 1. Smart confirmation matches the policy, move by move, in a real mid-game position ----
 {
   let agree = 0;
@@ -77,10 +86,9 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
     for (let c = 0; c < cards && total < 18; c++) {
       await page.locator('#hand .card').nth(c).click();
       await page.waitForTimeout(120);
-      const t = page.locator('.l-over .target').first();
-      if ((await t.count()) > 0 && !(await hook<Action | null>(page, 'pending'))) {
-        const box = await t.boundingBox();
-        await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+      if (!(await hook<Action | null>(page, 'pending')) &&
+          (await hook<State>(page, 'state')).history!.length === state.history!.length) {
+        await clickHighlightedTarget(page);
         await page.waitForTimeout(150);
       }
       const pending = await hook<Action | null>(page, 'pending');
@@ -145,11 +153,7 @@ const rect = (page: Page, sel: string) => page.evaluate((s) => JSON.stringify(do
   await page.locator('#hand .card.playable').first().click();
   await page.waitForTimeout(150);
   sizes.push(await rect(page, '#dock'), await rect(page, '#board'));
-  const t = page.locator('.l-over .target').first();
-  if (await t.count()) {
-    const b = await t.boundingBox();
-    await page.mouse.click(b!.x + b!.width / 2, b!.y + b!.height / 2);
-  }
+  await clickHighlightedTarget(page);
   await page.waitForTimeout(400);
   sizes.push(await rect(page, '#dock'), await rect(page, '#board'));
   const moved = JSON.stringify(await hook<State>(page, 'state')) !== before;

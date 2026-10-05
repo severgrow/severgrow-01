@@ -23,7 +23,12 @@ jobs:
       - run: CHANNEL=test2 npm run web:build && CHANNEL=test2 node scripts/check-channel-assets.mjs
 
   browser:
-    # Plays the built page in a real browser, in every theme (web/e2e/smoke.ts).
+    # Independent suites use separate runners, keeping their assertions and avoiding
+    # repeating successful suites when one driver fails.
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, test2-critical]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -34,7 +39,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
-      - run: npm run web:build
-      - run: npm run e2e
-      - run: CHANNEL=test2 npm run web:build
-      - run: node --import tsx web/e2e/test2-critical.ts
+      - if: matrix.suite != 'test2-critical'
+        run: npm run web:build
+      - if: matrix.suite == 'test2-critical'
+        run: CHANNEL=test2 npm run web:build
+      - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}
