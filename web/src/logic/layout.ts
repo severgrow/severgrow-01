@@ -61,6 +61,9 @@ export type Thumb = {
 /** Thumb layout: the visible part of every card along the arc (pt), the outward lift of a
  *  picked card, the pile column width, and the space kept free at the edges. */
 export const THUMB = { slice: 42, lift: 18, pileW: 60, edge: 8, icon: 44 } as const;
+/** Thumb layout: the room kept above the fan's top card (a picked card lifts THUMB.lift outward,
+ *  reaching briefly into the air above the dock). */
+const TOP_KEEP = 4;
 
 /** The centres, rotations (deg) and outward normals of `n` cards on the thumb arc (dock px). */
 export const fanSlots = (t: Thumb, n: number): { x: number; y: number; rot: number; nx: number; ny: number }[] => {
@@ -109,7 +112,7 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     const dy = Math.max(Math.sqrt(Math.max(0, chord * chord - dx * dx)), minH - (2 * hd + lift + 4 + bottomPad));
     // the piles sit in the top-left corner: the lowest card passes under them
     const pileY = 6;
-    const h = Math.ceil(Math.max(dy + 2 * hd + lift + 4 + bottomPad, pileY + pileBoxH + 8 + 2 * hd + bottomPad));
+    let h = Math.ceil(Math.max(dy + 2 * hd + lift + 4 + bottomPad, pileY + pileBoxH + 8 + 2 * hd + bottomPad));
     // dock-local points (y down): S low, E high
     const S = { x: sx, y: h - bottomPad - hd };
     const E = { x: ex, y: S.y - dy };
@@ -121,8 +124,8 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     const ux = (E.x - S.x) / c;
     const uy = (E.y - S.y) / c;
     const k = Math.sqrt(r * r - (c / 2) * (c / 2));
-    const cx = mx - uy * k;
-    const cy = my + ux * k;
+    let cx = mx - uy * k;
+    let cy = my + ux * k;
     const ang = (p: { x: number; y: number }) => (Math.atan2(p.y - cy, p.x - cx) * 180) / Math.PI;
     const a0 = ang(S);
     let a1 = ang(E);
@@ -134,8 +137,36 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
     // the move buttons: a column under the piles, left of the fan (two rows if they need them);
     // as tall as the cards below allow (filled in once the slots are known)
     let moves: Box = { x: edge, y: pileY + pileBoxH + 8, w: pilesW, h: 120 };
-    const sort: Box = { x: W - edge - icon, y: h - bottomPad - icon, w: icon, h: icon };
-    const undo: Box = { x: W - edge - 2 * icon - 8, y: h - bottomPad - icon, w: icon, h: icon };
+    let sort: Box = { x: W - edge - icon, y: h - bottomPad - icon, w: icon, h: icon };
+    let undo: Box = { x: W - edge - 2 * icon - 8, y: h - bottomPad - icon, w: icon, h: icon };
+    // Tighten: measure every card's real turned outline (a card lying almost flat at the bottom
+    // needs far less height than its diagonal), then pack the fan down onto the bottom edge,
+    // against the right edge, and trim the empty height above it. Only a sliver is kept at the
+    // top for a picked card's lift: it may briefly reach into the air above the dock.
+    {
+      const probe: Thumb = { side: 'right', arc: { cx, cy, r, a0, a1 }, maxHand, slice, card: { w: cw, h: ch }, piles, deck, discard, pileCard, moves, undo, sort, tips: piles };
+      const ext = fanSlots(probe, maxHand).map((p) => {
+        const a = (p.rot * Math.PI) / 180;
+        const hx = (cw / 2) * Math.abs(Math.cos(a)) + (ch / 2) * Math.abs(Math.sin(a));
+        const hy = (cw / 2) * Math.abs(Math.sin(a)) + (ch / 2) * Math.abs(Math.cos(a));
+        return { x0: p.x - hx, x1: p.x + hx, y0: p.y - hy, y1: p.y + hy };
+      });
+      const shiftX = W - edge - Math.max(...ext.map((e) => e.x1));
+      let shiftY = h - bottomPad - Math.max(...ext.map((e) => e.y1));
+      // cards that pass under the piles stay 8pt below them
+      const pileBottom = pileY + pileBoxH + 8;
+      const underPiles = ext.filter((e) => e.x0 + shiftX < edge + pilesW);
+      const topNeeded = Math.min(...ext.map((e) => e.y0)) + shiftY;
+      const slack = Math.min(topNeeded - TOP_KEEP, ...underPiles.map((e) => e.y0 + shiftY - pileBottom));
+      if (slack > 0) {
+        h -= Math.floor(slack);
+        shiftY -= Math.floor(slack);
+      }
+      cx += shiftX;
+      cy += shiftY;
+      sort = { ...sort, y: h - bottomPad - icon };
+      undo = { ...undo, y: h - bottomPad - icon };
+    }
     // the coach and first-time tips: just above the dock, over the board's lower-left edge,
     // narrow enough (44%) to stay left of my home at the bottom middle of the board
     const tips: Box = { x: edge, y: 0, w: Math.round(W * 0.44), h: 200 };
@@ -156,18 +187,28 @@ const thumbDock = (W: number, avail: number, sb: number, maxHand: number, radius
   /** A board limited by the width can't use all the height: the fan takes the rest (no empty
    *  strip between the board and the hand), up to 16pt of air either side of the board. */
   const fill = (b: ReturnType<typeof build>) => {
-    const spare = avail - b.h - b.boardH - 2 * MAX_GAP;
-    return spare > 4 ? build(b.cw, b.slice, b.h + Math.floor(spare)) : b;
+    let best = b;
+    let ask = b.h;
+    for (let i = 0; i < 4; i++) {
+      const spare = avail - best.h - best.boardH - 2 * MAX_GAP;
+      if (spare <= 4) break;
+      ask += Math.floor(spare);
+      const next = build(b.cw, b.slice, ask);
+      // a taller dock must not shrink the board (it only uses height the board can't)
+      if (next.hexPx < b.hexPx - 0.01) break;
+      best = next;
+    }
+    return best;
   };
   // the dock takes at most 60% of the screen (then the slice gives, for very big hands)
   const maxDock = avail * 0.6;
   const sizes = [64, 60, 56, 52, 48, 44];
-  // 1) a 42pt slice, cards a little smaller if that keeps the tiles at 44pt or more
-  // 2) a 40pt slice, the same
+  // 1) the biggest cards with a 42pt (else 40pt) slice that keep the tiles at 44pt or more
+  //    (cards shrink a step at a time; the slice gives the 2pt first)
   // 3) a 40pt slice within 60% of the screen (the board's tiles go under 44pt)
   // 4) the slice shrinks (never under 30pt) until the dock fits 60% of the screen
-  for (const slice of [42, 40]) {
-    for (const cw of sizes) {
+  for (const cw of sizes) {
+    for (const slice of [42, 40]) {
       const b = build(cw, slice);
       if (b.hexPx >= 44 && b.h <= maxDock) return fill(b);
     }
