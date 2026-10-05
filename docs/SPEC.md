@@ -175,6 +175,8 @@ The whole game: **grow, keep your network joined, cut theirs.**
 ```ts
 type RulesConfig = {
   boardRadius: number;          // 3
+  board: BoardSpec | null;      // null: Classic; explicit experimental boards in Lab only
+  reshuffleDiscard: boolean;   // false: Classic never reshuffles
   rootStyle: 'ring2' | 'corner';
   handSize: number;             // 7
   maxRank: number;              // 9: cards 1..maxRank, 5 to 9 (chosen by simulation, 11.1)

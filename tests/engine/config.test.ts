@@ -27,6 +27,8 @@ describe('DEFAULT_CONFIG', () => {
       fruitUsesSprout: true, // v0.8: a Fruit card uses the turn's Sprout
       rotEnabled: false,
       knockEnabled: false,
+      board: null,
+      reshuffleDiscard: false,
     });
   });
 

@@ -26,7 +26,11 @@ describe('golden games', () => {
       }
       expect(s.phase).toBe('GAME_OVER');
       const { history, ...rest } = s;
-      expect(stateHash(rest)).toBe(g.stateHash);
+      // Keep Main's original fixtures. Only disabled Lab metadata is normalized.
+      expect(rest.config.board).toBeNull();
+      expect(rest.config.reshuffleDiscard).toBe(false);
+      const { board, reshuffleDiscard, ...classicConfig } = rest.config;
+      expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });
   }
