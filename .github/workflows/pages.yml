@@ -55,6 +55,8 @@ jobs:
               const run = data.workflow_runs.find(r => r.head_sha === sha && r.event === 'push');
               if (run?.status === 'completed') {
                 if (run.conclusion !== 'success') throw new Error(`Candidate CI ${run.conclusion}: ${run.html_url}`);
+                const {data: current} = await github.rest.repos.getBranch({owner:context.repo.owner, repo:context.repo.repo, branch:'Main2.0'});
+                if (current.commit.sha !== sha) throw new Error(`Candidate ${sha} superseded by ${current.commit.sha}; wait for its CI`);
                 core.info(`Verified exact candidate ${sha}: ${run.html_url}`);
                 return;
               }
