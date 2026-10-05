@@ -7,6 +7,11 @@
       // removed (Pages caches the page for up to 10 minutes): the game then shows as bare text.
       // If one of them fails to load, reload once from a fresh address (never in a loop).
       (function () {
+        // Use native operations captured before channel.ts patches Storage.prototype.
+        var prefix = /\/test2\//.test(location.pathname) ? 'main2:' : /\/test\//.test(location.pathname) ? 'test:' : '';
+        var key = prefix + 'fresh-reload';
+        if (typeof Storage === 'undefined') return;
+        var get = Storage.prototype.getItem, set = Storage.prototype.setItem, remove = Storage.prototype.removeItem;
         var u = new URL(location.href);
         if (u.searchParams.has('_fresh')) {
           u.searchParams.delete('_fresh');
@@ -16,19 +21,16 @@
           var t = e.target;
           if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
           try {
-            if (sessionStorage.getItem('fresh-reload')) return;
-            sessionStorage.setItem('fresh-reload', '1');
-          } catch (_) {
-            return;
-          }
+            if (get.call(sessionStorage, key)) return;
+            set.call(sessionStorage, key, '1');
+          } catch (_) { return; }
           var r = new URL(location.href);
           r.searchParams.set('_fresh', String(Date.now()));
           location.replace(r.href);
         }, true);
-        window.addEventListener('load', function () {
-          try {
-            sessionStorage.removeItem('fresh-reload');
-          } catch (_) {}
+        // A failed load also fires window.load: only a working app resets recovery.
+        window.addEventListener('severor-ready', function () {
+          try { remove.call(sessionStorage, key); } catch (_) {}
         });
       })();
     </script>
