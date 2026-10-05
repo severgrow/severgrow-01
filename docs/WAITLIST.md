@@ -9,7 +9,7 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 ## Waiting
 
 ### Step plate redesign, pile chips removed, font changed (Fraunces + Plus Jakarta Sans)
-- Date: 2026-10-05 · Commit: `COMMIT` · In test only (updates "Step guidance ... and new font" below)
+- Date: 2026-10-05 · Commit: `61c9478` · In test only (updates "Step guidance ... and new font" below)
 - The step's cue is now a small crafted plate at the top of the map (icon, "Step 1 of 3", the
   words, three step pips; the opponent's turn in ember colours), with a soft entrance and one pass
   of light. The "Tap to draw / Tap to take" chips are gone (the piles' highlight is enough).
