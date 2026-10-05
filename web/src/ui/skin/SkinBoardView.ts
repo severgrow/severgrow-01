@@ -113,7 +113,8 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawCell(g: SVGGElement, key: string, t: Terrain) {
-    const d = hexPath(key, S - 1.2, this.style.tileShape);
+    // the ground is one picture: every hex reaches over the grid gap; a faint seam keeps the grid readable
+    const d = hexPath(key, S * 1.035, 'flat');
     const mat = this.skin.materials[this.skin.cells[t === 'rich' ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
     el('path', { d, class: 'skin-proxy', fill: mat?.proxy.base ?? '#262a28' }, g);
     el('path', { d, class: `skin-cell ${t}`, fill: this.url('skin-ground') }, g);

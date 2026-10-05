@@ -51,37 +51,77 @@ export type LinkOpts = {
 };
 
 /** Draws one link into `g`; returns the elements (for the sever animation). */
+/** Small deterministic number 0..1 from a string. */
+const h01 = (s: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+};
+
+/**
+ * The link as a gentle S-curve (the same for a pair every time): it leaves each plate along the
+ * straight line, bows to one side and back, and passes the shared edge's midpoint. Returned as
+ * points along the curve with the distance travelled, for laying the strip on it in short pieces.
+ */
+const curvePoints = (p: ReturnType<typeof linkPath>, seed: string, n: number) => {
+  const dx = p.end.x - p.start.x;
+  const dy = p.end.y - p.start.y;
+  const L = Math.hypot(dx, dy) || 1;
+  const ux = dx / L;
+  const uy = dy / L;
+  const amp = (1.6 + h01(seed) * 1.6) * (h01(`${seed}:s`) > 0.5 ? 1 : -1);
+  const c1 = { x: p.start.x + ux * L * 0.33 - uy * amp, y: p.start.y + uy * L * 0.33 + ux * amp };
+  const c2 = { x: p.end.x - ux * L * 0.33 + uy * amp, y: p.end.y - uy * L * 0.33 - ux * amp };
+  const pts: { x: number; y: number; s: number }[] = [];
+  let s = 0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const m = 1 - t;
+    const x = m ** 3 * p.start.x + 3 * m * m * t * c1.x + 3 * m * t * t * c2.x + t ** 3 * p.end.x;
+    const y = m ** 3 * p.start.y + 3 * m * m * t * c1.y + 3 * m * t * t * c2.y + t ** 3 * p.end.y;
+    if (i) s += Math.hypot(x - pts[i - 1]!.x, y - pts[i - 1]!.y);
+    pts.push({ x, y, s });
+  }
+  const d = `M${p.start.x.toFixed(2)},${p.start.y.toFixed(2)}C${c1.x.toFixed(2)},${c1.y.toFixed(2)} ${c2.x.toFixed(2)},${c2.y.toFixed(2)} ${p.end.x.toFixed(2)},${p.end.y.toFixed(2)}`;
+  return { pts, d };
+};
+
 export const drawLink = (g: SVGGElement, p: ReturnType<typeof linkPath>, o: LinkOpts): SVGElement[] => {
   const L = o.look;
-  const w = L.widths[o.width];
+  // a painted strip fades at its edges (no outline under it), so it is drawn wider than a plain stroke
+  const w = L.widths[o.width] * (o.strip && !o.loose ? 1.55 : 1);
   const out: SVGElement[] = [];
   const cls = `skin-link${o.grow ? ' grow-in' : ''}${o.loose ? ' loose' : ''}${o.fragile ? ' fragile' : ''}`;
-  const stroke = (color: string | undefined, width: number, extra: Record<string, string | number> = {}) => {
-    if (!color) return null;
-    const e = el('path', { d: p.d, pathLength: 1, class: cls, stroke: color, 'stroke-width': width.toFixed(2), fill: 'none', 'stroke-linecap': 'round', ...extra }, g);
+  const N = 6;
+  const curve = curvePoints(p, o.id, N);
+  const stroke = (d: string, color: string, width: number, extra: Record<string, string | number> = {}) => {
+    const e = el('path', { d, pathLength: 1, class: cls, stroke: color, 'stroke-width': width.toFixed(2), fill: 'none', 'stroke-linecap': 'round', ...extra }, g);
     out.push(e);
     return e;
   };
-  const lod = o.tilePx;
-  // under everything: a soft glow (only big tiles), then a short down-right shadow (light from the top left)
-  if (L.glow && lod >= 80 && !o.loose) stroke(L.glow, w + 3, { 'stroke-opacity': 0.2 });
-  if (L.shadow && lod >= 40) stroke(L.shadow, w + 1.2, { 'stroke-opacity': 0.45, transform: 'translate(0.6,0.8)' });
-  stroke(L.outline, w + 1.5);
-  stroke(L.body, w);
+  // no outline, no hard shadow: the link is painted into the ground, not laid on it
+  if (L.glow && o.tilePx >= 80 && !o.loose) stroke(curve.d, L.glow, w + 2.5, { 'stroke-opacity': 0.14 });
   if (o.strip && !o.loose) {
-    // the strip laid along the path: its length runs with the link, its height fills the body
-    const pid = `${o.id}-strip`;
+    // the painted strip laid along the curve in short straight pieces, each continuing the strip
+    // where the last one stopped (round ends overlap, so the bends close)
     const tw = (o.strip.w / o.strip.h) * w;
-    const pat = el('pattern', { id: pid, patternUnits: 'userSpaceOnUse', width: tw.toFixed(3), height: w.toFixed(3), patternTransform: `translate(${p.start.x.toFixed(2)},${p.start.y.toFixed(2)}) rotate(${p.angle.toFixed(2)}) translate(0,${(-w / 2).toFixed(3)})` }, o.defs);
-    el('image', { href: o.strip.url, x: 0, y: 0, width: tw.toFixed(3), height: w.toFixed(3), preserveAspectRatio: 'none' }, pat);
-    if (L.scroll && o.motion) el('animateTransform', { attributeName: 'patternTransform', type: 'translate', additive: 'sum', from: '0 0', to: `${tw.toFixed(3)} 0`, dur: '2.4s', repeatCount: 'indefinite' }, pat);
-    stroke(`url(#${pid})`, w, { 'stroke-linecap': 'butt' });
-  } else if (lod >= 40 || o.loose) {
-    // no strip: one highlight line (forest) or the hot core (volcano), flowing when the skin scrolls
+    for (let i = 0; i < N; i++) {
+      const a = curve.pts[i]!;
+      const b = curve.pts[i + 1]!;
+      const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+      const pid = `${o.id}-s${i}`;
+      const pat = el('pattern', { id: pid, patternUnits: 'userSpaceOnUse', width: tw.toFixed(3), height: w.toFixed(3), patternTransform: `translate(${a.x.toFixed(2)},${a.y.toFixed(2)}) rotate(${ang.toFixed(2)}) translate(${(-a.s % tw).toFixed(3)},${(-w / 2).toFixed(3)})` }, o.defs);
+      el('image', { href: o.strip.url, x: 0, y: 0, width: tw.toFixed(3), height: w.toFixed(3), preserveAspectRatio: 'none' }, pat);
+      if (L.scroll && o.motion) el('animateTransform', { attributeName: 'patternTransform', type: 'translate', additive: 'sum', from: '0 0', to: `${tw.toFixed(3)} 0`, dur: '2.4s', repeatCount: 'indefinite' }, pat);
+      stroke(`M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`, `url(#${pid})`, w, { 'stroke-linecap': i === 0 || i === N - 1 ? 'butt' : 'round' });
+    }
+  } else {
+    // no strip (or a cut-off link): the body colour along the curve, and the hot core or a highlight
+    stroke(curve.d, L.body, w * (o.loose ? 0.6 : 0.85), { 'stroke-opacity': o.loose ? 0.5 : 0.9 });
     if (L.hot_core) {
-      const core = stroke(L.hot_core, Math.max(0.6, w * 0.34), { 'stroke-opacity': o.loose ? 0.25 : 0.95 });
-      if (core && L.scroll && o.motion && !o.loose && lod >= 64) core.classList.add('skin-flow');
-    } else if (L.highlight) stroke(L.highlight, Math.max(0.5, w * 0.26), { 'stroke-opacity': 0.75, transform: 'translate(-0.35,-0.45)' });
+      const core = stroke(curve.d, L.hot_core, Math.max(0.6, w * 0.3), { 'stroke-opacity': o.loose ? 0.25 : 0.9 });
+      if (L.scroll && o.motion && !o.loose && o.tilePx >= 64) core.classList.add('skin-flow');
+    } else if (L.highlight) stroke(curve.d, L.highlight, Math.max(0.5, w * 0.22), { 'stroke-opacity': 0.6 });
   }
   return out;
 };

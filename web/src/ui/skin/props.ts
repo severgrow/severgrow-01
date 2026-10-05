@@ -14,10 +14,9 @@ const hash = (s: string) => {
 export const propBudget = (tilePx: number, strength9: number) => {
   if (tilePx < 40) return 0;
   // few, big props: the ground carries the look, props are accents
-  if (tilePx < 64) return strength9 >= 7 ? 1 : 0;
-  if (tilePx < 96) return strength9 >= 4 ? 1 : 0;
-  if (tilePx < 130) return strength9 >= 7 ? 2 : strength9 >= 3 ? 1 : 0;
-  return strength9 >= 6 ? 2 : 1;
+  if (tilePx < 96) return strength9 >= 7 ? 1 : 0;
+  if (tilePx < 130) return strength9 >= 5 ? 1 : 0;
+  return strength9 >= 8 ? 2 : strength9 >= 3 ? 1 : 0;
 };
 
 /** Clear zones, board units from the tile centre (geometry.json of the V3 pack). */
