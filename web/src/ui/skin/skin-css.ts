@@ -1,9 +1,9 @@
 // Styles for skinned boards (injected once by SkinBoardView; inert anywhere else).
 export const SKIN_CSS = `
-.skin-board .skin-cell { stroke: rgba(6, 8, 7, 0.55); stroke-width: 0.9; }
+.skin-board .skin-cell { stroke: rgba(4, 5, 5, 0.32); stroke-width: 0.7; }
 .skin-board .skin-proxy { pointer-events: none; }
 .skin-board .skin-fill, .skin-board .skin-edge { pointer-events: none; }
-.skin-board .skin-edge { fill: none; stroke: rgba(6, 8, 7, 0.62); stroke-width: 1.1; stroke-linecap: round; }
+.skin-board .skin-edge { fill: none; stroke: rgba(6, 8, 7, 0.45); stroke-width: 0.9; stroke-linecap: round; }
 .skin-board .skin-rocks { pointer-events: none; }
 .skin-board .skin-prop, .skin-board .skin-scar, .skin-board .skin-home-layer { pointer-events: none; }
 .skin-board .skin-link { pointer-events: none; stroke-linejoin: round; }
