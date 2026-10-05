@@ -1,5 +1,5 @@
 // first: the release channel (the test copy keeps its own storage)
-import { IS_TEST } from './channel.js';
+import { IS_TEST, FEATURES } from './channel.js';
 // Severgrow in the browser. You (player 1) against GreedyBot. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -81,7 +81,10 @@ const theme = () => themeOf(settings.palette);
 const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
-import { DesignBoardView } from './ui/designBoard.js';
+let DesignView: typeof BoardView = BoardView;
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
+}
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -178,7 +181,7 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
-const board = DESIGN_MODE ? new DesignBoardView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
+const board = DESIGN_MODE ? new DesignView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -368,7 +371,7 @@ function sheet(id: string | null) {
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
   if (id === 'sheet-menu') {
     setPaused(true);
-    if (IS_TEST) fillMenuStatus();
+    if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
@@ -538,15 +541,16 @@ function dealIn() {
 
 /** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
 /** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
-let guideMod: ReturnType<typeof import('./lab-mode/guide.js').mountGuide> | null = null;
+let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
+let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
-const REPLAY_BUTTON = !IS_TEST;
+const REPLAY_BUTTON = FEATURES.replay;
 /** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
-if (IS_TEST) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
+if (!FEATURES.weakTools) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
 // the test copy: the header keeps only the menu button and the score bar; the scores, the turn
 // and History move into the menu (no player marks there: the colours say who is who)
-if (IS_TEST) {
+if (FEATURES.slimHeader) {
   setSlimHud(true);
   document.documentElement.classList.add('slim-hud');
   const body = document.querySelector('#sheet-menu .sheet-body');
@@ -577,17 +581,21 @@ let thumbOverlap = 0;
 let overlapFor: unknown = null;
 // the Lab (test copy only: this import is dropped from the live build)
 let lab: {
-  camera: ReturnType<typeof import('./lab-mode/camera.js').installCamera>;
+  camera: ReturnType<typeof import('./player/camera.js').installCamera>;
   overrides: () => Partial<RulesConfig>;
   thinking: (on: boolean) => void;
   watchingChanged: (w: { level: number; pause: number } | null) => void;
 } | null = null;
-// (the build constant itself, so the live build drops the Lab's code entirely)
+let camera: ReturnType<typeof import('./player/camera.js').installCamera> | null = null;
+// Literal build guards keep player enhancements out of the legacy bundle.
 declare const __CHANNEL__: string;
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-  // the new type (Bricolage Grotesque + Figtree), unless the Lab says "Previous"
-  void import('./lab-mode/fonts.js').then((f) => f.applyFont());
-  void import('./lab-mode/thumb.js').then((t) => {
+if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'test2')) {
+  placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
+  void import('./player/player-css.js').then((m) => {
+    const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
+    layoutKey = ''; applyLayout(); if (session) render();
+  });
+  void import('./player/thumb.js').then((t) => {
     thumbMod = t.mountThumb({
       relayout: () => {
         layoutKey = '';
@@ -600,11 +608,15 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
     applyLayout();
     if (session) render();
     // the step guidance (its setting sits under the phone layout rows)
-    void import('./lab-mode/guide.js').then((g) => {
+    void import('./player/guide.js').then((g) => {
       guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
       if (session) render();
     });
   });
+  camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => {} });
+}
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  void import('./player/fonts.js').then((f) => f.applyFont());
   void import('./lab-mode/panel.js').then((m) => {
     lab = m.mountLab({
       sheet,
@@ -618,8 +630,13 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
       },
       board: board.svg,
       boardWrap: $('board-wrap'),
+      camera,
     });
   });
+}
+
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
+  void import('./player/fonts.js').then((f) => f.applyFont('new'));
 }
 
 /**
@@ -635,7 +652,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
  * is the classic board's tile (hexagon radius 3) on this screen with the current layout.
  */
 function feedCamera(v: View) {
-  if (!session || !lab) return;
+  if (!session || !camera) return;
   const r = board.svg.getBoundingClientRect();
   if (r.width === 0) return;
   // the classic board's drawing area (board units, logic/layout.ts boardUnits for radius 3)
@@ -652,7 +669,7 @@ function feedCamera(v: View) {
   const last = session.state.history?.at(-1);
   const recent = !last ? [] : last.t === 'Bloom' ? last.hexes.map((c) => centerOf(coordKey(c))) : 'coord' in last && last.coord ? [centerOf(coordKey(last.coord as { q: number; r: number }))] : [];
   const centres = new Map(Object.keys(v.board).map((k) => [k, centerOf(k)] as const));
-  lab.camera.update(
+  camera.update(
     {
       tiles,
       me: HUMAN,
@@ -691,7 +708,7 @@ function checkOverlap(v: View) {
   // only worth it when the board is held back by the height (else it can't grow)
   let pick = 0;
   // (while the camera is zoomed in, the fan stays below the board: the visible window decides)
-  const camWhole = !lab || lab.camera.isWhole();
+  const camWhole = !camera || camera.isWhole();
   if (camWhole && base.board.w < base.zone.w - 1) {
     const most = Math.floor(base.board.h * THUMB.overlapMax);
     for (const f of [1, 0.75, 0.5, 0.25]) {
@@ -1597,16 +1614,16 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
-  if (IS_TEST && lab) {
+  if (FEATURES.smartCamera && camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
     document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
     feedCamera(v);
   }
-  if (IS_TEST && thumbLayout) checkOverlap(v);
+  if (FEATURES.phoneLayout && thumbLayout) checkOverlap(v);
   // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)
-  if (IS_TEST && guideMod) {
+  if (FEATURES.guidance && guideMod) {
     // the step, from the game's own state: whose turn it is and the phase
     const st = session.state;
     const over = st.phase === 'GAME_OVER';
@@ -1617,6 +1634,13 @@ function render() {
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
+  if (placeTeachingPanel && thumbLayout) {
+    const keys = targetHexes(v, session.legal, session.sel);
+    requestAnimationFrame(() => {
+      placeTeachingPanel?.($('first-tip'), keys);
+      placeTeachingPanel?.($('coach'), keys);
+    });
+  }
   if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
     autoQueued = true;
     setTimeout(() => {
@@ -1642,6 +1666,10 @@ function renderGuide(advice: Advice | null) {
     session.preset(guideGoal);
     render();
     return;
+  }
+  if (FEATURES.tapAgain && t?.kind === 'confirm' && session.pending) {
+    const card = moveCards(session.pending)[0];
+    if (card !== undefined) t = { kind: 'card', id: card };
   }
   if (!t) {
     guideGoal = null;
@@ -1827,7 +1855,7 @@ function dockHint(v: View): Hint {
   if (!session) return { text: '', arrow: null };
   const h = hintFor(hintCtx(v));
   // the test copy: no Confirm box; a second tap on the card or the hex places the move
-  if (IS_TEST && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
+  if (FEATURES.tapAgain && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
   return h;
 }
 
@@ -1853,12 +1881,12 @@ function applyLayout() {
   const shapeCfg = session?.state.config;
   setBoardShape(shapeCfg?.board ? { cells: shapeCfg.board.cells, rot: (o) => homeRotation(o, shapeCfg, HUMAN) } : null);
   // the test copy's thumb layout (phones in portrait, the setting on): sized for the game's hand
-  const thumbSide = IS_TEST && thumbMod ? thumbMod.side(w, h) : null;
+  const thumbSide = FEATURES.phoneLayout && thumbMod ? thumbMod.side(w, h) : null;
   const maxHand = (shapeCfg?.handSize ?? 7) + 1;
   const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time);
   // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards)
-  const par = IS_TEST && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
+  const par = FEATURES.phoneLayout && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
@@ -1910,8 +1938,8 @@ function applyLayout() {
   }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
-  root.setProperty('--hud-h', px(IS_TEST ? SLIM_HUD : HEIGHTS.hud));
-  root.setProperty('--race-h', px(IS_TEST ? 0 : HEIGHTS.race));
+  root.setProperty('--hud-h', px(FEATURES.slimHeader ? SLIM_HUD : HEIGHTS.hud));
+  root.setProperty('--race-h', px(FEATURES.slimHeader ? 0 : HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
@@ -2053,7 +2081,7 @@ function renderBoard(v: View, advice: Advice | null) {
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
   }
-  if (!busy() && IS_TEST) {
+  if (!busy() && !FEATURES.weakTools) {
     // the test copy: no weak-spot toggles; my most dangerous weak link always pulses gently
     // with its "-N" (the opponent's weak links are on their tile card, when tapped)
     if (v.phase !== 'GAME_OVER') o.pulse = weakSpots(v)[0] ?? null;
@@ -2165,7 +2193,7 @@ function renderTooltip(v: View) {
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
       html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
       // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only
-      if (IS_TEST && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
+      if (!FEATURES.weakTools && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -2355,7 +2383,7 @@ function renderControls(v: View, advice: Advice | null) {
     info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
     // the test copy: no Confirm box (a second tap on the card or the hex places the move)
-    $('confirm').hidden = IS_TEST;
+    $('confirm').hidden = FEATURES.tapAgain;
   }
 }
 
@@ -2699,7 +2727,7 @@ function onCardTap(id: number) {
   if (busy()) fastForward();
   if (!myTurn()) return;
   // the test copy: no Confirm box; tapping a card of the waiting move again places it
-  if (IS_TEST && session.pending && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
+  if (FEATURES.tapAgain && session.pending && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;
@@ -3132,7 +3160,7 @@ let fanSleep = 0;
 $('dock').addEventListener(
   'pointerdown',
   () => {
-    if (!IS_TEST) return;
+    if (!FEATURES.mapBehindCards) return;
     document.documentElement.classList.add('fan-awake');
     clearTimeout(fanSleep);
     fanSleep = window.setTimeout(() => document.documentElement.classList.remove('fan-awake'), 3000);
@@ -3222,12 +3250,12 @@ bind('discard', () => {
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
-if (!IS_TEST) bind('tool-weak', () => {
+if (FEATURES.weakTools) bind('tool-weak', () => {
   settings = { ...settings, weakSpots: !settings.weakSpots };
   saveSettings();
   render();
 });
-if (!IS_TEST) bind('tool-targets', () => {
+if (FEATURES.weakTools) bind('tool-targets', () => {
   showOpps = !showOpps;
   render();
 });
@@ -3272,7 +3300,7 @@ bind('tool-replay', () => replayBotTurn());
   const KEY = 'severgrow.ctools.seen';
   /** The first time the tools show in a game: name each once (shield, then target). */
   firstToolTips = () => {
-    if (IS_TEST || store.get(KEY)) return;
+    if (!FEATURES.weakTools || store.get(KEY)) return;
     store.set(KEY, '1');
     const tools = ['tool-weak', 'tool-targets'].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => !!b && !b.hidden);
     tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
@@ -3463,7 +3491,7 @@ document.addEventListener('visibilitychange', () => {
 // the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
 if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
+    navigator.serviceWorker.register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2' ? './test2-sw.js' : './sw.js').catch(() => {
       /* offline play is a bonus; the page works without it */
     });
   });
@@ -3532,9 +3560,11 @@ const params = BOOT_PARAMS;
   document.documentElement.classList.toggle('align-overlay', store.get(KEY) === '1');
 }
 const urlSeed = Number(params.get('seed'));
-if (params.get('lab') === '1') {
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('lab') === '1') {
   // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
   for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+
+window.dispatchEvent(new Event('severor-ready'));
