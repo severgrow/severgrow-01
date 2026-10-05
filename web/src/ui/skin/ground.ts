@@ -48,7 +48,16 @@ export type Box = { x0: number; y0: number; w: number; h: number };
 /** Half the mask frame: masks span the hex's corner-to-corner box, 60 board units. */
 const HALF = 30;
 
-const blendB = (x: number, y: number) => Math.min(1, Math.max(0, 0.5 + 0.62 * Math.sin(x / 173 + 1.3) * Math.cos(y / 151 - 0.4)));
+/** How much of a material's extra base texture n (1, 2, ...) shows at a world point: smooth patches a
+ *  few hexes across, a different pattern for each n, so big areas never repeat one texture. */
+const baseWeight = (n: number, x: number, y: number) => {
+  const a = 150 + 37 * n;
+  const b = 131 + 29 * n;
+  const v = 0.5 + 0.62 * Math.sin(x / a + 1.3 + n * 2.1) * Math.cos(y / b - 0.4 + n * 1.7);
+  return Math.min(1, Math.max(0, n === 1 ? v : v * 0.85 - 0.08));
+};
+/** World units per mask pixel (the masks are smooth, so coarse is enough). */
+const MASK_UNIT = 4;
 
 type Loaded = {
   tex: Map<string, CanvasPattern | null>;
@@ -72,12 +81,25 @@ export class GroundPainter {
     if (!g) return null;
     const L = await this.load(g, cells, orient);
     const world = (c: CanvasRenderingContext2D, ox = 0, oy = 0) => c.setTransform(ppu, 0, 0, ppu, -box.x0 * ppu - ox, -box.y0 * ppu - oy);
-    const fill = (c: CanvasRenderingContext2D, mat: MaterialDef, which: 'base' | 'b' | 'overlay') => {
-      const src = which === 'overlay' ? mat.overlay : which === 'b' ? mat.base[1] : mat.base[0];
+    const fill = (c: CanvasRenderingContext2D, mat: MaterialDef, which: 'base' | 'overlay') => {
+      const src = which === 'overlay' ? mat.overlay : mat.base[0];
       const pat = src ? L.tex.get(src) : null;
       c.fillStyle = pat ?? (which === 'overlay' ? (mat.proxy.overlay ?? mat.proxy.base) : mat.proxy.base);
-      return !!pat || which !== 'b';
     };
+    // one soft world-space mask per extra base texture (built only when some material has it)
+    const maxBases = Math.max(1, ...cells.flatMap((c) => [c.material, c.under].map((id) => (id ? this.skin.materials[id]?.base.length ?? 1 : 1))));
+    const masks: (HTMLCanvasElement | null)[] = [null];
+    for (let n = 1; n < maxBases; n++) {
+      const m = document.createElement('canvas');
+      m.width = Math.max(1, Math.ceil(box.w / MASK_UNIT));
+      m.height = Math.max(1, Math.ceil(box.h / MASK_UNIT));
+      const mg = m.getContext('2d')!;
+      const d = mg.createImageData(m.width, m.height);
+      for (let j = 0; j < m.height; j++)
+        for (let i = 0; i < m.width; i++) d.data[(j * m.width + i) * 4 + 3] = Math.round(255 * baseWeight(n, box.x0 + (i + 0.5) * MASK_UNIT, box.y0 + (j + 0.5) * MASK_UNIT));
+      mg.putImageData(d, 0, 0);
+      masks.push(m);
+    }
     const tmpSize = Math.ceil(2 * HALF * ppu) + 2;
     const tmp = document.createElement('canvas');
     tmp.width = tmp.height = tmpSize;
@@ -92,10 +114,28 @@ export class GroundPainter {
       g.rect(cell.x - HALF, cell.y - HALF, 2 * HALF, 2 * HALF);
       fill(g, mat, 'base');
       g.fill();
-      if (mat.base[1] && L.tex.get(mat.base[1])) {
-        g.globalAlpha = alpha * blendB(cell.x, cell.y);
-        fill(g, mat, 'b');
-        g.fill();
+      // the extra base textures, each through its world mask (continuous across hexes)
+      for (let n = 1; n < mat.base.length; n++) {
+        const pat = L.tex.get(mat.base[n]!);
+        const mask = masks[n];
+        if (!pat || !mask) continue;
+        const ox = Math.floor((cell.x - HALF - box.x0) * ppu);
+        const oy = Math.floor((cell.y - HALF - box.y0) * ppu);
+        t.globalCompositeOperation = 'source-over';
+        t.globalAlpha = 1;
+        t.setTransform(1, 0, 0, 1, 0, 0);
+        t.clearRect(0, 0, tmpSize, tmpSize);
+        world(t, ox, oy);
+        t.fillStyle = pat;
+        t.fillRect(cell.x - HALF - 1, cell.y - HALF - 1, 2 * HALF + 2, 2 * HALF + 2);
+        t.globalCompositeOperation = 'destination-in';
+        t.imageSmoothingEnabled = true;
+        t.drawImage(mask, box.x0, box.y0, mask.width * MASK_UNIT, mask.height * MASK_UNIT);
+        g.save();
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalAlpha = alpha;
+        g.drawImage(tmp, ox, oy);
+        g.restore();
       }
       g.globalAlpha = 1;
       if (cell.coverage <= 0 || !L.cover.get(cell.coverage)) return;
@@ -186,12 +226,13 @@ export class GroundPainter {
     const skin = this.skin;
     const a = this.assets;
     const texPaths = new Set<string>();
+    const span = new Map<string, number>();
     const covers = new Set<number>();
     for (const c of cells) {
       for (const id of [c.material, c.under]) {
         const m = id ? skin.materials[id] : undefined;
         if (!m) continue;
-        for (const p of [...m.base, m.overlay]) if (p) texPaths.add(p);
+        for (const p of [...m.base, m.overlay]) if (p) (texPaths.add(p), span.set(p, m.worldUnits ?? skin.worldUnits));
       }
       if (c.coverage > 0) covers.add(c.coverage);
     }
@@ -201,7 +242,8 @@ export class GroundPainter {
         const img = await a.image(p);
         const pat = img ? g.createPattern(img, 'repeat') : null;
         // texture pixels -> board units: one texture spans skin.worldUnits, whatever the tier
-        if (pat && img) pat.setTransform(new DOMMatrix([skin.worldUnits / img.width, 0, 0, skin.worldUnits / img.height, 0, 0]));
+        const u = span.get(p) ?? skin.worldUnits;
+        if (pat && img) pat.setTransform(new DOMMatrix([u / img.width, 0, 0, u / img.height, 0, 0]));
         tex.set(p, pat);
       }),
     );

@@ -14,6 +14,8 @@ export type MaterialDef = {
   overlay?: string;
   /** flat greybox colours used while the textures are missing (never final art) */
   proxy: { base: string; overlay?: string };
+  /** board units one of this material's textures spans (default: the skin's worldUnits) */
+  worldUnits?: number;
   /** how much of the overlay the clarity masks take away under the number and gold badge (0-1) */
   clarity: number;
   /** cut-off look: a tint JSON (desaturate, darken, warm/cool shift, dryness/ash, magma reduction) */

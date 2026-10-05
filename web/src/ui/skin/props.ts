@@ -13,10 +13,11 @@ const hash = (s: string) => {
 /** The most props a tile may carry at this rendered size (CSS px per hex) and strength (1-9). */
 export const propBudget = (tilePx: number, strength9: number) => {
   if (tilePx < 40) return 0;
+  // few, big props: the ground carries the look, props are accents
   if (tilePx < 64) return strength9 >= 7 ? 1 : 0;
-  if (tilePx < 96) return strength9 >= 3 ? 1 : 0;
-  if (tilePx < 130) return strength9 >= 6 ? 2 : strength9 >= 2 ? 1 : 0;
-  return strength9 >= 7 ? 3 : strength9 >= 4 ? 2 : 1;
+  if (tilePx < 96) return strength9 >= 4 ? 1 : 0;
+  if (tilePx < 130) return strength9 >= 7 ? 2 : strength9 >= 3 ? 1 : 0;
+  return strength9 >= 6 ? 2 : 1;
 };
 
 /** Clear zones, board units from the tile centre (geometry.json of the V3 pack). */
@@ -35,7 +36,7 @@ export const placeProps = (key: string, defs: PropDef[], count: number, strength
   const turn = hash(`${key}:turn`) * Math.PI * 2;
   const spots = Array.from({ length: 6 }, (_, i) => {
     const a = turn + (i * Math.PI) / 3;
-    const r = 15 + hash(`${key}:r${i}`) * 4;
+    const r = 16 + hash(`${key}:r${i}`) * 5;
     return { x: Math.cos(a) * r, y: Math.sin(a) * r, k: hash(`${key}:o${i}`) };
   }).sort((p, q) => p.k - q.k);
   const out: Placed[] = [];
@@ -45,8 +46,8 @@ export const placeProps = (key: string, defs: PropDef[], count: number, strength
     const half = def.size * (0.85 + hash(`${key}:s${out.length}`) * 0.2) * 0.5;
     const clearOf = (z: { x: number; y: number; r: number }) => Math.hypot(s.x - z.x, s.y - z.y) >= z.r + half;
     // inside the hex: the inscribed circle (apothem 26) less the sprite
-    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.gold) || !clearOf(CLEAR.mark) || Math.hypot(s.x, s.y) + half > 25) continue;
-    if (out.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < (p.size + half * 2) * 0.5)) continue;
+    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.gold) || !clearOf(CLEAR.mark) || Math.hypot(s.x, s.y) + half * 0.45 > 27) continue;
+    if (out.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < (p.size + half * 2) * 0.38)) continue;
     out.push({ def, x: s.x, y: s.y, size: half * 2 });
   }
   return out;

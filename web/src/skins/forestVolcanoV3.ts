@@ -9,7 +9,7 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   label: 'V3',
   root: 'design-v3',
   // a 2048 (hi) or 1024 (lo) texture spans about four hexes
-  worldUnits: 240,
+  worldUnits: 360,
   tiers: { lo: { hexPx: 256, texPx: 1024 }, hi: { hexPx: 512, texPx: 2048 } },
   policy: { upgradeAt: 280, downgradeBelow: 200 },
   masks: {
@@ -20,14 +20,17 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   owners: ['forest', 'volcano'],
   cells: { normal: 'empty', rich: 'gold', rock: 'rock' },
   materials: {
-    empty: { base: ['textures/empty_ground.webp'], proxy: { base: '#262a28' }, clarity: 0 },
+    // five painted slate textures, mixed in soft patches across the board
+    empty: { base: [1, 2, 3, 4, 5].map((n) => `textures/empty_ground_0${n}.webp`), proxy: { base: '#262a28' }, clarity: 0 },
     gold: { base: ['textures/gold_ground.webp'], proxy: { base: '#4a3d24' }, clarity: 0 },
     // blocked hexes: the empty ground with a boulder cluster on top (props.rock)
-    rock: { base: ['textures/empty_ground.webp'], proxy: { base: '#57534c' }, clarity: 0 },
+    rock: { base: [1, 2, 3, 4, 5].map((n) => `textures/empty_ground_0${n}.webp`), proxy: { base: '#57534c' }, clarity: 0 },
     forest: {
       base: ['textures/forest_ground_a.webp', 'textures/forest_ground_b.webp'],
       overlay: 'textures/forest_lush.webp',
       proxy: { base: '#2f5a32', overlay: '#4f8a3c' },
+      // the forest painting is the busiest: shown bigger, so its leaves read as shapes, not noise
+      worldUnits: 480,
       clarity: 0.7,
       cutoff: 'states/forest_cutoff_tint.json',
       cutoffProps: { dir: 'states/forest_wilt_props/', size: 12 },
@@ -45,28 +48,28 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   props: {
     forest: {
       dir: 'props/forest/',
-      size: 13,
+      size: 19,
       anim: 'sway',
       rules: [
-        { match: 'sprout', size: 9 },
-        { match: 'log', minStrength: 4, size: 16, anim: null },
-        { match: 'flower', minStrength: 3, size: 11 },
-        { match: 'mushroom', minStrength: 4, size: 10, anim: null },
+        { match: 'sprout', size: 13 },
+        { match: 'log', minStrength: 4, size: 22, anim: null },
+        { match: 'flower', minStrength: 3, size: 16 },
+        { match: 'mushroom', minStrength: 4, size: 15, anim: null },
         { match: 'berry', minStrength: 5 },
-        { match: 'sapling', minStrength: 6, size: 15 },
+        { match: 'sapling', minStrength: 6, size: 20 },
       ],
     },
     volcano: {
       dir: 'props/volcano/',
-      size: 13,
+      size: 18,
       rules: [
-        { match: 'obsidian_hot', minStrength: 5, size: 11 },
-        { match: 'obsidian', size: 10 },
-        { match: 'cinder', minStrength: 3, size: 11 },
-        { match: 'vent', minStrength: 5, size: 12, anim: 'pulse' },
+        { match: 'obsidian_hot', minStrength: 5, size: 16 },
+        { match: 'obsidian', size: 15 },
+        { match: 'cinder', minStrength: 3, size: 15 },
+        { match: 'vent', minStrength: 5, size: 18, anim: 'pulse' },
       ],
     },
-    rock: { dir: 'props/rock/', size: 46 },
+    rock: { dir: 'props/rock/', size: 58 },
   },
   networkStyle: 'network/style.json',
   // built-in values (network/style.json in the tier overrides them)
@@ -76,16 +79,16 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   ],
   homes: [
     [
-      { src: 'homes/forest_tree_shadow.webp', size: 44, dx: 1.5, dy: 2 },
+      { src: 'homes/forest_tree_shadow.webp', size: 56, dx: 2, dy: 2.6 },
       // two looks: the fruit tree (its loose outer leaves sway) or the blossom tree
-      { src: 'homes/forest_tree_canopy.webp', size: 42, variant: 0 },
-      { src: 'homes/forest_tree_leaves_layer.webp', size: 42, anim: 'sway', variant: 0 },
-      { src: 'homes/forest_tree_canopy_blossom.webp', size: 42, variant: 1 },
+      { src: 'homes/forest_tree_canopy.webp', size: 54, variant: 0 },
+      { src: 'homes/forest_tree_leaves_layer.webp', size: 54, anim: 'sway', variant: 0 },
+      { src: 'homes/forest_tree_canopy_blossom.webp', size: 54, variant: 1 },
     ],
     [
-      { src: 'homes/volcano_crater.webp', size: 42 },
+      { src: 'homes/volcano_crater.webp', size: 52 },
       // the molten glow, inside the crater's ring of rock
-      { src: 'homes/volcano_crater_glow.webp', size: 26, anim: 'pulse', opacity: 0.75 },
+      { src: 'homes/volcano_crater_glow.webp', size: 32, anim: 'pulse', opacity: 0.75 },
       // three puffs drifting up one after another (one 6 s cycle, 2 s apart)
       { src: 'homes/volcano_smoke_01.webp', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
       { src: 'homes/volcano_smoke_02.webp', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
