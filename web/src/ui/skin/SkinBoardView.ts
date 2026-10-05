@@ -48,6 +48,8 @@ export class SkinBoardView extends BoardView {
   private propDefs: Record<string, PropDef[]> = {};
   /** props for cut-off tiles and severed hexes, by material */
   private cutoffDefs: Record<string, PropDef[]> = {};
+  /** ambient motes on screen (kept across renders so their motion never restarts) */
+  private motes = new Map<string, SVGElement>();
   /** tiles joined to their home in the board being drawn */
   private joinedNow = new Set<string>();
   private strips: ({ url: string; w: number; h: number } | null)[] = [null, null];
@@ -105,6 +107,7 @@ export class SkinBoardView extends BoardView {
     });
     this.paintedSig = '';
     this.paintedPpu = 0;
+    this.motes = new Map();
     this.checkView();
     this.decorate();
   }
@@ -309,8 +312,34 @@ export class SkinBoardView extends BoardView {
 
   // ---------- the drawing steps ----------
 
-  protected override drawGlows() {
-    // the skin's ground and network carry the top rank; no extra glow
+  /** No top-rank glow (the ground and network carry rank); instead a little ambient life. */
+  protected override drawGlows(board: Record<string, Tile | null>) {
+    const layer = this.layers.glow;
+    const amb = this.skin.ambient;
+    const want = new Map<string, { key: string; m: NonNullable<SkinDef['ambient']>['motes'][number] }>();
+    if (amb && this.look.motion && (this.tilePx() || 0) >= 48) {
+      for (const m of amb.motes) {
+        if (!this.assets.has(m.src)) continue;
+        const keys = this.keys.filter((k) => {
+          const t = board[k];
+          return t && !t.root && this.skin.owners[t.owner] === m.material && this.strength9(t) >= m.minStrength && this.joinedNow.has(k);
+        });
+        // the same tiles every time (by key), at most `max` per kind
+        keys.sort((a, b) => hash(`${a}:mote`) - hash(`${b}:mote`));
+        for (const k of keys.slice(0, amb.max)) want.set(`${k}|${m.src}`, { key: k, m });
+      }
+    }
+    for (const [id, e] of this.motes) if (!want.has(id) || !e.isConnected) (e.remove(), this.motes.delete(id));
+    for (const [id, { key, m }] of want) {
+      if (this.motes.has(id)) continue;
+      const { x, y } = centerOf(key);
+      const h = hash(id);
+      const dx = (h - 0.5) * 16;
+      const dy = m.kind === 'rise' ? 4 : -10;
+      const g = el('g', { class: `skin-mote ${m.kind}`, style: `animation-duration:${(m.kind === 'rise' ? 4.6 : 7) + h * 2.5}s;animation-delay:${(-h * 9).toFixed(2)}s` }, layer);
+      el('image', { href: this.assets.url(m.src), x: x + dx - m.size / 2, y: y + dy - m.size / 2, width: m.size, height: m.size, preserveAspectRatio: 'xMidYMid meet' }, g);
+      this.motes.set(id, g);
+    }
   }
 
   protected override drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {

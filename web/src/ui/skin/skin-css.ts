@@ -17,5 +17,11 @@ export const SKIN_CSS = `
 @keyframes skin-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 .skin-board .skin-drift { transform-box: fill-box; transform-origin: 50% 50%; animation: skin-drift 6s ease-in-out infinite; }
 @keyframes skin-drift { 0% { transform: translate(0, 0); opacity: 0; } 30% { opacity: 0.8; } 100% { transform: translate(3px, -9px); opacity: 0; } }
+.skin-board .skin-mote { pointer-events: none; transform-box: fill-box; transform-origin: 50% 50%; animation-timing-function: ease-in-out; animation-iteration-count: infinite; opacity: 0; }
+.skin-board .skin-mote.rise { animation-name: skin-rise; }
+.skin-board .skin-mote.fall { animation-name: skin-fall; }
+@keyframes skin-rise { 0% { transform: translate(0, 0) scale(0.6); opacity: 0; } 15% { opacity: 0.9; } 70% { opacity: 0.55; } 100% { transform: translate(3px, -18px) scale(1); opacity: 0; } }
+@keyframes skin-fall { 0% { transform: translate(0, 0) rotate(0deg); opacity: 0; } 15% { opacity: 0.85; } 75% { opacity: 0.6; } 100% { transform: translate(9px, 16px) rotate(140deg); opacity: 0; } }
+.reduce-motion .skin-board .skin-mote { display: none; }
 .reduce-motion .skin-board .skin-sway, .reduce-motion .skin-board .skin-pulse, .reduce-motion .skin-board .skin-drift, .reduce-motion .skin-board .skin-flow { animation: none; }
 `;

@@ -83,6 +83,14 @@ export const FOREST_VOLCANO_V3: SkinDef = {
     ],
   ],
   scars: ['fx/forest_scar.png', 'fx/volcano_scar.png'],
+  // a few embers rise off hot volcano tiles, a few leaves drift off lush forest (never many)
+  ambient: {
+    max: 4,
+    motes: [
+      { material: 'volcano', src: 'fx/ember_mote.png', minStrength: 6, kind: 'rise', size: 5 },
+      { material: 'forest', src: 'fx/leaf_mote.png', minStrength: 7, kind: 'fall', size: 5.5 },
+    ],
+  },
   numbers: [
     { ink: '#0b1a14', plate: '#eef6dc', plateAlpha: 0.78 },
     { ink: '#fff4ee', plate: '#1a0f0c', plateAlpha: 0.78 },

@@ -95,6 +95,8 @@ export type SkinDef = {
   networkStyle: string;
   network: [NetworkLook & { key: string }, NetworkLook & { key: string }];
   homes: [HomeLayer[], HomeLayer[]];
+  /** ambient life: small motes drifting off strong tiles (only with motion on and big enough tiles) */
+  ambient?: { max: number; motes: { material: string; src: string; minStrength: number; kind: 'rise' | 'fall'; size: number }[] };
   /** sever scar decals by player */
   scars?: [string, string];
   numbers: [NumberLook, NumberLook];

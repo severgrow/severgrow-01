@@ -49,7 +49,7 @@ for (const [name, w, h, dpr, touch, preset, ms] of runs) {
   const info = await page.evaluate(() => {
     const svg = document.querySelector('#board') as SVGSVGElement;
     const img = svg.querySelector('pattern[id$="skin-ground"] image');
-    return { tier: svg.dataset.tier, skin: svg.dataset.skin, ground: !!img?.getAttribute('href'), links: svg.querySelectorAll('.skin-link').length, tiles: svg.querySelectorAll('.skin-tile').length };
+    return { motes: svg.querySelectorAll('.skin-mote').length, tier: svg.dataset.tier, skin: svg.dataset.skin, ground: !!img?.getAttribute('href'), links: svg.querySelectorAll('.skin-link').length, tiles: svg.querySelectorAll('.skin-tile').length };
   });
   await page.screenshot({ path: `${out}/${name}.png` });
   console.log(name, JSON.stringify(info), bad.length ? bad.join(' | ') : 'clean');
