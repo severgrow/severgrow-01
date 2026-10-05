@@ -76,29 +76,29 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   ],
   homes: [
     [
-      { src: 'homes/forest_tree_shadow.png', size: 44, dx: 1.5, dy: 2 },
+      { src: 'homes/forest_tree_shadow.webp', size: 44, dx: 1.5, dy: 2 },
       // two looks: the fruit tree (its loose outer leaves sway) or the blossom tree
-      { src: 'homes/forest_tree_canopy.png', size: 42, variant: 0 },
-      { src: 'homes/forest_tree_leaves_layer.png', size: 42, anim: 'sway', variant: 0 },
-      { src: 'homes/forest_tree_canopy_blossom.png', size: 42, variant: 1 },
+      { src: 'homes/forest_tree_canopy.webp', size: 42, variant: 0 },
+      { src: 'homes/forest_tree_leaves_layer.webp', size: 42, anim: 'sway', variant: 0 },
+      { src: 'homes/forest_tree_canopy_blossom.webp', size: 42, variant: 1 },
     ],
     [
-      { src: 'homes/volcano_crater.png', size: 42 },
+      { src: 'homes/volcano_crater.webp', size: 42 },
       // the molten glow, inside the crater's ring of rock
-      { src: 'homes/volcano_crater_glow.png', size: 26, anim: 'pulse', opacity: 0.75 },
+      { src: 'homes/volcano_crater_glow.webp', size: 26, anim: 'pulse', opacity: 0.75 },
       // three puffs drifting up one after another (one 6 s cycle, 2 s apart)
-      { src: 'homes/volcano_smoke_01.png', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
-      { src: 'homes/volcano_smoke_02.png', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
-      { src: 'homes/volcano_smoke_03.png', size: 15, dx: 6, dy: -7, anim: 'drift', opacity: 0.7, delay: 4 },
+      { src: 'homes/volcano_smoke_01.webp', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
+      { src: 'homes/volcano_smoke_02.webp', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
+      { src: 'homes/volcano_smoke_03.webp', size: 15, dx: 6, dy: -7, anim: 'drift', opacity: 0.7, delay: 4 },
     ],
   ],
-  scars: ['fx/forest_scar.png', 'fx/volcano_scar.png'],
+  scars: ['fx/forest_scar.webp', 'fx/volcano_scar.webp'],
   // a few embers rise off hot volcano tiles, a few leaves drift off lush forest (never many)
   ambient: {
     max: 4,
     motes: [
-      { material: 'volcano', src: 'fx/ember_mote.png', minStrength: 6, kind: 'rise', size: 5 },
-      { material: 'forest', src: 'fx/leaf_mote.png', minStrength: 7, kind: 'fall', size: 5.5 },
+      { material: 'volcano', src: 'fx/ember_mote.webp', minStrength: 6, kind: 'rise', size: 5 },
+      { material: 'forest', src: 'fx/leaf_mote.webp', minStrength: 7, kind: 'fall', size: 5.5 },
     ],
   },
   numbers: [
