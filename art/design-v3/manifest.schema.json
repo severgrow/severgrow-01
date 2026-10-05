@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SEVEROR V3 Asset Manifest",
+  "type": "object",
+  "required": [
+    "version",
+    "tiers",
+    "assets"
+  ],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "tiers": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "masters",
+          "hi",
+          "lo"
+        ]
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "tier",
+          "width",
+          "height",
+          "purpose",
+          "alpha",
+          "anchor"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              "masters",
+              "hi",
+              "lo",
+              "dev"
+            ]
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "alpha": {
+            "enum": [
+              "opaque",
+              "alpha",
+              "grayscale"
+            ]
+          },
+          "anchor": {
+            "type": "object",
+            "required": [
+              "x",
+              "y",
+              "units"
+            ],
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "units": {
+                "enum": [
+                  "normalized",
+                  "pixels"
+                ]
+              }
+            }
+          },
+          "animation_layers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "master_source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

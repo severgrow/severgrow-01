@@ -25,7 +25,8 @@
     "ladder": "tsx src/sim/ladder.ts",
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",
-    "bot-timing": "tsx src/sim/bot-timing.ts"
+    "bot-timing": "tsx src/sim/bot-timing.ts",
+    "skin:manifest": "tsx web/skin-manifest.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

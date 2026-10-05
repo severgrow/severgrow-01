@@ -28,11 +28,13 @@ export type LabHooks = {
 const ACTIVE_KEY = 'severgrow-lab-active';
 /** DESIGN: the same Lab game drawn with the V2 illustrated skin (?design=1, see ui/designBoard.ts) */
 const IN_DESIGN = new URLSearchParams(location.search).get('design') === '1';
+/** V3: the same game on the skinned renderer with the V3 art system (?design=v3) */
+const IN_V3 = new URLSearchParams(location.search).get('design') === 'v3';
 const DESIGN_PLAY_KEY = 'severgrow-design-play';
 /** Opens the page with or without DESIGN (the game in progress is saved, so it carries over). */
-const goDesign = (on: boolean) => {
+const goDesign = (on: boolean | 'v3') => {
   const q = new URLSearchParams(location.search);
-  if (on) q.set('design', '1');
+  if (on) q.set('design', on === 'v3' ? 'v3' : '1');
   else q.delete('design');
   const qs = q.toString();
   location.href = `${location.pathname}${qs ? `?${qs}` : ''}`;
@@ -335,13 +337,20 @@ export const mountLab = (hooks: LabHooks) => {
   designBtn.textContent = IN_DESIGN ? 'Leave Design' : 'Design';
   designBtn.addEventListener('click', () => goDesign(!IN_DESIGN));
   labRow.appendChild(designBtn);
+  const v3Btn = document.createElement('button');
+  v3Btn.type = 'button';
+  v3Btn.id = 'menu-v3';
+  v3Btn.className = `btn ghost menu-design${IN_V3 ? ' on' : ''}`;
+  v3Btn.textContent = IN_V3 ? 'Leave V3' : 'V3';
+  v3Btn.addEventListener('click', () => goDesign(IN_V3 ? false : 'v3'));
+  labRow.appendChild(v3Btn);
   const line = document.createElement('p');
   line.className = 'lab-line small';
   menuButtons?.after(line);
   const showLine = () => {
     line.innerHTML = active
-      ? `Test build${IN_DESIGN ? ' · DESIGN' : ''} · <b>${esc(active.name)}</b> <span class="muted">(${shortCode(active)})</span> <button class="btn ghost lab-back" type="button">Back to Classic</button>`
-      : `Test build${IN_DESIGN ? ' · DESIGN' : ''} · Classic`;
+      ? `Test build${IN_DESIGN ? ' · DESIGN' : IN_V3 ? ' · V3' : ''} · <b>${esc(active.name)}</b> <span class="muted">(${shortCode(active)})</span> <button class="btn ghost lab-back" type="button">Back to Classic</button>`
+      : `Test build${IN_DESIGN ? ' · DESIGN' : IN_V3 ? ' · V3' : ''} · Classic`;
     line.querySelector('.lab-back')?.addEventListener('click', () => {
       activate(null);
       s = { ...CLASSIC };

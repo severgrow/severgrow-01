@@ -1,0 +1,16 @@
+{
+  "effective_px_per_hex": "tile_css_px * device_pixel_ratio * zoom",
+  "startup": {
+    "phone_or_coarse_pointer": "lo",
+    "desktop": "lo unless effective_px_per_hex >= 280, then hi"
+  },
+  "upgrade_hi_at": 280,
+  "downgrade_lo_below": 200,
+  "hysteresis_reason": "prevents visible tier flapping while zooming",
+  "memory_rules": [
+    "never preload both tiers",
+    "release unused decoded source images after board canvas is composited when practical",
+    "phones stay lo by default",
+    "hi is for genuine close/large rendering, not merely high DPR"
+  ]
+}

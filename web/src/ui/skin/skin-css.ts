@@ -1,0 +1,21 @@
+// Styles for skinned boards (injected once by SkinBoardView; inert anywhere else).
+export const SKIN_CSS = `
+.skin-board .skin-cell { stroke: rgba(6, 8, 7, 0.55); stroke-width: 0.9; }
+.skin-board .skin-proxy { pointer-events: none; }
+.skin-board .skin-fill, .skin-board .skin-edge { pointer-events: none; }
+.skin-board .skin-edge { fill: none; stroke: rgba(6, 8, 7, 0.5); stroke-width: 0.75; }
+.skin-board .skin-prop, .skin-board .skin-scar, .skin-board .skin-home-layer { pointer-events: none; }
+.skin-board .skin-link { pointer-events: none; stroke-linejoin: round; }
+.skin-board .skin-link.loose { opacity: 0.45; }
+.skin-board .skin-link.grow-in { stroke-dasharray: 1; animation: draw-on calc(0.34s * var(--anim, 1)) ease-out both; }
+.skin-board .skin-flow { stroke-dasharray: 0.05 0.035; animation: skin-flow 1.7s linear infinite; }
+@keyframes skin-flow { to { stroke-dashoffset: -0.085; } }
+.skin-board .landmark.skin-has-art .lm-sprite { display: none; }
+.skin-board .skin-sway { transform-box: fill-box; transform-origin: 50% 85%; animation: skin-sway 5.2s ease-in-out infinite; }
+@keyframes skin-sway { 0%, 100% { transform: rotate(-1.6deg); } 50% { transform: rotate(1.6deg); } }
+.skin-board .skin-pulse { animation: skin-pulse 3.4s ease-in-out infinite; }
+@keyframes skin-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.skin-board .skin-drift { transform-box: fill-box; transform-origin: 50% 50%; animation: skin-drift 6s ease-in-out infinite; }
+@keyframes skin-drift { 0% { transform: translate(0, 0); opacity: 0; } 30% { opacity: 0.8; } 100% { transform: translate(3px, -9px); opacity: 0; } }
+.reduce-motion .skin-board .skin-sway, .reduce-motion .skin-board .skin-pulse, .reduce-motion .skin-board .skin-drift, .reduce-motion .skin-board .skin-flow { animation: none; }
+`;

@@ -1,0 +1,86 @@
+{
+  "version": "3.0-starter",
+  "board_units": {
+    "hex_circumradius": 30.0,
+    "bleed": 3.0,
+    "number_zone_radius": 9.0,
+    "gold_badge_zone_radius": 6.0,
+    "gold_badge_center": [
+      17.4,
+      12.6
+    ]
+  },
+  "mask_canvas": {
+    "master": [
+      1024,
+      1024
+    ],
+    "hi": [
+      512,
+      512
+    ],
+    "lo": [
+      256,
+      256
+    ],
+    "pointy_hi_corners": [
+      [
+        256,
+        0
+      ],
+      [
+        478,
+        128
+      ],
+      [
+        478,
+        384
+      ],
+      [
+        256,
+        512
+      ],
+      [
+        34,
+        384
+      ],
+      [
+        34,
+        128
+      ]
+    ],
+    "flat_hi_corners": [
+      [
+        0,
+        256
+      ],
+      [
+        128,
+        34
+      ],
+      [
+        384,
+        34
+      ],
+      [
+        512,
+        256
+      ],
+      [
+        384,
+        478
+      ],
+      [
+        128,
+        478
+      ]
+    ],
+    "note": "Coverage masks may extend beyond the exact hex clip; the renderer applies the exact clip last. This is how the 3-board-unit bleed remains usable even on a square mask canvas."
+  },
+  "screen_space_rules": {
+    "light_direction": "top-left",
+    "shadow_direction": "down-right",
+    "art_rotation": "never rotate raster art with 60-degree board turns",
+    "texture_sampling": "sample in a screen-upright projected world space so lighting and brush direction remain screen-upright while ground remains continuous"
+  }
+}

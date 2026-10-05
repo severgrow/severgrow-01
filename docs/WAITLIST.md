@@ -8,6 +8,23 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
+### V3: skinned renderer and art pipeline (V3 art pending, greybox)
+- Date: 2026-10-05 · In test only (menu -> **V3**, or `?design=v3`)
+- A generic skinned board (`web/src/ui/skin/`) with Forest/Volcano V3 as data
+  (`web/src/skins/forestVolcanoV3.ts`): continuous world-space ground (base + overlay through
+  the strength coverage masks, clarity masks under number and gold badge, cut-off tints), one
+  continuous code path per linked pair skinned by the network style (strip textures when they
+  exist), props by folder with LOD and clear zones, home sprite layers with animation classes.
+- Art tiers `lo`/`hi` in `web/public/design-v3/`: one tier loaded at a time, picked from tile
+  CSS px x DPR x zoom (phones start lo; up at 280, down below 200). `npm run skin:manifest`
+  lists what each tier has; missing art falls back (greybox palette colours, the board's own
+  homes, no props). The development pack (briefs, masters, QA) is in `art/design-v3/`.
+- `BoardView`: drawing steps became overridable methods (same code, same order); the live
+  game, the Lab and Design draw exactly as before (web tests 483/483).
+- Check before locking in: the real V3 art (Phase 1 approval first); strip skinning on a straight
+  path (the strip carries the organic look); hi tier memory on tablets; the ground repaint time
+  on big boards on a real phone.
+
 ### Typography v2: Besley (display) + Commissioner (UI), tabular numbers
 - Date: 2026-10-05 · Commit: `fc6a4ec` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)
 - Besley for the SEVEROR wordmark, page and sheet titles, "Pick a level" and the result title;

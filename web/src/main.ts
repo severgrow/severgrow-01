@@ -82,6 +82,8 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { DesignBoardView } from './ui/designBoard.js';
+import { SkinBoardView } from './ui/skin/SkinBoardView.js';
+import { FOREST_VOLCANO_V3 } from './skins/forestVolcanoV3.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -109,6 +111,9 @@ const BOOT_PARAMS = new URLSearchParams(location.search);
 // the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
 const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
 if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
+// the test copy's V3 version (menu -> V3): the same game on the skinned renderer (ui/skin/), V3 art
+const V3_MODE = IS_TEST && BOOT_PARAMS.get('design') === 'v3';
+if (V3_MODE) document.documentElement.classList.add('design-v3');
 
 // ---------- small helpers ----------
 
@@ -178,7 +183,8 @@ let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
-const board = DESIGN_MODE ? new DesignBoardView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
+const boardSvg = $('board') as unknown as SVGSVGElement;
+const board = V3_MODE ? new SkinBoardView(boardSvg, boardHandlers, FOREST_VOLCANO_V3) : DESIGN_MODE ? new DesignBoardView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {

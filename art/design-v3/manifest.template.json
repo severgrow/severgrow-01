@@ -1,0 +1,26 @@
+{
+  "version": "3.0",
+  "tiers": [
+    "masters",
+    "hi",
+    "lo"
+  ],
+  "assets": [
+    {
+      "path": "lo/textures/empty_ground.webp",
+      "tier": "lo",
+      "width": 1024,
+      "height": 1024,
+      "purpose": "seamless empty board ground",
+      "alpha": "opaque",
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5,
+        "units": "normalized"
+      },
+      "animation_layers": [],
+      "master_source": "masters/textures/empty_ground.webp",
+      "notes": "Example entry only; replace with complete generated manifest."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+path,kind,count,sizes,alpha,workflow_phase,notes
+textures/empty_ground.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,quietest board material
+textures/gold_ground.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,warm but quieter than owned ground
+textures/forest_ground_a.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,forest base variation A
+textures/forest_ground_b.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 2,forest base variation B
+textures/forest_lush.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,strength overlay
+textures/volcano_ground_a.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,cooled basalt A
+textures/volcano_ground_b.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 2,cooled basalt B
+textures/volcano_hot.webp,seamless opaque texture,1,master 4096; hi 2048; lo 1024,opaque,phase 1,hot seams overlay
+"masks/{pointy,flat}/coverage_01..09.png",coverage masks,18,master 1024; hi 512; lo 256,grayscale,included,already generated in starter
+"masks/{pointy,flat}/hex_clip.png",exact clip masks,2,master 1024; hi 512; lo 256,grayscale,included,already generated
+"masks/{pointy,flat}/clarity_number_zone.png",local clarity mask,2,master 1024; hi 512; lo 256,grayscale,included,suppresses local texture contrast under number
+"masks/{pointy,flat}/clarity_gold_zone.png",local clarity mask,2,master 1024; hi 512; lo 256,grayscale,included,keeps lower-right badge zone calm
+props/forest/*,transparent prop sprites,12,master 512-ish source; hi 128-256; lo 64-128,alpha,phase 2,shrub/fern/flower/berry/mushroom/sapling families
+props/volcano/*,transparent prop sprites,12,master 512-ish source; hi 128-256; lo 64-128,alpha,phase 2,boulder/slab/vent/cinder families
+props/rock/*,transparent blocked clusters,4,master 512-ish; hi 192-256; lo 96-128,alpha,phase 1,"quiet, grey, big shapes"
+homes/forest_tree_canopy.*,home sprite,1,master 1536; hi 768; lo 384,alpha,phase 1,strictly top-down
+homes/forest_tree_leaves_layer.*,animation layer,1,master 1536; hi 768; lo 384,alpha,phase 2,sway layer
+homes/forest_tree_shadow.*,home shadow,1,master 1536; hi 768; lo 384,alpha,phase 1,soft down-right shadow
+homes/volcano_crater.*,home sprite,1,master 1536; hi 768; lo 384,alpha,phase 1,strict top-down caldera
+homes/volcano_crater_glow.*,animation layer,1,master 1536; hi 768; lo 384,alpha,phase 2,"pulse layer, restrained"
+homes/volcano_smoke_01..03.*,animation frames/layers,3,master 768-ish; hi 384; lo 192,alpha,phase 2,drifting smoke
+network/forest_vine_strip.webp,tileable strip,1,master 1024x128; hi 512x64; lo 256x32,alpha/opaque strip,phase 1,skins code path
+network/lava_flow_strip.webp,tileable strip,1,master 1024x128; hi 512x64; lo 256x32,alpha/opaque strip,phase 1,scrollable flow strip
+states/forest_wilt_props/*,state sprites,4,hi 128-256; lo 64-128,alpha,phase 2,disconnected forest
+states/volcano_ash_props/*,state sprites,4,hi 128-256; lo 64-128,alpha,phase 2,cooled/ashen volcano
+fx/*,small FX sprites/decals,~8-12,master 256-ish; hi 64-128; lo 32-64,alpha,phase 2,leaf/spark/ember/ash/dust/sever/scars
