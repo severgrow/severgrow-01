@@ -97,6 +97,11 @@ export type SkinDef = {
   materials: Record<string, MaterialDef>;
   /** props by material id */
   props: Record<string, PropSet>;
+  /**
+   * painted hex tiles by material id: a folder of pointy-top hex pictures named `s<strength>_<any>`
+   * (strength 1-9); an owned tile shows one for its strength (nearest painted), instead of props
+   */
+  tiles?: Record<string, string>;
   /** the network style file and the built-in values for each player */
   networkStyle: string;
   network: [NetworkLook & { key: string }, NetworkLook & { key: string }];

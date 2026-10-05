@@ -1,0 +1,10 @@
+# grass_src_<id> -> strength (1 plainest .. 9 richest); hextile.py writes tiles/forest/s<N>_<id>.webp
+1 97 98
+2 91 99 102
+3 82 83 87
+4 89 90 106
+5 100 103 105
+6 88 101 104
+7 84 86 93
+8 85 92 95
+9 94 96
