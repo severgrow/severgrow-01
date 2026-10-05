@@ -112,10 +112,7 @@ export class SkinBoardView extends BoardView {
       el('stop', { offset: 0.62, 'stop-color': n.plate, 'stop-opacity': 0.92 }, gr);
       el('stop', { offset: 1, 'stop-color': n.plate, 'stop-opacity': 0 }, gr);
     });
-    const fg = el('linearGradient', { id: this.id('skin-flame-grad'), x1: 0, y1: 1, x2: 0, y2: 0 }, defs);
-    el('stop', { offset: 0, 'stop-color': '#ffd25a' }, fg);
-    el('stop', { offset: 0.45, 'stop-color': '#ff7a1a' }, fg);
-    el('stop', { offset: 1, 'stop-color': '#c22a0a', 'stop-opacity': 0.2 }, fg);
+    this.lifeArt(defs);
     this.life = null;
     this.lifeSig = '';
     this.paintedSig = '';
@@ -436,23 +433,27 @@ export class SkinBoardView extends BoardView {
       for (let i = 0; i < jit.length; i++) d += `Q${jit[i]!.x.toFixed(1)},${jit[i]!.y.toFixed(1)} ${mid(jit[i]!, jit[(i + 1) % jit.length]!)}`;
       return d;
     };
+    const use = (parent: SVGElement, sym: string, extra: Record<string, string | number> = {}) => {
+      const u = el('use', extra, parent);
+      u.setAttribute('href', `#${this.id(sym)}`);
+      return u;
+    };
     const mine = sides[0]!;
     if (mine.length >= 2) {
-      const colours = [['#fff6c8', '#f2c94c'], ['#f4f1ff', '#b9c7ff'], ['#ffe2ef', '#f5a3c0']] as const;
       const n = Math.min(3, Math.ceil(mine.length / 5));
       for (let i = 0; i < n; i++) {
         const salt = `bfly${i}`;
-        const [a, b] = colours[Math.floor(hash(`${salt}:c`) * colours.length)]!;
+        const kind = Math.floor(hash(`${salt}:c`) * 3);
         const show = el('g', { class: 'skin-wander', style: timing(26 + hash(`${salt}:v`) * 14, `${salt}:v`) }, g);
         const fly = el('g', {}, show);
         el('animateMotion', { path: loop(mine, salt), ...smil(30 + hash(`${salt}:d`) * 16, `${salt}:d`) }, fly);
-        const bob = el('g', { class: 'skin-bob', style: timing(1.7 + hash(`${salt}:b`), `${salt}:b`) }, el('g', { transform: 'scale(2.1)' }, fly));
-        for (const side of [-1, 1]) {
-          const w = el('g', { class: 'skin-wing', style: `transform-origin:0 0;${timing(0.32 + hash(`${salt}:f`) * 0.1, `${salt}:f`)}` }, bob);
-          el('ellipse', { cx: side * 1.9, cy: -0.9, rx: 2, ry: 1.5, fill: a, stroke: b, 'stroke-width': 0.35 }, w);
-          el('ellipse', { cx: side * 1.4, cy: 1, rx: 1.3, ry: 1.05, fill: b }, w);
-        }
-        el('path', { d: 'M0,-1.6L0,1.8', stroke: '#3a2a1a', 'stroke-width': 0.55, 'stroke-linecap': 'round' }, bob);
+        // its shadow on the ground below (the butterfly flies a little above the land)
+        use(fly, 'life-shadow', { transform: 'translate(3,7) scale(1.6,0.8)' });
+        const bob = el('g', { class: 'skin-bob', style: timing(1.7 + hash(`${salt}:b`), `${salt}:b`) }, el('g', { transform: `scale(1.9) rotate(${((hash(`${salt}:r`) - 0.5) * 40).toFixed(1)})` }, fly));
+        const flap = timing(0.3 + hash(`${salt}:f`) * 0.12, `${salt}:f`);
+        use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`);
+        use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`, { transform: 'scale(-1,1)' });
+        use(bob, 'life-body');
       }
       const leaf = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[0])?.src;
       if (leaf && this.assets.has(leaf)) {
@@ -460,8 +461,9 @@ export class SkinBoardView extends BoardView {
         const show = el('g', { class: 'skin-wander', style: timing(34, `${salt}:v`) }, g);
         const fly = el('g', {}, show);
         el('animateMotion', { path: loop(mine, salt), ...smil(40, `${salt}:d`) }, fly);
+        use(fly, 'life-shadow', { transform: 'translate(2,6) scale(1.4,0.7)' });
         const spin = el('g', { class: 'skin-spin', style: timing(5.5, `${salt}:s`) }, fly);
-        el('image', { href: this.assets.url(leaf), x: -4, y: -4, width: 8, height: 8 }, spin);
+        el('image', { href: this.assets.url(leaf), x: -4.5, y: -4.5, width: 9, height: 9 }, spin);
       }
     }
     const theirs = sides[1]!;
@@ -471,20 +473,20 @@ export class SkinBoardView extends BoardView {
         const k = theirs[Math.floor(hash(`flame${i}:k`) * theirs.length)]!;
         const { x, y } = centerOf(k);
         const a = hash(`flame${i}:a`) * Math.PI * 2;
-        const r = 14 + hash(`flame${i}:r`) * 10;
+        const r = 13 + hash(`flame${i}:r`) * 10;
         const f = el('g', { class: 'skin-flame', transform: `translate(${(x + Math.cos(a) * r).toFixed(1)},${(y + Math.sin(a) * r).toFixed(1)})`, style: timing(6 + hash(`flame${i}:d`) * 7, `flame${i}:d`) }, g);
-        const lick = el('g', { class: 'skin-lick', style: timing(0.45 + hash(`flame${i}:l`) * 0.2, `flame${i}:l`) }, el('g', { transform: 'scale(1.7)' }, f));
-        el('path', { d: 'M0,0C-2.4,-1 -2.2,-4.2 0,-7.5C0.9,-4.6 2.6,-3.3 1.9,-1C1.5,0 0.6,0.3 0,0Z', fill: 'url(#' + this.id('skin-flame-grad') + ')' }, lick);
-        el('path', { d: 'M0,-0.4C-1,-1 -0.9,-2.6 0,-4.2C0.5,-2.8 1.1,-1.8 0.7,-0.8Z', fill: '#fff3b0', opacity: 0.85 }, lick);
+        // the light it throws on the rock around it, then the flame, then two sparks
+        use(f, 'life-flame-light', { class: 'skin-flame-light' });
+        const lick = el('g', { class: 'skin-lick', style: timing(0.42 + hash(`flame${i}:l`) * 0.2, `flame${i}:l`) }, el('g', { transform: `scale(${(1.6 + hash(`flame${i}:s`) * 0.5).toFixed(2)})` }, f));
+        use(lick, 'life-flame');
+        for (let j = 0; j < 2; j++) el('circle', { class: 'skin-spark', cx: (j ? 1.2 : -0.8).toFixed(1), cy: -5, r: 0.45, fill: '#ffd76a', style: `animation-delay:${(-j * 0.35).toFixed(2)}s` }, lick);
       }
-      const smoke = 'homes/volcano_smoke_01.webp';
-      if (this.assets.has(smoke))
-        for (let i = 0; i < Math.min(2, Math.ceil(theirs.length / 5)); i++) {
-          const k = theirs[Math.floor(hash(`soot${i}:k`) * theirs.length)]!;
-          const { x, y } = centerOf(k);
-          const sm = el('g', { class: 'skin-soot', style: timing(10 + hash(`soot${i}:d`) * 6, `soot${i}:d`) }, g);
-          el('image', { href: this.assets.url(smoke), x: x + (hash(`soot${i}:x`) - 0.5) * 24 - 8, y: y + (hash(`soot${i}:y`) - 0.5) * 18 - 8, width: 16, height: 16 }, sm);
-        }
+      for (let i = 0; i < Math.min(2, Math.ceil(theirs.length / 5)); i++) {
+        const k = theirs[Math.floor(hash(`soot${i}:k`) * theirs.length)]!;
+        const { x, y } = centerOf(k);
+        const sm = el('g', { class: 'skin-soot', style: timing(10 + hash(`soot${i}:d`) * 6, `soot${i}:d`) }, g);
+        use(sm, 'life-soot', { transform: `translate(${(x + (hash(`soot${i}:x`) - 0.5) * 14).toFixed(1)},${(y - 4 + (hash(`soot${i}:y`) - 0.5) * 10).toFixed(1)}) scale(2.3)` });
+      }
     }
   }
 
@@ -535,6 +537,7 @@ export class SkinBoardView extends BoardView {
           fragile,
           id: this.id(`l${p}-${a}-${b}`.replace(/[^a-z0-9_-]/gi, '_')),
           defs: this.netDefs as unknown as SVGDefsElement,
+          hot: this.id('life-hot'),
         });
         for (const e of els) this.veinEls.push({ a, b, owner: p, el: e });
       };
@@ -559,7 +562,7 @@ export class SkinBoardView extends BoardView {
     const now = performance.now() / 1000;
     const phase = (dur: number, salt: string) => `animation-duration:${dur.toFixed(2)}s;animation-delay:${(-((now + hash(`${key}:${salt}`) * dur) % dur)).toFixed(2)}s;`;
     const rot = turn ? `transform-box:fill-box;transform-origin:center;transform:rotate(${turn.toFixed(2)}deg);` : '';
-    el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: 'skin-lava-glow', preserveAspectRatio: 'none', style: rot + phase(3.6 + hash(`${key}:gd`) * 2.6, 'g') }, holder);
+    el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: 'skin-lava-glow', filter: `url(#${this.id('life-hot')})`, preserveAspectRatio: 'none', style: rot + phase(3.6 + hash(`${key}:gd`) * 2.6, 'g') }, holder);
     const embers = s9 >= 7 ? 2 : s9 >= 3 ? 1 : 0;
     const ember = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[1])?.src;
     if (ember && this.assets.has(ember))
@@ -574,6 +577,66 @@ export class SkinBoardView extends BoardView {
       const a = hash(`${key}:sa`) * Math.PI * 2;
       const sm = el('g', { class: 'skin-tile-smoke', style: phase(9 + hash(`${key}:sd`) * 5, 'sm') }, g);
       el('image', { href: this.assets.url(smoke), x: x + Math.cos(a) * 10 - 7, y: y + Math.sin(a) * 10 - 7, width: 14, height: 14, opacity: 0.7 }, sm);
+    }
+  }
+
+  /**
+   * The ambient life drawn once as symbols, in the tiles' own painted style: warm dark outlines,
+   * shaded fills, small highlights, colours taken from the art (the tiles' white, pink and blue
+   * flowers for the butterflies; the lava's yellow-orange-red for the flame; charcoal smoke lit
+   * orange from below). Everything else only references these.
+   */
+  private lifeArt(defs: SVGDefsElement) {
+    const id = (n: string) => this.id(n);
+    const grad = (n: string, stops: [number, string, number?][], radial: Record<string, string | number> | null = null, lin: Record<string, string | number> = {}) => {
+      const gr = el(radial ? 'radialGradient' : 'linearGradient', { id: id(n), ...(radial ?? lin) }, defs);
+      for (const [o, c, a] of stops) el('stop', { offset: o, 'stop-color': c, ...(a === undefined ? {} : { 'stop-opacity': a }) }, gr);
+    };
+    // a hotter copy of lava art (brighter, warmer), composited normally: no blend modes, so no
+    // stray boxes where a blended layer meets a mask
+    const hot = el('filter', { id: id('life-hot'), x: 0, y: 0, width: 1, height: 1, 'color-interpolation-filters': 'sRGB' }, defs);
+    el('feColorMatrix', { type: 'matrix', values: '1.7 0.15 0 0 0.04  0.1 1.45 0 0 0.02  0 0 0.9 0 0  0 0 0 1 0' }, hot);
+    const ink = '#2c1d14';
+    // soft ground shadow
+    grad('life-shadow-g', [[0, '#000', 0.32], [1, '#000', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
+    el('ellipse', { rx: 2.6, ry: 1.6, fill: `url(#${id('life-shadow-g')})` }, el('symbol', { id: id('life-shadow'), overflow: 'visible' }, defs));
+    // butterfly wings (the right pair; the left is this mirrored): forewing and hindwing, painted
+    // as a light edge into a deeper root, a dark tip band, two pale spots, and the ink outline
+    const palettes: [string, string, string][] = [
+      ['#fff7d6', '#f6c453', '#c46a1c'], // sunlit yellow, like the tiles' flower hearts
+      ['#e8f4ff', '#8fbcf0', '#3f6fb8'], // the blue flowers
+      ['#fff0f5', '#f4a8c4', '#c4507e'], // the pink blossom
+    ];
+    palettes.forEach(([light, mid, deep], i) => {
+      grad(`life-wf-${i}`, [[0, deep], [0.45, mid], [1, light]], { cx: 0, cy: 0, r: 5.2, fx: 0, fy: 0, gradientUnits: 'userSpaceOnUse' });
+      grad(`life-wh-${i}`, [[0, deep], [1, mid]], { cx: 0, cy: 0.6, r: 3.6, gradientUnits: 'userSpaceOnUse' });
+      const w = el('symbol', { id: id(`life-wing-${i}`), overflow: 'visible' }, defs);
+      el('path', { d: 'M0.15,0.5C2.4,0.4 3.9,1.7 3.4,3.2C2.9,4.4 1.1,3.8 0.15,1.6Z', fill: `url(#${id(`life-wh-${i}`)})`, stroke: ink, 'stroke-width': 0.3, 'stroke-linejoin': 'round' }, w);
+      el('path', { d: 'M0.1,-0.2C1.1,-3.4 4.4,-4.6 5.2,-2.6C5.7,-1.2 3.7,0.5 0.2,0.4Z', fill: `url(#${id(`life-wf-${i}`)})`, stroke: ink, 'stroke-width': 0.32, 'stroke-linejoin': 'round' }, w);
+      el('path', { d: 'M3.6,-3.9C4.6,-3.8 5.4,-3 5.2,-2.4C4.7,-2.6 4.1,-3.2 3.6,-3.9Z', fill: deep, opacity: 0.85 }, w);
+      el('circle', { cx: 3.9, cy: -2.3, r: 0.42, fill: '#fffaf0' }, w);
+      el('circle', { cx: 2.2, cy: 2.4, r: 0.32, fill: '#fffaf0', opacity: 0.9 }, w);
+      el('path', { d: 'M0.4,-0.4C1.6,-1.6 2.6,-2.3 3.6,-2.6', stroke: ink, 'stroke-width': 0.14, fill: 'none', opacity: 0.5 }, w);
+    });
+    const body = el('symbol', { id: id('life-body'), overflow: 'visible' }, defs);
+    el('path', { d: 'M-0.1,-2.2C-0.6,-3.4 -1.2,-3.9 -1.7,-4.1M0.1,-2.2C0.6,-3.4 1.2,-3.9 1.7,-4.1', stroke: ink, 'stroke-width': 0.18, fill: 'none', 'stroke-linecap': 'round' }, body);
+    el('ellipse', { cx: 0, cy: 0.3, rx: 0.48, ry: 2.4, fill: '#4a3222', stroke: ink, 'stroke-width': 0.2 }, body);
+    el('ellipse', { cx: -0.12, cy: -0.4, rx: 0.15, ry: 0.9, fill: '#a07a52', opacity: 0.8 }, body);
+    // flame: ink-dark red rim, orange body, yellow, white-hot heart (a lava tongue), and its light
+    grad('life-flame-light-g', [[0, '#ffb04a', 0.55], [0.5, '#ff6a1a', 0.18], [1, '#ff4a10', 0]], { cx: 0.5, cy: 0.5, r: 0.5 });
+    el('ellipse', { cx: 0, cy: -1, rx: 9, ry: 6.5, fill: `url(#${id('life-flame-light-g')})` }, el('symbol', { id: id('life-flame-light'), overflow: 'visible' }, defs));
+    const fl = el('symbol', { id: id('life-flame'), overflow: 'visible' }, defs);
+    el('path', { d: 'M0,0.6C-2.9,-0.2 -3,-3.4 -1.2,-5.6C-1,-4.2 -0.3,-3.8 0.1,-4.4C-0.3,-6.2 0.6,-7.6 1.8,-8.6C1.5,-6.6 3.2,-5.2 2.9,-2.6C2.7,-0.6 1.5,0.7 0,0.6Z', fill: '#c7301a', stroke: '#5a160c', 'stroke-width': 0.3, 'stroke-linejoin': 'round' }, fl);
+    el('path', { d: 'M0,0.1C-2.1,-0.5 -2.1,-3 -0.8,-4.6C-0.6,-3.4 0.1,-3.1 0.4,-3.7C0.2,-5.2 0.9,-6.3 1.6,-7C1.5,-5.4 2.6,-4.3 2.3,-2.3C2.1,-0.7 1.2,0.2 0,0.1Z', fill: '#ff7a1c' }, fl);
+    el('path', { d: 'M0.1,-0.3C-1.3,-0.7 -1.3,-2.5 -0.3,-3.6C-0.1,-2.7 0.4,-2.6 0.6,-3C0.6,-4 1.1,-4.8 1.4,-5.2C1.5,-4 2,-3.2 1.7,-1.8C1.5,-0.8 0.9,-0.2 0.1,-0.3Z', fill: '#ffc93c' }, fl);
+    el('path', { d: 'M0.3,-0.6C-0.4,-0.9 -0.4,-1.9 0.2,-2.6C0.4,-2 0.8,-2 0.9,-2.3C1.1,-1.6 1,-0.7 0.3,-0.6Z', fill: '#fff4c4' }, fl);
+    // black smoke: three charcoal puffs, darker on top, warmed orange from the lava below
+    grad('life-soot-g', [[0, '#3a2c27', 0.95], [0.65, '#241b18', 0.75], [1, '#1a1311', 0]], { cx: 0.45, cy: 0.38, r: 0.6 });
+    grad('life-soot-warm', [[0, '#a3461c', 0.5], [1, '#a3461c', 0]], { cx: 0.5, cy: 0.85, r: 0.55 });
+    const so = el('symbol', { id: id('life-soot'), overflow: 'visible' }, defs);
+    for (const [cx, cy, r] of [[-2.6, 0.8, 2.4], [1.9, 1, 2.2], [-0.4, -1.4, 3], [2.2, -2.6, 2], [-2.2, -3.2, 1.8]] as const) {
+      el('circle', { cx, cy, r, fill: `url(#${id('life-soot-g')})` }, so);
+      el('circle', { cx, cy, r, fill: `url(#${id('life-soot-warm')})` }, so);
     }
   }
 

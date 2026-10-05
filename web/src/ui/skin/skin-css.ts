@@ -25,13 +25,13 @@ export const SKIN_CSS = `
 .skin-board .skin-mote.fall { animation-name: skin-fall; }
 @keyframes skin-rise { 0% { transform: translate(0, 0) scale(0.6); opacity: 0; } 15% { opacity: 0.9; } 70% { opacity: 0.55; } 100% { transform: translate(3px, -18px) scale(1); opacity: 0; } }
 @keyframes skin-fall { 0% { transform: translate(0, 0) rotate(0deg); opacity: 0; } 15% { opacity: 0.85; } 75% { opacity: 0.6; } 100% { transform: translate(9px, 16px) rotate(140deg); opacity: 0; } }
-.skin-board .skin-glow { mix-blend-mode: screen; opacity: 0; animation: skin-glow 7s ease-in-out infinite; }
-@keyframes skin-glow { 0%, 42%, 100% { opacity: 0; } 58% { opacity: 0.55; } 78% { opacity: 0.12; } }
+.skin-board .skin-glow { opacity: 0; animation: skin-glow 7s ease-in-out infinite; }
+@keyframes skin-glow { 0%, 42%, 100% { opacity: 0; } 58% { opacity: 0.4; } 78% { opacity: 0.1; } }
 .skin-board .skin-breathe { animation: skin-breathe 6.5s ease-in-out infinite; }
 @keyframes skin-breathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.07) saturate(1.06); } }
 .skin-board .skin-firefly { transform-box: fill-box; transform-origin: center; opacity: 0; animation: skin-firefly 9s ease-in-out infinite; }
 @keyframes skin-firefly { 0%, 52%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); } 60% { opacity: 1; transform: translate(1.5px, -2px) scale(1); } 68% { opacity: 0.35; } 76% { opacity: 1; transform: translate(-1px, -6px) scale(0.9); } 90% { opacity: 0; transform: translate(2.5px, -10px) scale(0.6); } }
-.skin-board .skin-lava-glow { pointer-events: none; mix-blend-mode: screen; filter: brightness(1.5) saturate(1.4); opacity: 0; animation: skin-lava 5s ease-in-out infinite; }
+.skin-board .skin-lava-glow { pointer-events: none; opacity: 0; animation: skin-lava 5s ease-in-out infinite; }
 @keyframes skin-lava { 0%, 100% { opacity: 0; } 35% { opacity: 0.2; } 55% { opacity: 0.42; } 75% { opacity: 0.12; } }
 .skin-board .skin-ember { pointer-events: none; opacity: 0; animation: skin-ember 7s ease-out infinite; }
 @keyframes skin-ember { 0%, 64%, 100% { opacity: 0; transform: translate(0, 0) scale(0.5); } 68% { opacity: 1; transform: translate(0, -1px) scale(1); } 74% { opacity: 0.5; } 80% { opacity: 1; } 96% { opacity: 0; transform: translate(2.5px, -11px) scale(0.6); } }
@@ -42,7 +42,7 @@ export const SKIN_CSS = `
 @keyframes skin-link-in { from { transform: scaleX(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
 .skin-board .skin-vine { transform-box: fill-box; transform-origin: center; animation: skin-vine 6s ease-in-out infinite; }
 @keyframes skin-vine { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.01, 1.08); } }
-.skin-board .skin-lava-flow { pointer-events: none; mix-blend-mode: screen; filter: brightness(1.6) saturate(1.3); opacity: 0; animation: skin-lava 4s ease-in-out infinite; }
+.skin-board .skin-lava-flow { pointer-events: none; opacity: 0; animation: skin-lava 4s ease-in-out infinite; }
 .reduce-motion .skin-board .skin-vine { animation: none; }
 .reduce-motion .skin-board .skin-lava-flow { display: none; }
 .skin-board .skin-life { pointer-events: none; }
@@ -51,14 +51,17 @@ export const SKIN_CSS = `
 .skin-board .skin-bob { animation: skin-bob 2s ease-in-out infinite; }
 @keyframes skin-bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(0, -1.6px); } }
 .skin-board .skin-wing { animation: skin-wing 0.35s ease-in-out infinite alternate; }
-@keyframes skin-wing { from { transform: scaleX(1); } to { transform: scaleX(0.25); } }
+@keyframes skin-wing { from { transform: scaleX(1); } to { transform: scaleX(0.2); } }
 .skin-board .skin-spin { animation: skin-spin 6s linear infinite; }
 @keyframes skin-spin { to { transform: rotate(360deg); } }
 .skin-board .skin-flame { opacity: 0; animation: skin-flame 9s ease-out infinite; }
 @keyframes skin-flame { 0%, 80%, 100% { opacity: 0; } 83% { opacity: 1; } 92% { opacity: 0.85; } 97% { opacity: 0; } }
 .skin-board .skin-lick { transform-box: fill-box; transform-origin: 50% 100%; animation: skin-lick 0.5s ease-in-out infinite alternate; }
 @keyframes skin-lick { from { transform: scale(0.85, 0.9) skewX(-4deg); } to { transform: scale(1.05, 1.15) skewX(4deg); } }
-.skin-board .skin-soot { opacity: 0; filter: brightness(0.12) saturate(0); animation: skin-soot 12s ease-out infinite; }
+.skin-board .skin-soot { opacity: 0; animation: skin-soot 12s ease-out infinite; }
+.skin-board .skin-flame-light { opacity: 0.8; }
+.skin-board .skin-spark { animation: skin-spark 0.9s ease-out infinite; }
+@keyframes skin-spark { 0% { transform: translate(0, 0); opacity: 1; } 100% { transform: translate(1.2px, -6px); opacity: 0; } }
 @keyframes skin-soot { 0%, 72%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); } 78% { opacity: 0.55; } 99% { opacity: 0; transform: translate(3px, -14px) scale(1.4); } }
 .reduce-motion .skin-board .skin-life { display: none; }
 .reduce-motion .skin-board .skin-mote { display: none; }
