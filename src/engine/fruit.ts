@@ -1,4 +1,4 @@
-import { allNeighbors, coordKey, isOnBoard, normalizeCoord } from './board.js';
+import { allNeighbors, coordKey, normalizeCoord, onBoard } from './board.js';
 import { isFruitCard } from './cards.js';
 import { IllegalActionError } from './errors.js';
 import type { IllegalActionCode } from './errors.js';
@@ -26,7 +26,7 @@ export const fruitTouches = (ctx: BoardCtx, player: Player, target: Coord): bool
 
 /** Why a Fruit card cannot be played on `target`, or null when it can (the card aside). */
 export const fruitTargetBlocker = (ctx: BoardCtx, player: Player, target: Coord): IllegalActionCode | null => {
-  if (!isOnBoard(target, ctx.config.boardRadius)) return 'OFF_BOARD';
+  if (!onBoard(target, ctx.config)) return 'OFF_BOARD';
   const tile = ctx.board[coordKey(target)];
   if (!tile || tile.owner === player) return 'FRUIT_TARGET_NOT_ENEMY';
   if (tile.root) return 'FRUIT_TARGET_ROOT';

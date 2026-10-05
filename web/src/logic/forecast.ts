@@ -1,7 +1,7 @@
 // The forecast (UI overhaul items 8 and 10): what a move would do before it is played, and
 // whether it should ask for a Confirm. Read-only: everything is computed on copies through
 // the engine's public planning functions (via the shared simulate), never changing the view.
-import { allNeighbors, coordKey, isOnBoard, parseKey, rootCoord } from '../../../src/engine/index.js';
+import { allNeighbors, coordKey, homeCoord, onBoard, parseKey } from '../../../src/engine/index.js';
 import type { Action, Player, Terrain, Tile, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { OPP } from '../../../src/strings.js';
@@ -39,13 +39,12 @@ type Ctx = { config: View['config']; terrain: Record<string, Terrain>; board: Re
 
 /** How many of my root's six neighbours are blocked (off-board, rock or an opponent tile), and whether one is an opponent tile. */
 export const rootBlocked = (ctx: Ctx, me: Player): { blocked: number; byEnemy: boolean } => {
-  const R = ctx.config.boardRadius;
   let blocked = 0;
   let byEnemy = false;
-  for (const n of allNeighbors(rootCoord(me, ctx.config.rootStyle, R))) {
+  for (const n of allNeighbors(homeCoord(me, ctx.config))) {
     const key = coordKey(n);
     const t = ctx.board[key];
-    if (!isOnBoard(n, R) || ctx.terrain[key] === 'rock') blocked++;
+    if (!onBoard(n, ctx.config) || ctx.terrain[key] === 'rock') blocked++;
     else if (t && t.owner !== me) {
       blocked++;
       byEnemy = true;

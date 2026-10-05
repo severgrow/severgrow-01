@@ -28,12 +28,175 @@ export type Layout = {
   scale: number;
   /** the icon-only corner tools (40pt visible, 44pt hit area), in the zone's corners */
   tools: { weak: Box; targets: Box; replay: Box; help: Box };
+  /** the test copy's "thumb layout" (phones, portrait): the dock's parts, dock-local px */
+  thumb?: Thumb;
+};
+
+/**
+ * The thumb layout v2 (test copy only, phones held upright): the MAP FIRST. The board gets the
+ * full width and at least 60% of the usable height; the dock below takes at most 40% of it.
+ * The dock has two bands: the hand as a gentle fan (centre card flat, end cards tilted 7 degrees,
+ * a shallow curve, a slight rise to the right), anchored at the right edge for the right thumb;
+ * under it the deck and the throw pile (left), a slot for the move buttons, Undo and Sort
+ * (right, next to the fan). "left" mirrors it all. Boxes are in the dock's own coordinates.
+ */
+export type Thumb = {
+  side: 'right' | 'left';
+  /** the fan: the anchored end card's centre x, the base line, the curve (k: its depth, at the
+   *  largest hand's ends) and the rise (slope per px along the fan); lhMax: half the largest
+   *  hand's length between the end cards' centres */
+  fan: { anchorX: number; baseY: number; k: number; slope: number; lhMax: number; tilt: number; cx?: number };
+  maxHand: number;
+  slice: number;
+  card: { w: number; h: number };
+  piles: Box;
+  deck: Box;
+  discard: Box;
+  pileCard: { w: number; h: number };
+  /** the move buttons' fixed slot, between the piles and Undo/Sort */
+  moves: Box;
+  undo: Box;
+  sort: Box;
+  /** the coach and first-time tips: just above the dock (its y and h: the panel's bottom gap and largest height) */
+  tips: Box;
+  /** the band the fan lives in (dock px) */
+  band: Box;
+};
+/** Thumb layout v3: the card slice (wanted, most), the picked card's lift, the pile column, the
+ *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
+ *  rise (of its width), the dock's cap (of the usable height), the most the board may reach
+ *  under the dock (of its height), the bottom margin and the largest gap between map and dock. */
+export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
+/** Room kept above the dock's top element (a picked card's lift reaches into it). */
+const TOP_KEEP = 2;
+
+/** The centres, rotations (deg) and outward normals of `n` cards in the fan (dock px). */
+export const fanSlots = (t: Thumb, n: number): { x: number; y: number; rot: number; nx: number; ny: number }[] => {
+  if (n <= 0) return [];
+  const { anchorX, baseY, k, slope, lhMax, tilt } = t.fan;
+  const dir = t.side === 'left' ? -1 : 1;
+  const s = t.slice;
+  const lh = ((n - 1) * s) / 2;
+  // this hand's middle: its anchored end card stays at anchorX (small hands sit by the thumb)
+  const mid = t.fan.cx ?? anchorX - dir * lh;
+  return Array.from({ length: n }, (_, i) => {
+    const u = (i - (n - 1) / 2) * s; // + towards the anchored end
+    const f = lhMax > 0 ? u / lhMax : 0;
+    const rot = dir * tilt * f;
+    const rad = (rot * Math.PI) / 180;
+    // a shallow curve (both ends a little lower than the middle) and a slight rise to the anchor
+    return { x: mid + dir * u, y: baseY + k * f * f - slope * u, rot, nx: Math.sin(rad), ny: -Math.cos(rad) };
+  });
+};
+
+/**
+ * The thumb dock v4 for a width, the usable height (header and safe areas taken off) and the
+ * largest hand (7 + the card just drawn = 8 by default). Three separate bands, nothing ever
+ * shares space (so nothing can sit on anything else):
+ * 1. the hand, bottom-anchored and centred, compact (cards overlap: about 2/3 of each card
+ *    shows), a gentle symmetric curve;
+ * 2. above it one control row: the deck and the throw pile on the left, Undo and Sort on the
+ *    right, the move buttons stacked in the middle between them;
+ * 3. the map above, with the same gap above the control row as below it (the move buttons sit
+ *    exactly halfway between the map and the hand).
+ */
+const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | 'left', extra = 0) => {
+  const { edge: M, pileW, icon, lift, tilt } = THUMB;
+  const G = THUMB.gap + extra;
+  const rad = (tilt * Math.PI) / 180;
+  const bottomPad = THUMB.bottom;
+  const pileCard = { w: pileW - 4, h: Math.round((pileW - 4) * 1.42) };
+  const rowH = pileCard.h + 16; // the label under the pile card (the count is a badge on it)
+  const pilesW = 2 * pileW + 8;
+  const build = (cw: number) => {
+    const ch = Math.round(cw * 1.42);
+    const rotPad = (ch / 2) * Math.sin(rad) + 2;
+    const fanMaxW = W - 2 * M - 2 * rotPad;
+    const slice = Math.min(Math.max(THUMB.minSlice, Math.round(cw * THUMB.sliceOf)), (fanMaxW - cw) / Math.max(1, maxHand - 1));
+    const lhMax = ((maxHand - 1) * slice) / 2;
+    const k = (lhMax * Math.tan(rad)) / 2;
+    // the v3 fan's shape: tilted ends, a shallow curve and a slight rise to the right
+    const slope = lhMax > 0 ? (THUMB.rise * (2 * lhMax + cw)) / (2 * lhMax) : 0;
+    const ext = Array.from({ length: maxHand }, (_, i) => {
+      const u = (i - (maxHand - 1) / 2) * slice;
+      const f = lhMax > 0 ? u / lhMax : 0;
+      const r = (tilt * f * Math.PI) / 180;
+      const hy = (cw / 2) * Math.abs(Math.sin(r)) + (ch / 2) * Math.abs(Math.cos(r));
+      const y = k * f * f - slope * u;
+      return { y0: y - hy, y1: y + hy };
+    });
+    const y0 = Math.min(...ext.map((e) => e.y0));
+    const y1 = Math.max(...ext.map((e) => e.y1));
+    const fanH = y1 - y0 + lift;
+    const h = Math.ceil(G + rowH + G + fanH + bottomPad + TOP_KEEP);
+    const baseY = h - bottomPad - y1;
+    const Y0 = G + TOP_KEEP; // the control row's top (dock-local)
+    const deck: Box = { x: M, y: Y0, w: pileW, h: rowH };
+    const discard: Box = { x: M + pileW + 8, y: Y0, w: pileW, h: rowH };
+    const piles: Box = { x: M, y: Y0, w: pilesW, h: rowH };
+    const iconY = Y0 + (pileCard.h - icon) / 2;
+    const sort: Box = { x: W - M - icon, y: iconY, w: icon, h: icon };
+    const undo: Box = { x: W - M - 2 * icon - 8, y: iconY, w: icon, h: icon };
+    const mx = M + pilesW + 10;
+    const moves: Box = { x: mx, y: Y0, w: Math.max(0, undo.x - 10 - mx), h: rowH };
+    const tips: Box = { x: M, y: 0, w: Math.round(W * 0.44), h: 200 };
+    const band: Box = { x: M, y: Y0 + rowH + G, w: W - 2 * M, h: h - (Y0 + rowH + G) };
+    let t: Thumb = {
+      side: 'right',
+      fan: { anchorX: W / 2 + lhMax, baseY, k, slope, lhMax, tilt, cx: W / 2 },
+      maxHand,
+      slice,
+      card: { w: cw, h: ch },
+      piles,
+      deck,
+      discard,
+      pileCard,
+      moves,
+      undo,
+      sort,
+      tips,
+      band,
+    };
+    if (side === 'left') t = mirrorThumb(t, W);
+    return { t, h };
+  };
+  // the biggest cards whose compact fan fits the width with at least a 34pt strip per card
+  const sizes = [62, 60, 58, 56, 54, 52, 50, 48, 46, 44, 42, 40];
+  for (const cw of sizes) {
+    const b = build(cw);
+    if (b.t.slice >= THUMB.minSlice && b.h <= usable * THUMB.cap) return b;
+  }
+  return build(40);
+};
+
+const mirrorThumb = (t: Thumb, W: number): Thumb => {
+  const m = (b: Box): Box => ({ ...b, x: W - b.x - b.w });
+  return {
+    ...t,
+    side: 'left',
+    fan: { ...t.fan, anchorX: W - t.fan.anchorX, ...(t.fan.cx !== undefined ? { cx: W - t.fan.cx } : {}) },
+    piles: m(t.piles),
+    deck: m(t.discard),
+    discard: m(t.deck),
+    moves: m(t.moves),
+    tips: m(t.tips),
+    band: m(t.band),
+    undo: m(t.sort),
+    sort: m(t.undo),
+  };
 };
 
 /** Fixed heights, CSS px (8pt grid). */
 export const HEIGHTS = { hud: 48, race: 8, table: 84, handPad: 20, bottomPad: 8 } as const;
 /** The largest hand a player can hold (hand size + the drawn card). */
 export const MAX_HAND = 8;
+/** The test copy's slim header: one 44pt row (the menu button and the score bar). */
+export const SLIM_HUD = 44;
+let slimHud = false;
+/** The test copy: the header keeps only the menu button and the score bar. */
+export const setSlimHud = (on: boolean) => {
+  slimHud = on;
+};
 /** At least this much of every card is visible in a full hand. */
 export const MIN_SLICE = 36;
 /** Side margin of the board zone (v0.8: 4pt, the board takes the full width on tall phones). */
@@ -70,11 +233,42 @@ const S = 30;
  */
 export const boardUnits = (radius: number, orient: Orient = 'pointy') => {
   const m = 2;
+  if (shape) return shapeUnits(shape, orient, m);
   const halfLong = Math.sqrt(3) * S * radius + (Math.sqrt(3) / 2) * S + m; // across the points
   const halfShort = 1.5 * S * radius + S + m; // across the flat sides
   const halfW = orient === 'pointy' ? halfLong : halfShort;
   const halfH = orient === 'pointy' ? halfShort : halfLong;
   return { w: 2 * halfW, h: 2 * halfH, x0: -halfW, y0: -halfH, hexW: Math.sqrt(3) * S };
+};
+
+// The Lab (test copy): a board of any shape. Its drawing area is the box around its tiles, turned
+// the way the page will turn it (the homes on the centre line). null: the classic hexagon.
+type Shape = { cells: readonly string[]; rot: (o: Orient) => number };
+let shape: Shape | null = null;
+export const setBoardShape = (s: Shape | null) => {
+  shape = s;
+};
+const shapeUnits = (sh: Shape, orient: Orient, m: number) => {
+  const a = (((orient === 'pointy' ? 0 : -90) + 60 * sh.rot(orient)) * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const k of sh.cells) {
+    const [q, r] = k.split(',').map(Number) as [number, number];
+    const bx = Math.sqrt(3) * S * (q + r / 2);
+    const by = 1.5 * S * r;
+    const x = bx * cos - by * sin;
+    const y = bx * sin + by * cos;
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    y0 = Math.min(y0, y);
+    y1 = Math.max(y1, y);
+  }
+  const e = S + m; // a tile's corner reach, whatever the turn
+  return { w: x1 - x0 + 2 * e, h: y1 - y0 + 2 * e, x0: x0 - e, y0: y0 - e, hexW: Math.sqrt(3) * S };
 };
 
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);
@@ -149,13 +343,13 @@ const toolsIn = (zone: Box): Layout['tools'] => {
   };
 };
 
-export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layout => {
+export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb: 'right' | 'left' | null = null, overlap = 0): Layout => {
   const st = v.safeTop ?? 0;
   const sb = v.safeBottom ?? 0;
   const sl = v.safeLeft ?? 0;
   const sr = v.safeRight ?? 0;
   const W = v.w - sl - sr;
-  const headerH = HEIGHTS.hud + HEIGHTS.race;
+  const headerH = slimHud ? SLIM_HUD : HEIGHTS.hud + HEIGHTS.race;
   const header: Box = { x: sl, y: st, w: W, h: headerH };
   const top = st + headerH;
 
@@ -173,6 +367,46 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND): Layo
     const dockH = rows.table + rows.hand + SIDE_GAP + HEIGHTS.bottomPad;
     const dock: Box = { x: sl + W - dockW - BOARD_MARGIN, y: top + Math.max(0, (zone.h - dockH) / 2), w: dockW, h: dockH };
     return { mode: 'side', orient: fit.orient, header, zone, board, dock, rows, card, parts: partsIn(dock, rows, card, 'side', maxHand), hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone) };
+  }
+
+  if (thumb) {
+    // the test copy's thumb layout v2: the map first; the dock (at most 40% of the usable
+    // height) below it. `overlap`: how far the board may reach under the fan's band (smart
+    // overlap: granted by the page only where no tile, home, gold or target hex is under a card)
+    // (the screen keeps the bottom safe area itself: the dock sits on it, 12pt up)
+    const usable = v.h - top - sb;
+    const first = thumbDock(W, usable, Math.max(5, maxHand), thumb);
+    // a map held back by the width leaves spare height: a third of it widens the two equal gaps
+    // around the control row (up to 20pt each), the rest goes above the map
+    const z0 = v.h - sb - first.h - top;
+    const f0 = bestFit(W - 2 * THUMB.edge, z0, radius);
+    const spare = z0 - boardUnits(radius, f0.orient).h * f0.scale;
+    const extra = Math.max(0, Math.min(20, Math.floor(spare / 6)));
+    const { t, h } = extra > 0 ? thumbDock(W, usable, Math.max(5, maxHand), thumb, extra) : first;
+    const dock: Box = { x: sl, y: v.h - sb - h, w: W, h };
+    const zone: Box = { x: sl + THUMB.edge, y: top, w: W - 2 * THUMB.edge, h: dock.y - top + Math.max(0, Math.min(overlap, t.band.h)) };
+    const fit = bestFit(zone.w, zone.h, radius);
+    const u = boardUnits(radius, fit.orient);
+    const bw = u.w * fit.scale;
+    const bh = u.h * fit.scale;
+    // the map sits low in its zone: at most 24pt above the dock; any spare height above it
+    const gap = 0; // v4: the dock starts with the gap above its control row (the same gap as below it)
+    const board: Box = { x: zone.x + (zone.w - bw) / 2, y: zone.y + zone.h - gap - bh, w: bw, h: bh };
+    const card = { w: t.card.w, h: t.card.h, slice: t.slice };
+    const rows = { table: 0, hand: h };
+    const off = (b: Box): Box => ({ ...b, x: b.x + dock.x, y: b.y + dock.y });
+    const parts: Layout['parts'] = {
+      hint: { x: dock.x, y: dock.y, w: 0, h: 0 },
+      piles: off(t.piles),
+      deck: off(t.deck),
+      discard: off(t.discard),
+      moves: off(t.moves),
+      pileCard: t.pileCard,
+      undo: off(t.undo),
+      fan: { x: dock.x, y: dock.y, w: W, h },
+      sort: off(t.sort),
+    };
+    return { mode: 'stack', orient: fit.orient, header, zone, board, dock, rows, card, parts, hexPx: u.hexW * fit.scale, scale: fit.scale, tools: toolsIn(zone), thumb: t };
   }
 
   const card = cardSize(W, maxHand);

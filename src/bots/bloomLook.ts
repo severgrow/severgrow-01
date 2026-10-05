@@ -1,6 +1,6 @@
 // v0.7 Bloom look: a cheap first judgement of every legal Bloom (no cut check), so the bots
 // only fully simulate a short list. Pure: reads only the View.
-import { allNeighbors, bloomAction, bloomChoices, coordKey, rootCoord } from '../engine/index.js';
+import { allNeighbors, bloomAction, bloomChoices, coordKey, homeCoord } from '../engine/index.js';
 import type { Action, Player, View } from '../engine/index.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
@@ -9,6 +9,8 @@ const WASTED_STRENGTH = 0.02;
 
 /** Blooms fully scored per Grow step (after the quick look); the levels may pass fewer. */
 export const BLOOM_SHORTLIST = 10;
+/** The Lab's boards only: the most Bloom choices (hex sets) one quick look examines. */
+export const LAB_BLOOM_CAP = 300;
 
 /** The quick look at one legal Bloom: cheap facts from the board, no cut check. */
 export type BloomLook = {
@@ -34,7 +36,7 @@ export type BloomLook = {
 export const lookBlooms = (v: View): BloomLook[] => {
   const me = v.player;
   const opp = other(me);
-  const ring = allNeighbors(rootCoord(opp, v.config.rootStyle, v.config.boardRadius)).map(coordKey).filter((k) => k in v.board);
+  const ring = allNeighbors(homeCoord(opp, v.config)).map(coordKey).filter((k) => k in v.board);
   const open = ring.filter((k) => v.terrain[k] !== 'rock' && v.board[k]?.owner !== me);
   const enemyNear = (k: string) => {
     const [q, r] = k.split(',').map(Number) as [number, number];
@@ -45,7 +47,9 @@ export const lookBlooms = (v: View): BloomLook[] => {
     return allNeighbors({ q, r }).filter((n) => v.board[coordKey(n)]?.owner === me).length;
   };
   const out: BloomLook[] = [];
-  for (const choice of bloomChoices(v)) {
+  // the Lab's boards only (config.board set): at most LAB_BLOOM_CAP Bloom choices are looked at
+  const choices = bloomChoices(v);
+  for (const choice of v.config.board ? choices.slice(0, LAB_BLOOM_CAP) : choices) {
     const keys = choice.hexes.map(coordKey);
     const near = keys.map(enemyNear);
     const links = keys.reduce((n, k) => n + mineNear(k), 0);

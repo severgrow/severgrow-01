@@ -14,6 +14,13 @@ export type RulesConfig = {
   /** Spec default 3. Typed as number so nothing else hardcodes the radius (open question C). */
   boardRadius: number;
   rootStyle: RootStyle;
+  /**
+   * Lab (test copy): a board of any shape, its terrain and its two homes. null = the classic
+   * hexagon of boardRadius with generated terrain (every live game).
+   */
+  board: BoardSpec | null;
+  /** Lab: when the deck runs out, shuffle the throw pile (all but its top card) into a new deck. */
+  reshuffleDiscard: boolean;
   handSize: number;
   copiesPerCard: number;
   /** Must be even (mirrored pairs). */
@@ -160,6 +167,8 @@ export type State = {
   history?: Event[];
   /** v0.4: Sprouts played this turn. */
   sproutsThisTurn: number;
+  /** Lab: how many times the throw pile has been reshuffled into the deck (absent: never). */
+  reshuffles?: number;
 };
 
 export type View = {
@@ -190,3 +199,10 @@ export type View = {
   result: GameResult | null;
   lastResolution: ResolutionSummary | null;
 };
+
+/**
+ * Lab: a board as any set of hexes. Keys are "q,r" (axial). cells lists every hex in board
+ * order (q ascending, then r ascending); rock and gold are subsets of cells; homes[p] is
+ * player p's home.
+ */
+export type BoardSpec = { cells: string[]; rock: string[]; gold: string[]; homes: [string, string] };

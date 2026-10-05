@@ -1,4 +1,4 @@
-import { allNeighbors, coordKey, isOnBoard, rootCoord } from './board.js';
+import { allNeighbors, coordKey, homeCoord, onBoard } from './board.js';
 import type { BoardCtx } from './overgrow.js';
 import type { Player } from './types.js';
 
@@ -7,10 +7,9 @@ import type { Player } from './types.js';
  * and at least one is an enemy tile. Terrain alone never strangles.
  */
 export const isStrangled = (ctx: BoardCtx, player: Player): boolean => {
-  const { boardRadius, rootStyle } = ctx.config;
   let enemy = 0;
-  for (const n of allNeighbors(rootCoord(player, rootStyle, boardRadius))) {
-    if (!isOnBoard(n, boardRadius)) continue;
+  for (const n of allNeighbors(homeCoord(player, ctx.config))) {
+    if (!onBoard(n, ctx.config)) continue;
     const k = coordKey(n);
     if (ctx.terrain[k] === 'rock') continue;
     const tile = ctx.board[k];

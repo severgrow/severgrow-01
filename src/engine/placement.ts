@@ -1,4 +1,4 @@
-import { allNeighbors, coordKey, isConnected, isOnBoard, normalizeCoord } from './board.js';
+import { allNeighbors, coordKey, isConnected, normalizeCoord, onBoard } from './board.js';
 import { IllegalActionError } from './errors.js';
 import type { IllegalActionCode } from './errors.js';
 import { takeCards, validateBloom } from './melds.js';
@@ -89,7 +89,7 @@ export const planSprout = (ctx: BoardCtx, player: Player, hand: readonly Card[],
   if (card!.suit === null) throw new IllegalActionError('NOT_A_NUMBER_CARD', 'a Fruit card cannot sprout or strengthen');
   const c = assertCoord(coord);
   const own = ctx.board[coordKey(c)];
-  if (own && own.owner === player && isOnBoard(c, ctx.config.boardRadius)) {
+  if (own && own.owner === player && onBoard(c, ctx.config)) {
     const code = strengthenBlocker(ctx, player, c, card!.rank, strengthenUsed);
     if (code) throw new IllegalActionError(code, `cannot strengthen ${coordKey(c)}`);
     return { player, cards: [card!], tiles: [{ coord: c, strength: card!.rank }], strengthen: { from: own.strength } };

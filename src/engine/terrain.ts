@@ -40,6 +40,14 @@ export const eligibleTerrainPairs = (style: RootStyle, radius: number): [Coord, 
  * shuffled, the first rockCount/2 become rock, the next (richCount-1)/2 become rich.
  */
 export const generateTerrain = (seed: number, config: RulesConfig): Record<string, Terrain> => {
+  // Lab: a board of any shape brings its own terrain
+  if (config.board) {
+    const t: Record<string, Terrain> = {};
+    for (const k of config.board.cells) t[k] = 'normal';
+    for (const k of config.board.rock) t[k] = 'rock';
+    for (const k of config.board.gold) t[k] = 'rich';
+    return t;
+  }
   const { boardRadius, rootStyle, rockCount, richCount } = config;
   const rockPairs = rockCount / 2;
   const richPairs = (richCount - 1) / 2;

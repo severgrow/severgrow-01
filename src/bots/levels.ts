@@ -2,7 +2,7 @@
 // original GreedyBot, unchanged. All levels read only their own View, are pure and
 // deterministic: the same (view, level, seed) always gives the same action. Search
 // budgets are counted in iterations, never in time.
-import { bestMeldPartition, coordKey, createCards, legalActions, mulberry32, score } from '../engine/index.js';
+import { allNeighbors, bestMeldPartition, coordKey, createCards, legalActions, mulberry32, score } from '../engine/index.js';
 import type { Action, Card, Player, View } from '../engine/index.js';
 import { lookBlooms, shortlistBlooms } from './bloomLook.js';
 import { simulate } from './evaluate.js';
@@ -163,7 +163,18 @@ const replyDamage = (oppView: View): number => {
   let worst = 0;
   // (v0.7: Blooms through the quick look's short list, not all of them)
   const blooms = shortlistBlooms(lookBlooms(oppView), REPLY_BLOOMS).map((l) => l.action as Action);
-  for (const a of [...blooms, ...legalActions(oppView).filter((x) => x.t !== 'Bloom')]) {
+  let others = legalActions(oppView).filter((x) => x.t !== 'Bloom');
+  // the Lab's boards (config.board set; never the classic board): at most LAB_REPLY_CAP other
+  // replies, those landing next to my tiles first (an iteration cap, never a time cap)
+  if (oppView.config.board && others.length > LAB_REPLY_CAP) {
+    const me = other(oppView.player);
+    const nearMe = (a: Action) => {
+      const c = a.t === 'Sprout' ? a.coord : a.t === 'PlayFruit' ? a.target : null;
+      return c ? allNeighbors(c).some((n) => oppView.board[coordKey(n)]?.owner === me) : false;
+    };
+    others = [...others.filter(nearMe), ...others.filter((a) => !nearMe(a))].slice(0, LAB_REPLY_CAP);
+  }
+  for (const a of [...blooms, ...others]) {
     if (!growing(a)) continue;
     const sim = simulate(oppView, a);
     if (!sim) continue;
@@ -191,6 +202,11 @@ const usefulness = (c: Card, unseen: readonly Card[]): number =>
 const CANDIDATES = 6;
 /** Blooms the imagined opponent reply considers (the quick look's best). */
 const REPLY_BLOOMS = 6;
+/** The Lab's boards only: other (non-Bloom) replies weighed per imagined opponent hand. */
+export const LAB_REPLY_CAP = 12;
+/** The Lab's boards only: candidate moves searched, and imagined opponent hands per candidate. */
+export const LAB_CANDIDATES = 4;
+export const LAB_ITERATIONS = 3;
 
 /** A bot decision, with a short plain-words reason for Strengthen and Fruit (debug only). */
 export type Decision = { action: Action; reason?: string };
@@ -303,13 +319,16 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
     const unseen = c.searchIterations > 0 ? unseenCards(v) : [];
     const handSize = v.opponentHandCount + 1; // after their draw
     const value = new Map<Scored, number>();
-    for (const r of ranked.filter((x) => growing(x.action)).slice(0, CANDIDATES)) {
+    // the Lab's boards only: fewer candidates and imagined hands (iteration caps, never time)
+    const lab = v.config.board !== null && v.config.board !== undefined;
+    const iters = lab ? Math.min(c.searchIterations, LAB_ITERATIONS) : c.searchIterations;
+    for (const r of ranked.filter((x) => growing(x.action)).slice(0, lab ? LAB_CANDIDATES : CANDIDATES)) {
       const after = viewAfter(v, r.action);
       let val = r.score + (after && c.lookahead > 0 ? 0.9 * bestFollowUp(after, weights, c) : 0);
       if (after && c.searchIterations > 0) {
         let dmg = 0;
-        for (let i = 0; i < c.searchIterations; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)));
-        val -= c.replyWeight * (dmg / c.searchIterations);
+        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(after, sample(unseen, handSize, rng)));
+        val -= c.replyWeight * (dmg / iters);
       }
       value.set(r, val);
     }
@@ -318,8 +337,8 @@ export const decideWithConfig = (v: View, c: LevelConfig, seed: number): Decisio
       const stop = ranked.find((x) => !growing(x.action));
       if (stop) {
         let dmg = 0;
-        for (let i = 0; i < c.searchIterations; i++) dmg += replyDamage(opponentView(v, sample(unseen, handSize, rng)));
-        value.set(stop, stop.score - c.replyWeight * (dmg / c.searchIterations));
+        for (let i = 0; i < iters; i++) dmg += replyDamage(opponentView(v, sample(unseen, handSize, rng)));
+        value.set(stop, stop.score - c.replyWeight * (dmg / iters));
       }
     }
     // Re-rank: judged moves by their new value; ties keep the original (canonical) order.

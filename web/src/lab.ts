@@ -4,6 +4,7 @@
 // hex (empty and under a tile), and a cut-off chain for each side (dried grass, cooled lava).
 // Material pass 2: the 1-9 rows are the strength ramp strips; a second board per palette
 // shows neighbours of mixed strengths blending, and moss meeting lava.
+import { IS_TEST } from './channel.js';
 import { allCoords, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../src/engine/index.js';
 import { THEMES, THEME_IDS, cssVars } from './logic/themes.js';
@@ -16,13 +17,15 @@ import { drawLandmark, setLandmarkState } from './ui/landmarks.js';
 import { el } from './ui/geom.js';
 import type { Orient } from './logic/orient.js';
 
+declare const __CHANNEL__: string;
 const k = (q: number, r: number) => coordKey({ q, r });
 
 export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
   if (detail === 'normal') warmPhotosNow();
   const page = document.createElement('main');
   page.className = 'lab';
-  page.innerHTML = `<h1>Material lab</h1><label class="lab-align"><input type="checkbox" id="lab-align"> Alignment overlay (centre line, 16pt margins), also in the game</label><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a lone tile of each side between them. Detail: ${detail}.</p>`;
+  // the test copy only: a link to the DESIGN version (the live material lab is unchanged)
+  page.innerHTML = `${IS_TEST ? '<nav class="lab-mode-menu" aria-label="Lab modes"><span class="current">Lab</span><a class="btn ghost small design-link-btn" href="?design=1">Design</a></nav>' : ''}<h1>Material lab</h1><label class="lab-align"><input type="checkbox" id="lab-align"> Alignment overlay (centre line, 16pt margins), also in the game</label><p class="muted small">Grass 1-9 · lava 1-9 · roots, rock, empty, gold · cut-off chains fading over two turns (dried grass, cooled lava), with a lone tile of each side between them. Detail: ${detail}.</p>`;
   const align = page.querySelector<HTMLInputElement>('#lab-align')!;
   align.checked = document.documentElement.classList.contains('align-overlay');
   align.addEventListener('change', () => {
@@ -168,4 +171,6 @@ export const showLab = (detail: Detail = 'normal', reduceMotion = false) => {
     }
   }
   document.body.appendChild(page);
+  // the test copy: the font bake-off at the top (its fonts load only here)
+  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') void import('./lab-mode/fontbake.js').then((m) => m.bakeOff(page));
 };

@@ -4,8 +4,8 @@ import { IS_TEST } from './channel.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, newGame, parseKey, viewFor } from '../../src/engine/index.js';
-import type { Action, Player, State, View } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import type { Action, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -49,7 +49,8 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, computeLayout } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setSlimHud, THUMB } from './logic/layout.js';
+import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
@@ -80,6 +81,7 @@ const theme = () => themeOf(settings.palette);
 const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
+import { DesignBoardView } from './ui/designBoard.js';
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -103,6 +105,10 @@ import type { Beats } from './logic/emptyturn.js';
 const HUMAN: Player = 0;
 const BOT: Player = 1;
 const COACH_KEY_OLD = 'severgrow.coach.enabled';
+const BOOT_PARAMS = new URLSearchParams(location.search);
+// the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
+const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
+if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 
 // ---------- small helpers ----------
 
@@ -171,7 +177,8 @@ let pumping = false;
 let cardRects = new Map<number, DOMRect>();
 
 const sound = new Sound();
-const board = new BoardView($('board') as unknown as SVGSVGElement, { tap: (k) => onHexTap(k), inspect: (k) => onInspect(k), hold: (k) => pinCard(k) });
+const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
+const board = DESIGN_MODE ? new DesignBoardView($('board') as unknown as SVGSVGElement, boardHandlers) : new BoardView($('board') as unknown as SVGSVGElement, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -359,7 +366,10 @@ function sheet(id: string | null) {
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
-  if (id === 'sheet-menu') setPaused(true);
+  if (id === 'sheet-menu') {
+    setPaused(true);
+    if (IS_TEST) fillMenuStatus();
+  }
   else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
   if (openSheet) {
@@ -526,10 +536,225 @@ function dealIn() {
   });
 }
 
-function startGame(seed: number, level: Level = settings.level) {
+/** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
+/** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
+let guideMod: ReturnType<typeof import('./lab-mode/guide.js').mountGuide> | null = null;
+let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
+/** The replay button: hidden in the test copy (its code stays). */
+const REPLAY_BUTTON = !IS_TEST;
+/** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
+if (IS_TEST) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
+// the test copy: the header keeps only the menu button and the score bar; the scores, the turn
+// and History move into the menu (no player marks there: the colours say who is who)
+if (IS_TEST) {
+  setSlimHud(true);
+  document.documentElement.classList.add('slim-hud');
+  const body = document.querySelector('#sheet-menu .sheet-body');
+  if (body) {
+    const box = document.createElement('div');
+    box.id = 'gm-status';
+    box.className = 'gm-status';
+    box.innerHTML = '<div class="gm-scores"><span class="gm-you"><small>You</small><b class="num" id="gm-score-you">0</b></span><span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span></div><div class="gm-turn" id="gm-turn"></div><button id="gm-history" class="btn ghost" type="button">What happened</button>';
+    box.querySelector('.gm-bot small')!.textContent = OPP.Label;
+    body.prepend(box);
+    box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
+  }
+}
+/** The test copy's menu: the scores and the turn, as the header used to show them. */
+function fillMenuStatus() {
+  const you = document.getElementById('gm-score-you');
+  if (!you) return;
+  you.textContent = $('score-you').textContent;
+  $('gm-score-bot').textContent = $('score-bot').textContent;
+  const turn = $('gm-turn');
+  turn.className = `gm-turn ${$('turn').className}`;
+  turn.innerHTML = $('turn').innerHTML;
+}
+/** The thumb layout in use (test copy, phones in portrait), or null. */
+let thumbLayout: Thumb | null = null;
+/** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
+let thumbOverlap = 0;
+let overlapFor: unknown = null;
+// the Lab (test copy only: this import is dropped from the live build)
+let lab: {
+  camera: ReturnType<typeof import('./lab-mode/camera.js').installCamera>;
+  overrides: () => Partial<RulesConfig>;
+  thinking: (on: boolean) => void;
+  watchingChanged: (w: { level: number; pause: number } | null) => void;
+} | null = null;
+// (the build constant itself, so the live build drops the Lab's code entirely)
+declare const __CHANNEL__: string;
+if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  // the new type (Bricolage Grotesque + Figtree), unless the Lab says "Previous"
+  void import('./lab-mode/fonts.js').then((f) => f.applyFont());
+  void import('./lab-mode/thumb.js').then((t) => {
+    thumbMod = t.mountThumb({
+      relayout: () => {
+        layoutKey = '';
+        render();
+        applyLayout();
+      },
+      reduceMotion: () => settings.reduceMotion,
+    });
+    layoutKey = '';
+    applyLayout();
+    if (session) render();
+    // the step guidance (its setting sits under the phone layout rows)
+    void import('./lab-mode/guide.js').then((g) => {
+      guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
+      if (session) render();
+    });
+  });
+  void import('./lab-mode/panel.js').then((m) => {
+    lab = m.mountLab({
+      sheet,
+      play: (_o, level) => startGame(randomSeed(), level as Level),
+      watch: (level, green, pause) => startGame(randomSeed(), level as Level, { level: green as Level, pause }),
+      setWatch: (w) => {
+        watching = w ? { level: w.level as Level, pause: w.pause } : null;
+        document.body.classList.toggle('lab-watching', !!watching);
+        render();
+        scheduleBot();
+      },
+      board: board.svg,
+      boardWrap: $('board-wrap'),
+    });
+  });
+}
+
+/**
+ * Thumb layout v2, smart overlap (test copy only): the board may reach under the fan's band by
+ * up to 15% of its height, but only where every hex under a card is empty or rock, far from
+ * anything that could be played there this turn (my network: 4 hexes, a Bloom's reach; the
+ * opponent's: 1), with no tile, home, gold hex, target highlight or Bloom painting under a card.
+ * Worked out when the board changes (not every frame); a change re-lays the page with a short
+ * crossfade. Anything that would end up under a card cancels it at once.
+ */
+/**
+ * The test copy's smart camera (lab-mode/camera.ts): what it needs on every render. DEFAULT_TILE
+ * is the classic board's tile (hexagon radius 3) on this screen with the current layout.
+ */
+function feedCamera(v: View) {
+  if (!session || !lab) return;
+  const r = board.svg.getBoundingClientRect();
+  if (r.width === 0) return;
+  // the classic board's drawing area (board units, logic/layout.ts boardUnits for radius 3)
+  const halfLong = Math.sqrt(3) * S * 3 + (Math.sqrt(3) / 2) * S + 2;
+  const halfShort = 1.5 * S * 3 + S + 2;
+  const flat = getOrient() === 'flat';
+  const cw = 2 * (flat ? halfShort : halfLong);
+  const chh = 2 * (flat ? halfLong : halfShort);
+  // (on phones the map runs on under the cards: the window above them is what counts)
+  const winH = r.height - (parseFloat(getComputedStyle($('board-wrap')).getPropertyValue('--cam-under')) || 0);
+  const defaultTile = Math.sqrt(3) * S * Math.min(r.width / cw, winH / chh);
+  const shown = queue.board;
+  const tiles = Object.entries(shown).flatMap(([k, t]) => (t ? [{ key: k, owner: t.owner, ...centerOf(k) }] : []));
+  const last = session.state.history?.at(-1);
+  const recent = !last ? [] : last.t === 'Bloom' ? last.hexes.map((c) => centerOf(coordKey(c))) : 'coord' in last && last.coord ? [centerOf(coordKey(last.coord as { q: number; r: number }))] : [];
+  const centres = new Map(Object.keys(v.board).map((k) => [k, centerOf(k)] as const));
+  lab.camera.update(
+    {
+      tiles,
+      me: HUMAN,
+      recent,
+      turnKey: `${session.state.turnNumber}`,
+      defaultTile,
+      canMove: !busy() && !draw.shape.length && !draw.ptr && draw.desk.phase === 'idle',
+    },
+    centres,
+  );
+}
+
+function checkOverlap(v: View) {
+  if (!session || !thumbLayout) return;
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width ?? window.innerWidth);
+  const h = Math.round(vv?.height ?? window.innerHeight);
+  const cfg = session.state.config;
+  const maxHand = cfg.handSize + 1;
+  const side = thumbLayout.side;
+  // things under a card right now (highlights, a Bloom being painted) cancel it whatever the board
+  const live = new Set<string>([...(session.sel.card !== null || session.sel.kind !== null ? targetHexes(v, session.legal, session.sel) : []), ...draw.shape]);
+  const key = session.state;
+  if (overlapFor === key && live.size === 0) return;
+  overlapFor = key;
+  const st = session.state;
+  const mine: { q: number; r: number }[] = [];
+  const theirs: { q: number; r: number }[] = [];
+  for (const [k, t] of Object.entries(st.board)) if (t) (t.owner === HUMAN ? mine : theirs).push(parseKey(k));
+  const forbidden = (k: string) => {
+    const c = parseKey(k);
+    if (st.board[k] || st.terrain[k] === 'rich' || live.has(k)) return true;
+    return mine.some((m) => hexDistance(m, c) <= 4) || theirs.some((m) => hexDistance(m, c) <= 1);
+  };
+  const base = computeLayout({ w, h, ...safeArea() }, cfg.boardRadius, maxHand, side, 0);
+  // only worth it when the board is held back by the height (else it can't grow)
+  let pick = 0;
+  // (while the camera is zoomed in, the fan stays below the board: the visible window decides)
+  const camWhole = !lab || lab.camera.isWhole();
+  if (camWhole && base.board.w < base.zone.w - 1) {
+    const most = Math.floor(base.board.h * THUMB.overlapMax);
+    for (const f of [1, 0.75, 0.5, 0.25]) {
+      const o = Math.floor(most * f);
+      if (o < 8) continue;
+      const l = computeLayout({ w, h, ...safeArea() }, cfg.boardRadius, maxHand, side, o);
+      if (l.orient !== getOrient()) continue;
+      const u = boardUnits(cfg.boardRadius, l.orient);
+      const t = l.thumb!;
+      const cards = fanSlots(t, maxHand).map((p) => ({ x: l.dock.x + p.x, y: l.dock.y + p.y, a: (-p.rot * Math.PI) / 180 }));
+      const R = S * 0.95 * l.scale;
+      const hw = t.card.w / 2 + R;
+      const hh = t.card.h / 2 + R + THUMB.lift;
+      const under = (k: string) => {
+        const c = centerOf(k);
+        const x = l.board.x + (c.x - u.x0) * l.scale;
+        const y = l.board.y + (c.y - u.y0) * l.scale;
+        return cards.some((cd) => {
+          const dx = x - cd.x;
+          const dy = y - cd.y;
+          const rx = dx * Math.cos(cd.a) - dy * Math.sin(cd.a);
+          const ry = dx * Math.sin(cd.a) + dy * Math.cos(cd.a);
+          return Math.abs(rx) <= hw && Math.abs(ry) <= hh;
+        });
+      };
+      // the piles sit at the dock's top left: they may lie over the map only where the cards may
+      const pl = { x: l.dock.x + t.piles.x, y: l.dock.y + t.piles.y, w: t.piles.w, h: t.piles.h };
+      const underPiles = (k: string) => {
+        const c = centerOf(k);
+        const x = l.board.x + (c.x - u.x0) * l.scale;
+        const y = l.board.y + (c.y - u.y0) * l.scale;
+        return x > pl.x - R && x < pl.x + pl.w + R && y > pl.y - R && y < pl.y + pl.h + R;
+      };
+      if (Object.keys(st.board).every((k) => !forbidden(k) || (!under(k) && !underPiles(k)))) {
+        pick = o;
+        break;
+      }
+    }
+  }
+  if (pick !== thumbOverlap) {
+    thumbOverlap = pick;
+    layoutKey = '';
+    // a short crossfade while the board takes its new size
+    const wrap = $('board-wrap');
+    wrap.classList.remove('relayout-fade');
+    void wrap.offsetWidth;
+    wrap.classList.add('relayout-fade');
+    requestAnimationFrame(() => render());
+  }
+}
+
+function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+  watching = IS_TEST ? watch : null;
+  thumbOverlap = 0;
+  overlapFor = null;
+  if (IS_TEST) {
+    document.body.classList.toggle('lab-watching', !!watching);
+    lab?.watchingChanged(watching);
+  }
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  const state = newGame(seed);
+  // the test copy: the Lab's active experiment (none: the classic game)
+  const state = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
   beginSession(state, null);
   dealIn();
@@ -542,6 +767,11 @@ function continueGame() {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
   log = ['Welcome back.'];
+  watching = null;
+  if (IS_TEST) {
+    document.body.classList.remove('lab-watching');
+    lab?.watchingChanged(null);
+  }
   gameLevel = saved.level;
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
@@ -564,7 +794,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER') {
+    if (p.before.phase !== 'GAME_OVER' && !watching) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
@@ -636,7 +866,9 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 function scheduleBot() {
   if (!session || botBusy) return;
   const st = session.state;
-  if (st.phase === 'GAME_OVER' || st.actor !== BOT) return;
+  if (st.phase === 'GAME_OVER') return;
+  // the Lab's "Watch a game" (test copy only): a second opponent plays my seat
+  if (st.actor !== BOT) return void (IS_TEST && watching && scheduleWatch());
   botBusy = true;
   const my = epoch;
   void (async () => {
@@ -644,6 +876,7 @@ function scheduleBot() {
     if (my !== epoch || !session) return;
     const started = performance.now();
     thinking = true;
+    if (IS_TEST) lab?.thinking(true);
     renderHud();
     const st = session.state;
     if (st.phase === 'DRAW' && st.turnPlayer === BOT && botPlan?.keys[0] !== posKey(st)) botPlan = await planBotTurn(st);
@@ -656,11 +889,38 @@ function scheduleBot() {
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
+    if (IS_TEST) lab?.thinking(false);
     pill.botMoved();
     if (my !== epoch || !session) return;
     const p = session.play(action, BOT);
     botBusy = false;
     if (p) afterPlay(p, BOT, null);
+    else render();
+  })();
+}
+/** The Lab's "Watch a game": the level playing my seat and the pause after each move (null: I play). */
+let watching: { level: Level; pause: number } | null = null;
+function scheduleWatch() {
+  if (!session || botBusy || !watching) return;
+  botBusy = true;
+  const my = epoch;
+  // something on my side (a skipped animation, a new deal) can restart the step: try again
+  const retry = () => {
+    botBusy = false;
+    if (watching && session) setTimeout(scheduleBot, 60);
+  };
+  void (async () => {
+    await idle();
+    if (my !== epoch || !session || !watching) return retry();
+    const st = session.state;
+    const lvl = watching.level;
+    const action = await askBot(viewFor(st, HUMAN), lvl, botSeed(st.seed ^ 0x9e3779b9, lvl, st.turnNumber, st.history?.length ?? 0));
+    const grows = action.t === 'Bloom' || action.t === 'Sprout';
+    await wait(((grows ? 300 : 90) + (watching?.pause ?? 0)) * timeScale(), my);
+    if (my !== epoch || !session || !watching || session.state !== st) return retry();
+    const p = session.play(action, HUMAN);
+    botBusy = false;
+    if (p) afterPlay(p, HUMAN, null);
     else render();
   })();
 }
@@ -1337,6 +1597,22 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
+  if (IS_TEST && lab) {
+    // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
+    const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
+    document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
+    feedCamera(v);
+  }
+  if (IS_TEST && thumbLayout) checkOverlap(v);
+  // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
+  // animation, no Bloom being painted)
+  if (IS_TEST && guideMod) {
+    // the step, from the game's own state: whose turn it is and the phase
+    const st = session.state;
+    const over = st.phase === 'GAME_OVER';
+    const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
+    guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
+  }
   renderCoach(advice);
   renderGameOver();
   renderGuide(advice);
@@ -1506,7 +1782,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? 'Your turn' : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -1548,7 +1824,11 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 
 /** The dock's one-line hint (overhaul item 13 shortens and sharpens it). */
 function dockHint(v: View): Hint {
-  return session ? hintFor(hintCtx(v)) : { text: '', arrow: null };
+  if (!session) return { text: '', arrow: null };
+  const h = hintFor(hintCtx(v));
+  // the test copy: no Confirm box; a second tap on the card or the hex places the move
+  if (IS_TEST && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
+  return h;
 }
 
 // ---------- the layout (overhaul items 1-2): fixed dock, board fits the rest ----------
@@ -1569,13 +1849,43 @@ function applyLayout() {
   const w = Math.round(vv?.width ?? window.innerWidth);
   const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
-  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}`;
-  // phones: the board sits just above the dock (board.setup resets this, so set it every time)
-  const par = 'xMidYMid meet';
+  // the Lab (test copy): a board of any shape fits by the box around its tiles
+  const shapeCfg = session?.state.config;
+  setBoardShape(shapeCfg?.board ? { cells: shapeCfg.board.cells, rot: (o) => homeRotation(o, shapeCfg, HUMAN) } : null);
+  // the test copy's thumb layout (phones in portrait, the setting on): sized for the game's hand
+  const thumbSide = IS_TEST && thumbMod ? thumbMod.side(w, h) : null;
+  const maxHand = (shapeCfg?.handSize ?? 7) + 1;
+  const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
+  // phones: the board sits just above the dock (board.setup resets this, so set it every time);
+  // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards)
+  const par = IS_TEST && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
-  const l = computeLayout({ w, h, ...safeArea() }, radius);
+  const l = thumbSide ? computeLayout({ w, h, ...safeArea() }, radius, maxHand, thumbSide, thumbOverlap) : computeLayout({ w, h, ...safeArea() }, radius);
+  const thumbWas = thumbLayout;
+  thumbLayout = l.thumb ?? null;
+  if (thumbLayout) {
+    document.documentElement.dataset.thumb = thumbLayout.side;
+    const r = document.documentElement.style;
+    const t = thumbLayout;
+    for (const [name, b] of [['deck', t.deck], ['discard', t.discard], ['moves', t.moves], ['undo', t.undo], ['sort', t.sort], ['tips', t.tips]] as const) {
+      r.setProperty(`--t-${name}-x`, `${b.x.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-y`, `${b.y.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-w`, `${b.w.toFixed(1)}px`);
+      r.setProperty(`--t-${name}-h`, `${b.h.toFixed(1)}px`);
+    }
+    r.setProperty('--t-pile-w', `${t.pileCard.w}px`);
+    r.setProperty('--t-overlap', `${Math.max(0, l.zone.y + l.zone.h - l.dock.y).toFixed(1)}px`);
+    r.setProperty('--t-gap', `${Math.max(0, l.zone.y + l.zone.h - (l.board.y + l.board.h)).toFixed(1)}px`);
+    r.setProperty('--t-pile-h', `${t.pileCard.h}px`);
+    if (thumbOverlap > 0) document.documentElement.dataset.fanOver = '1';
+    else delete document.documentElement.dataset.fanOver;
+  } else {
+    delete document.documentElement.dataset.thumb;
+    delete document.documentElement.dataset.fanOver;
+  }
+  if (thumbWas !== thumbLayout && session) queueMicrotask(() => render());
   // Step 3: the board's orientation (points left-right or up-down), whichever gives bigger
   // tiles; a turn of the board is a full redraw (rendering only: the game state never changes)
   document.documentElement.dataset.orient = l.orient;
@@ -1600,8 +1910,8 @@ function applyLayout() {
   }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
-  root.setProperty('--hud-h', px(HEIGHTS.hud));
-  root.setProperty('--race-h', px(HEIGHTS.race));
+  root.setProperty('--hud-h', px(IS_TEST ? SLIM_HUD : HEIGHTS.hud));
+  root.setProperty('--race-h', px(IS_TEST ? 0 : HEIGHTS.race));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
@@ -1612,7 +1922,7 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
-  board.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
 
 }
@@ -1743,7 +2053,11 @@ function renderBoard(v: View, advice: Advice | null) {
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
   }
-  if (!busy()) {
+  if (!busy() && IS_TEST) {
+    // the test copy: no weak-spot toggles; my most dangerous weak link always pulses gently
+    // with its "-N" (the opponent's weak links are on their tile card, when tapped)
+    if (v.phase !== 'GAME_OVER') o.pulse = weakSpots(v)[0] ?? null;
+  } else if (!busy()) {
     if (settings.weakSpots) o.weak = weakSpots(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     if (showOpps) o.opps = opportunities(v, { anyReach: true, minLoss: 2 }).slice(0, 3);
     // My most dangerous weak link (one the bot could cut next turn) pulses gently.
@@ -1764,13 +2078,13 @@ function renderBoard(v: View, advice: Advice | null) {
     lastAmbKey = ambKey;
     board.ambient(busy() ? null : ambientPlan({ board: queue.board, terrain: v.terrain, config: v.config, me: HUMAN, effects: settings.effects, reduceMotion: settings.reduceMotion }));
   }
-  $('tool-weak').setAttribute('aria-pressed', String(settings.weakSpots));
-  $('tool-targets').setAttribute('aria-pressed', String(showOpps));
+  document.getElementById('tool-weak')?.setAttribute('aria-pressed', String(settings.weakSpots));
+  document.getElementById('tool-targets')?.setAttribute('aria-pressed', String(showOpps));
   $('tool-skip').hidden = !busy();
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
   const noReplay = session.lastTurnOf(BOT).length === 0;
-  $('tool-replay').hidden = busy();
+  $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
   $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
@@ -1850,6 +2164,8 @@ function renderTooltip(v: View) {
       const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
       html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
+      // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only
+      if (IS_TEST && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
     }
   }
   // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
@@ -2038,7 +2354,8 @@ function renderControls(v: View, advice: Advice | null) {
     const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
     info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
-    $('confirm').hidden = false;
+    // the test copy: no Confirm box (a second tap on the card or the hex places the move)
+    $('confirm').hidden = IS_TEST;
   }
 }
 
@@ -2121,8 +2438,21 @@ function renderHand(v: View, advice: Advice | null) {
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
-    b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
-    b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
+    if (thumbLayout) {
+      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward
+      const p = fanSlots(thumbLayout, n)[i]!;
+      b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
+      b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
+      b.style.setProperty('--rot', `${p.rot.toFixed(2)}deg`);
+      b.style.setProperty('--lx', `${(p.nx * THUMB.lift).toFixed(1)}px`);
+      b.style.setProperty('--ly', `${(p.ny * THUMB.lift).toFixed(1)}px`);
+      // each card's number corner stays visible: right hand, later cards on top; left, earlier
+      b.style.zIndex = String(thumbLayout.side === 'left' ? n - i : i + 1);
+    } else {
+      b.style.zIndex = '';
+      b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
+      b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
+    }
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
@@ -2368,6 +2698,8 @@ function onCardTap(id: number) {
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn()) return;
+  // the test copy: no Confirm box; tapping a card of the waiting move again places it
+  if (IS_TEST && session.pending && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;
@@ -2795,6 +3127,18 @@ bind('hand-sort', () => {
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
+// the test copy: a fan lying over the map is see-through until I touch it
+let fanSleep = 0;
+$('dock').addEventListener(
+  'pointerdown',
+  () => {
+    if (!IS_TEST) return;
+    document.documentElement.classList.add('fan-awake');
+    clearTimeout(fanSleep);
+    fanSleep = window.setTimeout(() => document.documentElement.classList.remove('fan-awake'), 3000);
+  },
+  { capture: true, passive: true },
+);
 $('hand').addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse' || settings.reduceMotion) return;
   const card = (e.target as HTMLElement).closest<HTMLElement>('.card');
@@ -2878,12 +3222,12 @@ bind('discard', () => {
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
-bind('tool-weak', () => {
+if (!IS_TEST) bind('tool-weak', () => {
   settings = { ...settings, weakSpots: !settings.weakSpots };
   saveSettings();
   render();
 });
-bind('tool-targets', () => {
+if (!IS_TEST) bind('tool-targets', () => {
   showOpps = !showOpps;
   render();
 });
@@ -2928,9 +3272,9 @@ bind('tool-replay', () => replayBotTurn());
   const KEY = 'severgrow.ctools.seen';
   /** The first time the tools show in a game: name each once (shield, then target). */
   firstToolTips = () => {
-    if (store.get(KEY)) return;
+    if (IS_TEST || store.get(KEY)) return;
     store.set(KEY, '1');
-    const tools = ['tool-weak', 'tool-targets'].map((id) => $(id)).filter((b) => !b.hidden);
+    const tools = ['tool-weak', 'tool-targets'].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => !!b && !b.hidden);
     tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
   };
 }
@@ -2971,6 +3315,7 @@ bind('go-share', () => {
     highlights: hl,
     board: st.board,
     radius: st.config.boardRadius,
+    cells: st.config.board?.cells,
     me: HUMAN,
   }).then((r) => {
     if (r === 'saved') $('go-share').textContent = 'Saved';
@@ -3178,7 +3523,7 @@ sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
 showSplash();
-const params = new URLSearchParams(location.search);
+const params = BOOT_PARAMS;
 // Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
 // the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too
 {

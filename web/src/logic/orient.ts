@@ -5,7 +5,7 @@
 // maps onto itself), so the two homes can sit on the screen's centre line. A pure rendering
 // mapping: board units to screen units and back. Text, landmarks, textures and the light stay
 // upright: everything is drawn in screen units. Engine coordinates never change.
-import { rootCoord } from '../../../src/engine/index.js';
+import { homeCoord } from '../../../src/engine/index.js';
 import type { RulesConfig } from '../../../src/engine/index.js';
 
 export type Orient = 'pointy' | 'flat';
@@ -49,9 +49,9 @@ export const toBoard = (x: number, y: number) => ({ x: x * cos + y * sin + 0, y:
  * portrait phones): the opponent's home straight above mine. Points up-down ("pointy", wide
  * screens: there the homes can't be vertical): mine on the left, theirs on the right, level.
  */
-export const homeRotation = (o: Orient, config: Pick<RulesConfig, 'rootStyle' | 'boardRadius'>, me: 0 | 1 = 0): number => {
+export const homeRotation = (o: Orient, config: Pick<RulesConfig, 'rootStyle' | 'boardRadius'> & Partial<Pick<RulesConfig, 'board'>>, me: 0 | 1 = 0): number => {
   const centre = (p: 0 | 1) => {
-    const c = rootCoord(p, config.rootStyle, config.boardRadius);
+    const c = homeCoord(p, { board: null, ...config });
     return { x: Math.sqrt(3) * (c.q + c.r / 2), y: 1.5 * c.r };
   };
   const mine = centre(me);
