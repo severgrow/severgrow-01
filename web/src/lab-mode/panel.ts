@@ -307,7 +307,20 @@ export const mountLab = (hooks: LabHooks) => {
     render();
     hooks.sheet('sheet-lab');
   });
-  menuButtons?.appendChild(labBtn);
+  // Lab and Design share one row, like "How to play" and "Settings"
+  const labRow = document.createElement('div');
+  labRow.className = 'menu-row';
+  labRow.appendChild(labBtn);
+  menuButtons?.appendChild(labRow);
+  // DESIGN: the same game (and the Lab's experiment) in the V2 illustrated look; the page reopens
+  // with ?design=1 and "Continue" carries the game over. In DESIGN the button leaves it.
+  const designBtn = document.createElement('button');
+  designBtn.type = 'button';
+  designBtn.id = 'menu-design';
+  designBtn.className = `btn ghost menu-design${IN_DESIGN ? ' on' : ''}`;
+  designBtn.textContent = IN_DESIGN ? 'Leave Design' : 'Design';
+  designBtn.addEventListener('click', () => goDesign(!IN_DESIGN));
+  labRow.appendChild(designBtn);
   const line = document.createElement('p');
   line.className = 'lab-line small';
   menuButtons?.after(line);
