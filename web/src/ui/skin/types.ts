@@ -51,6 +51,8 @@ export type HomeLayer = {
   opacity?: number;
   /** start the animation this many seconds into its cycle (staggered layers; hidden with Reduce motion) */
   delay?: number;
+  /** only in this look of the home (homes with several looks pick one from the home tile, so it never changes mid-game) */
+  variant?: number;
 };
 
 /** One player's network look (values from network/style.json override these). */

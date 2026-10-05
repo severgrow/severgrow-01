@@ -48,6 +48,8 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       size: 13,
       anim: 'sway',
       rules: [
+        { match: 'sprout', size: 9 },
+        { match: 'log', minStrength: 4, size: 16, anim: null },
         { match: 'flower', minStrength: 3, size: 11 },
         { match: 'mushroom', minStrength: 4, size: 10, anim: null },
         { match: 'berry', minStrength: 5 },
@@ -58,6 +60,8 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       dir: 'props/volcano/',
       size: 13,
       rules: [
+        { match: 'obsidian_hot', minStrength: 5, size: 11 },
+        { match: 'obsidian', size: 10 },
         { match: 'cinder', minStrength: 3, size: 11 },
         { match: 'vent', minStrength: 5, size: 12, anim: 'pulse' },
       ],
@@ -73,12 +77,15 @@ export const FOREST_VOLCANO_V3: SkinDef = {
   homes: [
     [
       { src: 'homes/forest_tree_shadow.png', size: 44, dx: 1.5, dy: 2 },
-      { src: 'homes/forest_tree_canopy.png', size: 42 },
-      { src: 'homes/forest_tree_leaves_layer.png', size: 42, anim: 'sway' },
+      // two looks: the fruit tree (its loose outer leaves sway) or the blossom tree
+      { src: 'homes/forest_tree_canopy.png', size: 42, variant: 0 },
+      { src: 'homes/forest_tree_leaves_layer.png', size: 42, anim: 'sway', variant: 0 },
+      { src: 'homes/forest_tree_canopy_blossom.png', size: 42, variant: 1 },
     ],
     [
       { src: 'homes/volcano_crater.png', size: 42 },
-      { src: 'homes/volcano_crater_glow.png', size: 42, anim: 'pulse' },
+      // the molten glow, inside the crater's ring of rock
+      { src: 'homes/volcano_crater_glow.png', size: 26, anim: 'pulse', opacity: 0.75 },
       // three puffs drifting up one after another (one 6 s cycle, 2 s apart)
       { src: 'homes/volcano_smoke_01.png', size: 20, dx: 4, dy: -8, anim: 'drift', opacity: 0.8 },
       { src: 'homes/volcano_smoke_02.png', size: 17, dx: 1, dy: -9, anim: 'drift', opacity: 0.75, delay: 2 },
