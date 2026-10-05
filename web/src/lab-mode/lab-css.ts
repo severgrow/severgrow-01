@@ -10,6 +10,8 @@ export const LAB_CSS = `
 .lab-check input { width: 28px; height: 28px; }
 .lab-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .lab-buttons .btn { min-height: 48px; }
+.lab-buttons .lab-design { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; letter-spacing: 0.08em; border-style: dashed; }
+.lab-buttons .lab-design small { font-size: 11px; font-weight: 500; letter-spacing: 0; opacity: 0.75; }
 .lab-preview-wrap { display: flex; justify-content: center; padding: 8px 0; }
 .lab-preview { width: 100%; max-width: 360px; max-height: 300px; }
 .lab-preview polygon { stroke: var(--c-bg); stroke-width: 0.08; }

@@ -20,6 +20,22 @@ go-ahead). Tick an item and add the date when it reaches `main`.
   bottom edge of the window; the fade on the light theme/palettes; tile cards (tooltips) near the
   bottom; Reduce motion; that taps on the cards never reach the map behind.
 
+### DESIGN: the Lab game with the V2 illustrated forest/volcano skin
+- Date: 2026-10-05 · Commit: `3428aba` · In test only (inside the Lab)
+- Lab sheet -> **DESIGN** applies the experiment and reopens the page with `?design=1`: the same
+  game, Lab tools, maps and rules, drawn by `DesignBoardView` (`web/src/ui/designBoard.ts`, a
+  subclass of `BoardView`). **Leave DESIGN** in the sheet goes back. `BoardView`, the normal Lab
+  and the live game are unchanged; the art is in `web/public/design-v2/`.
+- Applied from the V2 implementation drop. Changes to it: the DESIGN button sits in the Lab sheet
+  (the drop put it on the material lab page, which now links to it only in the test copy); the
+  sprites with sprite-sheet crop damage (baked checkerboard, guide lines, neighbour slivers:
+  details, scars, homes) were cleaned; only whole details are used (forest 1, 5, 6, 7, 8;
+  volcano 6, 7).
+- Check before locking in: volcano bases 02-06 still have a white strip (unused for now); the
+  strength art looks soft when upscaled on big tiles; the old grass fringe shows around forest
+  tiles; numbers on busy flower tiles; 13 MB of PNGs (convert to WebP); flat-top art is an
+  overscaled pointy master.
+
 ### Pro phone layout: slim header, compact centred hand, control row (nothing overlaps)
 - Date: 2026-10-05 · Commit: `5c75f68` · In test only
 - Header: only the menu button and the score bar. Scores, turn, level, turns left and "What
