@@ -66,7 +66,7 @@ export type Thumb = {
  *  shared side margin (board, piles, fan, tools), icon buttons, the fan's end tilt (deg) and
  *  rise (of its width), the dock's cap (of the usable height), the most the board may reach
  *  under the dock (of its height), the bottom margin and the largest gap between map and dock. */
-export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 6, rise: 0, cap: 0.4, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
+export const THUMB = { slice: 44, minSlice: 34, maxSlice: 48, sliceOf: 0.64, lift: 10, pileW: 56, edge: 8, icon: 44, tilt: 7, rise: 0.12, cap: 0.45, overlapMax: 0, bottom: 12, mapGap: 24, gap: 14 } as const;
 /** Room kept above the dock's top element (a picked card's lift reaches into it). */
 const TOP_KEEP = 2;
 
@@ -112,15 +112,25 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
     const ch = Math.round(cw * 1.42);
     const rotPad = (ch / 2) * Math.sin(rad) + 2;
     const fanMaxW = W - 2 * M - 2 * rotPad;
-    const slice = Math.min(Math.round(cw * THUMB.sliceOf), (fanMaxW - cw) / Math.max(1, maxHand - 1));
+    const slice = Math.min(Math.max(THUMB.minSlice, Math.round(cw * THUMB.sliceOf)), (fanMaxW - cw) / Math.max(1, maxHand - 1));
     const lhMax = ((maxHand - 1) * slice) / 2;
     const k = (lhMax * Math.tan(rad)) / 2;
-    // the fan's height (curve and tilt included), base line at 0
-    const hy = (cw / 2) * Math.sin(rad) + (ch / 2) * Math.cos(rad);
-    const fanH = ch / 2 + Math.max(hy + k, ch / 2) + lift;
+    // the v3 fan's shape: tilted ends, a shallow curve and a slight rise to the right
+    const slope = lhMax > 0 ? (THUMB.rise * (2 * lhMax + cw)) / (2 * lhMax) : 0;
+    const ext = Array.from({ length: maxHand }, (_, i) => {
+      const u = (i - (maxHand - 1) / 2) * slice;
+      const f = lhMax > 0 ? u / lhMax : 0;
+      const r = (tilt * f * Math.PI) / 180;
+      const hy = (cw / 2) * Math.abs(Math.sin(r)) + (ch / 2) * Math.abs(Math.cos(r));
+      const y = k * f * f - slope * u;
+      return { y0: y - hy, y1: y + hy };
+    });
+    const y0 = Math.min(...ext.map((e) => e.y0));
+    const y1 = Math.max(...ext.map((e) => e.y1));
+    const fanH = y1 - y0 + lift;
     const h = Math.ceil(G + rowH + G + fanH + bottomPad + TOP_KEEP);
+    const baseY = h - bottomPad - y1;
     const Y0 = G + TOP_KEEP; // the control row's top (dock-local)
-    const baseY = h - bottomPad - Math.max(hy + k, ch / 2);
     const deck: Box = { x: M, y: Y0, w: pileW, h: rowH };
     const discard: Box = { x: M + pileW + 8, y: Y0, w: pileW, h: rowH };
     const piles: Box = { x: M, y: Y0, w: pilesW, h: rowH };
@@ -133,7 +143,7 @@ const thumbDock = (W: number, usable: number, maxHand: number, side: 'right' | '
     const band: Box = { x: M, y: Y0 + rowH + G, w: W - 2 * M, h: h - (Y0 + rowH + G) };
     let t: Thumb = {
       side: 'right',
-      fan: { anchorX: W / 2 + lhMax, baseY, k, slope: 0, lhMax, tilt, cx: W / 2 },
+      fan: { anchorX: W / 2 + lhMax, baseY, k, slope, lhMax, tilt, cx: W / 2 },
       maxHand,
       slice,
       card: { w: cw, h: ch },

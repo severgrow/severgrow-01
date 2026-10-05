@@ -28,7 +28,8 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 - Date: 2026-10-05 · Commit: `5c75f68` · In test only
 - Header: only the menu button and the score bar. Scores, turn, level, turns left and "What
   happened" are at the top of the menu, without the circle/diamond player marks.
-- Bottom, from the edge up: a compact centred hand (bigger cards, more overlap); one control row
+- Bottom, from the edge up: the v3 fan (tilted ends, curve, rise to the right), now compact and
+  centred with bigger cards; one control row
   with the deck and throw pile on the left, Undo and Sort on the right and the move buttons
   ("Bloom ...", "Skip sprout") stacked in the middle; then the map. The move buttons sit exactly
   halfway between the map and the hand. Smart overlap is off, so nothing ever lies on the map.
