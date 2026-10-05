@@ -71,7 +71,10 @@ export const FOREST_VOLCANO_V3: SkinDef = {
       ],
     },
     rock: { dir: 'props/rock/', size: 58 },
-    gold: { dir: 'props/gold/', size: 50 },
+    // big, so the pile fills the hex (a little dimmer than the raw art, under the owned tiles)
+    gold: { dir: 'props/gold/', size: 64 },
+    // lost tiles (scars): one burnt stump or log on the empty ground, when the folder has sprites
+    dead: { dir: 'props/dead/', size: 54 },
   },
   networkStyle: 'network/style.json',
   // built-in values (network/style.json in the tier overrides them)
