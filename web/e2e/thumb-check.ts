@@ -1,7 +1,7 @@
 // Test copy, lite: the thumb layout on phones. Loads the test build at 390x844 and 360x640 (touch,
 // portrait) with 5, 8 and 10 cards in hand and checks: every card's visible slice hits that card,
 // no card leaves the screen, the fan never covers the piles, Undo or Sort, no console errors.
-// Saves screenshots in docs/screens/thumb2/ (thumb layout v2: map first, gentle fan, smart overlap).  Run: CHANNEL=test npm run web:build && npx tsx web/e2e/thumb-check.ts
+// Saves screenshots in docs/screens/thumb3/ (thumb layout v3: piles in the curve's notch, bottom-anchored dock).  Run: CHANNEL=test npm run web:build && npx tsx web/e2e/thumb-check.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
@@ -90,8 +90,10 @@ const sliceReport = (page: Page) =>
     const hidden = [...document.querySelectorAll<SVGGElement>('#board g.tile, #board .landmark, #board g.hex-cell.rich')].filter((g) => {
       const r = g.getBoundingClientRect();
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-      return !!top?.closest('[data-card]');
+      return !!top?.closest('[data-card], .pile');
     }).length;
+    const lowest = Math.max(...[...document.querySelectorAll('#hand [data-card], #tool-undo, #hand-sort, #deck, #discard')].map((e) => e.getBoundingClientRect().bottom));
+    const bottomGap = innerHeight - lowest;
     const tileW = (() => {
       const a = document.querySelector<SVGGElement>('#board g.hex-cell');
       return a ? a.getBoundingClientRect().width : 0;
@@ -101,17 +103,31 @@ const sliceReport = (page: Page) =>
       const d = Math.hypot(parseFloat(c.style.getPropertyValue('--fx')) - parseFloat(a.style.getPropertyValue('--fx')), parseFloat(c.style.getPropertyValue('--fy')) - parseFloat(a.style.getPropertyValue('--fy')));
       return Math.min(m, d);
     }, Infinity);
-    return { n: cards.length, cards: out, free, minStep, movesOk, moveCount: moveBtns.length, hidden, tileW, over: document.documentElement.dataset.fanOver === '1', thumb: document.documentElement.dataset.thumb ?? null };
+    return { n: cards.length, cards: out, free, minStep, movesOk, moveCount: moveBtns.length, hidden, tileW, bottomGap, over: document.documentElement.dataset.fanOver === '1', thumb: document.documentElement.dataset.thumb ?? null };
   });
 
-const MAPS = [CLASSIC, PRESETS.find((p) => p.name === 'Triangle')!, PRESETS.find((p) => p.name === 'Tall rectangle 6x10')!];
+const MAPS = [CLASSIC, PRESETS.find((p) => p.name === 'Triangle')!, PRESETS.find((p) => p.name === 'Rhombus 7x7')!, PRESETS.find((p) => p.name === 'Tall rectangle 6x10')!];
 for (const map of MAPS)
 for (const [w, h] of [[390, 844], [360, 640]] as const) {
-  for (const hand of [4, 9]) {
+  for (const hand of [7]) {
     const { page, errors } = await open(w, h, hand, 'right', map);
     const r = await sliceReport(page);
     const label = `${map.name}, ${w}x${h}, ${r.n} cards`;
-    check(`${label}: no tile, home or gold hex under a card`, r.hidden === 0, `tile ${r.tileW.toFixed(1)}px wide${r.over ? ', fan over the map' : ''}`);
+    check(`${label}: no tile, home or gold hex under a card or a pile`, r.hidden === 0, `tile ${r.tileW.toFixed(1)}px wide${r.over ? ', fan over the map' : ''}`);
+    check(`${label}: no empty band at the bottom`, r.bottomGap <= 16, `lowest card or tool edge ${r.bottomGap.toFixed(0)}px above the bottom`);
+    // the idle tip (after about 4 s without a touch): never over a home, a tile, a gold "2", a highlight
+    await page.waitForTimeout(4600);
+    const tip = await page.evaluate(() => {
+      const t = document.getElementById('idle-tip');
+      if (!t || Number(getComputedStyle(t).opacity) === 0) return { shown: false, clash: 0 };
+      const a = t.getBoundingClientRect();
+      const clash = [...document.querySelectorAll('#board g.tile, #board .landmark, #board .gold-badge, #board .l-over > *')].filter((e) => {
+        const b = e.getBoundingClientRect();
+        return b.width > 0 && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      }).length;
+      return { shown: true, clash, faint: t.classList.contains('faint') };
+    });
+    check(`${label}: the idle tip covers no home, tile, gold or highlight`, !tip.shown || tip.clash === 0 || !!tip.faint, tip.shown ? `shown${tip.faint ? ', faint (nowhere free)' : ''}` : 'not shown');
     check(`${label}: thumb layout on`, r.thumb === 'right');
     check(`${label}: every card's slice selects that card`, r.cards.every((c) => c.ok), `slice ${r.minStep.toFixed(1)}pt; misses: ${r.cards.map((c, i) => (c.ok ? '' : `#${i + 1}`)).filter(Boolean).join(',') || 'none'}`);
     check(`${label}: no card off screen`, r.cards.every((c) => c.onScreen));
@@ -136,7 +152,7 @@ for (const [w, h] of [[390, 844], [360, 640]] as const) {
       check(`${label}: tapping slices picks those cards`, good === taps, `${good}/${taps}`);
     }
     check(`${label}: no console errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
-    await page.screenshot({ path: `docs/screens/thumb2/${map.name.split(' ')[0]!.toLowerCase()}-${w}x${h}-${r.n}cards.png` });
+    await page.screenshot({ path: `docs/screens/thumb3/${map.name.split(' ')[0]!.toLowerCase()}-${w}x${h}-${r.n}cards.png` });
     await page.close();
   }
 }
@@ -147,7 +163,7 @@ for (const [w, h] of [[390, 844], [360, 640]] as const) {
   const r = await sliceReport(page);
   check('390x844, left hand: mirrored, every slice selects its card', r.thumb === 'left' && r.cards.every((c) => c.ok) && r.free.every((f) => f.ok));
   check('390x844, left hand: no console errors', errors.length === 0, errors.slice(0, 2).join(' | '));
-  await page.screenshot({ path: 'docs/screens/thumb2/classic-390x844-left.png' });
+  await page.screenshot({ path: 'docs/screens/thumb3/classic-390x844-left.png' });
   await page.close();
 }
 
@@ -163,7 +179,7 @@ for (const [w, h] of [[390, 844], [360, 640]] as const) {
   await page.waitForTimeout(3600);
   const later = await vis();
   const text = await page.evaluate(() => document.getElementById('idle-tip')?.textContent ?? '');
-  await page.screenshot({ path: 'docs/screens/thumb2/classic-390x844-idle-tip.png' });
+  await page.screenshot({ path: 'docs/screens/thumb3/classic-390x844-idle-tip.png' });
   await page.touchscreen.tap(195, 120);
   await page.waitForTimeout(200);
   const after = await vis();

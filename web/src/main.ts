@@ -631,7 +631,15 @@ function checkOverlap(v: View) {
           return Math.abs(rx) <= hw && Math.abs(ry) <= hh;
         });
       };
-      if (Object.keys(st.board).every((k) => !forbidden(k) || !under(k))) {
+      // the piles sit at the dock's top left: they may lie over the map only where the cards may
+      const pl = { x: l.dock.x + t.piles.x, y: l.dock.y + t.piles.y, w: t.piles.w, h: t.piles.h };
+      const underPiles = (k: string) => {
+        const c = centerOf(k);
+        const x = l.board.x + (c.x - u.x0) * l.scale;
+        const y = l.board.y + (c.y - u.y0) * l.scale;
+        return x > pl.x - R && x < pl.x + pl.w + R && y > pl.y - R && y < pl.y + pl.h + R;
+      };
+      if (Object.keys(st.board).every((k) => !forbidden(k) || (!under(k) && !underPiles(k)))) {
         pick = o;
         break;
       }
@@ -1750,8 +1758,9 @@ function applyLayout() {
   const thumbSide = IS_TEST && thumbMod ? thumbMod.side(w, h) : null;
   const maxHand = (shapeCfg?.handSize ?? 7) + 1;
   const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
-  // phones: the board sits just above the dock (board.setup resets this, so set it every time)
-  const par = 'xMidYMid meet';
+  // phones: the board sits just above the dock (board.setup resets this, so set it every time);
+  // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards)
+  const par = IS_TEST && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
@@ -1770,6 +1779,7 @@ function applyLayout() {
     }
     r.setProperty('--t-pile-w', `${t.pileCard.w}px`);
     r.setProperty('--t-overlap', `${Math.max(0, l.zone.y + l.zone.h - l.dock.y).toFixed(1)}px`);
+    r.setProperty('--t-gap', `${Math.max(0, l.zone.y + l.zone.h - (l.board.y + l.board.h)).toFixed(1)}px`);
     r.setProperty('--t-pile-h', `${t.pileCard.h}px`);
     if (thumbOverlap > 0) document.documentElement.dataset.fanOver = '1';
     else delete document.documentElement.dataset.fanOver;
@@ -1814,7 +1824,7 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
-  board.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
 
 }

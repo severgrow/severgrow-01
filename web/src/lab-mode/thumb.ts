@@ -101,20 +101,55 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
     tipEl.classList.toggle('instant', hooks.reduceMotion());
     tipEl.classList.add('on');
   };
-  /** The band of the board (top, middle or bottom third) with the fewest tiles and rocks. */
+  /**
+   * Where the tip goes: never over a home, a tile (its number), a gold hex's "2", a highlight or
+   * a legal target. Of the spots that touch none of them, the one over the most empty hexes.
+   * None at full size: smaller words; still none: the smallest words, very faint, where they
+   * cover the least.
+   */
   const place = () => {
     if (!wrap) return;
-    const r = wrap.getBoundingClientRect();
-    const busy = [...wrap.querySelectorAll<SVGGElement>('g.tile, g.hex-cell.rock')].map((e) => e.getBoundingClientRect());
-    const bands = [0.2, 0.5, 0.8].map((f) => {
-      const cy = r.top + r.height * f;
-      const n = busy.filter((b) => b.bottom > cy - 40 && b.top < cy + 40).length;
-      return { f, n };
-    });
-    // fewest things under it; ties: the top band, then the bottom (the middle holds the homes' line)
-    const best = bands.sort((a, b) => a.n - b.n || (a.f === 0.5 ? 1 : 0) - (b.f === 0.5 ? 1 : 0) || a.f - b.f)[0]!;
-    tipEl.style.top = `${(best.f * 100).toFixed(0)}%`;
-    tipEl.classList.toggle('busy', best.n > 4);
+    const W = wrap.getBoundingClientRect();
+    const rect = (e: Element) => e.getBoundingClientRect();
+    const avoid = [...wrap.querySelectorAll('g.tile, .landmark, .gold-badge, .l-over > *, .badge')].map(rect).filter((r) => r.width > 0);
+    const cells = [...wrap.querySelectorAll('g.hex-cell:not(.rock)')].map(rect);
+    const hit = (a: DOMRect | { left: number; top: number; right: number; bottom: number }, b: DOMRect) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const empty = cells.filter((c) => !avoid.some((x) => hit(c, x)));
+    tipEl.classList.remove('faint', 'busy');
+    let fallback: { x: number; y: number; size: number; cost: number } | null = null;
+    for (const size of [1, 0.8, 0.65]) {
+      tipEl.style.fontSize = `${(1.45 * size).toFixed(2)}rem`;
+      tipEl.style.width = `min(${size === 1 ? 86 : 70}%, 420px)`;
+      const w = tipEl.offsetWidth;
+      const h = tipEl.offsetHeight;
+      let best: { x: number; y: number; score: number } | null = null;
+      for (let yi = 0; yi <= 16; yi++) {
+        for (const xf of [0.5, 0.3, 0.7]) {
+          const cx = Math.min(W.width - w / 2, Math.max(w / 2, W.width * xf));
+          const cy = Math.min(W.height - h / 2, Math.max(h / 2, W.height * (0.08 + (0.84 * yi) / 16)));
+          const r = { left: W.left + cx - w / 2, right: W.left + cx + w / 2, top: W.top + cy - h / 2, bottom: W.top + cy + h / 2 };
+          const cost = avoid.filter((x) => hit(r, x)).length;
+          if (cost > 0) {
+            if (!fallback || cost < fallback.cost) fallback = { x: cx, y: cy, size, cost };
+            continue;
+          }
+          const score = empty.filter((c) => hit(r, c)).length - Math.abs(xf - 0.5);
+          if (!best || score > best.score) best = { x: cx, y: cy, score };
+        }
+      }
+      if (best) {
+        tipEl.style.left = `${best.x}px`;
+        tipEl.style.top = `${best.y}px`;
+        return;
+      }
+    }
+    // nowhere free: the smallest words, very faint, where they cover the least
+    if (fallback) {
+      tipEl.style.fontSize = `${(1.45 * 0.65).toFixed(2)}rem`;
+      tipEl.style.left = `${fallback.x}px`;
+      tipEl.style.top = `${fallback.y}px`;
+      tipEl.classList.add('faint');
+    }
   };
   for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) window.addEventListener(ev, arm, { capture: true, passive: true });
   document.addEventListener('visibilitychange', arm);

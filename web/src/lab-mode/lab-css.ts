@@ -266,6 +266,9 @@ html[data-thumb] .dock-overlays > .coach {
 .idle-tip.busy {
   background: radial-gradient(closest-side, rgba(0, 0, 0, 0.15), rgba(0, 0, 0, 0));
 }
+.idle-tip.faint.on {
+  opacity: 0.2;
+}
 .idle-tip.instant,
 .idle-tip.instant.on {
   transition: none;
@@ -275,16 +278,50 @@ html[data-thumb] .dock-overlays > .coach {
 }
 
 /* ---- thumb layout v2 ---- */
-/* the piles' label and count: one under the other (the narrower piles of v2) */
+/* v3: the piles' label under the card, the count as a small badge on the card's top corner */
 html[data-thumb] .dock .table-row .pile-meta {
-  flex-direction: column;
-  gap: 1px;
-  line-height: 1.1;
+  position: static;
+  display: block;
+  text-align: center;
+  line-height: 14px;
 }
 html[data-thumb] .dock .pile-label {
-  font-size: 0.66rem;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
-
+html[data-thumb] .dock #deck .pile-meta .pile-count,
+html[data-thumb] .dock #discard .pile-meta .pile-count {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  bottom: auto;
+  left: auto;
+  height: 18px;
+  min-width: 20px;
+  padding: 0 5px;
+  line-height: 18px;
+  font-size: 11px;
+  text-align: center;
+  border-radius: 9px;
+  z-index: 2;
+}
+/* v3: the map sits low in its zone, at most 24pt above the cards */
+html[data-thumb] .board-wrap {
+  padding-bottom: var(--t-gap, 0px);
+}
+/* v3: one shared margin: the corner tools sit on the board zone's edges */
+html[data-thumb] .ctool {
+  margin: 0;
+}
+/* v3: the piles lying over the map are see-through too */
+html[data-thumb][data-fan-over] .dock .table-row > .piles > .pile {
+  opacity: 0.55;
+  transition: opacity 120ms ease-out;
+}
+html[data-thumb][data-fan-over].fan-awake .dock .table-row > .piles > .pile {
+  opacity: 1;
+}
 /* smart overlap: the board reaches under the fan's band (only where nothing is under a card) */
 html[data-thumb][data-fan-over] .board-wrap {
   margin-bottom: calc(-1 * var(--t-overlap, 0px));
