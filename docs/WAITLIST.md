@@ -8,60 +8,99 @@ go-ahead). Tick an item and add the date when it reaches `main`.
 
 ## Waiting
 
-### Thumb layout v2 (gentler fan, map first, smart overlap)
-- Date: 2026-10-05 · Commit: `9fa0846` · In test only (replaces the v1 fan below; same settings)
-- Map first: the board takes the full width and at least 60% of the usable height; the card
-  area is capped at 40% (it now takes 28-40%). The hand is a gentle fan (middle card flat, end
-  cards tilted 7 degrees, a shallow curve, a slight rise to the right) anchored at the right edge
-  above a bottom band: deck and throw pile (left, 52pt wide, label with the count under it), the
-  move buttons ("Skip sprout" as a small pill, only when useful) and Undo/Sort (right, next to
-  the fan). Cards are 25% smaller (48pt wide instead of 64). Hand side Left mirrors it all.
-- Smart overlap: when the board is held back by the height, it may reach under the fan by up to
-  15% of its height, only where every hex under a card is empty or rock and nothing can be
-  played there this turn (4 hexes from my network, 1 from the opponent's); no tile, home, gold
-  hex, target highlight or Bloom painting is ever under a card (any of them cancels it at once).
-  Over the map the cards are 55% see-through until I touch the fan. Worked out when the board
-  changes, with a short crossfade.
-- Tile width (centre to centre): 360x640 classic 44.0 -> 49.9pt, triangle 31.5 -> 38.2pt, tall
-  rectangle 26.0 -> 34.5pt; 390x844 unchanged for boards that already fill the width (classic
-  59.4, triangle 46.8, tall rectangle 38.6pt), rhombus 44.9 -> 54.3pt.
-- Code: `web/src/logic/layout.ts` (thumbDock v2, fanSlots), `web/src/main.ts` (checkOverlap,
-  the see-through fan), `web/src/lab-mode/lab-css.ts` (v2 block). Check: `web/e2e/thumb-check.ts`;
-  screenshots in `docs/screens/thumb2/`.
+### Thumb layout v3 (piles above the hand in the curve notch, bottom-anchored dock, aligned margins, tip never covers a home)
+- Date: 2026-10-05 · Commit: `7d88857` · In test only (phones held upright, the "Thumb layout"
+  setting on; Hand side Left mirrors everything)
+- Designed for a hand of 8 (7 + the card just drawn). From the bottom up: the fan sits 12pt
+  above the bottom safe area, nearly full width (8pt margins), end cards tilted 7 degrees, a
+  rise of 12% to the right; cards 52pt wide at 390px (48 before; 48 at 360px), each showing a
+  44pt strip at 390px (42 before) and 40.5pt at 360px (the most a 360px row allows). Undo and
+  Sort sit in the free corner under the fan's raised right end, on the same bottom margin. The
+  deck and throw pile sit side by side in the notch above the fan's low left end, 8pt above the
+  cards, on the shared left margin with the board and the replay icon; their counts are small
+  badges on the cards, the labels underneath. The move buttons ("Bloom", "Skip sprout") sit
+  beside the piles in the same notch.
+- The map: the board zone is the screen minus the real header and dock (the bottom safe area is
+  no longer counted twice, which left an empty band on iPhones); the board sits at the bottom of
+  its zone, at most 24pt above the cards; any spare height goes above it.
+- Tile width (centre to centre), v2 -> v3: 360x640 classic 49.9 -> 52.8, triangle 38.2 -> 40.5,
+  rhombus 34.5 -> 36.6, tall rectangle 34.5 -> 34.8pt; 390x844 classic 59.4 -> 58.2, triangle
+  46.8 -> 45.8, rhombus 54.3 -> 56.0, tall rectangle 38.6 -> 37.8pt (the 390px v2 numbers assumed
+  a 4pt side margin while the page drew 8pt; on screen they were already the v3 values).
+- Smart overlap stays (now the piles count too): only over empty or rock hexes, 55% see-through
+  until touched, cancelled by any tile, home, gold, highlight or Bloom painting under a card or
+  pile. In the checks it was on for the hexagon and the triangle at 360x640.
+- The idle tip: never over a home, a tile, a gold hex's "2", a highlight or a target; it goes
+  where it covers the most empty hexes; smaller words if nothing fits; very faint if still nothing.
+- Code: `web/src/logic/layout.ts` (thumbDock v3), `web/src/main.ts`, `web/src/lab-mode/thumb.ts`
+  (the tip's anchor), `web/src/lab-mode/lab-css.ts`. Check: `web/e2e/thumb-check.ts`;
+  screenshots in `docs/screens/thumb3/`.
 - Check before locking in:
-  - tapping every card in a full hand (8 cards: 42pt slices at 390px, 40.5pt at 360px; a
-    10-card Lab hand gets 32-36pt, the map comes first);
+  - tapping every card in an 8-card hand (44pt strips at 390px, 40.5pt at 360px);
+  - drag onto the piles (the game has no drag-to-throw yet: tap a card, or a card then the pile);
   - the 360px width;
-  - Large text (the pile labels, the move pills);
+  - Large text (pile labels and badges, the move pills);
   - left-hand mode;
-  - overlap on the triangle and rectangle maps (in the checks, overlap only happened on the
-    classic hexagon at 360x640; the triangle and rectangle stayed below the board because their
-    bottom rows are near the homes or already fill the width);
-  - that no tile is ever hidden under a card (the check found none in 12 layouts);
-  - the board changing size during a game when the overlap turns on or off (crossfade): is it
-    distracting?
-
-### Thumb layout and the idle tip (phones)
-- Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map), `ffb332e` (fan packed to the bottom: bigger map) · In test only
-- Phones held upright (touch, portrait, up to 600px wide). The hand is a curved fan rising from
-  near the bottom centre to the right edge, the deck and throw pile sit side by side in the top left
-  of the card area (just under the board; the user's touch map), the move buttons under them, Undo and Sort in the free bottom-right corner, the "?" button is gone (How to play is in
-  the menu). No hint row: its height goes to the board, and the step's tip shows as large faint
-  words over the board after 4 seconds without a touch on my turn. Settings: Thumb layout
-  On/Off, Hand side Right/Left (Left mirrors everything), Idle tip On/Off.
-- Code: `web/src/logic/layout.ts` (the `thumb` variant of the one layout engine), the test-only
-  `web/src/lab-mode/thumb.ts` and `lab-css.ts`, the lines in `web/src/main.ts` marked "thumb".
-  Check: `web/e2e/thumb-check.ts`; screenshots in `docs/screens/thumb/`.
-- Check before locking in:
-  - card tap accuracy on real phones (every visible slice picks its card; 5, 8 and 10 cards);
-  - the 360px width: the board's tiles are about 44pt with 8 cards (52px cards), and a
-    10-card hand (Lab only) gets 32pt slices instead of 40;
-  - a picked card at the top of the fan lifts briefly into the gap above the cards (by design);
-  - Large text (the move buttons and the tip corner beside the fan);
-  - left-hand mode on a real phone;
-  - the idle tip on a crowded map (readable? the faint plate only when the map is busy);
-  - the coach and first-time tips, now just above the cards over the board's lower-left edge
-    (44% wide, so my home stays visible): does the tutorial coach hide too much of the board?
+  - overlap on the triangle, rhombus and rectangle maps;
+  - no tile ever hidden under a card or a pile (none in 8 checked layouts);
+  - the tip never covering a home (none in 8 checked layouts);
+  - on a real iPhone: the dock on the bottom margin (the empty band should be gone).
+- Earlier versions, kept for reference:
+  - v2 notes:
+  ### Thumb layout v2 (gentler fan, map first, smart overlap)
+  - Date: 2026-10-05 · Commit: `9fa0846` · In test only (replaces the v1 fan below; same settings)
+  - Map first: the board takes the full width and at least 60% of the usable height; the card
+    area is capped at 40% (it now takes 28-40%). The hand is a gentle fan (middle card flat, end
+    cards tilted 7 degrees, a shallow curve, a slight rise to the right) anchored at the right edge
+    above a bottom band: deck and throw pile (left, 52pt wide, label with the count under it), the
+    move buttons ("Skip sprout" as a small pill, only when useful) and Undo/Sort (right, next to
+    the fan). Cards are 25% smaller (48pt wide instead of 64). Hand side Left mirrors it all.
+  - Smart overlap: when the board is held back by the height, it may reach under the fan by up to
+    15% of its height, only where every hex under a card is empty or rock and nothing can be
+    played there this turn (4 hexes from my network, 1 from the opponent's); no tile, home, gold
+    hex, target highlight or Bloom painting is ever under a card (any of them cancels it at once).
+    Over the map the cards are 55% see-through until I touch the fan. Worked out when the board
+    changes, with a short crossfade.
+  - Tile width (centre to centre): 360x640 classic 44.0 -> 49.9pt, triangle 31.5 -> 38.2pt, tall
+    rectangle 26.0 -> 34.5pt; 390x844 unchanged for boards that already fill the width (classic
+    59.4, triangle 46.8, tall rectangle 38.6pt), rhombus 44.9 -> 54.3pt.
+  - Code: `web/src/logic/layout.ts` (thumbDock v2, fanSlots), `web/src/main.ts` (checkOverlap,
+    the see-through fan), `web/src/lab-mode/lab-css.ts` (v2 block). Check: `web/e2e/thumb-check.ts`;
+    screenshots in `docs/screens/thumb2/`.
+  - Check before locking in:
+    - tapping every card in a full hand (8 cards: 42pt slices at 390px, 40.5pt at 360px; a
+      10-card Lab hand gets 32-36pt, the map comes first);
+    - the 360px width;
+    - Large text (the pile labels, the move pills);
+    - left-hand mode;
+    - overlap on the triangle and rectangle maps (in the checks, overlap only happened on the
+      classic hexagon at 360x640; the triangle and rectangle stayed below the board because their
+      bottom rows are near the homes or already fill the width);
+    - that no tile is ever hidden under a card (the check found none in 12 layouts);
+    - the board changing size during a game when the overlap turns on or off (crossfade): is it
+      distracting?
+  - v1 notes (the original thumb layout and the idle tip):
+  ### Thumb layout and the idle tip (phones)
+  - Date: 2026-10-05 · Commits: `7254eeb`, `5c8b4f2` (matched to the user's touch map), `ffb332e` (fan packed to the bottom: bigger map) · In test only
+  - Phones held upright (touch, portrait, up to 600px wide). The hand is a curved fan rising from
+    near the bottom centre to the right edge, the deck and throw pile sit side by side in the top left
+    of the card area (just under the board; the user's touch map), the move buttons under them, Undo and Sort in the free bottom-right corner, the "?" button is gone (How to play is in
+    the menu). No hint row: its height goes to the board, and the step's tip shows as large faint
+    words over the board after 4 seconds without a touch on my turn. Settings: Thumb layout
+    On/Off, Hand side Right/Left (Left mirrors everything), Idle tip On/Off.
+  - Code: `web/src/logic/layout.ts` (the `thumb` variant of the one layout engine), the test-only
+    `web/src/lab-mode/thumb.ts` and `lab-css.ts`, the lines in `web/src/main.ts` marked "thumb".
+    Check: `web/e2e/thumb-check.ts`; screenshots in `docs/screens/thumb/`.
+  - Check before locking in:
+    - card tap accuracy on real phones (every visible slice picks its card; 5, 8 and 10 cards);
+    - the 360px width: the board's tiles are about 44pt with 8 cards (52px cards), and a
+      10-card hand (Lab only) gets 32pt slices instead of 40;
+    - a picked card at the top of the fan lifts briefly into the gap above the cards (by design);
+    - Large text (the move buttons and the tip corner beside the fan);
+    - left-hand mode on a real phone;
+    - the idle tip on a crowded map (readable? the faint plate only when the map is busy);
+    - the coach and first-time tips, now just above the cards over the board's lower-left edge
+      (44% wide, so my home stays visible): does the tutorial coach hide too much of the board?
 
 ### Desktop: a proper coach and tip panel
 - Date: 2026-10-04 · Commit: `dcc76c0` · In test only
