@@ -65,7 +65,7 @@ export const mountThumb = (hooks: { relayout: () => void; reduceMotion: () => bo
   const painters: (() => void)[] = [];
   const paintAll = () => painters.forEach((p) => p());
   const h3 = document.createElement('h3');
-  h3.textContent = 'Phone layout (test copy)';
+  h3.textContent = 'Phone layout';
   box.append(
     h3,
     seg('Thumb layout', 'thumb-seg', [['on', 'On'], ['off', 'Off']], () => (prefs.thumb ? 'on' : 'off'), (v) => (prefs = { ...prefs, thumb: v === 'on' })),
