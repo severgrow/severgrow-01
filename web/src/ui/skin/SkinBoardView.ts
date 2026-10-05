@@ -11,7 +11,7 @@
 import { allNeighbors, connectedKeys, coordKey, parseKey } from '../../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../../src/engine/index.js';
 import { looseEdges, networkEdges } from '../../logic/network.js';
-import { getOrient } from '../../logic/orient.js';
+import { getOrient, toScreen } from '../../logic/orient.js';
 import { vigour } from '../../logic/vigour.js';
 import { BoardView, S, centerOf, el } from '../board.js';
 import type { BoardHandlers, Overlay } from '../board.js';
@@ -240,7 +240,10 @@ export class SkinBoardView extends BoardView {
       if (!defs.length) continue;
       const def = defs[Math.floor(hash(`${key}:${t}`) * defs.length)]!;
       const { x, y } = centerOf(key);
-      el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: `skin-prop${t === 'rich' ? ' skin-gold' : ''}`, 'data-key': key, preserveAspectRatio: 'xMidYMid meet' }, g);
+      // rock clusters are painted to a pointy-top hex: turned with the board so they sit in theirs
+      const o = toScreen(1, 0);
+      const turn = t === 'rock' ? (Math.atan2(o.y, o.x) * 180) / Math.PI : 0;
+      el('image', { href: this.assets.url(def.src), x: x - def.size / 2, y: y - def.size / 2, width: def.size, height: def.size, class: `skin-prop${t === 'rich' ? ' skin-gold' : ''}`, 'data-key': key, preserveAspectRatio: 'xMidYMid meet', ...(turn ? { transform: `rotate(${turn.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})` } : {}) }, g);
     }
     if (this.lastRender) this.hideTakenGold(this.lastRender[0]);
   }
