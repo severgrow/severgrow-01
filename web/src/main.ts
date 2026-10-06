@@ -2932,7 +2932,9 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   if (session!.presetMove) text = '';
   else if (g?.action) {
     const pv = previewMove(v, g.action);
-    text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}${IS_TEST2 && draw.msg ? ` · ${draw.msg}` : ''}`;
+    text = IS_TEST2
+      ? `${c.n}/${c.n}${pv?.warning ? ` · ${pv.warning}` : ''}${draw.msg ? ` · ${draw.msg}` : ''}`
+      : `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
   } else if (g?.reason) text = draw.msg ? `${g.reason} · ${draw.msg}` : g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;

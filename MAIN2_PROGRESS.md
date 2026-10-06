@@ -13,6 +13,12 @@
 - Added real-input idle timing, short prompt, selected Bloom, Skip/control fit and immediate
   Fruit/Undo/save parity QA to the existing Test2 browser suites. All rules/bots/saves and Main/Dev
   source/refs remain untouched. Full check, isolated builds and browser CI required before release.
+- Local typecheck and all channel builds passed; Main/Dev assets byte-identical to the previous
+  layout baseline. Full local check: 106 files / 1,132 tests passed, one expected failure and one
+  sandbox failure (spawnSync npx EPERM). Local preview is also blocked (listen EPERM).
+  Information/help and V3 browser CI passed; exact final-head critical/full CI remain required.
+- Completed Bloom previews keep only their tile counter and concrete warnings in Test2;
+  redundant Bloom N tiles prose is removed there too. Full Help/accessibility descriptions remain.
 
 ## Lower dock and larger map — 6 October 2026
 
