@@ -43,6 +43,7 @@ export const INFORMATION_CSS = `
 .test2-information #step-cue[data-level='lo'] { opacity: .66 !important; }
 .test2-information #step-cue[data-level='off'],
 .test2-information.test2-move-active #step-cue,
+.test2-information:has(#tooltip:not([hidden])) #step-cue,
 .test2-information.gd-picked #step-cue { opacity: 0 !important; }
 .test2-information[data-step='none'] #step-cue,
 .test2-information[data-guide='off'] #step-cue { visibility: hidden; }

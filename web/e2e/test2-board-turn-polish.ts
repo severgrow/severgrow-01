@@ -310,6 +310,20 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     check(!await page.locator('#confirm').isVisible() && await page.evaluate(() => !(window as any).__severgrow.pending()),`${label}: completed Bloom has no Confirm or tap-again step`);
     check(await page.locator('#board .tile .mark-line, #board .tile .mark-ink').count() === 0,`${label}: numbered Bloom tiles have no owner icon`);
     await savedMatches(page,label);
+    if (!touch) {
+      const placed = await state(page);
+      await page.mouse.move(width-4,4);
+      await page.locator(`#board .hex-cell[data-key="${keys.at(-1)!}"]`).hover();
+      await page.waitForFunction(() => !document.querySelector<HTMLElement>('#tooltip')!.hidden);
+      await page.waitForTimeout(160);
+      check(await page.locator('#tooltip').isVisible(),`${label}: hovering keeps the tile information readable`);
+      check(await page.locator('#step-cue').evaluate(element => Number(getComputedStyle(element).opacity) === 0),`${label}: idle instruction yields to the open tile information`);
+      equal(await state(page),placed,`${label}: reading tile information changes no game state`);
+      await page.mouse.move(width-4,4);
+      await page.waitForFunction(() => document.querySelector<HTMLElement>('#tooltip')!.hidden);
+      await page.waitForTimeout(160);
+      await cue(page,'grow',`${label}: after inspection`);
+    }
     await page.screenshot({ path: `${dir}/${width}x${height}-bloom${v3 ? '-v3' : ''}.png` });
     await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`);
     await undo(page,before,label);
