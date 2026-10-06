@@ -163,7 +163,16 @@ async function geometry(page: Page, width: number, height: number, label: string
   check(info.rail.height <= 36, `${label}: no full-height instruction row (${info.rail.height}px)`);
   check(info.play.top <= info.hud.bottom + 37, `${label}: map follows the compact header (${info.play.top-info.hud.bottom}px gap)`);
   check(info.grid.left >= -1 && info.grid.right <= width+1 && info.grid.top >= info.hud.bottom-1 && info.grid.bottom <= height+1, `${label}: complete board stays within the viewport`);
-  if (width <= 600) check(info.grid.width >= width * .80, `${label}: phone grid uses the recovered map width (${info.grid.width.toFixed(1)}px)`);
+  if (width <= 600) check(info.grid.width >= width * .90, `${label}: phone grid uses nearly the full map width (${info.grid.width.toFixed(1)}px)`);
+  const dock = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll<HTMLElement>('#hand .card')].map(card => card.getBoundingClientRect());
+    const bottom = Math.max(...cards.map(card => card.bottom));
+    const safe = parseFloat(getComputedStyle(document.querySelector('#safe-probe') ?? document.body).paddingBottom) || 0;
+    return { bottom, safe, dock: document.querySelector('#dock')?.getBoundingClientRect().toJSON(),
+      margin: getComputedStyle(document.querySelector('#board-wrap')!).marginLeft };
+  });
+  check(dock.bottom <= height+1 && height-dock.bottom <= 20+dock.safe,
+    `${label}: cards sit low with a small safe bottom margin (${height-dock.bottom}px)`);
   measurements.push({ viewport: `${width}x${height}`, label, ...info });
   return info.paths;
 }

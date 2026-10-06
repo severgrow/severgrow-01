@@ -1976,7 +1976,9 @@ function applyLayout() {
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
-  const l = thumbSide ? computeLayout({ w, h, ...safeArea() }, radius, maxHand, thumbSide, thumbOverlap) : computeLayout({ w, h, ...safeArea() }, radius);
+  const viewport = { w, h, ...safeArea() };
+  const baseLayout = thumbSide ? computeLayout(viewport, radius, maxHand, thumbSide, thumbOverlap) : computeLayout(viewport, radius);
+  const l = branding ? branding.polishLayout(baseLayout, viewport, radius) : baseLayout;
   const thumbWas = thumbLayout;
   thumbLayout = l.thumb ?? null;
   if (thumbLayout) {

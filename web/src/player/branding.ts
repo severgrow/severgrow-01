@@ -1,5 +1,7 @@
 // Loaded only by the literal Test2 guard: Main and Dev keep their existing brand.
 import logoUrl from '../assets/futasaku-white.png?url';
+import { bestFit, boardUnits } from '../logic/layout.js';
+import type { Layout, Viewport } from '../logic/layout.js';
 
 export const BRANDING_CSS = `
 html.test2-branding.slim-hud .game > .hud {
@@ -13,6 +15,15 @@ html.test2-branding.slim-hud .game > .hud {
   gap: 8px;
 }
 html.test2-branding .game > #race { display: none !important; }
+html.test2-branding .game { max-width: none; margin: 0; }
+html.test2-branding .play { --board-margin: 2px; }
+html.test2-branding[data-layout='stack'] .board-wrap {
+  margin-left: max(2px, env(safe-area-inset-left));
+  margin-right: max(2px, env(safe-area-inset-right));
+}
+html.test2-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
+html.test2-branding .dock { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
@@ -31,6 +42,46 @@ html.test2-branding #menu #logo {
 }
 html.test2-branding #menu #logo svg { display: block; width: 100%; height: auto; }
 `;
+
+/** Presentation-only boxes. Card sizes, hand order, tile coordinates and inputs are unchanged. */
+export function polishLayout(layout: Layout, v: Viewport, radius: number): Layout {
+  const l = { ...layout, dock: { ...layout.dock }, zone: { ...layout.zone }, rows: { ...layout.rows }, parts: { ...layout.parts } };
+  const bottom = v.safeBottom ?? 0, left = v.safeLeft ?? 0, right = v.safeRight ?? 0;
+  if (layout.thumb) {
+    const old = layout.thumb;
+    const reclaim = Math.max(0, old.deck.y - 2 - 8);
+    const reduction = 8 + 2 * reclaim;
+    l.dock.h -= reduction; l.dock.y += reduction; l.rows.hand = l.dock.h;
+    const lower = (box: typeof old.deck) => ({ ...box, y: box.y - reclaim });
+    l.thumb = { ...old, deck: lower(old.deck), discard: lower(old.discard), piles: lower(old.piles),
+      moves: lower(old.moves), undo: lower(old.undo), sort: lower(old.sort),
+      fan: { ...old.fan, baseY: old.fan.baseY - 2 * reclaim },
+      band: { ...old.band, y: old.band.y - 2 * reclaim } };
+    for (const name of ['deck','discard','piles','moves','undo','sort'] as const)
+      l.parts[name] = { ...l.parts[name], y: l.parts[name].y + 8 + reclaim };
+    l.parts.fan = { ...l.dock };
+    l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
+  } else {
+    l.rows.table = Math.max(84, l.parts.pileCard.h + 22);
+    l.rows.hand = l.card.h + 8;
+    const gap = l.mode === 'side' ? 8 : 0;
+    l.dock.h = l.rows.table + l.rows.hand + gap + 4 + (l.mode === 'stack' ? bottom : 0);
+    l.dock.y = v.h-bottom-l.dock.h;
+    if (l.mode === 'stack') {
+      l.dock.y = v.h-l.dock.h;
+      l.zone = { x: left+2, y: l.header.y+l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
+    } else {
+      l.zone = { x: left+2, y: l.header.y+l.header.h, w: v.w-left-right-l.dock.w-6, h: v.h-l.header.y-l.header.h-bottom-2 };
+      l.dock.x = v.w-right-l.dock.w-2;
+    }
+  }
+  const fit = bestFit(l.zone.w,l.zone.h,radius), units = boardUnits(radius,fit.orient);
+  l.orient = fit.orient; l.scale = fit.scale; l.hexPx = units.hexW*fit.scale;
+  l.board = { x: l.zone.x+(l.zone.w-units.w*fit.scale)/2,
+    y: l.zone.y+(l.thumb ? l.zone.h-units.h*fit.scale : (l.zone.h-units.h*fit.scale)/2),
+    w: units.w*fit.scale, h: units.h*fit.scale };
+  return l;
+}
 
 // The exported PNG has faint alpha fringes in otherwise empty space. Render the mark as
 // uniformly cream, omit those fringes, and crop its transparent margins without stretching.

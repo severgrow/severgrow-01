@@ -1,5 +1,20 @@
 # Main2.0 / Test2 progress
 
+## Lower dock and larger map — 6 October 2026
+
+- Test2 only: tightened spare gaps above/below the pile row, lowered the hand to a roughly
+  4px bottom margin plus the device safe area, and lowered piles and the existing tool trio.
+  Card dimensions/order, touch targets and move handlers remain unchanged.
+- The map uses 2px side margins within the screen safe area and the vertical space recovered
+  from dock padding. It retains its hex geometry/aspect ratio and refits its existing camera.
+- Tablet/desktop retain their existing layout modes: compact rows and a bottom-aligned control
+  column on wide screens. The old 1240px screen cap is removed only in Test2.
+- The layout calculator adjustment lives behind the existing literal Test2 branding import.
+  Main/Dev calculators and layout defaults are unchanged; no engine/bot/save/rule changes.
+- Browser QA now requires at least 90% phone map width and a small safe bottom card margin,
+  alongside all existing overlap, target, help, drawing, Undo, state/save and turn checks.
+  Exact-head CI and phone/tablet/desktop screenshots are required before publication.
+
 ## Static film grain and map separation — 6 October 2026
 
 - Test2 only: a deterministic 128px monochrome grain tile covers the entire interface at 4%
