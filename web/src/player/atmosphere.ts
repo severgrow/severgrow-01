@@ -4,12 +4,13 @@ import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
 #test2-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
-  opacity: .044; background-repeat: repeat; background-size: 128px 128px;
+  opacity: .12; background-repeat: repeat; background-size: 128px 128px;
   user-select: none;
 }
 #test2-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #test2-board-backdrop { display: block; }
 #test2-map-rim { pointer-events: none; }
+#board .hex-cell.normal.test2-empty { filter: brightness(1.15); }
 `;
 
 export function mountAtmosphere() {
@@ -96,4 +97,12 @@ export function mountAtmosphere() {
   // Setup replaces the SVG children. Moves only update later layers, never rebake the rim.
   new MutationObserver(rim).observe(board, { childList: true });
   rim();
+  // Presentation follows actual rendered ownership. Classes never enter game/save state.
+  const lightEmptyCells = () => {
+    const occupied = new Set([...board.querySelectorAll('.tile[data-key]')].map(tile=>tile.getAttribute('data-key')));
+    for (const cell of board.querySelectorAll('.l-base .hex-cell.normal'))
+      cell.classList.toggle('test2-empty', !occupied.has(cell.getAttribute('data-key')));
+  };
+  new MutationObserver(lightEmptyCells).observe(board, { childList: true, subtree: true });
+  lightEmptyCells();
 }

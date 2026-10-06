@@ -2254,7 +2254,7 @@ function placeCorners() {
 
 function renderTooltip(v: View) {
   const tip = $('tooltip');
-  if (!inspectKey || busy() || !session) {
+  if (IS_TEST2 || !inspectKey || busy() || !session) {
     tip.hidden = true;
     return;
   }
@@ -2524,10 +2524,8 @@ function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View, comp
   icons.setAttribute('aria-hidden', 'true');
   icons.innerHTML = cards.map(c => `<span class="test2-mini-card ${suitClass(c!)}">${cardFace(c!)}</span>`).join('');
   button.replaceChildren(icons);
-  if (compact) {
-    button.classList.add('test2-compact-control');
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="m8 2 5 3v6l-5 3-5-3V5Zm10 6 5 3v6l-5 3-5-3v-6ZM8 14l5 3v5l-5 3-5-3v-5Z" transform="translate(0 -1) scale(.9)"/></svg>';
-  }
+  // Show the actual combination in the cockpit, including the selected Bloom.
+  if (compact) button.classList.add('test2-compact-control');
   button.setAttribute('aria-label', `${shortKindLabel(kind)}: ${cards.map(c => cardName(c!)).join(', ')}`);
 }
 
@@ -3193,6 +3191,13 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
+  if (IS_TEST2 && (!myTurn() ||
+      (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK') ||
+      (session.view.phase === 'ACT' && ((session.sel.card === null && session.sel.kind === null) ||
+        hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard')))) {
+    boinkTile(key);
+    return;
+  }
   reactHome(key);
   if (!myTurn() || (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK')) {
     pinCard(inspectKey === key && cardPinned ? null : key);
@@ -3215,10 +3220,33 @@ function onHexTap(key: string) {
 }
 
 function onInspect(key: string | null) {
+  if (IS_TEST2) return;
   // hovering never moves a pinned tile card
   if (cardPinned) return;
   inspectKey = key;
   if (session) renderTooltip(session.view);
+}
+
+/** Test2 idle touch response. Never select a tile or change the session. */
+function boinkTile(key: string) {
+  if (!session?.view.board[key]) return;
+  sound.click();
+  if (document.documentElement.classList.contains('reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const tile = session.view.board[key]?.root
+    ? board.homeEls.find(home=>home.dataset.key === key) : board.tile(key);
+  if (!tile) return;
+  for (const animation of tile.getAnimations()) if (animation.id === 'test2-boink') animation.cancel();
+  tile.classList.add('test2-boink');
+  const animation = anim(tile, [
+    { scale:'1', rotate:'0deg' },
+    { scale:'.97', rotate:'-1.2deg', offset:.25 },
+    { scale:'1.025', rotate:'.8deg', offset:.6 },
+    { scale:'1', rotate:'0deg' },
+  ], { duration:240, easing:'ease-out', fill:'none' });
+  if (!animation) { tile.classList.remove('test2-boink'); return; }
+  animation.id = 'test2-boink';
+  const clear = () => { if (!tile.getAnimations().some(a=>a.id === 'test2-boink' && a.playState !== 'finished' && a.playState !== 'idle')) tile.classList.remove('test2-boink'); };
+  void animation.finished.then(clear,clear);
 }
 
 /** Step 4: tapping a home: the tree's heartbeat and rustle, or the volcano's thump and rumble. */
@@ -3232,6 +3260,7 @@ function reactHome(key: string) {
 
 /** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
 function pinCard(key: string | null) {
+  if (IS_TEST2) { if (key) boinkTile(key); return; }
   inspectKey = key;
   cardPinned = key !== null;
   render();

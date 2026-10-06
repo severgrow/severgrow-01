@@ -27,7 +27,7 @@ const filter = process.env.TEST2_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
-const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices', '390x844-bomb-cards', '1280x800-bomb-cards']);
+const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices', '390x844-bomb-cards', '1280x800-bomb-cards', '390x844-bloom-ready', '1280x800-bloom-ready']);
 const evidenceWritten = new Set<string>();
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
@@ -109,7 +109,7 @@ async function geometry(page: Page, width: number, height: number, label: string
     const box = image.getBoundingClientRect();
     const race = document.querySelector<HTMLElement>('#race')!;
     return { title: document.title, loaded: asset.complete && asset.naturalWidth > 0,
-      height: box.height, menuHeight: lines.height / 2, center: box.top + box.height / 2,
+      height: box.height, menuHeight: lines.height / 2, top:box.top, inkTop:menu.top+menu.height/2-lines.height/4, center: box.top + box.height / 2,
       color: getComputedStyle(image.querySelector('feFlood')!).floodColor,
       buttonColor: getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor,
       menuCenter: menu.top + menu.height / 2, right: box.right,
@@ -117,8 +117,8 @@ async function geometry(page: Page, width: number, height: number, label: string
       pointer: getComputedStyle(image).pointerEvents };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-brand.menuHeight) < .1 && Math.abs(brand.center-brand.menuCenter) < 1,
-    `${label}: logo matches the three menu lines' visible height and centre`);
+  check(brand.loaded && Math.abs(brand.height-2*brand.menuHeight) < .1 && Math.abs(brand.top-brand.inkTop) < 1,
+    `${label}: new emblem is twice the menu lines' visible height and exactly top-aligned`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
@@ -152,8 +152,16 @@ async function geometry(page: Page, width: number, height: number, label: string
       rimStatic: !rim.hasAttribute('filter') && getComputedStyle(rim).pointerEvents === 'none' && rim.getAnimations().length === 0,
       restrained: peak > 0 && peak <= 32, cleanSeams };
   });
-  check(atmosphere.coverage && atmosphere.opacity === .044 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
-    `${label}: deterministic static 4.4% grain covers all UI without blocking input`);
+  const emptyLighting = await page.evaluate(() => {
+    const occupied = new Set([...document.querySelectorAll('#board .tile[data-key]')].map(tile=>tile.getAttribute('data-key')));
+    return [...document.querySelectorAll('#board .hex-cell')].every(cell => {
+      const empty = cell.classList.contains('normal') && !occupied.has(cell.getAttribute('data-key'));
+      return getComputedStyle(cell).filter === (empty ? 'brightness(1.15)' : 'none');
+    });
+  });
+  check(emptyLighting, `${label}: only empty normal hexes are 15% brighter; owned, rock and gold rendering stays unchanged`);
+  check(atmosphere.coverage && atmosphere.opacity === .12 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
+    `${label}: deterministic static 12% grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
   check(atmosphere.restrained && atmosphere.cleanSeams, `${label}: faint rim emits light only outside the map, never along internal seams`);
@@ -225,8 +233,33 @@ async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) 
   });
   check(result.visible && result.text?.trim().toLowerCase() === phase, `${label}: correct ${phase} cue is visible`);
   check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered in the usable map and cannot intercept input`);
-  check(result.font.includes('Besley') && result.opacity === .688, `${label}: Besley cue is exactly 20% fainter`);
+  check(result.font.includes('Besley') && result.opacity === .6536, `${label}: Besley cue is a further 5% fainter`);
+  if (phase === 'grow' && label.startsWith('1280x800') && !label.includes('inspection')) await pulseCheck(page,label);
   check(result.fontSize >= 30,`${label}: ${phase} cue remains legible at ${result.fontSize}px`);
+}
+
+async function pulseCheck(page: Page, label: string) {
+  const before = await state(page);
+  const result = await page.evaluate(() => {
+    const root = document.documentElement;
+    const reduced = root.classList.contains('reduce-motion');
+    root.classList.remove('reduce-motion');
+    const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
+    const animation = text.getAnimations().find(a => (a as CSSAnimation).animationName === 'test2-cue-breathe');
+    if (!animation) { root.classList.toggle('reduce-motion', reduced); return null; }
+    animation.pause(); animation.currentTime = 0;
+    const small = getComputedStyle(text).transform;
+    animation.currentTime = 2400;
+    const large = getComputedStyle(text).transform;
+    animation.play();
+    const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked) > .c-suit');
+    const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
+    root.classList.toggle('reduce-motion', reduced);
+    return { small, large, cardPulse, off: text.getAnimations().length === 0 };
+  });
+  check(result && result.small !== result.large && result.large.includes('1.035') && result.cardPulse && result.off,
+    `${label}: slow slight prompt zoom and faster card pulse actually run; Reduce Motion disables them`);
+  equal(await state(page), before, `${label}: pulses cannot change game state`);
 }
 
 async function idleTiming(page: Page, label: string) {
@@ -406,9 +439,12 @@ async function sproutFlow(width: number, height: number) {
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
     await tapHex(page,coordKey(action.coord),touch);
-    equal(await state(page),grown,`${label}: a board-first spot does not choose a card by itself`);
+    equal(await state(page),grown,`${label}: idle empty-tile tap does nothing`);
+    check(await page.evaluate(()=>(window as any).__severgrow.pending() === null && !document.documentElement.classList.contains('test2-move-active')),`${label}: idle tile tap does not preselect a destination`);
     await page.locator(`#hand [data-card="${action.card}"]`).click();
-    equal(await state(page),apply(grown,action),`${label}: choosing the card after its valid spot immediately places the Sprout`);
+    equal(await state(page),grown,`${label}: selecting a card still waits for its target`);
+    await tapHex(page,coordKey(action.coord),touch);
+    equal(await state(page),apply(grown,action),`${label}: card then valid target still immediately places the Sprout`);
     await undo(page,grown,label+' board-first Sprout');
     equal(await page.locator('#board .hex-cell').evaluateAll(cells => cells.map(cell => [cell.getAttribute('data-key'),cell.querySelector('.hex')?.getAttribute('d')])), paths, `${label}: Draw, placement and Undo retain the board geometry`);
     await page.screenshot({ path: `${dir}/${width}x${height}-sprout-undo.png` });
@@ -493,6 +529,19 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     equal((await page.locator('#step-cue .cue-text').textContent())?.trim(),'Bloom',`${label}: idle Bloom uses only its short prompt`);
     check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity)>0),`${label}: idle Bloom remains visible with a combination selected`);
     await controls(page,label+' selected Bloom');
+    await evidence(page,`${width}x${height}-bloom-ready`);
+    const cockpit = await page.evaluate(() => {
+      const box = document.querySelector('#test2-box')!.getBoundingClientRect();
+      const kind = document.querySelector('#moves > .kind')!.getBoundingClientRect();
+      const piles = document.querySelector('#test2-box > .piles')!.getBoundingClientRect();
+      const faces = [...document.querySelectorAll('#test2-box .pile-card')].map(el => el.getBoundingClientRect());
+      const actions = document.querySelector('#test2-actions')!.getBoundingClientRect();
+      return { fits: kind.left >= box.left && kind.right <= box.right && kind.top >= box.top && kind.bottom <= box.bottom,
+        separated: kind.left >= piles.right && kind.right <= actions.left && faces.every(face => face.right <= kind.left),
+        mini: [...document.querySelectorAll('#moves > .kind .test2-mini-card')].every(el => el.getBoundingClientRect().width >= 20),
+        weak: [...document.querySelectorAll('#board .badge.weak')].some(el => getComputedStyle(el).display !== 'none') };
+    });
+    check(cockpit.fits && cockpit.separated && cockpit.mini && !cockpit.weak, `${label}: readable Bloom combinations fit the box, clear of piles/tools; no weak-link badges`);
     await tapHex(page,keys[0]!,touch);
     equal(await state(page),before,`${label}: starting a partial Bloom does not prematurely spend cards`);
     await tapHex(page,'-1,0',touch);
@@ -516,20 +565,32 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     check(!await page.locator('#confirm').isVisible() && await page.evaluate(() => !(window as any).__severgrow.pending()),`${label}: completed Bloom has no Confirm or tap-again step`);
     check(await page.locator('#board .tile .mark-line, #board .tile .mark-ink').count() === 0,`${label}: numbered Bloom tiles have no owner icon`);
     await savedMatches(page,label);
+    const placed = await state(page);
+    const tapped = keys.at(-1)!;
+    const reduced = await page.evaluate(()=>document.documentElement.classList.contains('reduce-motion'));
+    await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+    await tapHex(page,tapped,touch);
+    const bounce = await page.locator(`#board .tile[data-key="${tapped}"]`).evaluate(el=>
+      el.getAnimations().some(a=>a.id==='test2-boink' && a.effect?.getTiming().duration===240));
+    check(bounce,`${label}: occupied tile tap gives a brief boink`);
+    check(!await page.locator('#tooltip').isVisible(),`${label}: tapping an occupied tile opens no explanation`);
+    equal(await state(page),placed,`${label}: touching a tile changes no game state`);
+    await page.waitForFunction(()=>!document.querySelector('#board .test2-boink'),undefined,{timeout:2000});
+    equal(await page.locator('#board .test2-boink').count(),0,`${label}: boink returns completely to the original appearance`);
+    await page.evaluate(reduced=>document.documentElement.classList.toggle('reduce-motion',reduced),reduced);
+    await tapHex(page,tapped,touch);
+    check(await page.locator(`#board .tile[data-key="${tapped}"]`).evaluate(el=>!el.getAnimations().some(a=>a.id==='test2-boink')),
+      `${label}: reduced motion suppresses the tile boink`);
+    const empty = Object.entries(placed.board).find(([key,tile])=>!tile && placed.terrain[key]==='normal')?.[0];
+    if (empty) await tapHex(page,empty,touch);
+    check(!await page.locator('#tooltip').isVisible(),`${label}: empty tile tap also opens no explanation`);
+    equal(await state(page),placed,`${label}: empty tile touch changes no state`);
     if (!touch) {
-      const placed = await state(page);
+      await page.locator(`#board .hex-cell[data-key="${tapped}"]`).hover();
+      check(!await page.locator('#tooltip').isVisible(),`${label}: hovering opens no explanation`);
       await page.mouse.move(width-4,4);
-      await page.locator(`#board .hex-cell[data-key="${keys.at(-1)!}"]`).hover();
-      await page.waitForFunction(() => !document.querySelector<HTMLElement>('#tooltip')!.hidden);
-      await page.waitForTimeout(160);
-      check(await page.locator('#tooltip').isVisible(),`${label}: hovering keeps the tile information readable`);
-      check(await page.locator('#step-cue').evaluate(element => Number(getComputedStyle(element).opacity) === 0),`${label}: idle instruction yields to the open tile information`);
-      equal(await state(page),placed,`${label}: reading tile information changes no game state`);
-      await page.mouse.move(width-4,4);
-      await page.waitForFunction(() => document.querySelector<HTMLElement>('#tooltip')!.hidden);
-      await page.waitForTimeout(160);
-      await cue(page,'grow',`${label}: after inspection`);
     }
+    await cue(page,'grow',`${label}: after inspection`);
     await page.screenshot({ path: `${dir}/${width}x${height}-bloom${v3 ? '-v3' : ''}.png` });
     await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`);
     await undo(page,before,label);

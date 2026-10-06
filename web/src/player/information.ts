@@ -59,9 +59,9 @@ export const INFORMATION_CSS = `
   overflow: visible;
   animation: none !important;
 }
-@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .86; } }
+@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .94; transform: scale(1.035); } }
 .test2-information #step-cue:is([data-step='draw'], [data-step='grow'], [data-step='throw']) .cue-text {
-  animation: test2-cue-breathe 3s ease-in-out infinite !important;
+  animation: test2-cue-breathe 4.8s ease-in-out infinite !important;
 }
 .test2-information-blocked #step-cue .cue-text,
 .test2-information.test2-move-active #step-cue .cue-text { animation-play-state: paused !important; }
@@ -77,6 +77,7 @@ export const INFORMATION_CSS = `
   line-height: 1.08;
 }
 .test2-information #step-cue .cue-text {
+  display: inline-block; transform-origin: center;
   font-family: var(--font-display, Georgia, serif);
   font-size: clamp(30px, 8.2vw, 48px);
   line-height: 1.08;
@@ -92,8 +93,8 @@ export const INFORMATION_CSS = `
 .test2-information #step-cue[data-step='opp'] .cue-text { font-size: clamp(24px, 6.6vw, 38px); }
 /* Test2 owns prompt visibility independently of the guide's legacy entrance/settle clock. */
 .test2-information:not(.test2-idle-ready) #step-cue { opacity: 0 !important; }
-.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .688 !important; }
-.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 3s ease-in-out infinite !important; animation-play-state: running !important; }
+.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .6536 !important; }
+.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 4.8s ease-in-out infinite !important; animation-play-state: running !important; }
 .test2-information #step-cue[data-step='opp'] { visibility: hidden !important; }
 .test2-information:has(#tooltip:not([hidden])) #step-cue { opacity: 0 !important; }
 .test2-information .dock .hand .card.playable {
@@ -217,6 +218,103 @@ export const INFORMATION_CSS = `
 .test2-information #test2-notice-slot > #root-warn i { display: none; }
 .test2-information body.paused #test2-information-rail,
 .test2-information body.paused #step-cue { visibility: hidden; }
+
+/* The box: one stable cockpit, with a centre display and a right action slot. */
+html.test2-information .dock > #test2-box {
+  --box-tools: 140px; --box-pile: 44px; --box-piles: calc(2 * var(--box-pile) + 8px);
+  display: grid; position: relative; inset: auto; width: 100%; height: 104px;
+  grid-template-columns: var(--box-piles) minmax(0, 1fr) var(--box-tools);
+  grid-template-rows: 44px 44px; gap: 4px 6px; padding: 6px;
+  box-sizing: border-box; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: center;
+}
+html.test2-information[data-thumb] .dock > #test2-box {
+  position: absolute; top: 8px; left: 4px; width: calc(100% - 8px);
+}
+html.test2-information .dock #test2-box > .piles {
+  display: flex; position: relative; grid-column: 1; grid-row: 1 / 3;
+  gap: 8px; align-items: center; justify-content: center; height: 100%;
+}
+html.test2-information .dock #test2-box > .piles > .pile {
+  position: relative; inset: auto; grid-area: auto; width: var(--box-pile); height: 100%;
+  margin: 0; flex: 0 0 var(--box-pile); min-width: 0;
+}
+html.test2-information .dock #test2-box .pile-card {
+  --pile-h: 62px; --cw: 44px; --ch: 62px; width: 44px; height: 62px;
+}
+html.test2-information .dock #test2-box .pile { justify-content: flex-start; }
+html.test2-information .dock #test2-box .pile-meta { position: absolute; inset: auto 0 0; height: 18px; pointer-events: none; }
+html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 -2px auto auto; height: 18px; }
+html.test2-information .dock #test2-box > .moves {
+  display: grid; position: static; inset: auto; grid-column: 2 / 4; grid-row: 1 / 3;
+  width: 100%; height: 100%; min-height: 0; max-height: none;
+  grid-template-columns: minmax(0, 1fr) var(--box-tools); grid-template-rows: 44px 44px;
+  gap: 4px 6px; padding: 0; align-items: center; justify-content: stretch;
+}
+html.test2-information .dock #test2-box #moves > .kind {
+  grid-column: 1; grid-row: 1 / 3; width: 100%; min-width: 0; max-width: 100%;
+  height: 100%; min-height: 60px; padding: 4px; justify-self: stretch;
+  background: transparent; border-radius: 6px;
+}
+html.test2-information .dock #test2-box #moves > :is(.test2-skip,.cancel,.empty-continue,.primary:not(.kind)) {
+  grid-column: 2; grid-row: 1; justify-self: end; width: 92px; max-width: 100%;
+  height: 44px !important; min-height: 44px !important; padding: 0 6px;
+  margin: 0; border-radius: 6px; font-size: 13px;
+}
+html.test2-information .dock #test2-box #moves:has(> .cancel) > .test2-skip { display: none; }
+html.test2-information .dock #test2-box #moves > .cancel { background: transparent; color: var(--c-muted); }
+html.test2-information .dock #test2-box #moves > .test2-skip::after { display: none; }
+html.test2-information .dock #test2-box #test2-actions {
+  position: static; inset: auto; grid-column: 3; grid-row: 2;
+  width: 140px; height: 44px; display: flex; justify-content: flex-end; gap: 4px; z-index: 4;
+}
+html.test2-information .dock #test2-box #test2-actions > .hand-slot {
+  width: 44px; height: 44px; flex: 0 0 44px; inset: auto;
+}
+html.test2-information .dock #test2-box #test2-actions > .hand-slot::after { display: none; }
+html.test2-information .dock #test2-box #test2-help-button[hidden] { display: grid; visibility: hidden; pointer-events: none; }
+html.test2-information[data-thumb='left'] .dock #test2-box { grid-template-columns: var(--box-tools) minmax(0,1fr) var(--box-piles); }
+html.test2-information[data-thumb='left'] .dock #test2-box > .piles { grid-column: 3; }
+html.test2-information[data-thumb='left'] .dock #test2-box > .moves { grid-column: 1 / 3; grid-template-columns: var(--box-tools) minmax(0,1fr); }
+html.test2-information[data-thumb='left'] .dock #test2-box #moves > .kind { grid-column: 2; }
+html.test2-information[data-thumb='left'] .dock #test2-box #moves > :is(.test2-skip,.cancel,.empty-continue,.primary:not(.kind)) { grid-column: 1; justify-self: end; }
+html.test2-information[data-thumb='left'] .dock #test2-box #test2-actions { grid-column: 1; justify-content: flex-start; }
+html.test2-information .dock #test2-box #test2-actions .i { width: 20px; height: 20px; }
+html.test2-information .dock #test2-box .test2-combination {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 3px; max-width: 100%;
+}
+html.test2-information .dock #test2-box .test2-mini-card {
+  flex: 0 0 20px; width: 20px; height: 34px; min-width: 20px; padding: 2px;
+}
+html.test2-information .dock #test2-box .test2-mini-card .c-num { font-size: 13px; }
+html.test2-information .dock #test2-box .test2-mini-card .c-suit svg { width: 13px; height: 13px; }
+html.test2-information .dock #test2-box #moves .bloom-toggle::after { display: none; }
+html.test2-information .dock #test2-box #moves > .bloom-toggle::before {
+  content: '⌄'; position: absolute; right: 3px; bottom: 0; color: var(--c-muted);
+}
+html.test2-information .dock #test2-box #moves > .bloom-toggle { position: relative; }
+html.test2-information .dock #test2-box #moves .bloom-options {
+  left: 0; right: 0; bottom: calc(100% + 6px); width: auto; max-height: min(45dvh,320px);
+  z-index: 8; padding: 8px; box-sizing: border-box;
+}
+html.test2-information #board .badge.weak { display: none !important; }
+html.test2-information #board .test2-boink { transform-box: fill-box; transform-origin: center; }
+/* Animate only the card face ink, never the fan geometry or its hit targets. */
+@keyframes test2-card-breathe { 0%,100% { opacity: .82; scale: 1; } 50% { opacity: 1; scale: 1.018; } }
+html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked) > :is(.c-num,.c-suit,.c-fruit) {
+  animation: test2-card-breathe 1.8s ease-in-out infinite; transform-origin: center;
+}
+html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked)::after {
+  animation: test2-card-breathe 1.8s ease-in-out infinite;
+}
+html.test2-information.test2-move-active #hand .card > :is(.c-num,.c-suit,.c-fruit),
+html.test2-information.test2-information-blocked #hand .card > :is(.c-num,.c-suit,.c-fruit),
+html.test2-information.reduce-motion #hand .card > :is(.c-num,.c-suit,.c-fruit),
+html.test2-information:is(.reduce-motion,.test2-move-active,.test2-information-blocked) #hand .card::after { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html.test2-information #hand .card > :is(.c-num,.c-suit,.c-fruit),
+  html.test2-information #hand .card::after { animation: none !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .test2-information #step-cue { transition: none; }
   .test2-information #step-cue .cue-text.cue-text { animation: none !important; }
@@ -232,6 +330,8 @@ export const mountInformation = () => {
   const wrap = document.getElementById('board-wrap');
   if (!IS_TEST2 || !game || !wrap || document.getElementById('test2-information-rail')) return;
   root.classList.add('test2-information');
+  const cockpit = document.querySelector<HTMLElement>('#dock > .table-row');
+  if (cockpit) { cockpit.id = 'test2-box'; cockpit.setAttribute('role', 'group'); cockpit.setAttribute('aria-label', 'Turn controls'); }
   const style = document.createElement('style');
   style.id = 'test2-information-style';
   style.textContent = INFORMATION_CSS;

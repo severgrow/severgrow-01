@@ -16,6 +16,24 @@ try {
   await menu.addInitScript(() => { (window as any).__name = (f: unknown) => f; });
   await menu.goto(base);
   await menu.waitForFunction(() => !!(window as any).__severgrow);
+  const appIcon = await menu.evaluate(async () => {
+    const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')!;
+    const image = new Image(); image.src = apple.href; await image.decode();
+    const manifestURL = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')!.href;
+    const manifest = await fetch(manifestURL).then(r=>r.json());
+    const icons = await Promise.all(manifest.icons.map(async (icon: {src:string;sizes:string;purpose:string}) => {
+      const asset = new Image(); asset.src = new URL(icon.src,manifestURL).href; await asset.decode();
+      return { ...icon, width:asset.naturalWidth,height:asset.naturalHeight };
+    }));
+    return { apple:apple.href, width:image.naturalWidth,height:image.naturalHeight,
+      name:manifest.name, start:manifest.start_url, scope:manifest.scope, icons };
+  });
+  check(appIcon.apple.endsWith('futasaku-icon-180.png') && appIcon.width===180 && appIcon.height===180,
+    'iPhone Home Screen loads the new 180px Futasaku artwork');
+  check(appIcon.name==='Futasaku' && appIcon.start==='./' && appIcon.scope==='./' && appIcon.icons.length===3 &&
+    appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&
+    appIcon.icons.some((icon: {purpose:string})=>icon.purpose==='maskable'),
+    'Android icons decode at the declared sizes with a separate mask-safe icon and Test2-local launch scope');
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#menu-howto');
     await menu.locator(`#howto-body [data-tip="${topic}"]`).click();
@@ -82,9 +100,9 @@ try {
       root.classList.add('reduce-motion');
       return { reduced, regular, duration, frames: frames.map(frame => ({ opacity: Number(frame.opacity), transform: frame.transform })) };
     });
-    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 3000 &&
-      pulse.frames.every(frame => frame.opacity >= .86 && frame.opacity <= 1 && !frame.transform),
-      `${width}: idle prompt breathes subtly without moving and respects Reduce motion (${JSON.stringify(pulse)})`);
+    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 4800 &&
+      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && ['scale(1)', 'scale(1.035)'].includes(String(frame.transform))),
+      `${width}: idle prompt zooms only 3.5% slowly and respects Reduce motion (${JSON.stringify(pulse)})`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     check(await page.evaluate(() => {
       document.documentElement.classList.remove('reduce-motion');
@@ -135,6 +153,17 @@ try {
         height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1, skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
     });
     check(skipFit.aligned && skipFit.height && skipFit.above, `${width}: Skip exactly spans bulb and ordering buttons above them (${JSON.stringify(skipFit)})`);
+    const frame = await page.evaluate(() => {
+      const box = document.querySelector<HTMLElement>('#test2-box')!;
+      const css = getComputedStyle(box);
+      const skip = document.querySelector('#moves .test2-skip')!.getBoundingClientRect();
+      const tools = document.querySelector('#test2-actions')!.getBoundingClientRect();
+      const faces = [...document.querySelectorAll('#test2-box .pile-card')].map(el=>el.getBoundingClientRect());
+      const counters = [...document.querySelectorAll('#test2-box .pile-count')].map(el=>el.getBoundingClientRect());
+      return { invisible:css.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(css.borderTopWidth) === 0 && css.boxShadow === 'none',
+        top:faces.every(face=>Math.abs(face.top-skip.top)<1), bottom:counters.every(counter=>Math.abs(counter.bottom-tools.bottom)<1) };
+    });
+    check(frame.invisible && frame.top && frame.bottom, `${width}: invisible box shares exact top and bottom alignment (${JSON.stringify(frame)})`);
     if (width === 360 || width === 1440) {
       const image = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
       if (image.length <= 192 * 1024) {

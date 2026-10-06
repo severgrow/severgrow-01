@@ -24,7 +24,8 @@ export const FEATURES = Object.freeze({
   v3: modern,
   watch: IS_TEST,
 });
-export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? 'main2:' : '';
+const isPreviewHost = typeof location !== 'undefined' && (location.hostname.endsWith('.chatgpt.site') || location.pathname.includes('/futasaku-03-preview/'));
+export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? (isPreviewHost ? 'futasaku03:' : 'main2:') : '';
 if (STORAGE_PREFIX && typeof Storage !== 'undefined') {
   const proto = Storage.prototype;
   const get = proto.getItem, set = proto.setItem, remove = proto.removeItem;

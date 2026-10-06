@@ -1,5 +1,5 @@
-// Loaded by the current Futasaku channel; historical channels keep their existing presentation.
-import logoUrl from '../assets/futasaku-white.png?url';
+// Futasaku 0.3 uses the Test2 presentation; historical channels keep their existing brand.
+import logoUrl from '../assets/futasaku-emblem.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
@@ -28,7 +28,8 @@ html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
-  height: var(--futasaku-logo-height, 12px);
+  height: var(--futasaku-logo-height, 24px);
+  align-self: start; margin-top: var(--futasaku-logo-top, 0px);
   width: auto;
   max-width: 150px;
   display: block;
@@ -38,7 +39,7 @@ html.test2-branding #hud-brand {
 html.test2-branding #menu #terrarium { display: none !important; }
 html.test2-branding #menu #logo {
   display: block !important;
-  width: min(280px, 76vw);
+  width: min(240px, 58vw, 29dvh);
   margin: 0 auto 16px;
 }
 html.test2-branding #menu #logo svg { display: block; width: 100%; height: auto; }
@@ -60,11 +61,16 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
       band: { ...old.band, y: old.band.y - 2 * reclaim } };
     for (const name of ['deck','discard','piles','moves','undo','sort'] as const)
       l.parts[name] = { ...l.parts[name], y: l.parts[name].y + 8 + reclaim };
+    // Reserve the 104px cockpit without pushing the fan below the safe screen edge.
+    const cockpitExtra = 24;
+    l.dock.h += cockpitExtra; l.dock.y -= cockpitExtra; l.rows.hand = l.dock.h;
+    l.thumb.fan.baseY += cockpitExtra;
+    l.thumb.band.y += cockpitExtra;
     l.parts.fan = { ...l.dock };
     l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
   } else {
     // Two compact control rows plus clearance for the fan's rotated upper corners.
-    l.rows.table = Math.max(104, l.parts.pileCard.h + 22);
+    l.rows.table = Math.max(124, l.parts.pileCard.h + 22);
     // The curved/rotated desktop fan needs its original 20px clearance; remove only
     // the surplus spacing, so its lower corners never cross the screen edge.
     l.rows.hand = l.card.h + 20;
@@ -91,9 +97,9 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
 function whiteLogo(id: string, accessible: boolean): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '79 57 2072 638');
-  svg.setAttribute('width', '2072');
-  svg.setAttribute('height', '638');
+  svg.setAttribute('viewBox', '0 0 1254 1254');
+  svg.setAttribute('width', '1254');
+  svg.setAttribute('height', '1254');
   svg.setAttribute('focusable', 'false');
   if (accessible) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Futasaku'); }
   else svg.setAttribute('aria-hidden', 'true');
@@ -103,8 +109,8 @@ function whiteLogo(id: string, accessible: boolean): SVGSVGElement {
   </feComponentTransfer><feFlood style="flood-color:var(--c-accent)"/><feComposite operator="in" in2="logo-mask"/></filter></defs>`;
   const image = document.createElementNS(ns, 'image');
   image.setAttribute('href', logoUrl);
-  image.setAttribute('width', '2200');
-  image.setAttribute('height', '715');
+  image.setAttribute('width', '1254');
+  image.setAttribute('height', '1254');
   image.setAttribute('filter', `url(#${id})`);
   svg.append(image);
   return svg;
@@ -138,7 +144,12 @@ export function mountBranding() {
     if (!path || !matrix) return;
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
     const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
-    if (height > 0) image.style.setProperty('--futasaku-logo-height', `${height}px`);
+    if (height > 0) {
+      image.style.setProperty('--futasaku-logo-height', `${height * 2}px`);
+      const hud = document.querySelector<HTMLElement>('#game > .hud');
+      const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c,matrix.d) / 2;
+      if (hud) image.style.setProperty('--futasaku-logo-top', `${Math.max(0,inkTop-hud.getBoundingClientRect().top)}px`);
+    }
   };
   if (menuIcon) {
     new ResizeObserver(align).observe(menuIcon);
