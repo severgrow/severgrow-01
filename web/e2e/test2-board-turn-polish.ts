@@ -101,7 +101,7 @@ async function geometry(page: Page, width: number, height: number, label: string
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
   check(brand.loaded && brand.height === brand.menuHeight && Math.abs(brand.center-brand.menuCenter) < 1,
     `${label}: white logo loads at the menu button's height and centre`);
-  check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input`);
+  check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
   const info = await page.evaluate(() => {
     const board = document.querySelector<SVGSVGElement>('#board')!;

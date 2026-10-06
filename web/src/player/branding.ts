@@ -3,7 +3,7 @@ import logoUrl from '../assets/futasaku-white.png?url';
 
 export const BRANDING_CSS = `
 html.test2-branding.slim-hud .game > .hud {
-  position: absolute;
+  position: fixed;
   inset: env(safe-area-inset-top) env(safe-area-inset-right) auto env(safe-area-inset-left);
   width: auto;
   z-index: 7;
