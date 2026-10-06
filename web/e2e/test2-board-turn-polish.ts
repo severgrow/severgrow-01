@@ -112,6 +112,21 @@ async function geometry(page: Page, width: number, height: number, label: string
     const css = getComputedStyle(grain), box = grain.getBoundingClientRect();
     const rim = document.querySelector<SVGImageElement>('#test2-map-rim')!;
     const image = new Image(); image.src = rim.getAttribute('href')!; await image.decode();
+    const pixels = document.createElement('canvas'); pixels.width = image.naturalWidth; pixels.height = image.naturalHeight;
+    const context = pixels.getContext('2d')!; context.drawImage(image,0,0);
+    const ink = context.getImageData(0,0,pixels.width,pixels.height).data;
+    let peak = 0; for (let i=3;i<ink.length;i+=4) peak = Math.max(peak,ink[i]!);
+    const cells = [...document.querySelectorAll<SVGPathElement>('#board .hex-cell > .hex')].map(path => {
+      const box = path.getBBox(); return { x: box.x+box.width/2, y: box.y+box.height/2 };
+    });
+    const distance = (a: {x:number;y:number}, b: {x:number;y:number}) => Math.hypot(a.x-b.x,a.y-b.y);
+    const nearest = Math.min(...cells.flatMap((a,i)=>cells.slice(i+1).map(b=>distance(a,b))));
+    const at = (x: number,y: number) => {
+      const px = Math.floor((x-rim.x.baseVal.value)*pixels.width/rim.width.baseVal.value);
+      const py = Math.floor((y-rim.y.baseVal.value)*pixels.height/rim.height.baseVal.value);
+      return ink[(py*pixels.width+px)*4+3] ?? 255;
+    };
+    const cleanSeams = cells.every((a,i)=>cells.slice(i+1).every(b=>distance(a,b)>nearest*1.05 || at((a.x+b.x)/2,(a.y+b.y)/2)===0));
     const backdrop = getComputedStyle(document.querySelector('#test2-board-backdrop')!);
     return { coverage: box.left === 0 && box.top === 0 && box.width === innerWidth && box.height === innerHeight,
       opacity: Number(css.opacity), pointer: css.pointerEvents, static: css.animationName === 'none' && css.filter === 'none',
@@ -119,12 +134,14 @@ async function geometry(page: Page, width: number, height: number, label: string
       darker: backdrop.display !== 'none' && Number(backdrop.opacity) === .1,
       loaded: image.complete && image.naturalWidth > 0, bounded: Math.max(image.naturalWidth,image.naturalHeight) <= 1024,
       behind: !!(rim.compareDocumentPosition(document.querySelector('#board .l-base')!) & Node.DOCUMENT_POSITION_FOLLOWING),
-      rimStatic: !rim.hasAttribute('filter') && getComputedStyle(rim).pointerEvents === 'none' && rim.getAnimations().length === 0 };
+      rimStatic: !rim.hasAttribute('filter') && getComputedStyle(rim).pointerEvents === 'none' && rim.getAnimations().length === 0,
+      restrained: peak > 0 && peak <= 32, cleanSeams };
   });
   check(atmosphere.coverage && atmosphere.opacity === .04 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
     `${label}: deterministic static 4% grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
+  check(atmosphere.restrained && atmosphere.cleanSeams, `${label}: faint rim emits light only outside the map, never along internal seams`);
   const info = await page.evaluate(() => {
     const board = document.querySelector<SVGSVGElement>('#board')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;

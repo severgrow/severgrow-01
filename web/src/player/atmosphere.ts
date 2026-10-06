@@ -1,5 +1,6 @@
 // Test2-only presentation. Both grain and rim are baked once; no live noise/blur filter,
 // animation clock, gameplay input, state or per-frame drawing.
+import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
 #test2-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
@@ -65,12 +66,22 @@ export function mountAtmosphere() {
     const b = baked.getContext('2d');
     if (!m || !b) return;
     m.scale(scale, scale); m.translate(-x, -y);
-    m.fillStyle = m.strokeStyle = '#fff'; m.lineWidth = 3;
-    // Fill the narrow hex gaps into one silhouette; only its outer contour emits light.
-    for (const path of paths) { const p = new Path2D(path.getAttribute('d')!); m.fill(p); m.stroke(p); }
-    b.shadowBlur = 12 * scale; b.shadowColor = 'rgba(255,246,207,.36)';
-    b.drawImage(mask, 0, 0);
-    b.shadowBlur = 0; b.globalCompositeOperation = 'destination-out';
+    m.fillStyle = m.strokeStyle = '#fff'; m.lineWidth = 2;
+    // Full cell polygons cover rounded artwork gaps. A connected map has one solid mask,
+    // including concave/bridge shapes, so there can be no glowing internal hex seams.
+    for (const path of paths) {
+      const key = path.parentElement?.getAttribute('data-key');
+      if (!key) continue;
+      m.beginPath();
+      cornerPts(key, S + 1).forEach(([px, py], index) => index ? m.lineTo(px, py) : m.moveTo(px, py));
+      m.closePath(); m.fill(); m.stroke();
+    }
+    b.shadowBlur = 4 * scale; b.shadowColor = 'rgba(255,246,207,.16)';
+    // Draw the source off-canvas and offset only its shadow back into view. This avoids
+    // a white antialiased outline from the mask itself leaking into the glow.
+    b.shadowOffsetX = mask.width + 32;
+    b.drawImage(mask, -b.shadowOffsetX, 0);
+    b.shadowOffsetX = 0; b.shadowBlur = 0; b.globalCompositeOperation = 'destination-out';
     b.drawImage(mask, 0, 0);
     const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
     image.id = 'test2-map-rim';
