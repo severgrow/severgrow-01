@@ -3564,9 +3564,14 @@ document.addEventListener('visibilitychange', () => {
 // the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
 if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
   const registerOffline = () => {
-    navigator.serviceWorker.register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2' ? './test2-sw.js' : './sw.js').catch(() => {
-      /* offline play is a bonus; the page works without it */
-    });
+    navigator.serviceWorker
+      .register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2' ? './test2-sw.js' : './sw.js')
+      // ask for a newer worker on every launch (browsers may otherwise keep an old one for a day);
+      // a moment after registering, when the browser is free to run the check
+      .then((r) => setTimeout(() => void r.update().catch(() => undefined), 1500))
+      .catch(() => {
+        /* offline play is a bonus; the page works without it */
+      });
   };
   if (document.readyState === 'complete') registerOffline();
   else window.addEventListener('load', registerOffline, { once: true });

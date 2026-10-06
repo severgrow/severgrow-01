@@ -112,12 +112,15 @@ console.log('Cards, save corruption, blocked storage and completed-game statisti
   const c=await browser.newContext({ignoreHTTPSErrors:true});await c.addInitScript(()=>(window as any).__name=(f:unknown)=>f);
   const p=await c.newPage();await p.goto(BASE+'/');await wait(p);await p.waitForFunction(async()=>!!(await navigator.serviceWorker.getRegistration())?.active);
   await p.evaluate(async()=>{await caches.open('test-sentinel');await (await caches.open('severgrow-v2-scoped')).put('./sentinel',new Response('main'));});
+  // a browser that kept an old Test2 cache (the V3 art manifest from an earlier release) must not be served it
+  await p.evaluate(async()=>{await (await caches.open('severor-main2-v1')).put(new URL('/test2/design-v3/manifest.json',location.href).href,new Response('{"tiers":{"lo":[],"hi":[]}}'));});
   await p.goto(BASE+'/test2/');await wait(p);await p.waitForFunction(async()=>(await navigator.serviceWorker.getRegistration())?.active?.scriptURL.endsWith('/test2/test2-sw.js'));await p.reload();await wait(p);
+  check(await p.evaluate(async()=>{const m=await (await fetch('design-v3/manifest.json?r=1')).json();return m.tiers.lo.length>0&&!!m.hash;}),'Test2 never serves a stale art manifest');
   const scope=await p.evaluate(()=>navigator.serviceWorker.controller?.scriptURL);check(scope?.endsWith('/test2/test2-sw.js'),'Test2 scoped worker controls candidate');
   await p.goto(BASE+'/test2/?seed=42');await wait(p);await p.click('#deck');await p.waitForTimeout(300);
   await p.goto(BASE+'/test2/');await wait(p);await c.setOffline(true);await p.reload();await wait(p);
   check(await p.locator('#menu-continue').isVisible(),'offline saved-game launch');await p.click('#menu-continue');await p.waitForTimeout(300);check(await p.evaluate(()=>!!(window as any).__severgrow.state()),'offline resume');
-  const keys=await p.evaluate(()=>caches.keys());check(keys.includes('test-sentinel')&&keys.includes('severgrow-v2-scoped')&&keys.includes('severor-main2-v1'),'channel caches coexist');
+  const keys=await p.evaluate(()=>caches.keys());check(keys.includes('test-sentinel')&&keys.includes('severgrow-v2-scoped')&&keys.includes('severor-main2-v2')&&!keys.includes('severor-main2-v1'),'channel caches coexist; the old Test2 cache is dropped');
   await c.setOffline(false);await p.goto(BASE+'/test/');await wait(p);check(await p.locator('#menu-lab').count()===1,'experimental Test preserved');await c.close();
 }
 console.log('Scoped offline launch and cache coexistence passed');

@@ -12,4 +12,10 @@ if (channel !== 'test') {
 if (channel === 'live') for (const n of names) assert(!/besley|commissioner|guide-|thumb-|camera-|player-css|fonts-/i.test(n), n);
 if (channel !== 'test2') for (const n of names) assert(!/^(information|help)-/.test(n), `Test2 information leaked: ${n}`);
 if (channel === 'test2') for (const prefix of ['besley-', 'commissioner-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
+if (existsSync(`${dir}/design-v3/manifest.json`)) {
+  // the art manifest lists a content hash per file (the game asks for file?v=hash, so no cache can serve a stale picture)
+  const { createHash } = await import('node:crypto');
+  const m = JSON.parse(readFileSync(`${dir}/design-v3/manifest.json`, 'utf8'));
+  for (const t of ['lo', 'hi']) for (const f of m.tiers[t]) assert.equal(m.hash?.[t]?.[f], createHash('sha1').update(readFileSync(`${dir}/design-v3/${t}/${f}`)).digest('hex').slice(0, 10), `design-v3 manifest out of date for ${t}/${f}: run npm run skin:manifest`);
+}
 console.log(`${channel}: asset isolation passed (${names.length} files)`);

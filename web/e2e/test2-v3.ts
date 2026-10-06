@@ -42,6 +42,10 @@ try {
     check(info.skin === 'forest-volcano-v3', `${w}: V3 board`);
     check(info.cells === 37, `${w}: Classic geometry`);
     check(info.ground, `${w}: ground painted`);
+    // freshness: every V3 picture on the board is drawn from memory (preloaded) or a content-addressed URL
+    // (file?v=<hash>), so no browser or offline cache can show a stale or missing one
+    const art = await page.evaluate(() => [...document.querySelectorAll('#board image')].map((i) => i.getAttribute('href') ?? '').filter((h) => h.startsWith('blob:') || h.includes('design-v3')));
+    check(art.length > 0 && art.every((h) => h.startsWith('blob:') || /\?v=[0-9a-f]{10}$/.test(h)), `${w}: V3 art from memory or content-addressed (${art.length})`);
     check(info.homes === 2, `${w}: both V3 homes`);
     check(info.tier === (phone ? 'lo' : 'lo') || info.tier === 'hi', `${w}: a tier (${info.tier})`);
     const before = await state(page);
