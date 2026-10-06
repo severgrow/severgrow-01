@@ -2373,7 +2373,7 @@ function renderControls(v: View, advice: Advice | null) {
       sub.className = 'kind-keep';
       sub.textContent = BLOOM.choices(kindButtons.length);
       toggle.append(sub);
-      if (IS_TEST2) renderBloomIcons(toggle, chosen?.kind ?? kindButtons[0]!.kind, v);
+      if (IS_TEST2) renderBloomIcons(toggle, chosen?.kind ?? kindButtons[0]!.kind, v, true);
       toggle.setAttribute('aria-haspopup', 'menu');
       toggle.setAttribute('aria-expanded', String(bloomMenu));
       moves.append(toggle);
@@ -2414,7 +2414,7 @@ function renderControls(v: View, advice: Advice | null) {
         b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
       }
       b.setAttribute('aria-pressed', String(on));
-      if (IS_TEST2) renderBloomIcons(b, k.kind, v);
+      if (IS_TEST2) renderBloomIcons(b, k.kind, v, on && !many);
       host.append(b);
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
@@ -2465,8 +2465,17 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(lab);
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
-  if (anySel && (!pending || IS_TEST2)) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
+  if (anySel && (!pending || IS_TEST2) && (!IS_TEST2 || !dc || !(draw.shape.length || draw.suggested))) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
 
+  if (IS_TEST2 && dc) {
+    for (const control of moves.querySelectorAll<HTMLButtonElement>('.draw-clear, .draw-reverse, .cancel')) {
+      control.setAttribute('aria-label', control.title || control.textContent || 'Cancel');
+      control.classList.add('test2-compact-control');
+      control.innerHTML = control.classList.contains('draw-reverse')
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+    }
+  }
   if (pending) {
     const pv = previewMove(v, pending);
     $('confirm-chip').textContent = pv ? pv.chip : pending.t === 'Discard' ? `Discard ${cardName(v.hand.find((c) => c.id === pending.card)!)}` : '';
@@ -2494,13 +2503,17 @@ function renderControls(v: View, advice: Advice | null) {
 }
 
 /** Test2 keeps the actual rank/suit combinations and accessible names, without instruction prose. */
-function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View) {
+function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View, compact = false) {
   const cards = kindCards(kind).map(id => v.hand.find(c => c.id === id)).filter(c => !!c);
   const icons = document.createElement('span');
   icons.className = 'test2-combination';
   icons.setAttribute('aria-hidden', 'true');
   icons.innerHTML = cards.map(c => `<span class="test2-mini-card ${suitClass(c!)}">${cardFace(c!)}</span>`).join('');
   button.replaceChildren(icons);
+  if (compact) {
+    button.classList.add('test2-compact-control');
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="m8 2 5 3v6l-5 3-5-3V5Zm10 6 5 3v6l-5 3-5-3v-6ZM8 14l5 3v5l-5 3-5-3v-5Z" transform="translate(0 -1) scale(.9)"/></svg>';
+  }
   button.setAttribute('aria-label', `${shortKindLabel(kind)}: ${cards.map(c => cardName(c!)).join(', ')}`);
 }
 

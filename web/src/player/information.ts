@@ -108,6 +108,7 @@ export const INFORMATION_CSS = `
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
+  transition: none !important;
 }
 .test2-information #moves .test2-skip {
   color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);
@@ -128,6 +129,16 @@ export const INFORMATION_CSS = `
 .test2-information .test2-combination .s3 { color: var(--c-ember); }
 .test2-information #moves .kind { min-height: 44px; padding: 4px 7px; }
 .test2-information #moves .bloom-toggle::after { content: '⌄'; margin-left: 4px; }
+.test2-information[data-thumb] .dock .table-row > .moves {
+  flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 4px;
+}
+.test2-information[data-thumb] .dock .table-row > .moves .btn {
+  width: auto; max-width: none; min-width: 44px; min-height: 44px;
+  margin: 0; padding: 4px 7px; flex: 0 0 auto;
+}
+.test2-information #moves .test2-compact-control { width: 44px; padding: 6px; }
+.test2-information #moves .test2-compact-control svg { width: 22px; height: 22px; }
+.test2-information #moves .bloom-toggle.test2-compact-control::after { display: none; }
 .test2-information #test2-information-subline {
   min-width: 0;
   width: 100%;

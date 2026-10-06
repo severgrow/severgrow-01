@@ -191,6 +191,11 @@ async function controls(page: Page, label: string) {
     }));
   });
   equal(blocked, [], `${label}: essential controls fit and receive taps`);
+  check(await page.evaluate(() => {
+    const dock = document.querySelector('#dock')!.getBoundingClientRect();
+    return [...document.querySelectorAll('#moves > button')].filter(button => button.getClientRects().length)
+      .every(button => button.getBoundingClientRect().top >= dock.top-1);
+  }), `${label}: move controls never spill upward into the map`);
 }
 
 async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) {

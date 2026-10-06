@@ -19,6 +19,11 @@
   Information/help and V3 browser CI passed; exact final-head critical/full CI remain required.
 - Completed Bloom previews keep only their tile counter and concrete warnings in Test2;
   redundant Bloom N tiles prose is removed there too. Full Help/accessibility descriptions remain.
+- First browser QA caught a phone-only control overflow and a legacy opacity transition at the
+  start of opponent turns. Bloom controls now share one compact 44px-target row; alternatives
+  retain full rank/suit icons in their existing chooser. Partial painting has one Clear control,
+  with Reverse as an icon and no redundant Cancel beside Clear. Waiting-hand dimming is immediate.
+  Added a strict check that move controls stay below the board. Fresh exact-head QA is required.
 
 ## Lower dock and larger map — 6 October 2026
 
