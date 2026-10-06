@@ -107,6 +107,24 @@ async function geometry(page: Page, width: number, height: number, label: string
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
+  const atmosphere = await page.evaluate(async () => {
+    const grain = document.querySelector<HTMLElement>('#test2-film-grain')!;
+    const css = getComputedStyle(grain), box = grain.getBoundingClientRect();
+    const rim = document.querySelector<SVGImageElement>('#test2-map-rim')!;
+    const image = new Image(); image.src = rim.getAttribute('href')!; await image.decode();
+    const backdrop = getComputedStyle(document.querySelector('#test2-board-backdrop')!);
+    return { coverage: box.left === 0 && box.top === 0 && box.width === innerWidth && box.height === innerHeight,
+      opacity: Number(css.opacity), pointer: css.pointerEvents, static: css.animationName === 'none' && css.filter === 'none',
+      tile: css.backgroundSize, background: css.backgroundImage.startsWith('url("data:image/png'),
+      darker: backdrop.display !== 'none' && Number(backdrop.opacity) === .1,
+      loaded: image.complete && image.naturalWidth > 0, bounded: Math.max(image.naturalWidth,image.naturalHeight) <= 1024,
+      behind: !!(rim.compareDocumentPosition(document.querySelector('#board .l-base')!) & Node.DOCUMENT_POSITION_FOLLOWING),
+      rimStatic: !rim.hasAttribute('filter') && getComputedStyle(rim).pointerEvents === 'none' && rim.getAnimations().length === 0 };
+  });
+  check(atmosphere.coverage && atmosphere.opacity === .04 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
+    `${label}: deterministic static 4% grain covers all UI without blocking input`);
+  check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
+    `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
   const info = await page.evaluate(() => {
     const board = document.querySelector<SVGSVGElement>('#board')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;

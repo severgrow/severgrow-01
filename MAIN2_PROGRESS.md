@@ -1,5 +1,20 @@
 # Main2.0 / Test2 progress
 
+## Static film grain and map separation — 6 October 2026
+
+- Test2 only: a deterministic 128px monochrome grain tile covers the entire interface at 4%
+  opacity, including the menu, cards and sheets. One fixed noninteractive layer; no animated
+  noise, full-screen blur, blend filter or recurring drawing. Generated once at mount.
+- While playing, a 10% black layer darkens only the existing background behind the interface;
+  tiles, numbers, cards and controls retain their existing brightness and contrast.
+- A restrained warm cream glow follows the map silhouette, behind its terrain and artwork.
+  Filled hex gaps prevent internal seam lighting. The shadow is baked into one bounded PNG
+  (maximum 1024px) when setup changes the map shape; ordinary moves do not regenerate it.
+  No live SVG blur filter or new animation work. Existing camera transforms carry it naturally.
+- Browser coverage verifies full-screen/nonblocking grain, precise opacity, backdrop visibility,
+  decoded/bounded static rim behind terrain, all existing input/Undo/turn checks and screenshots.
+  Main/Dev builds remain isolated; no rules, engine, bots, cards, saves or workflows changed.
+
 ## Hint bulb and restrained prompt pulse — 6 October 2026
 
 - Confirmed the existing Hint trigger remains. In Test2 only, moved it beside the original
