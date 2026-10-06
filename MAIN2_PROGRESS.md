@@ -1,5 +1,21 @@
 # Main2.0 / Test2 progress
 
+## Hint bulb and restrained prompt pulse — 6 October 2026
+
+- Confirmed the existing Hint trigger remains. In Test2 only, moved it beside the original
+  Undo and arrange-card controls as a matching line bulb in a circular button. Existing help,
+  coach, first-time lessons, focus restoration and keyboard behaviour remain intact.
+- Phones retain the existing dock/map geometry: move buttons use the upper half of the control
+  area beside the piles, with three aligned 44px buttons beneath. Left-hand mode mirrors that
+  area. Tablet/desktop group the same controls in the existing centre column; the duplicated
+  dock instruction yields to the board prompt. No extra layout row or board-space loss.
+- Idle Draw/Grow/Throw words now breathe between 94% and 100% opacity over three seconds, with
+  no scaling or movement. Action dismissal remains immediate; app/system Reduce motion disable
+  the effect. No rules, cards, bots, Undo behaviour, saves, Main or Dev changes.
+- Browser coverage checks real help actions, matching controls/target sizes/alignment, no
+  collisions with piles/moves/cards, left-hand/large-text layouts and both motion preferences.
+  Typecheck/build/isolation and exact-head CI/browser screenshots required before release.
+
 ## Futasaku branding — 6 October 2026
 
 - Follow-up: the in-game wordmark now matches the visible three-line menu glyph (about 12px),

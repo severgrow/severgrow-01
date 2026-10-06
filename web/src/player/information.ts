@@ -59,6 +59,12 @@ export const INFORMATION_CSS = `
   overflow: visible;
   animation: none !important;
 }
+@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .94; } }
+.test2-information #step-cue:is([data-step='draw'], [data-step='grow'], [data-step='throw']) .cue-text {
+  animation: test2-cue-breathe 3s ease-in-out infinite !important;
+}
+.test2-information-blocked #step-cue .cue-text,
+.test2-information.test2-move-active #step-cue .cue-text { animation-play-state: paused !important; }
 .test2-information .cue-icon,
 .test2-information .cue-kicker,
 .test2-information .cue-pips,
@@ -96,10 +102,6 @@ export const INFORMATION_CSS = `
 .test2-information #test2-notice-slot { min-width: 0; width: 100%; text-align: center; }
 .test2-information #test2-help-slot { min-width: 0; pointer-events: auto; }
 .test2-information #test2-help-slot:empty { display: none; }
-.test2-information #test2-help-button { height: 44px; min-height: 44px; line-height: 44px; }
-.test2-information #test2-help-button::before { display: none; }
-.test2-information #test2-information-rail[data-help='on']:not([data-notice-priority='major']) #test2-notice-slot,
-.test2-information #test2-information-rail[data-notice-priority='major'] #test2-help-slot { display: none; }
 .test2-information #test2-notice-slot > :not([data-information-active='true']) { display: none !important; }
 .test2-information #test2-notice-slot > [data-information-active='true'] {
   position: static !important;
@@ -133,8 +135,10 @@ export const INFORMATION_CSS = `
 .test2-information body.paused #step-cue { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .test2-information #step-cue { transition: none; }
+  .test2-information #step-cue .cue-text.cue-text { animation: none !important; }
 }
 .test2-information.reduce-motion #step-cue { transition: none; }
+.test2-information.reduce-motion #step-cue .cue-text { animation: none !important; }
 `;
 
 /** Mount after player enhancements (including mountGuide). No game state or settings change. */

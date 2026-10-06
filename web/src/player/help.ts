@@ -15,16 +15,32 @@ export const mountHelp = (hooks: HelpHooks) => {
   const style = document.createElement('style');
   style.id = 'test2-help-style';
   style.textContent = `
-    #test2-help-button {
-      position: relative; min-width: 44px; height: 24px; min-height: 24px;
-      padding: 0 4px; border: 0; border-radius: 5px; background: transparent;
-      color: var(--c-accent); font: inherit; font-size: .86rem; line-height: 24px;
-      white-space: nowrap; overflow: visible; box-shadow: none; cursor: pointer;
-      touch-action: manipulation;
+    .test2-information .dock .table-row > .hint-line { display: none; }
+    #test2-actions {
+      grid-column: 3; grid-row: 2; display: flex; align-items: center;
+      justify-content: center; gap: 16px; height: 28px; min-width: 0;
     }
-    #test2-help-button::before { content: ''; position: absolute; inset: -20px 0 0; }
+    #test2-actions > .hand-slot { flex: 0 0 28px; margin: 0; }
+    #test2-actions > .hand-slot[hidden] { display: grid; visibility: hidden; pointer-events: none; }
+    #test2-help-button { touch-action: manipulation; }
     #test2-help-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
-    .large-text #test2-help-button { font-size: 1rem; }
+    html[data-thumb] #test2-actions {
+      position: absolute; left: var(--t-moves-x);
+      top: calc(var(--t-moves-y) + var(--t-moves-h) - 44px);
+      width: calc(100% - var(--t-moves-x) - 8px); height: 44px;
+      justify-content: flex-end; gap: 4px; z-index: 3;
+    }
+    html[data-thumb] #test2-actions > .hand-slot { flex-basis: 44px; width: 44px; height: 44px; }
+    html[data-thumb] #test2-actions > .hand-slot::after { display: none; }
+    html[data-thumb] #test2-actions .i { width: 20px; height: 20px; }
+    html[data-thumb] .dock .table-row > .moves {
+      width: calc(100% - var(--t-moves-x) - 8px);
+      height: calc(var(--t-moves-h) - 48px); justify-content: flex-end;
+    }
+    html[data-thumb='left'] #test2-actions,
+    html[data-thumb='left'] .dock .table-row > .moves {
+      left: 8px; width: calc(var(--t-discard-x) - 18px); justify-content: flex-start;
+    }
     #sheet-test2-help {
       display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px;
       max-height: min(86dvh, 760px); overflow: hidden;
@@ -64,13 +80,24 @@ export const mountHelp = (hooks: HelpHooks) => {
 
   const trigger = document.createElement('button');
   trigger.id = 'test2-help-button';
-  trigger.className = 'test2-help-button';
+  trigger.className = 'hand-slot test2-help-button';
   trigger.type = 'button';
   trigger.hidden = true;
   trigger.setAttribute('aria-haspopup', 'dialog');
   trigger.setAttribute('aria-controls', HELP_SHEET_ID);
   trigger.setAttribute('aria-expanded', 'false');
-  slot.append(trigger);
+  // Keep the existing controls and handlers; only their Test2 presentation moves.
+  const actions = document.createElement('div');
+  actions.id = 'test2-actions';
+  actions.setAttribute('role', 'group');
+  actions.setAttribute('aria-label', 'Undo, hint and arrange cards');
+  const undo = document.getElementById('tool-undo');
+  const sort = document.getElementById('hand-sort');
+  const table = document.querySelector('.dock > .table-row');
+  if (!undo || !sort || !table) throw new Error('Test2 hint requires the existing card controls');
+  trigger.innerHTML = '<span class="i"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/></svg></span>';
+  actions.append(undo, trigger, sort);
+  table.append(actions);
 
   const dialog = document.createElement('section');
   dialog.id = HELP_SHEET_ID;
@@ -214,10 +241,10 @@ export const mountHelp = (hooks: HelpHooks) => {
       if (step && progress) progress.textContent = `Tip ${step}`;
       if (hasTip && !hasCoach) {
         const topic = /bloom/i.test(tipTitle) ? 'Bloom' : tipTitle;
-        trigger.textContent = `Learn: ${topic}`;
+        trigger.title = `Learn: ${topic}`;
         trigger.setAttribute('aria-label', `Learn: ${tipTitle}. Open the full explanation.`);
       } else {
-        trigger.textContent = 'Hint';
+        trigger.title = 'Hint';
         trigger.setAttribute('aria-label', step ? `Hint. Tip ${step}. Open the suggestion and explanation.` : 'Hint. Open your coach summary.');
       }
       if (!dialog.hidden) {

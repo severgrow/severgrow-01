@@ -39,6 +39,56 @@ try {
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
     check(await page.locator('#test2-help-button').isVisible(), `${width}: hint is discoverable`);
+    const tools = await page.evaluate(() => {
+      const hint = document.querySelector<HTMLElement>('#test2-help-button')!;
+      const buttons = ['tool-undo', 'test2-help-button', 'hand-sort'].map(id => document.getElementById(id)!);
+      const boxes = buttons.map(button => button.getBoundingClientRect());
+      const obstacles = [...document.querySelectorAll<HTMLElement>('#deck, #discard, #moves button, #hand .card')]
+        .filter(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
+        .map(node => ({ id: node.id || node.className, box: node.getBoundingClientRect() }));
+      const overlaps = boxes.flatMap((box, i) => obstacles.filter(({ box: other }) =>
+        box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top)
+        .map(({ id }) => `${buttons[i]!.id}/${id}`));
+      const style = getComputedStyle(hint);
+      const undo = getComputedStyle(buttons[0]!);
+      return { icon: !!hint.querySelector('svg path') && !hint.textContent?.trim(),
+        aligned: boxes.every(box => Math.abs(box.top + box.height / 2 - boxes[0]!.top - boxes[0]!.height / 2) < 1 && Math.abs(box.height-boxes[0]!.height) < 1),
+        separate: boxes.every((box, i) => !i || box.left >= boxes[i-1]!.right + 3),
+        fits: boxes.every(box => box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight),
+        matching: style.border === undo.border && style.backgroundColor === undo.backgroundColor && style.color === undo.color,
+        offMap: hint.closest('#test2-information-rail') === null && hint.parentElement?.id === 'test2-actions',
+        taps: buttons.every((button, i) => { const box = boxes[i]!; const pseudo = getComputedStyle(button,'::after');
+          const extra = pseudo.display !== 'none' ? 16 : 0;
+          return box.width+extra >= 44 && box.height+extra >= 44;
+        }), overlaps };
+    });
+    check(tools.icon && tools.offMap, `${width}: bulb replaces Hint text beside the existing tools`);
+    check(tools.aligned && tools.separate && tools.fits && tools.matching && tools.taps,
+      `${width}: tool trio matches, aligns and retains separate touch targets (${JSON.stringify(tools)})`);
+    check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
+    const pulse = await page.evaluate(() => {
+      const root = document.documentElement;
+      const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
+      const reduced = getComputedStyle(text).animationName;
+      root.classList.remove('reduce-motion');
+      const regular = getComputedStyle(text).animationName;
+      const animation = text.getAnimations()[0];
+      const frames = animation?.effect instanceof KeyframeEffect ? animation.effect.getKeyframes() : [];
+      const duration = animation?.effect?.getTiming().duration;
+      root.classList.add('reduce-motion');
+      return { reduced, regular, duration, frames: frames.map(frame => ({ opacity: Number(frame.opacity), transform: frame.transform })) };
+    });
+    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 3000 &&
+      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && !frame.transform),
+      `${width}: idle prompt breathes subtly without moving and respects Reduce motion (${JSON.stringify(pulse)})`);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    check(await page.evaluate(() => {
+      document.documentElement.classList.remove('reduce-motion');
+      const disabled = getComputedStyle(document.querySelector('#step-cue .cue-text')!).animationName === 'none';
+      document.documentElement.classList.add('reduce-motion');
+      return disabled;
+    }), `${width}: system Reduce motion also disables the pulse`);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('DRAW CARD')), `${width}: current step`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
@@ -72,6 +122,14 @@ try {
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
     check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW OR SKIP')), `${width}: Grow label follows state`);
+    if (width === 360 || width === 1440) {
+      const image = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
+      if (image.length <= 192 * 1024) {
+        console.log(`TEST2_SCREENSHOT_BEGIN ${width}x${height}-hint-bulb.jpg image/jpeg ${image.length} bytes`);
+        console.log(image.toString('base64'));
+        console.log(`TEST2_SCREENSHOT_END ${width}x${height}-hint-bulb.jpg`);
+      }
+    }
     await page.click('#test2-help-button');
     await page.keyboard.press('Escape');
     check(!await page.locator('#sheet-test2-help').isVisible(), `${width}: Escape closes`);
