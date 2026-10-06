@@ -128,13 +128,17 @@ async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) 
   await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.querySelector('#step-cue')?.getAttribute('data-level') !== 'off', phase);
   const result = await page.evaluate(() => {
     const cue = document.querySelector<HTMLElement>('#step-cue')!;
-    const map = document.querySelector<HTMLElement>('#board-wrap')!.getBoundingClientRect();
+    const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
+    const map = wrap.getBoundingClientRect();
+    const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
     const box = cue.getBoundingClientRect(), css = getComputedStyle(cue);
     return { text: cue.textContent, visible: css.visibility !== 'hidden' && css.display !== 'none' && Number(css.opacity) > 0, pointer: css.pointerEvents,
-      centered: Math.abs(box.x+box.width/2-(map.x+map.width/2)) < 3 && Math.abs(box.y+box.height/2-(map.y+map.height/2)) < 3 };
+      fontSize: parseFloat(getComputedStyle(cue.querySelector('.cue-text')!).fontSize),
+      centered: Math.abs(box.x+box.width/2-(map.x+map.width/2)) < 3 && Math.abs(box.y+box.height/2-(map.y+(map.height-under)/2)) < 3 };
   });
   check(result.visible && result.text?.toLowerCase().includes(phase === 'throw' ? 'throw' : phase), `${label}: correct ${phase} cue is visible`);
-  check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered and cannot intercept map input`);
+  check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered in the usable map and cannot intercept input`);
+  check(result.fontSize >= 30,`${label}: ${phase} cue remains legible at ${result.fontSize}px`);
 }
 
 async function undo(page: Page, before: State, label: string) {
@@ -193,6 +197,8 @@ async function sproutFlow(width: number, height: number) {
     await idle(page);
     const grown = await state(page);
     equal(grown, apply(initial,{ t:'Draw',from:'deck' }), `${label}: actual Draw preserves engine parity`);
+    await page.waitForTimeout(200);
+    await geometry(page,width,height,label+' after Draw');
     await cue(page,'grow',label);
     await evidence(page,`${width}x${height}-grow`);
     const action = legalActions(viewFor(grown,0)).find(action => action.t === 'Sprout');
@@ -237,6 +243,8 @@ async function sproutFlow(width: number, height: number) {
     }
     check(allBotActions.some(action => action.t === 'Sprout' || action.t === 'Bloom'), `${label}: real Volcano grew its numbered network`);
     check(await page.locator('#board .tile.bot:not(.root)').count() > 0 && await page.locator('#board .tile .mark-line, #board .tile .mark-ink').count() === 0, `${label}: numbered Volcano tiles remain readable without owner icons`);
+    await page.waitForTimeout(200);
+    await geometry(page,width,height,label+' after three turns');
     await controls(page,label+' after three turns');
     const resumed = await state(page);
     await page.evaluate(() => history.replaceState(null,'',location.pathname));
@@ -249,6 +257,7 @@ async function sproutFlow(width: number, height: number) {
     equal(errors,[],`${label}: no browser errors`);
   } catch (error) {
     await page.screenshot({ path: `${dir}/${width}x${height}-turns-failed.png` }).catch(() => {});
+    await evidence(page,`${width}x${height}-grow`).catch(() => {});
     throw error;
   } finally { await page.close(); }
 }
@@ -264,6 +273,8 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     await geometry(page,width,height,label);
     await page.click('#deck'); await idle(page);
     const before = await state(page);
+    await page.waitForTimeout(200);
+    await geometry(page,width,height,label+' after Draw');
     const keys = ['-2,1','-1,1','0,1'];
     const action = legalActions(viewFor(before,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === '6,43,61' && action.hexes.map(coordKey).join('|') === keys.join('|'));
     assert(action?.t === 'Bloom', `${label}: seeded legal Bloom`);
@@ -271,7 +282,8 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     const pick = async () => {
       const button = page.locator(`#moves [data-kind="${kind}"]`);
       if (!await button.isVisible()) await page.locator('#moves .bloom-toggle').click();
-      await button.click();
+      // Escape clears a partial painting and retains its selected Bloom group.
+      if (await button.getAttribute('aria-pressed') !== 'true') await button.click();
       await page.waitForTimeout(50);
     };
     await pick();
@@ -319,6 +331,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     equal(errors,[],`${label}: no browser errors`);
   } catch (error) {
     await page.screenshot({ path: `${dir}/${width}x${height}-bloom-failed.png` }).catch(() => {});
+    await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`).catch(() => {});
     throw error;
   } finally { await page.close(); }
 }

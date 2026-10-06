@@ -39,7 +39,7 @@ try {
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
     check(await page.locator('#test2-help-button').isVisible(), `${width}: hint is discoverable`);
-    check(await page.locator('#step-cue').innerText().then(text => text.includes('Draw card')), `${width}: current step`);
+    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('DRAW CARD')), `${width}: current step`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');
@@ -71,7 +71,7 @@ try {
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    check(await page.locator('#step-cue').innerText().then(text => text.includes('Grow or skip')), `${width}: Grow label follows state`);
+    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW OR SKIP')), `${width}: Grow label follows state`);
     await page.click('#test2-help-button');
     await page.keyboard.press('Escape');
     check(!await page.locator('#sheet-test2-help').isVisible(), `${width}: Escape closes`);
@@ -80,9 +80,10 @@ try {
       const rail = document.querySelector('#test2-information-rail')!.getBoundingClientRect();
       const board = document.querySelector('#board-wrap')!.getBoundingClientRect();
       const cue = document.querySelector('#step-cue')!.getBoundingClientRect();
+      const under = parseFloat(getComputedStyle(document.querySelector('#board-wrap')!).getPropertyValue('--cam-under')) || 0;
       return rail.top >= board.top && rail.bottom <= board.bottom &&
         Math.abs(cue.left + cue.width / 2 - (board.left + board.width / 2)) <= 1 &&
-        Math.abs(cue.top + cue.height / 2 - (board.top + board.height / 2)) <= 1 &&
+        Math.abs(cue.top + cue.height / 2 - (board.top + (board.height - under) / 2)) <= 1 &&
         getComputedStyle(document.querySelector('#step-cue')!).pointerEvents === 'none' &&
         cue.left >= 0 && cue.right <= innerWidth &&
         document.querySelector('#test2-information-rail')!.parentElement?.id === 'board-wrap';

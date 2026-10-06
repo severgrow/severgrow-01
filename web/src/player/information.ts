@@ -28,7 +28,7 @@ export const INFORMATION_CSS = `
 }
 .test2-information #step-cue {
   position: absolute !important;
-  inset: 50% auto auto 50% !important;
+  inset: calc((100% - var(--cam-under, 0px)) / 2) auto auto 50% !important;
   transform: translate(-50%, -50%) !important;
   width: calc(100% - 28px);
   max-width: 560px;
@@ -69,7 +69,8 @@ export const INFORMATION_CSS = `
   gap: 0;
   line-height: 1.08;
 }
-.test2-information .cue-text {
+.test2-information #step-cue .cue-text {
+  font-family: var(--font-ui, inherit);
   font-size: clamp(30px, 8.2vw, 48px);
   line-height: 1.08;
   font-weight: 750;
@@ -80,7 +81,7 @@ export const INFORMATION_CSS = `
   -webkit-text-stroke: .35px rgba(0,0,0,.5);
   animation: none !important;
 }
-.test2-information.large-text .cue-text { font-size: clamp(32px, 8.8vw, 52px); }
+.test2-information.large-text #step-cue .cue-text { font-size: clamp(32px, 8.8vw, 52px); }
 .test2-information #step-cue[data-step='opp'] .cue-text { font-size: clamp(24px, 6.6vw, 38px); }
 .test2-information #test2-information-subline {
   min-width: 0;

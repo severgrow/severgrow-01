@@ -2448,7 +2448,7 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(lab);
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
-  if (anySel && !pending) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
+  if (anySel && (!pending || IS_TEST2)) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
 
   if (pending) {
     const pv = previewMove(v, pending);
@@ -2900,7 +2900,7 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   if (session!.presetMove) text = '';
   else if (g?.action) {
     const pv = previewMove(v, g.action);
-    text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+    text = `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}${IS_TEST2 && draw.msg ? ` · ${draw.msg}` : ''}`;
   } else if (g?.reason) text = draw.msg ? `${g.reason} · ${draw.msg}` : g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;
@@ -2958,7 +2958,17 @@ function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
   if (((type === 'mouse' || type === 'keyboard') && draw.shape.length === 0) || draw.desk.phase === 'live') {
     const r = deskClick(draw.desk, key, v, c, draw.reverse);
-    if (r.finish) return finishDraw(r.finish);
+    if (r.finish) {
+      // The desktop shape grows toward the pointer, so hovering rock can still suggest a
+      // legal nearby clump. Test2 finishes only when the chosen hex belongs to that clump.
+      if (IS_TEST2 && !r.finish.hexes.some((h) => coordKey(h) === key)) {
+        draw = { ...draw, desk: deskHover(draw.desk, key), msg: 'Choose a glowing hex' };
+        board.shake(settings.reduceMotion);
+        paintDraw();
+        return;
+      }
+      return finishDraw(r.finish);
+    }
     // a click on another legal start begins again from there
     if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && drawStarts(c, draw.reverse).has(key) && !deskShape(v, c, r.desk, draw.reverse).action) {
       draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [] };
@@ -3015,7 +3025,7 @@ const drawHandlers = {
     if (draw.desk.phase === 'live') {
       const k = hexAtPoint(p.x, p.y, keys);
       if (k && k !== draw.desk.hover) {
-        draw = { ...draw, desk: deskHover(draw.desk, k) };
+        draw = { ...draw, desk: deskHover(draw.desk, k), msg: IS_TEST2 ? null : draw.msg };
         paintDraw();
       }
       if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
@@ -3087,7 +3097,10 @@ const drawHandlers = {
     if (!inside) return cancelDraw('Painting cancelled');
     // a live two-click shape dragged and released: it finishes where it was released
     if (draw.desk.phase === 'live') {
-      const k = hexAtPoint(p.x, p.y, new Set(board.boardKeys)) ?? draw.desk.hover;
+      const at = hexAtPoint(p.x, p.y, new Set(board.boardKeys));
+      // A release in a gap must not substitute the last legal hovered destination.
+      if (IS_TEST2 && !at) return cancelDraw('Painting cancelled');
+      const k = at ?? draw.desk.hover;
       return drawTap(c, k, ptr.type);
     }
     const g = drawGhostNow(c);

@@ -103,3 +103,10 @@ Preserved incoming commit 51640aa7 and its optional V3 look; the original look r
 ### NOT YET VERIFIED
 - Exact-head remote CI/browser results and newly published public Test2 build.
 - Real iPhone Safari and Android hardware.
+
+### FIRST CI REVIEW / FOLLOW-UP
+- Published candidate eaabee194fa4aa77fdfed500c7f51623ce20e6d0 with its tested tree. CI 37437163691 passed all nine real Forest/Volcano three-turn flows, including immediate Sprout, invalid rock, Undo, Skip, save/reload and control fit. Existing V3 (24 checks), Fruit, empty-turn, Pro, painting, monkey and overhaul suites passed.
+- Bloom coverage found and fixed a Test2 desktop edge case: directional painting could return a legal neighbouring clump when its final click was rock. A completed shape now requires the clicked destination to belong to it; a release in a gap cancels. Pending previews expose Cancel on touch. No rule or bot changes.
+- Corrected the phone test driver to retain the selected Bloom group after Escape clears only its partial shape; all complete and invalid Bloom assertions remain.
+- Reviewed the actual 360x640 CI screenshot. Corrected font selector specificity so the intended 30–48px prompt is not overridden by the legacy 16.5px type rule. Its centre now excludes the camera area behind the cards. Added computed text-size and post-Draw/post-turn map-boundary checks. Corrected legacy phase assertions to match the requested uppercase rendering.
+- The first CI remains failed and cannot publish. The follow-up requires a fresh complete exact-head CI run and visual review.
