@@ -316,9 +316,9 @@ async function sproutFlow(width: number, height: number) {
     const resumed = await state(page);
     await page.evaluate(() => history.replaceState(null,'',location.pathname));
     await page.reload();
-    equal(await page.locator('#menu .title').innerText(), 'Futasaku', `${label}: main screen uses the new name`);
     // HTML names the game before the async branding chunk mounts its supplied logo.
     await page.locator('#logo svg').waitFor({ state: 'visible' });
+    equal(await page.locator('#menu .title').innerText(), 'Futasaku', `${label}: main screen uses the new name`);
     check(await page.locator('#logo svg').isVisible(), `${label}: supplied logo replaces the old menu mark`);
     check(await page.evaluate(() => getComputedStyle(document.querySelector('#logo feFlood')!).floodColor === getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor), `${label}: main-screen logo matches Continue cream`);
     check(!/severor/i.test(await page.locator('body').innerText()), `${label}: old name is absent from visible copy`);
@@ -436,6 +436,19 @@ try {
       catch (error) { const failure=`${width}x${height} ${name}: ${error instanceof Error ? error.message : String(error)}`; failures.push(failure); console.error(failure); }
     }
   }
+  const safe = await open(390,844,219682080);
+  try {
+    const before = await state(safe.page);
+    // Model an iPhone notch/home indicator; the existing screen and inset probe agree.
+    await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.test2-branding .game > .hud { top:24px; }' });
+    await safe.page.setViewportSize({ width:390,height:843 });
+    await safe.page.waitForTimeout(250);
+    await geometry(safe.page,390,843,'phone with notch/home indicator');
+    await controls(safe.page,'phone with notch/home indicator');
+    const bottom = await safe.page.locator('#hand .card').evaluateAll(cards => Math.max(...cards.map(card=>card.getBoundingClientRect().bottom)));
+    check(bottom <= 843-34-2, 'lower hand keeps a clear margin above the home indicator');
+    equal(await state(safe.page),before,'safe-area resizing changes no game state');
+  } finally { await safe.page.close(); }
   writeFileSync(`${dir}/report.json`,JSON.stringify({ checks,failures,measurements,evidence:[...evidenceWritten] },null,2));
   equal(failures,[],`board/turn polish failures; evidence ${dir}/report.json`);
   console.log(`${checks} board/turn polish checks passed; screenshots and geometry: ${dir}`);

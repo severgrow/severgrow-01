@@ -18,11 +18,12 @@ html.test2-branding .game > #race { display: none !important; }
 html.test2-branding .game { max-width: none; margin: 0; }
 html.test2-branding .play { --board-margin: 2px; }
 html.test2-branding[data-layout='stack'] .board-wrap {
-  margin-left: max(2px, env(safe-area-inset-left));
-  margin-right: max(2px, env(safe-area-inset-right));
+  margin-left: 2px;
+  margin-right: 2px;
 }
 html.test2-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
-html.test2-branding .dock { padding-bottom: calc(4px + env(safe-area-inset-bottom)); }
+/* The screen already reserves the notch/home-indicator insets. */
+html.test2-branding .dock { padding-bottom: 4px; }
 html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
@@ -63,12 +64,13 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
     l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
   } else {
     l.rows.table = Math.max(84, l.parts.pileCard.h + 22);
-    l.rows.hand = l.card.h + 8;
+    // The curved/rotated desktop fan needs its original 20px clearance; remove only
+    // the surplus spacing, so its lower corners never cross the screen edge.
+    l.rows.hand = l.card.h + 20;
     const gap = l.mode === 'side' ? 8 : 0;
-    l.dock.h = l.rows.table + l.rows.hand + gap + 4 + (l.mode === 'stack' ? bottom : 0);
+    l.dock.h = l.rows.table + l.rows.hand + gap + 4;
     l.dock.y = v.h-bottom-l.dock.h;
     if (l.mode === 'stack') {
-      l.dock.y = v.h-l.dock.h;
       l.zone = { x: left+2, y: l.header.y+l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
     } else {
       l.zone = { x: left+2, y: l.header.y+l.header.h, w: v.w-left-right-l.dock.w-6, h: v.h-l.header.y-l.header.h-bottom-2 };
