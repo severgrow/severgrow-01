@@ -34,6 +34,17 @@ export const CARDS_CSS = `
 .test2-cards .dock .pile-top.card.fruit .c-fruit svg {
   width:calc(var(--cw)*.52); height:calc(var(--cw)*.52);
 }
+/* Clear keyboard feedback; pointer taps retain the existing selected-card styling. */
+.test2-cards .card:focus-visible, .test2-cards .pile:focus-visible {
+  outline:2px solid var(--c-accent); outline-offset:3px;
+}
+/* Quiet dark counters avoid pale badges competing with the hand's colours. */
+.test2-cards .dock :is(#deck, #discard) .pile-count {
+  background:rgba(20,21,21,.92); color:var(--c-accent);
+  border:1px solid color-mix(in srgb, var(--c-accent) 28%, transparent);
+  font-weight:700; display:inline-grid; place-items:center; line-height:1;
+}
+.test2-cards .dock #deck.low .pile-count { color:var(--c-gold); }
 .test2-cards .card.fruit .c-idx svg { width:calc(var(--cw)*.25); height:calc(var(--cw)*.25); }
 `;
 

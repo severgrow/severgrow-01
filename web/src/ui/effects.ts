@@ -4,7 +4,7 @@ import { SUIT_NAMES } from '../../../src/engine/index.js';
 import type { Card } from '../../../src/engine/index.js';
 import type { BoardView } from './board.js';
 import { S, centerOf, el, star } from './board.js';
-import { BOMB_SVG, FRUIT_SVG, SUIT_SVG } from './icons.js';
+import { BOMB_INDEX_SVG, BOMB_SVG, FRUIT_SVG, SUIT_SVG } from './icons.js';
 declare const __CHANNEL__: string;
 const IS_TEST2 = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2';
 import { FRUIT } from '../../../src/strings.js';
@@ -34,7 +34,7 @@ export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c
  */
 export const cardFace = (c: Card) =>
   c.suit === null
-    ? `<span class="c-num c-idx" aria-hidden="true">${IS_TEST2 ? BOMB_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" title="${IS_TEST2 ? 'Bomb' : FRUIT.print}">${IS_TEST2 ? BOMB_SVG : FRUIT_SVG}</span>`
+    ? `<span class="c-num c-idx" aria-hidden="true">${IS_TEST2 ? BOMB_INDEX_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" title="${IS_TEST2 ? 'Bomb' : FRUIT.print}">${IS_TEST2 ? BOMB_SVG : FRUIT_SVG}</span>`
     : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
 
 export const shakeFrames = (a: number): Keyframe[] => [

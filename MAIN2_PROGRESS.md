@@ -1,5 +1,17 @@
 # Main2.0 / Test2 progress
 
+## Bomb silhouette and restrained atmosphere follow-up — 6 October 2026
+
+- Test2 only: fuller round Bomb body, tilted collar, curved fuse, glint and tiny star spark
+  inspired by the reference; cream ink and dark translucent card faces stay consistent.
+- Grain increases relatively by 10% (4% to 4.4%). Black backdrop opacity becomes 23.5%,
+  giving 15% less light than the previous 10% black overlay: .9 * .85 = .765.
+- Three additional small refinements: simplified Bomb corner glyph for tiny cards; dark/cream
+  pile counters with low-deck amber preserved; explicit cream keyboard focus for cards/piles.
+- Main/Dev, rules/actions, Undo, card dimensions/fan, animations and board geometry unchanged.
+  Existing typecheck/full checks, isolated builds and browser screenshot review remain required.
+
+
 ## Card palette and Bomb presentation — 6 October 2026
 
 - Test2 only: exact approved suit inks (#7FCF8D leaf, #B389F3 frost, #76A8F5 water,

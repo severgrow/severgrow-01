@@ -146,14 +146,14 @@ async function geometry(page: Page, width: number, height: number, label: string
     return { coverage: box.left === 0 && box.top === 0 && box.width === innerWidth && box.height === innerHeight,
       opacity: Number(css.opacity), pointer: css.pointerEvents, static: css.animationName === 'none' && css.filter === 'none',
       tile: css.backgroundSize, background: css.backgroundImage.startsWith('url("data:image/png'),
-      darker: backdrop.display !== 'none' && Number(backdrop.opacity) === .1,
+      darker: backdrop.display !== 'none' && Number(backdrop.opacity) === .235,
       loaded: image.complete && image.naturalWidth > 0, bounded: Math.max(image.naturalWidth,image.naturalHeight) <= 1024,
       behind: !!(rim.compareDocumentPosition(document.querySelector('#board .l-base')!) & Node.DOCUMENT_POSITION_FOLLOWING),
       rimStatic: !rim.hasAttribute('filter') && getComputedStyle(rim).pointerEvents === 'none' && rim.getAnimations().length === 0,
       restrained: peak > 0 && peak <= 32, cleanSeams };
   });
-  check(atmosphere.coverage && atmosphere.opacity === .04 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
-    `${label}: deterministic static 4% grain covers all UI without blocking input`);
+  check(atmosphere.coverage && atmosphere.opacity === .044 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
+    `${label}: deterministic static 4.4% grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
   check(atmosphere.restrained && atmosphere.cleanSeams, `${label}: faint rim emits light only outside the map, never along internal seams`);
@@ -262,7 +262,7 @@ async function fruitFlow(width: number, height: number) {
     const palette = await page.locator('#hand .card').evaluateAll(cards => cards.map(card => ({
       suit:card.className.match(/\bs[0-3]\b/)?.[0] ?? 'bomb', ink:getComputedStyle(card.querySelector('.c-num')!).color,
       background:getComputedStyle(card).backgroundColor, border:getComputedStyle(card,'::after').borderStyle,
-      title:card.querySelector('.c-suit')?.getAttribute('title'), circles:card.querySelectorAll('.c-fruit svg circle').length,
+      title:card.querySelector('.c-suit')?.getAttribute('title'), spark:!!card.querySelector('.c-fruit .bomb-spark'), simpleIndex:!card.querySelector('.c-idx .bomb-spark'), circles:card.querySelectorAll('.c-fruit svg circle').length,
       name:card.getAttribute('aria-label')
     })));
     for (const [suit,color] of [['s0','rgb(127, 207, 141)'],['s1','rgb(179, 137, 243)'],['s2','rgb(118, 168, 245)'],['s3','rgb(238, 125, 115)']]) {
@@ -270,8 +270,16 @@ async function fruitFlow(width: number, height: number) {
     }
     check(palette.every(card=>card.background==='rgba(20, 21, 21, 0.88)'), 'Bomb/cards: all faces keep the same dark translucent background');
     const bomb=palette.find(card=>card.suit==='bomb')!;
-    check(bomb.title==='Bomb' && bomb.name?.includes('Bomb') && bomb.circles===1 && bomb.border==='double','Bomb: round line icon, cream double frame and accessible name replace mushroom');
+    check(bomb.title==='Bomb' && bomb.name?.includes('Bomb') && bomb.circles===1 && bomb.spark && bomb.simpleIndex && bomb.border==='double','Bomb: round line icon, cream double frame and accessible name replace mushroom');
     check(!await page.locator('body').innerText().then(text=>/\bfruit(?:ed)?\b/i.test(text)),'Bomb: no obsolete visible name');
+    const counts=await page.locator('.dock .pile-count').evaluateAll(nodes=>nodes.map(el=>({background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,text:el.textContent})));
+    check(counts.every(c=>c.background==='rgba(20, 21, 21, 0.92)' && c.text?.trim()),'Card counters: quiet dark faces retain readable actual counts');
+    await page.keyboard.press('Tab');
+    const focusCard=page.locator(`#hand [data-card="${action.card}"]`);
+    await focusCard.focus();
+    check(await focusCard.evaluate(el=>el.matches(':focus-visible') && getComputedStyle(el).outlineWidth==='2px'),'Card focus: keyboard selection has a clear separate outline');
+    await page.locator('#hud-menu').focus();
+    equal(await state(page),before,'Card focus and counter styling change no state');
     await evidence(page,`${width}x${height}-bomb-cards`);
     await page.locator(`#hand [data-card="${action.card}"]`).click();
     equal(await state(page),before,'Fruit: choosing the card alone does not spend it');

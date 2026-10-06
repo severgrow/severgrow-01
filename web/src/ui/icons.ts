@@ -51,8 +51,16 @@ export const FRUIT_SVG = wrap(
     '<circle cx="6" cy="4.5" r=".6" fill="currentColor"/><circle cx="18.5" cy="4" r=".5" fill="currentColor"/><circle cx="20.5" cy="7.5" r=".45" fill="currentColor"/>',
 );
 
-/** Test2's special card: restrained linework, short fuse and one tiny spark. */
+/** Test2 bomb: full round body, tilted collar, curved fuse and a restrained star spark. */
 export const BOMB_SVG = /* @__PURE__ */ wrap(
-  '<circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" fill-opacity=".12"/>' +
-  '<path d="m14 9 2-2-2-2-2 2M16 6c1.5-2 3-1 3-3M7 12.5a4 4 0 0 1 2-1.5M20 1v1M22 3h-1M21.5 1.5l-.7.7"/>',
+  '<circle cx="9.8" cy="14.2" r="7.2" fill="currentColor" fill-opacity=".2"/>' +
+  '<path d="m11.9 7.3 1.3-3.5 3.2 1.2-1.3 3.5M14.9 4.3C17.1 1.2 18.7 1.5 20 3.4"/>' +
+  '<path d="M5.3 14.3c.3-2.6 1.8-4.6 4-5.1" stroke-width="1.15"/>' +
+  '<path class="bomb-spark" d="m20 1 .6 2 2-.6-1 1.7 1.8 1-2.1.2.1 2-1.4-1.5-1.5 1 .4-2-1.8-.8 2-.6Z" fill="currentColor" fill-opacity=".16" stroke-width="1.1"/>',
+);
+
+/** Tiny corner mark: omit the star/glint so the body and curved fuse stay readable. */
+export const BOMB_INDEX_SVG = /* @__PURE__ */ wrap(
+  '<circle cx="10" cy="14" r="7" fill="currentColor" fill-opacity=".2"/>' +
+  '<path d="m12.5 7.5 1-3 3 1-1 3M15 5c2-3 4-3 5-1"/>',
 );

@@ -4,10 +4,10 @@ import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
 #test2-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
-  opacity: .04; background-repeat: repeat; background-size: 128px 128px;
+  opacity: .044; background-repeat: repeat; background-size: 128px 128px;
   user-select: none;
 }
-#test2-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .10; display: none; }
+#test2-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #test2-board-backdrop { display: block; }
 #test2-map-rim { pointer-events: none; }
 `;
