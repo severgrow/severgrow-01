@@ -27,7 +27,7 @@ const filter = process.env.TEST2_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
-const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu']);
+const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices']);
 const evidenceWritten = new Set<string>();
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
@@ -44,7 +44,7 @@ const tapHex = async (page: Page, key: string, touch: boolean) => {
   } else await page.locator(`#board .hex-cell[data-key="${key}"]`).click();
 };
 
-/** At most two phone images and one desktop image, bounded to 192 KiB each for CI log review. */
+/** Selected phone/desktop states, individually bounded to 192 KiB for CI log review. */
 async function evidence(page: Page, name: string) {
   if (!evidenceNames.has(name) || evidenceWritten.has(name)) return;
   let bytes = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
@@ -207,11 +207,12 @@ async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) 
     const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
     const box = cue.getBoundingClientRect(), css = getComputedStyle(cue);
     return { text: cue.querySelector('.cue-text')?.textContent, visible: css.visibility !== 'hidden' && css.display !== 'none' && Number(css.opacity) > 0, pointer: css.pointerEvents,
-      fontSize: parseFloat(getComputedStyle(cue.querySelector('.cue-text')!).fontSize),
+      fontSize: parseFloat(getComputedStyle(cue.querySelector('.cue-text')!).fontSize), font:getComputedStyle(cue.querySelector('.cue-text')!).fontFamily, opacity:Number(css.opacity),
       centered: Math.abs(box.x+box.width/2-(map.x+map.width/2)) < 3 && Math.abs(box.y+box.height/2-(map.y+(map.height-under)/2)) < 3 };
   });
   check(result.visible && result.text?.trim().toLowerCase() === phase, `${label}: correct ${phase} cue is visible`);
   check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered in the usable map and cannot intercept input`);
+  check(result.font.includes('Besley') && result.opacity === .688, `${label}: Besley cue is exactly 20% fainter`);
   check(result.fontSize >= 30,`${label}: ${phase} cue remains legible at ${result.fontSize}px`);
 }
 
@@ -305,7 +306,21 @@ async function finishTurn(page: Page, label: string) {
     });
     observer.observe(document.documentElement,{ attributes:true,attributeFilter:['data-step'] });
   });
-  await page.locator(`#hand [data-card="${discard.card}"]`).click();
+  const picked = page.locator(`#hand [data-card="${discard.card}"]`);
+  await picked.click();
+  equal(await state(page),before,`${label}: first Throw tap never spends a card or advances the turn`);
+  const selection = await picked.evaluate(el => ({ selected:el.classList.contains('test2-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
+  check(selection.selected && selection.filter === 'grayscale(1)' && selection.transform !== 'none',`${label}: Throw preview is enlarged and completely desaturated`);
+  const other = legalActions(viewFor(before,0)).find(a => a.t === 'Discard' && a.card !== discard.card);
+  if (other?.t === 'Discard') {
+    await page.locator(`#hand [data-card="${other.card}"]`).click();
+    equal(await state(page),before,`${label}: selecting another card changes the preview without throwing`);
+    equal(await page.locator('#hand .test2-throw-picked').getAttribute('data-card'),String(other.card),`${label}: only the new card is selected`);
+    await picked.click();
+    equal(await state(page),before,`${label}: returning to the first card still waits for confirmation`);
+  }
+  if (label.startsWith('360x640') && label.endsWith('turn 1')) await evidence(page,'360x640-throw-preview');
+  await picked.click();
   await idle(page);
   equal(await state(page), expected, `${label}: actual Volcano opponent turn matches every deterministic engine/bot action`);
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);
@@ -430,8 +445,10 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       if (!await button.isVisible()) await page.locator('#moves .bloom-toggle').click();
       // Escape clears a partial painting and retains its selected Bloom group.
       if (await button.getAttribute('aria-pressed') !== 'true') await button.click();
+      if (await page.locator('#moves .bloom-options').isVisible()) await page.locator('#moves .bloom-toggle').click();
       await page.waitForTimeout(50);
     };
+    if (width === 390 && height === 664) await evidence(page,'390x664-bloom-choices');
     await pick();
     equal((await page.locator('#moves .test2-skip').innerText()).trim(),'Skip',`${label}: Bloom retains a short Skip button`);
     check(await page.locator('#moves .test2-skip').isEnabled(),`${label}: subdued Skip remains usable`);
@@ -504,7 +521,41 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
   } finally { await page.close(); }
 }
 
+
+async function drawGlow() {
+  // Real save fixtures distinguish new combinations, existing combinations and duplicate faces.
+  for (const [label, numbers, topFace, wanted] of [
+    ['new run', [[0,4],[0,5],[2,9]], [0,6], true],
+    ['unrelated card', [[0,4],[0,5],[0,6]], [3,9], false],
+    ['duplicate face', [[0,4],[0,5],[0,6]], [0,4], false],
+    ['extends an existing run', [[0,4],[0,5],[0,6]], [0,7], true],
+  ] as const) {
+    const game = fruitPosition(NINE_CHAIN, numbers.map(([s,r]) => [s,r]),0);
+    const index = game.deck.findIndex(c => c.suit === topFace[0] && c.rank === topFace[1]);
+    assert(index >= 0,'top card exists in fixture deck');
+    const [top] = game.deck.splice(index,1);
+    game.deck.push(...game.discard); game.discard=[top!]; game.phase='DRAW';
+    const page = await browser.newPage({ viewport:{width:390,height:844},hasTouch:true,isMobile:true });
+    try {
+      await page.addInitScript(save => {
+        (window as any).__name=(f:unknown)=>f;
+        localStorage.setItem('main2:severgrow.save.v7',save);
+        localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:true,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
+      },positionSave({state:game}));
+      await page.goto(base); await page.waitForFunction(() => !!(window as any).__severgrow);
+      await page.click('#menu-continue'); await idle(page);
+      equal(await state(page),game,`${label}: exact real position resumes`);
+      equal(await page.locator('#discard').evaluate(el=>el.classList.contains('test2-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
+      equal(await page.locator('#deck.coach-glow').count(),0,`${label}: no square Deck recommendation`);
+      equal(await page.locator('.pile-label:visible').count(),0,`${label}: pile labels are hidden`);
+      check((await page.locator('#discard').getAttribute('aria-label'))?.startsWith('Throw pile:'),`${label}: accessible pile name remains`);
+      equal(await state(page),game,`${label}: highlighting changes no game state`);
+    } finally { await page.close(); }
+  }
+}
+
 try {
+  await drawGlow();
   for (const [index,[width,height]] of presets.entries()) {
     if (filter && !filter.includes(`${width}x${height}`)) continue;
     for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height,index%2 === 1)]] as const) {

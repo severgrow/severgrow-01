@@ -5,7 +5,7 @@ import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
 import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, viewFor } from '../../src/engine/index.js';
-import type { Action, Player, RulesConfig, State, View } from '../../src/engine/index.js';
+import type { Action, Card, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -2163,7 +2163,7 @@ function renderBoard(v: View, advice: Advice | null) {
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
-      coachHexes: advice && !anySel ? advice.hexes.map(coordKey) : [],
+      coachHexes: advice && !anySel && !IS_TEST2 ? advice.hexes.map(coordKey) : [],
       usable: true,
     };
     const dc = drawCombo();
@@ -2362,7 +2362,7 @@ function renderControls(v: View, advice: Advice | null) {
     // crowd the row or run off the screen); a single way gets its own button
     const many = kindButtons.length > 1;
     let host: HTMLElement = moves;
-    if (!many) bloomMenu = false;
+    if (!many && (!IS_TEST2 || !sel.kind?.startsWith('bloom-'))) bloomMenu = false;
     if (many) {
       const chosen = kindButtons.find((k) => sel.kind === k.kind);
       const toggle = button(chosen ? shortKindLabel(chosen.kind) : BLOOM.Name, `kind bloom-toggle${chosen || bloomMenu ? ' on' : ''}`, () => {
@@ -2414,13 +2414,23 @@ function renderControls(v: View, advice: Advice | null) {
         b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
       }
       b.setAttribute('aria-pressed', String(on));
-      if (IS_TEST2) renderBloomIcons(b, k.kind, v, on && !many);
+      if (IS_TEST2) renderBloomIcons(b, k.kind, v, !many && (on || kindCards(k.kind).length > 4));
       host.append(b);
+    }
+    if (IS_TEST2 && !many && sel.kind?.startsWith('bloom-') && kindButtons.length) {
+      const chosenButton = moves.querySelector<HTMLButtonElement>('[data-kind]')!;
+      const toggle = button('', 'kind bloom-toggle on', () => { bloomMenu = !bloomMenu; render(); });
+      renderBloomIcons(toggle, sel.kind, v, true);
+      toggle.setAttribute('aria-haspopup', 'menu');
+      toggle.setAttribute('aria-expanded', String(bloomMenu));
+      const panel = document.createElement('div'); panel.className = 'bloom-options';
+      panel.setAttribute('role', 'menu'); panel.hidden = !bloomMenu;
+      moves.replaceChild(toggle, chosenButton); panel.append(chosenButton); moves.append(panel);
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
-    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+    const label = v.hand.length > 0 ? IS_TEST2 ? 'Skip' : 'Throw a card' : 'End turn';
+    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${IS_TEST2 && v.hand.length > 0 ? ' test2-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
     if (end && !pending && grow.skipLink && !anySel) moves.append(button(IS_TEST2 ? 'Skip' : SPROUT.skip, `link end skip${IS_TEST2 ? ' test2-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
@@ -2465,9 +2475,13 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(lab);
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
-  if (anySel && (!pending || IS_TEST2) && (!IS_TEST2 || !dc || !(draw.shape.length || draw.suggested))) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
+  if (anySel && (!pending || IS_TEST2)) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
 
   if (IS_TEST2 && dc) {
+    const panel = moves.querySelector<HTMLElement>('.bloom-options');
+    if (panel) for (const control of [...moves.children]) {
+      if (control.matches('.draw-clear, .draw-reverse, .list-prev, .list-pos, .list-next, .cancel')) panel.append(control);
+    }
     for (const control of moves.querySelectorAll<HTMLButtonElement>('.draw-clear, .draw-reverse, .cancel')) {
       control.setAttribute('aria-label', control.title || control.textContent || 'Cancel');
       control.classList.add('test2-compact-control');
@@ -2605,7 +2619,10 @@ function renderHand(v: View, advice: Advice | null) {
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
-    if (IS_TEST2) b.classList.toggle('test2-bloom-card', bloomCards.has(c.id));
+    if (IS_TEST2) {
+      b.classList.toggle('test2-bloom-card', bloomCards.has(c.id));
+      b.classList.toggle('test2-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
+    }
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {
@@ -2624,7 +2641,7 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_TEST2 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -2691,8 +2708,15 @@ function renderPiles(v: View, advice: Advice | null) {
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
     const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
-    b.classList.toggle('coach-glow', coachOn);
+    b.classList.toggle('coach-glow', IS_TEST2 ? false : coachOn);
     $(`${id}-hint`).textContent = look.hint ?? '';
+  }
+  if (IS_TEST2) {
+    // A new card combination, regardless of board space. Duplicate faces don't create one.
+    const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
+    const before = new Set(bloomGroups(v.hand).map(g => key(g.cards)));
+    const createsBloom = !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
+    $('discard').classList.toggle('test2-bloom-draw', looks.discard.enabled && createsBloom);
   }
   $('deck').setAttribute('aria-label', `Deck: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
   $('discard').setAttribute('aria-label', top ? `Throw pile: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : 'Throw pile: empty');
@@ -2862,6 +2886,7 @@ function maybeAutoPlay() {
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
 function asksConfirm(a: Action): boolean {
+  if (IS_TEST2 && a.t === 'Discard') return true;
   if (IS_TEST2 && (a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit')) return false;
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }

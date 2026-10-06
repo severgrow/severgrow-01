@@ -73,7 +73,11 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check((await state(page)).phase === 'DISCARD', `${w}: end Grow enters Throw`);
   before = await state(page);
   const discard = legalActions(viewFor(before,0)).find(a=>a.t==='Discard'); assert(discard?.t==='Discard');
-  await page.locator(`#hand [data-card="${discard.card}"]`).click();
+  const throwCard = page.locator(`#hand [data-card="${discard.card}"]`);
+  await throwCard.click();
+  check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: selecting Throw leaves engine state unchanged`);
+  check(await throwCard.evaluate(el => el.classList.contains('test2-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
+  await throwCard.click();
   await page.waitForTimeout(100);
   check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual card throw`);
   await idle(page);

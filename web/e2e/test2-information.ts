@@ -66,6 +66,8 @@ try {
     check(tools.aligned && tools.separate && tools.fits && tools.matching && tools.taps,
       `${width}: tool trio matches, aligns and retains separate touch targets (${JSON.stringify(tools)})`);
     check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
+    check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
+    check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
     const pulse = await page.evaluate(() => {
       const root = document.documentElement;
       const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
@@ -79,7 +81,7 @@ try {
       return { reduced, regular, duration, frames: frames.map(frame => ({ opacity: Number(frame.opacity), transform: frame.transform })) };
     });
     check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 3000 &&
-      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && !frame.transform),
+      pulse.frames.every(frame => frame.opacity >= .86 && frame.opacity <= 1 && !frame.transform),
       `${width}: idle prompt breathes subtly without moving and respects Reduce motion (${JSON.stringify(pulse)})`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     check(await page.evaluate(() => {
@@ -122,6 +124,15 @@ try {
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
     check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW')), `${width}: Grow label follows state`);
+    check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
+    const skipFit = await page.evaluate(() => {
+      const skip = document.querySelector('#moves > .test2-skip')!.getBoundingClientRect();
+      const bulb = document.querySelector('#test2-help-button')!.getBoundingClientRect();
+      const sort = document.querySelector('#hand-sort')!.getBoundingClientRect();
+      return { aligned:Math.abs(skip.left-bulb.left)<1 && Math.abs(skip.right-sort.right)<1,
+        height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1, skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
+    });
+    check(skipFit.aligned && skipFit.height && skipFit.above, `${width}: Skip exactly spans bulb and ordering buttons above them (${JSON.stringify(skipFit)})`);
     if (width === 360 || width === 1440) {
       const image = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
       if (image.length <= 192 * 1024) {

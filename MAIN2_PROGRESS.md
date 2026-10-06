@@ -1,5 +1,23 @@
 # Main2.0 / Test2 progress
 
+## Besley idle cues, compact Skip and two-tap Throw — 6 October 2026
+
+- Test2 only: idle prompts retain their three-second delay, use Besley, breathe subtly and
+  render at .688 opacity (20% lower than .86). Reduced-motion settings still suppress breathing.
+- Skip matches the visible bulb + ordering pair in width/height and sits directly above them.
+  Bloom has its own column; advanced shape controls remain accessible in the existing chooser.
+- Removed Deck suggestion outlines, automatic suggested-tile rings and visible pile descriptions.
+  Counters, accessible names and actual valid-target feedback remain. The throw pile turns warm
+  gold only if taking its card creates a new Bloom combination, including extending a run.
+- First Throw tap enlarges/desaturates that card without changing state; another card switches
+  selection. A second tap on the selected card executes the existing discard and ends the turn.
+  Bloom, Sprout and Fruit remain immediate; Undo/rules/bots/save code are unchanged.
+- Added real-input two-tap/selection-change/engine parity checks, combination fixtures and strict
+  Skip alignment checks across phone, left-hand/large-text, tablet and desktop sizes.
+  Typecheck/builds passed; local full tests encounter the known subprocess EPERM sandbox issue.
+  Existing exact-head browser/full CI and screenshot review remain the publication gate.
+
+
 ## Idle-first prompts, Bloom choices and immediate Fruit — 6 October 2026
 
 - Test2 only: Draw/Grow/Throw/Bloom are three-second idle fallbacks. Input immediately hides

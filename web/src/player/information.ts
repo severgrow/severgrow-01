@@ -59,7 +59,7 @@ export const INFORMATION_CSS = `
   overflow: visible;
   animation: none !important;
 }
-@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .94; } }
+@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .86; } }
 .test2-information #step-cue:is([data-step='draw'], [data-step='grow'], [data-step='throw']) .cue-text {
   animation: test2-cue-breathe 3s ease-in-out infinite !important;
 }
@@ -77,7 +77,7 @@ export const INFORMATION_CSS = `
   line-height: 1.08;
 }
 .test2-information #step-cue .cue-text {
-  font-family: var(--font-ui, inherit);
+  font-family: var(--font-display, Georgia, serif);
   font-size: clamp(30px, 8.2vw, 48px);
   line-height: 1.08;
   font-weight: 750;
@@ -92,8 +92,8 @@ export const INFORMATION_CSS = `
 .test2-information #step-cue[data-step='opp'] .cue-text { font-size: clamp(24px, 6.6vw, 38px); }
 /* Test2 owns prompt visibility independently of the guide's legacy entrance/settle clock. */
 .test2-information:not(.test2-idle-ready) #step-cue { opacity: 0 !important; }
-.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .86 !important; }
-.test2-information.test2-idle-ready #step-cue .cue-text { animation-play-state: running !important; }
+.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .688 !important; }
+.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 3s ease-in-out infinite !important; animation-play-state: running !important; }
 .test2-information #step-cue[data-step='opp'] { visibility: hidden !important; }
 .test2-information:has(#tooltip:not([hidden])) #step-cue { opacity: 0 !important; }
 .test2-information .dock .hand .card.playable {
@@ -139,6 +139,41 @@ export const INFORMATION_CSS = `
 .test2-information #moves .test2-compact-control { width: 44px; padding: 6px; }
 .test2-information #moves .test2-compact-control svg { width: 22px; height: 22px; }
 .test2-information #moves .bloom-toggle.test2-compact-control::after { display: none; }
+
+/* Skip spans exactly the bulb + ordering controls; Bloom has its own remaining column. */
+.test2-information { --test2-tool-size: 28px; --test2-tool-gap: 16px; }
+.test2-information[data-thumb] { --test2-tool-size: 44px; --test2-tool-gap: 4px; }
+.test2-information .dock .table-row > .moves:is(:has(.test2-skip), :has(.kind)) {
+  display: grid; grid-template-columns: minmax(44px, 1fr) repeat(2, var(--test2-tool-size));
+  grid-template-rows: 44px; gap: var(--test2-tool-gap); align-items: center;
+}
+.test2-information[data-thumb='left'] .dock .table-row > .moves:is(:has(.test2-skip), :has(.kind)) { grid-template-columns: repeat(3, var(--test2-tool-size)); justify-content: start; }
+.test2-information .dock .table-row > .moves > .kind { grid-column: 1; grid-row: 1; max-width: 100%; width: auto; justify-self: center; }
+.test2-information .dock .table-row > .moves > .test2-skip {
+  grid-column: 2 / 4; grid-row: 1; width: 100%; min-width: 0; max-width: none;
+  height: var(--test2-tool-size); min-height: var(--test2-tool-size); margin: 0; padding: 0 6px;
+  position: relative; box-sizing: border-box;
+}
+.test2-information:not([data-thumb]) .dock .table-row { row-gap: 8px; }
+.test2-information:not([data-thumb]) .dock .table-row > .moves { grid-row: 2; }
+.test2-information:not([data-thumb]) #test2-actions { grid-row: 3; justify-content: flex-end; }
+.test2-information:not([data-thumb]) #moves > .test2-skip::after { content:''; position:absolute; inset:-8px; }
+.test2-information #moves .bloom-options { max-height: min(50dvh, 320px); overflow-y: auto; }
+.test2-information .test2-combination { max-width:100%; }
+.test2-information .test2-mini-card { flex-shrink: 1; min-width: 8px; padding-inline: 0; }
+.test2-information .pile-label { display: none; }
+.test2-information #deck.coach-glow { box-shadow: none; }
+.test2-information #discard.test2-bloom-draw .pile-top { border-color: var(--c-gold); }
+.test2-information #discard.test2-bloom-draw .pile-card { box-shadow: 0 0 18px -4px color-mix(in srgb, var(--c-gold) 65%, transparent); }
+.test2-information #discard.test2-bloom-draw .gd-halo { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--c-gold) 70%, transparent), 0 0 24px 2px color-mix(in srgb, var(--c-gold) 60%, transparent); }
+.test2-information #discard.test2-bloom-draw .gd-ring { border-color: color-mix(in srgb, var(--c-gold) 75%, transparent); }
+.test2-information #hand .card.test2-throw-picked {
+  filter: grayscale(1) !important; border-color: #dedede; box-shadow: none !important;
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.14);
+}
+.test2-information[data-thumb] #hand .card.test2-throw-picked {
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.14);
+}
 .test2-information #test2-information-subline {
   min-width: 0;
   width: 100%;
