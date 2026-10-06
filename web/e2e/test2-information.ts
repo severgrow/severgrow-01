@@ -89,7 +89,7 @@ try {
       return disabled;
     }), `${width}: system Reduce motion also disables the pulse`);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('DRAW CARD')), `${width}: current step`);
+    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('DRAW')), `${width}: current step`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');
@@ -121,7 +121,7 @@ try {
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW OR SKIP')), `${width}: Grow label follows state`);
+    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW')), `${width}: Grow label follows state`);
     if (width === 360 || width === 1440) {
       const image = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
       if (image.length <= 192 * 1024) {

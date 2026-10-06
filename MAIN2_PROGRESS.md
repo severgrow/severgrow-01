@@ -1,5 +1,19 @@
 # Main2.0 / Test2 progress
 
+## Idle-first prompts, Bloom choices and immediate Fruit — 6 October 2026
+
+- Test2 only: Draw/Grow/Throw/Bloom are three-second idle fallbacks. Input immediately hides
+  them and restarts one timer; turn/phase changes, busy animation, menus and hidden tabs reset it.
+  Opponent has no board prompt; the waiting hand is substantially darker/desaturated instead.
+- Eligible cards have a slightly stronger cream edge/glow; Bloom's actual card group is more
+  distinct. Bloom choices show rank/suit mini-card icons with full accessible names. Skip stays
+  enabled and reads only Skip, with subdued styling, including during Bloom selection.
+- Fruit executes at the first valid explicit card-and-target selection even with Confirm=Always;
+  a Fruit card alone never auto-spends. Existing legal-action validation and Undo are unchanged.
+- Added real-input idle timing, short prompt, selected Bloom, Skip/control fit and immediate
+  Fruit/Undo/save parity QA to the existing Test2 browser suites. All rules/bots/saves and Main/Dev
+  source/refs remain untouched. Full check, isolated builds and browser CI required before release.
+
 ## Lower dock and larger map — 6 October 2026
 
 - Test2 only: tightened spare gaps above/below the pile row, lowered the hand to a roughly

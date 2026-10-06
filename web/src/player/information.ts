@@ -90,6 +90,44 @@ export const INFORMATION_CSS = `
 }
 .test2-information.large-text #step-cue .cue-text { font-size: clamp(32px, 8.8vw, 52px); }
 .test2-information #step-cue[data-step='opp'] .cue-text { font-size: clamp(24px, 6.6vw, 38px); }
+/* Test2 owns prompt visibility independently of the guide's legacy entrance/settle clock. */
+.test2-information:not(.test2-idle-ready) #step-cue { opacity: 0 !important; }
+.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .86 !important; }
+.test2-information.test2-idle-ready #step-cue .cue-text { animation-play-state: running !important; }
+.test2-information #step-cue[data-step='opp'] { visibility: hidden !important; }
+.test2-information:has(#tooltip:not([hidden])) #step-cue { opacity: 0 !important; }
+.test2-information .dock .hand .card.playable {
+  border-color: color-mix(in srgb, var(--c-accent) 88%, var(--c-line));
+  box-shadow: 0 0 7px color-mix(in srgb, var(--c-accent) 16%, transparent);
+}
+.test2-information .dock .hand .card.test2-bloom-card {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c-accent) 28%, transparent), inset 0 0 7px color-mix(in srgb, var(--c-accent) 8%, transparent);
+}
+.test2-information .dock .hand.waiting .card {
+  opacity: .38 !important;
+  filter: grayscale(.85) brightness(.72) !important;
+  box-shadow: none !important;
+}
+.test2-information #moves .test2-skip {
+  color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);
+  opacity: .6; text-decoration: none;
+}
+.test2-information #moves .test2-skip:hover,
+.test2-information #moves .test2-skip:focus-visible { opacity: 1; }
+.test2-information .test2-combination { display: inline-flex; align-items: center; gap: 2px; }
+.test2-information .test2-mini-card {
+  display: grid; place-items: center; width: 14px; height: 28px; border: 1px solid currentColor;
+  border-radius: 4px; font-size: 10px; line-height: 1; padding: 2px; box-sizing: border-box;
+}
+.test2-information .test2-mini-card .c-num { font-size: 10px; padding: 0; }
+.test2-information .test2-mini-card .c-suit svg { width: 10px; height: 10px; }
+.test2-information .test2-combination .s0 { color: var(--c-moss); }
+.test2-information .test2-combination .s1 { color: var(--c-ash); }
+.test2-information .test2-combination .s2 { color: var(--c-dew); }
+.test2-information .test2-combination .s3 { color: var(--c-ember); }
+.test2-information #moves .kind { min-height: 44px; padding: 4px 7px; }
+.test2-information #moves .bloom-toggle::after { content: '⌄'; margin-left: 4px; }
 .test2-information #test2-information-subline {
   min-width: 0;
   width: 100%;
@@ -172,26 +210,47 @@ export const mountInformation = () => {
   if (cue) wrap.append(cue);
   const cueText = cue?.querySelector<HTMLElement>('.cue-text');
   if (cueText) {
-    const labels: Record<string, string> = { draw: 'Draw card', grow: 'Grow or skip', throw: 'Throw one card' };
+    const labels: Record<string, string> = { draw: 'Draw', grow: 'Grow', throw: 'Throw', opp: '' };
     const normalize = () => {
-      const label = labels[root.dataset.step ?? ''];
-      if (label && cueText.textContent !== label) cueText.textContent = label;
+      const label = root.dataset.test2Bloom === 'true' && root.dataset.step === 'grow' ? 'Bloom' : labels[root.dataset.step ?? ''];
+      if (label !== undefined && cueText.textContent !== label) cueText.textContent = label;
     };
     // The guide remains the sole phase source, including on resumed games. Its idle refresh
     // can refill the old Grow wording, so normalize just that presentation without a loop.
     new MutationObserver(normalize).observe(cueText, { childList: true, characterData: true, subtree: true });
-    new MutationObserver(normalize).observe(root, { attributes: true, attributeFilter: ['data-step'] });
+    new MutationObserver(normalize).observe(root, { attributes: true, attributeFilter: ['data-step', 'data-test2-bloom'] });
     normalize();
   }
-  let moveWasActive = root.classList.contains('test2-move-active');
-  // A finished/cancelled move returns to a decision immediately; the guide owns which phase
-  // it is. Its idle breath cannot bring text back over an in-progress card or Bloom selection.
-  new MutationObserver(() => {
-    const active = root.classList.contains('test2-move-active');
-    if (moveWasActive && !active && !root.classList.contains('gd-picked') &&
-        root.dataset.step !== 'none' && cue) cue.dataset.level = 'hi';
-    moveWasActive = active;
-  }).observe(root, { attributes: true, attributeFilter: ['class'] });
+  // Guidance is a fallback, never the opening ceremony of a turn. One timer is reset by
+  // real input, phase/turn readiness, menus and visibility; repeated renders don't postpone it.
+  let idleTimer = 0;
+  let held = false;
+  let idleKey = '';
+  const armPrompt = () => {
+    clearTimeout(idleTimer);
+    root.classList.remove('test2-idle-ready');
+    if (held || document.hidden || game.hidden || root.dataset.test2Waiting !== 'true' ||
+        root.classList.contains('test2-information-blocked') || document.body.classList.contains('paused')) return;
+    idleTimer = window.setTimeout(() => root.classList.add('test2-idle-ready'), 3000);
+  };
+  const syncPrompt = () => {
+    const key = [root.dataset.step, root.dataset.test2Turn, root.dataset.test2Waiting,
+      root.dataset.test2Bloom, root.classList.contains('test2-information-blocked'),
+      document.body.classList.contains('paused'), game.hidden].join(':');
+    if (key !== idleKey) { idleKey = key; armPrompt(); }
+  };
+  new MutationObserver(syncPrompt).observe(root, { attributes: true, attributeFilter: ['class', 'data-step', 'data-test2-turn', 'data-test2-waiting', 'data-test2-bloom'] });
+  new MutationObserver(syncPrompt).observe(game, { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(syncPrompt).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('pointerdown', () => { held = true; armPrompt(); }, { capture: true, passive: true });
+  for (const event of ['pointerup', 'pointercancel'] as const)
+    window.addEventListener(event, () => { held = false; armPrompt(); }, { capture: true, passive: true });
+  for (const event of ['keydown', 'click', 'wheel', 'pointermove'] as const)
+    window.addEventListener(event, armPrompt, { capture: true, passive: true });
+  window.addEventListener('blur', () => { held = false; clearTimeout(idleTimer); root.classList.remove('test2-idle-ready'); });
+  window.addEventListener('focus', armPrompt);
+  document.addEventListener('visibilitychange', armPrompt);
+  syncPrompt();
   const captions = document.getElementById('captions');
   // The message now has one live region; floating score numbers keep their existing rendering.
   captions?.setAttribute('aria-live', 'off');

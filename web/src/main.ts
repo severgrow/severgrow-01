@@ -1632,6 +1632,9 @@ function updateTest2MoveActive() {
   if (!IS_TEST2) return;
   const active = !!session && !$('game').hidden && (busy() || session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null || !!session.pending || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr);
   document.documentElement.classList.toggle('test2-move-active', active);
+  document.documentElement.dataset.test2Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
+  document.documentElement.dataset.test2Waiting = String(myTurn() && !busy() && !watching);
+  document.documentElement.dataset.test2Turn = String(session?.state.turnNumber ?? '');
 }
 
 // ---------- idle hint ----------
@@ -2370,6 +2373,7 @@ function renderControls(v: View, advice: Advice | null) {
       sub.className = 'kind-keep';
       sub.textContent = BLOOM.choices(kindButtons.length);
       toggle.append(sub);
+      if (IS_TEST2) renderBloomIcons(toggle, chosen?.kind ?? kindButtons[0]!.kind, v);
       toggle.setAttribute('aria-haspopup', 'menu');
       toggle.setAttribute('aria-expanded', String(bloomMenu));
       moves.append(toggle);
@@ -2410,6 +2414,7 @@ function renderControls(v: View, advice: Advice | null) {
         b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
       }
       b.setAttribute('aria-pressed', String(on));
+      if (IS_TEST2) renderBloomIcons(b, k.kind, v);
       host.append(b);
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
@@ -2417,7 +2422,7 @@ function renderControls(v: View, advice: Advice | null) {
     const label = v.hand.length > 0 ? 'Throw a card' : 'End turn';
     if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel) moves.append(button(SPROUT.skip, `link end skip${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
+    if (end && !pending && grow.skipLink && !anySel) moves.append(button(IS_TEST2 ? 'Skip' : SPROUT.skip, `link end skip${IS_TEST2 ? ' test2-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
@@ -2425,6 +2430,10 @@ function renderControls(v: View, advice: Advice | null) {
       if (isBoardAction(a) || a.t === 'Discard') continue;
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
     }
+  }
+  if (IS_TEST2 && sel.kind?.startsWith('bloom-')) {
+    const end = legal.find(a => a.t === 'EndAct');
+    if (end && !moves.querySelector('.end')) moves.append(button('Skip', 'end test2-skip', () => humanPlay(end), SPROUT.skipTitle));
   }
   const dc = drawCombo();
   if (dc && !pending) {
@@ -2482,6 +2491,17 @@ function renderControls(v: View, advice: Advice | null) {
     // the test copy: no Confirm box (a second tap on the card or the hex places the move)
     $('confirm').hidden = FEATURES.tapAgain;
   }
+}
+
+/** Test2 keeps the actual rank/suit combinations and accessible names, without instruction prose. */
+function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View) {
+  const cards = kindCards(kind).map(id => v.hand.find(c => c.id === id)).filter(c => !!c);
+  const icons = document.createElement('span');
+  icons.className = 'test2-combination';
+  icons.setAttribute('aria-hidden', 'true');
+  icons.innerHTML = cards.map(c => `<span class="test2-mini-card ${suitClass(c!)}">${cardFace(c!)}</span>`).join('');
+  button.replaceChildren(icons);
+  button.setAttribute('aria-label', `${shortKindLabel(kind)}: ${cards.map(c => cardName(c!)).join(', ')}`);
 }
 
 /** The forecast bar's risk lines (overhaul item 8): one icon and short line each. */
@@ -2545,6 +2565,9 @@ function renderHand(v: View, advice: Advice | null) {
   const picked = new Set(session.pending ? moveCards(session.pending) : []);
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
   const cards = handOrder(v.hand, settings.handSort);
+  const bloomCards = IS_TEST2 && myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
+    ? kindCards(sel.kind) : sel.card === null && sel.kind === null
+      ? legal.flatMap(a => a.t === 'Bloom' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = comboGroups(v.hand);
   // remember where every card was, so a reorder (Sort) slides them into place (FLIP)
@@ -2569,6 +2592,7 @@ function renderHand(v: View, advice: Advice | null) {
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
+    if (IS_TEST2) b.classList.toggle('test2-bloom-card', bloomCards.has(c.id));
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {
@@ -2825,7 +2849,7 @@ function maybeAutoPlay() {
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
 function asksConfirm(a: Action): boolean {
-  if (IS_TEST2 && (a.t === 'Bloom' || a.t === 'Sprout')) return false;
+  if (IS_TEST2 && (a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit')) return false;
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
@@ -2847,7 +2871,7 @@ function onCardTap(id: number) {
   // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
   if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
-  if (session.sel.card !== null && session.sel.hex === null) {
+  if (session.sel.card !== null && session.sel.hex === null && (!IS_TEST2 || session.view.hand.find(c => c.id === session!.sel.card)?.suit !== null)) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
     if (only.length === 1) session.tapHex(only[0]!);
   }

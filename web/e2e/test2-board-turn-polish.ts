@@ -12,6 +12,8 @@ import type { Action, State } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { decodeSave } from '../src/logic/persist.js';
 import { hexCenter } from './drawing.js';
+import { positionSave } from './position.js';
+import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 
 const port = Number(process.env.TEST2_POLISH_PORT ?? 4198);
 const external = process.env.TEST2_URL;
@@ -192,20 +194,61 @@ async function controls(page: Page, label: string) {
 }
 
 async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) {
-  await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.querySelector('#step-cue')?.getAttribute('data-level') !== 'off', phase);
+  await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.documentElement.classList.contains('test2-idle-ready'), phase);
   const result = await page.evaluate(() => {
     const cue = document.querySelector<HTMLElement>('#step-cue')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
     const map = wrap.getBoundingClientRect();
     const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
     const box = cue.getBoundingClientRect(), css = getComputedStyle(cue);
-    return { text: cue.textContent, visible: css.visibility !== 'hidden' && css.display !== 'none' && Number(css.opacity) > 0, pointer: css.pointerEvents,
+    return { text: cue.querySelector('.cue-text')?.textContent, visible: css.visibility !== 'hidden' && css.display !== 'none' && Number(css.opacity) > 0, pointer: css.pointerEvents,
       fontSize: parseFloat(getComputedStyle(cue.querySelector('.cue-text')!).fontSize),
       centered: Math.abs(box.x+box.width/2-(map.x+map.width/2)) < 3 && Math.abs(box.y+box.height/2-(map.y+(map.height-under)/2)) < 3 };
   });
-  check(result.visible && result.text?.toLowerCase().includes(phase === 'throw' ? 'throw' : phase), `${label}: correct ${phase} cue is visible`);
+  check(result.visible && result.text?.trim().toLowerCase() === phase, `${label}: correct ${phase} cue is visible`);
   check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered in the usable map and cannot intercept input`);
   check(result.fontSize >= 30,`${label}: ${phase} cue remains legible at ${result.fontSize}px`);
+}
+
+async function idleTiming(page: Page, label: string) {
+  const before = await state(page);
+  await page.keyboard.press('Shift');
+  const start = Date.now();
+  await page.waitForTimeout(2700);
+  check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: no prompt during the first 2.7 idle seconds`);
+  await page.waitForFunction(() => document.documentElement.classList.contains('test2-idle-ready'));
+  check(Date.now()-start >= 2950, `${label}: prompt waits three seconds after interaction`);
+  await cue(page, 'draw', label);
+  await page.keyboard.press('Shift');
+  await page.waitForTimeout(160);
+  check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: new input promptly hides idle guidance`);
+  equal(await state(page),before,`${label}: the idle timer changes no game state`);
+}
+
+async function fruitFlow(width: number, height: number) {
+  const before = fruitPosition(NINE_CHAIN, [[0,4],[2,5]], 1);
+  const action = legalActions(viewFor(before,0)).find(a => a.t === 'PlayFruit' && before.board[coordKey(a.target)]?.strength === 9);
+  assert(action?.t === 'PlayFruit');
+  const page = await browser.newPage({ viewport: { width,height }, hasTouch: width < 600, isMobile: width < 600 });
+  try {
+    await page.addInitScript(saved => {
+      (window as any).__name = (f: unknown) => f;
+      localStorage.setItem('main2:severgrow.save.v7', saved);
+      localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({ coach:false,sound:false,music:false,speed:'skip',reduceMotion:true,autoSkip:false,confirmPolicy:'always' }));
+      localStorage.setItem('main2:severgrow.tips.v1',JSON.stringify({fruit:true,fruitAny:true,strengthen:true}));
+    },positionSave({state:before}));
+    await page.goto(base);
+    await page.click('#menu-continue'); await idle(page);
+    equal(await state(page),before,'Fruit: saved position resumes unchanged');
+    await page.locator(`#hand [data-card="${action.card}"]`).click();
+    equal(await state(page),before,'Fruit: choosing the card alone does not spend it');
+    await tapHex(page,coordKey(action.target),width < 600);
+    equal(await state(page),apply(before,action),'Fruit: first valid target tap executes with Confirm=Always');
+    await idle(page);
+    check(!await page.locator('#confirm').isVisible() && await page.evaluate(() => !(window as any).__severgrow.pending()),'Fruit: no confirmation or second tap remains');
+    await undo(page,before,'Fruit');
+    await savedMatches(page,'Fruit after Undo');
+  } finally { await page.close(); }
 }
 
 async function undo(page: Page, before: State, label: string) {
@@ -258,6 +301,7 @@ async function sproutFlow(width: number, height: number) {
   try {
     const paths = await geometry(page,width,height,label);
     await controls(page,label);
+    if (width === 360 || width === 1280) await idleTiming(page,label);
     await cue(page,'draw',label);
     const initial = await state(page);
     await page.click('#deck');
@@ -266,6 +310,7 @@ async function sproutFlow(width: number, height: number) {
     equal(grown, apply(initial,{ t:'Draw',from:'deck' }), `${label}: actual Draw preserves engine parity`);
     await page.waitForTimeout(200);
     await geometry(page,width,height,label+' after Draw');
+    check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: Draw transitions without an immediate Grow prompt`);
     await cue(page,'grow',label);
     await evidence(page,`${width}x${height}-grow`);
     const action = legalActions(viewFor(grown,0)).find(action => action.t === 'Sprout');
@@ -366,6 +411,14 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       await page.waitForTimeout(50);
     };
     await pick();
+    equal((await page.locator('#moves .test2-skip').innerText()).trim(),'Skip',`${label}: Bloom retains a short Skip button`);
+    check(await page.locator('#moves .test2-skip').isEnabled(),`${label}: subdued Skip remains usable`);
+    equal(await page.locator('#hand .test2-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
+    check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
+    await page.waitForFunction(() => document.documentElement.classList.contains('test2-idle-ready'));
+    equal((await page.locator('#step-cue .cue-text').textContent())?.trim(),'Bloom',`${label}: idle Bloom uses only its short prompt`);
+    check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity)>0),`${label}: idle Bloom remains visible with a combination selected`);
+    await controls(page,label+' selected Bloom');
     await tapHex(page,keys[0]!,touch);
     equal(await state(page),before,`${label}: starting a partial Bloom does not prematurely spend cards`);
     await tapHex(page,'-1,0',touch);
@@ -437,6 +490,8 @@ try {
       catch (error) { const failure=`${width}x${height} ${name}: ${error instanceof Error ? error.message : String(error)}`; failures.push(failure); console.error(failure); }
     }
   }
+  await fruitFlow(390,844);
+  await fruitFlow(1280,800);
   const safe = await open(390,844,219682080);
   try {
     const before = await state(safe.page);
