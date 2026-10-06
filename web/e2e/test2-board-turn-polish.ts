@@ -318,7 +318,8 @@ async function sproutFlow(width: number, height: number) {
     await page.reload();
     // HTML names the game before the async branding chunk mounts its supplied logo.
     await page.locator('#logo svg').waitFor({ state: 'visible' });
-    equal(await page.locator('#menu .title').innerText(), 'Futasaku', `${label}: main screen uses the new name`);
+    equal((await page.locator('#menu .title').textContent())?.trim(), 'Futasaku', `${label}: main screen uses the exact new name`);
+    equal((await page.locator('#menu .title').innerText()).toLowerCase(), 'futasaku', `${label}: the visible wordmark has the new name, with its existing uppercase styling`);
     check(await page.locator('#logo svg').isVisible(), `${label}: supplied logo replaces the old menu mark`);
     check(await page.evaluate(() => getComputedStyle(document.querySelector('#logo feFlood')!).floodColor === getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor), `${label}: main-screen logo matches Continue cream`);
     check(!/severor/i.test(await page.locator('body').innerText()), `${label}: old name is absent from visible copy`);
