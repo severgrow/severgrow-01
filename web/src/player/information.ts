@@ -154,7 +154,7 @@ export const INFORMATION_CSS = `
   height: var(--test2-tool-size) !important; min-height: var(--test2-tool-size) !important; margin: 0; padding: 0 6px;
   position: relative; box-sizing: border-box;
 }
-.test2-information:not([data-thumb]) .dock .table-row { row-gap: 8px; }
+.test2-information:not([data-thumb]) .dock .table-row { grid-template-rows: 0 44px 28px minmax(20px, 1fr); row-gap: 4px; }
 .test2-information:not([data-thumb]) .dock .table-row > .moves { grid-row: 2; }
 .test2-information:not([data-thumb]) #test2-actions { grid-row: 3; justify-content: flex-end; }
 .test2-information:not([data-thumb]) #moves > .test2-skip::after { content:''; position:absolute; inset:-8px; }

@@ -63,7 +63,8 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
     l.parts.fan = { ...l.dock };
     l.zone = { x: left + 2, y: l.header.y + l.header.h, w: v.w-left-right-4, h: l.dock.y-l.header.y-l.header.h };
   } else {
-    l.rows.table = Math.max(84, l.parts.pileCard.h + 22);
+    // Two compact control rows plus clearance for the fan's rotated upper corners.
+    l.rows.table = Math.max(104, l.parts.pileCard.h + 22);
     // The curved/rotated desktop fan needs its original 20px clearance; remove only
     // the surplus spacing, so its lower corners never cross the screen edge.
     l.rows.hand = l.card.h + 20;

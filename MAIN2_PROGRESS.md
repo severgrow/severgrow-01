@@ -12,6 +12,8 @@
   actions or rules. The existing immediate action and Undo are unchanged.
 - Corrected the previous Skip height cascade (44px on phones), and browser QA now taps exposed
   card areas in the overlapping fan when switching a Throw preview; no forced input/steps.
+- Tablet/desktop control rows reserve clearance above the rotated fan; card sizes and bottom
+  positions stay fixed. Phone layout is unchanged. This fixes an overlap caught by browser QA.
 - Typecheck/Test2 build and focused wording tests passed. Local preview remains blocked by
   listen EPERM; full check encounters the known subprocess sandbox limitation. Existing exact
   head CI/browser checks and card screenshots are required before reporting completion/live.
