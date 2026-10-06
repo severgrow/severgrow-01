@@ -240,6 +240,10 @@ async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) 
 
 async function pulseCheck(page: Page, label: string) {
   const before = await state(page);
+  // The runner can request reduced motion at the OS/browser level. Explicitly test the
+  // normal-motion mode, then restore the browser preference after testing the game toggle.
+  const browserReduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const result = await page.evaluate(() => {
     const root = document.documentElement;
     const reduced = root.classList.contains('reduce-motion');
@@ -255,10 +259,12 @@ async function pulseCheck(page: Page, label: string) {
     const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked) > .c-suit');
     const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
     root.classList.toggle('reduce-motion', reduced);
+    getComputedStyle(text).animationName;
     return { small, large, cardPulse, off: text.getAnimations().length === 0 };
   });
+  await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
   check(result && result.small !== result.large && result.large.includes('1.035') && result.cardPulse && result.off,
-    `${label}: slow slight prompt zoom and faster card pulse actually run; Reduce Motion disables them`);
+    `${label}: slow slight prompt zoom and faster card pulse actually run; Reduce Motion disables them (${JSON.stringify(result)})`);
   equal(await state(page), before, `${label}: pulses cannot change game state`);
 }
 
