@@ -20,7 +20,8 @@ export const mountHelp = (hooks: HelpHooks) => {
       grid-column: 3; grid-row: 2; display: flex; align-items: center;
       justify-content: center; gap: 16px; height: 28px; min-width: 0;
     }
-    #test2-actions > .hand-slot { flex: 0 0 28px; margin: 0; }
+    #test2-actions > .hand-slot { flex: 0 0 28px; margin: 0; position: relative; inset: auto; }
+    #test2-actions .i { width: 16px; height: 16px; }
     #test2-actions > .hand-slot[hidden] { display: grid; visibility: hidden; pointer-events: none; }
     #test2-help-button { touch-action: manipulation; }
     #test2-help-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
