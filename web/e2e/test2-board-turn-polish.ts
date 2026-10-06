@@ -286,10 +286,27 @@ async function finishTurn(page: Page, label: string) {
     expected = apply(expected, action);
     assert(botActions.length < 20, 'bounded opponent turn');
   }
+  await page.evaluate(() => {
+    (window as any).__test2OpponentReadiness = null;
+    const observer = new MutationObserver(() => {
+      if (document.documentElement.dataset.step !== 'opp') return;
+      const card = document.querySelector('#hand .card');
+      const cue = document.querySelector('#step-cue')!;
+      if (!card) return;
+      const css = getComputedStyle(card);
+      (window as any).__test2OpponentReadiness = { opacity:Number(css.opacity),filter:css.filter,
+        hidden:getComputedStyle(cue).visibility === 'hidden',text:cue.querySelector('.cue-text')?.textContent };
+      observer.disconnect();
+    });
+    observer.observe(document.documentElement,{ attributes:true,attributeFilter:['data-step'] });
+  });
   await page.locator(`#hand [data-card="${discard.card}"]`).click();
   await idle(page);
   equal(await state(page), expected, `${label}: actual Volcano opponent turn matches every deterministic engine/bot action`);
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);
+  const opponent = await page.evaluate(() => (window as any).__test2OpponentReadiness);
+  check(opponent?.opacity <= .4 && opponent.filter.includes('grayscale') && opponent.filter.includes('brightness'),`${label}: actual opponent turn substantially darkens/desaturates the hand (${JSON.stringify(opponent)})`);
+  check(opponent?.hidden && opponent.text === '',`${label}: opponent turn has no board message`);
   check(!await page.locator('#confirm').isVisible(), `${label}: Throw and opponent turn leave no confirmation`);
   await savedMatches(page, label);
   return botActions;
