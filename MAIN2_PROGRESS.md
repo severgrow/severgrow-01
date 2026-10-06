@@ -14,8 +14,14 @@
   for logo loading/alignment, no progress bar, menu/welcome copy and installed-app name at all
   nine supported QA sizes. Local browser launch is blocked by sandbox EPERM; exact-head GitHub
   CI and visual screenshot review are required before reporting publication.
-- Full local check is running; one unchanged subprocess test already reports sandbox EPERM.
-  This is an environment failure, not a passed check. CI remains the publication gate.
+- Full local check: 106 files / 1,132 tests passed, one existing expected failure; one unchanged
+  subprocess test failed spawnSync npx EPERM. This is not a green full check.
+- First candidate 47e475ec passed phone/tablet header checks and the information/help/V3 suites.
+  Browser QA caught the desktop header's existing 20px outer inset preventing the requested
+  corner alignment. Test2 now positions that header within the screen safe area at every size,
+  preserving its reserved height and the board layout. Existing strict margin checks remain.
+- Reviewed actual phone/menu screenshots: clean white logo, Futasaku title, no progress bar.
+  Follow-up exact-head CI and screenshot review are still required before publication.
 
 ## DONE
 
