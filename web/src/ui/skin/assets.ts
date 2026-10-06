@@ -2,15 +2,21 @@
 // written by `npm run skin:manifest`) lists what each tier really has, so a missing file is never
 // requested (no 404s): the renderer falls back instead. Switching tier drops every image of the
 // old tier (bitmaps closed), so lo and hi are never decoded together.
+//
+// Freshness: the manifest is always fetched from the network (a unique address, so no cache can
+// answer it), and every file is asked for as `file?v=<content hash>`: a changed picture is a new
+// address, so a stale copy can never be shown. A file that fails to load is dropped (has() turns
+// false) and the renderer falls back: never a broken-image icon. preload() decodes a whole set up
+// front, so a tile placed later shows its art at once.
 import type { SkinDef, Tier } from './types.js';
 
-type Manifest = { version?: string; tiers: Record<Tier, string[]> };
+type Manifest = { version?: string; tiers: Record<Tier, string[]>; hash?: Partial<Record<Tier, Record<string, string>>> };
 const manifests = new Map<string, Promise<Manifest | null>>();
 
 const loadManifest = (root: string) => {
   let m = manifests.get(root);
   if (!m) {
-    m = fetch(`${root}/manifest.json`, { cache: 'no-cache' })
+    m = fetch(`${root}/manifest.json?r=${Date.now().toString(36)}`, { cache: 'no-store' })
       .then((r) => (r.ok ? (r.json() as Promise<Manifest>) : null))
       .catch(() => null);
     manifests.set(root, m);
@@ -38,6 +44,11 @@ const toAlpha = (img: CanvasImageSource & { width: number; height: number }, inv
 export class SkinAssets {
   tier: Tier | null = null;
   private files = new Set<string>();
+  private hashes: Record<string, string> = {};
+  /** in-memory copies (blob: URLs) of loaded files: the board draws from these, no network */
+  private blobs = new Map<string, string>();
+  /** files of this tier that failed to load (treated as missing) */
+  private bad = new Set<string>();
   private images = new Map<string, Promise<ImageBitmap | HTMLImageElement | null>>();
   private masks = new Map<string, Promise<HTMLCanvasElement | null>>();
   private jsons = new Map<string, Promise<unknown>>();
@@ -56,6 +67,8 @@ export class SkinAssets {
       this.release();
       this.tier = t;
       this.files = new Set(m?.tiers?.[t] ?? []);
+      this.hashes = m?.hash?.[t] ?? {};
+      this.bad = new Set();
       this.loading = null;
       this.loadingTier = null;
     });
@@ -64,6 +77,8 @@ export class SkinAssets {
 
   private release() {
     for (const p of this.images.values()) void p.then((b) => (b && 'close' in b ? b.close() : undefined));
+    for (const u of this.blobs.values()) URL.revokeObjectURL(u);
+    this.blobs.clear();
     this.images.clear();
     this.masks.clear();
     this.jsons.clear();
@@ -71,14 +86,37 @@ export class SkinAssets {
 
   /** Every image this tier has under a folder (prefix), sorted. */
   list(prefix: string): string[] {
-    return [...this.files].filter((f) => f.startsWith(prefix) && /\.(png|webp|avif|jpe?g)$/i.test(f)).sort();
+    return [...this.files].filter((f) => f.startsWith(prefix) && !this.bad.has(f) && /\.(png|webp|avif|jpe?g)$/i.test(f)).sort();
   }
 
   has(path: string | undefined): path is string {
-    return !!path && this.files.has(path);
+    return !!path && this.files.has(path) && !this.bad.has(path);
   }
+  /** Where to draw a file from: its in-memory copy once loaded, else its content-addressed URL. */
   url(path: string) {
-    return `${this.skin.root}/${this.tier}/${path}`;
+    const b = this.blobs.get(path);
+    if (b) return b;
+    return this.net(path);
+  }
+  private net(path: string) {
+    const v = this.hashes[path];
+    return `${this.skin.root}/${this.tier}/${path}${v ? `?v=${v}` : ''}`;
+  }
+
+  /**
+   * Downloads and decodes every image of this tier under these folders (a few at a time), so
+   * art drawn later appears at once. Files that fail are marked missing. Resolves when all are
+   * settled, or after `maxMs` (the rest keep loading in the background).
+   */
+  preload(prefixes: string[], maxMs = 8000): Promise<void> {
+    const tier = this.tier;
+    const todo = [...this.files].filter((f) => prefixes.some((p) => f.startsWith(p)) && /\.(png|webp|avif|jpe?g)$/i.test(f));
+    let i = 0;
+    const worker = async () => {
+      while (i < todo.length && this.tier === tier) await this.image(todo[i++]);
+    };
+    const all = Promise.all(Array.from({ length: 6 }, worker)).then(() => undefined);
+    return Promise.race([all, new Promise<void>((r) => setTimeout(r, maxMs))]);
   }
 
   /** A decoded image of this tier, or null when the file is missing or broken. */
@@ -86,13 +124,22 @@ export class SkinAssets {
     if (!this.has(path)) return Promise.resolve(null);
     let p = this.images.get(path);
     if (!p) {
+      const tier = this.tier;
       const img = new Image();
       img.decoding = 'async';
-      img.src = this.url(path);
-      p = img
-        .decode()
+      p = fetch(this.net(path))
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+        .then((blob) => {
+          const u = URL.createObjectURL(blob);
+          if (this.tier === tier) this.blobs.set(path, u);
+          img.src = u;
+          return img.decode();
+        })
         .then(() => (typeof createImageBitmap === 'function' ? createImageBitmap(img).catch(() => img) : img))
-        .catch(() => null);
+        .catch(() => {
+          if (this.tier === tier) this.bad.add(path);
+          return null;
+        });
       this.images.set(path, p);
     }
     return p;

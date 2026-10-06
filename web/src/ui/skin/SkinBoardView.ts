@@ -188,6 +188,11 @@ export class SkinBoardView extends BoardView {
     const a = this.assets;
     if (!a.tier) return;
     const tier = a.tier;
+    // everything a move can bring onto the board, decoded before the art is switched on: then a
+    // tile placed later shows its painting at once (and a file that fails is dropped, not shown
+    // broken). Until this settles the board shows its flat colours.
+    await a.preload(['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
+    if (a.tier !== tier) return;
     const style = await a.json<Record<string, Partial<NetworkLook>>>(this.skin.networkStyle);
     if (a.tier !== tier) return;
     const merge = (n: SkinDef['network'][number]): NetworkLook => ({ ...n, ...(style?.[n.key] ?? {}), widths: { ...n.widths, ...(style?.[n.key]?.widths ?? {}) } });
