@@ -28,10 +28,10 @@ export function mountAtmosphere() {
     let seed = 0x46555441;
     const random = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
     for (let i = 0; i < pixels.data.length; i += 4) {
-      // A centred bell-like distribution: neutral fine grain, never coloured flecks.
+      // Fine dark flecks avoid the grey veil that would brighten the dark backdrop.
       const ink = Math.round((random() + random() + random()) * 255 / 3);
-      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = ink;
-      pixels.data[i + 3] = 255;
+      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = 0;
+      pixels.data[i + 3] = ink;
     }
     ctx.putImageData(pixels, 0, 0);
     grain.style.backgroundImage = `url(${tile.toDataURL()})`;
