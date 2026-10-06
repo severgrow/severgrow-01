@@ -2,6 +2,12 @@
 
 ## Futasaku branding — 6 October 2026
 
+- Follow-up: the in-game wordmark now matches the visible three-line menu glyph (about 12px),
+  rather than its 44px tap target. Its size follows the glyph on resize and text-size changes;
+  vertical centring and safe-area placement stay intact. Both logos use the exact Continue
+  button accent/cream token, including when the palette changes. Updated browser assertions
+  verify visible ink height and colour equality. No gameplay, Main or Dev changes.
+
 - Test2 only: Futasaku replaces the visible game name on the menu, welcome, launch splash,
   browser/social/install metadata and result-sharing cards. Internal save/cache keys stay intact.
 - The supplied Japanese logo is rendered in clean white with transparent negative space. It

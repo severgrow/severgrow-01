@@ -86,6 +86,7 @@ async function geometry(page: Page, width: number, height: number, label: string
   const before = await state(page);
   const brand = await page.evaluate(async () => {
     const menu = document.querySelector<HTMLElement>('#hud-menu')!.getBoundingClientRect();
+    const lines = document.querySelector<SVGSVGElement>('#hud-menu svg')!.getBoundingClientRect();
     const image = document.querySelector<SVGSVGElement>('#hud-brand')!;
     const asset = new Image();
     asset.src = image.querySelector('image')!.getAttribute('href')!;
@@ -93,14 +94,17 @@ async function geometry(page: Page, width: number, height: number, label: string
     const box = image.getBoundingClientRect();
     const race = document.querySelector<HTMLElement>('#race')!;
     return { title: document.title, loaded: asset.complete && asset.naturalWidth > 0,
-      height: box.height, menuHeight: menu.height, center: box.top + box.height / 2,
+      height: box.height, menuHeight: lines.height / 2, center: box.top + box.height / 2,
+      color: getComputedStyle(image.querySelector('feFlood')!).floodColor,
+      buttonColor: getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor,
       menuCenter: menu.top + menu.height / 2, right: box.right,
       raceVisible: race.getClientRects().length > 0 && getComputedStyle(race).display !== 'none',
       pointer: getComputedStyle(image).pointerEvents };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && brand.height === brand.menuHeight && Math.abs(brand.center-brand.menuCenter) < 1,
-    `${label}: white logo loads at the menu button's height and centre`);
+  check(brand.loaded && Math.abs(brand.height-brand.menuHeight) < .1 && Math.abs(brand.center-brand.menuCenter) < 1,
+    `${label}: logo matches the three menu lines' visible height and centre`);
+  equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
   const info = await page.evaluate(() => {
@@ -270,6 +274,7 @@ async function sproutFlow(width: number, height: number) {
     await page.reload();
     equal(await page.locator('#menu .title').innerText(), 'Futasaku', `${label}: main screen uses the new name`);
     check(await page.locator('#logo svg').isVisible(), `${label}: supplied logo replaces the old menu mark`);
+    check(await page.evaluate(() => getComputedStyle(document.querySelector('#logo feFlood')!).floodColor === getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor), `${label}: main-screen logo matches Continue cream`);
     check(!/severor/i.test(await page.locator('body').innerText()), `${label}: old name is absent from visible copy`);
     check(!await page.locator('#terrarium').isVisible(), `${label}: old menu artwork does not obscure the new logo`);
     const manifest = await (await page.request.get(base+'manifest.webmanifest')).json();
