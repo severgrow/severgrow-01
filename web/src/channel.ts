@@ -17,7 +17,7 @@ export const FEATURES = Object.freeze({
   mapBehindCards: modern,
   replay: !modern,
   weakTools: !modern,
-  ownershipMarks: !IS_TEST,
+  ownershipMarks: !modern,
   lab: IS_TEST,
   design: IS_TEST,
   /** the V3 look (skinned renderer, V3 art): an option in the menu of both test channels */

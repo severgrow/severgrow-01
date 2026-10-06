@@ -719,3 +719,9 @@ Everything on the game screen is centred on one line, and the controls are mirro
 - **Hand row:** Undo, then the fan, then Sort. Undo and Sort keep their slots (dimmed when there's nothing to do), so nothing moves.
 - **Hint:** at most 28 characters. It is at full strength for the first three turns, then quieter, and comes back when you seem stuck (6 seconds with no tap) or something unusual happens.
 - **Alignment overlay:** `?align=1` (or the switch on the `?lab=1` page) draws the centre line and the 16pt margins over the game.
+
+## Test2 board and turn flow (2026-10-06)
+
+Test2 keeps the current artwork and controls while recovering the instruction row's space for the board. DRAW CARD, GROW OR SKIP and THROW ONE CARD sit over its centre, with transparent backgrounds, strong readable text and a 140ms fade. They never consume layout space or receive pointer input, and disappear when a card/target/shape is being chosen. Full hints remain in the existing Help sheet; short notices sit at the map's upper edge.
+
+Tile owner shapes are removed only in Test2. Forest/Volcano art, connections and strength numbers remain. A valid Sprout commits as soon as both card and target are chosen, in either order. A Bloom commits when its complete legal shape is finished by touch taps, drag, or desktop painting. No confirmation or repeated tap follows completion; an incomplete or invalid move does not spend cards. Explicit coach/list previews place with one highlighted-hex choice. Undo restores state, cards and rendered networks immediately after the action settles. Other channels retain their existing input flow.

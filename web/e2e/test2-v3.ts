@@ -58,10 +58,9 @@ try {
     await page.locator(`#hand [data-card="${action.card}"]`).click();
     const target = page.locator(`#board g.hex-cell[data-key="${action.coord.q},${action.coord.r}"]`);
     await target.click();
-    await target.click();
     await idle(page);
-    check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: tap again places the exact action in V3`);
-    check((await page.locator('#board .skin-tile .mark-line, #board .skin-tile .mark-ink').count()) > 0, `${w}: ownership shapes on V3 tiles`);
+    check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: first valid tap places the exact action in V3`);
+    check((await page.locator('#board .skin-tile .mark-line, #board .skin-tile .mark-ink').count()) === 0, `${w}: V3 artwork carries ownership without shapes`);
     await page.click('#tool-undo');
     await idle(page);
     check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);

@@ -39,7 +39,7 @@ try {
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
     check(await page.locator('#test2-help-button').isVisible(), `${width}: hint is discoverable`);
-    check(await page.locator('#step-cue').innerText().then(text => text.includes('Draw a card')), `${width}: current step`);
+    check(await page.locator('#step-cue').innerText().then(text => text.includes('Draw card')), `${width}: current step`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');
@@ -80,9 +80,14 @@ try {
       const rail = document.querySelector('#test2-information-rail')!.getBoundingClientRect();
       const board = document.querySelector('#board-wrap')!.getBoundingClientRect();
       const cue = document.querySelector('#step-cue')!.getBoundingClientRect();
-      return rail.bottom <= board.top + 1 && cue.bottom <= rail.bottom && cue.left >= 0 && cue.right <= innerWidth;
+      return rail.top >= board.top && rail.bottom <= board.bottom &&
+        Math.abs(cue.left + cue.width / 2 - (board.left + board.width / 2)) <= 1 &&
+        Math.abs(cue.top + cue.height / 2 - (board.top + board.height / 2)) <= 1 &&
+        getComputedStyle(document.querySelector('#step-cue')!).pointerEvents === 'none' &&
+        cue.left >= 0 && cue.right <= innerWidth &&
+        document.querySelector('#test2-information-rail')!.parentElement?.id === 'board-wrap';
     });
-    check(boundaries, `${width}: guidance stays outside playable tiles`);
+    check(boundaries, `${width}: guidance floats centrally over the board without blocking or reserving a row`);
     await page.click('#hud-menu');
     check(!await page.locator('#test2-help-button').isVisible(), `${width}: Pause suppresses background help`);
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);

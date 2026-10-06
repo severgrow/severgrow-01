@@ -83,3 +83,23 @@ Preserved incoming commit 51640aa7 and its optional V3 look; the original look r
 ### NOT YET VERIFIED
 - Real iPhone/Android hardware.
 - Exact newly published information commit on the public URL.
+
+## Test2 board and turn-flow polish — 6 October 2026
+
+### IMPLEMENTED
+- Removed owner shape marks through Test2's channel policy, preserving art, strength numbers, connections and accessible tile descriptions.
+- Removed the reserved instruction row and both 68/84px layout deductions. The existing fit calculation now uses the complete viewport: normal phones use approximately 95–96% map width, with control/safe margins preserved. No map coordinates or geometry changed.
+- Centred large uppercase Draw/Grow/Throw prompts directly over the board, with a transparent background, pointer-through hit testing and a 140ms fade. They yield to active card, target and Bloom selection. Kept concise notices and the full Help sheet, and bounded Hint's tap target inside the board.
+- Valid Sprout/Strengthen card-and-target pairs and completed Bloom shapes execute immediately in Test2, including Confirm moves=Always. Invalid/partial shapes spend nothing; Undo and other-channel input branches remain intact. Coach/list previews retain explicit position selection.
+- Preserved concurrent Main2.0 artwork and cache fixes through ccccea9a26da462f02796dfe264b498ba18f74eb; no engine, bot, card, rule, score, save-schema, Main/Dev ref or workflow changes in this pass.
+
+### VALIDATION / IN PROGRESS
+- Root and web typechecks passed. Final targeted interaction, session, paint and guide rerun passed all 51 tests after baseline synchronization. Channel policy regression coverage checks that Main ownership marks remain enabled and Test2 marks are disabled.
+- Local full npm run check: 106 files passed; 1,132 tests passed, one existing expected failure, and one environment failure (ADVERSARIAL 8: spawnSync npx EPERM). This is not a green full check; exact-head CI must pass unchanged checks.
+- Main, Dev and Test2 builds succeeded. Live/Test2 asset isolation passed; current manifest-hash guard is rechecked after preserving concurrent cache work.
+- Added real UI QA for Forest/Volcano turns, Bloom/Sprout and Undo, phase cues, Skip, invalid input, exact engine/bot equality, save replay, other-channel storage and layout at nine viewports. It runs through the existing Test2 critical CI suite, without workflow edits.
+- Local browser execution is blocked by the workspace sandbox; permission execution did not complete. Browser assertions and visual screenshot review must finish through the existing CI before completion/live claims.
+
+### NOT YET VERIFIED
+- Exact-head remote CI/browser results and newly published public Test2 build.
+- Real iPhone Safari and Android hardware.

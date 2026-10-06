@@ -1,3 +1,6 @@
+// Run the detailed board/turn UX regression before the existing responsive critical checks.
+// This keeps the new behavioral coverage in the current CI suite without workflow changes.
+import './test2-board-turn-polish.js';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -58,10 +61,11 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   },legalKeys);
   check(obscured.length===0,`${w}: tip leaves all playable hexes and both homes clear (${obscured})`);
   await target.click();
-  check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: first target tap previews`);
+  await idle(page);
+  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: first valid target tap places exact action`);
   await target.click(); await idle(page);
-  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: tap again places exact action`);
-  check(await page.locator('#board .mark-line,#board .mark-ink').count() > 0, `${w}: ownership shapes`);
+  check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: repeated target tap cannot duplicate the action`);
+  check(await page.locator('#board .mark-line,#board .mark-ink').count() === 0, `${w}: artwork communicates ownership without shapes`);
   await page.click('#tool-undo'); await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);
   await page.keyboard.press('Escape');

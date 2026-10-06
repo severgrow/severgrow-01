@@ -742,7 +742,7 @@ function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
   const vv = window.visualViewport;
   const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight) - (IS_TEST2 ? (settings.largeText ? 84 : 68) : 0);
+  const h = Math.round(vv?.height ?? window.innerHeight);
   const cfg = session.state.config;
   const maxHand = cfg.handSize + 1;
   const side = thumbLayout.side;
@@ -1620,6 +1620,13 @@ function countScores(to: [number, number]) {
 const busy = () => queue.pending > 0 || pumping;
 const myTurn = () => !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 
+/** Test2's idle prompt yields for every active move, including Bloom painting without a card. */
+function updateTest2MoveActive() {
+  if (!IS_TEST2) return;
+  const active = !!session && !$('game').hidden && (busy() || session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null || !!session.pending || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr);
+  document.documentElement.classList.toggle('test2-move-active', active);
+}
+
 // ---------- idle hint ----------
 // After about 8 seconds without a tap on my turn, the next control pulses very gently.
 // One quiet pulse, no sound, no nagging; any tap or change clears it.
@@ -1649,6 +1656,7 @@ function syncGlow() {
 function render() {
   applyLayout();
   syncGlow();
+  updateTest2MoveActive();
   if (!session || $('game').hidden) return;
   armIdle();
   const v = session.view;
@@ -1725,11 +1733,18 @@ function renderGuide(advice: Advice | null) {
   let t = guideTarget(session.view, session.legal, session.sel, guideGoal, session.pending);
   if (t?.kind === 'preset') {
     // A line or clump: the coach shows its placement on the board, ready to confirm.
+    if (IS_TEST2) draw = { ...DRAW0 };
     session.preset(guideGoal);
     render();
     return;
   }
-  if (FEATURES.tapAgain && t?.kind === 'confirm' && session.pending) {
+  if (IS_TEST2 && t?.kind === 'confirm' && session.pending?.t === 'Bloom') {
+    // Only an explicit demonstrated placement is ready; a bare inspected hex still needs
+    // the player to choose the Bloom group before drawing its shape.
+    t = session.presetMove?.t === 'Bloom'
+      ? { kind: 'hex', key: coordKey(session.presetMove.hexes[0]!) }
+      : { kind: 'kind', move: kindOf(session.pending)! };
+  } else if (FEATURES.tapAgain && t?.kind === 'confirm' && session.pending) {
     const card = moveCards(session.pending)[0];
     if (card !== undefined) t = { kind: 'card', id: card };
   }
@@ -1916,6 +1931,8 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 function dockHint(v: View): Hint {
   if (!session) return { text: '', arrow: null };
   const h = hintFor(hintCtx(v));
+  if (IS_TEST2 && session.presetMove?.t === 'Bloom') return { text: 'Tap a glowing hex to bloom', arrow: 'up' };
+  if (IS_TEST2 && session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: 'Pick a card or Bloom', arrow: 'down' };
   // the test copy: no Confirm box; a second tap on the card or the hex places the move
   if (FEATURES.tapAgain && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
   return h;
@@ -1937,7 +1954,7 @@ let layoutKey = '';
 function applyLayout() {
   const vv = window.visualViewport;
   const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight) - (IS_TEST2 ? (settings.largeText ? 84 : 68) : 0);
+  const h = Math.round(vv?.height ?? window.innerHeight);
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
@@ -2361,6 +2378,12 @@ function renderControls(v: View, advice: Advice | null) {
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         bloomMenu = false;
         session!.tapKind(k.kind);
+        if (IS_TEST2) {
+          // A Bloom starts a fresh shape, including when a board hex was picked first.
+          session!.sel = { ...session!.sel, hex: null };
+          draw = { ...DRAW0 };
+          board.ghost(null);
+        }
         render();
       });
       b.dataset.kind = k.kind;
@@ -2411,6 +2434,10 @@ function renderControls(v: View, advice: Advice | null) {
     const i = Math.max(0, all.findIndex((a) => JSON.stringify(a) === JSON.stringify(pending)));
     const step = (d: number) => {
       const k = pending ? (i + d + all.length) % all.length : d > 0 ? 0 : all.length - 1;
+      if (IS_TEST2) {
+        draw = { ...DRAW0 };
+        board.ghost(null);
+      }
       session!.preset(all[k]!);
       render();
     };
@@ -2781,13 +2808,16 @@ function cancelSel() {
 /** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
   if (!session || !myTurn() || busy()) return;
-  // a Strengthen waits for Confirm (a stray tap never plays it), unless "Confirm moves" is Never
-  const a = playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
-  if (a && !asksConfirm(a)) humanPlay(a);
+  // Test2 commits a complete card-and-target Sprout, including Strengthen. Blooms finish
+  // through the drawing path, so an inferred placement never spends a partly chosen group.
+  const sprout = IS_TEST2 && (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
+  const a = sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
+  if (a && (!IS_TEST2 || a.t !== 'Bloom') && !asksConfirm(a)) humanPlay(a);
 }
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
 function asksConfirm(a: Action): boolean {
+  if (IS_TEST2 && (a.t === 'Bloom' || a.t === 'Sprout')) return false;
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
@@ -2797,7 +2827,7 @@ function onCardTap(id: number) {
   if (busy()) fastForward();
   if (!myTurn()) return;
   // the test copy: no Confirm box; tapping a card of the waiting move again places it
-  if (FEATURES.tapAgain && session.pending && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
+  if (FEATURES.tapAgain && session.pending && (!IS_TEST2 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;
@@ -2844,6 +2874,7 @@ function drawGhostNow(c: Combo): DrawGhost | null {
 
 /** Repaints only the ghost layer and the info card (no full board redraw), once per frame. */
 function paintDraw() {
+  updateTest2MoveActive();
   cancelAnimationFrame(drawFrame);
   drawFrame = requestAnimationFrame(() => {
     const c = drawCombo();
@@ -2944,7 +2975,7 @@ function drawTap(c: Combo, key: string, type: string) {
   const m = paintMatch(c, next, draw.reverse);
   if (m) return finishDraw(m);
   // the one-tap suggestion: a first tap shows the best Bloom through this hex, ready to confirm
-  if (next.length === 1 && draw.shape.length === 1) {
+  if (!IS_TEST2 && next.length === 1 && draw.shape.length === 1) {
     const s = suggestBloom(v, c.actions, key);
     if (s) {
       session!.preset(s);
@@ -2965,7 +2996,7 @@ const drawHandlers = {
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
     const keys = new Set(board.boardKeys);
     const key = hexAtPoint(p.x, p.y, keys);
-    if (session.presetMove && !draw.suggested) {
+    if (!IS_TEST2 && session.presetMove && !draw.suggested) {
       // painting again over a waiting preview: the preview goes (and the one-placement shortcut
       // does not bring it straight back while this painting is on)
       session.preset(null);
@@ -2997,6 +3028,10 @@ const drawHandlers = {
     if (ptr.viewport !== `${innerWidth}:${innerHeight}`) { draw.ptr = null; return; }
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
       ptr.moved = true;
+      if (IS_TEST2 && session!.presetMove) {
+        session!.preset(null);
+        draw = { ...draw, redraw: true };
+      }
       // a drag begins with the hex it started on (a drag from a suggestion reshapes it)
       if (draw.suggested) {
         session!.preset(null);
@@ -3035,7 +3070,16 @@ const drawHandlers = {
     const ptr = draw.ptr;
     if (!c || !ptr || ptr.id !== e.pointerId) return;
     draw.ptr = null;
+    if (IS_TEST2 && !inside) return cancelDraw('Painting cancelled');
     if (!ptr.moved) {
+      // A coach/list/sole-placement preview is a complete choice. Selecting one of its
+      // ghost hexes places it, while an ordinary first touch keeps choosing the shape.
+      const preset = session!.presetMove;
+      if (IS_TEST2 && preset?.t === 'Bloom') {
+        if (ptr.downKey && preset.hexes.some((h) => coordKey(h) === ptr.downKey)) return finishDraw(preset);
+        session!.preset(null);
+        draw = { ...draw, redraw: true };
+      }
       if (ptr.downKey) drawTap(c, ptr.downKey, ptr.type);
       return;
     }
@@ -3078,7 +3122,7 @@ function onHexTap(key: string) {
   }
   cardPinned = false;
   // Tapping the previewed hex again plays the move (same as Confirm).
-  if (session.sel.hex === key && session.pending) return humanPlay(session.pending);
+  if (session.sel.hex === key && session.pending && (!IS_TEST2 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout'))) return humanPlay(session.pending);
   session.tapHex(key);
   inspectKey = session.pending ? null : key;
   render();
@@ -3608,7 +3652,12 @@ document.addEventListener('keydown', (e) => {
   /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
   pickKind: (kind: string) => {
     if (!session) return;
-    session.sel = { ...session.sel, kind };
+    session.sel = { ...session.sel, kind, ...(IS_TEST2 ? { hex: null } : {}) };
+    if (IS_TEST2) {
+      session.preset(null);
+      draw = { ...DRAW0 };
+      board.ghost(null);
+    }
     render();
   },
   /** tests only (filmstrip): play this action for this player, as if chosen */

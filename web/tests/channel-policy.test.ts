@@ -28,14 +28,16 @@ describe('release channel policy', () => {
       expect(store.data.get('test:sentinel')).toBe('Dev');
     }
   });
-  it('Test2 has approved player features and accessible ownership, without experiments', () => {
+  it('Test2 has approved player features without owner icons or experiments', () => {
     const f = boot('test2').policy.FEATURES;
-    for (const k of ['typography', 'phoneLayout', 'guidance', 'desktopCoach', 'slimHeader', 'tapAgain', 'smartCamera', 'mapBehindCards', 'ownershipMarks']) expect(f[k]).toBe(true);
-    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools']) expect(f[k]).toBe(false);
+    for (const k of ['typography', 'phoneLayout', 'guidance', 'desktopCoach', 'slimHeader', 'tapAgain', 'smartCamera', 'mapBehindCards']) expect(f[k]).toBe(true);
+    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks']) expect(f[k]).toBe(false);
   });
   it('Main retains legacy player behavior and Dev retains tools', () => {
     expect(boot('live').policy.FEATURES.tapAgain).toBe(false);
     expect(boot('live').policy.FEATURES.replay).toBe(true);
+    expect(boot('live').policy.FEATURES.ownershipMarks).toBe(true);
     expect(boot('test').policy.FEATURES.lab).toBe(true);
+    expect(boot('test').policy.FEATURES.ownershipMarks).toBe(false);
   });
 });
