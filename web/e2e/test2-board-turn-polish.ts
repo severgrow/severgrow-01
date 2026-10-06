@@ -27,7 +27,7 @@ const filter = process.env.TEST2_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
-const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices']);
+const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices', '390x844-bomb-cards', '1280x800-bomb-cards']);
 const evidenceWritten = new Set<string>();
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
@@ -35,6 +35,19 @@ const state = (page: Page): Promise<State> => page.evaluate(() => (window as any
 const idle = (page: Page) => page.waitForFunction(() => { const h = (window as any).__severgrow; return h?.state() && !h.busy() && (h.state().actor === 0 || h.state().phase === 'GAME_OVER'); }, undefined, { timeout: 30000 });
 const rawSave = (page: Page): Promise<string | null> => page.evaluate(() => Object.entries(localStorage).find(([key]) => key === 'main2:severgrow.save.v7')?.[1] ?? null);
 const savedMatches = async (page: Page, label: string) => equal(decodeSave(await rawSave(page))?.state, await state(page), `${label}: autosave replays the exact current state`);
+// The fan intentionally overlaps; use a visibly exposed point instead of covered card centres.
+async function tapCard(page: Page, id: number) {
+  const point = await page.locator(`#hand [data-card="${id}"]`).evaluate(el => {
+    const r=el.getBoundingClientRect();
+    for (const fy of [.18,.3,.45,.6,.8]) for (const fx of [.15,.3,.5,.7,.85]) {
+      const x=r.left+r.width*fx,y=r.top+r.height*fy;
+      if (document.elementFromPoint(x,y)?.closest('[data-card]') === el) return {x,y};
+    }
+    return null;
+  });
+  assert(point,`card ${id} retains an exposed, real tap target`);
+  await page.mouse.click(point.x,point.y);
+}
 const cdps = new WeakMap<Page, CDPSession>();
 const cdp = async (page: Page) => { if (!cdps.has(page)) cdps.set(page, await page.context().newCDPSession(page)); return cdps.get(page)!; };
 const tapHex = async (page: Page, key: string, touch: boolean) => {
@@ -232,7 +245,7 @@ async function idleTiming(page: Page, label: string) {
 }
 
 async function fruitFlow(width: number, height: number) {
-  const before = fruitPosition(NINE_CHAIN, [[0,4],[2,5]], 1);
+  const before = fruitPosition(NINE_CHAIN, [[0,4],[1,6],[2,5],[3,8]], 1);
   const action = legalActions(viewFor(before,0)).find(a => a.t === 'PlayFruit' && before.board[coordKey(a.target)]?.strength === 9);
   assert(action?.t === 'PlayFruit');
   const page = await browser.newPage({ viewport: { width,height }, hasTouch: width < 600, isMobile: width < 600 });
@@ -245,7 +258,21 @@ async function fruitFlow(width: number, height: number) {
     },positionSave({state:before}));
     await page.goto(base);
     await page.click('#menu-continue'); await idle(page);
-    equal(await state(page),before,'Fruit: saved position resumes unchanged');
+    equal(await state(page),before,'Bomb: saved position resumes unchanged');
+    const palette = await page.locator('#hand .card').evaluateAll(cards => cards.map(card => ({
+      suit:card.className.match(/\bs[0-3]\b/)?.[0] ?? 'bomb', ink:getComputedStyle(card.querySelector('.c-num')!).color,
+      background:getComputedStyle(card).backgroundColor, border:getComputedStyle(card,'::after').borderStyle,
+      title:card.querySelector('.c-suit')?.getAttribute('title'), circles:card.querySelectorAll('.c-fruit svg circle').length,
+      name:card.getAttribute('aria-label')
+    })));
+    for (const [suit,color] of [['s0','rgb(127, 207, 141)'],['s1','rgb(179, 137, 243)'],['s2','rgb(118, 168, 245)'],['s3','rgb(238, 125, 115)']]) {
+      equal(palette.find(card=>card.suit===suit)?.ink,color,`Bomb/cards: ${suit} uses the approved palette exactly`);
+    }
+    check(palette.every(card=>card.background==='rgba(20, 21, 21, 0.88)'), 'Bomb/cards: all faces keep the same dark translucent background');
+    const bomb=palette.find(card=>card.suit==='bomb')!;
+    check(bomb.title==='Bomb' && bomb.name?.includes('Bomb') && bomb.circles===1 && bomb.border==='double','Bomb: round line icon, cream double frame and accessible name replace mushroom');
+    check(!await page.locator('body').innerText().then(text=>/\bfruit(?:ed)?\b/i.test(text)),'Bomb: no obsolete visible name');
+    await evidence(page,`${width}x${height}-bomb-cards`);
     await page.locator(`#hand [data-card="${action.card}"]`).click();
     equal(await state(page),before,'Fruit: choosing the card alone does not spend it');
     await tapHex(page,coordKey(action.target),width < 600);
@@ -307,20 +334,20 @@ async function finishTurn(page: Page, label: string) {
     observer.observe(document.documentElement,{ attributes:true,attributeFilter:['data-step'] });
   });
   const picked = page.locator(`#hand [data-card="${discard.card}"]`);
-  await picked.click();
+  await tapCard(page,discard.card);
   equal(await state(page),before,`${label}: first Throw tap never spends a card or advances the turn`);
   const selection = await picked.evaluate(el => ({ selected:el.classList.contains('test2-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
   check(selection.selected && selection.filter === 'grayscale(1)' && selection.transform !== 'none',`${label}: Throw preview is enlarged and completely desaturated`);
   const other = legalActions(viewFor(before,0)).find(a => a.t === 'Discard' && a.card !== discard.card);
   if (other?.t === 'Discard') {
-    await page.locator(`#hand [data-card="${other.card}"]`).click();
+    await tapCard(page,other.card);
     equal(await state(page),before,`${label}: selecting another card changes the preview without throwing`);
     equal(await page.locator('#hand .test2-throw-picked').getAttribute('data-card'),String(other.card),`${label}: only the new card is selected`);
-    await picked.click();
+    await tapCard(page,discard.card);
     equal(await state(page),before,`${label}: returning to the first card still waits for confirmation`);
   }
   if (label.startsWith('360x640') && label.endsWith('turn 1')) await evidence(page,'360x640-throw-preview');
-  await picked.click();
+  await tapCard(page,discard.card);
   await idle(page);
   equal(await state(page), expected, `${label}: actual Volcano opponent turn matches every deterministic engine/bot action`);
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);

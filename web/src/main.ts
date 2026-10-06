@@ -696,6 +696,7 @@ async function mountPlayerEnhancements() {
   if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
     (await import('./player/atmosphere.js')).mountAtmosphere();
     (await import('./player/information.js')).mountInformation();
+    (await import('./player/cards.js')).mountCards();
     test2Help = (await import('./player/help.js')).mountHelp({ sheet });
     layoutKey = '';
     if (session) render();

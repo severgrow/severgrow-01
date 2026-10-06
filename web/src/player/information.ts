@@ -151,7 +151,7 @@ export const INFORMATION_CSS = `
 .test2-information .dock .table-row > .moves > .kind { grid-column: 1; grid-row: 1; max-width: 100%; width: auto; justify-self: center; }
 .test2-information .dock .table-row > .moves > .test2-skip {
   grid-column: 2 / 4; grid-row: 1; width: 100%; min-width: 0; max-width: none;
-  height: var(--test2-tool-size); min-height: var(--test2-tool-size); margin: 0; padding: 0 6px;
+  height: var(--test2-tool-size) !important; min-height: var(--test2-tool-size) !important; margin: 0; padding: 0 6px;
   position: relative; box-sizing: border-box;
 }
 .test2-information:not([data-thumb]) .dock .table-row { row-gap: 8px; }

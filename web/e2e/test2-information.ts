@@ -20,6 +20,8 @@ try {
     await menu.click('#menu-howto');
     await menu.locator(`#howto-body [data-tip="${topic}"]`).click();
     check(await menu.locator('#sheet-test2-help').isVisible(), `${topic}: explicit lesson opens before a game`);
+    check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-test2-help').innerText()), `${topic}: help uses Bomb terminology`);
+    if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
     check(!await menu.locator('#sheet-test2-help').isVisible(), `${topic}: acknowledgement closes help`);

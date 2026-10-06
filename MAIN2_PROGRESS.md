@@ -1,5 +1,22 @@
 # Main2.0 / Test2 progress
 
+## Card palette and Bomb presentation — 6 October 2026
+
+- Test2 only: exact approved suit inks (#7FCF8D leaf, #B389F3 frost, #76A8F5 water,
+  #EE7D73 fire), dark translucent faces, finer frame weights and consistent icon strokes.
+  Card sizes/order, fan, highlights, ownership colours and board art remain unchanged.
+- The special card uses a cream round-bomb line icon, short fuse, tiny spark and a restrained
+  double inner frame. Both corner/centre icons, pile and flying faces share the same rendering.
+- A Test2-only presentation adapter translates visible Fruit text, dynamic help/captions,
+  tooltips and accessibility labels to Bomb. It never edits data attributes, save identities,
+  actions or rules. The existing immediate action and Undo are unchanged.
+- Corrected the previous Skip height cascade (44px on phones), and browser QA now taps exposed
+  card areas in the overlapping fan when switching a Throw preview; no forced input/steps.
+- Typecheck/Test2 build and focused wording tests passed. Local preview remains blocked by
+  listen EPERM; full check encounters the known subprocess sandbox limitation. Existing exact
+  head CI/browser checks and card screenshots are required before reporting completion/live.
+
+
 ## Besley idle cues, compact Skip and two-tap Throw — 6 October 2026
 
 - Test2 only: idle prompts retain their three-second delay, use Besley, breathe subtly and

@@ -50,3 +50,9 @@ export const FRUIT_SVG = wrap(
     '<circle cx="9" cy="9.5" r=".9" fill="currentColor"/><circle cx="13.5" cy="8" r=".9" fill="currentColor"/><circle cx="16" cy="11" r=".7" fill="currentColor"/>' +
     '<circle cx="6" cy="4.5" r=".6" fill="currentColor"/><circle cx="18.5" cy="4" r=".5" fill="currentColor"/><circle cx="20.5" cy="7.5" r=".45" fill="currentColor"/>',
 );
+
+/** Test2's special card: restrained linework, short fuse and one tiny spark. */
+export const BOMB_SVG = /* @__PURE__ */ wrap(
+  '<circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" fill-opacity=".12"/>' +
+  '<path d="m14 9 2-2-2-2-2 2M16 6c1.5-2 3-1 3-3M7 12.5a4 4 0 0 1 2-1.5M20 1v1M22 3h-1M21.5 1.5l-.7.7"/>',
+);
