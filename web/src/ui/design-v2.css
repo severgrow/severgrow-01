@@ -1,0 +1,144 @@
+/* ================================================================
+   DESIGN V2 — experimental illustrated skin, test copy only.
+   These selectors are inert unless DesignBoardView adds .design-v2-board.
+   ================================================================ */
+
+.lab-mode-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.lab-mode-menu .current {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-panel) 88%, transparent);
+  font-weight: 800;
+}
+.lab-mode-menu .design-link-btn {
+  text-decoration: none;
+}
+
+.design-v2-board .design-v2-tile-art,
+.design-v2-board .design-v2-terrain-art,
+.design-v2-board .design-v2-home-art,
+.design-v2-board .design-v2-detail,
+.design-v2-board .design-v2-cutoff,
+.design-v2-board .design-v2-scar {
+  pointer-events: none;
+}
+
+.design-v2-board .design-v2-tile-art {
+  image-rendering: auto;
+}
+
+.design-v2-board .design-v2-terrain-art {
+  opacity: 0.96;
+}
+
+.design-v2-board .design-v2-cell-edge {
+  fill: none;
+  stroke: rgba(6, 10, 9, 0.54);
+  stroke-width: 0.78;
+}
+
+.design-v2-board .tile-edge {
+  stroke: rgba(4, 8, 7, 0.5);
+  stroke-width: 0.78;
+}
+
+.design-v2-board .num-plate {
+  opacity: 0.82 !important;
+}
+
+.design-v2-board .tile-num {
+  paint-order: stroke fill;
+  stroke: rgba(245, 247, 238, 0.22);
+  stroke-width: 0.5;
+}
+
+.design-v2-board .design-v2-detail {
+  opacity: 0.9;
+}
+
+.design-v2-board .design-v2-hidden-landmark {
+  opacity: 0;
+}
+
+.design-v2-board .design-v2-home-art {
+  image-rendering: auto;
+  filter: drop-shadow(1.2px 2px 1.2px rgba(0, 0, 0, 0.28));
+}
+
+.design-v2-board .design-link {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.design-v2-board .design-link.grow-in {
+  stroke-dasharray: 1;
+  animation: draw-on calc(0.34s * var(--anim, 1)) ease-out both;
+}
+
+.design-v2-board .design-v2-veins.forest .forest-shadow {
+  stroke: #26311e;
+}
+.design-v2-board .design-v2-veins.forest .forest-bark {
+  stroke: #5a6e36;
+}
+.design-v2-board .design-v2-veins.forest .forest-living {
+  stroke: #97b75a;
+}
+.design-v2-board .design-v2-veins.forest .forest-highlight {
+  stroke: #d6e596;
+}
+.design-v2-board .design-v2-link-leaf {
+  fill: #78a94e;
+  stroke: #354a29;
+  stroke-width: 0.45;
+}
+.design-v2-board .design-v2-veins.forest .fragile {
+  opacity: 0.82;
+}
+
+.design-v2-board .design-v2-veins.volcano .lava-glow {
+  stroke: #ff4b12;
+  opacity: 0.16;
+  filter: drop-shadow(0 0 1.4px rgba(255, 76, 20, 0.4));
+}
+.design-v2-board .design-v2-veins.volcano .lava-crust {
+  stroke: #251d1b;
+}
+.design-v2-board .design-v2-veins.volcano .lava-seam {
+  stroke: #7b281c;
+}
+.design-v2-board .design-v2-veins.volcano .lava-molten {
+  stroke: #ff5516;
+}
+.design-v2-board .design-v2-veins.volcano .lava-core {
+  stroke: #ffd45d;
+}
+.design-v2-board .design-v2-veins.volcano .fragile {
+  opacity: 0.8;
+}
+
+.design-v2-board .design-link.loose {
+  opacity: 0.48;
+}
+
+.design-v2-board .design-v2-cutoff {
+  filter: saturate(0.72) brightness(0.84);
+}
+.design-v2-board .design-v2-scar {
+  mix-blend-mode: normal;
+}
+
+.reduce-motion .design-v2-board .design-link.grow-in {
+  animation: none;
+}

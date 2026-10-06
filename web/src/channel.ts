@@ -1,5 +1,5 @@
-// Explicit product policy: Main stays legacy; Dev keeps experiments; Test2 promotes only
-// approved player features. Namespace applies equally to localStorage and sessionStorage.
+// Futasaku 0.3 uses the Test2 presentation. Historical channels remain for
+// compatibility checks; each channel keeps its established storage namespace.
 declare const __CHANNEL__: string;
 export type Channel = 'live' | 'test' | 'test2';
 export const CHANNEL: Channel = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'test2') ? __CHANNEL__ : 'live';

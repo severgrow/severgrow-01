@@ -24,8 +24,8 @@ export const OPP = Object.freeze({
   Label: `${OPPONENT_LABEL}'s`,
 });
 
-/** The game's name, as the player sees it (the code, storage keys and repo keep "severgrow"). */
-export const GAME_TITLE = 'Severor';
+/** The game's player-facing name. Historical save keys keep their original namespace. */
+export const GAME_TITLE = 'Futasaku';
 
 /** The words for the one-card move. It is called "Sprout" everywhere (one constant: SPROUT). */
 export type MoveWords = {

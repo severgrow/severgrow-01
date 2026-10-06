@@ -1,4 +1,4 @@
-// Loaded only by the literal Test2 guard: Main and Dev keep their existing brand.
+// Loaded by the current Futasaku channel; historical channels keep their existing presentation.
 import logoUrl from '../assets/futasaku-white.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';

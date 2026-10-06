@@ -94,7 +94,7 @@ for (const kind of ['touch', 'desk'] as const) {
   await page.goto('http://localhost:4194/');
   await page.waitForTimeout(900);
   const f = await fontsInUse(page);
-  check(`${kind}: Besley + Commissioner in use`, f.cls && f.body === 'Commissioner' && f.title === 'Besley' && f.btn === 'Commissioner' && f.num === 'Severor Numerals' && ['Besley', 'Commissioner', 'Severor Numerals'].every((x) => f.loaded.includes(x)), JSON.stringify(f));
+  check(`${kind}: Besley + Commissioner in use`, f.cls && f.body === 'Commissioner' && f.title === 'Besley' && f.btn === 'Commissioner' && f.num === 'Futasaku Numerals' && ['Besley', 'Commissioner', 'Futasaku Numerals'].every((x) => f.loaded.includes(x)), JSON.stringify(f));
   const each = async (name: string, prep?: () => Promise<void>) => {
     for (const [w, h] of sizes) {
       await page.setViewportSize({ width: w, height: h });
@@ -114,7 +114,7 @@ for (const kind of ['touch', 'desk'] as const) {
   const centre = await page.evaluate(() => {
     const c = document.createElement('canvas').getContext('2d')!;
     const res: Record<string, number[]> = {};
-    for (const fam of ['Severor Numerals', 'Alegreya Sans']) {
+    for (const fam of ['Futasaku Numerals', 'Alegreya Sans']) {
       c.font = `700 100px "${fam}"`;
       c.textBaseline = 'middle';
       res[fam] = [...'123456789'].map((d) => {
@@ -124,7 +124,7 @@ for (const kind of ['touch', 'desk'] as const) {
     }
     return res;
   });
-  console.log(`tile digits, ink centre above the em middle (per 100px): numerals ${centre['Severor Numerals']!.join(' ')} | Alegreya ${centre['Alegreya Sans']!.join(' ')}`);
+  console.log(`tile digits, ink centre above the em middle (per 100px): numerals ${centre['Futasaku Numerals']!.join(' ')} | Alegreya ${centre['Alegreya Sans']!.join(' ')}`);
   await each('draw');
   // play into Grow (draw), then Throw, opponent: one screen each
   let step = 0;

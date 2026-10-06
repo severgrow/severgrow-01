@@ -14,8 +14,8 @@ if (channel !== 'test2') for (const n of names) assert(!/^(information|help|atmo
 if (channel !== 'test2') for (const n of names) assert(!/^(branding|futasaku-white)-/.test(n), `Test2 brand leaked: ${n}`);
 const html = readFileSync(`${dir}/index.html`, 'utf8');
 const manifest = JSON.parse(readFileSync(`${dir}/manifest.webmanifest`, 'utf8'));
-assert.equal(manifest.name, channel === 'test2' ? 'Futasaku' : 'Severor', 'channel app name');
-assert(html.includes(`<title>${channel === 'test2' ? 'Futasaku' : 'Severor'}</title>`), 'channel browser title');
+assert.equal(manifest.name, 'Futasaku', 'channel app name');
+assert(html.includes('<title>Futasaku</title>'), 'channel browser title');
 if (channel === 'test2') for (const prefix of ['besley-', 'commissioner-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-', 'atmosphere-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
 if (existsSync(`${dir}/design-v3/manifest.json`)) {
   // the art manifest lists a content hash per file (the game asks for file?v=hash, so no cache can serve a stale picture)

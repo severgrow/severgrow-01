@@ -37,7 +37,7 @@ Two voices, scoped under `<html class="test-typography-v2">` (test build only; `
 - **Commissioner** (UI / functional): everything else. Body 460 / 1.42; small UI 530; buttons
   600 (primary and big 660, move buttons 660); the step plate's words 700, its line above 600
   +0.15em; sheet section labels 600 uppercase +0.09em 0.74rem; pile labels 530; level names 600.
-- **Severor Numerals**: Commissioner Bold's digits made tabular (Commissioner has no tabular
+- **Futasaku Numerals**: Commissioner Bold's digits made tabular (Commissioner has no tabular
   figures): each digit's advance set to the widest (the "0"), outlines centred. Loaded with a
   `unicode-range` for digits and + - , . / % : × −, so letters fall through to Commissioner. Used
   for every number: tile numbers (700), card numbers, scores, pile counts, level numbers, badges,
@@ -55,7 +55,7 @@ Two voices, scoped under `<html class="test-typography-v2">` (test build only; `
 |---|---|---|---|---|
 | Besley | `web/src/fonts/v2/besley-wght.woff2` | 600-800 axis | 24.4 KB | SIL OFL 1.1 (`LICENSE-besley.txt`) |
 | Commissioner | `web/src/fonts/v2/commissioner-wght.woff2` | 400-700 axis | 18.6 KB | SIL OFL 1.1 (`LICENSE-commissioner.txt`) |
-| Severor Numerals (from Commissioner 700) | `web/src/fonts/v2/severor-numerals-700.woff2` | 700 | 2.3 KB | SIL OFL 1.1 (modified, renamed) |
+| Futasaku Numerals (from Commissioner 700) | `web/src/fonts/v2/futasaku-numerals-700.woff2` | 700 | 2.3 KB | SIL OFL 1.1 (modified, renamed) |
 
 Total 45.3 KB. Subset to Basic Latin plus the symbols the game prints, hinting kept. Preloaded;
 `font-display: swap`; metric-matched fallbacks (`Besley Fallback` from Georgia, `Commissioner

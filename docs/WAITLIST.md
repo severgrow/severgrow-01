@@ -28,8 +28,9 @@ All 14 entries reviewed against pinned Dev fa674ff89e9bc1cae30b84bbf6dd307eb78bc
 | Watch | Excluded; Test development only |
 | Lab | Excluded; Test development only; Classic defaults verified against Main |
 
-Final browser/release verification is tracked in MAIN2_PROGRESS.md; promotion is not a claim
-that deployment or real-device checks are complete.
+Historical Test2 verification is recorded in `MAIN2_PROGRESS.md` at the frozen
+source commit `89d438c1b3fca253292d1b8a9eabffcf5e2da315`. Futasaku 0.3
+verification is recorded in `docs/FUTASAKU_0_3_BASELINE.md`.
 
 ## Original waiting entries
 

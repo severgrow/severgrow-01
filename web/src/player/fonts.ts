@@ -1,9 +1,9 @@
 // Approved typography v2 for Test and Test2; legacy live keeps Alegreya Sans:
-//   Besley (display / brand): the SEVEROR wordmark, page and sheet titles, the result title, the
+//   Besley (display / brand): the Futasaku wordmark, page and sheet titles, the result title, the
 //     level selector's heading. About a tenth of the type; never interface copy or numbers.
 //   Commissioner (UI / functional): everything else: buttons, the step plate, cards, labels,
 //     tooltips, the coach, settings, body copy.
-//   Severor Numerals: Commissioner Bold's digits made tabular (equal widths, centred), so scores,
+//   Futasaku Numerals: Commissioner Bold's digits made tabular (equal widths, centred), so scores,
 //     counts, card and tile numbers never shift (Commissioner has no tabular figures). It covers
 //     only digits and a few signs (unicode-range); letters fall through to Commissioner.
 // All SIL OFL, bundled in web/src/fonts/v2 (licences there), subset to the characters the game
@@ -11,7 +11,7 @@
 // "Font: New / Previous" in the Lab sheet switches back to Alegreya Sans instantly.
 import besley from '../fonts/v2/besley-wght.woff2?url';
 import commissioner from '../fonts/v2/commissioner-wght.woff2?url';
-import numerals from '../fonts/v2/severor-numerals-700.woff2?url';
+import numerals from '../fonts/v2/futasaku-numerals-700.woff2?url';
 
 const KEY = 'severgrow-font';
 export type FontChoice = 'new' | 'previous';
@@ -31,7 +31,7 @@ const T = `html.${TYPE_CLASS}`;
 const CSS = `
 @font-face { font-family: 'Besley'; src: url('${besley}') format('woff2'); font-weight: 600 800; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Commissioner'; src: url('${commissioner}') format('woff2'); font-weight: 400 700; font-style: normal; font-display: swap; }
-@font-face { font-family: 'Severor Numerals'; src: url('${numerals}') format('woff2'); font-weight: 400 800; font-style: normal; font-display: swap; unicode-range: U+0030-0039, U+002B-002F, U+0025, U+003A, U+00D7, U+2212; }
+@font-face { font-family: 'Futasaku Numerals'; src: url('${numerals}') format('woff2'); font-weight: 400 800; font-style: normal; font-display: swap; unicode-range: U+0030-0039, U+002B-002F, U+0025, U+003A, U+00D7, U+2212; }
 /* fallbacks shaped like the real fonts (width, ascent, descent), so nothing jumps while they load */
 @font-face { font-family: 'Besley Fallback'; src: local('Georgia'), local('Times New Roman'); size-adjust: 104%; ascent-override: 96%; descent-override: 28%; line-gap-override: 0%; }
 @font-face { font-family: 'Commissioner Fallback'; src: local('Arial'), local('Helvetica Neue'), local('Roboto'); size-adjust: 100%; ascent-override: 98%; descent-override: 21%; line-gap-override: 0%; }
@@ -40,7 +40,7 @@ const CSS = `
 ${T} body {
   --font-display: 'Besley', 'Besley Fallback', Georgia, serif;
   --font-ui: 'Commissioner', 'Commissioner Fallback', system-ui, sans-serif;
-  --font-num: 'Severor Numerals', 'Commissioner', 'Commissioner Fallback', system-ui, sans-serif;
+  --font-num: 'Futasaku Numerals', 'Commissioner', 'Commissioner Fallback', system-ui, sans-serif;
   --font: var(--font-ui);
   --w-ui-regular: 460;
   --w-ui-medium: 530;

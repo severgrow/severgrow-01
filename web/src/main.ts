@@ -1,6 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
-// Severgrow in the browser. You (player 1) against GreedyBot. All rules come from the
+// Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
@@ -86,6 +86,7 @@ const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2'
   ? await import('./player/branding.js') : null;
 branding?.mountBranding();
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
+  await import('./ui/design-v2.css');
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
 // the V3 look (menu -> V3, or ?design=v3; remembered in this channel's own storage): the same
@@ -112,9 +113,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE as LEGACY_GAME_TITLE, HOME, OPP, SPROUT, WELCOME as LEGACY_WELCOME, turnsLeftText } from '../../src/strings.js';
-const GAME_TITLE = IS_TEST2 ? 'Futasaku' : LEGACY_GAME_TITLE;
-const WELCOME = IS_TEST2 ? { ...LEGACY_WELCOME, title: `Welcome to ${GAME_TITLE}` } : LEGACY_WELCOME;
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, WELCOME, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';

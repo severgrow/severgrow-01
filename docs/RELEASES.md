@@ -18,7 +18,9 @@ Candidate publication requires the full unit/type check, original Classic per-ac
 asset isolation, and nine-viewport browser critical flow. Additional local HTTPS quality checks
 cover palettes, fonts, hand sizes, keyboard controls, tutorial, statistics, corrupt/blocked storage,
 scoped offline resume, and repeated missing-asset recovery. Record actual results and outstanding
-real-device checks in MAIN2_PROGRESS.md; historical results are not proof of a rebuilt candidate.
+real-device checks for this version in `docs/FUTASAKU_0_3_BASELINE.md`.
+Older Test2 results remain in `MAIN2_PROGRESS.md` at source commit
+`89d438c1b3fca253292d1b8a9eabffcf5e2da315`.
 
 `scripts/compose-pages.mjs` changes only offline routing in Main's generated worker: it excludes
 both child directories and deletes only Main-owned obsolete caches. Main gameplay source stays

@@ -38,8 +38,8 @@ for (const palette of ['soil','moss','ink']) for (const variant of ['right','lef
   check(await p.evaluate(()=>!!document.activeElement?.closest('button')),`${palette}/${variant}: keyboard focus`);
   await p.keyboard.press('d');await p.waitForTimeout(400);
   check(await p.evaluate(()=>(window as any).__severgrow.state().phase==='ACT'),`${palette}/${variant}: keyboard draw`);
-  check(await p.evaluate(()=>document.fonts.check('700 20px "Severor Numerals"')),`${palette}/${variant}: numeral font loaded`);
-  const numbers=await p.evaluate(()=>{const canvas=document.createElement('canvas'),c=canvas.getContext('2d')!;c.font='700 20px "Severor Numerals"';return [...'123456789'].map(n=>c.measureText(n).width);});
+  check(await p.evaluate(()=>document.fonts.check('700 20px "Futasaku Numerals"')),`${palette}/${variant}: numeral font loaded`);
+  const numbers=await p.evaluate(()=>{const canvas=document.createElement('canvas'),c=canvas.getContext('2d')!;c.font='700 20px "Futasaku Numerals"';return [...'123456789'].map(n=>c.measureText(n).width);});
   check(Math.max(...numbers)-Math.min(...numbers)<0.01,`${palette}/${variant}: equal-width digits 1–9`);
   const hand=await p.locator('#hand .card').count();check(hand===8,`${palette}/${variant}: eight-card hand`);
   const clipping=await p.evaluate(()=>[...document.querySelectorAll('#hand .card')].every(e=>{const r=e.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1;}));
