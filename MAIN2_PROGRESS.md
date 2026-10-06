@@ -1,5 +1,22 @@
 # Main2.0 / Test2 progress
 
+## Futasaku branding — 6 October 2026
+
+- Test2 only: Futasaku replaces the visible game name on the menu, welcome, launch splash,
+  browser/social/install metadata and result-sharing cards. Internal save/cache keys stay intact.
+- The supplied Japanese logo is rendered in clean white with transparent negative space. It
+  replaces the old menu emblem and appears at the far right of the game header, 44px high,
+  aligned vertically with the existing 44px menu button. The progress bar is fully hidden,
+  inaccessible and takes no layout space; scores remain available through the menu.
+- Main and Dev branding is preserved by literal Test2 imports and channel-specific build
+  metadata. No engine, bot, rule, card, scoring, save, branch or workflow changes.
+- Typechecks and all three channel builds/asset-isolation checks pass. Added real browser checks
+  for logo loading/alignment, no progress bar, menu/welcome copy and installed-app name at all
+  nine supported QA sizes. Local browser launch is blocked by sandbox EPERM; exact-head GitHub
+  CI and visual screenshot review are required before reporting publication.
+- Full local check is running; one unchanged subprocess test already reports sandbox EPERM.
+  This is an environment failure, not a passed check. CI remains the publication gate.
+
 ## DONE
 
 - 2026-10-05: Actual remote heads verified: Main `4833bf000110e3edb148a7264398e2ab81eb4b44`, Dev `fa674ff89e9bc1cae30b84bbf6dd307eb78bcd6b`, Main2.0 `5ad790c441c9388a3e86913940c3e61013c349f6`.

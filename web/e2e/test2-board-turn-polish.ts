@@ -25,7 +25,7 @@ const filter = process.env.TEST2_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
-const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3']);
+const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu']);
 const evidenceWritten = new Set<string>();
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
@@ -84,6 +84,25 @@ async function open(width: number, height: number, seed: number, v3 = false) {
 
 async function geometry(page: Page, width: number, height: number, label: string) {
   const before = await state(page);
+  const brand = await page.evaluate(async () => {
+    const menu = document.querySelector<HTMLElement>('#hud-menu')!.getBoundingClientRect();
+    const image = document.querySelector<SVGSVGElement>('#hud-brand')!;
+    const asset = new Image();
+    asset.src = image.querySelector('image')!.getAttribute('href')!;
+    await asset.decode();
+    const box = image.getBoundingClientRect();
+    const race = document.querySelector<HTMLElement>('#race')!;
+    return { title: document.title, loaded: asset.complete && asset.naturalWidth > 0,
+      height: box.height, menuHeight: menu.height, center: box.top + box.height / 2,
+      menuCenter: menu.top + menu.height / 2, right: box.right,
+      raceVisible: race.getClientRects().length > 0 && getComputedStyle(race).display !== 'none',
+      pointer: getComputedStyle(image).pointerEvents };
+  });
+  equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
+  check(brand.loaded && brand.height === brand.menuHeight && Math.abs(brand.center-brand.menuCenter) < 1,
+    `${label}: white logo loads at the menu button's height and centre`);
+  check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input`);
+  check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
   const info = await page.evaluate(() => {
     const board = document.querySelector<SVGSVGElement>('#board')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
@@ -249,6 +268,14 @@ async function sproutFlow(width: number, height: number) {
     const resumed = await state(page);
     await page.evaluate(() => history.replaceState(null,'',location.pathname));
     await page.reload();
+    equal(await page.locator('#menu .title').innerText(), 'Futasaku', `${label}: main screen uses the new name`);
+    check(await page.locator('#logo svg').isVisible(), `${label}: supplied logo replaces the old menu mark`);
+    check(!/severor/i.test(await page.locator('body').innerText()), `${label}: old name is absent from visible copy`);
+    check(!await page.locator('#terrarium').isVisible(), `${label}: old menu artwork does not obscure the new logo`);
+    const manifest = await (await page.request.get(base+'manifest.webmanifest')).json();
+    equal([manifest.name,manifest.short_name], ['Futasaku','Futasaku'], `${label}: installed-app name uses Futasaku`);
+    await page.screenshot({ path: `${dir}/${width}x${height}-futasaku-menu.png` });
+    await evidence(page,`${width}x${height}-futasaku-menu`);
     await page.click('#menu-continue'); await idle(page);
     equal(await state(page),resumed,`${label}: reload resumes exact save after real turns`);
     const untouched = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key === 'severgrow.save.v7' || key === 'test:severgrow.save.v7')));

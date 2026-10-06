@@ -82,6 +82,9 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 let DesignView: typeof BoardView = BoardView;
+const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2'
+  ? await import('./player/branding.js') : null;
+branding?.mountBranding();
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
@@ -109,7 +112,9 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, WELCOME, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE as LEGACY_GAME_TITLE, HOME, OPP, SPROUT, WELCOME as LEGACY_WELCOME, turnsLeftText } from '../../src/strings.js';
+const GAME_TITLE = IS_TEST2 ? 'Futasaku' : LEGACY_GAME_TITLE;
+const WELCOME = IS_TEST2 ? { ...LEGACY_WELCOME, title: `Welcome to ${GAME_TITLE}` } : LEGACY_WELCOME;
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -347,6 +352,7 @@ function drawTerrarium() {
 }
 
 function drawLogo() {
+  if (branding) { branding.drawLogo(); return; }
   drawTerrarium();
   const c = resolveColors(theme());
   $('logo').innerHTML = `<svg viewBox="0 0 120 84" width="132" height="92" aria-hidden="true">
