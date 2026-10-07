@@ -29,9 +29,6 @@ export const TYPE_CLASS = 'test-typography-v2';
 
 const T = `html.${TYPE_CLASS}`;
 const CSS = `
-@font-face { font-family: 'Besley'; src: url('${besley}') format('woff2'); font-weight: 600 800; font-style: normal; font-display: swap; }
-@font-face { font-family: 'Commissioner'; src: url('${commissioner}') format('woff2'); font-weight: 400 700; font-style: normal; font-display: swap; }
-@font-face { font-family: 'Futasaku Numerals'; src: url('${numerals}') format('woff2'); font-weight: 400 800; font-style: normal; font-display: swap; unicode-range: U+0030-0039, U+002B-002F, U+0025, U+003A, U+00D7, U+2212; }
 /* fallbacks shaped like the real fonts (width, ascent, descent), so nothing jumps while they load */
 @font-face { font-family: 'Besley Fallback'; src: local('Georgia'), local('Times New Roman'); size-adjust: 104%; ascent-override: 96%; descent-override: 28%; line-gap-override: 0%; }
 @font-face { font-family: 'Commissioner Fallback'; src: local('Arial'), local('Helvetica Neue'), local('Roboto'); size-adjust: 100%; ascent-override: 98%; descent-override: 21%; line-gap-override: 0%; }

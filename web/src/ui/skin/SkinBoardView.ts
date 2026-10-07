@@ -26,7 +26,7 @@ import { pickTier } from './tier.js';
 import type { HomeLayer, NetworkLook, PropDef, SkinDef, Tier } from './types.js';
 import { SKIN_CSS } from './skin-css.js';
 import { drawSeedStone } from '../seedstone.js';
-import { drawGoldCrystals } from '../goldcrystals.js';
+import { drawGoldCrystals, goldCrystalKeepout } from '../goldcrystals.js';
 
 /** Most ground-canvas pixels: phones (coarse pointer) and the rest. */
 const MAX_PX = { coarse: 3_000_000, fine: 6_500_000 };
@@ -74,6 +74,10 @@ export class SkinBoardView extends BoardView {
     super(svg, handlers);
     this.assets = new SkinAssets(skin);
     this.painter = new GroundPainter(skin, this.assets);
+    // Warm first-frame art while the menu is visible. A quick start shares
+    // these in-flight requests; a later high-tier choice releases them.
+    if (IS_TEST2) void this.assets.setTier('lo').then(() =>
+      this.assets.preload(['textures/empty_', 'homes/', 'props/rock/', 'tiles/', 'textures/', 'masks/flat/'], 8000));
     this.net = [{ ...skin.network[0] }, { ...skin.network[1] }];
     svg.classList.add('skin-board');
     svg.dataset.skin = skin.id;
@@ -100,6 +104,9 @@ export class SkinBoardView extends BoardView {
 
   protected override afterSetup(terrain: Record<string, Terrain>) {
     this.terrain = terrain;
+    if (this.groundUrl) URL.revokeObjectURL(this.groundUrl);
+    this.groundUrl = null;
+    this.svg.classList.remove('skin-ground-ready');
     const vb = this.svg.viewBox.baseVal;
     this.box = { x0: vb.x, y0: vb.y, w: vb.width, h: vb.height };
     const defs = this.svg.querySelector('defs')!;
@@ -191,10 +198,10 @@ export class SkinBoardView extends BoardView {
     const a = this.assets;
     if (!a.tier) return;
     const tier = a.tier;
-    // everything a move can bring onto the board, decoded before the art is switched on: then a
-    // tile placed later shows its painting at once (and a file that fails is dropped, not shown
-    // broken). Until this settles the board shows its flat colours.
-    await a.preload(IS_TEST2 ? ['tiles/', 'homes/', 'props/', 'fx/', 'states/'] : ['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
+    // Ground textures start alongside the visible sprites, then the painter
+    // reuses those requests. A later move's props do not delay the first frame.
+    if (IS_TEST2) void a.preload(['textures/empty_', 'textures/', 'masks/flat/'], 8000);
+    else await a.preload(['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
     if (a.tier !== tier) return;
     if (!IS_TEST2) {
       const style = await a.json<Record<string, Partial<NetworkLook>>>(this.skin.networkStyle);
@@ -220,6 +227,18 @@ export class SkinBoardView extends BoardView {
         const anim = r?.anim === null ? undefined : (r?.anim ?? set.anim);
         return { src, size: r?.size ?? set.size, ...(r?.minStrength ? { minStrength: r.minStrength } : {}), ...(anim ? { anim } : {}) };
       });
+    }
+    if (IS_TEST2) {
+      const visible = new Set([...a.list('homes/'), ...a.list('props/rock/')]);
+      for (const [key, tile] of Object.entries(this.lastRender?.[0] ?? {})) {
+        if (tile && !tile.root) {
+          const src = this.tileSource(key, tile);
+          if (src) visible.add(src);
+        }
+      }
+      await Promise.all([...visible].map(src => a.image(src)));
+      if (a.tier !== tier) return;
+      void a.preload(['tiles/', 'props/', 'fx/', 'states/'], 8000);
     }
     this.linkArt = IS_TEST2 ? [[], []] : await Promise.all(
       this.net.map(async (n) =>
@@ -305,6 +324,15 @@ export class SkinBoardView extends BoardView {
 
   private strength9(t: Tile) {
     return t.root ? 9 : 1 + Math.round(vigour(t.strength, this.config.maxRank) * 8);
+  }
+
+  private tileSource(key: string, tile: Tile): string | null {
+    const art = this.tileArt[this.skin.owners[tile.owner]];
+    if (!art) return null;
+    const rank = this.strength9(tile);
+    let list: string[] = [];
+    for (let d = 0; d < 9 && !list.length; d++) list = art[rank - d]?.length ? art[rank - d]! : (art[rank + d] ?? []);
+    return list[Math.floor(hash(`${key}:tile`) * list.length)] ?? null;
   }
 
   private joined(board: Record<string, Tile | null>) {
@@ -751,9 +779,7 @@ export class SkinBoardView extends BoardView {
     // a painted hex for this strength (the nearest strength that has one), turned with the board
     const art = this.tileArt[skin.owners[t.owner]];
     if (art) {
-      let list: string[] = [];
-      for (let d = 0; d < 9 && !list.length; d++) list = art[s9 - d]?.length ? art[s9 - d]! : (art[s9 + d] ?? []);
-      const src = list[Math.floor(hash(`${key}:tile`) * list.length)];
+      const src = this.tileSource(key, t);
       if (src) {
         const o = toScreen(1, 0);
         const turn = (Math.atan2(o.y, o.x) * 180) / Math.PI;
@@ -773,10 +799,10 @@ export class SkinBoardView extends BoardView {
     // tiles carry their own plants, so they get none)
     const defs = art ? [] : ((cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? []);
     const budget = cut ? Math.min(1, propBudget(this.tilePx(), 9)) : propBudget(this.tilePx(), s9);
-    for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
+    for (const pr of placeProps(key, defs, budget, cut ? 9 : s9, this.richKeys.has(key) ? [goldCrystalKeepout(key)] : [])) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true);
+    if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true, (this.settlingGold.get(key) ?? 0) > performance.now());
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];

@@ -110,7 +110,9 @@ export class SkinAssets {
    */
   preload(prefixes: string[], maxMs = 8000): Promise<void> {
     const tier = this.tier;
-    const todo = [...this.files].filter((f) => prefixes.some((p) => f.startsWith(p)) && /\.(png|webp|avif|jpe?g)$/i.test(f));
+    const priority = (file: string) => prefixes.findIndex(prefix => file.startsWith(prefix));
+    const todo = [...this.files].filter((f) => priority(f) >= 0 && /\.(png|webp|avif|jpe?g)$/i.test(f))
+      .sort((a, b) => priority(a) - priority(b));
     let i = 0;
     const worker = async () => {
       while (i < todo.length && this.tier === tier) await this.image(todo[i++]);

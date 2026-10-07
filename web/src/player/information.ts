@@ -231,6 +231,10 @@ html.test2-information .dock > #test2-box {
 html.test2-information[data-step='draw'] .dock > #test2-box { --box-piles: 128px; }
 html.test2-information[data-thumb] .dock > #test2-box {
   position: absolute; top: 8px; left: 4px; width: calc(100% - 8px);
+  height: 122px; grid-template-rows: 44px 48px; align-content: end;
+}
+html.test2-information[data-thumb] .dock #test2-box > .moves {
+  grid-template-rows: 44px 48px;
 }
 html.test2-information .dock #test2-box > .piles {
   display: flex; position: relative; grid-column: 1; grid-row: 1 / 3;
@@ -395,6 +399,7 @@ html.test2-information[data-step='throw'] #discard .gd-halo {
 html.test2-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
 /* A fixed backlight reads as a turn state without flickering with the moving cards. */
 html.test2-information #hand { position: relative; isolation: isolate; }
+html.test2-information #hand .card { touch-action: manipulation; }
 html.test2-information #hand::before {
   content: ''; position: absolute; inset: auto; z-index: -1; pointer-events: none;
   left: var(--test2-hand-glow-x, 50%); top: var(--test2-hand-glow-y, 50%);
@@ -403,10 +408,10 @@ html.test2-information #hand::before {
   border-radius: 50%; opacity: 0; transition: opacity 180ms ease, background 180ms ease;
 }
 html.test2-information[data-step='grow'] #hand::before {
-  opacity: .7; background: radial-gradient(ellipse, rgba(96,180,105,.20) 0%, rgba(71,139,83,.08) 48%, transparent 75%);
+  opacity: .8; background: radial-gradient(ellipse, transparent 44%, rgba(94,178,102,.22) 69%, rgba(59,127,70,.11) 82%, transparent 100%);
 }
 html.test2-information[data-step='throw'] #hand::before {
-  opacity: 1; background: radial-gradient(ellipse, rgba(189,69,52,.42) 0%, rgba(145,45,33,.21) 48%, transparent 78%);
+  opacity: 1; background: radial-gradient(ellipse, transparent 44%, rgba(181,57,42,.34) 68%, rgba(129,39,28,.19) 81%, transparent 100%);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes test2-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
@@ -417,9 +422,9 @@ html.test2-information[data-step='grow'][data-test2-waiting='true'] #moves > :is
   animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) {
-  opacity: .84; filter: grayscale(.62) brightness(.9);
+  opacity: .88; filter: grayscale(.54) brightness(.94);
   outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 0 15px rgba(205,76,53,.25), 0 4px 20px rgba(110,33,21,.18);
+  box-shadow: 0 4px 16px rgba(20,11,10,.32);
   animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked {

@@ -47,7 +47,8 @@ async function tapCard(page: Page, id: number) {
     return null;
   });
   assert(point,`card ${id} retains an exposed, real tap target`);
-  await page.mouse.click(point.x,point.y);
+  if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) await page.touchscreen.tap(point.x,point.y);
+  else await page.mouse.click(point.x,point.y);
 }
 const cdps = new WeakMap<Page, CDPSession>();
 const cdp = async (page: Page) => { if (!cdps.has(page)) cdps.set(page, await page.context().newCDPSession(page)); return cdps.get(page)!; };
@@ -404,10 +405,11 @@ async function finishTurn(page: Page, label: string) {
     const halo = document.querySelector('#discard .gd-halo')!;
     const ring = document.querySelector('#discard .gd-ring')!;
     return { cardFilter:getComputedStyle(card).filter, cardAnimation:getComputedStyle(card).animationName,
+      backlight:getComputedStyle(document.querySelector('#hand')!, '::before').backgroundImage,
       haloShadow:getComputedStyle(halo).boxShadow, haloAnimation:getComputedStyle(halo).animationName,
       ringAnimation:getComputedStyle(ring).animationName };
   });
-  check(throwLook.cardFilter.includes('grayscale(0.62)') && throwLook.cardAnimation === 'none' &&
+  check(throwLook.cardFilter.includes('grayscale(0.54)') && throwLook.backlight.includes('rgba(0, 0, 0, 0) 44%') && throwLook.cardAnimation === 'none' &&
     throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
     `${label}: Throw keeps readable color and a steady red backlight (${JSON.stringify(throwLook)})`);
   const glowScope = await page.evaluate(() => {
@@ -434,8 +436,8 @@ async function finishTurn(page: Page, label: string) {
     root.classList.toggle('reduce-motion', reduced);
     return result;
   });
-  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('radial-gradient') && throwPulse.light.includes('189, 69, 52'),
-    `${label}: Throw uses the same whole-card pulse as Grow over a fixed ember backlight`);
+  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('radial-gradient') && throwPulse.light.includes('181, 57, 42'),
+    `${label}: Throw uses the same whole-card pulse as Grow over a fixed ember backlight (${JSON.stringify(throwPulse)})`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
   while (expected.actor === 1 && expected.phase !== 'GAME_OVER') {
@@ -461,6 +463,10 @@ async function finishTurn(page: Page, label: string) {
   const picked = page.locator(`#hand [data-card="${discard.card}"]`);
   await tapCard(page,discard.card);
   equal(await state(page),before,`${label}: first Throw tap never spends a card or advances the turn`);
+  if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
+    check(await picked.evaluate(el => getComputedStyle(el).touchAction === 'manipulation'),
+      `${label}: the mobile Throw card prevents double-tap browser zoom`);
+  }
   const selection = await picked.evaluate(el => ({ selected:el.classList.contains('test2-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
   check(selection.selected && selection.filter === 'grayscale(1)' && selection.transform !== 'none',`${label}: Throw preview is enlarged and completely desaturated`);
   const other = legalActions(viewFor(before,0)).find(a => a.t === 'Discard' && a.card !== discard.card);
@@ -474,6 +480,10 @@ async function finishTurn(page: Page, label: string) {
   if (label.startsWith('360x640') && label.endsWith('turn 1')) await evidence(page,'360x640-throw-preview');
   await tapCard(page,discard.card);
   await idle(page);
+  if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) {
+    check(await page.evaluate(() => Math.abs((visualViewport?.scale ?? 1) - 1) < .01),
+      `${label}: confirming Throw keeps the mobile viewport at its normal scale`);
+  }
   equal(await state(page), expected, `${label}: actual Volcano opponent turn matches every deterministic engine/bot action`);
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);
   const opponent = await page.evaluate(() => (window as any).__test2OpponentReadiness);
@@ -896,12 +906,18 @@ async function goldCrystalVisuals() {
       },positionSave({state:game}));
       await page.goto(`${base}${v3?'?design=v3':''}`);
       await page.click('#menu-continue'); await idle(page);
+      if (v3) await page.waitForFunction(() => {
+        const board = document.querySelector('#board');
+        return board?.classList.contains('skin-ground-ready') && Number(getComputedStyle(board).opacity) > .98;
+      }, undefined, {timeout:30000});
       equal(await state(page),game,`${v3?'V3':'standard'}: crystal art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
         const occupied = document.querySelector<SVGGElement>('#board .tile[data-key="0,0"]')!;
         const stone = occupied.querySelector('.seed-stone')!;
         const crystal = occupied.querySelector('.gold-crystals')!;
+        const art = crystal.querySelector<SVGSVGElement>('.gold-crystal-art')!;
+        const clear = crystal.querySelector<SVGCircleElement>('mask circle');
         const source = document.querySelector<SVGImageElement>('#board .gold-crystals image')!.getAttribute('href')!;
         const atlas = new Image(); atlas.src=source; await atlas.decode();
         const empty = rich.find(cell=>cell.dataset.key !== '0,0')!.querySelector('.gold-crystals')!;
@@ -910,13 +926,18 @@ async function goldCrystalVisuals() {
           occupied:!!occupied.querySelector('.gold-crystals.occupied'),badges:document.querySelectorAll('#board .gold-badge').length,
           oldRocks:document.querySelectorAll('#board .skin-gold').length,stoneOnTop:!!(crystal.compareDocumentPosition(stone)&Node.DOCUMENT_POSITION_FOLLOWING),
           imageReady:atlas.naturalWidth===1536&&atlas.naturalHeight===1024,
+          compact:Number(art.getAttribute('width'))<=18,
+          stoneGap:!!clear && Number(clear.getAttribute('r'))>=9,
+          edgeMask:!!crystal.querySelector('mask path'),
+          rootedGlow:!!crystal.querySelector('.gold-crystal-bed'),
           strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(crystal).filter,
           variant:Number(crystal.getAttribute('data-variant'))};
       });
       check(visual.rich===rich.length && visual.empty===rich.length-1 && visual.hiddenUnderTile && visual.occupied && visual.badges===0 && visual.oldRocks===0,
         `${v3?'V3':'standard'}: every bonus hex shows crystals, with no visible 2 or old gold rocks (${JSON.stringify(visual)})`);
-      check(visual.stoneOnTop && visual.imageReady && visual.strongerEmptyGlow && visual.variant>=0 && visual.variant<6,
-        `${v3?'V3':'standard'}: six-pair atlas loads, strength stone stays in front, empty crystal glows more (${JSON.stringify(visual)})`);
+      check(visual.stoneOnTop && visual.imageReady && visual.compact && visual.stoneGap && visual.edgeMask && visual.rootedGlow &&
+        visual.strongerEmptyGlow && visual.variant>=0 && visual.variant<6,
+        `${v3?'V3':'standard'}: compact crystals sit clear of the stone and edge with a rooted glow (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/390x844-gold-${v3?'v3':'standard'}.png`});
     } finally { await page.close(); }
   }

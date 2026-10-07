@@ -1,0 +1,43 @@
+/* Test2's display and UI faces are declared in the first stylesheet, before
+   module imports. The menu never paints in a substitute face on a cold load. */
+@font-face {
+  font-family: 'Besley';
+  src: url('./fonts/v2/besley-wght.woff2') format('woff2');
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Commissioner';
+  src: url('./fonts/v2/commissioner-wght.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Futasaku Numerals';
+  src: url('./fonts/v2/futasaku-numerals-700.woff2') format('woff2');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0030-0039, U+002B-002F, U+0025, U+003A, U+00D7, U+2212;
+}
+html.test-typography-v2 body {
+  --font-display: 'Besley', Georgia, serif;
+  --font-ui: 'Commissioner', system-ui, sans-serif;
+  --font-num: 'Futasaku Numerals', 'Commissioner', system-ui, sans-serif;
+  --font: var(--font-ui);
+  --w-text: 460;
+  --w-num: 700;
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  line-height: 1.42;
+}
+html.test-typography-v2 #menu .title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -.03em;
+  line-height: .92;
+  font-size: clamp(2.5rem, 7.5vw + .9rem, 4.25rem);
+}

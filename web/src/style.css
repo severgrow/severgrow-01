@@ -605,10 +605,38 @@ html.test2-information .hex.rich {
   pointer-events: none;
   transform-box: view-box;
   transform-origin: 0 0;
-  filter: drop-shadow(0 0 1.5px rgba(255, 189, 55, .32));
+  filter: drop-shadow(0 0 2px rgba(255, 186, 56, .42));
+}
+/* A V3 board enters on its finished painting, never on grey placeholder hexes. */
+html.test2-information.design-v3 #board.skin-board:not(.skin-ground-ready) {
+  opacity: 0;
+  pointer-events: none;
+}
+html.test2-information.design-v3 #board.skin-board {
+  transition: opacity 120ms ease-out;
 }
 #board .gold-crystals.empty {
-  filter: drop-shadow(0 0 2.4px rgba(255, 191, 63, .5));
+  filter: drop-shadow(0 0 3px rgba(255, 191, 63, .66));
+}
+#board .gold-crystal-bed {
+  fill: #e7a530;
+  opacity: .34;
+  filter: blur(3px);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+#board .gold-crystals.empty .gold-crystal-bed { opacity: .48; }
+#board .gold-crystals.settling .gold-crystal-bed {
+  animation: gold-crystal-settle 420ms cubic-bezier(.18,.72,.24,1) both;
+}
+@keyframes gold-crystal-settle {
+  0% { opacity: .05; scale: .5; }
+  62% { opacity: .68; scale: 1.12; }
+  100% { opacity: .34; scale: 1; }
+}
+.reduce-motion #board .gold-crystals.settling .gold-crystal-bed { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  #board .gold-crystals.settling .gold-crystal-bed { animation: none; }
 }
 .gold-weave-fill {
   pointer-events: none;

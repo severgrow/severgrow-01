@@ -2010,8 +2010,10 @@ function alignHandGlow() {
   const right = Math.max(...rects.map(rect => rect.right));
   const top = Math.min(...rects.map(rect => rect.top));
   const bottom = Math.max(...rects.map(rect => rect.bottom));
-  const insetX = Math.min(15, (right - left) * .08);
-  const insetY = Math.min(18, (bottom - top) * .14);
+  // Place the backlight at the outside of the fan; its hollow centre keeps
+  // colour from pooling between overlapping translucent cards.
+  const insetX = 2;
+  const insetY = 2;
   hand.style.setProperty('--test2-hand-glow-x', `${Math.round(left - origin.left + insetX)}px`);
   hand.style.setProperty('--test2-hand-glow-y', `${Math.round(top - origin.top + insetY)}px`);
   hand.style.setProperty('--test2-hand-glow-w', `${Math.round(Math.max(1, right - left - insetX * 2))}px`);
@@ -3869,7 +3871,7 @@ sound.enabled = settings.sound;
 sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
-showSplash();
+if (!IS_TEST2) showSplash();
 const params = BOOT_PARAMS;
 // Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
 // the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too

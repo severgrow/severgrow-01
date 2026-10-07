@@ -1,5 +1,5 @@
 // Props: separate sprites on owned tiles, placed deterministically (the same board always looks
-// the same), never in the number or gold-badge clear zones, and only as many as the tile's
+// the same), never in the number or occupied gold-crystal clear zones, and only as many as the tile's
 // rendered size allows (LOD). Pure.
 import type { PropDef } from './types.js';
 
@@ -20,7 +20,7 @@ export const propBudget = (tilePx: number, strength9: number) => {
 };
 
 /** Clear zones, board units from the tile centre (geometry.json of the V3 pack). */
-export const CLEAR = { number: { x: 0, y: -1.8, r: 9 }, gold: { x: 17.4, y: 12.6, r: 6 }, mark: { x: 0, y: 16.8, r: 4.5 } };
+export const CLEAR = { number: { x: 0, y: -1.8, r: 9 }, mark: { x: 0, y: 16.8, r: 4.5 } };
 
 export type Placed = { def: PropDef; x: number; y: number; size: number };
 
@@ -29,7 +29,7 @@ export type Placed = { def: PropDef; x: number; y: number; size: number };
  * spots between the centre and the corners (turned a little per tile), skipping any spot whose
  * sprite would touch a clear zone or leave the hex.
  */
-export const placeProps = (key: string, defs: PropDef[], count: number, strength9: number): Placed[] => {
+export const placeProps = (key: string, defs: PropDef[], count: number, strength9: number, extraClear: readonly { x: number; y: number; r: number }[] = []): Placed[] => {
   const pool = defs.filter((d) => (d.minStrength ?? 1) <= strength9);
   if (!pool.length || count <= 0) return [];
   const turn = hash(`${key}:turn`) * Math.PI * 2;
@@ -45,7 +45,7 @@ export const placeProps = (key: string, defs: PropDef[], count: number, strength
     const half = def.size * (0.85 + hash(`${key}:s${out.length}`) * 0.2) * 0.5;
     const clearOf = (z: { x: number; y: number; r: number }) => Math.hypot(s.x - z.x, s.y - z.y) >= z.r + half;
     // inside the hex: the inscribed circle (apothem 26) less the sprite
-    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.gold) || !clearOf(CLEAR.mark) || Math.hypot(s.x, s.y) + half * 0.45 > 27) continue;
+    if (!clearOf(CLEAR.number) || !clearOf(CLEAR.mark) || extraClear.some(z => !clearOf(z)) || Math.hypot(s.x, s.y) + half * 0.45 > 27) continue;
     if (out.some((p) => Math.hypot(p.x - s.x, p.y - s.y) < (p.size + half * 2) * 0.38)) continue;
     out.push({ def, x: s.x, y: s.y, size: half * 2 });
   }
