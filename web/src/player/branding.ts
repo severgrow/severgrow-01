@@ -28,11 +28,12 @@ html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
-  height: var(--futasaku-logo-height, 40px);
+  height: var(--futasaku-logo-height, 50px);
   align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
   max-width: 150px;
   display: block;
+  opacity: .75;
   pointer-events: none;
   user-select: none;
 }
@@ -145,10 +146,16 @@ export function mountBranding() {
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
     const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
     if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 3.4}px`);
-      const hud = document.querySelector<HTMLElement>('#game > .hud');
-      const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c,matrix.d) / 2;
-      if (hud) image.style.setProperty('--futasaku-logo-top', `${Math.max(0,inkTop-hud.getBoundingClientRect().top)}px`);
+      image.style.setProperty('--futasaku-logo-height', `${height * 4.25}px`);
+      // The taller logo also changes the grid row's height, which moves the menu ink.
+      // Re-measure both after each small correction until their tops meet, including safe areas.
+      for (let i = 0; i < 7; i++) {
+        const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c, matrix.d) / 2;
+        const delta = inkTop - image.getBoundingClientRect().top;
+        if (Math.abs(delta) < .15) break;
+        const top = parseFloat(getComputedStyle(image).marginTop) || 0;
+        image.style.setProperty('--futasaku-logo-top', `${Math.max(0, top + delta)}px`);
+      }
     }
   };
   if (menuIcon) {

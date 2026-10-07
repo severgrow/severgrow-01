@@ -60,6 +60,10 @@ try {
     await target.click();
     await idle(page);
     check(JSON.stringify(await state(page)) === JSON.stringify(apply(grown, action)), `${w}: first valid tap places the exact action in V3`);
+    check(await page.locator('#board .l-veins > *').count() === 0 && await page.locator('#board .ghost-vein').count() === 0,
+      `${w}: V3 paints no permanent or preview connector artwork`);
+    check(await page.locator(`#board .tile[data-key="${action.coord.q},${action.coord.r}"] .seed-stone .tile-num`).textContent() === String(grown.hands[0].find(card => card.id === action.card)!.rank),
+      `${w}: V3 keeps the correct strength on the ceramic counter`);
     check((await page.locator('#board .skin-tile .mark-line, #board .skin-tile .mark-ink').count()) === 0, `${w}: V3 artwork carries ownership without shapes`);
     await page.click('#tool-undo');
     await idle(page);

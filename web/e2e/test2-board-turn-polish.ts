@@ -114,11 +114,11 @@ async function geometry(page: Page, width: number, height: number, label: string
       buttonColor: getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor,
       menuCenter: menu.top + menu.height / 2, right: box.right,
       raceVisible: race.getClientRects().length > 0 && getComputedStyle(race).display !== 'none',
-      pointer: getComputedStyle(image).pointerEvents };
+      pointer: getComputedStyle(image).pointerEvents, opacity: getComputedStyle(image).opacity };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-3.4*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2,
-    `${label}: new emblem is readable and exactly top-aligned with the menu lines`);
+  check(brand.loaded && Math.abs(brand.height-4.25*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
+    `${label}: new emblem is readable and exactly top-aligned with the menu lines (${JSON.stringify(brand)})`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
@@ -365,6 +365,17 @@ async function finishTurn(page: Page, label: string) {
   assert(discard?.t === 'Discard', `${label}: has a legal throw`);
   const deck = await page.locator('#deck').evaluate(el => ({ opacity: Number(getComputedStyle(el).opacity), filter: getComputedStyle(el).filter }));
   check(deck.opacity < .55 && deck.filter.includes('grayscale'), `${label}: dimmed deck makes Throw visually distinct from Grow`);
+  const throwLook = await page.evaluate(() => {
+    const card = document.querySelector('#hand .card:not(.test2-throw-picked)')!;
+    const halo = document.querySelector('#discard .gd-halo')!;
+    const ring = document.querySelector('#discard .gd-ring')!;
+    return { cardFilter:getComputedStyle(card).filter, cardAnimation:getComputedStyle(card).animationName,
+      haloShadow:getComputedStyle(halo).boxShadow, haloAnimation:getComputedStyle(halo).animationName,
+      ringAnimation:getComputedStyle(ring).animationName };
+  });
+  check(throwLook.cardFilter.includes('grayscale(0.62)') && throwLook.cardAnimation === 'none' &&
+    throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
+    `${label}: Throw keeps readable color and a steady red backlight (${JSON.stringify(throwLook)})`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
   while (expected.actor === 1 && expected.phase !== 'GAME_OVER') {
@@ -449,6 +460,10 @@ async function sproutFlow(width: number, height: number) {
     check(!await page.locator('#confirm').isVisible() && await page.evaluate(() => !(window as any).__severgrow.pending()), `${label}: Sprout has no Confirm or tap-again step`);
     check(await page.locator('#board .tile .mark-line, #board .tile .mark-ink').count() === 0, `${label}: numbered Forest tiles have no owner icon`);
     check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .tile-num`).textContent() === String(grown.hands[0].find(card => card.id === action.card)!.rank), `${label}: Sprout strength is clearly rendered`);
+    check(await page.locator('#board .l-veins > *').count() === 0 && await page.locator('#board .ghost-vein').count() === 0,
+      `${label}: no permanent or preview connector artwork is rendered`);
+    check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .seed-stone .seed-stone-num`).count() === 1,
+      `${label}: the actual strength sits on a code-rendered ceramic stone`);
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
     const illegalEmpty = Object.keys(grown.terrain).find(key => !grown.board[key] && grown.terrain[key] === 'normal' &&
@@ -590,9 +605,27 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     const tapped = keys.at(-1)!;
     const reduced = await page.evaluate(()=>document.documentElement.classList.contains('reduce-motion'));
     await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
+    await page.evaluate(() => {
+      const proto = Element.prototype as Element & { __boinkOriginal?: typeof Element.prototype.animate; __boinkCount?: number };
+      proto.__boinkOriginal = proto.animate;
+      proto.__boinkCount = 0;
+      proto.animate = function(frames, options) {
+        if (this.matches(`#board .tile[data-key="${(window as any).__boinkKey}"]`) && typeof options === 'object' && options?.duration === 240)
+          proto.__boinkCount!++;
+        return proto.__boinkOriginal!.call(this, frames, options);
+      };
+    });
+    await page.evaluate(key => { (window as any).__boinkKey = key; }, tapped);
     await tapHex(page,tapped,touch);
-    const bounce = await page.locator(`#board .tile[data-key="${tapped}"]`).evaluate(el=>
-      el.getAnimations().some(a=>a.id==='test2-boink' && a.effect?.getTiming().duration===240));
+    const bounce = await page.evaluate(() => {
+      const proto = Element.prototype as Element & { __boinkOriginal?: typeof Element.prototype.animate; __boinkCount?: number };
+      const count = proto.__boinkCount ?? 0;
+      if (proto.__boinkOriginal) proto.animate = proto.__boinkOriginal;
+      delete proto.__boinkOriginal;
+      delete proto.__boinkCount;
+      delete (window as any).__boinkKey;
+      return count > 0;
+    });
     check(bounce,`${label}: occupied tile tap gives a brief boink`);
     check(!await page.locator('#tooltip').isVisible(),`${label}: tapping an occupied tile opens no explanation`);
     equal(await state(page),placed,`${label}: touching a tile changes no game state`);

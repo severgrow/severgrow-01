@@ -247,9 +247,12 @@ html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-cou
 html.test2-information .dock #test2-box .pile-count.pile-meter {
   display: flex; align-items: center; justify-content: center; gap: 0;
   width: 30px; min-width: 30px; height: 18px; padding: 1px 3px;
-  border: 1px solid rgba(245,239,219,.3); border-radius: 3px;
-  background: linear-gradient(180deg,#080a0a,#1a1b1b 52%,#090a0a);
-  color: #f4efde; box-shadow: inset 0 1px 2px #000, 0 1px 2px rgba(0,0,0,.45);
+  border: 1px solid rgba(204,198,177,.38); border-radius: 3px 4px 2px 3px;
+  background:
+    radial-gradient(circle at 8px 4px,rgba(255,245,214,.065) 0 .6px,transparent .85px) 0 0/13px 9px,
+    repeating-linear-gradient(101deg,transparent 0 3px,rgba(211,202,176,.025) 3px 3.5px),
+    linear-gradient(180deg,#080a0a,#1a1b1b 52%,#090a0a);
+  color: #f4efde; box-shadow: inset 0 1px 2px #000, inset 0 -1px rgba(224,218,198,.09), 0 1px 2px rgba(0,0,0,.45);
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
@@ -330,6 +333,11 @@ html.test2-information[data-step='throw'] #test2-box #deck {
 html.test2-information[data-step='throw'] #test2-box #discard {
   filter: brightness(1.12); transition: filter 160ms ease;
 }
+html.test2-information[data-step='throw'] #discard .gd-halo {
+  opacity: .62; transition: none;
+  box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
+}
+html.test2-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
 /* Scale is a separate transform property, so the fan's rotate/translate and hit targets
    retain their layout. Grow breathes as whole playable cards; Throw has its own tone. */
 @keyframes test2-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
@@ -337,11 +345,16 @@ html.test2-information[data-step='grow'][data-test2-waiting='true'] #hand:not(.w
   animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) {
-  opacity: .8; filter: grayscale(.78) brightness(.84);
+  opacity: .84; filter: grayscale(.62) brightness(.9);
   outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 0 14px rgba(205,76,53,.26), 0 4px 20px rgba(110,33,21,.18);
+  box-shadow: 0 0 15px rgba(205,76,53,.25), 0 4px 20px rgba(110,33,21,.18);
 }
-html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { opacity: 1; }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked {
+  opacity: 1; box-shadow: 0 0 18px rgba(205,76,53,.28) !important;
+}
+/* The old idle hint animated the card filter, making the red light appear to flicker. */
+html.test2-information[data-step='throw'] #hand .card,
+html.test2-information[data-step='throw'] #hand.idle-hint .card.playable { animation: none !important; }
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
   html.test2-information #hand .card { animation: none !important; }

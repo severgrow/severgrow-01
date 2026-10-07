@@ -677,6 +677,19 @@ svg.usable .hex-cell {
 .tile.bot .tile-num {
   fill: var(--c-botInk);
 }
+.seed-stone { pointer-events: none; }
+.seed-stone-shadow { fill: rgba(0, 0, 0, .34); }
+.seed-stone-body { stroke: #8c826e; stroke-width: .58; }
+.seed-stone-glint { fill: #fffdf5; opacity: .25; }
+.tile .seed-stone .seed-stone-num,
+.ghost .seed-stone .seed-stone-num {
+  fill: #272720;
+  stroke: none;
+  paint-order: normal;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
 .mark-ink {
   fill: var(--c-youInk);
 }
@@ -3788,6 +3801,7 @@ html.final-turns .game::after {
 .l-amb {
   pointer-events: none;
 }
+.territory-pulse { pointer-events: none; }
 .amb-pulse {
   fill: none;
   stroke: color-mix(in srgb, var(--c-you) 55%, #fff);

@@ -2,8 +2,8 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { FEATURES } from '../channel.js';
-import { boardCoords, coordKey, homeCoord } from '../../../src/engine/index.js';
+import { FEATURES, IS_TEST2 } from '../channel.js';
+import { allNeighbors, boardCoords, connectedKeys, coordKey, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -26,6 +26,7 @@ import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
 import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
+import { drawSeedStone, seedStoneDefs } from './seedstone.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -183,7 +184,8 @@ export class BoardView {
       const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
       el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
-      el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
+      if (IS_TEST2) drawSeedStone(gg, t.key, x, y + 1, t.strength, this.id('seed-stone'));
+      else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
     }
     for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
     if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
@@ -212,6 +214,7 @@ export class BoardView {
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
+    if (IS_TEST2) seedStoneDefs(defs, this.id('seed-stone'));
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
     const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 2.2, height: 6, class: 'pat-ink' }, hatch);
@@ -417,8 +420,9 @@ export class BoardView {
     }
   }
 
-  /** The networks: one vein per linked pair (fills this.veinEls). */
+  /** Futasaku 0.3 lets adjacent tile art carry territory; no permanent connector is drawn. */
   protected drawVeins(board: Record<string, Tile | null>, o: Overlay, veins: SVGGElement) {
+    if (IS_TEST2) { this.shownVeins.clear(); return; }
     const st = this.style;
     // Veins: thick, glowing links back to the root. Thickness and brightness follow how
     // many tiles depend on each link; fragile links (cutting them removes tiles) are thin
@@ -464,7 +468,7 @@ export class BoardView {
     }
     for (const key of o.cutKeys) el('path', { d: hexPath(key, S * 0.7, st.tileShape), class: 'will-cut' }, over);
     // overhaul item 10: the veins the move would grow, drawn on before the tiles
-    for (const [a, b] of o.ghostLinks ?? []) {
+    for (const [a, b] of IS_TEST2 ? [] : (o.ghostLinks ?? [])) {
       const A = centerOf(a);
       const B = centerOf(b);
       const t = 0.28;
@@ -474,7 +478,8 @@ export class BoardView {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       el('path', { d: hexPath(g.key, S * tileScale(g.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(g.key);
-      el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
+      if (IS_TEST2) drawSeedStone(gg, g.key, x, y + 1, g.strength, this.id('seed-stone'));
+      else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
       if (g.replaces) el('path', { d: star(x + S * 0.5, y - S * 0.5, 6), class: 'spark-mark' }, gg);
     }
     // The coach's hint is a circle (not a hex outline), so it never looks like gold.
@@ -589,14 +594,18 @@ export class BoardView {
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
-      el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
-      el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
+      if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, this.id('seed-stone'));
+      else {
+        el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
+        el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
+      }
       this.mark(g, x, y + S * 0.52, t.owner === 0 ? st.youMark : st.botMark);
       return g;
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
+    if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, this.id('seed-stone'));
+    else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
   }
@@ -712,7 +721,9 @@ export class BoardView {
     g.replaceChildren();
     this.svg.classList.toggle('sway', !!plan?.sway);
     if (!plan) return;
-    for (const p of plan.pulses) {
+    if (IS_TEST2) {
+      if (plan.sway) this.drawTerritoryPulses(g);
+    } else for (const p of plan.pulses) {
       const A = centerOf(p.from);
       const B = centerOf(p.to);
       el('path', { d: `M${A.x.toFixed(1)},${A.y.toFixed(1)}L${B.x.toFixed(1)},${B.y.toFixed(1)}`, class: 'amb-pulse', pathLength: 100, style: `animation-delay:${p.delay}s` }, g);
@@ -728,6 +739,49 @@ export class BoardView {
     for (const e of plan.embers) {
       const { x, y } = centerOf(e.key);
       el('circle', { cx: (x + e.dx * S).toFixed(1), cy: (y - S * 0.2).toFixed(1), r: 1.1, class: 'amb-ember', style: `animation-delay:${e.delay}s` }, g);
+    }
+  }
+
+  /** One moving, clipped pool of light per living territory. Its motion path has no stroke:
+   * the highlight only appears on owned tile surfaces, never as a connector in a gap. */
+  private drawTerritoryPulses(layer: SVGGElement) {
+    const board = this.lastRender?.[0];
+    const defs = this.svg.querySelector('defs');
+    if (!board || !defs) return;
+    for (const owner of [0, 1] as const) {
+      let joined: Set<string>;
+      try { joined = connectedKeys(board, this.config, owner); }
+      catch { continue; }
+      const root = this.rootKey(owner);
+      if (!joined.has(root) || joined.size < 2) continue;
+      const route: string[] = [root];
+      const seen = new Set([root]);
+      const walk = (key: string) => {
+        for (const next of allNeighbors(parseKey(key)).map(coordKey).filter(k => joined.has(k) && !seen.has(k)).sort()) {
+          seen.add(next); route.push(next); walk(next); route.push(key);
+        }
+      };
+      walk(root);
+      const clipId = this.id(`territory-clip-${owner}`);
+      const glowId = this.id(`territory-light-${owner}`);
+      defs.querySelector(`#${clipId}`)?.remove();
+      let gradient = defs.querySelector(`#${glowId}`);
+      if (!gradient) {
+        gradient = el('radialGradient', { id: glowId }, defs);
+        el('stop', { offset: '0%', 'stop-color': owner === 0 ? '#f4ffd9' : '#ffbe79', 'stop-opacity': owner === 0 ? .46 : .52 }, gradient);
+        el('stop', { offset: '54%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': .16 }, gradient);
+        el('stop', { offset: '100%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': 0 }, gradient);
+      }
+      const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
+      for (const key of joined) el('path', { d: hexPath(key, S * 1.01, this.style.tileShape) }, clip);
+      const surface = el('g', { class: `territory-pulse p${owner}`, 'clip-path': `url(#${clipId})` }, layer);
+      const light = el('circle', { cx: 0, cy: 0, r: S * .98, fill: `url(#${glowId})`, opacity: 0 }, surface);
+      const points = route.map(key => centerOf(key));
+      const path = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join('');
+      const duration = `${Math.min(24, Math.max(8, route.length * .48)).toFixed(1)}s`;
+      const begin = owner ? '-3.2s' : '0s';
+      el('animateMotion', { path, dur: duration, begin, repeatCount: 'indefinite', calcMode: 'linear' }, light);
+      el('animate', { attributeName: 'opacity', values: '0;.8;.8;0', keyTimes: '0;.08;.88;1', dur: duration, begin, repeatCount: 'indefinite' }, light);
     }
   }
   veinsTouching(keys: Set<string>) {
@@ -751,4 +805,3 @@ export class BoardView {
     return hexPath(key, size, this.style.tileShape);
   }
 }
-

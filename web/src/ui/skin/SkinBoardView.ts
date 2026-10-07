@@ -9,6 +9,7 @@
 // (tier.ts). Anything the skin's files don't have yet falls back (greybox colours from the
 // skin, the board's own home drawings, no props), so final art drops in without code changes.
 import { allNeighbors, connectedKeys, coordKey, parseKey } from '../../../../src/engine/index.js';
+import { IS_TEST2 } from '../../channel.js';
 import type { Player, Terrain, Tile } from '../../../../src/engine/index.js';
 import { looseEdges, networkEdges } from '../../logic/network.js';
 import { getOrient, toScreen } from '../../logic/orient.js';
@@ -24,6 +25,7 @@ import { placeProps, propBudget } from './props.js';
 import { pickTier } from './tier.js';
 import type { HomeLayer, NetworkLook, PropDef, SkinDef, Tier } from './types.js';
 import { SKIN_CSS } from './skin-css.js';
+import { drawSeedStone } from '../seedstone.js';
 
 /** Most ground-canvas pixels: phones (coarse pointer) and the rest. */
 const MAX_PX = { coarse: 3_000_000, fine: 6_500_000 };
@@ -106,7 +108,7 @@ export class SkinBoardView extends BoardView {
     if (this.groundUrl) this.groundImg.setAttribute('href', this.groundUrl);
     this.netDefs = el('g', {}, defs);
     // the number plates: a soft disc behind the digit, in each player's colours
-    this.skin.numbers.forEach((n, p) => {
+    if (!IS_TEST2) this.skin.numbers.forEach((n, p) => {
       const gr = el('radialGradient', { id: this.id(`skin-plate-${p}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
       el('stop', { offset: 0, 'stop-color': n.plate, 'stop-opacity': 1 }, gr);
       el('stop', { offset: 0.62, 'stop-color': n.plate, 'stop-opacity': 0.92 }, gr);
@@ -191,12 +193,14 @@ export class SkinBoardView extends BoardView {
     // everything a move can bring onto the board, decoded before the art is switched on: then a
     // tile placed later shows its painting at once (and a file that fails is dropped, not shown
     // broken). Until this settles the board shows its flat colours.
-    await a.preload(['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
+    await a.preload(IS_TEST2 ? ['tiles/', 'homes/', 'props/', 'fx/', 'states/'] : ['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
     if (a.tier !== tier) return;
-    const style = await a.json<Record<string, Partial<NetworkLook>>>(this.skin.networkStyle);
-    if (a.tier !== tier) return;
-    const merge = (n: SkinDef['network'][number]): NetworkLook => ({ ...n, ...(style?.[n.key] ?? {}), widths: { ...n.widths, ...(style?.[n.key]?.widths ?? {}) } });
-    this.net = [merge(this.skin.network[0]), merge(this.skin.network[1])];
+    if (!IS_TEST2) {
+      const style = await a.json<Record<string, Partial<NetworkLook>>>(this.skin.networkStyle);
+      if (a.tier !== tier) return;
+      const merge = (n: SkinDef['network'][number]): NetworkLook => ({ ...n, ...(style?.[n.key] ?? {}), widths: { ...n.widths, ...(style?.[n.key]?.widths ?? {}) } });
+      this.net = [merge(this.skin.network[0]), merge(this.skin.network[1])];
+    }
     this.propDefs = {};
     this.cutoffDefs = {};
     for (const [id, m] of Object.entries(this.skin.materials)) if (m.cutoffProps) this.cutoffDefs[id] = a.list(m.cutoffProps.dir).map((src) => ({ src, size: m.cutoffProps!.size }));
@@ -216,14 +220,14 @@ export class SkinBoardView extends BoardView {
         return { src, size: r?.size ?? set.size, ...(r?.minStrength ? { minStrength: r.minStrength } : {}), ...(anim ? { anim } : {}) };
       });
     }
-    this.linkArt = await Promise.all(
+    this.linkArt = IS_TEST2 ? [[], []] : await Promise.all(
       this.net.map(async (n) =>
         n.links
           ? (await Promise.all(a.list(n.links).map(async (f) => ({ f, img: await a.image(f) })))).flatMap(({ f, img }) => (img ? [{ url: a.url(f), aspect: img.width / img.height }] : []))
           : [],
       ),
     );
-    this.strips = await Promise.all(
+    this.strips = IS_TEST2 ? [null, null] : await Promise.all(
       this.net.map(async (n) => {
         const img = n.strip ? await a.image(n.strip) : null;
         return img && n.strip ? { url: a.url(n.strip), w: img.width, h: img.height } : null;
@@ -520,6 +524,7 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawVeins(board: Record<string, Tile | null>, o: Overlay, veins: SVGGElement) {
+    if (IS_TEST2) { this.shownVeins.clear(); return; }
     const now = new Set<string>();
     const fresh = this.shownVeins.size > 0;
     const tilePx = this.tilePx() || 60;
@@ -763,9 +768,12 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    const n = skin.numbers[t.owner];
-    el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);
-    el('text', { x, y: y - S * 0.06, class: 'num tile-num world skin-num', style: `fill:${n.ink}` }, g).textContent = String(t.strength);
+    if (IS_TEST2) drawSeedStone(g, key, x, y - S * .06, t.strength, this.id('seed-stone'));
+    else {
+      const n = skin.numbers[t.owner];
+      el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);
+      el('text', { x, y: y - S * 0.06, class: 'num tile-num world skin-num', style: `fill:${n.ink}` }, g).textContent = String(t.strength);
+    }
     return g;
   }
 }
