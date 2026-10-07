@@ -258,6 +258,9 @@ html.test2-information .dock #test2-box #deck .pile-stack { inset: 0; }
 html.test2-information[data-step='draw'] .dock #test2-box > .piles > .pile.ready {
   transform: scale(1.16); animation: test2-draw-pile-breathe 1.8s ease-in-out 240ms infinite;
 }
+html.test2-information[data-thumb][data-step='draw'] .dock #test2-box > .piles > .pile.ready {
+  transform: translateY(10px) scale(1.16);
+}
 @keyframes test2-draw-pile-breathe { 0%,100% { scale: 1; } 50% { scale: 1.035; } }
 html.test2-information[data-step='draw'] .dock #test2-box .pile.ready .pile-card {
   transform: none; animation: none !important;
@@ -370,8 +373,12 @@ html.test2-information .dock #test2-box #moves > .bloom-toggle::before {
 }
 html.test2-information .dock #test2-box #moves > .bloom-toggle { position: relative; }
 html.test2-information .dock #test2-box #moves .bloom-options {
-  left: 0; right: 0; bottom: calc(100% + 6px); width: auto; max-height: min(45dvh,320px);
-  z-index: 8; padding: 8px; box-sizing: border-box;
+  left: calc(var(--box-piles) + 6px); right: auto; bottom: calc(100% + 6px);
+  width: max-content; min-width: 0; max-width: min(280px, calc(100% - var(--box-piles) - 12px));
+  max-height: min(45dvh,320px); z-index: 8; padding: 8px; box-sizing: border-box;
+}
+html.test2-information[data-thumb='left'] .dock #test2-box #moves .bloom-options {
+  left: 6px;
 }
 html.test2-information #board .badge.weak { display: none !important; }
 html.test2-information #board .test2-boink { transform-box: fill-box; transform-origin: center; }
@@ -389,7 +396,10 @@ html.test2-information[data-step='throw'] #discard .gd-ring { animation: none !i
 /* A fixed backlight reads as a turn state without flickering with the moving cards. */
 html.test2-information #hand { position: relative; isolation: isolate; }
 html.test2-information #hand::before {
-  content: ''; position: absolute; inset: 8% 4% 2%; z-index: -1; pointer-events: none;
+  content: ''; position: absolute; inset: auto; z-index: -1; pointer-events: none;
+  left: var(--test2-hand-glow-x, 50%); top: var(--test2-hand-glow-y, 50%);
+  width: var(--test2-hand-glow-w, 0px); height: var(--test2-hand-glow-h, 0px);
+  filter: blur(10px);
   border-radius: 50%; opacity: 0; transition: opacity 180ms ease, background 180ms ease;
 }
 html.test2-information[data-step='grow'] #hand::before {

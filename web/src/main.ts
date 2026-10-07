@@ -1703,7 +1703,7 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
-  if (IS_TEST2) requestAnimationFrame(alignDrawPiles);
+  if (IS_TEST2) requestAnimationFrame(() => { alignDrawPiles(); alignHandGlow(); });
   if (FEATURES.smartCamera && camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
@@ -1996,6 +1996,26 @@ function alignDrawPiles() {
   const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
   piles.style.setProperty('--test2-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
 }
+/** Bound the turn backlight to the visible card fan. On phones #hand occupies the whole
+ * dock, so percentages of that container let the old glow spill far below the cards. */
+function alignHandGlow() {
+  const hand = document.getElementById('hand');
+  if (!hand) return;
+  const cards = [...hand.querySelectorAll<HTMLElement>('.card')].filter(card => card.getClientRects().length && getComputedStyle(card).visibility !== 'hidden');
+  if (!cards.length) return;
+  const origin = hand.getBoundingClientRect();
+  const rects = cards.map(card => card.getBoundingClientRect());
+  const left = Math.min(...rects.map(rect => rect.left));
+  const right = Math.max(...rects.map(rect => rect.right));
+  const top = Math.min(...rects.map(rect => rect.top));
+  const bottom = Math.max(...rects.map(rect => rect.bottom));
+  const insetX = Math.min(15, (right - left) * .08);
+  const insetY = Math.min(18, (bottom - top) * .14);
+  hand.style.setProperty('--test2-hand-glow-x', `${Math.round(left - origin.left + insetX)}px`);
+  hand.style.setProperty('--test2-hand-glow-y', `${Math.round(top - origin.top + insetY)}px`);
+  hand.style.setProperty('--test2-hand-glow-w', `${Math.round(Math.max(1, right - left - insetX * 2))}px`);
+  hand.style.setProperty('--test2-hand-glow-h', `${Math.round(Math.max(1, bottom - top - insetY * 2))}px`);
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
   const vv = window.visualViewport;
@@ -2078,7 +2098,7 @@ function applyLayout() {
   document.documentElement.dataset.layout = l.mode;
   board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
-  if (IS_TEST2) requestAnimationFrame(alignDrawPiles);
+  if (IS_TEST2) requestAnimationFrame(() => { alignDrawPiles(); alignHandGlow(); });
 
 }
 window.addEventListener('resize', () => applyLayout());

@@ -153,6 +153,9 @@ try {
         height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1, skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
     });
     check(skipFit.aligned && skipFit.height && skipFit.above, `${width}: Skip exactly spans bulb and ordering buttons above them (${JSON.stringify(skipFit)})`);
+    // Draw piles ease back into the cockpit after the phase changes; measure the
+    // settled geometry rather than an intermediate transition frame.
+    await page.waitForTimeout(260);
     const frame = await page.evaluate(() => {
       const box = document.querySelector<HTMLElement>('#test2-box')!;
       const css = getComputedStyle(box);

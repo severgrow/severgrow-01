@@ -14,6 +14,7 @@ import { decodeSave } from '../src/logic/persist.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
+import { fixture } from '../../tests/helpers.js';
 
 const port = Number(process.env.TEST2_POLISH_PORT ?? 4198);
 const external = process.env.TEST2_URL;
@@ -382,6 +383,20 @@ async function finishTurn(page: Page, label: string) {
   check(throwLook.cardFilter.includes('grayscale(0.62)') && throwLook.cardAnimation === 'none' &&
     throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
     `${label}: Throw keeps readable color and a steady red backlight (${JSON.stringify(throwLook)})`);
+  const glowScope = await page.evaluate(() => {
+    const hand = document.querySelector<HTMLElement>('#hand')!;
+    const handBox = hand.getBoundingClientRect();
+    const cards = [...hand.querySelectorAll<HTMLElement>('.card')].map(card => card.getBoundingClientRect());
+    const glow = getComputedStyle(hand, '::before');
+    const x = handBox.left + parseFloat(glow.left), y = handBox.top + parseFloat(glow.top);
+    const w = parseFloat(glow.width), h = parseFloat(glow.height);
+    return { x, y, w, h, cardLeft: Math.min(...cards.map(card => card.left)),
+      cardRight: Math.max(...cards.map(card => card.right)), cardTop: Math.min(...cards.map(card => card.top)),
+      cardBottom: Math.max(...cards.map(card => card.bottom)) };
+  });
+  check(glowScope.x >= glowScope.cardLeft - 2 && glowScope.x + glowScope.w <= glowScope.cardRight + 2 &&
+    glowScope.y >= glowScope.cardTop - 2 && glowScope.y + glowScope.h <= glowScope.cardBottom + 2,
+    `${label}: the red backlight is bounded by the actual card fan (${JSON.stringify(glowScope)})`);
   const throwPulse = await page.evaluate(() => {
     const root = document.documentElement;
     const reduced = root.classList.contains('reduce-motion');
@@ -494,6 +509,17 @@ async function sproutFlow(width: number, height: number) {
       `${label}: no permanent or preview connector artwork is rendered`);
     check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .seed-stone[data-owner="0"] .seed-stone-art image`).count() === 1,
       `${label}: the actual strength uses the light physical stone artwork`);
+    await page.waitForTimeout(520); // the placed tile's entry animation has finished
+    const stonePlacement = await page.evaluate(key => {
+      const stone = document.querySelector<SVGGElement>(`#board .tile[data-key="${key}"] .seed-stone`)!;
+      const hexPath = document.querySelector<SVGPathElement>(`#board .hex-cell[data-key="${key}"] > .hex`)!;
+      const hex = hexPath.getBoundingClientRect();
+      const group = new DOMPoint(0, 0).matrixTransform(stone.getScreenCTM()!);
+      return { dx: Math.abs(group.x - hex.left - hex.width / 2),
+        dy: Math.abs(group.y - hex.top - hex.height / 2), transform: stone.getAttribute('transform') };
+    }, coordKey(action.coord));
+    check(stonePlacement.dx < 5 && stonePlacement.dy < 5 && stonePlacement.transform?.endsWith('scale(0.6)'),
+      `${label}: the 20% larger strength stone sits at the hex centre (${JSON.stringify(stonePlacement)})`);
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
     const illegalEmpty = Object.keys(grown.terrain).find(key => !grown.board[key] && grown.terrain[key] === 'normal' &&
@@ -574,14 +600,18 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       const first = document.querySelector<HTMLElement>('#hand .card')!.getBoundingClientRect();
       const deck = document.querySelector<HTMLElement>('#deck .pile-card')!.getBoundingClientRect();
       const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
+      const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
       const actions = document.querySelector<HTMLElement>('#test2-actions')!.getBoundingClientRect();
-      return { first: first.left, deck: deck.left, meter: meter.left, right: piles.getBoundingClientRect().right,
+      return { first: first.left, deck: deck.left, meter: meter.left, meterBottom: meter.bottom, boxBottom: box.bottom,
+        right: piles.getBoundingClientRect().right,
         actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--test2-draw-shift')) || 0 };
     });
     check(drawPiles.scale >= 1.15 && Math.abs(drawPiles.deck-drawPiles.meter) < .6,
       `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
     if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.actions - 6,
       `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
+    if (width <= 600) check(drawPiles.meterBottom >= drawPiles.boxBottom + 4 && drawPiles.meterBottom <= drawPiles.boxBottom + 12,
+      `${label}: enlarged Draw piles sit just below the cockpit baseline (${JSON.stringify(drawPiles)})`);
     if (width === 390 && height === 844 && !v3) await page.screenshot({ path: `${dir}/390x844-draw-piles.png` });
     await page.click('#deck'); await idle(page);
     const before = await state(page);
@@ -589,6 +619,23 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     const keys = ['-2,1','-1,1','0,1'];
     const action = legalActions(viewFor(before,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === '6,43,61' && action.hexes.map(coordKey).join('|') === keys.join('|'));
     assert(action?.t === 'Bloom', `${label}: seeded legal Bloom`);
+    const choicesToggle = page.locator('#moves > .bloom-toggle');
+    if (await choicesToggle.count()) {
+      await choicesToggle.click();
+      const menu = page.locator('#moves .bloom-options');
+      if (await menu.isVisible() && await menu.locator('button').count() > 1) {
+        const size = await page.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>('#moves .bloom-options')!.getBoundingClientRect();
+          const toggle = document.querySelector<HTMLElement>('#moves > .bloom-toggle')!.getBoundingClientRect();
+          const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+          return { width: panel.width, boxWidth: box.width, left: panel.left, toggleLeft: toggle.left };
+        });
+        check(size.width <= Math.min(280, size.boxWidth * .75) && Math.abs(size.left - size.toggleLeft) <= 50,
+          `${label}: multiple Bloom choices open in a compact menu beside their control (${JSON.stringify(size)})`);
+        if (width === 390 && height === 664 && !v3) await page.screenshot({ path: `${dir}/390x664-bloom-menu-open.png` });
+      }
+      await choicesToggle.click();
+    }
     if (width === 390 && height === 844) {
       await page.waitForFunction(() => document.documentElement.dataset.test2Waiting === 'true');
       const bloomPulse = await page.evaluate(() => {
@@ -770,8 +817,48 @@ async function drawGlow() {
   }
 }
 
+async function bloomMenuFit() {
+  const game = newGame(5);
+  const board = fixture({ tiles: { '0,1': [1,7] } });
+  const pool = [...game.hands[0], ...game.hands[1], ...game.deck];
+  const faces = [[0,6],[1,6],[2,6],[3,6],[0,3],[0,4],[0,5]] as const;
+  const hand = faces.map(([suit,rank]) => {
+    const index = pool.findIndex(card => card.suit === suit && card.rank === rank);
+    assert(index >= 0, `Bloom menu fixture has ${suit}/${rank}`);
+    return pool.splice(index,1)[0]!;
+  });
+  const positioned: State = { ...game, board: board.board, terrain: board.terrain,
+    hands: [hand, pool.slice(0,7)], deck: pool.slice(7), phase: 'ACT', turnPlayer: 0, actor: 0 };
+  const page = await browser.newPage({viewport:{width:390,height:664},hasTouch:true,isMobile:true});
+  try {
+    await page.addInitScript(save => {
+      (window as any).__name=(f:unknown)=>f;
+      localStorage.setItem('main2:severgrow.save.v7',save);
+      localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip',autoSkip:false}));
+    },positionSave({state:positioned}));
+    await page.goto(base); await page.click('#menu-continue'); await idle(page);
+    equal(await state(page),positioned,'multiple Bloom choices fixture resumes exactly');
+    const toggle = page.locator('#moves > .bloom-toggle');
+    check(await toggle.isVisible(),'multiple Bloom choices have a menu control');
+    await toggle.click();
+    const panel = page.locator('#moves .bloom-options');
+    const count = await panel.locator('button').count();
+    check(count > 1,`Bloom fixture presents several choices (${count})`);
+    const size = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('#moves .bloom-options')!.getBoundingClientRect();
+      const toggle = document.querySelector<HTMLElement>('#moves > .bloom-toggle')!.getBoundingClientRect();
+      const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+      return {width:panel.width,boxWidth:box.width,left:panel.left,right:panel.right,toggleLeft:toggle.left};
+    });
+    check(size.width <= Math.min(280,size.boxWidth*.75) && Math.abs(size.left-size.toggleLeft) <= 50 && size.right <= 390,
+      `multiple Bloom choices fit beside their current control (${JSON.stringify(size)})`);
+    await page.screenshot({path:`${dir}/390x664-bloom-menu-open.png`});
+  } finally { await page.close(); }
+}
+
 try {
   await drawGlow();
+  await bloomMenuFit();
   for (const [index,[width,height]] of presets.entries()) {
     if (filter && !filter.includes(`${width}x${height}`)) continue;
     for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height,index%2 === 1)]] as const) {

@@ -184,7 +184,7 @@ export class BoardView {
       const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
       el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
-      if (IS_TEST2) drawSeedStone(gg, t.key, x, y + 1, t.strength, 0);
+      if (IS_TEST2) drawSeedStone(gg, t.key, x, y, t.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
     }
     for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
@@ -477,7 +477,7 @@ export class BoardView {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       el('path', { d: hexPath(g.key, S * tileScale(g.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(g.key);
-      if (IS_TEST2) drawSeedStone(gg, g.key, x, y + 1, g.strength, 0);
+      if (IS_TEST2) drawSeedStone(gg, g.key, x, y, g.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
       if (g.replaces) el('path', { d: star(x + S * 0.5, y - S * 0.5, 6), class: 'spark-mark' }, gg);
     }
@@ -593,7 +593,7 @@ export class BoardView {
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
-      if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, t.owner);
+      if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
       else {
         el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
         el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
@@ -603,7 +603,7 @@ export class BoardView {
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, t.owner);
+    if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
