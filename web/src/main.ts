@@ -23,6 +23,7 @@ import {
   deskShape,
   drawNext,
   drawStarts,
+  endpointBloom,
   growToward,
   hexAtPoint,
   hexesAlong,
@@ -3026,6 +3027,11 @@ function finishDraw(a: Meld) {
  */
 function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
+  if (IS_TEST2 && (draw.shape.length === 1 || draw.desk.phase === 'live')) {
+    const start = draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]!;
+    const shortcut = endpointBloom(c, start, key, draw.reverse);
+    if (shortcut) return finishDraw(shortcut);
+  }
   if (((type === 'mouse' || type === 'keyboard') && draw.shape.length === 0) || draw.desk.phase === 'live') {
     const r = deskClick(draw.desk, key, v, c, draw.reverse);
     if (r.finish) {
@@ -3191,9 +3197,12 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
+  const idleGrowSpot = IS_TEST2 && myTurn() && session.view.phase === 'ACT' &&
+    session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
+    session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);
   if (IS_TEST2 && (!myTurn() ||
       (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK') ||
-      (session.view.phase === 'ACT' && ((session.sel.card === null && session.sel.kind === null) ||
+      (session.view.phase === 'ACT' && ((!idleGrowSpot && session.sel.card === null && session.sel.kind === null) ||
         hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard')))) {
     boinkTile(key);
     return;

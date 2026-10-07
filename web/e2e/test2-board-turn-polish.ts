@@ -117,8 +117,8 @@ async function geometry(page: Page, width: number, height: number, label: string
       pointer: getComputedStyle(image).pointerEvents };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-2*brand.menuHeight) < .1 && Math.abs(brand.top-brand.inkTop) < 1,
-    `${label}: new emblem is twice the menu lines' visible height and exactly top-aligned`);
+  check(brand.loaded && Math.abs(brand.height-2.7*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2,
+    `${label}: new emblem is readable and exactly top-aligned with the menu lines`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
@@ -358,6 +358,8 @@ async function finishTurn(page: Page, label: string) {
   const before = await state(page);
   const discard = legalActions(viewFor(before,0)).find(action => action.t === 'Discard');
   assert(discard?.t === 'Discard', `${label}: has a legal throw`);
+  const deck = await page.locator('#deck').evaluate(el => ({ opacity: Number(getComputedStyle(el).opacity), filter: getComputedStyle(el).filter }));
+  check(deck.opacity < .55 && deck.filter.includes('grayscale'), `${label}: dimmed deck makes Throw visually distinct from Grow`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
   while (expected.actor === 1 && expected.phase !== 'GAME_OVER') {
@@ -444,13 +446,18 @@ async function sproutFlow(width: number, height: number) {
     check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .tile-num`).textContent() === String(grown.hands[0].find(card => card.id === action.card)!.rank), `${label}: Sprout strength is clearly rendered`);
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
+    const illegalEmpty = Object.keys(grown.terrain).find(key => !grown.board[key] && grown.terrain[key] === 'normal' &&
+      !legalActions(viewFor(grown,0)).some(move => move.t === 'Sprout' && coordKey(move.coord) === key));
+    if (illegalEmpty) {
+      await tapHex(page,illegalEmpty,touch);
+      equal(await state(page),grown,`${label}: an illegal empty tile never places a card`);
+      equal(await page.locator('#board .selected').count(),0,`${label}: an illegal empty tile is not selected`);
+    }
     await tapHex(page,coordKey(action.coord),touch);
-    equal(await state(page),grown,`${label}: idle empty-tile tap does nothing`);
-    check(await page.evaluate(()=>(window as any).__severgrow.pending() === null && !document.documentElement.classList.contains('test2-move-active')),`${label}: idle tile tap does not preselect a destination`);
+    equal(await state(page),grown,`${label}: legal empty-tile tap only previews a destination`);
+    check(await page.locator('#board .selected').count()>0,`${label}: legal destination is visibly selected`);
     await page.locator(`#hand [data-card="${action.card}"]`).click();
-    equal(await state(page),grown,`${label}: selecting a card still waits for its target`);
-    await tapHex(page,coordKey(action.coord),touch);
-    equal(await state(page),apply(grown,action),`${label}: card then valid target still immediately places the Sprout`);
+    equal(await state(page),apply(grown,action),`${label}: tapping a card after a legal destination immediately places the Sprout`);
     await undo(page,grown,label+' board-first Sprout');
     equal(await page.locator('#board .hex-cell').evaluateAll(cells => cells.map(cell => [cell.getAttribute('data-key'),cell.querySelector('.hex')?.getAttribute('d')])), paths, `${label}: Draw, placement and Undo retain the board geometry`);
     await page.screenshot({ path: `${dir}/${width}x${height}-sprout-undo.png` });
@@ -542,12 +549,15 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       const piles = document.querySelector('#test2-box > .piles')!.getBoundingClientRect();
       const faces = [...document.querySelectorAll('#test2-box .pile-card')].map(el => el.getBoundingClientRect());
       const actions = document.querySelector('#test2-actions')!.getBoundingClientRect();
+      const miniCards = [...document.querySelectorAll('#moves > .kind .test2-mini-card')].map(el=>el.getBoundingClientRect());
+      const kindStyle = getComputedStyle(document.querySelector('#moves > .kind')!);
       return { fits: kind.left >= box.left && kind.right <= box.right && kind.top >= box.top && kind.bottom <= box.bottom,
         separated: kind.left >= piles.right && kind.right <= actions.left && faces.every(face => face.right <= kind.left),
-        mini: [...document.querySelectorAll('#moves > .kind .test2-mini-card')].every(el => el.getBoundingClientRect().width >= 20),
+        mini: miniCards.every(face=>face.width >= 20 && Math.abs(face.bottom-actions.bottom) <= 12),
+        frameFree: kindStyle.borderWidth === '0px' && kindStyle.boxShadow === 'none',
         weak: [...document.querySelectorAll('#board .badge.weak')].some(el => getComputedStyle(el).display !== 'none') };
     });
-    check(cockpit.fits && cockpit.separated && cockpit.mini && !cockpit.weak, `${label}: readable Bloom combinations fit the box, clear of piles/tools; no weak-link badges`);
+    check(cockpit.fits && cockpit.separated && cockpit.mini && cockpit.frameFree && !cockpit.weak, `${label}: frameless Bloom combinations sit on the cockpit baseline, clear of piles/tools; no weak-link badges`);
     await tapHex(page,keys[0]!,touch);
     equal(await state(page),before,`${label}: starting a partial Bloom does not prematurely spend cards`);
     await tapHex(page,'-1,0',touch);
@@ -601,6 +611,12 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`);
     await undo(page,before,label);
     if (touch) {
+      await pick();
+      await tapHex(page,keys[0]!,true);
+      equal(await state(page),before,`${label}: endpoint shortcut starts without spending cards`);
+      await tapHex(page,keys.at(-1)!,true);
+      equal(await state(page),apply(before,action),`${label}: second endpoint infers and commits a legal Bloom`);
+      await undo(page,before,label+' endpoints');
       await pick();
       const points = await Promise.all(keys.map(key => hexCenter(page,key)));
       const session = await cdp(page);

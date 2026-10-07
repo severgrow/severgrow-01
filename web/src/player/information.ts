@@ -221,25 +221,25 @@ export const INFORMATION_CSS = `
 
 /* The box: one stable cockpit, with a centre display and a right action slot. */
 html.test2-information .dock > #test2-box {
-  --box-tools: 140px; --box-pile: 44px; --box-piles: calc(2 * var(--box-pile) + 8px);
+  --box-tools: 140px; --box-pile: 50px; --box-piles: calc(2 * var(--box-pile) + 8px);
   display: grid; position: relative; inset: auto; width: 100%; height: 104px;
   grid-template-columns: var(--box-piles) minmax(0, 1fr) var(--box-tools);
   grid-template-rows: 44px 44px; gap: 4px 6px; padding: 6px;
-  box-sizing: border-box; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: center;
+  box-sizing: border-box; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: end;
 }
 html.test2-information[data-thumb] .dock > #test2-box {
   position: absolute; top: 8px; left: 4px; width: calc(100% - 8px);
 }
 html.test2-information .dock #test2-box > .piles {
   display: flex; position: relative; grid-column: 1; grid-row: 1 / 3;
-  gap: 8px; align-items: center; justify-content: center; height: 100%;
+  gap: 8px; align-items: flex-end; justify-content: center; height: 100%;
 }
 html.test2-information .dock #test2-box > .piles > .pile {
   position: relative; inset: auto; grid-area: auto; width: var(--box-pile); height: 100%;
   margin: 0; flex: 0 0 var(--box-pile); min-width: 0;
 }
 html.test2-information .dock #test2-box .pile-card {
-  --pile-h: 62px; --cw: 44px; --ch: 62px; width: 44px; height: 62px;
+  --pile-h: 71px; --cw: 50px; --ch: 71px; width: 50px; height: 71px;
 }
 html.test2-information .dock #test2-box .pile { justify-content: flex-start; }
 html.test2-information .dock #test2-box .pile-meta { position: absolute; inset: auto 0 0; height: 18px; pointer-events: none; }
@@ -248,12 +248,19 @@ html.test2-information .dock #test2-box > .moves {
   display: grid; position: static; inset: auto; grid-column: 2 / 4; grid-row: 1 / 3;
   width: 100%; height: 100%; min-height: 0; max-height: none;
   grid-template-columns: minmax(0, 1fr) var(--box-tools); grid-template-rows: 44px 44px;
-  gap: 4px 6px; padding: 0; align-items: center; justify-content: stretch;
+  gap: 4px 6px; padding: 0; align-items: end; justify-content: stretch;
 }
 html.test2-information .dock #test2-box #moves > .kind {
   grid-column: 1; grid-row: 1 / 3; width: 100%; min-width: 0; max-width: 100%;
-  height: 100%; min-height: 60px; padding: 4px; justify-self: stretch;
-  background: transparent; border-radius: 6px;
+  height: 100%; min-height: 60px; padding: 4px 4px 6px; justify-self: stretch;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: transparent; border: 0; outline: 0; box-shadow: none; border-radius: 0;
+}
+html.test2-information .dock #test2-box #moves > .kind:is(:hover,:focus-visible,.on) {
+  background: transparent; box-shadow: none;
+}
+html.test2-information .dock #test2-box #moves > .kind:focus-visible {
+  outline: 2px solid var(--c-accent); outline-offset: -2px;
 }
 html.test2-information .dock #test2-box #moves > :is(.test2-skip,.cancel,.empty-continue,.primary:not(.kind)) {
   grid-column: 2; grid-row: 1; justify-self: end; width: 92px; max-width: 100%;
@@ -298,13 +305,19 @@ html.test2-information .dock #test2-box #moves .bloom-options {
 }
 html.test2-information #board .badge.weak { display: none !important; }
 html.test2-information #board .test2-boink { transform-box: fill-box; transform-origin: center; }
+html.test2-information[data-step='throw'] #test2-box #deck {
+  opacity: .48; filter: grayscale(.7); transition: opacity 160ms ease, filter 160ms ease;
+}
+html.test2-information[data-step='throw'] #test2-box #discard {
+  filter: brightness(1.12); transition: filter 160ms ease;
+}
 /* Animate only the card face ink, never the fan geometry or its hit targets. */
-@keyframes test2-card-breathe { 0%,100% { opacity: .82; scale: 1; } 50% { opacity: 1; scale: 1.018; } }
+@keyframes test2-card-breathe { 0%,100% { opacity: .72; scale: 1; } 50% { opacity: 1; scale: 1.085; } }
 html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked) > :is(.c-num,.c-suit,.c-fruit) {
-  animation: test2-card-breathe 1.8s ease-in-out infinite; transform-origin: center;
+  animation: test2-card-breathe 1.15s ease-in-out infinite; transform-origin: center;
 }
 html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked)::after {
-  animation: test2-card-breathe 1.8s ease-in-out infinite;
+  animation: test2-card-breathe 1.15s ease-in-out infinite;
 }
 html.test2-information.test2-move-active #hand .card > :is(.c-num,.c-suit,.c-fruit),
 html.test2-information.test2-information-blocked #hand .card > :is(.c-num,.c-suit,.c-fruit),

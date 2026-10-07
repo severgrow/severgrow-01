@@ -134,6 +134,33 @@ export const drawNext = (c: Combo, shape: readonly string[], reverse = false): S
 /** Where a painting may start. */
 export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c, [], reverse);
 
+/** A legal Bloom spanning two tapped hexes. The engine's legal actions are the source of
+ * truth; the search only chooses which already-legal placement to use. Adjacent second
+ * taps remain available for ordinary tile-by-tile painting. */
+export const endpointBloom = (c: Combo, start: string, end: string, reverse = false): Bloom | null => {
+  if (start === end || drawNext(c, [start], reverse).has(end)) return null;
+  let best: { action: Bloom; distance: number; index: number } | null = null;
+  for (const [index, action] of c.actions.entries()) {
+    const keys = action.hexes.map(coordKey);
+    if (!keys.includes(start) || !keys.includes(end)) continue;
+    if (c.run) {
+      const ordered = reverse ? [...keys].reverse() : keys;
+      if (ordered[0] !== start || ordered.at(-1) !== end) continue;
+    }
+    // Shortest connected route within this legal placement. Extra tiles may branch off it.
+    const seen = new Set([start]);
+    let frontier = [start], distance = 0;
+    while (frontier.length && !seen.has(end)) {
+      distance++;
+      frontier = frontier.flatMap(k => keys.filter(next => !seen.has(next) && hexDistance(parseKey(k), parseKey(next)) === 1));
+      for (const k of frontier) seen.add(k);
+    }
+    if (!seen.has(end)) continue;
+    if (!best || distance < best.distance || (distance === best.distance && index < best.index)) best = { action, distance, index };
+  }
+  return best?.action ?? null;
+};
+
 /**
  * Hexes next to the shape (or any start, when empty) that some Bloom of this group uses but
  * that cannot take the number they would receive now, each with a short reason.

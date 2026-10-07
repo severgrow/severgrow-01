@@ -28,8 +28,8 @@ html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
-  height: var(--futasaku-logo-height, 24px);
-  align-self: start; margin-top: var(--futasaku-logo-top, 0px);
+  height: var(--futasaku-logo-height, 32px);
+  align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
   max-width: 150px;
   display: block;
@@ -145,7 +145,7 @@ export function mountBranding() {
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
     const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
     if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 2}px`);
+      image.style.setProperty('--futasaku-logo-height', `${height * 2.7}px`);
       const hud = document.querySelector<HTMLElement>('#game > .hud');
       const inkTop = path.getBoundingClientRect().top - stroke * Math.hypot(matrix.c,matrix.d) / 2;
       if (hud) image.style.setProperty('--futasaku-logo-top', `${Math.max(0,inkTop-hud.getBoundingClientRect().top)}px`);

@@ -4,7 +4,7 @@
 // Blooms, the one-tap suggestion, the desktop two-click machine, keyboard steps, and that every
 // legal Bloom can be made by tapping hexes one by one.
 import { describe, expect, it } from 'vitest';
-import { coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import { coordKey, legalActions, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { EMPTY_SEL, kindOf, tapKind } from '../src/logic/interaction.js';
 import {
@@ -17,6 +17,7 @@ import {
   deskShape,
   drawNext,
   drawStarts,
+  endpointBloom,
   growToward,
   hexAtPoint,
   hexesAlong,
@@ -33,7 +34,18 @@ import {
   suggestBloom,
   unavailable,
 } from '../src/logic/draw.js';
-import type { Bloom } from '../src/logic/draw.js';
+import type { Bloom, Combo } from '../src/logic/draw.js';
+
+it('two endpoint taps choose the shortest legal Bloom, including a branching shape', () => {
+  const make = (keys: string[]): Bloom => ({ t: 'Bloom', cards: [1,2,3,4,5], hexes: keys.map(parseKey) });
+  const longer = make(['0,0','0,1','1,1','2,0','2,-1']);
+  const branch = make(['0,0','1,0','2,0','1,-1','1,1']);
+  const combo: Combo = { kind: 'bloom-5-1.2.3.4.5', n: 5, ranks: [5,5,5,5,5], run: false,
+    actions: [longer,branch], hexes: new Set([...longer.hexes,...branch.hexes].map(coordKey)), byKey: new Map() };
+  expect(endpointBloom(combo,'0,0','2,0')).toEqual(branch);
+  expect(endpointBloom(combo,'0,0','1,0')).toBeNull(); // adjacent taps keep the manual path
+  expect(endpointBloom(combo,'0,0','9,9')).toBeNull(); // no illegal placement can be committed
+});
 import { fixture } from '../../tests/helpers.js';
 
 const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number][], opts: { rock?: string[]; config?: Partial<RulesConfig> } = {}): State => {

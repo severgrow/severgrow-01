@@ -1,22 +1,22 @@
 @import "./fonts.css";
-/* Severgrow page styles. Every colour comes from the theme tokens (--c-*), set by
+/* Futasaku page styles. Every colour comes from the theme tokens (--c-*), set by
    main.ts from web/src/logic/themes.ts. Theme-only details sit at the end. */
 
 :root {
-  --c-bg: #0d0e11;
-  --c-surface: #1b1c1f;
-  --c-text: #edeae2;
-  --c-muted: #a3a19b;
-  --c-line: #3a3a3b;
-  --c-hexFill: #16171a;
-  --c-rock: #4c4c4c;
+  --c-bg: #18191a;
+  --c-surface: #232425;
+  --c-text: #eeebe4;
+  --c-muted: #aaa8a3;
+  --c-line: #46474a;
+  --c-hexFill: #222325;
+  --c-rock: #58524a;
   --c-gold: #f2c14e;
-  --c-you: #4df0b4;
+  --c-you: #7fcf8d;
   --c-bot: #ff6b4a;
-  --c-youInk: #0d0e11;
-  --c-botInk: #0d0e11;
-  --c-accent: #4df0b4;
-  --c-accentInk: #0d0e11;
+  --c-youInk: #18191a;
+  --c-botInk: #18191a;
+  --c-accent: #efe5cb;
+  --c-accentInk: #18191a;
   --c-danger: #ff6b4a;
   --font: system-ui, sans-serif;
   --w-text: 500;
