@@ -258,9 +258,10 @@ async function pulseCheck(page: Page, label: string) {
     animation.play();
     const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked) > .c-suit');
     const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
+    root.classList.add('reduce-motion');
+    const noMotion = getComputedStyle(text).animationName === 'none' && text.getAnimations().length === 0;
     root.classList.toggle('reduce-motion', reduced);
-    getComputedStyle(text).animationName;
-    return { small, large, cardPulse, off: text.getAnimations().length === 0 };
+    return { small, large, cardPulse, off: noMotion };
   });
   await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
   check(result && result.small !== result.large && result.large.includes('1.035') && result.cardPulse && result.off,
