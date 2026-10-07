@@ -236,11 +236,17 @@ html.test2-information .dock #test2-box > .piles {
   display: flex; position: relative; grid-column: 1; grid-row: 1 / 3;
   gap: 8px; align-items: flex-end; justify-content: center; height: 100%;
   transform: translateX(var(--test2-draw-shift, 0px));
-  transition: transform 300ms cubic-bezier(.2,.8,.2,1), gap 240ms ease;
+  /* Returning to Grow is immediate: an exiting pile must never sit over Skip. */
+  transition: none;
 }
 html.test2-information[data-step='draw'] .dock #test2-box > .piles {
   gap: 18px; justify-content: flex-start;
+  transition: transform 300ms cubic-bezier(.2,.8,.2,1), gap 240ms ease;
 }
+/* The Draw cockpit may visually overlap the empty Moves region on small phones.
+   Its transparent group must not intercept the enlarged pile buttons. */
+html.test2-information[data-step='draw'] .dock #test2-box > .moves { pointer-events: none; }
+html.test2-information[data-step='draw'] .dock #test2-box > .moves > * { pointer-events: auto; }
 html.test2-information .dock #test2-box > .piles > .pile {
   position: relative; inset: auto; grid-area: auto; width: var(--box-pile); height: 100%;
   margin: 0; flex: 0 0 var(--box-pile); min-width: 0;
