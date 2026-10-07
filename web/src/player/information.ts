@@ -333,7 +333,7 @@ html.test2-information:is(.reduce-motion,.test2-move-active,.test2-information-b
   .test2-information #step-cue .cue-text.cue-text { animation: none !important; }
 }
 .test2-information.reduce-motion #step-cue { transition: none; }
-.test2-information.reduce-motion #step-cue .cue-text { animation: none !important; }
+.test2-information.reduce-motion #step-cue .cue-text.cue-text { animation: none !important; }
 `;
 
 /** Mount after player enhancements (including mountGuide). No game state or settings change. */
