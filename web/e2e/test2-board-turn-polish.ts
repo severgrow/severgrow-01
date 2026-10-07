@@ -253,10 +253,10 @@ async function pulseCheck(page: Page, label: string) {
     if (!animation) { root.classList.toggle('reduce-motion', reduced); return null; }
     animation.pause(); animation.currentTime = 0;
     const small = getComputedStyle(text).transform;
-    animation.currentTime = 2400;
+    animation.currentTime = 1550;
     const large = getComputedStyle(text).transform;
     animation.play();
-    const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked) > .c-suit');
+    const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked)');
     const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
     root.classList.add('reduce-motion');
     // Chromium may retain the paused Animation object briefly after CSS removes it.
@@ -267,8 +267,8 @@ async function pulseCheck(page: Page, label: string) {
     return { small, large, cardPulse, off: noMotion, motionName };
   });
   await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
-  check(result && result.small !== result.large && result.large.includes('1.035') && result.cardPulse && result.off,
-    `${label}: slow slight prompt zoom and faster card pulse actually run; Reduce Motion disables them (${JSON.stringify(result)})`);
+  check(result && result.small !== result.large && result.large.includes('1.085') && result.cardPulse && result.off,
+    `${label}: larger idle cue and whole playable-card pulse actually run; Reduce Motion disables them (${JSON.stringify(result)})`);
   equal(await state(page), before, `${label}: pulses cannot change game state`);
 }
 
@@ -315,8 +315,9 @@ async function fruitFlow(width: number, height: number) {
     const bomb=palette.find(card=>card.suit==='bomb')!;
     check(bomb.title==='Bomb' && bomb.name?.includes('Bomb') && bomb.circles===1 && bomb.spark && bomb.simpleIndex && bomb.border==='double','Bomb: round line icon, cream double frame and accessible name replace mushroom');
     check(!await page.locator('body').innerText().then(text=>/\bfruit(?:ed)?\b/i.test(text)),'Bomb: no obsolete visible name');
-    const counts=await page.locator('.dock .pile-count').evaluateAll(nodes=>nodes.map(el=>({background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,text:el.textContent})));
-    check(counts.every(c=>c.background==='rgba(20, 21, 21, 0.92)' && c.text?.trim()),'Card counters: quiet dark faces retain readable actual counts');
+    const counts=await page.locator('.dock .pile-count').evaluateAll(nodes=>nodes.map(el=>({value:(el as HTMLElement).dataset.value,wheels:el.querySelectorAll('.pile-meter-window').length})));
+    check(counts.every(c=>c.value?.length===2 && c.wheels===2),
+      'Card counters: two mechanical digit windows retain actual counts');
     await page.keyboard.press('Tab');
     const focusCard=page.locator(`#hand [data-card="${action.card}"]`);
     await focusCard.focus();

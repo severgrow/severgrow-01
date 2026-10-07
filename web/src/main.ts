@@ -67,6 +67,7 @@ import type { Hint, HintCtx } from './logic/hint.js';
 import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from './logic/forecast.js';
 import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
 import { pileCountState, pileStates, stackLayers } from './logic/piles.js';
+import { renderPileMeter } from './player/pile-meter.js';
 import { effectBudget, idleTarget, moveTier, pitchLadder, tierBanner } from './logic/juice.js';
 import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
@@ -2639,6 +2640,7 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
+    if (IS_TEST2 && b.classList.contains('test2-throw-picked')) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_TEST2 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
@@ -2680,12 +2682,13 @@ function renderPiles(v: View, advice: Advice | null) {
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   t.innerHTML = top ? cardFace(top) : '';
-  $('deck-count').textContent = String(v.deckCount);
+  if (IS_TEST2) renderPileMeter($('deck-count'), v.deckCount);
+  else $('deck-count').textContent = String(v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  $('deck').setAttribute('aria-label', low ? `Deck: only ${v.deckCount} card${v.deckCount === 1 ? '' : 's'} left, the game ends soon` : 'Deck');
-  $('discard-count').textContent = String(v.discard.length);
+  if (IS_TEST2) renderPileMeter($('discard-count'), v.discard.length);
+  else $('discard-count').textContent = String(v.discard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {

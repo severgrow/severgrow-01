@@ -100,9 +100,9 @@ try {
       root.classList.add('reduce-motion');
       return { reduced, regular, duration, frames: frames.map(frame => ({ opacity: Number(frame.opacity), transform: frame.transform })) };
     });
-    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 4800 &&
-      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && ['scale(1)', 'scale(1.035)'].includes(String(frame.transform))),
-      `${width}: idle prompt zooms only 3.5% slowly and respects Reduce motion (${JSON.stringify(pulse)})`);
+    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 3100 &&
+      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && ['scale(1)', 'scale(1.085)'].includes(String(frame.transform))),
+      `${width}: idle prompt has an intentional 8.5% zoom and respects Reduce motion (${JSON.stringify(pulse)})`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     check(await page.evaluate(() => {
       document.documentElement.classList.remove('reduce-motion');

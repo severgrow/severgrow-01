@@ -59,9 +59,9 @@ export const INFORMATION_CSS = `
   overflow: visible;
   animation: none !important;
 }
-@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .94; transform: scale(1.035); } }
+@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .94; transform: scale(1.085); } }
 .test2-information #step-cue:is([data-step='draw'], [data-step='grow'], [data-step='throw']) .cue-text {
-  animation: test2-cue-breathe 4.8s ease-in-out infinite !important;
+  animation: test2-cue-breathe 3.1s ease-in-out infinite !important;
 }
 .test2-information-blocked #step-cue .cue-text,
 .test2-information.test2-move-active #step-cue .cue-text { animation-play-state: paused !important; }
@@ -94,7 +94,7 @@ export const INFORMATION_CSS = `
 /* Test2 owns prompt visibility independently of the guide's legacy entrance/settle clock. */
 .test2-information:not(.test2-idle-ready) #step-cue { opacity: 0 !important; }
 .test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .6536 !important; }
-.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 4.8s ease-in-out infinite !important; animation-play-state: running !important; }
+.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 3.1s ease-in-out infinite !important; animation-play-state: running !important; }
 .test2-information #step-cue[data-step='opp'] { visibility: hidden !important; }
 .test2-information:has(#tooltip:not([hidden])) #step-cue { opacity: 0 !important; }
 .test2-information .dock .hand .card.playable {
@@ -170,10 +170,10 @@ export const INFORMATION_CSS = `
 .test2-information #discard.test2-bloom-draw .gd-ring { border-color: color-mix(in srgb, var(--c-gold) 75%, transparent); }
 .test2-information #hand .card.test2-throw-picked {
   filter: grayscale(1) !important; border-color: #dedede; box-shadow: none !important;
-  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.14);
+  transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.31);
 }
 .test2-information[data-thumb] #hand .card.test2-throw-picked {
-  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.14);
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) rotate(var(--rot, 0deg)) scale(1.31);
 }
 .test2-information #test2-information-subline {
   min-width: 0;
@@ -243,7 +243,26 @@ html.test2-information .dock #test2-box .pile-card {
 }
 html.test2-information .dock #test2-box .pile { justify-content: flex-start; }
 html.test2-information .dock #test2-box .pile-meta { position: absolute; inset: auto 0 0; height: 18px; pointer-events: none; }
-html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 -2px auto auto; height: 18px; }
+html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 0 auto auto; height: 18px; }
+html.test2-information .dock #test2-box .pile-count.pile-meter {
+  display: flex; align-items: center; justify-content: center; gap: 0;
+  width: 30px; min-width: 30px; height: 18px; padding: 1px 3px;
+  border: 1px solid rgba(245,239,219,.3); border-radius: 3px;
+  background: linear-gradient(180deg,#080a0a,#1a1b1b 52%,#090a0a);
+  color: #f4efde; box-shadow: inset 0 1px 2px #000, 0 1px 2px rgba(0,0,0,.45);
+  font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
+}
+html.test2-information .dock #test2-box .pile-meter-window {
+  position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px;
+  overflow: hidden; border-right: 1px solid rgba(255,255,255,.08);
+}
+html.test2-information .dock #test2-box .pile-meter-window:last-child { border-right: 0; }
+html.test2-information .dock #test2-box .pile-meter-face {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  height: 15px; white-space: nowrap; font: inherit;
+}
+html.test2-information .dock #test2-box #deck.low .pile-meter { color: var(--c-gold); }
 html.test2-information .dock #test2-box > .moves {
   display: grid; position: static; inset: auto; grid-column: 2 / 4; grid-row: 1 / 3;
   width: 100%; height: 100%; min-height: 0; max-height: none;
@@ -311,21 +330,21 @@ html.test2-information[data-step='throw'] #test2-box #deck {
 html.test2-information[data-step='throw'] #test2-box #discard {
   filter: brightness(1.12); transition: filter 160ms ease;
 }
-/* Animate only the card face ink, never the fan geometry or its hit targets. */
-@keyframes test2-card-breathe { 0%,100% { opacity: .72; scale: 1; } 50% { opacity: 1; scale: 1.085; } }
-html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked) > :is(.c-num,.c-suit,.c-fruit) {
-  animation: test2-card-breathe 1.15s ease-in-out infinite; transform-origin: center;
+/* Scale is a separate transform property, so the fan's rotate/translate and hit targets
+   retain their layout. Grow breathes as whole playable cards; Throw has its own tone. */
+@keyframes test2-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
+html.test2-information[data-step='grow'][data-test2-waiting='true'] #hand:not(.waiting) .card.playable:not(.lifted) {
+  animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
-html.test2-information[data-test2-waiting='true']:is([data-step='grow'],[data-step='throw']) #hand:not(.waiting) .card.playable:not(.lifted):not(.test2-throw-picked)::after {
-  animation: test2-card-breathe 1.15s ease-in-out infinite;
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) {
+  opacity: .8; filter: grayscale(.78) brightness(.84);
+  outline-color: rgba(223,105,77,.35) !important;
+  box-shadow: 0 0 14px rgba(205,76,53,.26), 0 4px 20px rgba(110,33,21,.18);
 }
-html.test2-information.test2-move-active #hand .card > :is(.c-num,.c-suit,.c-fruit),
-html.test2-information.test2-information-blocked #hand .card > :is(.c-num,.c-suit,.c-fruit),
-html.test2-information.reduce-motion #hand .card > :is(.c-num,.c-suit,.c-fruit),
-html.test2-information:is(.reduce-motion,.test2-move-active,.test2-information-blocked) #hand .card::after { animation: none !important; }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { opacity: 1; }
+html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  html.test2-information #hand .card > :is(.c-num,.c-suit,.c-fruit),
-  html.test2-information #hand .card::after { animation: none !important; }
+  html.test2-information #hand .card { animation: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
