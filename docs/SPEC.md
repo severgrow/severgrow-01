@@ -78,6 +78,12 @@ default (see the appendix).
   connected non-root tiles to remove one enemy non-root tile next to them, **whatever its
   strength**. Then the normal cut check for both players, then Strangle. Option
   `fruitOnlyWhenBehind` (off; simulation only).
+- **Futasaku 0.3 Strengthen update (2026-10-07; rules version
+  `futasaku0.3-unlimited-strengthen`).** The current default is no per-game
+  Strengthen limit (`strengthenLimitPerGame: -1`). A Strengthen still uses the turn's one
+  Sprout-or-Strengthen action. Existing `v0.8-fruit-sprout` recordings keep their two-use
+  config. Browser saves from that version continue with the same board and action history
+  under the new default. The simulation table below records the earlier two-use decision.
 - **Strengthen (new Sprout variant, section 7.4).** A Sprout may target one of your own
   non-root tiles when the card is **strictly higher** than the tile: the tile stays and takes
   the card's number. It uses the turn's Sprout. Options `allowStrengthen` and

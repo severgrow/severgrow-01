@@ -226,17 +226,46 @@ html.test2-information .dock > #test2-box {
   grid-template-columns: var(--box-piles) minmax(0, 1fr) var(--box-tools);
   grid-template-rows: 44px 44px; gap: 4px 6px; padding: 6px;
   box-sizing: border-box; border: 0; border-radius: 0; background: none; box-shadow: none; align-items: end;
+  transition: grid-template-columns 240ms ease;
 }
+html.test2-information[data-step='draw'] .dock > #test2-box { --box-piles: 128px; }
 html.test2-information[data-thumb] .dock > #test2-box {
   position: absolute; top: 8px; left: 4px; width: calc(100% - 8px);
 }
 html.test2-information .dock #test2-box > .piles {
   display: flex; position: relative; grid-column: 1; grid-row: 1 / 3;
   gap: 8px; align-items: flex-end; justify-content: center; height: 100%;
+  transform: translateX(var(--test2-draw-shift, 0px));
+  transition: transform 300ms cubic-bezier(.2,.8,.2,1), gap 240ms ease;
+}
+html.test2-information[data-step='draw'] .dock #test2-box > .piles {
+  gap: 18px; justify-content: flex-start;
 }
 html.test2-information .dock #test2-box > .piles > .pile {
   position: relative; inset: auto; grid-area: auto; width: var(--box-pile); height: 100%;
   margin: 0; flex: 0 0 var(--box-pile); min-width: 0;
+  transform-origin: left bottom; transition: transform 240ms cubic-bezier(.18,.8,.25,1);
+}
+html.test2-information .dock #test2-box #deck .pile-stack { inset: 0; }
+/* The face, halo and meter share one edge. Draw scales the whole instrument, including
+   its two-digit meter, while the surrounding grid reserves the extra width. */
+html.test2-information[data-step='draw'] .dock #test2-box > .piles > .pile.ready {
+  transform: scale(1.16); animation: test2-draw-pile-breathe 1.8s ease-in-out 240ms infinite;
+}
+@keyframes test2-draw-pile-breathe { 0%,100% { scale: 1; } 50% { scale: 1.035; } }
+html.test2-information[data-step='draw'] .dock #test2-box .pile.ready .pile-card {
+  transform: none; animation: none !important;
+}
+html.test2-information .dock #test2-box .gd-ring { display: none !important; }
+html.test2-information .dock #test2-box .gd-halo {
+  box-shadow: 0 0 24px 2px rgba(var(--gd-cream), .72);
+}
+html.test2-information .dock #test2-box #discard.test2-bloom-draw .gd-halo {
+  box-shadow: 0 0 24px 2px color-mix(in srgb, var(--c-gold) 60%, transparent);
+}
+html.test2-information.reduce-motion .dock #test2-box > .piles > .pile.ready { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  html.test2-information .dock #test2-box > .piles > .pile.ready { animation: none; }
 }
 html.test2-information .dock #test2-box .pile-card {
   --pile-h: 71px; --cw: 50px; --ch: 71px; width: 50px; height: 71px;
@@ -351,26 +380,39 @@ html.test2-information[data-step='throw'] #discard .gd-halo {
   box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
 }
 html.test2-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
-/* Scale is a separate transform property, so the fan's rotate/translate and hit targets
-   retain their layout. Grow breathes as whole playable cards; Throw has its own tone. */
+/* A fixed backlight reads as a turn state without flickering with the moving cards. */
+html.test2-information #hand { position: relative; isolation: isolate; }
+html.test2-information #hand::before {
+  content: ''; position: absolute; inset: 8% 4% 2%; z-index: -1; pointer-events: none;
+  border-radius: 50%; opacity: 0; transition: opacity 180ms ease, background 180ms ease;
+}
+html.test2-information[data-step='grow'] #hand::before {
+  opacity: .7; background: radial-gradient(ellipse, rgba(96,180,105,.20) 0%, rgba(71,139,83,.08) 48%, transparent 75%);
+}
+html.test2-information[data-step='throw'] #hand::before {
+  opacity: 1; background: radial-gradient(ellipse, rgba(189,69,52,.42) 0%, rgba(145,45,33,.21) 48%, transparent 78%);
+}
+/* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes test2-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
 html.test2-information[data-step='grow'][data-test2-waiting='true'] #hand:not(.waiting) .card.playable:not(.lifted) {
+  animation: test2-card-breathe 1.35s ease-in-out infinite;
+}
+html.test2-information[data-step='grow'][data-test2-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .test2-combination {
   animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) {
   opacity: .84; filter: grayscale(.62) brightness(.9);
   outline-color: rgba(223,105,77,.35) !important;
   box-shadow: 0 0 15px rgba(205,76,53,.25), 0 4px 20px rgba(110,33,21,.18);
+  animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked {
   opacity: 1; box-shadow: 0 0 18px rgba(205,76,53,.28) !important;
 }
-/* The old idle hint animated the card filter, making the red light appear to flicker. */
-html.test2-information[data-step='throw'] #hand .card,
-html.test2-information[data-step='throw'] #hand.idle-hint .card.playable { animation: none !important; }
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
+html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #moves .test2-combination { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  html.test2-information #hand .card { animation: none !important; }
+  html.test2-information #hand .card, html.test2-information #moves .test2-combination { animation: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

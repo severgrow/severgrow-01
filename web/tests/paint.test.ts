@@ -10,6 +10,7 @@ import { EMPTY_SEL, kindOf, tapKind } from '../src/logic/interaction.js';
 import {
   DESK_IDLE,
   HIT,
+  bloomEndpoints,
   comboFor,
   confirmMovesFor,
   deskClick,
@@ -43,6 +44,8 @@ it('two endpoint taps choose the shortest legal Bloom, including a branching sha
   const combo: Combo = { kind: 'bloom-5-1.2.3.4.5', n: 5, ranks: [5,5,5,5,5], run: false,
     actions: [longer,branch], hexes: new Set([...longer.hexes,...branch.hexes].map(coordKey)), byKey: new Map() };
   expect(endpointBloom(combo,'0,0','2,0')).toEqual(branch);
+  expect(bloomEndpoints(combo,'0,0')).toContain('2,0');
+  expect(bloomEndpoints(combo,'0,0')).not.toContain('1,0');
   expect(endpointBloom(combo,'0,0','1,0')).toBeNull(); // adjacent taps keep the manual path
   expect(endpointBloom(combo,'0,0','9,9')).toBeNull(); // no illegal placement can be committed
 });

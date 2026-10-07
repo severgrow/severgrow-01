@@ -22,7 +22,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   sproutsPerTurn: 1,
   maxTurnsPerPlayer: 30,
   allowStrengthen: true,
-  strengthenLimitPerGame: 2,
+  strengthenLimitPerGame: -1,
   fruitCardCount: 4,
   fruitRootCountsAsTouch: true,
   fruitUsesSprout: true,

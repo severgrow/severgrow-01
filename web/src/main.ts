@@ -22,6 +22,7 @@ import {
   deskHover,
   deskShape,
   drawNext,
+  bloomEndpoints,
   drawStarts,
   endpointBloom,
   growToward,
@@ -161,6 +162,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let settings: Settings = parseSettings(store.get(SETTINGS_KEY), systemReduce());
 let stats = parseStats(store.get(STATS_KEY));
 const SEEN_KEY = 'severgrow.seen';
+const SMOOTH_KEY = 'severgrow.smoother';
 /** Polish pass 3: the tile card stays open (pinned) after a tap or long-press, so its buttons can be used. */
 let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
@@ -168,6 +170,12 @@ let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
 if (store.get(SETTINGS_KEY) === null && store.get(COACH_KEY_OLD) === '0') settings = { ...settings, coach: false };
 const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
+// A previous automatic "Smoother mode" could leave this preview on Low effects. Restore
+// the normal visual level once; an explicit Reduce motion/device preference still applies.
+if (IS_TEST2 && store.get(SMOOTH_KEY) && settings.effects === 'low') {
+  settings = { ...settings, effects: 'normal' };
+  saveSettings();
+}
 /** Animation time scale (0 = no animations). */
 /** overhaul item 19: Replay plays the opponent's turn a little slower */
 let replaying = false;
@@ -1171,6 +1179,7 @@ async function impact(m: Moment, f: number, my: number) {
 let perf = perfStart();
 let perfRaf = 0;
 function watchFrames() {
+  if (IS_TEST2) return; // no automatic effect downgrade or interruption in Futasaku 0.3
   if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
   let last = performance.now();
   const tick = (t: number) => {
@@ -1185,7 +1194,6 @@ function watchFrames() {
   };
   perfRaf = requestAnimationFrame(tick);
 }
-const SMOOTH_KEY = 'severgrow.smoother';
 function smootherMode() {
   const before = settings.effects;
   settings = { ...settings, effects: 'low' };
@@ -1404,7 +1412,9 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'discard': {
-      const from = step.player === HUMAN ? cardRects.get(step.card.id) : document.querySelector<HTMLElement>('.score.bot')!.getBoundingClientRect();
+      // The opponent's card is represented by the pile update; its old flight crossed the
+      // player's board and felt like a card thrown at the camera.
+      const from = step.player === HUMAN ? cardRects.get(step.card.id) : null;
       if (from) flyCard(step.card, from, $('discard').getBoundingClientRect(), f);
       if (step.player === HUMAN) {
         const hp = hapticFor('throw', settings);
@@ -1693,6 +1703,7 @@ function render() {
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
   renderPiles(v, advice);
+  if (IS_TEST2) requestAnimationFrame(alignDrawPiles);
   if (FEATURES.smartCamera && camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
@@ -1965,6 +1976,26 @@ function safeArea() {
 
 let firstToolTips: () => void = () => {};
 let layoutKey = '';
+/** Draw brings the two pile instruments toward the first hand card, without moving
+ * their counters separately or letting them cover the cockpit's action buttons. */
+function alignDrawPiles() {
+  const box = document.getElementById('test2-box');
+  const piles = box?.querySelector<HTMLElement>(':scope > .piles');
+  if (!box || !piles) return;
+  if (document.documentElement.dataset.step !== 'draw' || document.documentElement.dataset.thumb === 'left') {
+    piles.style.setProperty('--test2-draw-shift', '0px');
+    return;
+  }
+  const handCard = document.querySelector<HTMLElement>('#hand .card');
+  const actions = document.getElementById('test2-actions');
+  if (!handCard) return;
+  // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
+  const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
+  const desired = handCard.getBoundingClientRect().left - baseLeft;
+  const rightLimit = Math.min(window.innerWidth - 8, (actions?.getBoundingClientRect().left ?? window.innerWidth) - 8);
+  const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
+  piles.style.setProperty('--test2-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
   const vv = window.visualViewport;
@@ -2047,6 +2078,7 @@ function applyLayout() {
   document.documentElement.dataset.layout = l.mode;
   board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
+  if (IS_TEST2) requestAnimationFrame(alignDrawPiles);
 
 }
 window.addEventListener('resize', () => applyLayout());
@@ -2174,7 +2206,11 @@ function renderBoard(v: View, advice: Advice | null) {
     const dc = drawCombo();
     // overhaul item 7: before drawing only the starts; while drawing only what can come next
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
-    if (dc && !pending) o = { ...o, targets: drawNext(dc, drawn), selectedHex: null, coachHexes: [] };
+    if (dc && !pending) {
+      const targets = drawNext(dc, drawn);
+      if (IS_TEST2 && drawn.length === 1) for (const key of bloomEndpoints(dc, drawn[0]!, draw.reverse)) targets.add(key);
+      o = { ...o, targets, selectedHex: null, coachHexes: [] };
+    }
   }
   if (!busy() && !FEATURES.weakTools) {
     // the test copy: no weak-spot toggles; my most dangerous weak link always pulses gently
@@ -3035,7 +3071,7 @@ function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
   if (IS_TEST2 && (draw.shape.length === 1 || draw.desk.phase === 'live')) {
     const start = draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]!;
-    const shortcut = endpointBloom(c, start, key, draw.reverse);
+    const shortcut = endpointBloom(c, start, key, draw.reverse, v);
     if (shortcut) return finishDraw(shortcut);
   }
   if (((type === 'mouse' || type === 'keyboard') && draw.shape.length === 0) || draw.desk.phase === 'live') {

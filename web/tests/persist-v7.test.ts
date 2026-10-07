@@ -1,7 +1,7 @@
-// Step 7: the autosave keeps only the seed and the action list (and the rules version); resuming
-// replays them. Saves from older rules, or with an action the rules refuse, start fresh.
+// The autosave keeps a seed, action list and rules version. Test2 saves migrate to the
+// unlimited Strengthen default; unknown versions and illegal logs still start fresh.
 import { describe, expect, it } from 'vitest';
-import { CURRENT_RULES_VERSION, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import { CURRENT_RULES_VERSION, PREVIOUS_RULES_VERSION, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { SAVE_KEY, decodeSave, encodeSave } from '../src/logic/persist.js';
 import { Session } from '../src/logic/session.js';
@@ -63,6 +63,15 @@ describe('autosave: seed + actions (v0.7)', () => {
     expect(decodeSave(JSON.stringify({ state: newGame(1), coach: null, level: 4 }))).toBeNull(); // a v0.6 save
     expect(decodeSave('nonsense')).toBeNull();
     expect(decodeSave(null)).toBeNull();
+  });
+
+  it('continues a Test2 save with the same action history and unlimited Strengthen', () => {
+    const s = played(19, 20);
+    const raw = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
+    const loaded = decodeSave(JSON.stringify({ ...raw, rules: PREVIOUS_RULES_VERSION }))!;
+    expect(loaded.actions).toEqual(s.log);
+    expect(loaded.state.config.strengthenLimitPerGame).toBe(-1);
+    expect(loaded.state.board).toEqual(s.state.board);
   });
 
   it('an unknown level becomes 7', () => {

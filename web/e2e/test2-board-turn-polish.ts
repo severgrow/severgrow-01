@@ -117,7 +117,7 @@ async function geometry(page: Page, width: number, height: number, label: string
       pointer: getComputedStyle(image).pointerEvents, opacity: getComputedStyle(image).opacity };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-2.6*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
+  check(brand.loaded && Math.abs(brand.height-1.82*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
     `${label}: kanji wordmark is readable and top-aligned with the menu lines (${JSON.stringify(brand)})`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
@@ -382,6 +382,18 @@ async function finishTurn(page: Page, label: string) {
   check(throwLook.cardFilter.includes('grayscale(0.62)') && throwLook.cardAnimation === 'none' &&
     throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
     `${label}: Throw keeps readable color and a steady red backlight (${JSON.stringify(throwLook)})`);
+  const throwPulse = await page.evaluate(() => {
+    const root = document.documentElement;
+    const reduced = root.classList.contains('reduce-motion');
+    root.classList.remove('reduce-motion');
+    const hand = document.querySelector('#hand')!;
+    const card = hand.querySelector('.card:not(.test2-throw-picked)')!;
+    const result = { card: getComputedStyle(card).animationName, light: getComputedStyle(hand,'::before').backgroundImage };
+    root.classList.toggle('reduce-motion', reduced);
+    return result;
+  });
+  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('radial-gradient') && throwPulse.light.includes('189, 69, 52'),
+    `${label}: Throw uses the same whole-card pulse as Grow over a fixed ember backlight`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
   while (expected.actor === 1 && expected.phase !== 'GAME_OVER') {
@@ -556,13 +568,39 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       check(await page.locator('#board').getAttribute('data-skin') === 'forest-volcano-v3',`${label}: V3 artwork loads`);
     }
     await geometry(page,width,height,label);
+    await page.waitForTimeout(350);
+    const drawPiles = await page.evaluate(() => {
+      const piles = document.querySelector<HTMLElement>('#test2-box > .piles')!;
+      const first = document.querySelector<HTMLElement>('#hand .card')!.getBoundingClientRect();
+      const deck = document.querySelector<HTMLElement>('#deck .pile-card')!.getBoundingClientRect();
+      const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
+      const actions = document.querySelector<HTMLElement>('#test2-actions')!.getBoundingClientRect();
+      return { first: first.left, deck: deck.left, meter: meter.left, right: piles.getBoundingClientRect().right,
+        actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--test2-draw-shift')) || 0 };
+    });
+    check(drawPiles.scale >= 1.15 && Math.abs(drawPiles.deck-drawPiles.meter) < .6,
+      `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
+    if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.actions - 6,
+      `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
+    if (width === 390 && height === 844 && !v3) await page.screenshot({ path: `${dir}/390x844-draw-piles.png` });
     await page.click('#deck'); await idle(page);
     const before = await state(page);
-    await page.waitForTimeout(200);
     await geometry(page,width,height,label+' after Draw');
     const keys = ['-2,1','-1,1','0,1'];
     const action = legalActions(viewFor(before,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === '6,43,61' && action.hexes.map(coordKey).join('|') === keys.join('|'));
     assert(action?.t === 'Bloom', `${label}: seeded legal Bloom`);
+    if (width === 390 && height === 844) {
+      await page.waitForFunction(() => document.documentElement.dataset.test2Waiting === 'true');
+      const bloomPulse = await page.evaluate(() => {
+        const root = document.documentElement, reduced = root.classList.contains('reduce-motion');
+        root.classList.remove('reduce-motion');
+        const icon = document.querySelector('#moves > .kind:not(.on) .test2-combination');
+        const name = icon ? getComputedStyle(icon).animationName : null;
+        root.classList.toggle('reduce-motion', reduced);
+        return name;
+      });
+      check(bloomPulse === 'test2-card-breathe', `${label}: available Bloom cards pulse gently in the cockpit`);
+    }
     const kind = `bloom-3-${action.cards.join('.')}`;
     const pick = async () => {
       const button = page.locator(`#moves [data-kind="${kind}"]`);
@@ -672,6 +710,8 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       await pick();
       await tapHex(page,keys[0]!,true);
       equal(await state(page),before,`${label}: endpoint shortcut starts without spending cards`);
+      check(await page.locator(`#board .target[data-key="${keys.at(-1)!}"]`).count() > 0,
+        `${label}: the third Bloom tile is visibly tappable immediately after the first`);
       await tapHex(page,keys.at(-1)!,true);
       equal(await state(page),apply(before,action),`${label}: second endpoint infers and commits a legal Bloom`);
       await undo(page,before,label+' endpoints');

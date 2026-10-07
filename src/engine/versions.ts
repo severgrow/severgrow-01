@@ -1,13 +1,14 @@
-// Rules versions. Only the current rules are kept (v0.6: no old-version support). A recorded
-// game or a world-map ticket names the rules version it was played under; an unknown one is
-// refused rather than replayed under different rules.
+// A recorded game names its rules. Keep the last Test2 config for old recordings and saves;
+// Futasaku 0.3 removes the per-game Strengthen cap.
 import { DEFAULT_CONFIG } from './config.js';
 import type { RulesConfig } from './types.js';
 
-export const CURRENT_RULES_VERSION = 'v0.8-fruit-sprout';
+export const PREVIOUS_RULES_VERSION = 'v0.8-fruit-sprout';
+export const CURRENT_RULES_VERSION = 'futasaku0.3-unlimited-strengthen';
 
-/** Every rules version still accepted, by name: just the current one, a frozen copy of the defaults. */
+/** Accepted rules for deterministic replay and existing game tickets. */
 export const RULES_VERSIONS: Readonly<Record<string, Readonly<RulesConfig>>> = Object.freeze({
+  [PREVIOUS_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthenLimitPerGame: 2 }),
   [CURRENT_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG }),
 });
 

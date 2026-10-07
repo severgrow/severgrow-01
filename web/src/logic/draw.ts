@@ -134,12 +134,26 @@ export const drawNext = (c: Combo, shape: readonly string[], reverse = false): S
 /** Where a painting may start. */
 export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c, [], reverse);
 
-/** A legal Bloom spanning two tapped hexes. The engine's legal actions are the source of
- * truth; the search only chooses which already-legal placement to use. Adjacent second
- * taps remain available for ordinary tile-by-tile painting. */
-export const endpointBloom = (c: Combo, start: string, end: string, reverse = false): Bloom | null => {
+/** Endpoints which finish an already-legal Bloom after its first tile. Immediate neighbours
+ * stay reserved for the ordinary tap-by-tap path. */
+export const bloomEndpoints = (c: Combo, start: string, reverse = false): Set<string> => {
+  const out = new Set<string>();
+  const next = drawNext(c, [start], reverse);
+  for (const action of c.actions) {
+    const keys = action.hexes.map(coordKey);
+    if (!keys.includes(start)) continue;
+    const ordered = reverse ? [...keys].reverse() : keys;
+    const ends = c.run ? (ordered[0] === start ? [ordered.at(-1)!] : []) : keys;
+    for (const end of ends) if (end !== start && !next.has(end)) out.add(end);
+  }
+  return out;
+};
+
+/** A legal Bloom spanning two tapped hexes. Shortest route first; ties favour a win, a
+ * severed enemy network, more enemy territory and safer resulting territory. */
+export const endpointBloom = (c: Combo, start: string, end: string, reverse = false, v?: View): Bloom | null => {
   if (start === end || drawNext(c, [start], reverse).has(end)) return null;
-  let best: { action: Bloom; distance: number; index: number } | null = null;
+  let best: { action: Bloom; distance: number; index: number; merit: number } | null = null;
   for (const [index, action] of c.actions.entries()) {
     const keys = action.hexes.map(coordKey);
     if (!keys.includes(start) || !keys.includes(end)) continue;
@@ -156,7 +170,11 @@ export const endpointBloom = (c: Combo, start: string, end: string, reverse = fa
       for (const k of frontier) seen.add(k);
     }
     if (!seen.has(end)) continue;
-    if (!best || distance < best.distance || (distance === best.distance && index < best.index)) best = { action, distance, index };
+    if (best && distance > best.distance) continue;
+    const sim = v ? simulate(v, action) : null;
+    const merit = sim ? (sim.wins ? 10000 : 0) + sim.botCut * 100 + sim.taken * 20 + sim.points * 2 - sim.myLoss * 100 : 0;
+    if (!best || distance < best.distance || (distance === best.distance && (merit > best.merit || (merit === best.merit && index < best.index))))
+      best = { action, distance, index, merit };
   }
   return best?.action ?? null;
 };

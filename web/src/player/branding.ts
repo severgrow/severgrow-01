@@ -29,17 +29,17 @@ html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
-  height: var(--futasaku-logo-height, 32px);
+  height: var(--futasaku-logo-height, 22px);
   align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
-  max-width: 110px;
+  max-width: 90px;
   display: block;
   opacity: .75;
   pointer-events: none;
   user-select: none;
 }
 html.test2-branding #hud-menu,
-html.test2-branding #hud-brand { position: relative; top: -3px; }
+html.test2-branding #hud-brand { position: relative; top: 0; }
 html.test2-branding #menu #terrarium { display: none !important; }
 html.test2-branding #menu #logo {
   display: block !important;
@@ -150,7 +150,7 @@ export function mountBranding() {
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
     const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
     if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 2.6}px`);
+      image.style.setProperty('--futasaku-logo-height', `${height * 1.82}px`);
       // The taller logo also changes the grid row's height, which moves the menu ink.
       // Re-measure both after each small correction until their tops meet, including safe areas.
       for (let i = 0; i < 7; i++) {
