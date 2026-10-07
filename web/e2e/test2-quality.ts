@@ -36,7 +36,9 @@ for (const palette of ['soil','moss','ink']) for (const variant of ['right','lef
   const p=await context.newPage();await p.goto(BASE+'/test2/?seed=219682080');await wait(p);
   await p.keyboard.press('Tab');
   check(await p.evaluate(()=>!!document.activeElement?.closest('button')),`${palette}/${variant}: keyboard focus`);
-  await p.keyboard.press('d');await p.waitForTimeout(400);
+  await p.waitForFunction(() => (window as any).__severgrow?.state()?.phase === 'DRAW');
+  await p.keyboard.press('d');
+  await p.waitForFunction(() => (window as any).__severgrow?.state()?.phase === 'ACT');
   check(await p.evaluate(()=>(window as any).__severgrow.state().phase==='ACT'),`${palette}/${variant}: keyboard draw`);
   check(await p.evaluate(()=>document.fonts.check('700 20px "Futasaku Numerals"')),`${palette}/${variant}: numeral font loaded`);
   const numbers=await p.evaluate(()=>{const canvas=document.createElement('canvas'),c=canvas.getContext('2d')!;c.font='700 20px "Futasaku Numerals"';return [...'123456789'].map(n=>c.measureText(n).width);});

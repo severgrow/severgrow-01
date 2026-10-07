@@ -377,6 +377,7 @@ export class SkinBoardView extends BoardView {
     const want = new Map<string, { key: string; m: NonNullable<SkinDef['ambient']>['motes'][number] }>();
     if (amb && this.look.motion && (this.tilePx() || 0) >= 48) {
       for (const m of amb.motes) {
+        if (IS_TEST2 && m.material === this.skin.owners[1]) continue; // pause rising ember motes; keep leaves
         if (!this.assets.has(m.src)) continue;
         const keys = this.keys.filter((k) => {
           const t = board[k];
@@ -449,20 +450,23 @@ export class SkinBoardView extends BoardView {
     };
     const mine = sides[0]!;
     if (mine.length >= 2) {
-      const n = Math.min(3, Math.ceil(mine.length / 5));
-      for (let i = 0; i < n; i++) {
-        const salt = `bfly${i}`;
-        const kind = Math.floor(hash(`${salt}:c`) * 3);
-        const show = el('g', { class: 'skin-wander', style: timing(26 + hash(`${salt}:v`) * 14, `${salt}:v`) }, g);
-        const fly = el('g', {}, show);
-        el('animateMotion', { path: loop(mine, salt), ...smil(30 + hash(`${salt}:d`) * 16, `${salt}:d`) }, fly);
-        // its shadow on the ground below (the butterfly flies a little above the land)
-        use(fly, 'life-shadow', { transform: 'translate(3,7) scale(1.6,0.8)' });
-        const bob = el('g', { class: 'skin-bob', style: timing(1.7 + hash(`${salt}:b`), `${salt}:b`) }, el('g', { transform: `scale(1.9) rotate(${((hash(`${salt}:r`) - 0.5) * 40).toFixed(1)})` }, fly));
-        const flap = timing(0.3 + hash(`${salt}:f`) * 0.12, `${salt}:f`);
-        use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`);
-        use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`, { transform: 'scale(-1,1)' });
-        use(bob, 'life-body');
+      // Park the butterfly experiment in Futasaku 0.3; the drifting leaf stays.
+      if (!IS_TEST2) {
+        const n = Math.min(3, Math.ceil(mine.length / 5));
+        for (let i = 0; i < n; i++) {
+          const salt = `bfly${i}`;
+          const kind = Math.floor(hash(`${salt}:c`) * 3);
+          const show = el('g', { class: 'skin-wander', style: timing(26 + hash(`${salt}:v`) * 14, `${salt}:v`) }, g);
+          const fly = el('g', {}, show);
+          el('animateMotion', { path: loop(mine, salt), ...smil(30 + hash(`${salt}:d`) * 16, `${salt}:d`) }, fly);
+          // its shadow on the ground below (the butterfly flies a little above the land)
+          use(fly, 'life-shadow', { transform: 'translate(3,7) scale(1.6,0.8)' });
+          const bob = el('g', { class: 'skin-bob', style: timing(1.7 + hash(`${salt}:b`), `${salt}:b`) }, el('g', { transform: `scale(1.9) rotate(${((hash(`${salt}:r`) - 0.5) * 40).toFixed(1)})` }, fly));
+          const flap = timing(0.3 + hash(`${salt}:f`) * 0.12, `${salt}:f`);
+          use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`);
+          use(el('g', { class: 'skin-wing', style: flap }, bob), `life-wing-${kind}`, { transform: 'scale(-1,1)' });
+          use(bob, 'life-body');
+        }
       }
       const leaf = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[0])?.src;
       if (leaf && this.assets.has(leaf)) {
@@ -477,18 +481,21 @@ export class SkinBoardView extends BoardView {
     }
     const theirs = sides[1]!;
     if (theirs.length) {
-      const flames = Math.min(4, Math.ceil(theirs.length / 3));
-      for (let i = 0; i < flames; i++) {
-        const k = theirs[Math.floor(hash(`flame${i}:k`) * theirs.length)]!;
-        const { x, y } = centerOf(k);
-        const a = hash(`flame${i}:a`) * Math.PI * 2;
-        const r = 13 + hash(`flame${i}:r`) * 10;
-        const f = el('g', { class: 'skin-flame', transform: `translate(${(x + Math.cos(a) * r).toFixed(1)},${(y + Math.sin(a) * r).toFixed(1)})`, style: timing(6 + hash(`flame${i}:d`) * 7, `flame${i}:d`) }, g);
-        // the light it throws on the rock around it, then the flame, then two sparks
-        use(f, 'life-flame-light', { class: 'skin-flame-light' });
-        const lick = el('g', { class: 'skin-lick', style: timing(0.42 + hash(`flame${i}:l`) * 0.2, `flame${i}:l`) }, el('g', { transform: `scale(${(1.6 + hash(`flame${i}:s`) * 0.5).toFixed(2)})` }, f));
-        use(lick, 'life-flame');
-        for (let j = 0; j < 2; j++) el('circle', { class: 'skin-spark', cx: (j ? 1.2 : -0.8).toFixed(1), cy: -5, r: 0.45, fill: '#ffd76a', style: `animation-delay:${(-j * 0.35).toFixed(2)}s` }, lick);
+      // Keep the volcanic smoke and lava warmth, but pause the separate flame sprites.
+      if (!IS_TEST2) {
+        const flames = Math.min(4, Math.ceil(theirs.length / 3));
+        for (let i = 0; i < flames; i++) {
+          const k = theirs[Math.floor(hash(`flame${i}:k`) * theirs.length)]!;
+          const { x, y } = centerOf(k);
+          const a = hash(`flame${i}:a`) * Math.PI * 2;
+          const r = 13 + hash(`flame${i}:r`) * 10;
+          const f = el('g', { class: 'skin-flame', transform: `translate(${(x + Math.cos(a) * r).toFixed(1)},${(y + Math.sin(a) * r).toFixed(1)})`, style: timing(6 + hash(`flame${i}:d`) * 7, `flame${i}:d`) }, g);
+          // the light it throws on the rock around it, then the flame, then two sparks
+          use(f, 'life-flame-light', { class: 'skin-flame-light' });
+          const lick = el('g', { class: 'skin-lick', style: timing(0.42 + hash(`flame${i}:l`) * 0.2, `flame${i}:l`) }, el('g', { transform: `scale(${(1.6 + hash(`flame${i}:s`) * 0.5).toFixed(2)})` }, f));
+          use(lick, 'life-flame');
+          for (let j = 0; j < 2; j++) el('circle', { class: 'skin-spark', cx: (j ? 1.2 : -0.8).toFixed(1), cy: -5, r: 0.45, fill: '#ffd76a', style: `animation-delay:${(-j * 0.35).toFixed(2)}s` }, lick);
+        }
       }
       for (let i = 0; i < Math.min(2, Math.ceil(theirs.length / 5)); i++) {
         const k = theirs[Math.floor(hash(`soot${i}:k`) * theirs.length)]!;
@@ -575,7 +582,7 @@ export class SkinBoardView extends BoardView {
     el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: 'skin-lava-glow', filter: `url(#${this.id('life-hot')})`, preserveAspectRatio: 'none', style: rot + phase(3.6 + hash(`${key}:gd`) * 2.6, 'g') }, holder);
     const embers = s9 >= 7 ? 2 : s9 >= 3 ? 1 : 0;
     const ember = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[1])?.src;
-    if (ember && this.assets.has(ember))
+    if (!IS_TEST2 && ember && this.assets.has(ember))
       for (let i = 0; i < embers; i++) {
         const a = hash(`${key}:ea${i}`) * Math.PI * 2;
         const r = 7 + hash(`${key}:er${i}`) * 13;
@@ -768,7 +775,7 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (IS_TEST2) drawSeedStone(g, key, x, y - S * .06, t.strength, this.id('seed-stone'));
+    if (IS_TEST2) drawSeedStone(g, key, x, y - S * .06, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];
       el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);

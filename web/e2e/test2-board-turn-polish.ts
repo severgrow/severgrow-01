@@ -117,11 +117,17 @@ async function geometry(page: Page, width: number, height: number, label: string
       pointer: getComputedStyle(image).pointerEvents, opacity: getComputedStyle(image).opacity };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-4.25*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
-    `${label}: new emblem is readable and exactly top-aligned with the menu lines (${JSON.stringify(brand)})`);
+  check(brand.loaded && Math.abs(brand.height-2.6*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
+    `${label}: kanji wordmark is readable and top-aligned with the menu lines (${JSON.stringify(brand)})`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
+  const meterAlignment = await page.evaluate(() => ['deck','discard'].map(id => {
+    const pile = document.querySelector(`#${id} .pile-card`)!.getBoundingClientRect();
+    const meter = document.querySelector(`#${id} .pile-meter`)!.getBoundingClientRect();
+    return Math.abs(pile.left-meter.left);
+  }));
+  check(meterAlignment.every(gap => gap < .6), `${label}: each mechanical counter starts at its pile's left edge (${meterAlignment})`);
   const atmosphere = await page.evaluate(async () => {
     const grain = document.querySelector<HTMLElement>('#test2-film-grain')!;
     const css = getComputedStyle(grain), box = grain.getBoundingClientRect();
@@ -433,8 +439,20 @@ async function sproutFlow(width: number, height: number) {
     if (width === 360 || width === 1280) await idleTiming(page,label);
     await cue(page,'draw',label);
     const initial = await state(page);
+    const meterMotion = width === 390 && height === 844;
+    if (meterMotion) await page.evaluate(() => document.documentElement.classList.remove('reduce-motion'));
     await page.click('#deck');
     await idle(page);
+    if (meterMotion) {
+      const wheel = page.locator('#deck .pile-meter-drum').last();
+      check(await wheel.count() > 0 && await wheel.evaluate(el => el.getAnimations().some(a => a.playState === 'running')),
+        `${label}: drawing turns a mechanical number wheel`);
+      const first = await wheel.evaluate(el => getComputedStyle(el).transform);
+      await page.waitForTimeout(110);
+      const second = await wheel.evaluate(el => getComputedStyle(el).transform);
+      check(first !== second, `${label}: the number rolls smoothly across frames`);
+      await page.evaluate(() => document.documentElement.classList.add('reduce-motion'));
+    }
     const grown = await state(page);
     equal(grown, apply(initial,{ t:'Draw',from:'deck' }), `${label}: actual Draw preserves engine parity`);
     await page.waitForTimeout(200);
@@ -462,8 +480,8 @@ async function sproutFlow(width: number, height: number) {
     check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .tile-num`).textContent() === String(grown.hands[0].find(card => card.id === action.card)!.rank), `${label}: Sprout strength is clearly rendered`);
     check(await page.locator('#board .l-veins > *').count() === 0 && await page.locator('#board .ghost-vein').count() === 0,
       `${label}: no permanent or preview connector artwork is rendered`);
-    check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .seed-stone .seed-stone-num`).count() === 1,
-      `${label}: the actual strength sits on a code-rendered ceramic stone`);
+    check(await page.locator(`#board .tile[data-key="${coordKey(action.coord)}"] .seed-stone[data-owner="0"] .seed-stone-art image`).count() === 1,
+      `${label}: the actual strength uses the light physical stone artwork`);
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
     const illegalEmpty = Object.keys(grown.terrain).find(key => !grown.board[key] && grown.terrain[key] === 'normal' &&
@@ -496,6 +514,8 @@ async function sproutFlow(width: number, height: number) {
     }
     check(allBotActions.some(action => action.t === 'Sprout' || action.t === 'Bloom'), `${label}: real Volcano grew its numbered network`);
     check(await page.locator('#board .tile.bot:not(.root)').count() > 0 && await page.locator('#board .tile .mark-line, #board .tile .mark-ink').count() === 0, `${label}: numbered Volcano tiles remain readable without owner icons`);
+    check(await page.locator('#captions .caption, #captions .float, #board .amb-ember').count() === 0,
+      `${label}: temporary move captions and rising fire are absent from this preview`);
     await page.waitForTimeout(200);
     await geometry(page,width,height,label+' after three turns');
     await controls(page,label+' after three turns');

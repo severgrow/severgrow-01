@@ -242,28 +242,41 @@ html.test2-information .dock #test2-box .pile-card {
   --pile-h: 71px; --cw: 50px; --ch: 71px; width: 50px; height: 71px;
 }
 html.test2-information .dock #test2-box .pile { justify-content: flex-start; }
-html.test2-information .dock #test2-box .pile-meta { position: absolute; inset: auto 0 0; height: 18px; pointer-events: none; }
-html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 0 auto auto; height: 18px; }
+html.test2-information .dock #test2-box .pile-meta {
+  position: absolute; inset: auto auto 0 0; width: var(--box-pile);
+  height: 18px; justify-self: stretch; pointer-events: none;
+}
+html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 auto auto 0; height: 18px; }
 html.test2-information .dock #test2-box .pile-count.pile-meter {
-  display: flex; align-items: center; justify-content: center; gap: 0;
-  width: 30px; min-width: 30px; height: 18px; padding: 1px 3px;
-  border: 1px solid rgba(204,198,177,.38); border-radius: 3px 4px 2px 3px;
+  display: flex; align-items: center; justify-content: center; gap: 0; position: relative;
+  width: 34px; min-width: 34px; height: 19px; padding: 1px 3px;
+  border: 1px solid rgba(171,165,144,.64); border-radius: 2px 3px 3px 2px;
   background:
-    radial-gradient(circle at 8px 4px,rgba(255,245,214,.065) 0 .6px,transparent .85px) 0 0/13px 9px,
-    repeating-linear-gradient(101deg,transparent 0 3px,rgba(211,202,176,.025) 3px 3.5px),
-    linear-gradient(180deg,#080a0a,#1a1b1b 52%,#090a0a);
-  color: #f4efde; box-shadow: inset 0 1px 2px #000, inset 0 -1px rgba(224,218,198,.09), 0 1px 2px rgba(0,0,0,.45);
+    radial-gradient(circle at 8px 4px,rgba(255,245,214,.09) 0 .6px,transparent .85px) 0 0/13px 9px,
+    repeating-linear-gradient(101deg,transparent 0 3px,rgba(211,202,176,.035) 3px 3.5px),
+    linear-gradient(180deg,#282923 0%,#101311 24%,#080a09 56%,#252720 100%);
+  color: #e8e1cd;
+  box-shadow: inset 0 1px 1px rgba(241,233,207,.24), inset 0 -2px 2px #050606, 0 1px 2px rgba(0,0,0,.55);
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
+html.test2-information .dock #test2-box .pile-count.pile-meter::after {
+  content: ''; position: absolute; inset: 1px 2px; border-radius: 2px;
+  background: linear-gradient(180deg,rgba(255,246,219,.15),transparent 35%,rgba(0,0,0,.16) 76%,rgba(255,244,215,.06));
+  box-shadow: inset 0 0 3px rgba(0,0,0,.5); pointer-events: none;
+}
 html.test2-information .dock #test2-box .pile-meter-window {
   position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px;
-  overflow: hidden; border-right: 1px solid rgba(255,255,255,.08);
+  overflow: hidden; border-right: 1px solid rgba(181,173,146,.23);
+  box-shadow: inset 0 0 2px rgba(0,0,0,.65);
 }
 html.test2-information .dock #test2-box .pile-meter-window:last-child { border-right: 0; }
+html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 30px; }
 html.test2-information .dock #test2-box .pile-meter-face {
-  position: absolute; inset: 0; display: grid; place-items: center;
+  position: relative; display: grid; place-items: center; width: 100%;
   height: 15px; white-space: nowrap; font: inherit;
+  text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
+  background: linear-gradient(180deg,rgba(197,187,153,.1),transparent 35%,rgba(0,0,0,.08) 80%);
 }
 html.test2-information .dock #test2-box #deck.low .pile-meter { color: var(--c-gold); }
 html.test2-information .dock #test2-box > .moves {

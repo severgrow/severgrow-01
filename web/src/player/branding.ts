@@ -1,5 +1,6 @@
 // Futasaku 0.3 uses the Test2 presentation; historical channels keep their existing brand.
 import logoUrl from '../assets/futasaku-emblem.png?url';
+import wordmarkUrl from '../assets/futasaku-white.png?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
@@ -28,15 +29,17 @@ html.test2-branding[data-thumb] .dock { padding: 0; }
 html.test2-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
-  height: var(--futasaku-logo-height, 50px);
+  height: var(--futasaku-logo-height, 32px);
   align-self: start; margin-top: var(--futasaku-logo-top, 18px);
   width: auto;
-  max-width: 150px;
+  max-width: 110px;
   display: block;
   opacity: .75;
   pointer-events: none;
   user-select: none;
 }
+html.test2-branding #hud-menu,
+html.test2-branding #hud-brand { position: relative; top: -3px; }
 html.test2-branding #menu #terrarium { display: none !important; }
 html.test2-branding #menu #logo {
   display: block !important;
@@ -95,12 +98,13 @@ export function polishLayout(layout: Layout, v: Viewport, radius: number): Layou
 
 // The exported PNG has faint alpha fringes in otherwise empty space. Render the mark as
 // uniformly cream, omit those fringes, and crop its transparent margins without stretching.
-function whiteLogo(id: string, accessible: boolean): SVGSVGElement {
+function whiteLogo(id: string, accessible: boolean, wordmark = false): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 1254 1254');
-  svg.setAttribute('width', '1254');
-  svg.setAttribute('height', '1254');
+  const width = wordmark ? 2200 : 1254, height = wordmark ? 715 : 1254;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
   svg.setAttribute('focusable', 'false');
   if (accessible) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Futasaku'); }
   else svg.setAttribute('aria-hidden', 'true');
@@ -109,9 +113,9 @@ function whiteLogo(id: string, accessible: boolean): SVGSVGElement {
     <feFuncB type="linear" slope="0" intercept="1"/><feFuncA type="discrete" tableValues="0 1"/>
   </feComponentTransfer><feFlood style="flood-color:var(--c-accent)"/><feComposite operator="in" in2="logo-mask"/></filter></defs>`;
   const image = document.createElementNS(ns, 'image');
-  image.setAttribute('href', logoUrl);
-  image.setAttribute('width', '1254');
-  image.setAttribute('height', '1254');
+  image.setAttribute('href', wordmark ? wordmarkUrl : logoUrl);
+  image.setAttribute('width', String(width));
+  image.setAttribute('height', String(height));
   image.setAttribute('filter', `url(#${id})`);
   svg.append(image);
   return svg;
@@ -134,7 +138,7 @@ export function mountBranding() {
   document.head.append(style);
   const race = document.getElementById('race');
   if (race) { race.hidden = true; race.setAttribute('aria-hidden', 'true'); }
-  const image = whiteLogo('futasaku-hud-white', true);
+  const image = whiteLogo('futasaku-hud-white', true, true);
   image.id = 'hud-brand';
   document.querySelector('#game > .hud')?.append(image);
   // Match the visible ink, including the rounded stroke, rather than the 44px tap target.
@@ -146,7 +150,7 @@ export function mountBranding() {
     const stroke = parseFloat(getComputedStyle(path).strokeWidth) || 0;
     const height = (path.getBBox().height + stroke) * Math.hypot(matrix.c, matrix.d);
     if (height > 0) {
-      image.style.setProperty('--futasaku-logo-height', `${height * 4.25}px`);
+      image.style.setProperty('--futasaku-logo-height', `${height * 2.6}px`);
       // The taller logo also changes the grid row's height, which moves the menu ink.
       // Re-measure both after each small correction until their tops meet, including safe areas.
       for (let i = 0; i < 7; i++) {

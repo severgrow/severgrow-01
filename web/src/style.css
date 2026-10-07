@@ -678,18 +678,9 @@ svg.usable .hex-cell {
   fill: var(--c-botInk);
 }
 .seed-stone { pointer-events: none; }
-.seed-stone-shadow { fill: rgba(0, 0, 0, .34); }
-.seed-stone-body { stroke: #8c826e; stroke-width: .58; }
-.seed-stone-glint { fill: #fffdf5; opacity: .25; }
-.tile .seed-stone .seed-stone-num,
-.ghost .seed-stone .seed-stone-num {
-  fill: #272720;
-  stroke: none;
-  paint-order: normal;
-  font-size: 15px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
+.seed-stone-shadow { fill: rgba(0, 0, 0, .4); }
+.seed-stone-art { pointer-events: none; overflow: hidden; }
+.seed-stone-value { display: none; }
 .mark-ink {
   fill: var(--c-youInk);
 }

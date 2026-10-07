@@ -26,7 +26,7 @@ import type { DrawCtx } from './materials.js';
 import { materialFor } from '../logic/materials.js';
 import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
-import { drawSeedStone, seedStoneDefs } from './seedstone.js';
+import { drawSeedStone } from './seedstone.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -184,7 +184,7 @@ export class BoardView {
       const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
       el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
-      if (IS_TEST2) drawSeedStone(gg, t.key, x, y + 1, t.strength, this.id('seed-stone'));
+      if (IS_TEST2) drawSeedStone(gg, t.key, x, y + 1, t.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
     }
     for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
@@ -214,7 +214,6 @@ export class BoardView {
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
-    if (IS_TEST2) seedStoneDefs(defs, this.id('seed-stone'));
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
     const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 2.2, height: 6, class: 'pat-ink' }, hatch);
@@ -478,7 +477,7 @@ export class BoardView {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       el('path', { d: hexPath(g.key, S * tileScale(g.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(g.key);
-      if (IS_TEST2) drawSeedStone(gg, g.key, x, y + 1, g.strength, this.id('seed-stone'));
+      if (IS_TEST2) drawSeedStone(gg, g.key, x, y + 1, g.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
       if (g.replaces) el('path', { d: star(x + S * 0.5, y - S * 0.5, 6), class: 'spark-mark' }, gg);
     }
@@ -594,7 +593,7 @@ export class BoardView {
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
-      if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, this.id('seed-stone'));
+      if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, t.owner);
       else {
         el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
         el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
@@ -604,7 +603,7 @@ export class BoardView {
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, this.id('seed-stone'));
+    if (IS_TEST2) drawSeedStone(g, key, x, y - S * 0.06, t.strength, t.owner);
     else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
@@ -736,7 +735,7 @@ export class BoardView {
       const { x, y } = centerOf(b.key);
       el('circle', { cx: (x + b.dx * S).toFixed(1), cy: (y + b.dy * S).toFixed(1), r: 2.2, class: 'amb-bubble', style: `animation-delay:${b.delay}s` }, g);
     }
-    for (const e of plan.embers) {
+    for (const e of IS_TEST2 ? [] : plan.embers) {
       const { x, y } = centerOf(e.key);
       el('circle', { cx: (x + e.dx * S).toFixed(1), cy: (y - S * 0.2).toFixed(1), r: 1.1, class: 'amb-ember', style: `animation-delay:${e.delay}s` }, g);
     }
@@ -768,20 +767,24 @@ export class BoardView {
       let gradient = defs.querySelector(`#${glowId}`);
       if (!gradient) {
         gradient = el('radialGradient', { id: glowId }, defs);
-        el('stop', { offset: '0%', 'stop-color': owner === 0 ? '#f4ffd9' : '#ffbe79', 'stop-opacity': owner === 0 ? .46 : .52 }, gradient);
-        el('stop', { offset: '54%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': .16 }, gradient);
+        el('stop', { offset: '0%', 'stop-color': owner === 0 ? '#f8ffe7' : '#ffe2a5', 'stop-opacity': owner === 0 ? .45 : .6 }, gradient);
+        el('stop', { offset: '48%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff913f', 'stop-opacity': owner === 0 ? .18 : .22 }, gradient);
         el('stop', { offset: '100%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': 0 }, gradient);
       }
       const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
       for (const key of joined) el('path', { d: hexPath(key, S * 1.01, this.style.tileShape) }, clip);
       const surface = el('g', { class: `territory-pulse p${owner}`, 'clip-path': `url(#${clipId})` }, layer);
-      const light = el('circle', { cx: 0, cy: 0, r: S * .98, fill: `url(#${glowId})`, opacity: 0 }, surface);
+      const light = el('g', { opacity: 0 }, surface);
+      el('circle', { cx: 0, cy: 0, r: S * (owner === 0 ? 1.08 : .88), fill: `url(#${glowId})` }, light);
+      // A narrower magma glint gives the volcano a little more bite, but it still
+      // appears only while the travelling pool of light is on that tile's surface.
+      if (owner === 1) el('circle', { cx: 0, cy: 0, r: S * .3, fill: `url(#${glowId})`, opacity: .62 }, light);
       const points = route.map(key => centerOf(key));
       const path = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join('');
-      const duration = `${Math.min(24, Math.max(8, route.length * .48)).toFixed(1)}s`;
+      const duration = `${Math.min(21, Math.max(7, route.length * .38)).toFixed(1)}s`;
       const begin = owner ? '-3.2s' : '0s';
       el('animateMotion', { path, dur: duration, begin, repeatCount: 'indefinite', calcMode: 'linear' }, light);
-      el('animate', { attributeName: 'opacity', values: '0;.8;.8;0', keyTimes: '0;.08;.88;1', dur: duration, begin, repeatCount: 'indefinite' }, light);
+      el('animate', { attributeName: 'opacity', values: '0;.74;.74;0', keyTimes: '0;.08;.88;1', dur: duration, begin, repeatCount: 'indefinite' }, light);
     }
   }
   veinsTouching(keys: Set<string>) {

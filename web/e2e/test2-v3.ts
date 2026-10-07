@@ -64,6 +64,8 @@ try {
       `${w}: V3 paints no permanent or preview connector artwork`);
     check(await page.locator(`#board .tile[data-key="${action.coord.q},${action.coord.r}"] .seed-stone .tile-num`).textContent() === String(grown.hands[0].find(card => card.id === action.card)!.rank),
       `${w}: V3 keeps the correct strength on the ceramic counter`);
+    check((await page.locator('#board .skin-wing, #board .skin-flame, #board .skin-ember, #board .skin-mote.rise').count()) === 0,
+      `${w}: butterflies and rising fire sprites are parked while leaves and smoke remain available`);
     check((await page.locator('#board .skin-tile .mark-line, #board .skin-tile .mark-ink').count()) === 0, `${w}: V3 artwork carries ownership without shapes`);
     await page.click('#tool-undo');
     await idle(page);

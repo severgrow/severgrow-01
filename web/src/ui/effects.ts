@@ -114,6 +114,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   function floatText(text: string, key: string, tone: string, f: number) {
+    // The board tells this story directly for now; keep the effect for a later caption pass.
+    if (IS_TEST2) return;
     const d = document.createElement('div');
     d.className = `float num ${tone}`;
     d.textContent = text;
@@ -125,6 +127,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   function caption(text: string, key: string | null, tone: string) {
+    if (IS_TEST2) return;
     const box = $('captions');
     const d = document.createElement('div');
     d.className = `caption ${tone}`;
@@ -140,6 +143,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   function banner(text: string, tone?: 'you' | 'bot' | 'big' | 'calm') {
+    if (IS_TEST2) return;
     const b = $('banner');
     b.textContent = text;
     b.className = `banner ${tone ?? 'you'}`;

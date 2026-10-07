@@ -83,6 +83,7 @@ const theme = () => themeOf(settings.palette);
 const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
+import { setSeedStoneStrength } from './ui/seedstone.js';
 let DesignView: typeof BoardView = BoardView;
 const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2'
   ? await import('./player/branding.js') : null;
@@ -1353,9 +1354,11 @@ async function playStep(step: Step, my: number) {
       if (m > 0) ring(step.key, f, top);
       const num = tileEl?.querySelector('.tile-num');
       if (num && step.to > step.from) {
+        const stone = IS_TEST2 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
+        const setShown = (value: number) => stone ? setSeedStoneStrength(stone, value) : (num.textContent = String(value));
         const n = step.to - step.from;
-        for (let i = 1; i <= n; i++) setTimeout(() => (num.textContent = String(step.from + i)), (i * 260 * f) / n);
-        num.textContent = String(step.from);
+        for (let i = 1; i <= n; i++) setTimeout(() => setShown(step.from + i), (i * 260 * f) / n);
+        setShown(step.from);
       }
       if (settings.sound) sound.thud();
       if (top && mo.budget.particles > 0) sparks(step.key, step.player === HUMAN ? 'you' : 'bot', 120 * f, f, Math.min(8, mo.budget.particles));
