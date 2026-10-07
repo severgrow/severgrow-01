@@ -117,7 +117,7 @@ async function geometry(page: Page, width: number, height: number, label: string
       pointer: getComputedStyle(image).pointerEvents };
   });
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
-  check(brand.loaded && Math.abs(brand.height-2.7*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2,
+  check(brand.loaded && Math.abs(brand.height-3.4*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2,
     `${label}: new emblem is readable and exactly top-aligned with the menu lines`);
   equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
