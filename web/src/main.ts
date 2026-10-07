@@ -51,7 +51,7 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setSlimHud, THUMB } from './logic/layout.js';
+import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -129,6 +129,7 @@ import type { Beats } from './logic/emptyturn.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
+if (IS_TEST2) setFixedBoardOrient('flat');
 const COACH_KEY_OLD = 'severgrow.coach.enabled';
 const BOOT_PARAMS = new URLSearchParams(location.search);
 // the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin

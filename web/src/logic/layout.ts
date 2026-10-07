@@ -193,6 +193,10 @@ export const MAX_HAND = 8;
 /** The test copy's slim header: one 44pt row (the menu button and the score bar). */
 export const SLIM_HUD = 44;
 let slimHud = false;
+// The active Futasaku board keeps the same tabletop orientation at every viewport size.
+// Historical channels still use the fit-based choice below.
+let fixedBoardOrient: Orient | null = null;
+export const setFixedBoardOrient = (orient: Orient | null) => { fixedBoardOrient = orient; };
 /** The test copy: the header keeps only the menu button and the score bar. */
 export const setSlimHud = (on: boolean) => {
   slimHud = on;
@@ -287,6 +291,7 @@ export const bestFit = (w: number, h: number, radius: number): { orient: Orient;
     const u = boardUnits(radius, o);
     return Math.min(w / u.w, h / u.h);
   };
+  if (fixedBoardOrient) return { orient: fixedBoardOrient, scale: fit(fixedBoardOrient) };
   const p = fit('pointy');
   const f = fit('flat');
   return f > p + 1e-9 ? { orient: 'flat', scale: f } : { orient: 'pointy', scale: p };

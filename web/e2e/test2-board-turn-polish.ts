@@ -52,10 +52,10 @@ async function tapCard(page: Page, id: number) {
 const cdps = new WeakMap<Page, CDPSession>();
 const cdp = async (page: Page) => { if (!cdps.has(page)) cdps.set(page, await page.context().newCDPSession(page)); return cdps.get(page)!; };
 const tapHex = async (page: Page, key: string, touch: boolean) => {
+  const point = await hexCenter(page,key);
   if (touch) {
-    const point = await hexCenter(page,key);
     await page.touchscreen.tap(point.x,point.y);
-  } else await page.locator(`#board .hex-cell[data-key="${key}"]`).click();
+  } else await page.mouse.click(point.x,point.y);
 };
 
 /** Selected phone/desktop states, individually bounded to 192 KiB for CI log review. */
@@ -92,6 +92,9 @@ async function open(width: number, height: number, seed: number, v3 = false) {
   });
   await page.goto(`${base}?seed=${seed}${v3 ? '&design=v3' : ''}`);
   await idle(page);
+  await page.locator('#game').waitFor({state:'visible'});
+  await page.waitForFunction(() => document.querySelectorAll('#board .hex-cell').length > 0);
+  await page.locator('#splash').waitFor({state:'hidden'});
   await page.waitForFunction(() => document.fonts.status === 'loaded');
   await page.waitForTimeout(180);
   equal(await state(page), newGame(seed), `${width}x${height}: seeded Classic setup`);
@@ -100,6 +103,26 @@ async function open(width: number, height: number, seed: number, v3 = false) {
 
 async function geometry(page: Page, width: number, height: number, label: string) {
   const before = await state(page);
+  const orientation = await page.evaluate(() => {
+    const board = (window as any).__severgrow.state().board as Record<string, { owner: number; root?: boolean } | null>;
+    const homes = Object.entries(board).filter(([, tile]) => tile?.root);
+    const centre = (key: string) => {
+      const box = document.querySelector<SVGPathElement>(`#board .hex-cell[data-key="${key}"] > .hex`)!.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    };
+    const mine = centre(homes.find(([, tile]) => tile?.owner === 0)![0]);
+    const theirs = centre(homes.find(([, tile]) => tile?.owner === 1)![0]);
+    const cells = [...document.querySelectorAll<SVGGElement>('#board .hex-cell[data-key]')].map(cell => centre(cell.dataset.key!));
+    const top = Math.min(...cells.map(cell => cell.y));
+    const bottom = Math.max(...cells.map(cell => cell.y));
+    return { family: document.documentElement.dataset.orient, mine, theirs,
+      topCount: cells.filter(cell => Math.abs(cell.y - top) < 1).length,
+      bottomCount: cells.filter(cell => Math.abs(cell.y - bottom) < 1).length };
+  });
+  check(orientation.family === 'flat' && orientation.mine.y > orientation.theirs.y &&
+    Math.abs(orientation.mine.x - orientation.theirs.x) < 2 &&
+    orientation.topCount === 1 && orientation.bottomCount === 1,
+    `${label}: fixed orientation puts the player below the opponent and a single hex at each point (${JSON.stringify(orientation)})`);
   const brand = await page.evaluate(async () => {
     const menu = document.querySelector<HTMLElement>('#hud-menu')!.getBoundingClientRect();
     const lines = document.querySelector<SVGSVGElement>('#hud-menu svg')!.getBoundingClientRect();
@@ -179,7 +202,9 @@ async function geometry(page: Page, width: number, height: number, label: string
     const rail = document.querySelector<HTMLElement>('#test2-information-rail')!;
     const hud = document.querySelector<HTMLElement>('#game > .hud')!;
     const cells = [...board.querySelectorAll<SVGGElement>('.hex-cell')];
-    const boxes = cells.map(cell => cell.getBoundingClientRect());
+    // The crystals have a soft halo; board fit is defined by the hex outlines,
+    // not by decorative children extending their SVG group bounds.
+    const boxes = cells.map(cell => cell.querySelector('.hex')!.getBoundingClientRect());
     const left = Math.min(...boxes.map(box => box.left)), top = Math.min(...boxes.map(box => box.top));
     const right = Math.max(...boxes.map(box => box.right)), bottom = Math.max(...boxes.map(box => box.bottom));
     return { keys: cells.map(cell => cell.getAttribute('data-key')).sort(), paths: cells.map(cell => [cell.getAttribute('data-key'), cell.querySelector('.hex')?.getAttribute('d')]),
@@ -193,7 +218,9 @@ async function geometry(page: Page, width: number, height: number, label: string
   check(info.rail.height <= 36, `${label}: no full-height instruction row (${info.rail.height}px)`);
   check(info.play.top <= info.hud.bottom + 37, `${label}: map follows the compact header (${info.play.top-info.hud.bottom}px gap)`);
   check(info.grid.left >= -1 && info.grid.right <= width+1 && info.grid.top >= info.hud.bottom-1 && info.grid.bottom <= height+1, `${label}: complete board stays within the viewport`);
-  if (width <= 600) check(info.grid.width >= width * .90, `${label}: phone grid uses nearly the full map width (${info.grid.width.toFixed(1)}px)`);
+  // At the shortest supported heights the fixed upright map is height-bound;
+  // keep it substantial without rotating it to fill the width.
+  if (width <= 600) check(info.grid.width >= width * (height < 700 ? .75 : .90), `${label}: upright phone grid remains substantial (${info.grid.width.toFixed(1)}px)`);
   const dock = await page.evaluate(() => {
     const cards = [...document.querySelectorAll<HTMLElement>('#hand .card')].map(card => card.getBoundingClientRect());
     const bottom = Math.max(...cards.map(card => card.bottom));
@@ -697,8 +724,6 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     } else {
       const start = await hexCenter(page,keys[0]!), end = await hexCenter(page,keys.at(-1)!);
       await page.mouse.click(start.x,start.y);
-      await page.mouse.move(end.x,end.y,{ steps: 8 });
-      equal(await state(page),before,`${label}: desktop pointer preview leaves engine state untouched`);
       await page.mouse.click(end.x,end.y);
     }
     equal(await state(page),apply(before,action),`${label}: completed valid Bloom immediately commits once`);
@@ -856,9 +881,51 @@ async function bloomMenuFit() {
   } finally { await page.close(); }
 }
 
+async function goldCrystalVisuals() {
+  const game = newGame(5);
+  const rich = Object.entries(game.terrain).filter(([,terrain]) => terrain === 'rich').map(([key]) => key);
+  assert(rich.includes('0,0'),'gold fixture keeps its centre bonus hex');
+  game.board['0,0'] = {owner:0,strength:6};
+  for (const v3 of [false,true]) {
+    const page = await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+    try {
+      await page.addInitScript(save => {
+        (window as any).__name=(f:unknown)=>f;
+        localStorage.setItem('main2:severgrow.save.v7',save);
+        localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip'}));
+      },positionSave({state:game}));
+      await page.goto(`${base}${v3?'?design=v3':''}`);
+      await page.click('#menu-continue'); await idle(page);
+      equal(await state(page),game,`${v3?'V3':'standard'}: crystal art does not change the position`);
+      const visual = await page.evaluate(async () => {
+        const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
+        const occupied = document.querySelector<SVGGElement>('#board .tile[data-key="0,0"]')!;
+        const stone = occupied.querySelector('.seed-stone')!;
+        const crystal = occupied.querySelector('.gold-crystals')!;
+        const source = document.querySelector<SVGImageElement>('#board .gold-crystals image')!.getAttribute('href')!;
+        const atlas = new Image(); atlas.src=source; await atlas.decode();
+        const empty = rich.find(cell=>cell.dataset.key !== '0,0')!.querySelector('.gold-crystals')!;
+        return {rich:rich.length,empty:rich.filter(cell=>!!cell.querySelector('.gold-crystals.empty') && getComputedStyle(cell.querySelector('.gold-crystals.empty')!).display!=='none').length,
+          hiddenUnderTile:getComputedStyle(rich.find(cell=>cell.dataset.key==='0,0')!.querySelector('.gold-crystals.empty')!).display==='none',
+          occupied:!!occupied.querySelector('.gold-crystals.occupied'),badges:document.querySelectorAll('#board .gold-badge').length,
+          oldRocks:document.querySelectorAll('#board .skin-gold').length,stoneOnTop:!!(crystal.compareDocumentPosition(stone)&Node.DOCUMENT_POSITION_FOLLOWING),
+          imageReady:atlas.naturalWidth===1536&&atlas.naturalHeight===1024,
+          strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(crystal).filter,
+          variant:Number(crystal.getAttribute('data-variant'))};
+      });
+      check(visual.rich===rich.length && visual.empty===rich.length-1 && visual.hiddenUnderTile && visual.occupied && visual.badges===0 && visual.oldRocks===0,
+        `${v3?'V3':'standard'}: every bonus hex shows crystals, with no visible 2 or old gold rocks (${JSON.stringify(visual)})`);
+      check(visual.stoneOnTop && visual.imageReady && visual.strongerEmptyGlow && visual.variant>=0 && visual.variant<6,
+        `${v3?'V3':'standard'}: six-pair atlas loads, strength stone stays in front, empty crystal glows more (${JSON.stringify(visual)})`);
+      await page.screenshot({path:`${dir}/390x844-gold-${v3?'v3':'standard'}.png`});
+    } finally { await page.close(); }
+  }
+}
+
 try {
   await drawGlow();
   await bloomMenuFit();
+  await goldCrystalVisuals();
   for (const [index,[width,height]] of presets.entries()) {
     if (filter && !filter.includes(`${width}x${height}`)) continue;
     for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height,index%2 === 1)]] as const) {

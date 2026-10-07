@@ -26,6 +26,7 @@ import { pickTier } from './tier.js';
 import type { HomeLayer, NetworkLook, PropDef, SkinDef, Tier } from './types.js';
 import { SKIN_CSS } from './skin-css.js';
 import { drawSeedStone } from '../seedstone.js';
+import { drawGoldCrystals } from '../goldcrystals.js';
 
 /** Most ground-canvas pixels: phones (coarse pointer) and the rest. */
 const MAX_PX = { coarse: 3_000_000, fine: 6_500_000 };
@@ -127,7 +128,7 @@ export class SkinBoardView extends BoardView {
   protected override drawCell(g: SVGGElement, key: string, t: Terrain) {
     // the ground is one picture: every hex reaches over the grid gap; a faint seam keeps the grid readable
     const d = hexPath(key, S * 1.035, 'flat');
-    const mat = this.skin.materials[this.skin.cells[t === 'rich' ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
+    const mat = this.skin.materials[this.skin.cells[t === 'rich' && !IS_TEST2 ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
     el('path', { d, class: 'skin-proxy', fill: mat?.proxy.base ?? '#262a28' }, g);
     el('path', { d, class: `skin-cell ${t}`, fill: this.url('skin-ground') }, g);
     void key;
@@ -274,7 +275,7 @@ export class SkinBoardView extends BoardView {
     const g = el('g', { class: 'skin-rocks', 'aria-hidden': 'true' }, this.layers.base);
     for (const key of this.keys) {
       const t = this.terrain[key];
-      if (t !== 'rock' && t !== 'rich') continue;
+      if (t !== 'rock' && (t !== 'rich' || IS_TEST2)) continue;
       const defs = this.propDefs[this.skin.cells[t]] ?? [];
       if (!defs.length) continue;
       const def = defs[Math.floor(hash(`${key}:${t}`) * defs.length)]!;
@@ -328,9 +329,9 @@ export class SkinBoardView extends BoardView {
     for (const key of this.keys) {
       const { x, y } = centerOf(key);
       const terr = this.terrain[key] ?? 'normal';
-      const cellMat = skin.cells[terr === 'rich' ? 'rich' : terr === 'rock' ? 'rock' : 'normal'];
+      const cellMat = skin.cells[terr === 'rich' && !IS_TEST2 ? 'rich' : terr === 'rock' ? 'rock' : 'normal'];
       const t = board[key];
-      const base = { key, x, y, rich: terr === 'rich', mirror: hash(`${key}:m`) > 0.5 };
+      const base = { key, x, y, rich: terr === 'rich' && !IS_TEST2, mirror: hash(`${key}:m`) > 0.5 };
       if (t) {
         const mat = skin.owners[t.owner];
         cells.push({ ...base, material: mat, coverage: this.strength9(t), tint: joined.has(key) ? null : (this.tints[mat] ?? null) });
@@ -775,6 +776,7 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
+    if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true);
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];

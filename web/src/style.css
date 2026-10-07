@@ -595,6 +595,21 @@ html.kbd .board:focus-visible {
   stroke: color-mix(in srgb, var(--c-gold) 42%, var(--c-hexFill));
   stroke-width: 0.9;
 }
+/* In Futasaku the crystals, rather than the ground tint, identify a bonus hex. */
+html.test2-information .hex.rich {
+  fill: var(--c-hexFill);
+  stroke: var(--c-line);
+  stroke-width: 1;
+}
+#board .gold-crystals {
+  pointer-events: none;
+  transform-box: view-box;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 0 1.5px rgba(255, 189, 55, .32));
+}
+#board .gold-crystals.empty {
+  filter: drop-shadow(0 0 2.4px rgba(255, 191, 63, .5));
+}
 .gold-weave-fill {
   pointer-events: none;
 }

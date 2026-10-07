@@ -9,7 +9,9 @@ import { coordKey, hexDistance, parseKey } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 
 export const hexCenter = async (page: Page, key: string) => {
-  const b = (await page.locator(`.hex-cell[data-key="${key}"]`).boundingBox())!;
+  // Decorative children (crystals, stones, glows) can extend a cell's group box.
+  // The hex outline remains the exact, stable tap target at every board rotation.
+  const b = (await page.locator(`.hex-cell[data-key="${key}"] > .hex`).boundingBox())!;
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 };
 
