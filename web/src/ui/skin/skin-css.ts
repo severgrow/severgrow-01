@@ -4,6 +4,7 @@ export const SKIN_CSS = `
 .skin-board .skin-proxy { pointer-events: none; }
 .skin-board .skin-fill, .skin-board .skin-edge { pointer-events: none; }
 .skin-board .skin-edge { fill: none; stroke: rgba(6, 8, 7, 0.45); stroke-width: 0.9; stroke-linecap: round; }
+.skin-board .skin-home-rim { stroke:rgba(14,17,13,.65); stroke-width:1.05; }
 .skin-board .skin-rocks { pointer-events: none; }
 .skin-board .skin-tile-art { pointer-events: none; }
 .skin-board .skin-tile-art.cut { filter: saturate(0.45) brightness(0.72); }

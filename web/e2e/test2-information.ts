@@ -89,8 +89,8 @@ try {
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
     check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
     check(!await page.locator('#step-cue').isVisible(), `${width}: routine board prompt is gone`);
-    check((await page.locator('#smart-led-text').innerText()) === 'DRAW A CARD', `${width}: Draw appears immediately in the LED`);
-    check((await page.locator('#smart-led-text').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
+    check((await page.locator('#smart-led-text').innerText()) === 'DRAW', `${width}: Draw appears immediately in the LED`);
+    check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');

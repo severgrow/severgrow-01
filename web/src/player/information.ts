@@ -152,11 +152,10 @@ export const INFORMATION_CSS = `
 /* The box: one stable cockpit, with a centre display and a right action slot. */
 html.test2-information .dock > #test2-box {
   --box-tools: 140px; --box-pile: 50px; --box-piles: calc(2 * var(--box-pile) + 8px);
-  --hardware-grain:
-    radial-gradient(circle at 2px 3px,rgba(240,229,200,.045) 0 .45px,transparent .7px) 0 0/11px 13px,
-    radial-gradient(circle at 7px 8px,rgba(0,0,0,.10) 0 .45px,transparent .75px) 0 0/17px 19px,
-    radial-gradient(ellipse 22px 8px at 13% 2%,rgba(220,205,170,.035),transparent 90%),
-    radial-gradient(ellipse 17px 7px at 86% 99%,rgba(220,205,170,.025),transparent 90%);
+  --hardware-surface:
+    radial-gradient(ellipse 24px 12px at 7% 0%,rgba(222,213,188,.045),transparent 80%),
+    radial-gradient(ellipse 19px 10px at 97% 100%,rgba(224,211,180,.035),transparent 80%),
+    linear-gradient(155deg,#242624,#1a1c1b 52%,#171918);
   display: grid; position: relative; inset: auto; width: 100%; height: 104px;
   grid-template-columns: var(--box-piles) minmax(0, 1fr) var(--box-tools);
   grid-template-rows: 44px 44px; gap: 4px 6px; padding: 6px;
@@ -228,7 +227,7 @@ html.test2-information .dock #test2-box .pile-count.pile-meter {
   display: flex; align-items: center; justify-content: center; gap: 0; position: relative;
   width: 34px; min-width: 34px; height: 19px; padding: 1px 3px;
   border: 1px solid rgba(171,165,144,.64); border-radius: 2px 3px 3px 2px;
-  background: var(--hardware-grain), linear-gradient(180deg,#23251f 0%,#101210 26%,#0b0d0b 60%,#20221d 100%);
+  background: var(--hardware-surface);
   color: #e8e1cd;
   box-shadow: inset 0 1px 1px rgba(241,233,207,.16), inset 0 -2px 2px #050606, 0 1px 2px rgba(0,0,0,.55);
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
@@ -382,7 +381,7 @@ html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves 
   display: grid; place-items: center; box-sizing: border-box;
   width: var(--control-size); height: var(--control-size); min-width: var(--control-size); min-height: var(--control-size);
   margin: 0; padding: 0; border: 1px solid rgba(201,198,186,.33); border-radius: 12px;
-  background: var(--hardware-grain), linear-gradient(160deg,#262826 0%,#1c1e1d 42%,#141615 100%);
+  background: var(--hardware-surface);
   color: var(--control-ivory); opacity: 1;
   box-shadow: inset 0 1px rgba(255,250,236,.07), inset 0 -2px rgba(0,0,0,.46), 0 2px 4px rgba(0,0,0,.38);
   text-decoration: none; touch-action: manipulation;

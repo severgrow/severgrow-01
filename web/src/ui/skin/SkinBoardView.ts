@@ -792,7 +792,9 @@ export class SkinBoardView extends BoardView {
         if (look?.lava && !cut) this.liveLava(g, holder, key, src, x, y, sz, turn, s9);
       }
     }
-    if (edge) el('path', { d: edge, class: 'tile-edge skin-edge skin-rim' }, g);
+    // The home landmark sits above the tile layer. Draw its existing outer rim in
+    // the overlay layer so that the same territory contour remains visible at the source.
+    if (edge) el('path', { d: edge, class: `tile-edge skin-edge skin-rim${t.root ? ' skin-home-rim' : ''}` }, t.root ? this.layers.over : g);
     void d;
     if (t.root) return g;
     // a tile cut off from its home shows wilted / ashen props instead of its living ones (painted

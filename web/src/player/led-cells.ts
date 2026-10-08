@@ -44,11 +44,18 @@ const GLYPHS: Record<string, string> = {
   '/':'00001/00001/00010/00100/01000/10000/10000',
   '+':'00000/00100/00100/11111/00100/00100/00000',
   '…':'00000/00000/00000/00000/00000/00000/10101',
+  '•':'00000/00000/00100/01110/00100/00000/00000',
 };
 
-/** Width is deliberately narrow; full phase instructions fit a two-button instrument window. */
-export function drawLedCells(canvas: HTMLCanvasElement, message: string) {
-  const width = Math.max(1, message.length * 6 - .65);
+const ADVANCE = 11.4;
+const DOT_X = 1.8;
+const SEPARATOR = '   •   ';
+export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
+
+/** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */
+export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false) {
+  const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
+  const width = ledMessageWidth(shown);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.ceil(width * dpr);
   canvas.height = Math.ceil(20 * dpr);
@@ -57,16 +64,21 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return width;
   ctx.scale(dpr, dpr);
-  for (let i = 0; i < message.length; i++) {
-    const rows = GLYPHS[message[i]!] ?? (message[i] === ' ' ? '' : GLYPHS['?']!);
+  for (let i = 0; i < shown.length; i++) {
+    const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
     if (!rows) continue;
     const glyph = rows.split('/');
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
       const lit = glyph[y]?.[x] === '1';
+      const px = i * ADVANCE + x * DOT_X + 1.1;
+      const py = y * 2.45 + 2.25;
+      const radius = shown[i] === '•' ? 1.03 : .72;
       ctx.beginPath();
-      ctx.ellipse(i * 6 + x * 1.08 + .53, y * 2.45 + 2.25, .49, .91, 0, 0, Math.PI * 2);
-      ctx.fillStyle = lit ? '#f0d29d' : 'rgba(190,146,89,.07)';
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fillStyle = lit ? '#f0d29d' : 'rgba(190,146,89,.055)';
+      if (lit) { ctx.shadowColor = 'rgba(246,188,99,.43)'; ctx.shadowBlur = 2.2; }
       ctx.fill();
+      ctx.shadowBlur = 0;
     }
   }
   return width;

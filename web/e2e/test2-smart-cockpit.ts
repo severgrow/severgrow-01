@@ -18,7 +18,7 @@ const rects = (page:Page) => page.evaluate(() => {
   const r = (id:string) => document.getElementById(id)!.getBoundingClientRect();
   const panel=r('smart-panel'), led=r('smart-led'), context=r('smart-context');
   const undo=r('tool-undo'), tips=r('test2-help-button'), sort=r('hand-sort');
-  const piles=['deck','discard'].map(id=>({ pile:r(id), count:r(`${id}-count`) }));
+  const piles=['deck','discard'].map(id=>({ pile:r(id), count:r(`${id}-count`), frontOffset:parseFloat(getComputedStyle(document.getElementById(id)!).getPropertyValue('--pile-front-offset'))||0 }));
   return { panel,led,context,undo,tips,sort,piles,box:r('test2-box') };
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
@@ -27,7 +27,7 @@ const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
   check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
   check([r.context,r.undo,r.tips,r.sort].every(b=>b.width>=44&&b.height>=44),`${label}: four 44px targets`);
   check(near(r.context.x,r.sort.x)&&near(r.led.x,r.undo.x)&&near(r.led.right,r.tips.right),`${label}: fixed three-column grid`);
-  check(r.piles.every(({pile,count})=>near(pile.x+pile.width/2,count.x+count.width/2)),`${label}: mechanical counters centred under piles`);
+  check(r.piles.every(({pile,count,frontOffset})=>near(pile.x+pile.width/2+frontOffset*pile.width/50,count.x+count.width/2)),`${label}: meters centred under visible top cards`);
   check(r.panel.left>=r.box.left-1&&r.panel.right<=r.box.right+1,`${label}: panel remains inside cockpit`);
 };
 
@@ -45,7 +45,7 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
     await page.waitForTimeout(1100); // intentional Draw entrance finishes before anchoring assertions
     let start=await rects(page); aligned(start,`${name} Draw`);
-    check(await page.locator('#smart-led-text').innerText()==='DRAW A CARD',`${name}: immediate Draw LED`);
+    check(await page.locator('#smart-led-text').innerText()==='DRAW',`${name}: immediate Draw LED`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
     const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!).backgroundImage));
     check(materials.every(value=>value.startsWith(materials[0]!.slice(0,140))),`${name}: button, meter and display share the visible worn finish`);
@@ -70,7 +70,7 @@ try {
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
-    check(await page.locator('#smart-led-text').innerText()==='THROW A CARD',`${name}: immediate Throw LED`);
+    check(await page.locator('#smart-led-text').innerText()==='THROW',`${name}: immediate Throw LED`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
@@ -81,15 +81,10 @@ try {
   await page.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await page.goto(`${BASE}?seed=3`);await page.waitForSelector('#deck.ready');
   await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click());await waitPhase(page,'ACT');
-  check(await page.locator('#smart-selector button').count()>1,'Bloom: multiple valid contextual actions');
-  await page.locator('#smart-context').click();
-  check(await page.locator('#smart-selector').isVisible(),'Bloom: context opens the selector');
-  const fit=await page.evaluate(()=>{const p=document.getElementById('smart-panel')!.getBoundingClientRect(),s=document.getElementById('smart-selector')!.getBoundingClientRect();return s.left>=p.left-.5&&s.right<=p.right+.5&&s.top>=p.top-.5&&s.bottom<=p.bottom+.5;});
-  check(fit,'Bloom: temporary selector stays within cockpit, clear of board and cards');
-  await page.screenshot({path:`${dir}/390x844-bloom-selector.png`});
-  await page.keyboard.press('Escape');check(!await page.locator('#smart-selector').isVisible(),'Bloom: Escape closes selector');
-  await page.locator('#smart-context').click();await page.locator('#smart-selector button[data-action^="bloom:"]').first().click();
-  check(!await page.locator('#smart-selector').isVisible(),'Bloom: selecting an action closes the selector');
+  check(await page.locator('#smart-bloom-selector button').count()===1,'Bloom: one distinct recipe, independent of placement routes');
+  check(await page.locator('#smart-bloom-button .test2-combination .test2-mini-card').count()===3,'Bloom: cockpit shows symbolic recipe cards');
+  await page.locator('#smart-bloom-button').click();
+  check(!await page.locator('#smart-bloom-selector').isVisible(),'Bloom: single recipe selects on one tap');
   await page.waitForTimeout(1400); // the context-change cue briefly explains Cancel first
   check(await page.locator('#smart-led-text').innerText()==='BLOOM READY','Bloom: LED names selected phase');
   await page.screenshot({path:`${dir}/390x844-bloom.png`});
@@ -106,11 +101,12 @@ try {
     check(await page.locator('#tool-undo').isEnabled(),'Bloom: endpoint shortcut commits and Undo is available');
     await page.locator('#tool-undo').click();
     await page.waitForFunction(previous => (window as any).__severgrow.state().history.length === previous && !(window as any).__severgrow.busy(),beforeBloom.history.length);
-    check(await page.locator('#smart-led-text').innerText()==='BLOOM READY','Bloom: Undo restores the prior action');
+    check(await page.locator('#smart-bloom').isVisible(),'Bloom: Undo restores the available recipe');
   }
   await page.evaluate(()=>{const banner=document.getElementById('banner')!;banner.textContent='THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';});
   await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('THIS IS A LONG'));
   await page.waitForFunction(()=>document.querySelector('#smart-led-cells')?.classList.contains('scrolling'));
+  check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)>400),'LED: long copy uses full-width cells and repeated marquee');
   check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
   await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
   check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
@@ -131,6 +127,7 @@ try {
   const target=wells.locator('#board .target.kind-grow').first(); await target.waitFor();
   await wells.waitForTimeout(450); // placement entrance may replace overlay paths once
   check(await wells.locator('#board .receptive-well').count()===await wells.locator('#board .target.kind-grow').count(),'Grow: only legal empty targets receive wells');
+  check(await wells.locator('#board .target.kind-grow').evaluateAll(nodes=>nodes.every(node=>!node.getAttribute('d')?.includes('Q'))),'Grow: every legal well uses the same straight hex geometry');
   const resting=Number(await target.evaluate(el=>getComputedStyle(el).fillOpacity));
   const key=await target.getAttribute('data-key');
   const point=await hexCenter(wells,key!);
@@ -145,8 +142,14 @@ try {
   await branch.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await branch.goto(`${BASE}?seed=4`); await branch.waitForSelector('#deck.ready');
   await branch.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(branch,'ACT');
-  await branch.locator('#smart-context').click();
-  await branch.locator('#smart-selector button[data-action*="bloom-3-49.51.53"]').click();
+  check(await branch.locator('#smart-bloom-selector button').count()>1,'Bloom: multiple recipes are listed separately');
+  await branch.locator('#smart-bloom-button').click();
+  check(await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: compact recipe drawer opens');
+  await branch.screenshot({path:`${dir}/390x844-bloom-selector.png`});
+  await branch.keyboard.press('Escape');
+  check(!await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: Escape closes the recipe drawer');
+  await branch.locator('#smart-bloom-button').click();
+  await branch.locator('#smart-bloom-selector button[aria-label*="Dew 7"]').click();
   const first=await hexCenter(branch,'-3,0'); await branch.touchscreen.tap(first.x,first.y);
   await branch.locator('#smart-context').click();
   check(await branch.locator('#smart-selector button[data-action^="clear:"]').count()===1,'Bloom: Clear remains reachable');
