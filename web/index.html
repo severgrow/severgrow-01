@@ -268,6 +268,16 @@
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
         <label class="row"><span>Coach</span><input type="checkbox" data-setting="coach" /></label>
         <button id="restart-tutorial" class="btn ghost small" type="button">Restart the coach with a new game</button>
+        <details id="settings-lab" class="settings-lab">
+          <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong>Lab</strong><small>20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <p>Small experiments made from the controls already inside Futasaku. Try one; your original setup stays ready to restore.</p>
+            <div id="lab-categories" class="lab-categories" role="group" aria-label="Lab experiments"></div>
+            <div id="lab-cards" class="lab-cards" role="group"></div>
+            <p id="lab-status" class="lab-status" role="status" aria-live="polite"></p>
+            <div class="lab-actions"><button id="lab-surprise" type="button">Surprise me <span aria-hidden="true">↗</span></button><button id="lab-restore" type="button" disabled>Restore my setup</button></div>
+          </div>
+        </details>
       </div>
     </section>
 

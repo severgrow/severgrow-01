@@ -74,6 +74,8 @@ import type { Budget, Tier } from './logic/juice.js';
 import { Session } from './logic/session.js';
 import type { Played } from './logic/session.js';
 import { SETTINGS_KEY, EFFECTS, SPEEDS, parseSettings, speedFactor } from './logic/settings.js';
+import { LAB_CATEGORIES, LAB_PRESETS, withLabPreset } from './logic/lab-presets.js';
+import type { LabCategory, LabPreset } from './logic/lab-presets.js';
 import { GLOW_SETTINGS } from './logic/topglow.js';
 import type { Settings } from './logic/settings.js';
 import { THEMES, THEME_IDS, cssVars, resolveColors, themeOf } from './logic/themes.js';
@@ -154,6 +156,9 @@ const store = {
       /* storage blocked: the page still works, it just won't remember */
     }
   },
+  remove(key: string) {
+    try { localStorage.removeItem(key); } catch { /* the in-memory Lab still works */ }
+  },
 };
 const systemReduce = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -171,6 +176,17 @@ let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
 if (store.get(SETTINGS_KEY) === null && store.get(COACH_KEY_OLD) === '0') settings = { ...settings, coach: false };
 const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
+const LAB_BASE_KEY = 'severgrow.lab.base.v1';
+const LAB_ACTIVE_KEY = 'severgrow.lab.active.v1';
+const savedLabBase = store.get(LAB_BASE_KEY);
+let labBaseline: Settings | null = (() => {
+  try {
+    const value = JSON.parse(savedLabBase ?? 'null');
+    return value && typeof value === 'object' && !Array.isArray(value) ? parseSettings(savedLabBase, systemReduce()) : null;
+  } catch { return null; }
+})();
+let labActiveId = labBaseline ? store.get(LAB_ACTIVE_KEY) : null;
+let labCategory: LabCategory = LAB_PRESETS.find((preset) => preset.id === labActiveId)?.category ?? 'surface';
 // A previous automatic "Smoother mode" could leave this preview on Low effects. Restore
 // the normal visual level once; an explicit Reduce motion/device preference still applies.
 if (IS_TEST2 && store.get(SMOOTH_KEY) && settings.effects === 'low') {
@@ -531,6 +547,94 @@ function syncSettingsForm() {
   segmented('confirm-seg', CONFIRM_MODES, settings.confirmPolicy, (x) => (x === 'smart' ? 'Smart' : cap(x)), (x) => {
     settings.confirmPolicy = x;
   });
+  renderSettingsLab();
+}
+
+/** The Lab edits existing settings only. Every recipe starts from the saved
+ * pre-Lab setup, so trying several recipes never accumulates hidden changes. */
+function applyLab(preset: LabPreset) {
+  if (!labBaseline) {
+    labBaseline = { ...settings };
+    store.set(LAB_BASE_KEY, JSON.stringify(labBaseline));
+  }
+  settings = { ...withLabPreset(labBaseline, preset), level: settings.level };
+  labActiveId = preset.id;
+  store.set(LAB_ACTIVE_KEY, preset.id);
+  finishLabChange();
+}
+
+function restoreLab() {
+  if (!labBaseline) return;
+  settings = { ...labBaseline, level: settings.level };
+  labBaseline = null;
+  labActiveId = null;
+  store.remove(LAB_BASE_KEY);
+  store.remove(LAB_ACTIVE_KEY);
+  finishLabChange();
+  $('lab-surprise').focus();
+}
+
+function finishLabChange() {
+  saveSettings();
+  sound.enabled = settings.sound;
+  if (settings.sound || settings.music) sound.unlock();
+  sound.setMix(settings);
+  sound.setMusic(settings.music);
+  applyTheme();
+  syncSettingsForm();
+}
+
+function renderSettingsLab() {
+  const section = $('settings-lab') as HTMLDetailsElement;
+  if (!section.open) return;
+  const categories = $('lab-categories');
+  const cards = $('lab-cards');
+  categories.replaceChildren(...LAB_CATEGORIES.map((category) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.labCategory = category.id;
+    button.setAttribute('aria-pressed', String(labCategory === category.id));
+    button.textContent = category.label;
+    button.addEventListener('click', () => {
+      labCategory = category.id;
+      renderSettingsLab();
+      categories.querySelector<HTMLButtonElement>(`[data-lab-category="${category.id}"]`)?.focus();
+    });
+    return button;
+  }));
+  const selected = LAB_PRESETS.filter((preset) => preset.category === labCategory);
+  cards.setAttribute('aria-label', `${labCategory} experiments`);
+  cards.replaceChildren(...selected.map((preset) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'lab-card';
+    button.dataset.labPreset = preset.id;
+    const active = labActiveId === preset.id && Object.entries(preset.values).every(([key, value]) => settings[key as keyof Settings] === value);
+    button.setAttribute('aria-pressed', String(active));
+    const number = document.createElement('span');
+    number.className = 'lab-card-number';
+    number.textContent = String(LAB_PRESETS.indexOf(preset) + 1).padStart(2, '0');
+    const copy = document.createElement('span');
+    copy.className = 'lab-card-copy';
+    const title = document.createElement('strong');
+    title.textContent = preset.title;
+    const note = document.createElement('small');
+    note.textContent = preset.note;
+    copy.append(title, note);
+    const readout = document.createElement('span');
+    readout.className = 'lab-card-readout';
+    readout.textContent = preset.readout;
+    button.append(number, copy, readout);
+    button.addEventListener('click', () => {
+      applyLab(preset);
+      cards.querySelector<HTMLButtonElement>(`[data-lab-preset="${preset.id}"]`)?.focus();
+    });
+    return button;
+  }));
+  const active = LAB_PRESETS.find((preset) => preset.id === labActiveId);
+  const matching = active && Object.entries(active.values).every(([key, value]) => settings[key as keyof Settings] === value);
+  $('lab-status').textContent = !labBaseline ? 'Your current setup is untouched.' : matching ? `${active.title} is on. Your original setup is saved.` : 'Custom mix is on. Your original setup is saved.';
+  ($<HTMLButtonElement>('lab-restore')).disabled = !labBaseline;
 }
 
 const cap = (w: string) => w[0]!.toUpperCase() + w.slice(1);
@@ -3512,6 +3616,18 @@ bind('menu-tutorial', () => {
 });
 bind('menu-howto', () => sheet('sheet-howto'));
 bind('menu-settings', () => sheet('sheet-settings'));
+($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
+  renderSettingsLab();
+  const section = $('settings-lab') as HTMLDetailsElement;
+  if (section.open) requestAnimationFrame(() => section.scrollIntoView({ block: 'start', behavior: settings.reduceMotion ? 'instant' : 'smooth' }));
+});
+bind('lab-restore', restoreLab);
+bind('lab-surprise', () => {
+  const choices = LAB_PRESETS.filter((preset) => preset.id !== labActiveId);
+  const preset = choices[crypto.getRandomValues(new Uint32Array(1))[0]! % choices.length]!;
+  labCategory = preset.category;
+  applyLab(preset);
+});
 bind('hud-menu', () => sheet('sheet-menu'));
 bind('hud-history', () => sheet('sheet-history'));
 bind('gm-resume', () => sheet(null));
