@@ -99,6 +99,19 @@ html.test2-information #test2-box #smart-led-cells {
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
+/* A faint optical spill from the actual LED pixels reaches the two keys below it. */
+html.test2-information #smart-led-spill {
+  position:absolute; left:0; top:var(--control-size); width:calc(2 * var(--control-size) + var(--control-gap));
+  height:calc(var(--control-size) + var(--control-gap)); overflow:hidden; pointer-events:none; z-index:7;
+  opacity:.32; mix-blend-mode:screen;
+  -webkit-mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.5) 37%,transparent 76%);
+  mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.5) 37%,transparent 76%);
+}
+html.test2-information #smart-led-spill-cells {
+  display:block; position:absolute; left:8px; top:1px; height:26px;
+  filter:blur(5px) brightness(1.3); scale:1 1.35; transform-origin:top;
+}
+html.test2-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 html.test2-information #smart-selector {
   position:absolute; right:0; top:0; z-index:10;
   display:flex; gap:var(--control-gap); width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
@@ -208,8 +221,8 @@ html.test2-information #board .l-over .selected.receptive-active {
   fill:#e2d7ba; fill-opacity:.20; stroke:#e1d0a9; stroke-opacity:.70; stroke-width:1.35;
   pointer-events:none;
 }
-@media (prefers-reduced-motion:reduce) { html.test2-information #smart-led-cells.scrolling { animation:none; } }
-html.test2-information.reduce-motion #smart-led-cells.scrolling { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.test2-information :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; } }
+html.test2-information.reduce-motion :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #board .l-over .target.kind-grow { animation:none; transition:none; } }
 html.test2-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
@@ -227,6 +240,8 @@ export function mountSmartCockpit() {
   const text = document.createElement('span'); text.id = 'smart-led-text';
   const cells = document.createElement('canvas'); cells.id = 'smart-led-cells'; cells.setAttribute('aria-hidden','true');
   windowEl.append(text,cells); led.append(windowEl);
+  const spill = document.createElement('div'); spill.id = 'smart-led-spill'; spill.setAttribute('aria-hidden','true');
+  const spillCells = document.createElement('canvas'); spillCells.id = 'smart-led-spill-cells'; spill.append(spillCells);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);
@@ -236,7 +251,7 @@ export function mountSmartCockpit() {
   const bloomSelector = document.createElement('div'); bloomSelector.id = 'smart-bloom-selector'; bloomSelector.setAttribute('role','menu'); bloomSelector.hidden = true;
   bloomButton.setAttribute('aria-controls',bloomSelector.id);
   bloom.append(bloomButton,bloomSelector);
-  panel.append(led,context,actions,selector); box.append(panel,bloom);
+  panel.append(led,spill,context,actions,selector); box.append(panel,bloom);
   moves.setAttribute('aria-hidden','true');
   let current: Action[] = [];
   let signature = '';
@@ -280,16 +295,19 @@ export function mountSmartCockpit() {
   const setText = (value: string) => {
     if (value === lastText) return;
     lastText = value; text.textContent = value; led.title = value;
-    cells.classList.remove('scrolling');
+    cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
     requestAnimationFrame(() => {
       if (value !== lastText) return;
       const scrolling = ledMessageWidth(value) > windowEl.clientWidth - 2;
       drawLedCells(cells,value,scrolling);
+      drawLedCells(spillCells,value,scrolling);
       if (scrolling) {
         const travel = ledMessageWidth(`${value}   •   `);
-        cells.style.setProperty('--led-travel',`${travel}px`);
-        cells.style.setProperty('--led-duration',`${Math.max(4,travel/30).toFixed(1)}s`);
-        cells.classList.add('scrolling');
+        for (const target of [cells,spillCells]) {
+          target.style.setProperty('--led-travel',`${travel}px`);
+          target.style.setProperty('--led-duration',`${Math.max(4,travel/30).toFixed(1)}s`);
+          target.classList.add('scrolling');
+        }
       }
     });
   };
