@@ -227,12 +227,12 @@ html.test2-information .dock #test2-box .pile-count.pile-meter {
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
 html.test2-information .dock #test2-box .pile-count.pile-meter::before {
-  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  content:''; position:absolute; inset:0; border-radius:0; pointer-events:none;
   background:url('./hardware/counter-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information .dock #test2-box .pile-meter-window {
   position: relative; display: block; flex: 0 0 11px; width: 11px; height: 10px; z-index:1;
-  overflow: hidden; border-right: 0; box-shadow: none;
+  overflow: hidden; border-right: 0; box-shadow: none; background:#0c0d0c;
 }
 html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 20px; }
 html.test2-information .dock #test2-box .pile-meter-face {

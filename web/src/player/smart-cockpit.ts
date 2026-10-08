@@ -56,7 +56,7 @@ html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .han
   touch-action:manipulation;
 }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot)::before {
-  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  content:''; position:absolute; inset:0; border-radius:0; pointer-events:none;
   background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { position:relative; z-index:1; }
@@ -78,21 +78,26 @@ html.test2-information #test2-box #smart-led {
   background:#111312; box-shadow:none; position:relative;
 }
 html.test2-information #test2-box #smart-led::before {
-  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  content:''; position:absolute; inset:0; border-radius:0; pointer-events:none;
   background:url('./hardware/display-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information #test2-box #smart-led-window {
   display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0; box-sizing:border-box; position:relative;
   border-radius:4px; background:#090c0b; box-shadow:none; z-index:1;
 }
+html.test2-information #test2-box #smart-led-window::before {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background-image:radial-gradient(circle,rgba(166,128,78,.20) .65px,transparent .8px);
+  background-size:2.3px 3.1px; background-position:0 2.6px;
+}
 html.test2-information #test2-box #smart-led-text {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
 }
 html.test2-information #test2-box #smart-led-cells {
-  display:block; flex:none; width:auto; height:26px;
+  display:block; flex:none; width:auto; height:26px; position:relative;
 }
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
-@keyframes smart-led-scroll { 0%,12% { transform:translateX(0); } 88%,100% { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
+@keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 html.test2-information #smart-selector {
   position:absolute; right:0; top:0; z-index:10;
@@ -135,6 +140,11 @@ html.test2-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expand
 }
 html.test2-information #smart-bloom-button:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #smart-bloom-button:active { transform:translateY(1px) scale(.98); }
+html.test2-information[data-step='grow'][data-test2-waiting='true'] #smart-bloom-button:not([aria-expanded='true']) .test2-combination {
+  animation:test2-card-breathe 1.35s ease-in-out infinite;
+}
+html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #smart-bloom-button .test2-combination { animation:none !important; }
+@media (prefers-reduced-motion:reduce) { html.test2-information #smart-bloom-button .test2-combination { animation:none !important; } }
 html.test2-information #test2-box #smart-bloom-button .test2-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:2px; max-width:100%; }
 html.test2-information #test2-box #smart-bloom-button .test2-mini-card { flex:0 0 17px; width:17px; min-width:17px; height:28px; padding:1px; border-radius:3px; }
 html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-num { font-size:11px; }
@@ -164,9 +174,13 @@ html.test2-information .dock #test2-box #deck[data-layers='2'] { --pile-front-of
 html.test2-information .dock #test2-box #deck:is([data-layers='3'],[data-layers='4']) { --pile-front-offset:4px; }
 html.test2-information .dock #test2-box #deck .pile-meta .pile-count { left:calc(50% + var(--pile-front-offset,0px)); transform:translateX(-50%); }
 html.test2-information .dock #test2-box #discard .pile-meta .pile-count { left:50%; transform:translateX(-50%); }
-html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) { box-shadow:0 0 0 1px rgba(119,194,115,.4),0 0 9px 1px rgba(88,171,86,.4),0 5px 12px rgba(5,16,9,.30); }
-html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5),0 5px 12px rgba(20,11,10,.34); }
-html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5) !important; }
+/* Match the illustrated card's printed corners instead of the legacy card silhouette. */
+html.test2-information.test2-card-art-ready #hand .card:has(>.test2-card-art) { border-radius:calc(var(--cw) * .075); }
+html.test2-information.test2-card-art-ready #hand .card > .test2-card-art { border-radius:inherit; }
+html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) { box-shadow:0 0 0 1px rgba(119,194,115,.4),0 0 6px 1px rgba(88,171,86,.43),0 5px 12px rgba(5,16,9,.30); }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
+html.test2-information #discard .gd-halo { inset:0; border-radius:6px; }
 /* Draw enlarges both piles without a second halo behind either card. */
 html.test2-information[data-step='draw'] :is(#deck,#discard) .pile-card { box-shadow:none !important; }
 html.test2-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
@@ -274,7 +288,7 @@ export function mountSmartCockpit() {
       if (scrolling) {
         const travel = ledMessageWidth(`${value}   •   `);
         cells.style.setProperty('--led-travel',`${travel}px`);
-        cells.style.setProperty('--led-duration',`${Math.max(8,travel/19+2).toFixed(1)}s`);
+        cells.style.setProperty('--led-duration',`${Math.max(4,travel/30).toFixed(1)}s`);
         cells.classList.add('scrolling');
       }
     });

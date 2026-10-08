@@ -75,9 +75,11 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
       const radius = shown[i] === '•' ? 1.33 : 1;
       ctx.beginPath();
       ctx.arc(px, py, radius, 0, Math.PI * 2);
-      ctx.fillStyle = lit ? '#f0d29d' : 'rgba(190,146,89,.055)';
-      if (lit) { ctx.shadowColor = 'rgba(246,188,99,.52)'; ctx.shadowBlur = 2.6; }
-      ctx.fill();
+      if (lit) {
+        ctx.fillStyle = '#f5d8a4';
+        ctx.shadowColor = 'rgba(255,195,104,.78)'; ctx.shadowBlur = 3.4;
+        ctx.fill();
+      }
       ctx.shadowBlur = 0;
     }
   }

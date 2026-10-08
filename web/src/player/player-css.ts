@@ -83,6 +83,7 @@ html[data-thumb] .dock .table-row > .hint-line,
 html[data-thumb] #hint-btn {
   display: none;
 }
+html.test2-information #hint-btn { display:none; }
 html[data-thumb] .dock .table-row > .piles > .pile {
   position: absolute;
   left: var(--x);

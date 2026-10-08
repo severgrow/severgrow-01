@@ -512,7 +512,7 @@ export class BoardView {
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
     if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, st.tileShape), class: 'focus' }, over);
     // UX pass: what the opponent changed last turn: a small spark at the top of each hex
-    for (const key of o.fresh ?? []) {
+    for (const key of IS_TEST2 ? [] : (o.fresh ?? [])) {
       if (!board[key]) continue;
       const { x, y } = centerOf(key);
       const g = el('g', { class: `fresh-mark${this.look.motion ? ' arrive' : ''}`, 'data-key': key }, over);
