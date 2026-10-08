@@ -1995,7 +1995,12 @@ function alignDrawPiles() {
   if (!handCard) return;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
   const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;
-  const desired = handCard.getBoundingClientRect().left - baseLeft;
+  // Hand sorting uses a FLIP animation on the individual card's `translate`.
+  // Its screen rect includes that temporary travel, while the piles must align
+  // with the card's resting slot throughout the sort.
+  const travelX = parseFloat(getComputedStyle(handCard).translate);
+  const restingLeft = handCard.getBoundingClientRect().left - (Number.isFinite(travelX) ? travelX : 0);
+  const desired = restingLeft - baseLeft;
   const rightLimit = Math.min(window.innerWidth - 8, (actions?.getBoundingClientRect().left ?? window.innerWidth) - 8);
   const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
   piles.style.setProperty('--test2-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);

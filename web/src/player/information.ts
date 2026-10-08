@@ -222,6 +222,11 @@ export const INFORMATION_CSS = `
 /* The box: one stable cockpit, with a centre display and a right action slot. */
 html.test2-information .dock > #test2-box {
   --box-tools: 140px; --box-pile: 50px; --box-piles: calc(2 * var(--box-pile) + 8px);
+  --hardware-grain:
+    radial-gradient(circle at 2px 3px,rgba(240,229,200,.045) 0 .45px,transparent .7px) 0 0/11px 13px,
+    radial-gradient(circle at 7px 8px,rgba(0,0,0,.10) 0 .45px,transparent .75px) 0 0/17px 19px,
+    radial-gradient(ellipse 22px 8px at 13% 2%,rgba(220,205,170,.035),transparent 90%),
+    radial-gradient(ellipse 17px 7px at 86% 99%,rgba(220,205,170,.025),transparent 90%);
   display: grid; position: relative; inset: auto; width: 100%; height: 104px;
   grid-template-columns: var(--box-piles) minmax(0, 1fr) var(--box-tools);
   grid-template-rows: 44px 44px; gap: 4px 6px; padding: 6px;
@@ -293,18 +298,15 @@ html.test2-information .dock #test2-box .pile-count.pile-meter {
   display: flex; align-items: center; justify-content: center; gap: 0; position: relative;
   width: 34px; min-width: 34px; height: 19px; padding: 1px 3px;
   border: 1px solid rgba(171,165,144,.64); border-radius: 2px 3px 3px 2px;
-  background:
-    radial-gradient(circle at 8px 4px,rgba(255,245,214,.09) 0 .6px,transparent .85px) 0 0/13px 9px,
-    repeating-linear-gradient(101deg,transparent 0 3px,rgba(211,202,176,.035) 3px 3.5px),
-    linear-gradient(180deg,#282923 0%,#101311 24%,#080a09 56%,#252720 100%);
+  background: var(--hardware-grain), linear-gradient(180deg,#23251f 0%,#101210 26%,#0b0d0b 60%,#20221d 100%);
   color: #e8e1cd;
-  box-shadow: inset 0 1px 1px rgba(241,233,207,.24), inset 0 -2px 2px #050606, 0 1px 2px rgba(0,0,0,.55);
+  box-shadow: inset 0 1px 1px rgba(241,233,207,.16), inset 0 -2px 2px #050606, 0 1px 2px rgba(0,0,0,.55);
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
 html.test2-information .dock #test2-box .pile-count.pile-meter::after {
   content: ''; position: absolute; inset: 1px 2px; border-radius: 2px;
-  background: linear-gradient(180deg,rgba(255,246,219,.15),transparent 35%,rgba(0,0,0,.16) 76%,rgba(255,244,215,.06));
+  background: linear-gradient(180deg,rgba(255,246,219,.08),transparent 35%,rgba(0,0,0,.16) 76%,rgba(255,244,215,.035));
   box-shadow: inset 0 0 3px rgba(0,0,0,.5); pointer-events: none;
 }
 html.test2-information .dock #test2-box .pile-meter-window {
@@ -457,9 +459,9 @@ html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves 
   display: grid; place-items: center; box-sizing: border-box;
   width: var(--control-size); height: var(--control-size); min-width: var(--control-size); min-height: var(--control-size);
   margin: 0; padding: 0; border: 1px solid rgba(201,198,186,.33); border-radius: 12px;
-  background: linear-gradient(160deg,#292b29 0%,#1c1e1d 42%,#111313 100%);
+  background: var(--hardware-grain), linear-gradient(160deg,#262826 0%,#1c1e1d 42%,#141615 100%);
   color: var(--control-ivory); opacity: 1;
-  box-shadow: inset 0 1px rgba(255,250,236,.11), inset 0 -2px rgba(0,0,0,.46), 0 2px 4px rgba(0,0,0,.38);
+  box-shadow: inset 0 1px rgba(255,250,236,.07), inset 0 -2px rgba(0,0,0,.46), 0 2px 4px rgba(0,0,0,.38);
   text-decoration: none; touch-action: manipulation;
   transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
 }
