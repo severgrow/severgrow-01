@@ -37,12 +37,14 @@ export type MossLook = {
 };
 
 export const mossLook = (t: number): MossLook => ({
-  blade: lerp(0.07, 0.26, t),
-  density: lerp(0.32, 1, Math.pow(t, 0.8)),
-  soil: lerp(0.62, 0.02, smooth(0, 0.7, t)),
-  flowers: 9 * smooth(0.25, 1, t),
+  // Even a new tile is a little lawn, rather than mostly bare earth. Strength adds
+  // height and depth to that lawn without changing the board's underlying geometry.
+  blade: lerp(0.14, 0.26, t),
+  density: lerp(0.74, 1, Math.pow(t, 0.8)),
+  soil: lerp(0.075, 0.008, smooth(0, 0.8, t)),
+  flowers: 4 * smooth(0.25, 1, t),
   roots: smooth(0.6, 1, t),
-  colour: lerp(0.25, 1, t),
+  colour: lerp(0.42, 1, t),
 });
 
 export type LavaLook = {
@@ -190,12 +192,12 @@ const mix = (a: string, b: string, t: number) => {
  */
 export const mossPalette = (t: number, id: ThemeId): string[] => {
   const m = materialsOf(id).colors;
-  const dry = '#9aa86a';
+  const dry = '#789457';
   return [
     mix('#5b4632', '#3e2f22', t), // soil
-    mix(mix(m.mossDeep, dry, 0.45), m.mossDeep, t), // shade between blades
-    mix(mix(m.moss, dry, 0.55), m.moss, t), // grass body
-    mix(mix(m.mossTop, dry, 0.5), m.mossTuft, t), // sunlit tips
+    mix(mix(m.mossDeep, dry, 0.34), m.mossDeep, t), // shade between blades
+    mix(mix(m.moss, dry, 0.36), m.moss, t), // grass body
+    mix(mix(m.mossTop, dry, 0.28), m.mossTuft, t), // sunlit tips
   ];
 };
 

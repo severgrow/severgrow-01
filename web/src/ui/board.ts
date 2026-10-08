@@ -36,6 +36,26 @@ let boardCount = 0;
 /** Tile size grows with strength (1 small ... max rank nearly the full hex). */
 export const tileScale = (strength: number, maxRank: number) => 0.6 + 0.37 * (strength / Math.max(maxRank, 1));
 
+/** A rare, quiet natural detail for the unskinned lawn. Kept well clear of the
+ * centred strength stone and the hex rim; the rich-tile frame takes precedence. */
+const drawLawnDetail = (parent: SVGGElement, key: string, x: number, y: number, strength: number, palette: ThemeId) => {
+  const choice = hash(`${key}:lawn-detail`);
+  if (choice > 0.29 || strength < 2) return;
+  const side = hash(`${key}:lawn-side`) > 0.5 ? 1 : -1;
+  const px = x + side * 13.6;
+  const py = y + (hash(`${key}:lawn-y`) - 0.5) * 12;
+  const colors = materialsOf(palette).colors;
+  const g = el('g', { class: 'lawn-detail', 'pointer-events': 'none' }, parent);
+  el('path', { d: `M${px - side * 3},${py + 3} Q${px},${py} ${px + side * 3},${py - 4}`, fill: 'none', stroke: colors.mossDeep, 'stroke-width': 0.8, 'stroke-linecap': 'round' }, g);
+  for (const [dx, dy, angle] of [[-2, 1, -30], [1, -1.2, 30], [3, -3, -25]] as const) {
+    el('ellipse', { cx: px + side * dx, cy: py + dy, rx: 1.8, ry: 0.9, transform: `rotate(${angle * side} ${px + side * dx} ${py + dy})`, fill: choice < 0.13 ? colors.mossTop : colors.moss }, g);
+  }
+  if (choice < 0.07 && strength >= 4) {
+    el('circle', { cx: px + side * 1.1, cy: py - 1, r: 1.15, fill: '#8e302e' }, g);
+    el('circle', { cx: px + side * 0.85, cy: py - 1.3, r: 0.33, fill: '#e7a478' }, g);
+  }
+};
+
 export type Overlay = {
   targets: Set<string> | null;
   selectedHex: string | null;
@@ -610,6 +630,7 @@ export class BoardView {
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
+      if (t.owner === 0 && !this.richKeys.has(key)) drawLawnDetail(g, key, x, y, t.strength, this.paletteId);
       if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
       if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
       else {

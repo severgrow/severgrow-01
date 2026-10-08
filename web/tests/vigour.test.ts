@@ -42,7 +42,8 @@ describe('every look parameter moves one way with t', () => {
       expect(richness('moss', T[i]!)).toBeGreaterThan(richness('moss', T[i - 1]!));
     }
     expect(mossLook(0)).toMatchObject({ flowers: 0, roots: 0 });
-    expect(mossLook(0).soil).toBeGreaterThan(0.4);
+    expect(mossLook(0).density).toBeGreaterThan(0.7);
+    expect(mossLook(0).soil).toBeLessThan(0.2);
     expect(mossLook(0.5).flowers).toBeGreaterThan(0);
     expect(mossLook(0.5).soil).toBeLessThan(0.15);
     expect(mossLook(0.55).roots).toBe(0);

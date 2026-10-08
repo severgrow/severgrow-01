@@ -88,7 +88,7 @@ const mossBase = (x: number, y: number, t: number, id: ThemeId): RGB => {
   const soilTh = threshold(look.soil);
   if (soilN < soilTh) {
     const g = wnoise(x * 3.1, y * 3.1, 3);
-    return mix(pal[0]!, mix(pal[0]!, [150, 120, 90], 0.25), g); // soil with grain
+    return mix(mix(pal[0]!, pal[1]!, 0.26), mix(pal[0]!, [139, 119, 83], 0.2), g); // a little earth peeking through the lawn
   }
   const p = wfbm(x - 33, y + 71, 20, 3);
   return mix(pal[1]!, pal[2]!, 0.25 + 0.6 * p); // the shadowy grass under the blades
@@ -194,6 +194,12 @@ const mossDetails = (inp: PaintInput, cv: Canvas) => {
         let col = mix(pal[1]!, tipCol, u ** 0.8);
         if (dead) col = deaden(col, 'moss');
         put(cv, bx, by, col, (1 - u * 0.3) * 0.9);
+        if (s === steps && hash(i, j, 8) < 0.38) {
+          // A few blade tips open into tiny soft tufts. These share the world
+          // grid, so neighbouring tiles still read as one continuous lawn.
+          put(cv, bx - 0.55, by + 0.35, col, dead ? 0.2 : 0.42);
+          put(cv, bx + 0.55, by + 0.35, col, dead ? 0.2 : 0.42);
+        }
       }
     }
   }
@@ -225,13 +231,13 @@ const mossDetails = (inp: PaintInput, cv: Canvas) => {
       const at = tileAt(inp, rx, ry);
       if (!at || at.tile.owner !== 0) continue;
       const look = mossLook(fieldT(rx, ry, inp.tiles));
-      if (hash(i, j, 23) > look.roots * 0.55) continue;
+      if (hash(i, j, 23) > look.roots * 0.28) continue;
       const c = centreOf(at.h.q, at.h.r);
       if (hexDist(rx - c.x, ry - c.y) < 0.45) continue; // roots near the edges, off the number
       const a0 = hash(i, j, 24) * Math.PI * 2;
       const len = S * (0.22 + 0.18 * hash(i, j, 25));
-      const dark: RGB = at.tile.dead ? [70, 62, 54] : [74, 50, 32];
-      const light: RGB = at.tile.dead ? [110, 102, 92] : [138, 104, 70];
+      const dark: RGB = at.tile.dead ? [70, 62, 54] : [83, 67, 44];
+      const light: RGB = at.tile.dead ? [110, 102, 92] : [143, 119, 82];
       for (let s = 0; s <= 30; s++) {
         const u = s / 30;
         const ang = a0 + Math.sin(u * 3.2) * 0.9;

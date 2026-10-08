@@ -45,6 +45,8 @@ const tree = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => {
   const rich = look.textures;
   // a soft shadow under the canopy, cast down-right (light from the top left)
   el('circle', { cx: 2, cy: 2.6, r: 16.6, class: 'lm-shadow', fill: c.shadow }, g);
+  el('path', { d: 'M-2,8 Q-1,12 -0.5,17 L3.2,17 Q2.2,12 3.6,8 Z', fill: '#57452b', stroke: '#2c291d', 'stroke-width': 0.7 }, g);
+  el('path', { d: 'M0.4,10 Q1.1,13 1.4,16', fill: 'none', stroke: '#9f8252', 'stroke-width': 0.7, 'stroke-opacity': 0.7 }, g);
   const can = el('g', { class: 'lm-canopy' }, g);
   // the canopy from above: a round mass of leaf clusters, deep at the edge, lit at the top left
   const lobes = 7 + v.form;
@@ -57,6 +59,11 @@ const tree = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => {
   };
   el('circle', { cx: 0.6, cy: 0.8, r: 13.2, fill: c.mossDeep }, can);
   ring(11, 6, 0.6, 0.8, c.mossDeep);
+  // Short limbs peek through the foliage. They make this read as one small tree,
+  // rather than a flat green disc, without extending outside the home hex.
+  for (const d of ['M0,5 Q-5,2 -12,-5', 'M0,5 Q6,0 11,-7', 'M0,5 Q2,8 8,12']) {
+    el('path', { d, fill: 'none', stroke: '#493e27', 'stroke-width': 1.7, 'stroke-linecap': 'round', 'stroke-opacity': 0.78 }, can);
+  }
   el('circle', { cx: -0.4, cy: -0.4, r: 11.8, fill: c.moss }, can);
   ring(9.8, 5.2, -0.4, -0.4, c.moss);
   if (rich) {
@@ -64,9 +71,22 @@ const tree = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => {
     ring(6.4, 3.4, -2.2, -2.4, c.mossTop, 0.9);
     el('circle', { cx: -3.2, cy: -3.4, r: 4.6, fill: c.mossTop, 'fill-opacity': 0.8 }, can);
   }
+  // Small overlapping leaf crowns give the simple coded tree a plush, uneven
+  // silhouette. The positions are fixed for a given home, so nothing shimmers.
+  for (let i = 0; i < 32; i++) {
+    const a = i * 2.39996 + v.phase * 6;
+    const r = Math.sqrt((i + 0.5) / 32) * 13.7;
+    const x = Math.cos(a) * r - 0.6;
+    const y = Math.sin(a) * r - 0.8;
+    const shade = i % 5 === 0 ? c.mossDeep : i % 3 === 0 ? c.mossTop : c.moss;
+    el('circle', { cx: f(x), cy: f(y), r: f(1.55 + (i % 4) * 0.28), fill: shade, 'fill-opacity': i % 5 === 0 ? 0.7 : 0.84 }, can);
+  }
+  for (const d of ['M-0.5,4 Q-3,1 -8,-4', 'M-0.5,4 Q3,0 7,-7', 'M-0.5,4 Q2,6 7,9']) {
+    el('path', { d, fill: 'none', stroke: '#334a27', 'stroke-width': 1.15, 'stroke-linecap': 'round', 'stroke-opacity': 0.58 }, can);
+  }
   // a few red apples among the leaves (they burst like petals when this home wins)
   const apples = [[-8, -4], [6.5, -8], [9, 4.5], [-4.5, 8.5], [2, 1.5], [-9.5, 5]] as const;
-  for (const [x, y] of apples.slice(0, 4 + (v.form === 0 ? 0 : 2))) {
+  for (const [x, y] of apples.slice(0, 2 + v.form)) {
     const ax = x + v.lean * 0.8;
     el('circle', { cx: f(ax + 0.3), cy: f(y + 0.4), r: 1.9, class: 'lm-flower', fill: APPLE_DARK }, can);
     el('circle', { cx: f(ax), cy: f(y), r: 1.7, class: 'lm-flower', fill: APPLE }, can);

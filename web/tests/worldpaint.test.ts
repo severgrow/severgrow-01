@@ -64,11 +64,14 @@ describe('the world painter', () => {
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it('moss: bare soil shrinks as strength rises; lava: the molten share rises from about 3% to most of it', () => {
+  it('moss: even low strength reads as a lawn; lava: the molten share rises from about 3% to most of it', () => {
     const soil = [1, 5, 9].map((s) => share({ owner: 0, t: vigour(s, 9) }, soilish));
+    const grass = [1, 5, 9].map((s) => share({ owner: 0, t: vigour(s, 9) }, (r, g, b) => g > r * 1.08 && g > b * 1.2));
     expect(soil[0]!).toBeGreaterThan(soil[1]!);
-    expect(soil[1]!).toBeGreaterThan(soil[2]!);
-    expect(soil[0]!).toBeGreaterThan(0.25);
+    expect(grass[0]!).toBeGreaterThan(0.8);
+    expect(grass[1]!).toBeGreaterThan(0.8);
+    expect(grass[2]!).toBeGreaterThan(0.8);
+    expect(soil[0]!).toBeLessThan(0.2);
     expect(soil[2]!).toBeLessThan(0.08);
     const hot = [1, 5, 9].map((s) => share({ owner: 1, t: vigour(s, 9) }, molten));
     expect(hot[0]!).toBeLessThan(0.1);
