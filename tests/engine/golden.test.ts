@@ -24,11 +24,11 @@ describe('golden games', () => {
         s = apply(s, a);
       }
       expect(s.phase).toBe('GAME_OVER');
-      const { history, ...rest } = s;
+      const { history, startingPlayer, deckFinal, ...rest } = s;
       // Keep Main's original fixtures. Only disabled Lab metadata is normalized.
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
-      const { board, reshuffleDiscard, ...classicConfig } = rest.config;
+      const { board, reshuffleDiscard, deckFinalTurns, ...classicConfig } = rest.config;
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });

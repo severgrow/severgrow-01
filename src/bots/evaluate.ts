@@ -6,6 +6,7 @@ import {
   hexDistance,
   parseKey,
   planFruitCard,
+  planMegaBomb,
   planBloom,
   planSprout,
   removeTiles,
@@ -80,6 +81,10 @@ export const simulate = (v: View, a: Action): Simulation | null => {
     // v0.6 Fruit card: the target goes (whatever its strength), nothing of mine is given up
     board = removeTiles(v.board, [planFruitCard(v, p, v.hand, a.card, a.target).target]);
     taken = 1;
+  } else if (a.t === 'MegaBomb') {
+    const blast = planMegaBomb(v,p,v.hand,a.cards,a.target);
+    board = removeTiles(v.board,blast.destroyed);
+    taken = blast.destroyed.length;
   } else return null;
 
   const cut = sever(board, v.config, p);

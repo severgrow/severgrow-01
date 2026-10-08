@@ -29,6 +29,7 @@ describe('DEFAULT_CONFIG', () => {
       knockEnabled: false,
       board: null,
       reshuffleDiscard: false,
+      deckFinalTurns: true,
     });
   });
 

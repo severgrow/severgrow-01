@@ -74,7 +74,7 @@ export const forecastMove = (v: View, a: Action, rules = CONFIRM_RULES): Forecas
   const cutTheirs = Object.keys(v.board).filter((k) => v.board[k]?.owner === opp && !v.board[k]!.root && !placedKeys.has(k) && !sim.board[k] && !(a.t === 'PlayFruit' && coordKey(a.target) === k));
   const cutMine = Object.keys(v.board).filter((k) => v.board[k]?.owner === me && !v.board[k]!.root && sim.board[k]?.owner !== me).sort();
   const worst = threats(after, me)[0] ?? null;
-  const cards = a.t === 'Sprout' || a.t === 'PlayFruit' ? 1 : a.t === 'Bloom' ? a.cards.length : 0;
+  const cards = a.t === 'Sprout' || a.t === 'PlayFruit' ? 1 : a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards.length : 0;
   return {
     kind: a.t === 'PlayFruit' ? 'fruit' : isStrengthen ? 'strengthen' : 'grow',
     tiles: isStrengthen ? 0 : sim.placed,

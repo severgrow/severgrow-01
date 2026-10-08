@@ -49,8 +49,9 @@ const GLYPHS: Record<string, string> = {
 
 const ADVANCE = 14.5;
 const DOT_X = 2.3;
-const SEPARATOR = '   •   ';
+const SEPARATOR = ' • ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
+export const ledMarqueeTravel = (message: string) => ledMessageWidth(`${message}${SEPARATOR}`);
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
 export function ledStaticMessage(message: string) {
@@ -67,6 +68,11 @@ export function ledStaticMessage(message: string) {
   if (message.startsWith('OPP LEADS +')) return `O+${message.slice(11)}`;
   if (message.startsWith('CUT -')) return `CUT-${message.slice(5)}`;
   if (message.startsWith('TURN +')) return `T+${message.slice(6)}`;
+  if (message.startsWith('OPP +')) return `O+${message.slice(5)}`;
+  if (message.startsWith('FINAL TURNS')) return 'FINALS';
+  if (message.startsWith('FINAL TURN')) return 'FINAL';
+  if (message.startsWith('LAST TURN')) return 'LAST';
+  if (message === 'MEGA BOMB') return 'MEGA';
   if (/^[+-]\d+ TILES$/.test(message)) return message.split(' ')[0]!;
   if (message === 'UNDONE') return 'UNDO';
   if (message.length <= 5) return message;

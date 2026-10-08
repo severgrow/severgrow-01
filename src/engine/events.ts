@@ -73,6 +73,12 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
       out.push({ t: 'FruitCard', player: p, card: res!.fruit!.card, target: { ...res!.fruit!.target }, strength: res!.fruit!.strength });
       out.push(...settleEvents(before, after, p, false));
       break;
+    case 'MegaBomb': {
+      const bomb = res!.megaBomb!;
+      out.push({ t:'MegaBomb',player:p,cards:[...bomb.cards],target:{...bomb.target},destroyed:bomb.destroyed.map(coord=>({...coord})) });
+      out.push(...settleEvents(before,after,p,false));
+      break;
+    }
     case 'Discard':
       out.push({ t: 'Discard', player: p, card: a.card });
       // v0.4: with Rot and Knock off the turn finishes inside the discard.

@@ -8,6 +8,9 @@ import type { Coord, GameResult, Player, ResolutionSummary, State } from './type
 
 export const opponent = (p: Player): Player => (p === 0 ? 1 : 0);
 
+/** Old saves lack startingPlayer; turn parity recovers it without assuming either seat. */
+export const startingPlayerOf = (s: State): Player => s.startingPlayer ?? (s.turnNumber % 2 ? s.turnPlayer : opponent(s.turnPlayer));
+
 export const emptyResolution = (): ResolutionSummary => ({ placed: [], overgrown: [], rotted: [], severed: [] });
 
 export const endGame = (s: State, result: GameResult): State => ({ ...s, phase: 'GAME_OVER', result, rotPick: null });
@@ -47,13 +50,21 @@ export const severAndStrangle = (s: State, mover: Player, res: ResolutionSummary
 
 /**
  * Continue steps 2-4 (spec 6.4), after all Rot removals: Sever + Strangle, Refill,
- * end of turn. A short refill draws what exists and ends the game, and so does a
- * refill that leaves the deck empty (spec 6.5, v0.3.1).
+ * end of turn. Once the deck empties, give each seat its final Grow-first turn.
  */
 export const finishTurn = (s: State, rotted: Coord[]): State => {
   const res: ResolutionSummary = { ...emptyResolution(), rotted };
   const settled = severAndStrangle(s, s.turnPlayer, res);
   if (settled.phase === 'GAME_OVER') return settled;
+
+  if (settled.deckFinal) {
+    if (settled.deckFinal.remaining === 2) {
+      const next = passTurn(settled);
+      return { ...next, phase:'ACT', deckFinal:{...settled.deckFinal,remaining:1} };
+    }
+    const dw: [number,number] = [deadwood(settled.hands[0]),deadwood(settled.hands[1])];
+    return endGame(settled,deckExhaustionResult(scores(settled),leftoverRulesOn(settled) ? dw : null));
+  }
 
   const p = s.turnPlayer;
   const kept = settled.hands[p];
@@ -64,6 +75,10 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
   const hands: [typeof kept, typeof kept] = [stocked.hands[0], stocked.hands[1]];
   hands[p] = [...kept, ...drawn];
   let refilled: State = { ...stocked, hands, deck };
+  if (!s.config.deckFinalTurns && !s.config.reshuffleDiscard && (drawn.length < need || deck.length === 0)) {
+    const dw: [number,number] = [deadwood(refilled.hands[0]),deadwood(refilled.hands[1])];
+    return endGame(refilled,deckExhaustionResult(scores(refilled),leftoverRulesOn(s) ? dw : null));
+  }
   if (s.config.reshuffleDiscard) {
     // the deck never ends the game: only the turn limit does (a hand may stay short)
     if (refilled.deck.length === 0) refilled = reshuffleDiscard(refilled);
@@ -76,23 +91,16 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
     return passTurn(refilled);
   }
 
-  if (drawn.length < need) {
-    // Kept-hand deadwood: the turn player's hand before the refill; the opponent's
-    // current hand (their kept hand from their own last turn plus its refill).
-    const dw: [number, number] = [0, 0];
-    dw[p] = deadwood(kept);
-    dw[opponent(p)] = deadwood(settled.hands[opponent(p)]);
-    return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null));
-  }
-  if (deck.length === 0) {
-    // v0.3.1: a turn never starts with an empty deck. Both hands are current here.
-    const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
-    return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null));
-  }
   if (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer) {
     // v0.4 turn limit: every game ends, scored like the deck running out.
     const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
     return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, 'turn_limit'));
+  }
+  if (deck.length === 0 && !refilled.finalTurn) {
+    const first = opponent(p);
+    const remaining = first === startingPlayerOf(s) ? 2 : 1;
+    const next = passTurn(refilled);
+    return { ...next, phase:'ACT', deckFinal:{first,remaining} };
   }
   return passTurn(refilled);
 };

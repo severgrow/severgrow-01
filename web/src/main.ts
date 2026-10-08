@@ -481,7 +481,7 @@ function renderHowTo() {
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
     `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
-    `<p><b>The end:</b> the game ends when the deck runs out${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
+    `<p><b>The end:</b> when the deck runs out, both players finish with equal turns${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
@@ -1017,6 +1017,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
   if (displayEvent) smartCockpit?.event(displayEvent);
+  if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
+  else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
   render();
   void pump();
   scheduleBot();
@@ -1257,11 +1259,11 @@ function markMoment(steps: readonly Step[], before: State) {
   const budget = effectBudget(tier, settings.effects, settings.reduceMotion);
   // Part 2: a cut has its own banner in its payoff (logic/cut.ts), so the move's banner stays quiet
   // (a Fruit card shows its own "Fruited!" in its burst, mine only: the opponent's is calmer)
-  const banner = budget.banner && !steps.some((s) => s.k === 'sever' || s.k === 'fruit') ? tierBanner(steps) : null;
+  const banner = budget.banner && !steps.some((s) => s.k === 'sever' || s.k === 'fruit' || s.k === 'megaBomb') ? tierBanner(steps) : null;
   let chain = 0;
   let first = true;
   for (const st of steps) {
-    if (st.k !== 'grow' && st.k !== 'sever' && st.k !== 'strangle' && st.k !== 'fruit' && st.k !== 'strengthen') continue;
+    if (st.k !== 'grow' && st.k !== 'sever' && st.k !== 'strangle' && st.k !== 'fruit' && st.k !== 'megaBomb' && st.k !== 'strengthen') continue;
     moments.set(st, { tier, budget, banner, chain, first });
     chain++;
     first = false;
@@ -1461,6 +1463,15 @@ async function playStep(step: Step, my: number) {
       await playCut({ origin: step.origin, keys: step.keys, victimTiles: victim, mine }, mo.first || mo.chain === 0, mo.chain, f, my);
       if (my !== epoch) return;
       show();
+      return;
+    }
+    case 'megaBomb': {
+      if (!show()) return;
+      flash(step.target,f,false);
+      if (m > 0) for (const key of step.destroyed) sparks(key,step.player === HUMAN ? 'you' : 'bot',0,f,2);
+      if (settings.sound) sound.thud();
+      if (step.player === HUMAN) vibrate(settings.vibration,18);
+      await wait(280 * f,my);
       return;
     }
     case 'remove': {
@@ -2020,7 +2031,7 @@ function renderHud() {
   const finalOn = ft.final && st.phase !== 'GAME_OVER';
   document.documentElement.classList.toggle('final-turns', finalOn);
   sound.setCalm(finalOn);
-  if (finalOn && !finalShown && !busy() && st.actor === HUMAN && ft.banner) {
+  if (finalOn && !st.deckFinal && !finalShown && !busy() && st.actor === HUMAN && ft.banner) {
     finalShown = true;
     banner(ft.banner, 'calm');
   }
@@ -2775,7 +2786,7 @@ function renderHand(v: View, advice: Advice | null) {
   const cards = handOrder(v.hand, settings.handSort);
   const bloomCards = IS_TEST2 && myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
     ? kindCards(sel.kind) : sel.card === null && sel.kind === null
-      ? legal.flatMap(a => a.t === 'Bloom' ? a.cards : []) : []) : new Set<number>();
+      ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = comboGroups(v.hand);
   // remember where every card was, so a reorder (Sort) slides them into place (FLIP)
@@ -3413,6 +3424,7 @@ function onHexTap(key: string) {
   // Tapping the previewed hex again plays the move (same as Confirm).
   if (session.sel.hex === key && session.pending && (!IS_TEST2 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout'))) return humanPlay(session.pending);
   session.tapHex(key);
+  if (session.sel.kind?.startsWith('bloom-mega-') && session.pending?.t === 'MegaBomb') return humanPlay(session.pending);
   inspectKey = session.pending ? null : key;
   render();
   maybeAutoPlay();

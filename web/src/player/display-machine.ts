@@ -1,6 +1,6 @@
 import type { DisplayEvent } from './display-readout.js';
 
-export type DisplayFrame = { text: string; mode: 'amber' | 'red'; pulse?: boolean };
+export type DisplayFrame = { text: string; mode: 'amber' | 'red'; pulse?: boolean; compact?: boolean };
 
 /** One clock owns the sign. Newer, stronger events replace weaker ones; nothing stale queues up. */
 export class DisplayMachine {
@@ -13,9 +13,9 @@ export class DisplayMachine {
   private epoch = 0;
   private frame: DisplayFrame = { text:'', mode:'amber' };
   constructor(private readonly show: (frame: DisplayFrame) => void) {}
-  private emit(text: string, mode: 'amber'|'red', pulse = false) {
-    const next = { text, mode, ...(pulse ? {pulse:true} : {}) };
-    if (this.frame.text === text && this.frame.mode === mode && !pulse) return;
+  private emit(text: string, mode: 'amber'|'red', compact = false) {
+    const next = { text, mode, compact };
+    if (this.frame.text === text && this.frame.mode === mode && !!this.frame.compact === compact) return;
     this.frame = next; this.show(next);
   }
   phase(text: string) {
@@ -31,16 +31,22 @@ export class DisplayMachine {
     const id = ++this.epoch;
     window.clearTimeout(this.timer);
     window.clearTimeout(this.idleTimer);
-    this.emit(event.message,event.mode ?? 'red');
+    this.emit(event.message,event.mode ?? 'red',true);
     this.timer = window.setTimeout(() => {
       if (id !== this.epoch) return;
-      if (event.score && event.score !== event.message) {
-        this.emit(event.score,'red');
-        this.timer = window.setTimeout(() => this.finish(id),1000);
-      } else this.finish(id);
+      const showScore = () => {
+        if (event.score && event.score !== event.message) {
+          this.emit(event.score,'red',true);
+          this.timer = window.setTimeout(() => this.finish(id),1550);
+        } else this.finish(id);
+      };
+      if (event.followup) {
+        this.emit(event.followup,event.mode ?? 'red',true);
+        this.timer = window.setTimeout(showScore,1300);
+      } else showScore();
     },event.duration);
   }
-  hint(text: string) { this.event({message:text,priority:20,duration:950,mode:'amber'}); }
+  hint(text: string) { this.event({message:text,priority:20,duration:1250,mode:'amber'}); }
   private finish(id: number) {
     if (id !== this.epoch) return;
     this.active = null;

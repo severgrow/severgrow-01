@@ -16,6 +16,7 @@ export const actorOf = (s: Step): Player | null => {
     case 'grow':
     case 'strengthen':
     case 'fruit':
+    case 'megaBomb':
     case 'discard':
     case 'draw':
       return s.player;
@@ -35,6 +36,8 @@ export const involvedKeys = (s: Step): string[] => {
       return [s.key];
     case 'fruit':
       return [s.target];
+    case 'megaBomb':
+      return [s.target,...s.destroyed];
     case 'sever':
       return [...new Set([s.origin, ...s.keys])];
     case 'remove':

@@ -15,7 +15,7 @@ describe('match display state', () => {
     expect(frames.at(-1)).toMatchObject({text:'BLOOM +3',mode:'red'});
     vi.advanceTimersByTime(1200);
     expect(frames.at(-1)).toMatchObject({text:'YOU 30 • 12 OPP',mode:'red'});
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1550);
     expect(frames.at(-1)).toMatchObject({text:'THROW',mode:'amber'});
   });
 

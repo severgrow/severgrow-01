@@ -109,6 +109,7 @@ describe('events (spec 12, step 18)', () => {
           if (e.t === 'Sprout') board[coordKey(e.coord)] = { owner: p, strength: cards.get(e.card)!.rank };
           if (e.t === 'Strengthen') board[coordKey(e.coord)] = { owner: p, strength: e.newStrength };
           if (e.t === 'FruitCard') board[coordKey(e.target)] = null;
+          if (e.t === 'MegaBomb') for (const c of e.destroyed) board[coordKey(c)] = null;
           if (e.t === 'Rot' || e.t === 'Sever') for (const c of e.coords) board[coordKey(c)] = null;
           if (e.t === 'RotPick') board[coordKey(e.coord)] = null;
         }

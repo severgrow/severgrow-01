@@ -2,7 +2,7 @@ import type { Player, State } from '../../../src/engine/index.js';
 import { viewFor } from '../../../src/engine/index.js';
 import type { Step } from '../logic/anim.js';
 
-export type DisplayEvent = { message: string; priority: number; duration: number; score?: string; mode?: 'amber'|'red' };
+export type DisplayEvent = { message: string; priority: number; duration: number; followup?: string; score?: string; mode?: 'amber'|'red' };
 const owned = (state: State, player: Player) => Object.values(state.board).filter(tile => tile?.owner === player && !tile.root).length;
 const scoreLine = (you: number, opp: number) => `YOU ${you} • ${opp} OPP`;
 
@@ -15,7 +15,9 @@ export function displayEventForPlay(before: State, after: State, steps: readonly
   const cutMine = steps.filter((step): step is Extract<Step,{k:'sever'}> => step.k === 'sever' && step.player === human).reduce((sum,step)=>sum+step.keys.length,0);
   const cutTheirs = steps.filter((step): step is Extract<Step,{k:'sever'}> => step.k === 'sever' && step.player !== human).reduce((sum,step)=>sum+step.keys.length,0);
   const bloom = steps.find((step): step is Extract<Step,{k:'grow'}> => step.k === 'grow' && step.style === 'bloom');
+  const mega = steps.find((step): step is Extract<Step,{k:'megaBomb'}> => step.k === 'megaBomb');
   const mover = before.turnPlayer;
+  if (mega) return { message:'MEGA BOMB', followup:`-${mega.destroyed.length} TILES`, priority:95, duration:1450, score };
   if (cutMine >= 2) return { message:`CUT -${cutMine}`, priority:90, duration:1450, score };
   if (bloom && mover === human) return { message:`BLOOM +${Math.max(0,myTiles)}`, priority:80, duration:1350, score };
   if (cutTheirs >= 2) return { message:`CUT -${cutTheirs}`, priority:75, duration:1350, score };

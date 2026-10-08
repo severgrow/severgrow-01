@@ -234,7 +234,8 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
   switch (f.kind) {
     case 'bloom':
     case 'fruit':
-      return whyBoard(c, f.move, f.kind === 'fruit');
+    case 'megaBomb':
+      return whyBoard(c, f.move, f.kind === 'fruit' || f.kind === 'megaBomb');
     case 'sprout':
       return f.move.placed > 0 && !f.move.taken && !f.move.botCut && !f.move.onRich && !f.move.wins
         ? [SPROUT.coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]

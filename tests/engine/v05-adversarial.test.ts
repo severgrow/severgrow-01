@@ -79,7 +79,7 @@ describe('v0.5 adversarial tests', () => {
     expect(free.phase).toBe('ACT');
   });
 
-  it('ADVERSARIAL 4: Fruit on the last turn before the deck runs out: it resolves, then the game ends on the refill', () => {
+  it('ADVERSARIAL 4: Fruit resolves before the deck-empty final turn begins', () => {
     const tiles: Record<string, [Player, number]> = { '-1,1': [0, 2], '0,1': [0, 2], '0,0': [0, 2], '1,1': [0, 2], '1,-1': [1, 9], '1,0': [1, 9], '2,0': [1, 5], '3,-1': [1, 5] };
     const base = stateWith({ tiles, hand: [FRUIT, [1, 1]] });
     const s: State = { ...base, discard: [...base.discard, ...base.deck.slice(1)], deck: base.deck.slice(0, 1) };
@@ -87,10 +87,9 @@ describe('v0.5 adversarial tests', () => {
     expect(g.board['1,0']).toBeNull();
     g = apply(g, { t: 'EndAct' });
     g = apply(g, { t: 'Discard', card: g.hands[0][0]!.id });
-    expect(g.phase).toBe('GAME_OVER');
-    expect(g.result!.reason).toBe('deck_exhaustion');
-    // the Fruit card's result counts in the final score
-    expect(g.result!.scores[1]).toBe(1); // only (1,-1) is left of theirs
+    expect(g.phase).toBe('ACT');
+    expect(g.deckFinal).toEqual({first:1,remaining:1});
+    expect(Object.values(g.board).filter(tile=>tile?.owner===1 && !tile.root)).toHaveLength(1);
   });
 
   it('ADVERSARIAL 5: upgrading the last tile of a chain just before the bot can overgrow it: afterwards no card of theirs can', () => {

@@ -39,7 +39,7 @@ const makeState = (o: {
     ...(o.rich ? { rich: o.rich } : {}),
     ...(o.config ? { config: o.config } : {}),
   });
-  const base = newGame(1, o.config ?? {});
+  const base = newGame(1, { deckFinalTurns:false, ...o.config });
   const tp = o.turnPlayer ?? 0;
   return {
     ...base,

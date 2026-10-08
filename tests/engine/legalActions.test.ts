@@ -38,6 +38,8 @@ const canon = (s: State, a: Action): string => {
     case 'PlayFruit':
       // Fruit cards are all alike: only the target matters
       return `F ${coordKey(a.target)}`;
+    case 'MegaBomb':
+      return `M ${coordKey(a.target)}`;
     case 'Sprout':
       return `T ${cardKey([a.card])} ${coordKey(a.coord)}`;
     case 'Discard': {
@@ -147,6 +149,8 @@ const bruteForce = (s: State): Set<string> => {
       });
       void mine;
       for (const card of hand) for (const target of enemy) add({ t: 'PlayFruit', card: card.id, target });
+      const bombs=hand.filter(card=>card.suit===null).sort((a,b)=>a.id-b.id);
+      if (bombs.length>=2) for (const target of enemy) add({t:'MegaBomb',cards:[bombs[0]!.id,bombs[1]!.id],target});
       break;
     }
   }

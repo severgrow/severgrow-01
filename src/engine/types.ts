@@ -21,6 +21,8 @@ export type RulesConfig = {
   board: BoardSpec | null;
   /** Lab: when the deck runs out, shuffle the throw pile (all but its top card) into a new deck. */
   reshuffleDiscard: boolean;
+  /** False only for archived replays made before fair deck-end turns and Mega Bomb. */
+  deckFinalTurns: boolean;
   handSize: number;
   copiesPerCard: number;
   /** Must be even (mirrored pairs). */
@@ -92,6 +94,8 @@ export type ResolutionSummary = {
   bloom?: { cards: number[]; hexes: Coord[] };
   /** v0.6: a Fruit card removed this tile (its strength before). */
   fruit?: { card: number; target: Coord; strength: number };
+  /** Two Bomb cards clear enemy non-home tiles in a radius-one blast. */
+  megaBomb?: { cards: number[]; target: Coord; destroyed: Coord[] };
   strangled?: Player;
   /** v0.4: the hex a Sprout claimed. */
   sprout?: Coord;
@@ -105,6 +109,7 @@ export type Action =
   | { t: 'Bloom'; cards: number[]; hexes: Coord[] }
   | { t: 'Sprout'; card: number; coord: Coord }
   | { t: 'PlayFruit'; card: number; target: Coord }
+  | { t: 'MegaBomb'; cards: number[]; target: Coord }
   | { t: 'EndAct' }
   | { t: 'Discard'; card: number }
   | { t: 'Knock' }
@@ -125,6 +130,7 @@ export type Event =
       newStrength: number;
     }
   | { t: 'FruitCard'; player: Player; card: number; target: Coord; strength: number }
+  | { t: 'MegaBomb'; player: Player; cards: number[]; target: Coord; destroyed: Coord[] }
   | { t: 'Discard'; player: Player; card: number }
   | { t: 'Knock'; player: Player }
   | { t: 'FinalTurnStart'; player: Player }
@@ -149,6 +155,8 @@ export type State = {
   /** Top of the discard pile is the last element. */
   discard: Card[];
   turnPlayer: Player;
+  /** Player who took turn one; absent only in saves made before this rule. */
+  startingPlayer?: Player;
   actor: Player;
   phase: Phase;
   drawnFromDiscard: number | null;
@@ -159,6 +167,8 @@ export type State = {
   /** v0.5: Strengthens used per player this game. */
   strengthenUsed: [number, number];
   finalTurn: { knocker: Player } | null;
+  /** Remaining Grow-first turns after deck exhaustion; separate from Knock's finalTurn. */
+  deckFinal?: { first: Player; remaining: 1 | 2 } | null;
   rotPick: RotPickState | null;
   /** Increments per player-turn, starts at 1. */
   turnNumber: number;

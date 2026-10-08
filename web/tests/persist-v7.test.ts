@@ -65,11 +65,12 @@ describe('autosave: seed + actions (v0.7)', () => {
     expect(decodeSave(null)).toBeNull();
   });
 
-  it('continues a Test2 save with the same action history and unlimited Strengthen', () => {
+  it('continues a Test2 save from an exact upgraded snapshot', () => {
     const s = played(19, 20);
     const raw = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
     const loaded = decodeSave(JSON.stringify({ ...raw, rules: PREVIOUS_RULES_VERSION }))!;
-    expect(loaded.actions).toEqual(s.log);
+    expect(loaded.actions).toEqual([]);
+    expect(loaded.base).toEqual(loaded.state);
     expect(loaded.state.config.strengthenLimitPerGame).toBe(-1);
     expect(loaded.state.board).toEqual(s.state.board);
   });

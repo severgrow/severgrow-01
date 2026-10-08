@@ -18,6 +18,7 @@ export type Step =
   | { k: 'strengthen'; player: Player; key: string; from: number; to: number }
   /** v0.6: a Fruit card removes one tile (`strength` before), then the cut follows as its own steps */
   | { k: 'fruit'; player: Player; card: Card; target: string; strength: number }
+  | { k: 'megaBomb'; player: Player; target: string; destroyed: string[] }
   | { k: 'discard'; player: Player; card: Card }
   | { k: 'strangle'; loser: Player }
   | { k: 'turn'; player: Player; final: boolean }
@@ -63,6 +64,13 @@ export const buildSteps = (before: State, action: Action, after: State, viewer: 
       case 'FruitCard': {
         hits.push(coordKey(e.target));
         steps.push({ k: 'fruit', player: e.player, card: { id: e.card, suit: null, rank: 0 }, target: coordKey(e.target), strength: e.strength });
+        break;
+      }
+      case 'MegaBomb': {
+        const target = coordKey(e.target);
+        const destroyed = e.destroyed.map(coordKey);
+        hits.push(target,...destroyed);
+        steps.push({k:'megaBomb',player:e.player,target,destroyed});
         break;
       }
       case 'Rot':
@@ -123,6 +131,11 @@ export const applyStep = (board: Board, s: Step): Board => {
       next[s.target] = null;
       return next;
     }
+    case 'megaBomb': {
+      const next = {...board};
+      for (const key of s.destroyed) next[key] = null;
+      return next;
+    }
     case 'sync':
       return copyBoard(s.board);
     default:
@@ -180,6 +193,8 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
       return s.player === viewer ? `Strengthened ${s.from} → ${s.to}` : `${OPP.The} strengthened a ${s.from} to a ${s.to}`;
     case 'fruit':
       return s.player === viewer ? `${FRUIT.banner} Their ${s.strength} is gone` : FRUIT.oppDid(s.strength);
+    case 'megaBomb':
+      return `Mega Bomb cleared ${s.destroyed.length} tiles`;
     case 'discard':
       return s.player === viewer ? null : `${OPP.The} threw away ${cardName(s.card)}`;
     case 'draw':

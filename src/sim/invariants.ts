@@ -140,6 +140,7 @@ export const runPropertyGame = (
     s = apply(s, a);
     actions.push(a);
     if (a.t === 'Bloom') for (const id of a.cards) melded.add(id);
+    if (a.t === 'MegaBomb') for (const id of a.cards) melded.add(id);
     if (a.t === 'Sprout' || a.t === 'PlayFruit') melded.add(a.card); // a played Fruit card leaves the game
     if (checks) {
       // 6. apply never mutates its input.

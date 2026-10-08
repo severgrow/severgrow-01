@@ -454,37 +454,29 @@ describe('Continue: Rot, Sever, Refill (14.8, 14.12)', () => {
     expect(done.lastResolution!.rotted).toEqual([{ q: -1, r: 1 }, { q: -2, r: 1 }]);
   });
 
-  it('a short refill ends the game by deck exhaustion', () => {
+  it('a short refill starts the next no-draw final turn', () => {
     const kept = [c(MOSS, 1), c(ASH, 2), c(DEW, 3), c(EMBER, 4)];
     const deck = [c(MOSS, 9), c(ASH, 9)];
     const s = makeState({ phase: 'KNOCK', hands: [kept, junk(7)], deck, tiles: { '-1,1': [0, 1] } });
     const n = act(s, { t: 'Continue' });
-    expect(n.phase).toBe('GAME_OVER');
+    expect(n.phase).toBe('ACT');
+    expect(n.turnPlayer).toBe(1);
+    expect(n.deckFinal).toEqual({first:1,remaining:1});
     expect(n.hands[0]).toHaveLength(6);
     expect(n.deck).toEqual([]);
-    expect(n.result).toEqual({
-      winner: 0,
-      reason: 'deck_exhaustion',
-      scores: [1, 0],
-      deadwood: [10, deadwood(s.hands[1])],
-    });
+    expect(n.result).toBeNull();
   });
 
-  it('an exactly-empty deck after a full refill ends the game (v0.3.1)', () => {
+  it('an exactly-empty deck after a full refill also starts a no-draw turn', () => {
     const kept = [c(MOSS, 1), c(ASH, 2), c(DEW, 3), c(EMBER, 4)];
     const deck = [c(MOSS, 9), c(ASH, 9), c(DEW, 7)];
     const s = makeState({ phase: 'KNOCK', hands: [kept, junk(7)], deck, tiles: { '-1,1': [0, 1] } });
     const n = act(s, { t: 'Continue' });
     expect(n.hands[0]).toHaveLength(7);
     expect(n.deck).toEqual([]);
-    expect(n.phase).toBe('GAME_OVER');
-    // Both hands are current here (the refill was full): deadwood of each current hand.
-    expect(n.result).toEqual({
-      winner: 0,
-      reason: 'deck_exhaustion',
-      scores: [1, 0],
-      deadwood: [deadwood(n.hands[0]), deadwood(n.hands[1])],
-    });
+    expect(n.phase).toBe('ACT');
+    expect(n.deckFinal?.remaining).toBe(1);
+    expect(n.result).toBeNull();
   });
 
   it('a deck with cards left after the refill keeps the game going', () => {
@@ -503,15 +495,18 @@ describe('Continue: Rot, Sever, Refill (14.8, 14.12)', () => {
     expect(act(k, { t: 'Draw', from: 'discard' }).phase).toBe('ACT');
   });
 
-  it('deck exhaustion tie-breaks on kept-hand deadwood, then P2', () => {
+  it('deck exhaustion preserves kept cards and starts a fair final turn', () => {
     const deck = [c(MOSS, 9)];
     const low = [c(MOSS, 1), c(ASH, 2)]; // 3
     const p2Hand = [c(MOSS, 7), c(ASH, 7), c(DEW, 7), c(EMBER, 2), c(MOSS, 1), c(ASH, 1), c(DEW, 1)]; // set 7s + set 1s + 2 = 2
     const n = act(makeState({ phase: 'KNOCK', hands: [low, p2Hand], deck }), { t: 'Continue' });
-    expect(n.result).toMatchObject({ reason: 'deck_exhaustion', winner: 1, scores: [0, 0], deadwood: [3, 2] });
+    expect(n.result).toBeNull();
+    expect(ids(n.hands[0].slice(0, low.length))).toEqual(ids(low));
+    expect(n.hands[1]).toEqual(p2Hand);
     const even = [c(MOSS, 1), c(ASH, 1)]; // 2
     const m = act(makeState({ phase: 'KNOCK', hands: [even, p2Hand], deck }), { t: 'Continue' });
-    expect(m.result).toMatchObject({ winner: 1, deadwood: [2, 2] });
+    expect(m.result).toBeNull();
+    expect(ids(m.hands[0].slice(0, even.length))).toEqual(ids(even));
   });
 });
 

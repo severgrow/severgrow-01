@@ -46,7 +46,7 @@ export type MoveFacts = {
 };
 
 export type Facts =
-  | { kind: 'bloom' | 'fruit' | 'sprout'; move: MoveFacts; reason?: string }
+  | { kind: 'bloom' | 'fruit' | 'sprout' | 'megaBomb'; move: MoveFacts; reason?: string }
   | { kind: 'strengthen'; from: number; to: number; reason: string }
   | { kind: 'draw'; from: 'deck' | 'discard'; completesCombo: boolean; comboWith: Card[] }
   | { kind: 'discard'; card: Card; fitsCombo: boolean; deadwoodAfter: number }
@@ -71,7 +71,7 @@ const worst = (ctx: Ctx, p: Player) => threats(ctx, p)[0] ?? null;
 const inCombo = (hand: readonly Card[], c: Card): boolean =>
   bestMeldPartition(hand).melds.some((m) => m.some((x) => x.id === c.id));
 
-type BoardMove = Extract<Action, { t: 'Bloom' | 'PlayFruit' | 'Sprout' }>;
+type BoardMove = Extract<Action, { t: 'Bloom' | 'PlayFruit' | 'Sprout' | 'MegaBomb' }>;
 
 /** The full board score of one Bloom, Sprout or Fruit card (also for moves off the Bloom shortlist). */
 export const scoreBoardMove = (v: View, a: BoardMove, w: Weights = WEIGHTS): Scored => {
@@ -103,7 +103,7 @@ export const scoreBoardMove = (v: View, a: BoardMove, w: Weights = WEIGHTS): Sco
   };
   // Strength placed on empty hexes is "spent" without taking anything.
   const strengths =
-    a.t === 'PlayFruit'
+    a.t === 'PlayFruit' || a.t === 'MegaBomb'
       ? []
       : a.t === 'Sprout'
         ? [v.hand.find((c) => c.id === a.card)!.rank]
@@ -118,7 +118,7 @@ export const scoreBoardMove = (v: View, a: BoardMove, w: Weights = WEIGHTS): Sco
     sim.botPointsLost -
     w.exposure * (myAfter - myBefore) +
     w.pressure * (pressureAfter - pressureBefore);
-  return { action: a, score, facts: { kind: a.t === 'PlayFruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'bloom', move } };
+  return { action: a, score, facts: { kind: a.t === 'MegaBomb' ? 'megaBomb' : a.t === 'PlayFruit' ? 'fruit' : a.t === 'Sprout' ? 'sprout' : 'bloom', move } };
 };
 
 
@@ -127,6 +127,7 @@ const scoreAction = (v: View, a: Action, bloomsAvailable: boolean, w: Weights): 
     case 'Bloom':
     case 'Sprout':
     case 'PlayFruit':
+    case 'MegaBomb':
       return scoreBoardMove(v, a, w);
     case 'Draw': {
       if (a.from === 'deck') return { action: a, score: 0, facts: { kind: 'draw', from: 'deck', completesCombo: false, comboWith: [] } };

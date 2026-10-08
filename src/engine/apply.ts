@@ -5,6 +5,7 @@ import { deadwood } from './deadwood.js';
 import { IllegalActionError } from './errors.js';
 import { isFruitCard } from './cards.js';
 import { planFruitCard } from './fruit.js';
+import { planMegaBomb } from './megaBomb.js';
 import { eventsOf } from './events.js';
 import { afterDiscard, emptyResolution, endGame, finishTurn, opponent, passTurn, severAndStrangle } from './phases.js';
 import { applyPlacement, assertCoord, planBloom, planSprout } from './placement.js';
@@ -35,7 +36,7 @@ const draw = (s: State, from: 'deck' | 'discard'): State => {
   const p = s.turnPlayer;
   if (from === 'deck') {
     // Lab: with reshuffle on, an empty deck takes the throw pile back first
-    if (s.deck.length === 0) s = reshuffleDiscard(s);
+    if (s.deck.length === 0 && s.config.reshuffleDiscard) s = reshuffleDiscard(s);
     const card = s.deck[0] ?? fail('DECK_EMPTY', 'the deck is empty');
     return {
       ...s,
@@ -109,6 +110,17 @@ const playFruit = (s: State, a: Extract<Action, { t: 'PlayFruit' }>): State => {
   const res = { ...emptyResolution(), fruit: { card: plan.card.id, target: { ...plan.target }, strength: plan.strength } };
   const next: State = { ...s, board, hands: setHand(s, p, hand), fruitPlayed: s.fruitPlayed + 1, fruitKnown: knownAfter(s, p, hand), sproutsThisTurn: s.config.fruitUsesSprout ? s.sproutsThisTurn + 1 : s.sproutsThisTurn };
   return severAndStrangle(next, p, res);
+};
+
+const megaBomb = (s: State, a: Extract<Action,{t:'MegaBomb'}>): State => {
+  if (!s.config.deckFinalTurns) fail('MALFORMED_ACTION','Mega Bomb is unavailable under archived rules');
+  const p = s.turnPlayer;
+  const plan = planMegaBomb(s,p,s.hands[p],a.cards,a.target);
+  const used = new Set(plan.cards.map(card=>card.id));
+  const hand = s.hands[p].filter(card=>!used.has(card.id));
+  const board = removeTiles(s.board,plan.destroyed);
+  const res = { ...emptyResolution(), megaBomb:{cards:plan.cards.map(card=>card.id),target:plan.target,destroyed:plan.destroyed} };
+  return severAndStrangle({ ...s,board,hands:setHand(s,p,hand),fruitPlayed:s.fruitPlayed+2,fruitKnown:knownAfter(s,p,hand) },p,res);
 };
 
 const discard = (s: State, cardId: number): State => {
@@ -196,6 +208,8 @@ const applyRules = (state: State, action: Action): State => {
       return bloom(state, planBloom(state, p, state.hands[p], a.cards, a.hexes));
     case 'PlayFruit':
       return playFruit(state, a);
+    case 'MegaBomb':
+      return megaBomb(state,a);
     case 'Sprout':
       return sprout(state, a.card, a.coord);
     case 'EndAct':

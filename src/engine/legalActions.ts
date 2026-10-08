@@ -1,6 +1,7 @@
 import { allNeighbors, boardCoords, coordKey } from './board.js';
 import { MAX_RANK, MIN_RANK, SUITS } from './constants.js';
 import { fruitTargetBlocker } from './fruit.js';
+import { megaBombTargets } from './megaBomb.js';
 import { claimBlocker } from './overgrow.js';
 import { strengthenBlocker, touchesNetwork } from './placement.js';
 import type { Action, Card, Coord, State, View } from './types.js';
@@ -139,6 +140,8 @@ const actActions = (v: View): Action[] => {
   const out: Action[] = [];
   // v0.7 Bloom: every legal assignment of every choice (a set once per hex set)
   for (const choice of bloomChoices(v)) for (const order of choice.orders) out.push(bloomAction(choice, order));
+  const bombs = v.hand.filter(card=>card.suit===null).sort((a,b)=>a.id-b.id).slice(0,2);
+  if (v.config.deckFinalTurns && bombs.length === 2) for (const target of megaBombTargets(v,p)) out.push({t:'MegaBomb',cards:bombs.map(card=>card.id),target});
 
   // Sprout (v0.4): one card, one tile next to the network; one card per suit/rank. v0.5
   // Strengthen is a Sprout on my own weaker non-root tile, listed in the same board order.

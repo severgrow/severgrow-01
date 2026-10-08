@@ -1,5 +1,5 @@
 /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
-import { drawLedCells, ledMessageWidth, ledStaticMessage } from './led-cells.js';
+import { drawLedCells, ledMarqueeTravel, ledMessageWidth, ledStaticMessage } from './led-cells.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -267,6 +267,7 @@ export function mountSmartCockpit() {
   let lastAction = '';
   let lastText = '';
   let lastMode: 'amber'|'red' = 'amber';
+  let lastCompact = false;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
@@ -303,7 +304,7 @@ export function mountSmartCockpit() {
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     windowEl.classList.toggle('led-pulse',!!frame.pulse && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches);
-    if (value === lastText && mode === lastMode) return;
+    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact) return;
     const previous = lastText;
     const animateReel = previous && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
     for (const running of reel) running.cancel(); reel = [];
@@ -316,17 +317,17 @@ export function mountSmartCockpit() {
       old.style.cssText = `position:absolute;width:${cells.style.width};height:26px;left:${cells.classList.contains('scrolling') ? '0' : '50%'};top:50%;transform:translate(${cells.classList.contains('scrolling') ? '0' : '-50%'},-50%);pointer-events:none`;
       windowEl.append(old);
     }
-    lastText = value; lastMode = mode; text.textContent = value; led.title = value; led.dataset.mode = mode;
+    lastText = value; lastMode = mode; lastCompact = !!frame.compact; text.textContent = value; led.title = value; led.dataset.mode = mode;
     cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
     requestAnimationFrame(() => {
-      if (value !== lastText || mode !== lastMode) { old?.remove(); return; }
+      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact) { old?.remove(); return; }
       const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-      const shown = reduced ? ledStaticMessage(value) : value;
+      const shown = reduced || frame.compact ? ledStaticMessage(value) : value;
       const scrolling = !reduced && ledMessageWidth(shown) > windowEl.clientWidth - 2;
       drawLedCells(cells,shown,scrolling,mode);
       drawLedCells(spillCells,shown,scrolling,mode);
       if (scrolling) {
-        const travel = ledMessageWidth(`${value}   •   `);
+        const travel = ledMarqueeTravel(shown);
         for (const target of [cells,spillCells]) {
           target.style.setProperty('--led-travel',`${travel}px`);
           target.style.setProperty('--led-duration',`${Math.max(3.2,travel/42).toFixed(1)}s`);

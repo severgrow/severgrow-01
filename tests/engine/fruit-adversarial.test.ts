@@ -86,7 +86,7 @@ describe('Fruit cards: 6 adversarial tests', () => {
     expect(s.board['1,0']).toBeNull();
   });
 
-  it('ADVERSARIAL 6: a Fruit card drawn on the last turn before the deck runs out: drawn, played, then the game ends on the refill, its result counted', () => {
+  it('ADVERSARIAL 6: a Fruit card drawn as the deck empties can be played before final no-draw turns', () => {
     const g = at(arms, [], { phase: 'DRAW' });
     const numbers = g.hands[1];
     const s: State = { ...g, hands: [numbers.slice(0, 6), g.hands[1]], deck: [fruitCard(72)], discard: [...g.discard, ...g.deck] };
@@ -97,8 +97,8 @@ describe('Fruit cards: 6 adversarial tests', () => {
     expect(t.board['1,0']).toBeNull();
     t = apply(t, { t: 'EndAct' });
     t = apply(t, { t: 'Discard', card: t.hands[0][0]!.id });
-    expect(t.phase).toBe('GAME_OVER');
-    expect(t.result!.reason).toBe('deck_exhaustion');
-    expect(t.result!.scores[1]).toBe(Object.values(t.board).filter((x) => x && x.owner === 1 && !x.root).length);
+    expect(t.phase).toBe('ACT');
+    expect(t.deckFinal).toEqual({first:1,remaining:1});
+    expect(t.board['1,0']).toBeNull();
   });
 });

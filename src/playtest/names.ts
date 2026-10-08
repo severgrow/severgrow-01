@@ -48,6 +48,10 @@ export const moveSentence = (v: View, a: Action): string => {
       const more = sim.botCut > 0 ? `, cutting off ${sim.botCut} more` : '';
       return `${FRUIT.suggest(hn(a.target), v.board[coordKey(a.target)]!.strength)}${more}${pointsText(sim)}`;
     }
+    case 'MegaBomb': {
+      const sim = simulate(v,a)!;
+      return `Mega Bomb at ${hn(a.target)}, removing ${plural(sim.taken, `${OPP.noun} tile`)}${pointsText(sim)}`;
+    }
     case 'EndAct':
       return "I'm done playing cards";
     case 'Discard':
@@ -70,6 +74,8 @@ export const moveHexes = (a: Action): Coord[] => {
       return [a.coord];
     case 'PlayFruit':
       return [a.target];
+    case 'MegaBomb':
+      return [a.target];
     case 'RotPick':
       return [a.coord];
     default:
@@ -79,7 +85,7 @@ export const moveHexes = (a: Action): Coord[] => {
 
 /** Card ids a move uses. */
 export const moveCards = (a: Action): number[] => {
-  if (a.t === 'Bloom') return a.cards;
+  if (a.t === 'Bloom' || a.t === 'MegaBomb') return a.cards;
   if (a.t === 'Sprout' || a.t === 'PlayFruit') return [a.card];
   if (a.t === 'Discard') return [a.card];
   return [];

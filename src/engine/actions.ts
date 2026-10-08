@@ -7,6 +7,7 @@ export const ACTION_PHASE: Record<Action['t'], Phase> = {
   Bloom: 'ACT',
   Sprout: 'ACT',
   PlayFruit: 'ACT',
+  MegaBomb: 'ACT',
   EndAct: 'ACT',
   Discard: 'DISCARD',
   Knock: 'KNOCK',
@@ -34,6 +35,9 @@ export const assertActionShape = (a: unknown): Action => {
       break;
     case 'PlayFruit':
       if (typeof a.card !== 'number') bad('PlayFruit needs a card id and a target');
+      break;
+    case 'MegaBomb':
+      if (!Array.isArray(a.cards) || !a.target) bad('MegaBomb needs cards[] and target');
       break;
     case 'Sprout':
       if (typeof a.card !== 'number') bad('Sprout needs a card id and a coord');

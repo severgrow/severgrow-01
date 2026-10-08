@@ -41,7 +41,7 @@ const resolution = (s: State, me: Player): string => {
 export const describe = (before: State, a: Action, after: State, me: Player): string => {
   const R = before.config.boardRadius;
   const hn = (c: Coord) => hexName(c, R);
-  const placed = a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit';
+  const placed = a.t === 'Bloom' || a.t === 'MegaBomb' || a.t === 'Sprout' || a.t === 'PlayFruit';
   const tail = placed && after.lastResolution !== before.lastResolution ? resolution(after, me) : '';
   if (before.actor === me) {
     if (a.t === 'Bloom') return `${BLOOM.youDid(a.cards.length)}${tail}`;
@@ -55,6 +55,8 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
       return a.from === 'deck' ? `${OPP.The} drew a card` : `${OPP.The} took the ${cardName(before.discard.at(-1)!)}`;
     case 'Bloom':
       return `${BLOOM.oppDid(a.cards.length)} (${a.cards.map(name).join(', ')})${tail}`;
+    case 'MegaBomb':
+      return `${OPP.The} launched a Mega Bomb at ${hn(a.target)}${tail}`;
     case 'Sprout':
       return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':

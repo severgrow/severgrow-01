@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   knockEnabled: false,
   board: null,
   reshuffleDiscard: false,
+  deckFinalTurns: true,
 });
 
 /** Lowest allowed maxRank (v0.4). */
@@ -63,6 +64,7 @@ const BOOLEAN_KEYS = [
   'rotEnabled',
   'knockEnabled',
   'reshuffleDiscard',
+  'deckFinalTurns',
 ] as const;
 
 
