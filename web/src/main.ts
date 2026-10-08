@@ -109,6 +109,7 @@ const V3_MODE = FEATURES.v3 && (() => {
   }
 })();
 const v3 = V3_MODE ? await Promise.all([import('./ui/skin/SkinBoardView.js'), import('./skins/forestVolcanoV3.js')]) : null;
+const defaultArt = IS_TEST2 && !V3_MODE ? await import('./ui/defaultArtBoard.js') : null;
 if (V3_MODE) document.documentElement.classList.add('design-v3');
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
@@ -229,7 +230,9 @@ let cardRects = new Map<number, DOMRect>();
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
-const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3) : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
+const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3)
+  : defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
+  : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
 // the menu's V3 option: switches the look and reloads (the game in progress is saved)
 if (FEATURES.v3) {
   const row = document.createElement('div');
@@ -284,7 +287,7 @@ function applyTheme() {
   root.style.setProperty('--m-rim', String(lk.rim));
   root.classList.toggle('mat-textures', lk.textures);
   root.classList.toggle('mat-motion', lk.motion);
-  if (lk.textures) warmPhotos();
+  if (lk.textures && !IS_TEST2) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
   // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
@@ -2187,7 +2190,7 @@ function applyLayout() {
     setOrient(l.orient);
     setRotation(rot);
     setPixelGrid(grid);
-    if (familyChanged) photosForOrientation();
+    if (familyChanged && !IS_TEST2) photosForOrientation();
     if (session) {
       board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
       lastAmbBoard = null;
@@ -4012,7 +4015,7 @@ document.addEventListener('keydown', (e) => {
 await mountPlayerEnhancements();
 fillIcons();
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
-onPhotosReady(() => {
+if (!IS_TEST2) onPhotosReady(() => {
   lastBoard = null;
   if (!busy()) render();
 });
