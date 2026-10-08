@@ -174,5 +174,19 @@ try {
   await branch.locator('#smart-selector button[data-action^="clear:"]').click();
   check(await branch.locator('#moves .draw-clear').count()===0,'Bloom: Clear executes existing action');
   await branch.close();
+  const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
+  await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
+  await cameraPage.goto(`${BASE}?seed=1`); await cameraPage.waitForSelector('#deck.ready');
+  const board=await cameraPage.locator('#board-wrap').boundingBox();
+  check(!!board,'Camera: board has a visible viewport');
+  if(board) { await cameraPage.mouse.move(board.x+board.width/2,board.y+board.height/2); await cameraPage.mouse.wheel(0,-600); }
+  await cameraPage.waitForFunction(()=>!(document.querySelector('.cam-whole') as HTMLButtonElement).hidden);
+  check(!await cameraPage.locator('.cam-whole').isVisible(),'Camera: no extra top-screen button');
+  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Whole map','Camera: Whole map enters the context slot after manual zoom');
+  await cameraPage.locator('#smart-context').click();
+  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')==='Back to play','Camera: Back to play replaces Whole map in the same slot');
+  await cameraPage.locator('#smart-context').click();
+  check(await cameraPage.locator('#smart-context').getAttribute('aria-label')!=='Back to play','Camera: context action restores play framing');
+  await cameraPage.close();
   console.log(`${checks} smart cockpit checks passed; screenshots: ${dir}`);
 } finally { await browser.close(); if(server) await new Promise<void>(resolve=>server.httpServer.close(()=>resolve())); }

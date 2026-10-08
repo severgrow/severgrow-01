@@ -8,6 +8,8 @@ const ICONS: Record<string, string> = {
   clear: '<path d="M5 7h14M9 7V5h6v2m2 0-.7 12H7.7L7 7m3 4v5m4-5v5"/>',
   reverse: '<path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/>',
   previous: '<path d="m14.5 5-7 7 7 7"/>',
+  back: '<path d="m14.5 5-7 7 7 7"/>',
+  whole: '<path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/>',
   next: '<path d="m9.5 5 7 7-7 7"/>',
   bloom: '<path d="M12 12c-3-4-3-7 0-8 3 1 3 4 0 8Zm0 0c4-3 7-3 8 0-1 3-4 3-8 0Zm0 0c3 4 3 7 0 8-3-1-3-4 0-8Zm0 0c-4 3-7 3-8 0 1-3 4-3 8 0Z"/>',
   continue: '<path d="m8 5 8 7-8 7"/>',
@@ -20,11 +22,12 @@ const actionKind = (button: HTMLButtonElement) => button.matches('[data-kind],.b
   : button.matches('.list-prev') ? 'previous' : button.matches('.list-next') ? 'next'
   : button.matches('.cancel') ? 'cancel' : button.matches('.test2-skip,.end') ? 'skip'
   : button.matches('.empty-continue') ? 'continue' : button.matches('.primary') ? 'confirm' : 'continue';
-const priority: Record<string, number> = { clear: 0, confirm: 1, cancel: 2, bloom: 3, reverse: 4, next: 5, previous: 6, continue: 7, skip: 8 };
+const priority: Record<string, number> = { back: -1, clear: 0, confirm: 1, cancel: 2, bloom: 3, reverse: 4, next: 5, previous: 6, continue: 7, skip: 8, whole: 9 };
 
 export const SMART_COCKPIT_CSS = `
 html.test2-information #step-cue { display:none !important; }
 html.test2-information #tool-skip { display:none !important; }
+html.test2-information .cam-whole { display:none !important; }
 html.test2-information #test2-box {
   --hardware-edge:inset 0 1px rgba(226,218,191,.10),inset 1px 0 rgba(225,212,180,.035),inset -1px 0 rgba(225,212,180,.03),inset 0 -2px rgba(0,0,0,.48);
   --box-tools:calc(3 * var(--control-size) + 2 * var(--control-gap));
@@ -336,12 +339,15 @@ export function mountSmartCockpit() {
       const skip = document.getElementById('tool-skip') as HTMLButtonElement;
       items.push(skip);
     }
+    const camera = document.querySelector<HTMLButtonElement>('.cam-whole');
+    if (camera && !camera.hidden) items.push(camera);
     if (document.getElementById('confirm')?.hidden === false) {
       items.push(document.getElementById('confirm-play') as HTMLButtonElement,document.getElementById('confirm-cancel') as HTMLButtonElement);
     }
     return items.filter(button => !button.closest('[hidden]') || button.closest('.bloom-options'))
       .map((button,index) => {
-        const kind = button.id === 'tool-skip' ? 'skip' : button.id === 'confirm-play' ? 'confirm' : button.id === 'confirm-cancel' ? 'cancel' : actionKind(button);
+        const kind = button.matches('.cam-whole') ? button.textContent?.trim() === 'Back to play' ? 'back' : 'whole'
+          : button.id === 'tool-skip' ? 'skip' : button.id === 'confirm-play' ? 'confirm' : button.id === 'confirm-cancel' ? 'cancel' : actionKind(button);
         const label = button.getAttribute('aria-label') || button.title || button.textContent?.trim() || kind;
         const key = `${kind}:${button.dataset.kind ?? ''}:${label}`;
         return { key,label,icon:kind,priority:(button.id === 'tool-skip' ? -2 : priority[kind] ?? 9)+index/100,source:button };

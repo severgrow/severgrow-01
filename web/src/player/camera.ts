@@ -186,6 +186,14 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   };
   /** The whole map is in the window. */
   const whole = () => !!view && !!base && view.w >= base.w - 0.5 && winOf(view).h >= base.h - 0.5;
+  const syncWholeAction = (available: boolean) => {
+    const hidden = !available;
+    const label = wholeOn ? 'Back to play' : 'Whole map';
+    const changed = pill.hidden !== hidden || pill.textContent !== label;
+    pill.hidden = hidden;
+    pill.textContent = label;
+    if (changed) hooks.changed();
+  };
   /** Zoomed in: the map is clipped to its own area (never over the header); on phones it runs on
    *  under the cards, faded (cam-under: some of the map is behind the cards now). */
   const clip = () => {
@@ -275,8 +283,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
   const frame = (force = false) => {
     const t = target();
     if (!t) return;
-    pill.hidden = !(wholeOn || !t.whole);
-    pill.textContent = wholeOn ? 'Back to play' : 'Whole map';
+    syncWholeAction(wholeOn || !t.whole);
     if (!force && view && Math.abs(view.x - t.rect.x) + Math.abs(view.y - t.rect.y) + Math.abs(view.w - t.rect.w) + Math.abs(view.h - t.rect.h) < 0.5) return settle();
     show(t.rect);
   };
@@ -316,6 +323,7 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     clip();
     arrows.replaceChildren();
     auto = false;
+    syncWholeAction(!whole());
   };
   const centre = () => {
     const a = [...pts.values()];

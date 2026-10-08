@@ -1,5 +1,41 @@
 // Approved player layout and guidance; no Lab panel or Watch tools.
 export const PLAYER_CSS = `
+/* The game rests on darker felt; the menu keeps its own backdrop. */
+html.test2-information:has(#game:not([hidden])) #texture { filter:brightness(.92); }
+html.test2-information:has(#game:not([hidden])) #texture::before {
+  display:block; opacity:.20;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .66  0 0 0 0 .64  0 0 0 0 .59  0 0 0 .52 -.21'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html.test2-information #game::before {
+  content:''; position:fixed; inset:-12% -25%; pointer-events:none; z-index:8;
+  background:radial-gradient(ellipse 43% 55% at 50% 48%,rgba(255,219,164,.11),transparent 78%);
+  mix-blend-mode:screen; opacity:0; animation:futasaku-warm-pass 32s ease-in-out infinite;
+}
+@keyframes futasaku-warm-pass {
+  0%,36%,100% { opacity:0; transform:translate3d(-5%,0,0); }
+  53% { opacity:.32; transform:translate3d(0,0,0); }
+  70% { opacity:0; transform:translate3d(5%,0,0); }
+}
+html.test2-information #game .play { position:relative; isolation:isolate; }
+html.test2-information #game .play::before {
+  content:''; position:absolute; inset:3% 2% 0; pointer-events:none; z-index:0;
+  background:radial-gradient(ellipse 55% 58% at 48% 57%,rgba(0,0,0,.43),rgba(0,0,0,.14) 58%,transparent 84%);
+  transform:translateY(22px); filter:blur(14px);
+}
+html.test2-information #game .board-wrap,
+html.test2-information #game .dock { z-index:1; }
+/* A quiet reflected edge beneath the map and short contact shadows beneath the hardware. */
+html.test2-information #game .board-wrap::before {
+  content:''; position:absolute; inset:7% 4% 8%; pointer-events:none;
+  background:radial-gradient(ellipse 56% 52% at 50% 50%,rgba(242,213,169,.035),transparent 80%);
+}
+html.test2-information #game .dock::before {
+  content:''; position:absolute; inset:0 2% 13%; pointer-events:none;
+  background:radial-gradient(ellipse 27% 23% at 22% 27%,rgba(0,0,0,.26),transparent 85%),
+             radial-gradient(ellipse 28% 23% at 79% 27%,rgba(0,0,0,.24),transparent 85%);
+}
+@media (prefers-reduced-motion:reduce) { html.test2-information #game::before { animation:none; opacity:.025; transform:none; } }
+html.test2-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
 /* ---- desktop (side layout): the coach and first-time tips get the empty space above the
    piles, at full size, instead of a squeezed strip over the deck. Test copy only for now:
    on docs/LIST-TO-IMPLEMENT.md to bring to the main game. ---- */

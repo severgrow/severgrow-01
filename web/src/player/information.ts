@@ -236,7 +236,7 @@ html.test2-information .dock #test2-box .pile-meter-window {
 }
 html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 20px; }
 html.test2-information .dock #test2-box .pile-meter-face {
-  position: relative; display: grid; place-items: center; width: 100%;
+  position: relative; top:1px; display: grid; place-items: center; width: 100%;
   height: 10px; white-space: nowrap; font: inherit;
   text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
   background: transparent;

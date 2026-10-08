@@ -678,7 +678,7 @@ async function mountPlayerEnhancements() {
         if (session) render();
       });
     }));
-    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => {} });
+    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => smartCockpit?.sync() });
   }
   if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont()));
