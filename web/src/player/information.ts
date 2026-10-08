@@ -95,9 +95,6 @@ export const INFORMATION_CSS = `
 .test2-information .pile-label { display: none; }
 .test2-information #deck.coach-glow { box-shadow: none; }
 .test2-information #discard.test2-bloom-draw .pile-top { border-color: var(--c-gold); }
-.test2-information #discard.test2-bloom-draw .pile-card { box-shadow: 0 0 18px -4px color-mix(in srgb, var(--c-gold) 65%, transparent); }
-.test2-information #discard.test2-bloom-draw .gd-halo { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--c-gold) 70%, transparent), 0 0 24px 2px color-mix(in srgb, var(--c-gold) 60%, transparent); }
-.test2-information #discard.test2-bloom-draw .gd-ring { border-color: color-mix(in srgb, var(--c-gold) 75%, transparent); }
 .test2-information #hand .card.test2-throw-picked {
   filter: grayscale(1) !important; border-color: #dedede; box-shadow: none !important;
   transform: perspective(500px) rotate(var(--rot, 0deg)) translateY(calc(var(--dy, 0px) - 18px)) scale(1.31);
@@ -207,9 +204,6 @@ html.test2-information .dock #test2-box .gd-ring { display: none !important; }
 html.test2-information .dock #test2-box .gd-halo {
   box-shadow: 0 0 24px 2px rgba(var(--gd-cream), .72);
 }
-html.test2-information .dock #test2-box #discard.test2-bloom-draw .gd-halo {
-  box-shadow: 0 0 24px 2px color-mix(in srgb, var(--c-gold) 60%, transparent);
-}
 html.test2-information.reduce-motion .dock #test2-box > .piles > .pile.ready { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   html.test2-information .dock #test2-box > .piles > .pile.ready { animation: none; }
@@ -226,17 +220,12 @@ html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-cou
 html.test2-information .dock #test2-box .pile-count.pile-meter {
   display: flex; align-items: center; justify-content: center; gap: 0; position: relative;
   width: 34px; min-width: 34px; height: 19px; padding: 1px 3px;
-  border: 1px solid rgba(171,165,144,.64); border-radius: 2px 3px 3px 2px;
-  background: var(--hardware-surface);
+  border: 0; border-radius: 3px;
+  background: #111312 url('./hardware/counter-shell.webp') center / 100% 100% no-repeat;
   color: #e8e1cd;
-  box-shadow: inset 0 1px 1px rgba(241,233,207,.16), inset 0 -2px 2px #050606, 0 1px 2px rgba(0,0,0,.55);
+  box-shadow: none;
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
-}
-html.test2-information .dock #test2-box .pile-count.pile-meter::after {
-  content: ''; position: absolute; inset: 1px 2px; border-radius: 2px;
-  background: linear-gradient(180deg,rgba(255,246,219,.08),transparent 35%,rgba(0,0,0,.16) 76%,rgba(255,244,215,.035));
-  box-shadow: inset 0 0 3px rgba(0,0,0,.5); pointer-events: none;
 }
 html.test2-information .dock #test2-box .pile-meter-window {
   position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px;

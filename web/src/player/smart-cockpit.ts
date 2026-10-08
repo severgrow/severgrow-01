@@ -49,18 +49,17 @@ html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .han
   min-width:var(--control-size); min-height:var(--control-size); max-width:var(--control-size);
   margin:0; padding:0; position:relative; inset:auto; flex:none;
   display:grid; place-items:center; box-sizing:border-box;
-  border:1px solid rgba(201,198,186,.33); border-radius:12px;
-  background:var(--hardware-surface);
+  border:0; border-radius:12px;
+  background:#121413 url('./hardware/button-shell.webp') center / 100% 100% no-repeat;
   color:var(--control-ivory); opacity:1;
-  box-shadow:var(--hardware-edge),0 2px 4px rgba(0,0,0,.38);
+  box-shadow:none;
   touch-action:manipulation;
 }
 html.test2-information #test2-box #smart-context { grid-column:3; grid-row:1; cursor:pointer; }
 html.test2-information #test2-box #smart-context svg { width:21px; height:21px; }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { opacity:.94; }
 html.test2-information #test2-box #smart-context:is(:hover,:focus-visible,[aria-expanded='true']) {
-  border-color:var(--control-amber); color:#fff1cf;
-  box-shadow:inset 0 1px rgba(255,246,215,.14),inset 0 -2px rgba(0,0,0,.48),0 0 0 1px rgba(196,150,88,.3),0 0 12px rgba(196,150,88,.18);
+  color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
 }
 html.test2-information #test2-box #smart-context:active:not(:disabled) { transform:translateY(1px) scale(.98); }
 html.test2-information #test2-box #smart-context:disabled { opacity:.38; cursor:default; }
@@ -68,14 +67,13 @@ html.test2-information #test2-box #test2-actions > .hand-slot:disabled { opacity
 html.test2-information #test2-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #test2-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
-  padding:4px; box-sizing:border-box; border:1px solid rgba(201,198,186,.27); border-radius:12px;
-  background:var(--hardware-surface);
-  box-shadow:var(--hardware-edge),0 2px 4px rgba(0,0,0,.38);
+  padding:11px 12px; box-sizing:border-box; border:0; border-radius:12px;
+  background:#121413 url('./hardware/display-shell.webp') center / 100% 100% no-repeat;
+  box-shadow:none;
 }
 html.test2-information #test2-box #smart-led-window {
-  display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0 5px; box-sizing:border-box; position:relative;
-  border-radius:7px; background:linear-gradient(180deg,#090c0b,#11140f 60%,#080a09);
-  box-shadow:inset 0 1px 3px #030504,inset 0 0 0 1px rgba(199,164,104,.16),inset 0 0 10px rgba(192,125,45,.055);
+  display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0; box-sizing:border-box; position:relative;
+  border-radius:3px; background:#090c0b; box-shadow:none;
 }
 html.test2-information #test2-box #smart-led-text {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
@@ -83,7 +81,7 @@ html.test2-information #test2-box #smart-led-text {
 html.test2-information #test2-box #smart-led-cells {
   display:block; flex:none; width:auto; height:20px;
 }
-html.test2-information #smart-led-cells.scrolling { position:absolute; left:5px; }
+html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { 0%,12% { transform:translateX(0); } 88%,100% { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 html.test2-information #smart-selector {
@@ -118,13 +116,12 @@ html.test2-information #test2-box > #smart-bloom {
 html.test2-information #test2-box > #smart-bloom[hidden] { display:none; }
 html.test2-information #smart-bloom-button {
   display:grid; place-items:center; position:relative; width:100%; min-width:44px; height:var(--control-size);
-  border:1px solid rgba(201,198,186,.24); border-radius:12px; padding:3px;
-  background:var(--hardware-surface); color:var(--control-ivory); cursor:pointer;
-  box-shadow:var(--hardware-edge),0 2px 4px rgba(0,0,0,.38),0 0 10px rgba(207,170,96,.12);
+  border:0; border-radius:0; padding:3px;
+  background:none; color:var(--control-ivory); cursor:pointer; box-shadow:none;
   touch-action:manipulation;
 }
 html.test2-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expanded='true']) {
-  border-color:var(--control-amber); box-shadow:var(--hardware-edge),0 0 0 1px rgba(196,150,88,.25),0 0 12px rgba(196,150,88,.18);
+  filter:brightness(1.16);
 }
 html.test2-information #smart-bloom-button:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #smart-bloom-button:active { transform:translateY(1px) scale(.98); }
@@ -157,21 +154,16 @@ html.test2-information .dock #test2-box #deck[data-layers='2'] { --pile-front-of
 html.test2-information .dock #test2-box #deck:is([data-layers='3'],[data-layers='4']) { --pile-front-offset:4px; }
 html.test2-information .dock #test2-box #deck .pile-meta .pile-count { left:calc(50% + var(--pile-front-offset,0px)); transform:translateX(-50%); }
 html.test2-information .dock #test2-box #discard .pile-meta .pile-count { left:50%; transform:translateX(-50%); }
-html.test2-information .dock #test2-box .pile-count.pile-meter {
-  background:var(--hardware-surface);
-  border-color:rgba(189,178,151,.7);
-  box-shadow:var(--hardware-edge),0 1px 2px rgba(0,0,0,.55);
-}
 html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) { box-shadow:0 0 0 1px rgba(119,194,115,.4),0 0 9px 1px rgba(88,171,86,.4),0 5px 12px rgba(5,16,9,.30); }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5),0 5px 12px rgba(20,11,10,.34); }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5) !important; }
-/* The discard draw cue belongs to its printed top card, never to a second slot. */
-html.test2-information[data-step='draw'] #discard .pile-card { box-shadow:none !important; }
-html.test2-information[data-step='draw'] #discard .gd-fx { display:none !important; }
+/* Draw enlarges both piles without a second halo behind either card. */
+html.test2-information[data-step='draw'] :is(#deck,#discard) .pile-card { box-shadow:none !important; }
+html.test2-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.test2-information[data-step='draw'] #discard.ready:not(.test2-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
 html.test2-information[data-step='draw'] #discard.test2-bloom-draw .pile-top.card {
-  transform:translateY(-3px); border-color:rgba(209,172,105,.8);
-  box-shadow:0 0 0 1px rgba(209,172,105,.34),0 0 9px 1px rgba(205,162,87,.21),0 2px 4px rgba(0,0,0,.45);
+  transform:translateY(-3px); border-color:rgba(209,172,105,.8); border-radius:var(--radius,6px);
+  box-shadow:0 0 0 1px rgba(209,172,105,.45),0 0 7px rgba(205,162,87,.30),0 2px 4px rgba(0,0,0,.45);
   transition:transform .2s ease-out,border-color .2s ease-out,box-shadow .2s ease-out;
 }
 /* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
@@ -239,7 +231,8 @@ export function mountSmartCockpit() {
     for (const button of moves.querySelectorAll<HTMLButtonElement>('button[data-kind]')) {
       if (!button.disabled && button.dataset.kind && !byKind.has(button.dataset.kind)) byKind.set(button.dataset.kind,button);
     }
-    bloomSources = [...byKind.values()];
+    const highestRank = (button: HTMLButtonElement) => Math.max(0,...[...button.querySelectorAll<HTMLElement>('.test2-mini-card .c-num')].map(node=>Number(node.textContent?.trim())||0));
+    bloomSources = [...byKind.values()].sort((a,b)=>highestRank(b)-highestRank(a));
     const next = bloomSources.map(button => `${button.dataset.kind}:${button.getAttribute('aria-label')}`).join('|');
     bloom.hidden = bloomSources.length === 0;
     if (next === bloomSignature) return;
@@ -250,8 +243,7 @@ export function mountSmartCockpit() {
     bloomButton.replaceChildren(...(face ? [face] : [document.createTextNode('BLOOM')]),bloomCount);
     bloomButton.setAttribute('aria-label',bloomSources.length === 1 ? first.getAttribute('aria-label') || 'Bloom' : `${bloomSources.length} Bloom combinations`);
     bloomButton.setAttribute('aria-haspopup',bloomSources.length > 1 ? 'menu' : 'false');
-    bloomCount.hidden = bloomSources.length < 2;
-    bloomCount.textContent = bloomSources.length > 1 ? String(bloomSources.length) : '';
+    bloomCount.hidden = true; // The visible control is the recipe cards alone.
     bloomSelector.replaceChildren(...bloomSources.map((button,index) => {
       const choice = document.createElement('button'); choice.type = 'button'; choice.setAttribute('role','menuitem');
       choice.setAttribute('aria-label',button.getAttribute('aria-label') || `Bloom combination ${index+1}`);

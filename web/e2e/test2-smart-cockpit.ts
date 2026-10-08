@@ -48,12 +48,13 @@ try {
     check(await page.locator('#smart-led-text').innerText()==='DRAW',`${name}: immediate Draw LED`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
     const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!).backgroundImage));
-    check(materials.every(value=>value.startsWith(materials[0]!.slice(0,140))),`${name}: button, meter and display share the visible worn finish`);
+    check(materials[0]!.includes('button-shell.webp')&&materials[1]!.includes('counter-shell.webp')&&materials[2]!.includes('display-shell.webp'),`${name}: each coded control uses its fitted hardware shell`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
     check(await page.locator('#discard.test2-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
     check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
+    check(await page.locator('#deck .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no draw halo behind the deck`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-draw.png`});
     const x=start.piles[0]!.pile.x;
     for(let i=0;i<4;i++) {
@@ -143,6 +144,11 @@ try {
   await branch.goto(`${BASE}?seed=4`); await branch.waitForSelector('#deck.ready');
   await branch.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(branch,'ACT');
   check(await branch.locator('#smart-bloom-selector button').count()>1,'Bloom: multiple recipes are listed separately');
+  check(await branch.locator('#smart-bloom-button').evaluate(el=>getComputedStyle(el).backgroundImage)==='none','Bloom: centre recipe has no hardware frame');
+  check(await branch.locator('#smart-bloom-button').evaluate(el=>{
+    const rank=(node:Element)=>Math.max(...[...node.querySelectorAll('.c-num')].map(n=>Number(n.textContent)||0));
+    return rank(el)===Math.max(...[...document.querySelectorAll('#smart-bloom-selector button')].map(rank));
+  }),'Bloom: centre shows a recipe containing the highest card rank');
   await branch.locator('#smart-bloom-button').click();
   check(await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: compact recipe drawer opens');
   await branch.screenshot({path:`${dir}/390x844-bloom-selector.png`});
