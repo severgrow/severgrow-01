@@ -50,11 +50,17 @@ html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .han
   margin:0; padding:0; position:relative; inset:auto; flex:none;
   display:grid; place-items:center; box-sizing:border-box;
   border:0; border-radius:12px;
-  background:#121413 url('./hardware/button-shell.webp') center / 100% 100% no-repeat;
+  background:#111312;
   color:var(--control-ivory); opacity:1;
   box-shadow:none;
   touch-action:manipulation;
 }
+html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot)::before {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:url('./hardware/button-shell.webp') center / 100% 100% no-repeat;
+  filter:brightness(1.38); z-index:0;
+}
+html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { position:relative; z-index:1; }
 html.test2-information #test2-box #smart-context { grid-column:3; grid-row:1; cursor:pointer; }
 html.test2-information #test2-box #smart-context svg { width:21px; height:21px; }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { opacity:.94; }
@@ -62,24 +68,30 @@ html.test2-information #test2-box #smart-context:is(:hover,:focus-visible,[aria-
   color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
 }
 html.test2-information #test2-box #smart-context:active:not(:disabled) { transform:translateY(1px) scale(.98); }
-html.test2-information #test2-box #smart-context:disabled { opacity:.38; cursor:default; }
-html.test2-information #test2-box #test2-actions > .hand-slot:disabled { opacity:.54; }
+html.test2-information #test2-box #smart-context:disabled { opacity:.68; cursor:default; }
+html.test2-information #test2-box #smart-context:disabled svg { opacity:.45; }
+html.test2-information #test2-box #test2-actions > .hand-slot:disabled { opacity:.72; }
+html.test2-information #test2-box #test2-actions > .hand-slot:disabled :is(svg,.i) { opacity:.48; }
 html.test2-information #test2-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #test2-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
-  padding:11px 12px; box-sizing:border-box; border:0; border-radius:12px;
-  background:#121413 url('./hardware/display-shell.webp') center / 100% 100% no-repeat;
-  box-shadow:none;
+  padding:9px 10px; box-sizing:border-box; border:0; border-radius:12px;
+  background:#111312; box-shadow:none; position:relative;
+}
+html.test2-information #test2-box #smart-led::before {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:url('./hardware/display-shell.webp') center / 100% 100% no-repeat;
+  filter:brightness(1.38); z-index:0;
 }
 html.test2-information #test2-box #smart-led-window {
   display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0; box-sizing:border-box; position:relative;
-  border-radius:3px; background:#090c0b; box-shadow:none;
+  border-radius:4px; background:#090c0b; box-shadow:none; z-index:1;
 }
 html.test2-information #test2-box #smart-led-text {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
 }
 html.test2-information #test2-box #smart-led-cells {
-  display:block; flex:none; width:auto; height:20px;
+  display:block; flex:none; width:auto; height:24px;
 }
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { 0%,12% { transform:translateX(0); } 88%,100% { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
@@ -259,7 +271,7 @@ export function mountSmartCockpit() {
     cells.classList.remove('scrolling');
     requestAnimationFrame(() => {
       if (value !== lastText) return;
-      const scrolling = ledMessageWidth(value) > windowEl.clientWidth - 10;
+      const scrolling = ledMessageWidth(value) > windowEl.clientWidth - 2;
       drawLedCells(cells,value,scrolling);
       if (scrolling) {
         const travel = ledMessageWidth(`${value}   •   `);

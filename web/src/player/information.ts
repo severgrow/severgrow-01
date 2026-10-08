@@ -218,27 +218,29 @@ html.test2-information .dock #test2-box .pile-meta {
 }
 html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 auto auto 0; height: 18px; }
 html.test2-information .dock #test2-box .pile-count.pile-meter {
-  display: flex; align-items: center; justify-content: center; gap: 0; position: relative;
-  width: 34px; min-width: 34px; height: 19px; padding: 1px 3px;
+  display: flex; align-items: center; justify-content: center; gap: 3px; position: relative;
+  width: 34px; min-width: 34px; height: 18px; padding: 1px 0;
   border: 0; border-radius: 3px;
-  background: #111312 url('./hardware/counter-shell.webp') center / 100% 100% no-repeat;
-  color: #e8e1cd;
+  background: #111312; color: #e8e1cd;
   box-shadow: none;
   font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
-html.test2-information .dock #test2-box .pile-meter-window {
-  position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px;
-  overflow: hidden; border-right: 1px solid rgba(181,173,146,.23);
-  box-shadow: inset 0 0 2px rgba(0,0,0,.65);
+html.test2-information .dock #test2-box .pile-count.pile-meter::before {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:url('./hardware/counter-shell.webp') center / 100% 100% no-repeat;
+  filter:brightness(1.38); z-index:0;
 }
-html.test2-information .dock #test2-box .pile-meter-window:last-child { border-right: 0; }
+html.test2-information .dock #test2-box .pile-meter-window {
+  position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px; z-index:1;
+  overflow: hidden; border-right: 0; box-shadow: none;
+}
 html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 30px; }
 html.test2-information .dock #test2-box .pile-meter-face {
   position: relative; display: grid; place-items: center; width: 100%;
   height: 15px; white-space: nowrap; font: inherit;
   text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
-  background: linear-gradient(180deg,rgba(197,187,153,.1),transparent 35%,rgba(0,0,0,.08) 80%);
+  background: transparent;
 }
 html.test2-information .dock #test2-box #deck.low .pile-meter { color: var(--c-gold); }
 html.test2-information .dock #test2-box > .moves {
@@ -369,10 +371,10 @@ html.test2-information .dock #test2-box #moves > :is(.test2-skip,.cancel,.empty-
 html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control) {
   display: grid; place-items: center; box-sizing: border-box;
   width: var(--control-size); height: var(--control-size); min-width: var(--control-size); min-height: var(--control-size);
-  margin: 0; padding: 0; border: 1px solid rgba(201,198,186,.33); border-radius: 12px;
-  background: var(--hardware-surface);
+  margin: 0; padding: 0; border: 0; border-radius: 12px;
+  background: #111312;
   color: var(--control-ivory); opacity: 1;
-  box-shadow: inset 0 1px rgba(255,250,236,.07), inset 0 -2px rgba(0,0,0,.46), 0 2px 4px rgba(0,0,0,.38);
+  box-shadow: none;
   text-decoration: none; touch-action: manipulation;
   transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
 }
@@ -380,8 +382,7 @@ html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves 
   display: block; width: 21px; height: 21px;
 }
 html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):is(:hover,:focus-visible,[aria-pressed='true'],.on) {
-  border-color: var(--control-amber); color: #fff1cf;
-  box-shadow: inset 0 1px rgba(255,246,215,.14), inset 0 -2px rgba(0,0,0,.48), 0 0 0 1px rgba(196,150,88,.3), 0 0 12px rgba(196,150,88,.18);
+  color: #fff1cf; box-shadow: 0 0 9px rgba(196,150,88,.22);
 }
 html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):focus-visible {
   outline: 2px solid #ffe1a7; outline-offset: 2px;
@@ -394,11 +395,10 @@ html.test2-information .dock #test2-box #moves .test2-skip.test2-hardware-contro
 }
 html.test2-information .dock #test2-box #moves .test2-control-clear { color: #d38c7c; }
 html.test2-information .dock #test2-box #moves .test2-control-clear:is(:hover,:focus-visible) {
-  border-color: var(--control-ember); color: #ed9b87;
-  box-shadow: inset 0 1px rgba(255,246,215,.1), 0 0 0 1px rgba(201,110,92,.28), 0 0 12px rgba(201,110,92,.14);
+  color: #ed9b87; box-shadow: 0 0 9px rgba(201,110,92,.2);
 }
 html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):disabled {
-  opacity: .38; filter: grayscale(1); box-shadow: inset 0 1px rgba(255,255,255,.04), inset 0 -2px rgba(0,0,0,.4);
+  opacity: .68;
 }
 html.test2-information .dock #test2-box #moves .bloom-options .test2-hardware-control {
   display: inline-grid; vertical-align: middle; margin: 3px;

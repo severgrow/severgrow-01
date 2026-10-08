@@ -14,6 +14,7 @@ const dir = '/tmp/futasaku-smart-cockpit'; mkdirSync(dir,{recursive:true});
 let checks = 0;
 const check = (value:unknown,label:string) => { assert(value,label); checks++; };
 const waitPhase = (page:Page,value:string) => page.waitForFunction(want => (window as any).__severgrow?.state().phase===want && !(window as any).__severgrow.busy(),value);
+const near=(a:number,b:number)=>Math.abs(a-b)<.7;
 const rects = (page:Page) => page.evaluate(() => {
   const r = (id:string) => document.getElementById(id)!.getBoundingClientRect();
   const panel=r('smart-panel'), led=r('smart-led'), context=r('smart-context');
@@ -22,9 +23,9 @@ const rects = (page:Page) => page.evaluate(() => {
   return { panel,led,context,undo,tips,sort,piles,box:r('test2-box') };
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
-  const near=(a:number,b:number)=>Math.abs(a-b)<.7;
   check(near(r.led.y,r.context.y)&&near(r.undo.y,r.tips.y)&&near(r.tips.y,r.sort.y),`${label}: exactly two aligned rows`);
   check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
+  check(near(r.led.width,92)&&near(r.led.height,44)&&near(r.context.width,44)&&near(r.context.height,44),`${label}: generated shells keep the original outer footprints`);
   check([r.context,r.undo,r.tips,r.sort].every(b=>b.width>=44&&b.height>=44),`${label}: four 44px targets`);
   check(near(r.context.x,r.sort.x)&&near(r.led.x,r.undo.x)&&near(r.led.right,r.tips.right),`${label}: fixed three-column grid`);
   check(r.piles.every(({pile,count,frontOffset})=>near(pile.x+pile.width/2+frontOffset*pile.width/50,count.x+count.width/2)),`${label}: meters centred under visible top cards`);
@@ -47,8 +48,9 @@ try {
     let start=await rects(page); aligned(start,`${name} Draw`);
     check(await page.locator('#smart-led-text').innerText()==='DRAW',`${name}: immediate Draw LED`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
-    const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!).backgroundImage));
+    const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!,'::before').backgroundImage));
     check(materials[0]!.includes('button-shell.webp')&&materials[1]!.includes('counter-shell.webp')&&materials[2]!.includes('display-shell.webp'),`${name}: each coded control uses its fitted hardware shell`);
+    check(await page.locator('#smart-led-cells').evaluate(el=>el.getBoundingClientRect().height)===24,`${name}: LED uses the enlarged full-height glyph canvas`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
@@ -65,6 +67,9 @@ try {
     }
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(page,'ACT');
     const grow=await rects(page);aligned(grow,`${name} Grow`);
+    check(await page.locator('#deck-count,#discard-count').evaluateAll(nodes=>nodes.every(node=>{
+      const style=getComputedStyle(node);return style.width==='34px'&&style.height==='18px';
+    })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);
     check(await page.locator('#smart-led-text').innerText()==='GROW OR SKIP',`${name}: immediate Grow LED`);
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
     check(!await page.locator('#smart-context').isDisabled(),`${name}: Skip in context slot`);
@@ -72,6 +77,7 @@ try {
     await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
     check(await page.locator('#smart-led-text').innerText()==='THROW',`${name}: immediate Throw LED`);
+    check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-throw.png`});
@@ -135,8 +141,8 @@ try {
   await target.evaluate((el,position)=>el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:position.x,clientY:position.y,pointerType:'touch'})),point);
   await wells.waitForTimeout(220);
   const awake=Number(await target.evaluate(el=>getComputedStyle(el).fillOpacity));
-  const near=await target.evaluate(el=>el.style.getPropertyValue('--near'));
-  check(awake>resting,`Grow: proximity strengthens the same receptive-well treatment (${resting} → ${awake}; near ${near})`);
+  const proximity=await target.evaluate(el=>el.style.getPropertyValue('--near'));
+  check(awake>resting,`Grow: proximity strengthens the same receptive-well treatment (${resting} → ${awake}; near ${proximity})`);
   await wells.screenshot({path:`${dir}/390x844-legal-wells.png`});
   await wells.close();
   const branch=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
