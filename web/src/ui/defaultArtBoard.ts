@@ -11,7 +11,9 @@ import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
 
-const ART_SIZE = 62;
+// The source paintings include transparent breathing room. These sizes cover
+// the whole hex, including its corners, without changing the board geometry.
+const artSize = (index: number) => index < 9 ? 80 : 76;
 const v3 = (path: string) => new URL(`design-v3/lo/${path}`,
   typeof document === 'undefined' ? 'http://localhost/' : document.baseURI).href;
 const groundUrl = v3('textures/empty_ground_01.webp');
@@ -28,18 +30,34 @@ if (typeof Image !== 'undefined') {
   }
 }
 
-/** The artist's assets are stored point-up; rotate them with the board. */
-const artAngle = () => {
+/** The source's upper-right edge becomes the board hex's bottom edge. */
+const artAngle = (index: number) => {
   const axis = toScreen(1, 0);
-  return Math.atan2(axis.y, axis.x) * 180 / Math.PI;
+  // Meadow/homes were cut from flat-top art and turned -90 degrees; Ash was
+  // already point-up. The portrait board's axis is -30 degrees, so these
+  // offsets put each original upper-right edge on the lower horizontal side.
+  return Math.atan2(axis.y, axis.x) * 180 / Math.PI + (index < 9 || index >= 18 ? -120 : 180);
 };
 
 export class DefaultArtBoardView extends BoardView {
   protected override usesWorldLayer() { return false; }
 
   private artCell(parent: SVGGElement, index: number) {
-    el('image', { href: DEFAULT_ART_SPRITES[index]!, x: -ART_SIZE / 2, y: -ART_SIZE / 2,
-      width: ART_SIZE, height: ART_SIZE, class: 'default-art-sprite' }, parent);
+    const size = artSize(index);
+    el('image', { href: DEFAULT_ART_SPRITES[index]!, x: -size / 2, y: -size / 2,
+      width: size, height: size, class: 'default-art-sprite' }, parent);
+  }
+
+  private artClip(key: string, local = false) {
+    const id = this.id(`default-art-clip-${local ? 'home-' : ''}${key.replace(',', '-')}`);
+    const defs = this.svg.querySelector('defs')!;
+    if (!defs.querySelector(`#${id}`)) {
+      const clip = el('clipPath', { id, clipPathUnits: 'userSpaceOnUse' }, defs);
+      // Slight overlap absorbs antialiasing at shared hex edges. The mask
+      // stays independent of the painting and never changes hit geometry.
+      el('path', { d: hexPath(local ? '0,0' : key, S * 1.055, 'flat') }, clip);
+    }
+    return this.url(`default-art-clip-${local ? 'home-' : ''}${key.replace(',', '-')}`);
   }
 
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
@@ -63,8 +81,10 @@ export class DefaultArtBoardView extends BoardView {
     const home = drawLandmark(this.layers.homes, player === 0 ? 'tree' : 'volcano', key,
       centerOf(key), getOrient(), materialsOf(this.paletteId).colors, this.look);
     home.querySelector('.lm-body')?.remove();
-    const art = el('g', { class: 'default-home-art', transform: `rotate(${artAngle().toFixed(2)})` }, home);
-    this.artCell(art, player === 0 ? 18 : 19);
+    const index = player === 0 ? 18 : 19;
+    const clipped = el('g', { class: 'default-home-art', 'clip-path': this.artClip(key, true) }, home);
+    const art = el('g', { transform: `rotate(${artAngle(index).toFixed(2)})` }, clipped);
+    this.artCell(art, index);
     const ring = home.querySelector('.lm-ring');
     if (ring) home.appendChild(ring);
     return home;
@@ -77,10 +97,12 @@ export class DefaultArtBoardView extends BoardView {
     // The separate garden/fortress home art fills its hex on the home layer.
     if (tile.root) return group;
     // The quiet colour beneath each cutout prevents a flash while its sprite decodes.
-    el('path', { d: hexPath(key, S * 1.015, 'flat'), fill: owner === 0 ? '#2e4025' : '#302c2c' }, group);
-    const art = el('g', { transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) rotate(${artAngle().toFixed(2)})` }, group);
+    el('path', { d: hexPath(key, S * 1.055, 'flat'), fill: owner === 0 ? '#2e4025' : '#302c2c' }, group);
+    const clipped = el('g', { 'clip-path': this.artClip(key) }, group);
     const variant = Math.floor(hash(`${key}:default-tile`) * 9);
-    this.artCell(art, owner * 9 + variant);
+    const index = owner * 9 + variant;
+    const art = el('g', { transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) rotate(${artAngle(index).toFixed(2)})` }, clipped);
+    this.artCell(art, index);
     if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
