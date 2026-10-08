@@ -684,7 +684,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     };
     if (width === 390 && height === 664) await evidence(page,'390x664-bloom-choices');
     await pick();
-    equal((await page.locator('#moves .test2-skip').innerText()).trim(),'Skip',`${label}: Bloom retains a short Skip button`);
+    check(await page.locator('#moves .test2-skip').evaluate(button => !!button.querySelector('svg') && !button.textContent?.trim() && button.getAttribute('aria-label')?.startsWith('Skip')),`${label}: Bloom retains an accessible icon-only Skip button`);
     check(await page.locator('#moves .test2-skip').isEnabled(),`${label}: subdued Skip remains usable`);
     equal(await page.locator('#hand .test2-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);

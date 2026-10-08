@@ -87,6 +87,8 @@ export const mountHelp = (hooks: HelpHooks) => {
   trigger.setAttribute('aria-haspopup', 'dialog');
   trigger.setAttribute('aria-controls', HELP_SHEET_ID);
   trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-label', 'Tips');
+  trigger.title = 'Tips';
   // Keep the existing controls and handlers; only their Test2 presentation moves.
   const actions = document.createElement('div');
   actions.id = 'test2-actions';

@@ -431,6 +431,68 @@ html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-
 }
 .test2-information.reduce-motion #step-cue { transition: none; }
 .test2-information.reduce-motion #step-cue .cue-text.cue-text { animation: none !important; }
+
+/* Shared cockpit hardware: a 44px touch target, compact matte face and quiet edge light. */
+html.test2-information #test2-box {
+  --control-size: 44px;
+  --control-gap: 4px;
+  --control-ivory: #f5edda;
+  --control-amber: #c49658;
+  --control-ember: #c96e5c;
+}
+html.test2-information .dock #test2-box #test2-actions {
+  width: calc(3 * var(--control-size) + 2 * var(--control-gap));
+  height: var(--control-size);
+  gap: var(--control-gap);
+}
+html.test2-information .dock #test2-box #test2-actions > .hand-slot {
+  width: var(--control-size); height: var(--control-size); flex-basis: var(--control-size);
+}
+html.test2-information .dock #test2-box #moves > :is(.test2-skip,.cancel,.empty-continue,.primary:not(.kind)).test2-hardware-control {
+  width: var(--control-size); min-width: var(--control-size); max-width: var(--control-size);
+  height: var(--control-size) !important; min-height: var(--control-size) !important;
+  padding: 0; justify-self: end;
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control) {
+  display: grid; place-items: center; box-sizing: border-box;
+  width: var(--control-size); height: var(--control-size); min-width: var(--control-size); min-height: var(--control-size);
+  margin: 0; padding: 0; border: 1px solid rgba(201,198,186,.33); border-radius: 12px;
+  background: linear-gradient(160deg,#292b29 0%,#1c1e1d 42%,#111313 100%);
+  color: var(--control-ivory); opacity: 1;
+  box-shadow: inset 0 1px rgba(255,250,236,.11), inset 0 -2px rgba(0,0,0,.46), 0 2px 4px rgba(0,0,0,.38);
+  text-decoration: none; touch-action: manipulation;
+  transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control) :is(svg,.i) {
+  display: block; width: 21px; height: 21px;
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):is(:hover,:focus-visible,[aria-pressed='true'],.on) {
+  border-color: var(--control-amber); color: #fff1cf;
+  box-shadow: inset 0 1px rgba(255,246,215,.14), inset 0 -2px rgba(0,0,0,.48), 0 0 0 1px rgba(196,150,88,.3), 0 0 12px rgba(196,150,88,.18);
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):focus-visible {
+  outline: 2px solid #ffe1a7; outline-offset: 2px;
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):active:not(:disabled) {
+  transform: translateY(1px) scale(.98);
+}
+html.test2-information .dock #test2-box #moves .test2-skip.test2-hardware-control {
+  color: #c4c1b7; opacity: .77;
+}
+html.test2-information .dock #test2-box #moves .test2-control-clear { color: #d38c7c; }
+html.test2-information .dock #test2-box #moves .test2-control-clear:is(:hover,:focus-visible) {
+  border-color: var(--control-ember); color: #ed9b87;
+  box-shadow: inset 0 1px rgba(255,246,215,.1), 0 0 0 1px rgba(201,110,92,.28), 0 0 12px rgba(201,110,92,.14);
+}
+html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control):disabled {
+  opacity: .38; filter: grayscale(1); box-shadow: inset 0 1px rgba(255,255,255,.04), inset 0 -2px rgba(0,0,0,.4);
+}
+html.test2-information .dock #test2-box #moves .bloom-options .test2-hardware-control {
+  display: inline-grid; vertical-align: middle; margin: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.test2-information .dock #test2-box :is(#test2-actions > .hand-slot, #moves .test2-hardware-control) { transition: none; }
+}
 `;
 
 /** Mount after player enhancements (including mountGuide). No game state or settings change. */

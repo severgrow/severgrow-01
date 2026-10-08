@@ -149,10 +149,13 @@ try {
       const skip = document.querySelector('#moves > .test2-skip')!.getBoundingClientRect();
       const bulb = document.querySelector('#test2-help-button')!.getBoundingClientRect();
       const sort = document.querySelector('#hand-sort')!.getBoundingClientRect();
-      return { aligned:Math.abs(skip.left-bulb.left)<1 && Math.abs(skip.right-sort.right)<1,
-        height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1, skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
+      const button = document.querySelector<HTMLButtonElement>('#moves > .test2-skip')!;
+      return { aligned:Math.abs(skip.left-sort.left)<1 && Math.abs(skip.right-sort.right)<1,
+        height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1,
+        icon:!!button.querySelector('svg') && !button.textContent?.trim() && !!button.getAttribute('aria-label'),
+        skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
     });
-    check(skipFit.aligned && skipFit.height && skipFit.above, `${width}: Skip exactly spans bulb and ordering buttons above them (${JSON.stringify(skipFit)})`);
+    check(skipFit.aligned && skipFit.height && skipFit.above && skipFit.icon, `${width}: icon-only Skip sits in the shared action column above Sort (${JSON.stringify(skipFit)})`);
     // Draw piles ease back into the cockpit after the phase changes; measure the
     // settled geometry rather than an intermediate transition frame.
     await page.waitForTimeout(260);

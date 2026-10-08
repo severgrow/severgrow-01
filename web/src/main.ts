@@ -2359,6 +2359,24 @@ const button = (text: string, cls: string, onClick: () => void, label?: string) 
   return b;
 };
 
+/** Test2 cockpit art. The accessible name remains the action, not the drawing. */
+const controlIcon = (control: HTMLButtonElement, name: 'skip' | 'cancel' | 'clear' | 'reverse' | 'previous' | 'next') => {
+  if (!IS_TEST2) return;
+  const label = control.getAttribute('aria-label') || control.textContent?.trim() || name;
+  control.setAttribute('aria-label', label);
+  control.title = label;
+  control.classList.add('test2-hardware-control', `test2-control-${name}`);
+  const paths: Record<typeof name, string> = {
+    skip: '<path d="m5 5 7 7-7 7V5Zm8 0 7 7-7 7V5Z" fill="currentColor" stroke="none"/>',
+    cancel: '<path d="M6 6 18 18M18 6 6 18"/>',
+    clear: '<path d="M5 7h14M9 7V5h6v2m2 0-.7 12H7.7L7 7m3 4v5m4-5v5"/>',
+    reverse: '<path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4"/>',
+    previous: '<path d="m14.5 5-7 7 7 7"/>',
+    next: '<path d="m9.5 5 7 7-7 7"/>',
+  };
+  control.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</svg>`;
+};
+
 function renderControls(v: View, advice: Advice | null) {
   if (!session) return;
   const moves = $('moves');
@@ -2524,12 +2542,13 @@ function renderControls(v: View, advice: Advice | null) {
     if (panel) for (const control of [...moves.children]) {
       if (control.matches('.draw-clear, .draw-reverse, .list-prev, .list-pos, .list-next, .cancel')) panel.append(control);
     }
-    for (const control of moves.querySelectorAll<HTMLButtonElement>('.draw-clear, .draw-reverse, .cancel')) {
-      control.setAttribute('aria-label', control.title || control.textContent || 'Cancel');
-      control.classList.add('test2-compact-control');
-      control.innerHTML = control.classList.contains('draw-reverse')
-        ? '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>'
-        : '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+  }
+  if (IS_TEST2) {
+    for (const [selector, name] of [
+      ['.test2-skip', 'skip'], ['.cancel', 'cancel'], ['.draw-clear', 'clear'],
+      ['.draw-reverse', 'reverse'], ['.list-prev', 'previous'], ['.list-next', 'next'],
+    ] as const) {
+      for (const control of moves.querySelectorAll<HTMLButtonElement>(selector)) controlIcon(control, name);
     }
   }
   if (pending) {
