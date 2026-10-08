@@ -64,6 +64,7 @@ export const CARDS_CSS = `
   background-size:300% 300%; background-repeat:no-repeat; pointer-events:none;
   opacity:0;
 }
+.test2-cards .dock .pile-top.card { border-radius:6px; }
 .test2-cards .card.s0 .test2-card-art { background-image:url('${mossArt}'); }
 .test2-cards .card.s1 .test2-card-art { background-image:url('${ashArt}'); }
 .test2-cards .card.s2 .test2-card-art { background-image:url('${dewArt}'); }

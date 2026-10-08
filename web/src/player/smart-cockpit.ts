@@ -162,7 +162,7 @@ html.test2-information[data-step='draw'] :is(#deck,#discard) .pile-card { box-sh
 html.test2-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.test2-information[data-step='draw'] #discard.ready:not(.test2-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
 html.test2-information[data-step='draw'] #discard.test2-bloom-draw .pile-top.card {
-  transform:translateY(-3px); border-color:rgba(209,172,105,.8); border-radius:var(--radius,6px);
+  transform:translateY(-3px); border-color:rgba(209,172,105,.8);
   box-shadow:0 0 0 1px rgba(209,172,105,.45),0 0 7px rgba(205,162,87,.30),0 2px 4px rgba(0,0,0,.45);
   transition:transform .2s ease-out,border-color .2s ease-out,box-shadow .2s ease-out;
 }
