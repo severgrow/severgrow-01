@@ -32,10 +32,15 @@ export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c
  * A card's face: number and suit, or (a Fruit card, v0.8 UI pass) the same two parts with the
  * mushroom in both places: a small corner index where the number sits, a big icon where the suit sits.
  */
-export const cardFace = (c: Card) =>
-  c.suit === null
+export const cardFace = (c: Card) => {
+  const art = IS_TEST2 ? c.suit === null
+    ? '<span class="test2-card-art test2-card-bomb" data-card-art="bomb" aria-hidden="true"></span>'
+    : `<span class="test2-card-art" data-card-art="${c.suit}:${c.rank}" style="background-position:${((c.rank - 1) % 3) * 50}% ${Math.floor((c.rank - 1) / 3) * 50}%" aria-hidden="true"></span>`
+    : '';
+  return art + (c.suit === null
     ? `<span class="c-num c-idx" aria-hidden="true">${IS_TEST2 ? BOMB_INDEX_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" title="${IS_TEST2 ? 'Bomb' : FRUIT.print}">${IS_TEST2 ? BOMB_SVG : FRUIT_SVG}</span>`
-    : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`;
+    : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`);
+};
 
 export const shakeFrames = (a: number): Keyframe[] => [
   { transform: 'translate(0,0)' },
@@ -166,11 +171,13 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = to.left + to.width / 2 - (from.left + from.width / 2);
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const sc = to.height / Math.max(from.height, 1);
-    const frames: Keyframe[] =
-      motion() === 0
-        ? [{ opacity: 1 }, { opacity: 0 }]
+    const frames: Keyframe[] = motion() === 0
+      ? [{ opacity: 1 }, { opacity: 0 }]
+      : IS_TEST2
+        ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: .92 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    removeAfter(anim(d, frames, { duration: 440 * f, easing: 'ease-in-out', fill: 'forwards' }), d, 0);
+    const duration = (IS_TEST2 ? 280 : 440) * f;
+    removeAfter(anim(d, frames, { duration, easing: IS_TEST2 ? 'cubic-bezier(.25,.72,.25,1)' : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
   function flyBack(from: HTMLElement, to: HTMLElement, f: number) {

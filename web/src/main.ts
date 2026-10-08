@@ -1270,10 +1270,13 @@ async function playStep(step: Step, my: number) {
         const from = (step.from === 'deck' ? $('deck') : $('discard')).getBoundingClientRect();
         if (to) {
           const r = to.getBoundingClientRect();
-          anim(to, m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }], { duration: 420 * f, easing: 'cubic-bezier(.3,.7,.3,1)' });
+          const frames = IS_TEST2
+            ? [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.82', opacity: 0.65 }, { translate: '0 0', scale: '1', opacity: 1 }]
+            : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
+          anim(to, frames, { duration: (IS_TEST2 ? 300 : 420) * f, easing: IS_TEST2 ? 'cubic-bezier(.18,.76,.22,1)' : 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.click();
-        await wait(240 * f, my);
+        await wait((IS_TEST2 ? 170 : 240) * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
         await wait(quickShow ? quickShow.show.draw : 120 * f, my);
@@ -2657,7 +2660,7 @@ function renderHand(v: View, advice: Advice | null) {
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = comboGroups(v.hand);
   // remember where every card was, so a reorder (Sort) slides them into place (FLIP)
-  const before = new Map([...hand.querySelectorAll<HTMLElement>('[data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect().left]));
+  const before = new Map([...hand.querySelectorAll<HTMLElement>('[data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
@@ -2712,8 +2715,13 @@ function renderHand(v: View, advice: Advice | null) {
   if (!settings.reduceMotion && settings.speed !== 'skip') {
     for (const b of hand.querySelectorAll<HTMLElement>('[data-card]')) {
       const was = before.get(Number(b.dataset.card));
-      const dx = was === undefined ? 0 : was - b.getBoundingClientRect().left;
-      if (Math.abs(dx) > 2) anim(b, [{ translate: `${dx}px 0` }, { translate: '0 0' }], { duration: 280 * timeScale(), easing: 'cubic-bezier(.2,.9,.3,1.25)' });
+      const now = b.getBoundingClientRect();
+      const dx = was === undefined ? 0 : was.left - now.left;
+      const dy = was === undefined ? 0 : was.top - now.top;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
+        duration: (IS_TEST2 ? 190 : 280) * timeScale(),
+        easing: IS_TEST2 ? 'cubic-bezier(.2,.72,.2,1)' : 'cubic-bezier(.2,.9,.3,1.25)',
+      });
     }
   }
   const sortBtn = $('hand-sort');

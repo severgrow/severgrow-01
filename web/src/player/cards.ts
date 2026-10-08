@@ -1,5 +1,13 @@
 // Loaded only in Test2. Rules, card identities and saved actions keep their existing names.
 import { bombText } from '../logic/bomb-text.js';
+import mossArt from '../assets/cards/moss.webp?url';
+import ashArt from '../assets/cards/ash.webp?url';
+import dewArt from '../assets/cards/dew.webp?url';
+import emberArt from '../assets/cards/ember.webp?url';
+import bombArt from '../assets/cards/bomb.webp?url';
+import backArt from '../assets/cards/back.webp?url';
+
+const CARD_ART_URLS = [mossArt, ashArt, dewArt, emberArt, bombArt, backArt];
 
 export const CARDS_CSS = `
 /* Card-local ink: never change terrain, ownership or interface colour tokens. */
@@ -46,6 +54,41 @@ export const CARDS_CSS = `
 }
 .test2-cards .dock #deck.low .pile-count { color:var(--c-gold); }
 .test2-cards .card.fruit .c-idx svg { width:calc(var(--cw)*.25); height:calc(var(--cw)*.25); }
+/* One shared decoded atlas per suit; duplicate cards use the same texture and cell. */
+.test2-cards .card { isolation:isolate; }
+.test2-cards .dock .hand-row > .hand .card {
+  transition:transform .18s cubic-bezier(.22,.72,.24,1), opacity .16s ease, filter .16s ease, box-shadow .16s ease;
+}
+.test2-cards .card .test2-card-art {
+  position:absolute; inset:1px; z-index:0; display:block; border-radius:inherit;
+  background-size:300% 300%; background-repeat:no-repeat; pointer-events:none;
+  opacity:0;
+}
+.test2-cards .card.s0 .test2-card-art { background-image:url('${mossArt}'); }
+.test2-cards .card.s1 .test2-card-art { background-image:url('${ashArt}'); }
+.test2-cards .card.s2 .test2-card-art { background-image:url('${dewArt}'); }
+.test2-cards .card.s3 .test2-card-art { background-image:url('${emberArt}'); }
+.test2-cards .card.fruit .test2-card-art { background-image:url('${bombArt}'); background-size:cover; background-position:center; }
+.test2-cards.test2-card-art-ready .card .test2-card-art { opacity:1; }
+.test2-cards.test2-card-art-ready .card :is(.c-num,.c-suit) { opacity:0; }
+.test2-cards.test2-card-art-ready .card::after { display:none; }
+.test2-cards.test2-card-art-ready .card:has(>.test2-card-art) { border-color:transparent; }
+.test2-cards.test2-card-art-ready .card:has(>.test2-card-art).playable,
+.test2-cards.test2-card-art-ready .card:has(>.test2-card-art).lifted { border-color:var(--c-accent); }
+.test2-cards .test2-mini-card .test2-card-art { display:none; }
+/* The separately supplied tree-logo back is the only face-down artwork. */
+.test2-cards .card.back,
+.test2-cards #deck .pile-stack,
+.test2-cards #deck .pile-stack::before,
+.test2-cards #deck .pile-stack::after {
+  background-image:url('${backArt}'); background-size:100% 100%; background-position:center;
+  border-color:transparent;
+}
+.test2-cards #deck .pile-stack { box-shadow:0 2px 5px rgba(0,0,0,.38); }
+@media (prefers-reduced-motion:reduce) {
+  .test2-cards .dock .hand-row > .hand .card { transition:none; }
+}
+.test2-cards.reduce-motion .dock .hand-row > .hand .card { transition:none; }
 `;
 
 /** Translate only presentation, including dynamic hints, captions and accessible names.
@@ -54,6 +97,14 @@ export function mountCards() {
   document.documentElement.classList.add('test2-cards');
   const style = document.createElement('style');
   style.id = 'test2-cards-style'; style.textContent = CARDS_CSS; document.head.append(style);
+  // Fetch and decode once in the background while the menu is visible. Until all six
+  // textures are ready, the existing code-drawn face remains an instant fallback.
+  void Promise.all(CARD_ART_URLS.map(async url => {
+    const image = new Image(); image.decoding = 'async'; image.src = url;
+    await image.decode();
+  })).then(() => document.documentElement.classList.add('test2-card-art-ready')).catch(() => {
+    // A failed art request leaves readable cards and the current game fully playable.
+  });
   const attributes = ['aria-label', 'aria-description', 'title', 'alt'];
   const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable]');
   const translate = (node: Node) => {
