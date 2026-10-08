@@ -234,8 +234,9 @@ export const mountHelp = (hooks: HelpHooks) => {
       blocked = nextBlocked;
       const hasTip = !firstTip.hidden;
       const hasCoach = !coach.hidden;
-      trigger.hidden = blocked || (!hasTip && !hasCoach);
-      trigger.disabled = blocked;
+      // Smart cockpit keeps this physical control in place even when help is unavailable.
+      trigger.hidden = false;
+      trigger.disabled = blocked || (!hasTip && !hasCoach);
       slot.closest<HTMLElement>('#test2-information-rail')?.setAttribute('data-help', trigger.hidden ? 'off' : 'on');
       if (dialog.hidden) kind = hasCoach ? 'coach' : 'tip';
       const tipTitle = document.getElementById('first-tip-title')?.textContent?.trim() || 'Game help';

@@ -26,77 +26,7 @@ export const INFORMATION_CSS = `
   height: 28px;
   pointer-events: none;
 }
-.test2-information #step-cue {
-  position: absolute !important;
-  inset: calc((100% - var(--cam-under, 0px)) / 2) auto auto 50% !important;
-  transform: translate(-50%, -50%) !important;
-  width: calc(100% - 28px);
-  max-width: 560px;
-  min-width: 0;
-  z-index: 5;
-  text-align: center;
-  pointer-events: none;
-  opacity: .72 !important;
-  transition: opacity 140ms ease-out;
-}
-.test2-information #step-cue[data-level='hi'] { opacity: .86 !important; }
-.test2-information #step-cue[data-level='lo'] { opacity: .66 !important; }
-.test2-information #step-cue[data-level='off'],
-.test2-information.test2-move-active #step-cue,
-.test2-information:has(#tooltip:not([hidden])) #step-cue,
-.test2-information.gd-picked #step-cue { opacity: 0 !important; }
-.test2-information[data-step='none'] #step-cue,
-.test2-information[data-guide='off'] #step-cue { visibility: hidden; }
-.test2-information .cue-plate {
-  display: block;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  overflow: visible;
-  animation: none !important;
-}
-@keyframes test2-cue-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .94; transform: scale(1.085); } }
-.test2-information #step-cue:is([data-step='draw'], [data-step='grow'], [data-step='throw']) .cue-text {
-  animation: test2-cue-breathe 3.1s ease-in-out infinite !important;
-}
-.test2-information-blocked #step-cue .cue-text,
-.test2-information.test2-move-active #step-cue .cue-text { animation-play-state: paused !important; }
-.test2-information .cue-icon,
-.test2-information .cue-kicker,
-.test2-information .cue-pips,
-.test2-information .cue-plate::after { display: none; }
-.test2-information .cue-words {
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  gap: 0;
-  line-height: 1.08;
-}
-.test2-information #step-cue .cue-text {
-  display: inline-block; transform-origin: center;
-  font-family: var(--font-display, Georgia, serif);
-  font-size: clamp(30px, 8.2vw, 48px);
-  line-height: 1.08;
-  font-weight: 750;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-  color: #fff9e9;
-  text-shadow: 0 2px 12px rgba(0,0,0,.85), 0 0 3px rgba(0,0,0,.95);
-  -webkit-text-stroke: .35px rgba(0,0,0,.5);
-  animation: none !important;
-}
-.test2-information.large-text #step-cue .cue-text { font-size: clamp(32px, 8.8vw, 52px); }
-.test2-information #step-cue[data-step='opp'] .cue-text { font-size: clamp(24px, 6.6vw, 38px); }
-/* Test2 owns prompt visibility independently of the guide's legacy entrance/settle clock. */
-.test2-information:not(.test2-idle-ready) #step-cue { opacity: 0 !important; }
-.test2-information.test2-idle-ready #step-cue:not([data-step='opp']) { opacity: .6536 !important; }
-.test2-information.test2-idle-ready #step-cue .cue-text { animation: test2-cue-breathe 3.1s ease-in-out infinite !important; animation-play-state: running !important; }
-.test2-information #step-cue[data-step='opp'] { visibility: hidden !important; }
-.test2-information:has(#tooltip:not([hidden])) #step-cue { opacity: 0 !important; }
+.test2-information #step-cue { display:none !important; }
 .test2-information .dock .hand .card.playable {
   border-color: color-mix(in srgb, var(--c-accent) 88%, var(--c-line));
   box-shadow: 0 0 7px color-mix(in srgb, var(--c-accent) 16%, transparent);
@@ -427,13 +357,6 @@ html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-
   html.test2-information #hand .card, html.test2-information #moves .test2-combination { animation: none !important; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .test2-information #step-cue { transition: none; }
-  .test2-information #step-cue .cue-text.cue-text { animation: none !important; }
-}
-.test2-information.reduce-motion #step-cue { transition: none; }
-.test2-information.reduce-motion #step-cue .cue-text.cue-text { animation: none !important; }
-
 /* Shared cockpit hardware: a 44px touch target, compact matte face and quiet edge light. */
 html.test2-information #test2-box {
   --control-size: 44px;
@@ -526,51 +449,9 @@ export const mountInformation = () => {
   rail.append(subline);
   wrap.append(rail);
 
+  // The fixed LED now owns routine phase instructions; no idle prompt timers remain.
   const cue = document.getElementById('step-cue');
-  if (cue) wrap.append(cue);
-  const cueText = cue?.querySelector<HTMLElement>('.cue-text');
-  if (cueText) {
-    const labels: Record<string, string> = { draw: 'Draw', grow: 'Grow', throw: 'Throw', opp: '' };
-    const normalize = () => {
-      const label = root.dataset.test2Bloom === 'true' && root.dataset.step === 'grow' ? 'Bloom' : labels[root.dataset.step ?? ''];
-      if (label !== undefined && cueText.textContent !== label) cueText.textContent = label;
-    };
-    // The guide remains the sole phase source, including on resumed games. Its idle refresh
-    // can refill the old Grow wording, so normalize just that presentation without a loop.
-    new MutationObserver(normalize).observe(cueText, { childList: true, characterData: true, subtree: true });
-    new MutationObserver(normalize).observe(root, { attributes: true, attributeFilter: ['data-step', 'data-test2-bloom'] });
-    normalize();
-  }
-  // Guidance is a fallback, never the opening ceremony of a turn. One timer is reset by
-  // real input, phase/turn readiness, menus and visibility; repeated renders don't postpone it.
-  let idleTimer = 0;
-  let held = false;
-  let idleKey = '';
-  const armPrompt = () => {
-    clearTimeout(idleTimer);
-    root.classList.remove('test2-idle-ready');
-    if (held || document.hidden || game.hidden || root.dataset.test2Waiting !== 'true' ||
-        root.classList.contains('test2-information-blocked') || document.body.classList.contains('paused')) return;
-    idleTimer = window.setTimeout(() => root.classList.add('test2-idle-ready'), 3000);
-  };
-  const syncPrompt = () => {
-    const key = [root.dataset.step, root.dataset.test2Turn, root.dataset.test2Waiting,
-      root.dataset.test2Bloom, root.classList.contains('test2-information-blocked'),
-      document.body.classList.contains('paused'), game.hidden].join(':');
-    if (key !== idleKey) { idleKey = key; armPrompt(); }
-  };
-  new MutationObserver(syncPrompt).observe(root, { attributes: true, attributeFilter: ['class', 'data-step', 'data-test2-turn', 'data-test2-waiting', 'data-test2-bloom'] });
-  new MutationObserver(syncPrompt).observe(game, { attributes: true, attributeFilter: ['hidden'] });
-  new MutationObserver(syncPrompt).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-  window.addEventListener('pointerdown', () => { held = true; armPrompt(); }, { capture: true, passive: true });
-  for (const event of ['pointerup', 'pointercancel'] as const)
-    window.addEventListener(event, () => { held = false; armPrompt(); }, { capture: true, passive: true });
-  for (const event of ['keydown', 'click', 'wheel', 'pointermove'] as const)
-    window.addEventListener(event, armPrompt, { capture: true, passive: true });
-  window.addEventListener('blur', () => { held = false; clearTimeout(idleTimer); root.classList.remove('test2-idle-ready'); });
-  window.addEventListener('focus', armPrompt);
-  document.addEventListener('visibilitychange', armPrompt);
-  syncPrompt();
+  if (cue) { cue.setAttribute('aria-hidden', 'true'); cue.inert = true; }
   const captions = document.getElementById('captions');
   // The message now has one live region; floating score numbers keep their existing rendering.
   captions?.setAttribute('aria-live', 'off');

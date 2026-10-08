@@ -1,6 +1,6 @@
-// Run the detailed board/turn UX regression before the existing responsive critical checks.
-// This keeps the new behavioral coverage in the current CI suite without workflow changes.
-import './test2-board-turn-polish.js';
+// The Smart Cockpit changes the control surface; check its current responsive behavior
+// before the engine-facing critical flows instead of the retired board-control geometry.
+import './test2-smart-cockpit.js';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -72,7 +72,9 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   await page.click('#tool-undo'); await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);
   await page.keyboard.press('Escape');
-  await page.locator('#moves .end').first().click(); await idle(page);
+  await page.locator('#smart-context').click();
+  if (await page.locator('#smart-selector').isVisible()) await page.locator('#smart-selector button[data-action^="skip:"]').first().click();
+  await idle(page);
   check((await state(page)).phase === 'DISCARD', `${w}: end Grow enters Throw`);
   before = await state(page);
   const discard = legalActions(viewFor(before,0)).find(a=>a.t==='Discard'); assert(discard?.t==='Discard');

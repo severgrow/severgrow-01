@@ -604,6 +604,7 @@ function dealIn() {
 /** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let test2Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
+let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
@@ -709,6 +710,7 @@ async function mountPlayerEnhancements() {
     (await import('./player/information.js')).mountInformation();
     (await import('./player/cards.js')).mountCards();
     test2Help = (await import('./player/help.js')).mountHelp({ sheet });
+    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
     if (session) render();
   }
@@ -1729,6 +1731,7 @@ function render() {
   renderGuide(advice);
   renderFirstTip(v);
   updateTest2Help();
+  smartCockpit?.sync();
   if (!IS_TEST2 && placeTeachingPanel && thumbLayout) {
     const keys = targetHexes(v, session.legal, session.sel);
     requestAnimationFrame(() => {
@@ -1991,7 +1994,7 @@ function alignDrawPiles() {
     return;
   }
   const handCard = document.querySelector<HTMLElement>('#hand .card');
-  const actions = document.getElementById('test2-actions');
+  const actions = document.getElementById('smart-panel') ?? document.getElementById('test2-actions');
   if (!handCard) return;
   // offsetLeft is layout geometry, so the calculation stays steady while the group animates.
   const baseLeft = box.getBoundingClientRect().left + piles.offsetLeft;

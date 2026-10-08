@@ -88,30 +88,9 @@ try {
     check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
     check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
-    const pulse = await page.evaluate(() => {
-      const root = document.documentElement;
-      const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
-      const reduced = getComputedStyle(text).animationName;
-      root.classList.remove('reduce-motion');
-      const regular = getComputedStyle(text).animationName;
-      const animation = text.getAnimations()[0];
-      const frames = animation?.effect instanceof KeyframeEffect ? animation.effect.getKeyframes() : [];
-      const duration = animation?.effect?.getTiming().duration;
-      root.classList.add('reduce-motion');
-      return { reduced, regular, duration, frames: frames.map(frame => ({ opacity: Number(frame.opacity), transform: frame.transform })) };
-    });
-    check(pulse.reduced === 'none' && pulse.regular === 'test2-cue-breathe' && pulse.duration === 3100 &&
-      pulse.frames.every(frame => frame.opacity >= .94 && frame.opacity <= 1 && ['scale(1)', 'scale(1.085)'].includes(String(frame.transform))),
-      `${width}: idle prompt has an intentional 8.5% zoom and respects Reduce motion (${JSON.stringify(pulse)})`);
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    check(await page.evaluate(() => {
-      document.documentElement.classList.remove('reduce-motion');
-      const disabled = getComputedStyle(document.querySelector('#step-cue .cue-text')!).animationName === 'none';
-      document.documentElement.classList.add('reduce-motion');
-      return disabled;
-    }), `${width}: system Reduce motion also disables the pulse`);
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('DRAW')), `${width}: current step`);
+    check(!await page.locator('#step-cue').isVisible(), `${width}: routine board prompt is gone`);
+    check((await page.locator('#smart-led-text').innerText()) === 'DRAW A CARD', `${width}: Draw appears immediately in the LED`);
+    check((await page.locator('#smart-led-text').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');
@@ -143,41 +122,21 @@ try {
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    check(await page.locator('#step-cue').innerText().then(text => text.toUpperCase().includes('GROW')), `${width}: Grow label follows state`);
+    check((await page.locator('#smart-led-text').innerText()) === 'GROW OR SKIP', `${width}: Grow LED follows state`);
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
-    const skipFit = await page.evaluate(() => {
-      const skip = document.querySelector('#moves > .test2-skip')!.getBoundingClientRect();
-      const bulb = document.querySelector('#test2-help-button')!.getBoundingClientRect();
-      const sort = document.querySelector('#hand-sort')!.getBoundingClientRect();
-      const button = document.querySelector<HTMLButtonElement>('#moves > .test2-skip')!;
-      return { aligned:Math.abs(skip.left-sort.left)<1 && Math.abs(skip.right-sort.right)<1,
-        height:Math.abs(skip.height-bulb.height)<1, above:skip.bottom<=bulb.top-1,
-        icon:!!button.querySelector('svg') && !button.textContent?.trim() && !!button.getAttribute('aria-label'),
-        skip:[skip.x,skip.y,skip.width,skip.height], bulb:[bulb.x,bulb.y,bulb.width,bulb.height], sort:[sort.x,sort.y,sort.width,sort.height] };
+    const cockpit = await page.evaluate(() => {
+      const rect=(id:string)=>document.getElementById(id)!.getBoundingClientRect();
+      const led=rect('smart-led'),context=rect('smart-context'),undo=rect('tool-undo'),tips=rect('test2-help-button'),sort=rect('hand-sort');
+      const close=(a:number,b:number)=>Math.abs(a-b)<1;
+      return { top:close(led.top,context.top),bottom:close(undo.top,tips.top)&&close(tips.top,sort.top),
+        width:close(led.width,undo.width+tips.width+(tips.left-undo.right)),
+        columns:close(led.left,undo.left)&&close(context.left,sort.left),
+        fixed: [context,undo,tips,sort].every(r=>r.width>=44&&r.height>=44),
+        icon: !!document.querySelector('#smart-context svg'),
+        count: document.querySelectorAll('#smart-panel button:not(#smart-selector button)').length };
     });
-    check(skipFit.aligned && skipFit.height && skipFit.above && skipFit.icon, `${width}: icon-only Skip sits in the shared action column above Sort (${JSON.stringify(skipFit)})`);
-    // Draw piles ease back into the cockpit after the phase changes; measure the
-    // settled geometry rather than an intermediate transition frame.
-    await page.waitForTimeout(260);
-    const frame = await page.evaluate(() => {
-      const box = document.querySelector<HTMLElement>('#test2-box')!;
-      const css = getComputedStyle(box);
-      const skip = document.querySelector('#moves .test2-skip')!.getBoundingClientRect();
-      const tools = document.querySelector('#test2-actions')!.getBoundingClientRect();
-      const faces = [...document.querySelectorAll('#test2-box .pile-card')].map(el=>el.getBoundingClientRect());
-      const counters = [...document.querySelectorAll('#test2-box .pile-count')].map(el=>el.getBoundingClientRect());
-      return { invisible:css.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(css.borderTopWidth) === 0 && css.boxShadow === 'none',
-        top:faces.every(face=>Math.abs(face.top-skip.top)<1), bottom:counters.every(counter=>Math.abs(counter.bottom-tools.bottom)<1) };
-    });
-    check(frame.invisible && frame.top && frame.bottom, `${width}: invisible box shares exact top and bottom alignment (${JSON.stringify(frame)})`);
-    if (width === 360 || width === 1440) {
-      const image = await page.screenshot({ type: 'jpeg', quality: 35, scale: 'css' });
-      if (image.length <= 192 * 1024) {
-        console.log(`TEST2_SCREENSHOT_BEGIN ${width}x${height}-hint-bulb.jpg image/jpeg ${image.length} bytes`);
-        console.log(image.toString('base64'));
-        console.log(`TEST2_SCREENSHOT_END ${width}x${height}-hint-bulb.jpg`);
-      }
-    }
+    check(cockpit.top&&cockpit.bottom&&cockpit.width&&cockpit.columns&&cockpit.fixed&&cockpit.icon&&cockpit.count===4,
+      `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);
     await page.click('#test2-help-button');
     await page.keyboard.press('Escape');
     check(!await page.locator('#sheet-test2-help').isVisible(), `${width}: Escape closes`);
@@ -185,16 +144,12 @@ try {
     const boundaries = await page.evaluate(() => {
       const rail = document.querySelector('#test2-information-rail')!.getBoundingClientRect();
       const board = document.querySelector('#board-wrap')!.getBoundingClientRect();
-      const cue = document.querySelector('#step-cue')!.getBoundingClientRect();
-      const under = parseFloat(getComputedStyle(document.querySelector('#board-wrap')!).getPropertyValue('--cam-under')) || 0;
-      return rail.top >= board.top && rail.bottom <= board.bottom &&
-        Math.abs(cue.left + cue.width / 2 - (board.left + board.width / 2)) <= 1 &&
-        Math.abs(cue.top + cue.height / 2 - (board.top + (board.height - under) / 2)) <= 1 &&
-        getComputedStyle(document.querySelector('#step-cue')!).pointerEvents === 'none' &&
-        cue.left >= 0 && cue.right <= innerWidth &&
+      const panel = document.querySelector('#smart-panel')!.getBoundingClientRect();
+      const box = document.querySelector('#test2-box')!.getBoundingClientRect();
+      return rail.top>=board.top && rail.bottom<=board.bottom && panel.left>=box.left-1 && panel.right<=box.right+1 &&
         document.querySelector('#test2-information-rail')!.parentElement?.id === 'board-wrap';
     });
-    check(boundaries, `${width}: guidance floats centrally over the board without blocking or reserving a row`);
+    check(boundaries, `${width}: notices stay over board and LED controls stay inside cockpit`);
     await page.click('#hud-menu');
     check(!await page.locator('#test2-help-button').isVisible(), `${width}: Pause suppresses background help`);
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);
