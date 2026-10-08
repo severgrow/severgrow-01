@@ -27,7 +27,7 @@ import { materialFor } from '../logic/materials.js';
 import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
-import { drawGoldCrystals } from './goldcrystals.js';
+import { drawGoldFrame } from './goldframes.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -108,8 +108,6 @@ export class BoardView {
   protected keys: string[] = [];
   /** Bonus terrain stays in engine state; this set only controls its visual crystals. */
   protected richKeys = new Set<string>();
-  private previousGold: Set<string> | null = null;
-  protected settlingGold = new Map<string, number>();
   protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
@@ -214,8 +212,6 @@ export class BoardView {
     const coords = boardCoords(config);
     this.keys = coords.map(coordKey);
     this.richKeys = new Set(this.keys.filter(key => terrain[key] === 'rich'));
-    this.previousGold = null;
-    this.settlingGold.clear();
     // Step 3: just the tiles, a thin margin and headroom for the homes, in the board's orientation
     const u = boardUnits(config.boardRadius, getOrient());
     svg.setAttribute('viewBox', `${u.x0.toFixed(1)} ${u.y0.toFixed(1)} ${u.w.toFixed(1)} ${u.h.toFixed(1)}`);
@@ -298,7 +294,7 @@ export class BoardView {
       this.drawCell(g, key, t);
       if (t === 'rich' && IS_TEST2) {
         const { x, y } = centerOf(key);
-        drawGoldCrystals(g, key, x, y, false);
+        drawGoldFrame(g, key, x, y, false);
       }
       if (t === 'rich' && !IS_TEST2) {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
@@ -394,14 +390,6 @@ export class BoardView {
   protected lastRender: [Record<string, Tile | null>, Overlay] | null = null;
 
   render(board: Record<string, Tile | null>, o: Overlay) {
-    if (IS_TEST2) {
-      const occupied = new Set([...this.richKeys].filter(key => !!board[key]));
-      if (this.previousGold) for (const key of occupied) {
-        if (!this.previousGold.has(key)) this.settlingGold.set(key, performance.now() + 420);
-      }
-      for (const key of this.settlingGold.keys()) if (!occupied.has(key)) this.settlingGold.delete(key);
-      this.previousGold = occupied;
-    }
     this.lastRender = [board, o];
     const { veins, tiles, over, scars } = this.layers;
     if (this.world) {
@@ -469,11 +457,10 @@ export class BoardView {
     const { over } = this.layers;
     const st = this.style;
     const maxRank = this.config.maxRank;
-    // Only one crystal pair is visible per bonus hex: the base pair gives way to
-    // the pair drawn over an occupied tile, below that tile's strength stone.
+    // An occupied bonus hex uses its tile-layer frame in place of its base rim.
     if (IS_TEST2) {
-      for (const crystal of this.layers.base.querySelectorAll<SVGGElement>('.gold-crystals.empty')) {
-        crystal.style.display = board[crystal.dataset.key ?? ''] ? 'none' : '';
+      for (const frame of this.layers.base.querySelectorAll<SVGGElement>('.gold-frame.empty')) {
+        frame.style.display = board[frame.dataset.key ?? ''] ? 'none' : '';
       }
     } else {
       for (const badge of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) badge.classList.toggle('on-tile', !!board[badge.dataset.key ?? badge.getAttribute('data-key') ?? '']);
@@ -621,7 +608,7 @@ export class BoardView {
       el('path', { d, class: 'world-fill', fill: this.url('world') }, g);
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
-      if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true, (this.settlingGold.get(key) ?? 0) > performance.now());
+      if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
       if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
       else {
         el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
@@ -632,7 +619,7 @@ export class BoardView {
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true, (this.settlingGold.get(key) ?? 0) > performance.now());
+    if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);

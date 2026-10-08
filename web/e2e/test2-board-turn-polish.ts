@@ -293,16 +293,19 @@ async function pulseCheck(page: Page, label: string) {
     animation.play();
     const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked)');
     const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
+    const growEdge = card ? getComputedStyle(card).boxShadow : '';
+    const handBlob = getComputedStyle(document.querySelector('#hand')!, '::before').content;
     root.classList.add('reduce-motion');
     // Chromium may retain the paused Animation object briefly after CSS removes it.
     // The computed animation is the player's effective reduced-motion state.
     const motionName = getComputedStyle(text).animationName;
     const noMotion = motionName === 'none';
     root.classList.toggle('reduce-motion', reduced);
-    return { small, large, cardPulse, off: noMotion, motionName };
+    return { small, large, cardPulse, growEdge, handBlob, off: noMotion, motionName };
   });
   await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
-  check(result && result.small !== result.large && result.large.includes('1.085') && result.cardPulse && result.off,
+  check(result && result.small !== result.large && result.large.includes('1.085') && result.cardPulse &&
+    result.growEdge.includes('119, 179, 116') && result.handBlob === 'none' && result.off,
     `${label}: larger idle cue and whole playable-card pulse actually run; Reduce Motion disables them (${JSON.stringify(result)})`);
   equal(await state(page), before, `${label}: pulses cannot change game state`);
 }
@@ -405,39 +408,24 @@ async function finishTurn(page: Page, label: string) {
     const halo = document.querySelector('#discard .gd-halo')!;
     const ring = document.querySelector('#discard .gd-ring')!;
     return { cardFilter:getComputedStyle(card).filter, cardAnimation:getComputedStyle(card).animationName,
-      backlight:getComputedStyle(document.querySelector('#hand')!, '::before').backgroundImage,
+      edge:getComputedStyle(card).boxShadow, handBlob:getComputedStyle(document.querySelector('#hand')!, '::before').content,
       haloShadow:getComputedStyle(halo).boxShadow, haloAnimation:getComputedStyle(halo).animationName,
       ringAnimation:getComputedStyle(ring).animationName };
   });
-  check(throwLook.cardFilter.includes('grayscale(0.54)') && throwLook.backlight.includes('rgba(0, 0, 0, 0) 44%') && throwLook.cardAnimation === 'none' &&
+  check(throwLook.cardFilter.includes('grayscale(0.54)') && throwLook.edge.includes('222, 110, 83') && throwLook.handBlob === 'none' && throwLook.cardAnimation === 'none' &&
     throwLook.haloShadow !== 'none' && throwLook.haloAnimation === 'none' && throwLook.ringAnimation === 'none',
-    `${label}: Throw keeps readable color and a steady red backlight (${JSON.stringify(throwLook)})`);
-  const glowScope = await page.evaluate(() => {
-    const hand = document.querySelector<HTMLElement>('#hand')!;
-    const handBox = hand.getBoundingClientRect();
-    const cards = [...hand.querySelectorAll<HTMLElement>('.card')].map(card => card.getBoundingClientRect());
-    const glow = getComputedStyle(hand, '::before');
-    const x = handBox.left + parseFloat(glow.left), y = handBox.top + parseFloat(glow.top);
-    const w = parseFloat(glow.width), h = parseFloat(glow.height);
-    return { x, y, w, h, cardLeft: Math.min(...cards.map(card => card.left)),
-      cardRight: Math.max(...cards.map(card => card.right)), cardTop: Math.min(...cards.map(card => card.top)),
-      cardBottom: Math.max(...cards.map(card => card.bottom)) };
-  });
-  check(glowScope.x >= glowScope.cardLeft - 2 && glowScope.x + glowScope.w <= glowScope.cardRight + 2 &&
-    glowScope.y >= glowScope.cardTop - 2 && glowScope.y + glowScope.h <= glowScope.cardBottom + 2,
-    `${label}: the red backlight is bounded by the actual card fan (${JSON.stringify(glowScope)})`);
+    `${label}: Throw keeps readable color and a steady ember light on each card edge (${JSON.stringify(throwLook)})`);
   const throwPulse = await page.evaluate(() => {
     const root = document.documentElement;
     const reduced = root.classList.contains('reduce-motion');
     root.classList.remove('reduce-motion');
-    const hand = document.querySelector('#hand')!;
-    const card = hand.querySelector('.card:not(.test2-throw-picked)')!;
-    const result = { card: getComputedStyle(card).animationName, light: getComputedStyle(hand,'::before').backgroundImage };
+    const card = document.querySelector('#hand .card:not(.test2-throw-picked)')!;
+    const result = { card: getComputedStyle(card).animationName, light: getComputedStyle(card).boxShadow };
     root.classList.toggle('reduce-motion', reduced);
     return result;
   });
-  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('radial-gradient') && throwPulse.light.includes('181, 57, 42'),
-    `${label}: Throw uses the same whole-card pulse as Grow over a fixed ember backlight (${JSON.stringify(throwPulse)})`);
+  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('186, 66, 47'),
+    `${label}: Throw pulses the whole card while its edge light stays attached (${JSON.stringify(throwPulse)})`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
   while (expected.actor === 1 && expected.phase !== 'GAME_OVER') {
@@ -891,13 +879,16 @@ async function bloomMenuFit() {
   } finally { await page.close(); }
 }
 
-async function goldCrystalVisuals() {
+async function goldFrameVisuals() {
   const game = newGame(5);
   const rich = Object.entries(game.terrain).filter(([,terrain]) => terrain === 'rich').map(([key]) => key);
   assert(rich.includes('0,0'),'gold fixture keeps its centre bonus hex');
   game.board['0,0'] = {owner:0,strength:6};
-  for (const v3 of [false,true]) {
-    const page = await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  const botKey = rich.find(key => key !== '0,0' && !game.board[key]);
+  assert(botKey,'gold fixture has another available bonus hex');
+  game.board[botKey] = {owner:1,strength:5};
+  for (const v3 of [false,true]) for (const [width,height] of [[390,844],[1280,800]] as const) {
+    const page = await browser.newPage({viewport:{width,height},hasTouch:width<600,isMobile:width<600});
     try {
       await page.addInitScript(save => {
         (window as any).__name=(f:unknown)=>f;
@@ -910,35 +901,49 @@ async function goldCrystalVisuals() {
         const board = document.querySelector('#board');
         return board?.classList.contains('skin-ground-ready') && Number(getComputedStyle(board).opacity) > .98;
       }, undefined, {timeout:30000});
-      equal(await state(page),game,`${v3?'V3':'standard'}: crystal art does not change the position`);
+      equal(await state(page),game,`${v3?'V3':'standard'} ${width}: frame art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
-        const occupied = document.querySelector<SVGGElement>('#board .tile[data-key="0,0"]')!;
-        const stone = occupied.querySelector('.seed-stone')!;
-        const crystal = occupied.querySelector('.gold-crystals')!;
-        const art = crystal.querySelector<SVGSVGElement>('.gold-crystal-art')!;
-        const clear = crystal.querySelector<SVGCircleElement>('mask circle');
-        const source = document.querySelector<SVGImageElement>('#board .gold-crystals image')!.getAttribute('href')!;
+        const owned = [...document.querySelectorAll<SVGGElement>('#board .tile .gold-frame.occupied')];
+        const forest = document.querySelector<SVGGElement>('#board .tile.you .gold-frame.occupied')!;
+        const volcano = document.querySelector<SVGGElement>('#board .tile.bot .gold-frame.occupied')!;
+        const art = forest.querySelector<SVGSVGElement>('.gold-frame-art')!;
+        const source = document.querySelector<SVGImageElement>('#board .gold-frame image')!.getAttribute('href')!;
         const atlas = new Image(); atlas.src=source; await atlas.decode();
-        const empty = rich.find(cell=>cell.dataset.key !== '0,0')!.querySelector('.gold-crystals')!;
-        return {rich:rich.length,empty:rich.filter(cell=>!!cell.querySelector('.gold-crystals.empty') && getComputedStyle(cell.querySelector('.gold-crystals.empty')!).display!=='none').length,
-          hiddenUnderTile:getComputedStyle(rich.find(cell=>cell.dataset.key==='0,0')!.querySelector('.gold-crystals.empty')!).display==='none',
-          occupied:!!occupied.querySelector('.gold-crystals.occupied'),badges:document.querySelectorAll('#board .gold-badge').length,
-          oldRocks:document.querySelectorAll('#board .skin-gold').length,stoneOnTop:!!(crystal.compareDocumentPosition(stone)&Node.DOCUMENT_POSITION_FOLLOWING),
-          imageReady:atlas.naturalWidth===1536&&atlas.naturalHeight===1024,
-          compact:Number(art.getAttribute('width'))<=18,
-          stoneGap:!!clear && Number(clear.getAttribute('r'))>=9,
-          edgeMask:!!crystal.querySelector('mask path'),
-          rootedGlow:!!crystal.querySelector('.gold-crystal-bed'),
-          strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(crystal).filter,
-          variant:Number(crystal.getAttribute('data-variant'))};
+        const empty = rich.find(cell => getComputedStyle(cell.querySelector('.gold-frame.empty')!).display !== 'none')!.querySelector('.gold-frame')!;
+        const centers = owned.map(frame => {
+          const art = frame.querySelector<SVGSVGElement>('.gold-frame-art')!;
+          const stone = frame.parentElement!.querySelector<SVGGElement>('.seed-stone')!;
+          const point = frame.ownerSVGElement!.createSVGPoint();
+          point.x = Number(art.getAttribute('x')) + Number(art.getAttribute('width'))/2;
+          point.y = Number(art.getAttribute('y')) + Number(art.getAttribute('height'))/2;
+          const a = point.matrixTransform(frame.getScreenCTM()!);
+          point.x = 0; point.y = 0;
+          const b = point.matrixTransform(stone.getScreenCTM()!);
+          return Math.hypot(a.x-b.x,a.y-b.y);
+        });
+        return {rich:rich.length,empty:rich.filter(cell=>getComputedStyle(cell.querySelector('.gold-frame.empty')!).display!=='none').length,
+          hiddenUnderTile:getComputedStyle(rich.find(cell=>cell.dataset.key==='0,0')!.querySelector('.gold-frame.empty')!).display==='none',
+          owners:owned.length,forest:!!forest,volcano:!!volcano,
+          oldMarkers:document.querySelectorAll('#board .gold-crystals, #board .gold-crystal-bed, #board .gold-badge, #board .skin-gold').length,
+          stoneOnTop:owned.every(frame=>!!(frame.compareDocumentPosition(frame.parentElement!.querySelector('.seed-stone')!)&Node.DOCUMENT_POSITION_FOLLOWING)),
+          imageReady:atlas.naturalWidth===2172&&atlas.naturalHeight===724,
+          frameWidth:Number(art.getAttribute('width')),centers,
+          strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(forest).filter,
+          variants:rich.map(cell=>Number(cell.querySelector('.gold-frame')!.getAttribute('data-variant'))),
+          noInterception:owned.every(frame=>getComputedStyle(frame).pointerEvents==='none')};
       });
-      check(visual.rich===rich.length && visual.empty===rich.length-1 && visual.hiddenUnderTile && visual.occupied && visual.badges===0 && visual.oldRocks===0,
-        `${v3?'V3':'standard'}: every bonus hex shows crystals, with no visible 2 or old gold rocks (${JSON.stringify(visual)})`);
-      check(visual.stoneOnTop && visual.imageReady && visual.compact && visual.stoneGap && visual.edgeMask && visual.rootedGlow &&
-        visual.strongerEmptyGlow && visual.variant>=0 && visual.variant<6,
-        `${v3?'V3':'standard'}: compact crystals sit clear of the stone and edge with a rooted glow (${JSON.stringify(visual)})`);
-      await page.screenshot({path:`${dir}/390x844-gold-${v3?'v3':'standard'}.png`});
+      check(visual.rich===rich.length && visual.empty===rich.length-2 && visual.hiddenUnderTile && visual.owners===2 &&
+        visual.forest && visual.volcano && visual.oldMarkers===0 && visual.noInterception,
+        `${v3?'V3':'standard'} ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
+      check(visual.stoneOnTop && visual.imageReady && visual.frameWidth>59 && visual.frameWidth<63 &&
+        visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
+        visual.variants.every(variant=>variant>=0 && variant<3),
+        `${v3?'V3':'standard'} ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
+      await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-${v3?'v3':'standard'}.png`});
+      await page.reload(); await page.click('#menu-continue'); await idle(page);
+      const reloaded = await page.locator('#board .hex-cell.rich .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
+      equal(reloaded,visual.variants,`${v3?'V3':'standard'} ${width}: frame variants survive reload`);
     } finally { await page.close(); }
   }
 }
@@ -946,7 +951,7 @@ async function goldCrystalVisuals() {
 try {
   await drawGlow();
   await bloomMenuFit();
-  await goldCrystalVisuals();
+  await goldFrameVisuals();
   for (const [index,[width,height]] of presets.entries()) {
     if (filter && !filter.includes(`${width}x${height}`)) continue;
     for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height,index%2 === 1)]] as const) {

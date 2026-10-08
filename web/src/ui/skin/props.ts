@@ -1,5 +1,5 @@
 // Props: separate sprites on owned tiles, placed deterministically (the same board always looks
-// the same), never in the number or occupied gold-crystal clear zones, and only as many as the tile's
+// the same), clear of the number and tile edge, and only as many as the tile's
 // rendered size allows (LOD). Pure.
 import type { PropDef } from './types.js';
 

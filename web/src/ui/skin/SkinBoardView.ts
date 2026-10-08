@@ -26,7 +26,7 @@ import { pickTier } from './tier.js';
 import type { HomeLayer, NetworkLook, PropDef, SkinDef, Tier } from './types.js';
 import { SKIN_CSS } from './skin-css.js';
 import { drawSeedStone } from '../seedstone.js';
-import { drawGoldCrystals, goldCrystalKeepout } from '../goldcrystals.js';
+import { drawGoldFrame } from '../goldframes.js';
 
 /** Most ground-canvas pixels: phones (coarse pointer) and the rest. */
 const MAX_PX = { coarse: 3_000_000, fine: 6_500_000 };
@@ -799,10 +799,10 @@ export class SkinBoardView extends BoardView {
     // tiles carry their own plants, so they get none)
     const defs = art ? [] : ((cut ? this.cutoffDefs : this.propDefs)[skin.owners[t.owner]] ?? []);
     const budget = cut ? Math.min(1, propBudget(this.tilePx(), 9)) : propBudget(this.tilePx(), s9);
-    for (const pr of placeProps(key, defs, budget, cut ? 9 : s9, this.richKeys.has(key) ? [goldCrystalKeepout(key)] : [])) this.prop(g, x, y, pr, key);
+    for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (IS_TEST2 && this.richKeys.has(key)) drawGoldCrystals(g, key, x, y, true, (this.settlingGold.get(key) ?? 0) > performance.now());
+    if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];

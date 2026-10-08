@@ -397,21 +397,10 @@ html.test2-information[data-step='throw'] #discard .gd-halo {
   box-shadow: 0 0 0 1px rgba(218,104,80,.38), 0 0 22px 2px rgba(173,64,47,.32);
 }
 html.test2-information[data-step='throw'] #discard .gd-ring { animation: none !important; opacity: 0; }
-/* A fixed backlight reads as a turn state without flickering with the moving cards. */
-html.test2-information #hand { position: relative; isolation: isolate; }
 html.test2-information #hand .card { touch-action: manipulation; }
-html.test2-information #hand::before {
-  content: ''; position: absolute; inset: auto; z-index: -1; pointer-events: none;
-  left: var(--test2-hand-glow-x, 50%); top: var(--test2-hand-glow-y, 50%);
-  width: var(--test2-hand-glow-w, 0px); height: var(--test2-hand-glow-h, 0px);
-  filter: blur(10px);
-  border-radius: 50%; opacity: 0; transition: opacity 180ms ease, background 180ms ease;
-}
-html.test2-information[data-step='grow'] #hand::before {
-  opacity: .8; background: radial-gradient(ellipse, transparent 44%, rgba(94,178,102,.22) 69%, rgba(59,127,70,.11) 82%, transparent 100%);
-}
-html.test2-information[data-step='throw'] #hand::before {
-  opacity: 1; background: radial-gradient(ellipse, transparent 44%, rgba(181,57,42,.34) 68%, rgba(129,39,28,.19) 81%, transparent 100%);
+/* A short edge light belongs to each card, and follows its fan rotation and lift. */
+html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) {
+  box-shadow: 0 0 0 1px rgba(119,179,116,.22), 0 0 8px 1px rgba(88,158,89,.18), 0 5px 15px rgba(5,16,9,.30);
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes test2-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
@@ -424,11 +413,11 @@ html.test2-information[data-step='grow'][data-test2-waiting='true'] #moves > :is
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) {
   opacity: .88; filter: grayscale(.54) brightness(.94);
   outline-color: rgba(223,105,77,.35) !important;
-  box-shadow: 0 4px 16px rgba(20,11,10,.32);
+  box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
   animation: test2-card-breathe 1.35s ease-in-out infinite;
 }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked {
-  opacity: 1; box-shadow: 0 0 18px rgba(205,76,53,.28) !important;
+  opacity: 1; box-shadow: 0 0 0 1px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
 }
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #hand .card { animation: none !important; }
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #moves .test2-combination { animation: none !important; }
