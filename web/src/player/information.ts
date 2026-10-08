@@ -223,22 +223,21 @@ html.test2-information .dock #test2-box .pile-count.pile-meter {
   border: 0; border-radius: 3px;
   background: #111312; color: #e8e1cd;
   box-shadow: none;
-  font: 600 12px/15px var(--font-mono, ui-monospace, monospace);
+  font: 700 10px/10px var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-sizing: border-box;
 }
 html.test2-information .dock #test2-box .pile-count.pile-meter::before {
   content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-  background:url('./hardware/counter-shell.webp') center / 100% 100% no-repeat;
-  filter:brightness(1.38); z-index:0;
+  background:url('./hardware/counter-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information .dock #test2-box .pile-meter-window {
-  position: relative; display: block; flex: 0 0 11px; width: 11px; height: 15px; z-index:1;
+  position: relative; display: block; flex: 0 0 11px; width: 11px; height: 10px; z-index:1;
   overflow: hidden; border-right: 0; box-shadow: none;
 }
-html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 30px; }
+html.test2-information .dock #test2-box .pile-meter-drum { position: absolute; top: 0; left: 0; width: 100%; height: 20px; }
 html.test2-information .dock #test2-box .pile-meter-face {
   position: relative; display: grid; place-items: center; width: 100%;
-  height: 15px; white-space: nowrap; font: inherit;
+  height: 10px; white-space: nowrap; font: inherit;
   text-shadow: 0 1px 1px #020303, 0 -1px rgba(255,250,225,.12);
   background: transparent;
 }

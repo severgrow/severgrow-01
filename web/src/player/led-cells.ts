@@ -47,8 +47,8 @@ const GLYPHS: Record<string, string> = {
   '•':'00000/00000/00100/01110/00100/00000/00000',
 };
 
-const ADVANCE = 13.4;
-const DOT_X = 2.1;
+const ADVANCE = 14.5;
+const DOT_X = 2.3;
 const SEPARATOR = '   •   ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
 
@@ -58,9 +58,9 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
   const width = ledMessageWidth(shown);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.ceil(width * dpr);
-  canvas.height = Math.ceil(24 * dpr);
+  canvas.height = Math.ceil(26 * dpr);
   canvas.style.width = `${width}px`;
-  canvas.style.height = '24px';
+  canvas.style.height = '26px';
   const ctx = canvas.getContext('2d');
   if (!ctx) return width;
   ctx.scale(dpr, dpr);
@@ -71,8 +71,8 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
       const lit = glyph[y]?.[x] === '1';
       const px = i * ADVANCE + x * DOT_X + 1.1;
-      const py = y * 2.9 + 3.2;
-      const radius = shown[i] === '•' ? 1.26 : .93;
+      const py = y * 3.1 + 3.15;
+      const radius = shown[i] === '•' ? 1.33 : 1;
       ctx.beginPath();
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       ctx.fillStyle = lit ? '#f0d29d' : 'rgba(190,146,89,.055)';

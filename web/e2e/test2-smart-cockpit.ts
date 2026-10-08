@@ -49,8 +49,10 @@ try {
     check(await page.locator('#smart-led-text').innerText()==='DRAW',`${name}: immediate Draw LED`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
     const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!,'::before').backgroundImage));
-    check(materials[0]!.includes('button-shell.webp')&&materials[1]!.includes('counter-shell.webp')&&materials[2]!.includes('display-shell.webp'),`${name}: each coded control uses its fitted hardware shell`);
-    check(await page.locator('#smart-led-cells').evaluate(el=>el.getBoundingClientRect().height)===24,`${name}: LED uses the enlarged full-height glyph canvas`);
+    check(materials[0]!.includes('button-frame-supplied.webp')&&materials[1]!.includes('counter-frame-supplied.webp')&&materials[2]!.includes('display-frame-supplied.webp'),`${name}: each coded control uses the supplied frame art`);
+    check(await page.locator('#smart-led-cells').evaluate(el=>el.getBoundingClientRect().height)===26,`${name}: LED uses the enlarged full-height glyph canvas`);
+    check(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied display art keeps its proportions`);
+    check(await page.locator('#deck-count').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied counter art keeps its proportions`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);

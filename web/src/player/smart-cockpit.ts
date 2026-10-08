@@ -57,8 +57,7 @@ html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .han
 }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot)::before {
   content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-  background:url('./hardware/button-shell.webp') center / 100% 100% no-repeat;
-  filter:brightness(1.38); z-index:0;
+  background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { position:relative; z-index:1; }
 html.test2-information #test2-box #smart-context { grid-column:3; grid-row:1; cursor:pointer; }
@@ -75,13 +74,12 @@ html.test2-information #test2-box #test2-actions > .hand-slot:disabled :is(svg,.
 html.test2-information #test2-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #test2-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
-  padding:9px 10px; box-sizing:border-box; border:0; border-radius:12px;
+  padding:8px; box-sizing:border-box; border:0; border-radius:12px;
   background:#111312; box-shadow:none; position:relative;
 }
 html.test2-information #test2-box #smart-led::before {
   content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-  background:url('./hardware/display-shell.webp') center / 100% 100% no-repeat;
-  filter:brightness(1.38); z-index:0;
+  background:url('./hardware/display-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
 html.test2-information #test2-box #smart-led-window {
   display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0; box-sizing:border-box; position:relative;
@@ -91,7 +89,7 @@ html.test2-information #test2-box #smart-led-text {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
 }
 html.test2-information #test2-box #smart-led-cells {
-  display:block; flex:none; width:auto; height:24px;
+  display:block; flex:none; width:auto; height:26px;
 }
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { 0%,12% { transform:translateX(0); } 88%,100% { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
