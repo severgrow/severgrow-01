@@ -1,4 +1,5 @@
 /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
+import { drawLedCells } from './led-cells.js';
 type Action = { key: string; label: string; icon: string; priority: number; source: HTMLButtonElement };
 
 const ICONS: Record<string, string> = {
@@ -26,10 +27,17 @@ html.test2-information #step-cue { display:none !important; }
 html.test2-information #tool-skip { display:none !important; }
 html.test2-information #test2-box {
   --hardware-grain:
-    radial-gradient(circle at 2px 3px,rgba(240,229,200,.22) 0 .62px,transparent 1px) 0 0/11px 13px,
-    radial-gradient(circle at 7px 8px,rgba(0,0,0,.32) 0 .62px,transparent 1px) 0 0/17px 19px,
-    radial-gradient(ellipse 22px 8px at 13% 2%,rgba(220,205,170,.09),transparent 90%),
-    radial-gradient(ellipse 17px 7px at 86% 99%,rgba(220,205,170,.07),transparent 90%);
+    radial-gradient(ellipse 9px 6px at 2px 3px,rgba(231,216,181,.27),transparent 88%) 0 0/19px 23px,
+    radial-gradient(ellipse 10px 7px at 8px 9px,rgba(0,0,0,.40),transparent 90%) 0 0/27px 29px,
+    radial-gradient(circle at 4px 6px,rgba(232,218,188,.43) 0 1.1px,transparent 1.7px) 0 0/13px 17px,
+    radial-gradient(circle at 9px 4px,rgba(0,0,0,.52) 0 1px,transparent 1.6px) 0 0/17px 13px;
+  --hardware-wear:
+    radial-gradient(ellipse 17px 11px at 8% 5%,rgba(234,220,185,.14),transparent 95%),
+    radial-gradient(ellipse 15px 12px at 38% 52%,rgba(213,200,166,.14),transparent 82%),
+    radial-gradient(ellipse 13px 9px at 91% 92%,rgba(201,184,145,.10),transparent 95%),
+    linear-gradient(116deg,rgba(239,227,198,.16),transparent 24%,transparent 76%,rgba(232,218,184,.09)),
+    linear-gradient(0deg,rgba(206,187,148,.10),transparent 12%,transparent 88%,rgba(234,222,194,.13));
+  --hardware-edge:inset 0 1px rgba(255,244,215,.18),inset 1px 0 rgba(225,212,180,.08),inset -1px 0 rgba(225,212,180,.06),inset 0 -2px rgba(0,0,0,.48);
   --box-tools:calc(3 * var(--control-size) + 2 * var(--control-gap));
 }
 html.test2-information #test2-box #moves { position:absolute !important; width:0 !important; height:0 !important; min-height:0 !important; overflow:hidden !important; visibility:hidden !important; pointer-events:none !important; }
@@ -46,19 +54,20 @@ html.test2-information #test2-box #test2-actions > :nth-child(1) { grid-column:1
 html.test2-information #test2-box #test2-actions > :nth-child(2) { grid-column:2; grid-row:2; }
 html.test2-information #test2-box #test2-actions > :nth-child(3) { grid-column:3; grid-row:2; }
 html.test2-information #test2-box #test2-actions > .hand-slot[hidden] { display:grid !important; visibility:visible !important; }
-html.test2-information #test2-box :is(#smart-context,#test2-actions > .hand-slot) {
+html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) {
   width:var(--control-size) !important; height:var(--control-size) !important;
   min-width:var(--control-size); min-height:var(--control-size); max-width:var(--control-size);
   margin:0; padding:0; position:relative; inset:auto; flex:none;
   display:grid; place-items:center; box-sizing:border-box;
   border:1px solid rgba(201,198,186,.33); border-radius:12px;
-  background:var(--hardware-grain),linear-gradient(160deg,#262826 0%,#1c1e1d 42%,#141615 100%);
+  background:var(--hardware-wear),var(--hardware-grain),linear-gradient(160deg,#262826 0%,#1c1e1d 42%,#141615 100%);
   color:var(--control-ivory); opacity:1;
-  box-shadow:inset 0 1px rgba(255,250,236,.07),inset 0 -2px rgba(0,0,0,.46),0 2px 4px rgba(0,0,0,.38);
+  box-shadow:var(--hardware-edge),0 2px 4px rgba(0,0,0,.38);
   touch-action:manipulation;
 }
 html.test2-information #test2-box #smart-context { grid-column:3; grid-row:1; cursor:pointer; }
 html.test2-information #test2-box #smart-context svg { width:21px; height:21px; }
+html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { opacity:.94; }
 html.test2-information #test2-box #smart-context:is(:hover,:focus-visible,[aria-expanded='true']) {
   border-color:var(--control-amber); color:#fff1cf;
   box-shadow:inset 0 1px rgba(255,246,215,.14),inset 0 -2px rgba(0,0,0,.48),0 0 0 1px rgba(196,150,88,.3),0 0 12px rgba(196,150,88,.18);
@@ -70,27 +79,28 @@ html.test2-information #test2-box #smart-context:focus-visible { outline:2px sol
 html.test2-information #test2-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
   padding:4px; box-sizing:border-box; border:1px solid rgba(201,198,186,.27); border-radius:12px;
-  background:var(--hardware-grain),linear-gradient(160deg,#252725,#141615);
-  box-shadow:inset 0 1px rgba(255,250,236,.06),inset 0 -2px rgba(0,0,0,.45),0 2px 4px rgba(0,0,0,.38);
+  background:var(--hardware-wear),var(--hardware-grain),linear-gradient(160deg,#252725,#141615);
+  box-shadow:var(--hardware-edge),0 2px 4px rgba(0,0,0,.38);
 }
 html.test2-information #test2-box #smart-led-window {
-  display:flex; align-items:center; overflow:hidden; width:100%; height:100%; padding:0 5px; box-sizing:border-box;
+  display:flex; align-items:center; overflow:hidden; width:100%; height:100%; padding:0 5px; box-sizing:border-box; position:relative;
   border-radius:7px; background:linear-gradient(180deg,#090c0b,#11140f 60%,#080a09);
-  box-shadow:inset 0 1px 3px #030504,inset 0 0 0 1px rgba(199,164,104,.11);
+  box-shadow:inset 0 1px 3px #030504,inset 0 0 0 1px rgba(199,164,104,.16),inset 0 0 10px rgba(192,125,45,.055);
 }
 html.test2-information #test2-box #smart-led-text {
-  display:block; flex:none; white-space:nowrap; color:#e2b778;
-  font:700 9px/1 var(--font-mono,ui-monospace,monospace); letter-spacing:.02em;
-  text-shadow:0 0 5px rgba(217,149,55,.21); font-variant-numeric:tabular-nums;
+  position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
+}
+html.test2-information #test2-box #smart-led-cells {
+  display:block; flex:none; width:auto; height:20px;
 }
 @keyframes smart-led-scroll { 0%,13% { transform:translateX(0); } 87%,100% { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
-html.test2-information #smart-led-text.scrolling { animation:smart-led-scroll var(--led-duration,5s) ease-in-out infinite alternate; }
+html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,5s) ease-in-out infinite alternate; }
 html.test2-information #smart-selector {
   position:absolute; right:0; top:0; z-index:10;
   display:flex; gap:var(--control-gap); width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
   overflow-x:auto; overflow-y:hidden; padding:0; box-sizing:border-box; scrollbar-width:none;
   border:0; border-radius:12px;
-  background:var(--hardware-grain),linear-gradient(155deg,#262826,#111411);
+  background:var(--hardware-wear),var(--hardware-grain),linear-gradient(155deg,#262826,#111411);
   box-shadow:0 2px 8px rgba(0,0,0,.4);
 }
 html.test2-information #smart-selector::-webkit-scrollbar { display:none; }
@@ -98,8 +108,8 @@ html.test2-information #smart-selector[hidden] { display:none; }
 html.test2-information #smart-selector button {
   display:grid; place-items:center; flex:0 0 var(--control-size); width:var(--control-size); height:var(--control-size);
   border:1px solid rgba(201,198,186,.31); border-radius:12px; padding:0;
-  background:var(--hardware-grain),linear-gradient(155deg,#262826,#111411);
-  color:var(--control-ivory); touch-action:manipulation;
+  background:var(--hardware-wear),var(--hardware-grain),linear-gradient(155deg,#262826,#111411);
+  color:var(--control-ivory); touch-action:manipulation; box-shadow:var(--hardware-edge);
 }
 html.test2-information #smart-selector button:first-child { background:rgba(196,150,88,.10); }
 html.test2-information #smart-selector button:is(:hover,:focus-visible) { background:rgba(196,150,88,.2); outline:1px solid var(--control-amber); }
@@ -110,11 +120,45 @@ html.test2-information #smart-selector .test2-mini-card .c-num { font-size:7px !
 html.test2-information #smart-selector .test2-mini-card .c-suit svg { width:7px !important; height:7px !important; }
 html.test2-information #smart-selector .smart-action-label { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
 html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { left:50%; transform:translateX(-50%); }
-html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) { box-shadow:0 0 0 1px rgba(119,194,115,.36),0 0 16px 3px rgba(88,171,86,.38),0 5px 15px rgba(5,16,9,.30); }
-html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.45),0 0 18px 3px rgba(190,68,47,.48),0 5px 15px rgba(20,11,10,.34); }
-html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 18px 3px rgba(190,68,47,.48) !important; }
-@media (prefers-reduced-motion:reduce) { html.test2-information #smart-led-text.scrolling { animation:none; max-width:100%; overflow:hidden; text-overflow:ellipsis; } }
-html.test2-information.reduce-motion #smart-led-text.scrolling { animation:none; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+html.test2-information .dock #test2-box .pile-count.pile-meter {
+  background:var(--hardware-wear),var(--hardware-grain),linear-gradient(180deg,#23251f 0%,#101210 26%,#0b0d0b 60%,#20221d 100%);
+  border-color:rgba(189,178,151,.7);
+  box-shadow:var(--hardware-edge),0 1px 2px rgba(0,0,0,.55);
+}
+html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) { box-shadow:0 0 0 1px rgba(119,194,115,.4),0 0 9px 1px rgba(88,171,86,.4),0 5px 12px rgba(5,16,9,.30); }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5),0 5px 12px rgba(20,11,10,.34); }
+html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 10px 1px rgba(190,68,47,.5) !important; }
+/* The discard draw cue belongs to its printed top card, never to a second slot. */
+html.test2-information[data-step='draw'] #discard .pile-card { box-shadow:none !important; }
+html.test2-information[data-step='draw'] #discard .gd-fx { display:none !important; }
+html.test2-information[data-step='draw'] #discard.ready:not(.test2-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
+html.test2-information[data-step='draw'] #discard.test2-bloom-draw .pile-top.card {
+  transform:translateY(-3px); border-color:rgba(209,172,105,.8);
+  box-shadow:0 0 0 1px rgba(209,172,105,.34),0 0 9px 1px rgba(205,162,87,.21),0 2px 4px rgba(0,0,0,.45);
+  transition:transform .2s ease-out,border-color .2s ease-out,box-shadow .2s ease-out;
+}
+/* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
+html.test2-information #board .l-over .receptive-well {
+  fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
+  pointer-events:none;
+}
+html.test2-information #board .l-over .target.kind-grow {
+  fill:#ded6bd; fill-opacity:calc(.055 + var(--near,0) * .16);
+  stroke:#d8c8a5; stroke-width:1.15; stroke-opacity:calc(.30 + var(--near,0) * .35);
+  stroke-dasharray:none; animation:target-in .2s ease-out both;
+  transition:fill-opacity .14s ease,stroke-opacity .14s ease;
+}
+html.test2-information #board .l-over .target.kind-grow:hover {
+  fill-opacity:.24; stroke-opacity:.72;
+}
+html.test2-information #board .l-over .selected.receptive-active {
+  fill:#e2d7ba; fill-opacity:.20; stroke:#e1d0a9; stroke-opacity:.70; stroke-width:1.35;
+  pointer-events:none;
+}
+@media (prefers-reduced-motion:reduce) { html.test2-information #smart-led-cells.scrolling { animation:none; } }
+html.test2-information.reduce-motion #smart-led-cells.scrolling { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.test2-information #board .l-over .target.kind-grow { animation:none; transition:none; } }
+html.test2-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
 
 export function mountSmartCockpit() {
@@ -127,7 +171,9 @@ export function mountSmartCockpit() {
   const panel = document.createElement('div'); panel.id = 'smart-panel'; panel.setAttribute('role','group'); panel.setAttribute('aria-label','Game controls');
   const led = document.createElement('div'); led.id = 'smart-led'; led.setAttribute('role','status'); led.setAttribute('aria-live','polite');
   const windowEl = document.createElement('div'); windowEl.id = 'smart-led-window';
-  const text = document.createElement('span'); text.id = 'smart-led-text'; windowEl.append(text); led.append(windowEl);
+  const text = document.createElement('span'); text.id = 'smart-led-text';
+  const cells = document.createElement('canvas'); cells.id = 'smart-led-cells'; cells.setAttribute('aria-hidden','true');
+  windowEl.append(text,cells); led.append(windowEl);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);
@@ -145,14 +191,15 @@ export function mountSmartCockpit() {
   const setText = (value: string) => {
     if (value === lastText) return;
     lastText = value; text.textContent = value; led.title = value;
-    text.classList.remove('scrolling');
+    cells.classList.remove('scrolling');
+    const width = drawLedCells(cells,value);
     requestAnimationFrame(() => {
       if (value !== lastText) return;
-      const travel = Math.ceil(text.scrollWidth - windowEl.clientWidth + 10);
+      const travel = Math.ceil(width - windowEl.clientWidth + 10);
       if (travel > 2) {
-        text.style.setProperty('--led-travel',`${travel}px`);
-        text.style.setProperty('--led-duration',`${Math.max(4.8,travel/20+2.5).toFixed(1)}s`);
-        text.classList.add('scrolling');
+        cells.style.setProperty('--led-travel',`${travel}px`);
+        cells.style.setProperty('--led-duration',`${Math.max(4.8,travel/20+2.5).toFixed(1)}s`);
+        cells.classList.add('scrolling');
       }
     });
   };

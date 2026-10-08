@@ -46,9 +46,14 @@ try {
     await page.waitForTimeout(1100); // intentional Draw entrance finishes before anchoring assertions
     let start=await rects(page); aligned(start,`${name} Draw`);
     check(await page.locator('#smart-led-text').innerText()==='DRAW A CARD',`${name}: immediate Draw LED`);
+    check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
+    const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!).backgroundImage));
+    check(materials.every(value=>value.startsWith(materials[0]!.slice(0,140))),`${name}: button, meter and display share the visible worn finish`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
+    check(await page.locator('#discard.test2-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
+    check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-draw.png`});
     const x=start.piles[0]!.pile.x;
     for(let i=0;i<4;i++) {
@@ -105,11 +110,37 @@ try {
   }
   await page.evaluate(()=>{const banner=document.getElementById('banner')!;banner.textContent='THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';});
   await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('THIS IS A LONG'));
-  await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.classList.contains('scrolling'));
-  check((await page.locator('#smart-led-text').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
+  await page.waitForFunction(()=>document.querySelector('#smart-led-cells')?.classList.contains('scrolling'));
+  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
   await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
-  check((await page.locator('#smart-led-text').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
+  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
   await page.close();
+  const discard=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await discard.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
+  await discard.goto(`${BASE}?seed=14`); await discard.waitForSelector('#discard.ready');
+  check(await discard.locator('#discard.test2-bloom-draw').count()===1,'Draw: discard card creates a new Bloom combination');
+  check(await discard.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none','Draw: old discard rectangle is removed');
+  check((await discard.locator('#discard .pile-top').evaluate(el=>getComputedStyle(el).transform))!=='none','Draw: combo-relevant top card lifts within its own pile');
+  await discard.screenshot({path:`${dir}/390x844-combo-discard.png`});
+  await discard.close();
+  const wells=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await wells.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
+  await wells.goto(`${BASE}?seed=1`); await wells.waitForSelector('#deck.ready');
+  await wells.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(wells,'ACT');
+  await wells.locator('#hand .card.playable').first().click();
+  const target=wells.locator('#board .target.kind-grow').first(); await target.waitFor();
+  await wells.waitForTimeout(450); // placement entrance may replace overlay paths once
+  check(await wells.locator('#board .receptive-well').count()===await wells.locator('#board .target.kind-grow').count(),'Grow: only legal empty targets receive wells');
+  const resting=Number(await target.evaluate(el=>getComputedStyle(el).fillOpacity));
+  const key=await target.getAttribute('data-key');
+  const point=await hexCenter(wells,key!);
+  await target.evaluate((el,position)=>el.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:position.x,clientY:position.y,pointerType:'touch'})),point);
+  await wells.waitForTimeout(220);
+  const awake=Number(await target.evaluate(el=>getComputedStyle(el).fillOpacity));
+  const near=await target.evaluate(el=>el.style.getPropertyValue('--near'));
+  check(awake>resting,`Grow: proximity strengthens the same receptive-well treatment (${resting} → ${awake}; near ${near})`);
+  await wells.screenshot({path:`${dir}/390x844-legal-wells.png`});
+  await wells.close();
   const branch=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await branch.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await branch.goto(`${BASE}?seed=4`); await branch.waitForSelector('#deck.ready');

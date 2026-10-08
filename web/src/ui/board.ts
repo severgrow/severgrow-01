@@ -474,6 +474,8 @@ export class BoardView {
       }
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
+        // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
+        if (IS_TEST2 && kind === 'grow') el('path', { d: hexPath(key, S - 5, st.tileShape), class: 'receptive-well', 'aria-hidden': 'true' }, over);
         el('path', { d: hexPath(key, S - 3, st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
@@ -501,7 +503,7 @@ export class BoardView {
       const { x, y } = centerOf(key);
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
-    if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, st.tileShape), class: 'selected' }, over);
+    if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, st.tileShape), class: `selected${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}` }, over);
     // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
     if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
     if (o.cutKeys.length > 0 && o.ghosts.length > 0) this.badge(over, [...o.cutKeys].sort()[0]!, `−${o.cutKeys.length}`, 'opp cut-gain');
