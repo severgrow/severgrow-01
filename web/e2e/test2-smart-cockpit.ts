@@ -33,7 +33,7 @@ const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
 };
 
 try {
-  for (const [width,height,side] of [[360,640,'right'],[390,664,'right'],[390,844,'right'],[430,932,'right'],[768,1024,'right'],[1280,800,'right'],[1440,900,'right'],[1600,980,'right'],[1920,1080,'right'],[390,844,'left']] as const) {
+  for (const [width,height,side] of [[360,640,'right'],[390,664,'right'],[390,664,'left'],[390,844,'right'],[430,932,'right'],[768,1024,'right'],[1280,800,'right'],[1440,900,'right'],[1600,980,'right'],[1920,1080,'right'],[390,844,'left']] as const) {
     const name=`${width}x${height} ${side}`, mobile=width<600;
     const page=await browser.newPage({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
     const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -69,6 +69,16 @@ try {
     }
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(page,'ACT');
     const grow=await rects(page);aligned(grow,`${name} Grow`);
+    if(mobile && width/height>=.53) {
+      const map=await page.evaluate(()=>{
+        const cells=[...document.querySelectorAll<SVGPathElement>('#board-wrap .l-base path.hex')].map(el=>el.getBoundingClientRect());
+        return {left:Math.min(...cells.map(r=>r.left)),right:Math.max(...cells.map(r=>r.right)),top:Math.min(...cells.map(r=>r.top)),bottom:Math.max(...cells.map(r=>r.bottom))};
+      });
+      const controlLeft=Math.min(grow.piles[0]!.pile.left,grow.piles[1]!.pile.left,grow.panel.left);
+      const controlRight=Math.max(grow.piles[0]!.pile.right,grow.piles[1]!.pile.right,grow.panel.right);
+      check(Math.abs(map.left-controlLeft)<7&&Math.abs(map.right-controlRight)<7,`${name}: map and cockpit controls share outer margins`);
+      check(map.top>=-1&&map.bottom<=grow.panel.top+15,`${name}: enlarged map stays between header and controls`);
+    }
     check(await page.locator('#deck-count,#discard-count').evaluateAll(nodes=>nodes.every(node=>{
       const style=getComputedStyle(node);return style.width==='34px'&&style.height==='18px';
     })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);

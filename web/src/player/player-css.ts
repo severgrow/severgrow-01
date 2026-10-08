@@ -560,6 +560,14 @@ html[data-thumb] .board-wrap {
   --cam-under: var(--dock-h, 0px);
   margin-bottom: calc(-1 * var(--dock-h, 0px));
 }
+/* Short phones can use the clear space between the header controls. Extend the camera's
+   window, not the hex geometry, until the map shares the cockpit's small side margins. */
+@media (max-width:600px) and (min-aspect-ratio:53/100) {
+  html.test2-information[data-thumb] #game .board-wrap {
+    margin-top:calc(-1 * var(--hud-h,44px));
+    margin-bottom:calc(-1 * var(--dock-h,0px) - clamp(8px,calc(70vw - 244px),32px));
+  }
+}
 html[data-thumb] .board {
   overflow: hidden;
 }
