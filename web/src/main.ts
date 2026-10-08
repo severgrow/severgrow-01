@@ -12,6 +12,7 @@ import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
+import { displayEventForPlay } from './player/display-readout.js';
 import { gameHighlights } from './logic/highlights.js';
 import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
@@ -664,7 +665,9 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
+let displayTurnStart: State | null = null;
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
+  displayTurnStart = state.phase === 'DRAW' ? state : null;
   epoch++;
   for (const w of [...waiters]) w();
   pumping = false;
@@ -688,6 +691,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   applyLayout();
   lastBoard = null;
   showScreen('game');
+  smartCockpit?.reset();
   scheduleBot();
 }
 
@@ -989,6 +993,8 @@ function currentAdvice(): Advice | null {
 // ---------- playing moves ----------
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
+  const displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN,displayTurnStart) : null;
+  if (p.steps.some(step=>step.k==='turn')) displayTurnStart = p.after;
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
@@ -1010,6 +1016,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
+  if (displayEvent) smartCockpit?.event(displayEvent);
   render();
   void pump();
   scheduleBot();
@@ -3043,6 +3050,7 @@ function undoMove() {
   log.unshift('You took back a move.');
   save();
   render();
+  smartCockpit?.hint('UNDONE');
 }
 
 function cancelSel() {

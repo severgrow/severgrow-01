@@ -52,8 +52,29 @@ const DOT_X = 2.3;
 const SEPARATOR = '   •   ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
 
+/** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
+export function ledStaticMessage(message: string) {
+  const score = /^YOU (\d+) • (\d+) OPP$/.exec(message);
+  if (score) {
+    const both = `${score[1]}:${score[2]}`;
+    return ledMessageWidth(both) < 76 ? both : `Y${score[1]}`;
+  }
+  if (message === 'GROW OR SKIP') return 'GROW';
+  if (message === 'OPPONENT TURN') return 'OPP';
+  if (message === 'BLOOM READY') return 'BLOOM';
+  if (message.startsWith('BLOOM +')) return `B+${message.slice(7)}`;
+  if (message.startsWith('YOU LEAD +')) return `Y+${message.slice(10)}`;
+  if (message.startsWith('OPP LEADS +')) return `O+${message.slice(11)}`;
+  if (message.startsWith('CUT -')) return `CUT-${message.slice(5)}`;
+  if (message.startsWith('TURN +')) return `T+${message.slice(6)}`;
+  if (/^[+-]\d+ TILES$/.test(message)) return message.split(' ')[0]!;
+  if (message === 'UNDONE') return 'UNDO';
+  if (message.length <= 5) return message;
+  return message.split(' ')[0]!.slice(0,5);
+}
+
 /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */
-export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false) {
+export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false, mode: 'amber'|'red' = 'amber') {
   const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
   const width = ledMessageWidth(shown);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -76,8 +97,8 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
       ctx.beginPath();
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       if (lit) {
-        ctx.fillStyle = '#f5d8a4';
-        ctx.shadowColor = 'rgba(255,195,104,.78)'; ctx.shadowBlur = 3.4;
+        ctx.fillStyle = mode === 'red' ? '#e4705e' : '#f5d8a4';
+        ctx.shadowColor = mode === 'red' ? 'rgba(234,68,48,.82)' : 'rgba(255,195,104,.78)'; ctx.shadowBlur = mode === 'red' ? 4 : 3.4;
         ctx.fill();
       }
       ctx.shadowBlur = 0;

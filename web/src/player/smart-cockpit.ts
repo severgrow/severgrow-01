@@ -1,5 +1,8 @@
 /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
-import { drawLedCells, ledMessageWidth } from './led-cells.js';
+import { drawLedCells, ledMessageWidth, ledStaticMessage } from './led-cells.js';
+import { DisplayMachine } from './display-machine.js';
+import type { DisplayFrame } from './display-machine.js';
+import type { DisplayEvent } from './display-readout.js';
 type Action = { key: string; label: string; icon: string; priority: number; source: HTMLButtonElement };
 
 const ICONS: Record<string, string> = {
@@ -102,6 +105,7 @@ html.test2-information #test2-box #smart-led-cells {
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
+html.test2-information #smart-led-window.led-pulse #smart-led-cells { filter:brightness(1.22); }
 /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
 html.test2-information #smart-led-spill {
   position:absolute; left:0; top:var(--control-size); width:calc(2 * var(--control-size) + var(--control-gap));
@@ -115,6 +119,7 @@ html.test2-information #smart-led-spill-cells {
   filter:blur(5px) brightness(1.3); scale:1 1.35; transform-origin:top;
 }
 html.test2-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
+html.test2-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.42; }
 html.test2-information #smart-selector {
   position:absolute; right:0; top:0; z-index:10;
   display:flex; gap:var(--control-gap); width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
@@ -261,9 +266,9 @@ export function mountSmartCockpit() {
   let lastPhase = '';
   let lastAction = '';
   let lastText = '';
-  let messageUntil = 0;
-  let transient = '';
-  let messageTimer = 0;
+  let lastMode: 'amber'|'red' = 'amber';
+  let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
   const closeBloom = () => { bloomSelector.hidden = true; bloomButton.setAttribute('aria-expanded','false'); };
   let bloomSources: HTMLButtonElement[] = [];
@@ -295,25 +300,48 @@ export function mountSmartCockpit() {
       return choice;
     }));
   };
-  const setText = (value: string) => {
-    if (value === lastText) return;
-    lastText = value; text.textContent = value; led.title = value;
+  const setText = (frame: DisplayFrame) => {
+    const { text:value, mode } = frame;
+    windowEl.classList.toggle('led-pulse',!!frame.pulse && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+    if (value === lastText && mode === lastMode) return;
+    const previous = lastText;
+    const animateReel = previous && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    for (const running of reel) running.cancel(); reel = [];
+    windowEl.querySelector('.led-reel-old')?.remove();
+    let old: HTMLCanvasElement | null = null;
+    if (animateReel) {
+      old = document.createElement('canvas'); old.className = 'led-reel-old';
+      old.width = cells.width; old.height = cells.height;
+      old.getContext('2d')?.drawImage(cells,0,0);
+      old.style.cssText = `position:absolute;width:${cells.style.width};height:26px;left:${cells.classList.contains('scrolling') ? '0' : '50%'};top:50%;transform:translate(${cells.classList.contains('scrolling') ? '0' : '-50%'},-50%);pointer-events:none`;
+      windowEl.append(old);
+    }
+    lastText = value; lastMode = mode; text.textContent = value; led.title = value; led.dataset.mode = mode;
     cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
     requestAnimationFrame(() => {
-      if (value !== lastText) return;
-      const scrolling = ledMessageWidth(value) > windowEl.clientWidth - 2;
-      drawLedCells(cells,value,scrolling);
-      drawLedCells(spillCells,value,scrolling);
+      if (value !== lastText || mode !== lastMode) { old?.remove(); return; }
+      const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+      const shown = reduced ? ledStaticMessage(value) : value;
+      const scrolling = !reduced && ledMessageWidth(shown) > windowEl.clientWidth - 2;
+      drawLedCells(cells,shown,scrolling,mode);
+      drawLedCells(spillCells,shown,scrolling,mode);
       if (scrolling) {
         const travel = ledMessageWidth(`${value}   •   `);
         for (const target of [cells,spillCells]) {
           target.style.setProperty('--led-travel',`${travel}px`);
-          target.style.setProperty('--led-duration',`${Math.max(4,travel/30).toFixed(1)}s`);
+          target.style.setProperty('--led-duration',`${Math.max(3.2,travel/42).toFixed(1)}s`);
           target.classList.add('scrolling');
         }
       }
+      if (old && old.isConnected) {
+        const duration = 190;
+        const outgoing = old.animate([{translate:'0 0',opacity:1},{translate:'0 26px',opacity:0}],{duration,easing:'linear'});
+        const incoming = cells.animate([{translate:'0 -26px',opacity:0},{translate:'0 0',opacity:1}],{duration,easing:'linear'});
+        reel = [outgoing,incoming]; outgoing.onfinish = () => old?.remove();
+      }
     });
   };
+  const machine = new DisplayMachine(setText);
   const phaseMessage = () => {
     const root = document.documentElement;
     if (root.dataset.step === 'opp') return 'OPPONENT TURN';
@@ -323,15 +351,9 @@ export function mountSmartCockpit() {
     if (root.dataset.step === 'grow') return 'GROW OR SKIP';
     return 'FUTASAKU';
   };
-  const refreshMessage = () => {
-    if (Date.now() >= messageUntil) transient = '';
-    setText(transient || phaseMessage());
-  };
-  const flash = (value: string, ms = 1900) => {
-    transient = value.toUpperCase(); messageUntil = Date.now() + ms;
-    clearTimeout(messageTimer); refreshMessage();
-    messageTimer = window.setTimeout(refreshMessage,ms+10);
-  };
+  machine.reset(phaseMessage());
+  const refreshMessage = () => machine.phase(phaseMessage());
+  const flash = (value: string, ms = 1900) => machine.event({message:value.toUpperCase(),priority:30,duration:ms});
   const collect = (): Action[] => {
     const buttons = [...moves.querySelectorAll<HTMLButtonElement>('button')];
     const items = buttons.filter(button => !button.disabled && !button.matches('[data-kind],.bloom-toggle'));
@@ -379,10 +401,12 @@ export function mountSmartCockpit() {
     else closeBloom();
   });
   document.addEventListener('pointerdown', event => {
+    machine.interact();
     if (!panel.contains(event.target as Node)) close();
     if (!bloom.contains(event.target as Node)) closeBloom();
   }, { capture:true });
   document.addEventListener('keydown', event => {
+    machine.interact();
     if (event.key !== 'Escape') return;
     if (!bloomSelector.hidden) { event.preventDefault(); closeBloom(); bloomButton.focus(); }
     else if (!selector.hidden) { event.preventDefault(); close(); context.focus(); }
@@ -392,8 +416,10 @@ export function mountSmartCockpit() {
     if (shown && rail.dataset.noticePriority === 'major') flash(shown.textContent?.trim() || 'ACTION',2200);
     else refreshMessage();
   });
-  window.addEventListener('resize', () => { lastText = ''; refreshMessage(); });
+  window.addEventListener('resize', () => { lastText = ''; machine.repaint(); });
   return { sync() {
+    const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    if (reduced !== lastReduced) { lastReduced = reduced; lastText = ''; machine.repaint(); }
     syncBloom();
     const next = collect();
     const phase = document.documentElement.dataset.step ?? '';
@@ -405,7 +431,7 @@ export function mountSmartCockpit() {
       const hint = first?.icon === 'clear' ? 'CLEAR SHAPE' : first?.icon === 'reverse' ? 'REVERSE ORDER'
         : first?.icon === 'cancel' ? 'CANCEL SELECTION' : first?.icon === 'bloom' ? 'BLOOM READY'
         : first?.source.id === 'tool-skip' ? 'FAST FORWARD' : '';
-      if (hint) flash(hint,1250);
+      if (hint) machine.hint(hint);
     }
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
@@ -414,5 +440,5 @@ export function mountSmartCockpit() {
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
-  }, flash };
+  }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event), reset: () => machine.reset(phaseMessage()) };
 }

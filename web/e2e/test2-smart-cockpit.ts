@@ -121,13 +121,25 @@ try {
     await page.locator('#tool-undo').click();
     await page.waitForFunction(previous => (window as any).__severgrow.state().history.length === previous && !(window as any).__severgrow.busy(),beforeBloom.history.length);
     check(await page.locator('#smart-bloom').isVisible(),'Bloom: Undo restores the available recipe');
+    await page.evaluate(action=>(window as any).__severgrow.playFor(action,0),bloomAction);
+    await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('BLOOM +'));
+    check(await page.locator('#smart-led').getAttribute('data-mode')==='red','LED: completed Bloom triggers a brief red result');
+    await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('YOU '));
+    await page.waitForFunction(()=>document.querySelector('#smart-led')?.getAttribute('data-mode')==='amber');
+    check(await page.locator('#smart-led-text').innerText()===await page.evaluate(()=>{
+      const root=document.documentElement;
+      return root.dataset.step==='throw'?'THROW':root.dataset.step==='draw'?'DRAW':root.dataset.step==='opp'?'OPPONENT TURN':root.dataset.test2Bloom==='true'?'BLOOM READY':'GROW OR SKIP';
+    }),'LED: result and score return to current phase');
   }
+  // A real Bloom result owns the sign until its event → score sequence finishes.
+  await page.waitForTimeout(2600);
   await page.evaluate(()=>{const banner=document.getElementById('banner')!;banner.textContent='THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';});
   await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('THIS IS A LONG'));
+  check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)<76),'LED: reduced motion uses readable full-size static shorthand');
+  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
+  await page.evaluate(()=>{document.documentElement.classList.remove('reduce-motion');window.dispatchEvent(new Event('resize'));});
   await page.waitForFunction(()=>document.querySelector('#smart-led-cells')?.classList.contains('scrolling'));
   check(await page.locator('#smart-led-cells').evaluate(el=>(el as HTMLCanvasElement).width/(window.devicePixelRatio||1)>400),'LED: long copy uses full-width cells and repeated marquee');
-  check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='none','LED: reduced motion keeps long text still');
-  await page.evaluate(()=>document.documentElement.classList.remove('reduce-motion'));
   check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName))==='smart-led-scroll','LED: long text scrolls with motion enabled');
   await page.close();
   const discard=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
