@@ -5,7 +5,7 @@ import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
 import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
-import type { Action, Card, Player, RulesConfig, State, View } from '../../src/engine/index.js';
+import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
 import { cutLoss } from './analysis.js';
@@ -221,7 +221,8 @@ let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
 const hiddenCards = new Set<number>();
-let scars: { key: string; owner: Player; age: number }[] = [];
+let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
+const removedTiles = new WeakMap<Step, Map<string, Tile>>();
 let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
@@ -1003,6 +1004,18 @@ function currentAdvice(): Advice | null {
 
 // ---------- playing moves ----------
 
+function rememberRemoved(steps: readonly Step[], before: State) {
+  for (const s of steps) if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
+    const keys = s.k === 'megaBomb' ? s.destroyed : s.keys;
+    const former = new Map<string, Tile>();
+    for (const key of keys) {
+      const tile = before.board[key];
+      if (tile) former.set(key, { ...tile });
+    }
+    removedTiles.set(s, former);
+  }
+}
+
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
   const displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN,displayTurnStart) : null;
   if (p.steps.some(step=>step.k==='turn')) displayTurnStart = p.after;
@@ -1022,6 +1035,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     coach.choice = 0;
   }
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
+  rememberRemoved(p.steps, p.before);
   markMoment(p.steps, p.before);
   queue.push(p.steps);
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
@@ -1228,8 +1242,18 @@ function fastForward() {
 /** Book-keeping for a step that is shown (with or without animation). */
 function settleStep(s: Step, animated: boolean) {
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
-  if (s.k === 'sever') scars.push(...s.keys.map((key) => ({ key, owner: s.player, age: 0 })));
-  if (s.k === 'turn') scars = scars.map((x) => ({ ...x, age: x.age + 1 })).filter((x) => x.age <= 2);
+  if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
+    const former = removedTiles.get(s);
+    const keys = s.k === 'megaBomb' ? s.destroyed : s.keys;
+    for (const key of keys) {
+      const tile = former?.get(key);
+      if (!tile && s.k !== 'sever') continue;
+      scars = scars.filter(x => x.key !== key);
+      scars.push({ key, owner: tile?.owner ?? (s.k === 'remove' ? HUMAN : s.player), age: 0, ...(tile ? { tile } : {}) });
+    }
+    removedTiles.delete(s);
+  }
+  if (s.k === 'turn') scars = scars.map((x) => ({ ...x, age: x.age + 1 })).filter((x) => x.age <= 1);
   if (s.k === 'sync') {
     if (animated) countScores(s.scores);
     else shownScores = [s.scores[HUMAN], s.scores[BOT]];
@@ -2354,18 +2378,22 @@ function ghostExtras(v: View, pending: Action | null, ghosts: { key: string }[])
 let blastHoverKey: string | null = null;
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
-  let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age }) => ({ key, owner, age })), focusKey, fresh: freshKeys() };
+  let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age, tile }) => ({ key, owner, age, tile })), focusKey, fresh: freshKeys() };
   if (myTurn() && !busy()) {
     const sel = session.sel;
     const pending = session.pending;
     const pv = pending ? previewMove(v, pending) : null;
     const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
     const kinds = !pending && (sel.card !== null || sel.kind !== null) && !drawCombo() ? targetKinds(v, session.legal, sel) : null;
+    const targets = !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null;
+    const bloomTint = sel.kind?.startsWith('bloom-') ? (sel.kind.startsWith('bloom-mega-') ? 'replace' : 'bloom') : null;
     o = {
       ...o,
-      targets: !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null,
-      ...(kinds ? { targetKinds: Object.fromEntries(kinds) } : {}),
+      targets,
+      ...(kinds || bloomTint && targets ? { targetKinds: Object.fromEntries(
+        [...targets ?? []].map(key => [key, bloomTint ?? kinds?.get(key) ?? 'grow'])) } : {}),
       selectedHex: sel.hex ?? (pending?.t === 'RotPick' ? coordKey(pending.coord) : null),
+      selectedKind: pending?.t === 'Bloom' ? 'bloom' : pending?.t === 'Sprout' ? sproutKind(v, pending) : pending?.t === 'MegaBomb' ? 'replace' : sel.kind?.startsWith('bloom-') ? 'bloom' : undefined,
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
@@ -3605,7 +3633,10 @@ function replayBotTurn() {
   queue.reset(turn[0]!.before.board);
   const v0 = viewFor(turn[0]!.before, HUMAN);
   shownScores = [v0.score, v0.opponentScore];
-  for (const p of turn) queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && !(s.k === 'draw' && s.player === HUMAN)));
+  for (const p of turn) {
+    rememberRemoved(p.steps, p.before);
+    queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && !(s.k === 'draw' && s.player === HUMAN)));
+  }
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);
   banner(`Replay: ${OPP.Label} turn`, 'bot');
@@ -3866,6 +3897,7 @@ bind('go-cut', () => {
   queue.reset(p.before.board);
   const v0 = viewFor(p.before, HUMAN);
   shownScores = [v0.score, v0.opponentScore];
+  rememberRemoved(p.steps, p.before);
   queue.push(p.steps.filter((s) => s.k !== 'end' && s.k !== 'turn' && s.k !== 'draw'));
   const v = session.view;
   queue.push([{ k: 'sync', board: session.state.board, scores: [v.score, v.opponentScore] }]);

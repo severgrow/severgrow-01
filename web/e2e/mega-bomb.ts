@@ -15,7 +15,7 @@ const state: State = { ...base, phase:'ACT', board:blastBoard,
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium',args:['--no-sandbox']});
 try {
-  for (const [width,height] of [[390,844],[1280,800]] as const) {
+  for (const [width,height,v3] of [[390,844,false],[1280,800,false],[390,844,true]] as const) {
     const game: State = width < 600 ? state : { ...state,hands:[[...state.hands[0],
       {id:1400,suit:0,rank:4},{id:1401,suit:1,rank:4},{id:1402,suit:2,rank:4}],state.hands[1]] };
     const page = await browser.newPage({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
@@ -25,9 +25,18 @@ try {
       localStorage.setItem('main2:severgrow.save.v7',saved);
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,speed:'skip',reduceMotion:true,coach:false}));
     },positionSave({state:game}));
-    await page.goto('http://localhost:4199/');
+    await page.goto(`http://localhost:4199/${v3?'?design=v3':''}`);
     await page.click('#menu-continue');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
+    if (v3) await page.waitForFunction(() => document.querySelector('#board')?.getAttribute('data-skin')==='forest-volcano-v3');
+    assert(await page.locator('#board').evaluate(board => {
+      const svg = board.tagName.toLowerCase()==='svg' ? board : board.querySelector('svg');
+      const layers = [...svg?.children ?? []];
+      const contour = board.querySelector('.l-territory-contour');
+      const gold = board.querySelector('.l-rich-frames');
+      return !!contour && !!gold && layers.indexOf(contour) < layers.indexOf(gold) &&
+        !!contour.querySelector('.territory-contour.p0') && !!contour.querySelector('.territory-contour.p1');
+    }),'both home networks have a shared contour beneath the gold frames');
     await page.locator('#hand [data-card="1000"]').click();
     assert((await page.locator('#board .target.kind-fruit').count())>0,'a tapped Bomb remains the existing single-card action');
     await page.keyboard.press('Escape');
@@ -47,6 +56,17 @@ try {
     await page.mouse.click(centre.x,centre.y);
     await page.waitForFunction(() => (window as any).__severgrow.state().board['-1,2'] === null);
     const after=await page.evaluate(() => (window as any).__severgrow.state() as State);
+    await page.waitForFunction(() => document.querySelectorAll('#board .last-round-art').length >= 6);
+    const faded = await page.locator('#board .last-round-art').evaluateAll(nodes=>nodes.every(node=>
+      node.getAttribute('opacity')==='0.2' &&
+      !node.querySelector('.seed-stone') &&
+      !(window as any).__severgrow.state().board[node.getAttribute('data-key')||'']));
+    assert(faded,'removed enemy tiles show their former artwork faintly only on empty hexes');
+    if (width<600 && !v3) await page.screenshot({path:'/tmp/futasaku-default-last-round.png'});
+    if (v3) {
+      await page.waitForTimeout(900);
+      await page.screenshot({path:'/tmp/futasaku-v3-last-round.png'});
+    }
     assert.deepEqual(after.hands[0].map(c=>c.id),game.hands[0].filter(c=>c.id!==1000&&c.id!==1001).map(c=>c.id));
     assert.deepEqual(after.lastResolution?.megaBomb?.cards,[1000,1001]);
     assert.equal(errors.length,0,errors.join(' | '));

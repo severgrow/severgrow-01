@@ -26,7 +26,6 @@ import { pickTier } from './tier.js';
 import type { HomeLayer, NetworkLook, PropDef, SkinDef, Tier } from './types.js';
 import { SKIN_CSS } from './skin-css.js';
 import { drawSeedStone } from '../seedstone.js';
-import { drawGoldFrame } from '../goldframes.js';
 
 /** Most ground-canvas pixels: phones (coarse pointer) and the rest. */
 const MAX_PX = { coarse: 3_000_000, fine: 6_500_000 };
@@ -363,7 +362,7 @@ export class SkinBoardView extends BoardView {
       if (t) {
         const mat = skin.owners[t.owner];
         cells.push({ ...base, material: mat, coverage: this.strength9(t), tint: joined.has(key) ? null : (this.tints[mat] ?? null) });
-      } else if (scars.has(key) && !this.propDefs.dead?.length) {
+      } else if (!IS_TEST2 && scars.has(key) && !this.propDefs.dead?.length) {
         const s = scars.get(key)!;
         const mat = skin.owners[s.owner];
         const age = Math.min(2, s.age ?? 0);
@@ -536,6 +535,28 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
+    if (IS_TEST2) {
+      const defs = this.svg.querySelector('defs')!;
+      for (const s of o.scars) {
+        if (board[s.key] || !s.tile) continue;
+        const src = this.tileSource(s.key, s.tile);
+        if (!src || !this.assets.has(src)) continue;
+        const clipId = this.id(`last-round-${s.key.replace(',', '-')}`);
+        if (!defs.querySelector(`#${clipId}`)) {
+          const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
+          el('path', { d: hexPath(s.key, S, 'flat') }, clip);
+        }
+        const { x, y } = centerOf(s.key);
+        const size = S * 2.07;
+        const axis = toScreen(1, 0);
+        const turn = Math.atan2(axis.y, axis.x) * 180 / Math.PI;
+        const group = el('g', { class: 'last-round-art', 'data-key': s.key, opacity: .2, 'clip-path': `url(#${clipId})` }, scars);
+        el('image', { href: this.assets.url(src), x: x - size / 2, y: y - size / 2, width: size, height: size,
+          class: 'skin-tile-art', preserveAspectRatio: 'none',
+          ...(turn ? { transform: `rotate(${turn.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})` } : {}) }, group);
+      }
+      return;
+    }
     // with dead-wood sprites (props.dead): the empty ground and one burnt stump or log per lost hex
     const dead = this.propDefs.dead ?? [];
     for (const s of o.scars) {
@@ -794,7 +815,7 @@ export class SkinBoardView extends BoardView {
     }
     // The home landmark sits above the tile layer. Draw its existing outer rim in
     // the overlay layer so that the same territory contour remains visible at the source.
-    if (edge) el('path', { d: edge, class: `tile-edge skin-edge skin-rim${t.root ? ' skin-home-rim' : ''}` }, t.root ? this.layers.over : g);
+    if (edge && !IS_TEST2) el('path', { d: edge, class: `tile-edge skin-edge skin-rim${t.root ? ' skin-home-rim' : ''}` }, t.root ? this.layers.over : g);
     void d;
     if (t.root) return g;
     // a tile cut off from its home shows wilted / ashen props instead of its living ones (painted
@@ -804,7 +825,6 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];

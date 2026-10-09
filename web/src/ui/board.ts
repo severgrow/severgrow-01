@@ -10,7 +10,7 @@ import type { Spot } from '../logic/weakspots.js';
 import { looseEdges, networkEdges, veinLook } from '../logic/network.js';
 import type { ThemeStyle } from '../logic/themes.js';
 import type { MaterialLook } from '../logic/materials.js';
-import { FULL_LOOK, S, centerOf, el, hash, hexPath, noiseTile, star } from './geom.js';
+import { FULL_LOOK, S, centerOf, cornerPts, el, hash, hexPath, noiseTile, star } from './geom.js';
 import { drawMaterial, materialDefs } from './materials.js';
 import { WorldLayer } from './worldlayer.js';
 import { boardUnits } from '../logic/layout.js';
@@ -59,6 +59,7 @@ const drawLawnDetail = (parent: SVGGElement, key: string, x: number, y: number, 
 export type Overlay = {
   targets: Set<string> | null;
   selectedHex: string | null;
+  selectedKind?: 'grow' | 'replace' | 'strengthen' | 'bloom' | 'fruit' | null | undefined;
   ghosts: Ghost[];
   cutKeys: string[];
   /** Enemy tiles removed by a hovered Mega Bomb, separate from its launch hex. */
@@ -69,7 +70,7 @@ export type Overlay = {
   coachHexes: string[];
   focusKey: string | null;
   /** what cut-off tiles leave; `age` in turns (0 = this turn): older scars are fainter */
-  scars: { key: string; owner: Player; age?: number }[];
+  scars: { key: string; owner: Player; age?: number; tile?: Tile | undefined }[];
   /** UX pass: hexes the opponent changed on its last turn (shown until I change the board) */
   fresh?: string[];
   usable: boolean;
@@ -78,7 +79,7 @@ export type Overlay = {
   /** Show the bot's fragile links flickering ("Bot's weak links" is on). */
   botFragile: boolean;
   /** v0.5: what each target does: grow on empty, replace a bot tile (⇆), strengthen mine (+). */
-  targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen' | 'fruit'>;
+  targetKinds?: Record<string, 'grow' | 'replace' | 'strengthen' | 'bloom' | 'fruit'>;
   /** polish pass 3: the picked tiles are the game's suggestion (soft "−" markers, not numbers) */
   /** v0.5 Fruit flow: tiles that can be picked, tiles picked so far (in order), the target. */
   /** overhaul item 10: the veins the previewed move would grow (pairs of keys) */
@@ -131,7 +132,7 @@ export class BoardView {
   protected keys: string[] = [];
   /** Bonus terrain stays in engine state; this set only controls its visual crystals. */
   protected richKeys = new Set<string>();
-  protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
+  protected layers!: Record<'base' | 'scars' | 'veins' | 'homes' | 'tiles' | 'glow' | 'amb' | 'contour' | 'rich' | 'marks' | 'dim' | 'over' | 'draw' | 'fx', SVGGElement>;
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
   private drawHandlers: DrawHandlers | null = null;
@@ -303,6 +304,8 @@ export class BoardView {
       glow: el('g', { class: 'l-glow' }, svg),
       veins: el('g', { class: 'l-veins' }, svg),
       homes: el('g', { class: 'l-homes' }, svg),
+      contour: el('g', { class: 'l-territory-contour', 'aria-hidden': 'true', 'pointer-events': 'none' }, svg),
+      rich: el('g', { class: 'l-rich-frames', 'aria-hidden': 'true', 'pointer-events': 'none' }, svg),
       amb: el('g', { class: 'l-amb', 'aria-hidden': 'true' }, svg),
       marks: el('g', { class: 'l-marks' }, svg),
       dim: el('g', { class: 'l-dim', 'aria-hidden': 'true' }, svg),
@@ -315,10 +318,6 @@ export class BoardView {
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
       el('path', { d: hexPath(key, S - 1.2, IS_TEST2 ? 'flat' : style.tileShape), class: `hex ${t}` }, g);
       this.drawCell(g, key, t);
-      if (t === 'rich' && IS_TEST2) {
-        const { x, y } = centerOf(key);
-        drawGoldFrame(g, key, x, y, false);
-      }
       if (t === 'rich' && !IS_TEST2) {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
@@ -414,7 +413,7 @@ export class BoardView {
 
   render(board: Record<string, Tile | null>, o: Overlay) {
     this.lastRender = [board, o];
-    const { veins, tiles, over, scars } = this.layers;
+    const { veins, tiles, over, scars, rich } = this.layers;
     if (this.world) {
       const paint = new Map<string, PaintTile>();
       for (const [k, t] of Object.entries(board)) if (t && !t.root) paint.set(k, { owner: t.owner, t: vigour(t.strength, this.config.maxRank) });
@@ -424,6 +423,7 @@ export class BoardView {
     tiles.replaceChildren();
     over.replaceChildren();
     scars.replaceChildren();
+    rich.replaceChildren();
     this.tileEls.clear();
     this.veinEls = [];
 
@@ -438,13 +438,55 @@ export class BoardView {
       this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
     }
     this.drawGlows(board);
+    if (IS_TEST2) {
+      this.drawTerritoryContour(board);
+      for (const key of this.richKeys) {
+        const { x, y } = centerOf(key);
+        drawGoldFrame(rich, key, x, y, !!board[key]);
+      }
+    }
     this.renderOverlays(board, o);
+  }
+
+  /** One inside edge around each home-connected territory, independent of the chosen skin. */
+  private drawTerritoryContour(board: Record<string, Tile | null>) {
+    const layer = this.layers.contour;
+    layer.replaceChildren();
+    for (const owner of [0, 1] as const) {
+      let joined: Set<string>;
+      try { joined = connectedKeys(board, this.config, owner); }
+      catch { continue; }
+      const segments: string[] = [];
+      for (const key of joined) {
+        const centre = centerOf(key);
+        const corners = cornerPts(key, S - 1.5);
+        const neighbors = allNeighbors(parseKey(key)).map(coordKey);
+        for (let i = 0; i < 6; i++) {
+          const a = corners[i]!, b = corners[(i + 1) % 6]!;
+          const mx = (a[0] + b[0]) / 2 - centre.x;
+          const my = (a[1] + b[1]) / 2 - centre.y;
+          const across = neighbors.reduce((best, candidate) => {
+            const p = centerOf(best), q = centerOf(candidate);
+            return (q.x - centre.x) * mx + (q.y - centre.y) * my >
+              (p.x - centre.x) * mx + (p.y - centre.y) * my ? candidate : best;
+          });
+          if (!joined.has(across)) segments.push(`M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`);
+        }
+      }
+      if (segments.length) el('path', { d: segments.join(''), class: `territory-contour p${owner}`, fill: 'none' }, layer);
+    }
   }
 
   /** What cut-off tiles leave (empty hexes). */
   protected drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
     for (const s of o.scars) {
       if (board[s.key]) continue;
+      if (IS_TEST2) {
+        const g = el('g', { class: 'last-round-art', 'data-key': s.key, opacity: .2 }, scars);
+        this.drawTile(g, s.key, s.tile ?? { owner: s.owner, strength: 1, root: false }, this.config.maxRank);
+        g.querySelectorAll('.seed-stone,.gold-frame,.tile-num,.num-plate').forEach(node => node.remove());
+        continue;
+      }
       // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's), fading over two turns
       const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
       drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(g, s.key));
@@ -480,12 +522,7 @@ export class BoardView {
     const { over } = this.layers;
     const st = this.style;
     const maxRank = this.config.maxRank;
-    // An occupied bonus hex uses its tile-layer frame in place of its base rim.
-    if (IS_TEST2) {
-      for (const frame of this.layers.base.querySelectorAll<SVGGElement>('.gold-frame.empty')) {
-        frame.style.display = board[frame.dataset.key ?? ''] ? 'none' : '';
-      }
-    } else {
+    if (!IS_TEST2) {
       for (const badge of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) badge.classList.toggle('on-tile', !!board[badge.dataset.key ?? badge.getAttribute('data-key') ?? '']);
     }
 
@@ -505,8 +542,14 @@ export class BoardView {
         if (!IS_TEST2 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
       }
     }
-    for (const key of o.cutKeys) el('path', { d: hexPath(key, IS_TEST2 ? S - 4 : S * .7, IS_TEST2 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
-    for (const key of o.blastKeys ?? []) el('path', { d: hexPath(key, S - 4, 'flat'), class: 'blast-affected', 'data-key': key }, over);
+    for (const key of o.cutKeys) {
+      if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
+      el('path', { d: hexPath(key, IS_TEST2 ? S - 3 : S * .7, IS_TEST2 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
+    }
+    for (const key of o.blastKeys ?? []) {
+      if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
+      el('path', { d: hexPath(key, S - 3, 'flat'), class: 'blast-affected', 'data-key': key }, over);
+    }
     // overhaul item 10: the veins the move would grow, drawn on before the tiles
     for (const [a, b] of IS_TEST2 ? [] : (o.ghostLinks ?? [])) {
       const A = centerOf(a);
@@ -516,7 +559,9 @@ export class BoardView {
     }
     for (const g of o.ghosts) {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
-      el('path', { d: hexPath(g.key, S * tileScale(g.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
+      const previewKind = o.selectedKind === 'strengthen' || o.selectedKind === 'bloom' ? o.selectedKind : g.replaces ? 'replace' : 'grow';
+      if (IS_TEST2) el('path', { d: hexPath(g.key, S - 5, 'flat'), class: `receptive-well kind-${previewKind}` }, gg);
+      el('path', { d: hexPath(g.key, IS_TEST2 ? S - 3 : S * tileScale(g.strength, maxRank), IS_TEST2 ? 'flat' : st.tileShape), class: `ghost-tile kind-${previewKind}` }, gg);
       const { x, y } = centerOf(g.key);
       if (IS_TEST2) drawSeedStone(gg, g.key, x, y, g.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
@@ -527,7 +572,11 @@ export class BoardView {
       const { x, y } = centerOf(key);
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
-    if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, IS_TEST2 ? 'flat' : st.tileShape), class: `selected${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
+    if (o.selectedHex) {
+      const selectedKind = o.selectedKind ?? o.targetKinds?.[o.selectedHex] ?? 'grow';
+      if (IS_TEST2 && !o.targets?.has(o.selectedHex)) el('path', { d: hexPath(o.selectedHex, S - 5, 'flat'), class: `receptive-well kind-${selectedKind}` }, over);
+      el('path', { d: hexPath(o.selectedHex, IS_TEST2 ? S - 3 : S - 2, IS_TEST2 ? 'flat' : st.tileShape), class: `selected kind-${selectedKind}${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
+    }
     // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
     if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
     if (o.cutKeys.length > 0 && o.ghosts.length > 0) this.badge(over, [...o.cutKeys].sort()[0]!, `−${o.cutKeys.length}`, 'opp cut-gain');
@@ -635,7 +684,6 @@ export class BoardView {
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
       if (t.owner === 0 && !this.richKeys.has(key)) drawLawnDetail(g, key, x, y, t.strength, this.paletteId);
-      if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
       if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
       else {
         el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
@@ -646,7 +694,6 @@ export class BoardView {
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    if (IS_TEST2 && this.richKeys.has(key)) drawGoldFrame(g, key, x, y, true);
     if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);

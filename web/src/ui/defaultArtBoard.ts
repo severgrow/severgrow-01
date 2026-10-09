@@ -1,12 +1,10 @@
 // The fast default board: small cropped sprites for both territories and homes, with
 // the existing V3 empty ground, rocks, gold frames and physical number stones.
 // It keeps BoardView's hitboxes, overlays and game interactions unchanged.
-import { allNeighbors, connectedKeys, coordKey, parseKey } from '../../../src/engine/index.js';
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
 import { BoardView } from './board.js';
-import { S, centerOf, cornerPts, el, hash, hexPath } from './geom.js';
-import { drawGoldFrame } from './goldframes.js';
+import { S, centerOf, el, hash, hexPath } from './geom.js';
 import { drawLandmark } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
@@ -37,60 +35,10 @@ const artAngle = () => {
   const axis = toScreen(1, 0);
   return Math.atan2(axis.y, axis.x) * 180 / Math.PI + 120;
 };
-
 const f = (n: number) => n.toFixed(2);
 
-/** Match each visual side to its actual neighbouring hex, in either orientation. */
-const sidesOf = (key: string) => {
-  const centre = centerOf(key);
-  const corners = cornerPts(key, S);
-  const neighbours = allNeighbors(parseKey(key)).map(coordKey);
-  return corners.map((start, i) => {
-    const end = corners[(i + 1) % 6]!;
-    const mx = (start[0] + end[0]) / 2 - centre.x;
-    const my = (start[1] + end[1]) / 2 - centre.y;
-    const keyAcross = neighbours.reduce((best, candidate) => {
-      const b = centerOf(best), c = centerOf(candidate);
-      return (c.x - centre.x) * mx + (c.y - centre.y) * my >
-        (b.x - centre.x) * mx + (b.y - centre.y) * my ? candidate : best;
-    });
-    return { start, end, across: keyAcross };
-  });
-};
-
 export class DefaultArtBoardView extends BoardView {
-  private contourLayer: SVGGElement | null = null;
-  private sideCache = new Map<string, ReturnType<typeof sidesOf>>();
   protected override usesWorldLayer() { return false; }
-
-  protected override afterSetup() {
-    this.sideCache.clear();
-    this.contourLayer = el('g', { class: 'default-territory-contour', 'pointer-events': 'none' }, this.layers.homes);
-  }
-
-  private sides(key: string) {
-    let value = this.sideCache.get(key);
-    if (!value) { value = sidesOf(key); this.sideCache.set(key, value); }
-    return value;
-  }
-
-  override render(board: Record<string, Tile | null>, overlay: Parameters<BoardView['render']>[1]) {
-    super.render(board, overlay);
-    const layer = this.contourLayer;
-    if (!layer) return;
-    layer.replaceChildren();
-    for (const owner of [0, 1] as const) {
-      const joined = connectedKeys(board, this.config, owner);
-      for (const key of joined) {
-        for (const side of this.sides(key)) {
-          if (joined.has(side.across)) continue;
-          const d = `M${f(side.start[0])},${f(side.start[1])}L${f(side.end[0])},${f(side.end[1])}`;
-          el('path', { d, fill: 'none', stroke: owner === 0 ? 'rgba(196,224,160,.36)' : 'rgba(193,149,128,.38)',
-            'stroke-width': .57, 'stroke-linecap': 'round' }, layer);
-        }
-      }
-    }
-  }
 
   private artCell(parent: SVGGElement, index: number) {
     const size = artSize(index);
@@ -159,7 +107,6 @@ export class DefaultArtBoardView extends BoardView {
     const clipped = el('g', { 'clip-path': this.artClip(key) }, group);
     const art = el('g', { transform: `translate(${f(x)},${f(y)}) rotate(${artAngle().toFixed(2)})` }, clipped);
     this.artCell(art, index);
-    if (this.richKeys.has(key)) drawGoldFrame(group, key, x, y, true);
     drawSeedStone(group, key, x, y, tile.strength, owner);
     return group;
   }

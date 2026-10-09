@@ -362,9 +362,9 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
     // Full desktops give the board a left-side stage and the cards a generous
     // right instrument area. Compact landscape screens keep their old fit.
     const wideDesktop = W >= 1500;
-    const dockW = wideDesktop ? Math.min(900, Math.round(W * 0.42))
+    const dockW = wideDesktop ? Math.min(950, Math.round(W * 0.47))
       : Math.min(420, Math.max(340, Math.round(W * 0.32)));
-    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(116, Math.round(dockW * 0.155)) : 72);
+    const card = cardSize(dockW, maxHand, wideDesktop ? Math.min(150, Math.round(dockW * 0.17)) : 72);
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
     const zone: Box = { x: sl + BOARD_MARGIN, y: top, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - top - sb - BOARD_MARGIN };
     const fit = bestFit(zone.w, zone.h, radius);

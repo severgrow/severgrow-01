@@ -904,16 +904,17 @@ async function goldFrameVisuals() {
       equal(await state(page),game,`${v3?'V3':'standard'} ${width}: frame art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
-        const owned = [...document.querySelectorAll<SVGGElement>('#board .tile .gold-frame.occupied')];
-        const forest = document.querySelector<SVGGElement>('#board .tile.you .gold-frame.occupied')!;
-        const volcano = document.querySelector<SVGGElement>('#board .tile.bot .gold-frame.occupied')!;
+        const owned = [...document.querySelectorAll<SVGGElement>('#board .l-rich-frames .gold-frame.occupied')];
+        const forest = document.querySelector<SVGGElement>('#board .l-rich-frames .gold-frame.occupied[data-key="0,0"]')!;
+        const volcano = owned.find(frame=>frame!==forest)!;
         const art = forest.querySelector<SVGSVGElement>('.gold-frame-art')!;
         const source = document.querySelector<SVGImageElement>('#board .gold-frame image')!.getAttribute('href')!;
         const atlas = new Image(); atlas.src=source; await atlas.decode();
-        const empty = rich.find(cell => getComputedStyle(cell.querySelector('.gold-frame.empty')!).display !== 'none')!.querySelector('.gold-frame')!;
+        const empty = document.querySelector<SVGGElement>('#board .l-rich-frames .gold-frame.empty')!;
         const centers = owned.map(frame => {
           const art = frame.querySelector<SVGSVGElement>('.gold-frame-art')!;
-          const stone = frame.parentElement!.querySelector<SVGGElement>('.seed-stone')!;
+          const stone = [...document.querySelectorAll<SVGGElement>('#board .l-tiles .tile')]
+            .find(tile=>tile.dataset.key===frame.dataset.key)!.querySelector<SVGGElement>('.seed-stone')!;
           const point = frame.ownerSVGElement!.createSVGPoint();
           point.x = Number(art.getAttribute('x')) + Number(art.getAttribute('width'))/2;
           point.y = Number(art.getAttribute('y')) + Number(art.getAttribute('height'))/2;
@@ -922,33 +923,37 @@ async function goldFrameVisuals() {
           const b = point.matrixTransform(stone.getScreenCTM()!);
           return Math.hypot(a.x-b.x,a.y-b.y);
         });
-        return {rich:rich.length,empty:rich.filter(cell=>getComputedStyle(cell.querySelector('.gold-frame.empty')!).display!=='none').length,
-          hiddenUnderTile:getComputedStyle(rich.find(cell=>cell.dataset.key==='0,0')!.querySelector('.gold-frame.empty')!).display==='none',
+        return {rich:rich.length,empty:document.querySelectorAll('#board .l-rich-frames .gold-frame.empty').length,
+          hiddenUnderTile:!document.querySelector('#board .l-rich-frames .gold-frame.empty[data-key="0,0"]'),
           owners:owned.length,forest:!!forest,volcano:!!volcano,
           oldMarkers:document.querySelectorAll('#board .gold-crystals, #board .gold-crystal-bed, #board .gold-badge, #board .skin-gold').length,
-          stoneOnTop:owned.every(frame=>!!(frame.compareDocumentPosition(frame.parentElement!.querySelector('.seed-stone')!)&Node.DOCUMENT_POSITION_FOLLOWING)),
+          contourBelowGold:!!(document.querySelector('#board .l-territory-contour')!.compareDocumentPosition(document.querySelector('#board .l-rich-frames')!)&Node.DOCUMENT_POSITION_FOLLOWING),
           imageReady:atlas.naturalWidth===2172&&atlas.naturalHeight===724,
           frameWidth:Number(art.getAttribute('width')),centers,
           strongerEmptyGlow:getComputedStyle(empty).filter!==getComputedStyle(forest).filter,
-          variants:rich.map(cell=>Number(cell.querySelector('.gold-frame')!.getAttribute('data-variant'))),
+          variants:rich.map(cell=>Number(document.querySelector(`#board .l-rich-frames .gold-frame[data-key="${cell.dataset.key}"]`)!.getAttribute('data-variant'))),
           noInterception:owned.every(frame=>getComputedStyle(frame).pointerEvents==='none')};
       });
       check(visual.rich===rich.length && visual.empty===rich.length-2 && visual.hiddenUnderTile && visual.owners===2 &&
         visual.forest && visual.volcano && visual.oldMarkers===0 && visual.noInterception,
         `${v3?'V3':'standard'} ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
-      check(visual.stoneOnTop && visual.imageReady && visual.frameWidth>59 && visual.frameWidth<63 &&
+      check(visual.contourBelowGold && visual.imageReady && visual.frameWidth>59 && visual.frameWidth<63 &&
         visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
         visual.variants.every(variant=>variant>=0 && variant<3),
         `${v3?'V3':'standard'} ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
       await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-${v3?'v3':'standard'}.png`});
       await page.reload(); await page.click('#menu-continue'); await idle(page);
-      const reloaded = await page.locator('#board .hex-cell.rich .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
+      const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
       equal(reloaded,visual.variants,`${v3?'V3':'standard'} ${width}: frame variants survive reload`);
     } finally { await page.close(); }
   }
 }
 
 try {
+  if (process.env.TEST2_POLISH_ONLY === 'gold') {
+    await goldFrameVisuals();
+    console.log(`${checks} gold-frame checks passed`);
+  } else {
   await drawGlow();
   await bloomMenuFit();
   await goldFrameVisuals();
@@ -977,4 +982,5 @@ try {
   writeFileSync(`${dir}/report.json`,JSON.stringify({ checks,failures,measurements,evidence:[...evidenceWritten] },null,2));
   equal(failures,[],`board/turn polish failures; evidence ${dir}/report.json`);
   console.log(`${checks} board/turn polish checks passed; screenshots and geometry: ${dir}`);
+  }
 } finally { await browser.close(); server?.httpServer.close(); }

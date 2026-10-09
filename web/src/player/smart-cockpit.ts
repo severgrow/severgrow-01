@@ -127,15 +127,21 @@ html.test2-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.4
 /* On a wide desktop the cockpit and its piles grow as one instrument. Phone
    controls retain their exact existing footprint. */
 @media (min-width:1500px) {
+  html.test2-information[data-layout='side'] .dock > #test2-box {
+    width:min(560px,100%); justify-self:end;
+  }
+  html.test2-information[data-layout='side'] .dock .hand-row > #hand {
+    justify-content:flex-end; --slice:54px;
+  }
   html.test2-information[data-layout='side'] #test2-box {
-    --control-size:64px; --box-tools:200px; --box-pile:78px; --box-piles:164px;
-    height:144px; grid-template-rows:64px 64px;
+    --control-size:72px; --box-tools:224px; --box-pile:88px; --box-piles:184px;
+    height:160px; grid-template-rows:72px 72px;
   }
   html.test2-information[data-layout='side'] #test2-box .pile-card {
-    --pile-h:111px; --cw:78px; --ch:111px; width:78px; height:111px;
+    --pile-h:125px; --cw:88px; --ch:125px; width:88px; height:125px;
   }
   html.test2-information[data-layout='side'][data-step='draw'] .dock > #test2-box {
-    --box-piles:200px;
+    --box-piles:224px;
   }
 }
 html.test2-information #smart-selector {
@@ -164,7 +170,7 @@ html.test2-information #smart-selector .test2-mini-card .c-suit svg { width:7px 
 html.test2-information #smart-selector .smart-action-label { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
 html.test2-information #test2-box > #smart-bloom {
   grid-column:2; grid-row:1 / 3; align-self:end; justify-self:center;
-  display:grid; place-items:center; position:relative; z-index:6;
+  display:grid; place-items:center; position:static; z-index:6;
   width:100%; min-width:0; height:calc(2 * var(--control-size) + var(--control-gap));
 }
 html.test2-information #test2-box > #smart-bloom[hidden] { display:none; }
@@ -192,7 +198,7 @@ html.test2-information #smart-bloom-count { position:absolute; right:2px; top:1p
 html.test2-information #smart-bloom-count[hidden] { display:none; }
 html.test2-information #smart-bloom-selector {
   position:absolute; bottom:calc(100% + 14px); left:50%; transform:translateX(-50%); z-index:12;
-  display:flex; gap:4px; width:max-content; max-width:calc(100vw - 20px);
+  display:flex; gap:4px; width:max-content; max-width:100%;
   overflow-x:auto; overflow-y:hidden; padding:6px; box-sizing:border-box;
   border:1px solid rgba(201,198,186,.32); border-radius:13px;
   background:var(--hardware-surface); box-shadow:var(--hardware-edge),0 7px 18px rgba(0,0,0,.55);
@@ -235,7 +241,7 @@ html.test2-information #board .l-over .receptive-well {
   fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
   pointer-events:none;
 }
-html.test2-information #board .l-over .receptive-well.kind-strengthen { fill:rgba(99,171,96,.055); }
+html.test2-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.055); }
 html.test2-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.055); }
 html.test2-information #board .l-over .target.kind-grow {
   fill:#ded6bd; fill-opacity:calc(.055 + var(--near,0) * .16);
@@ -243,16 +249,16 @@ html.test2-information #board .l-over .target.kind-grow {
   stroke-dasharray:none; animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
-html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-replace,.kind-fruit) {
+html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit) {
   stroke-dasharray:none; stroke-width:1.15;
   fill-opacity:calc(.055 + var(--near,0) * .16);
   stroke-opacity:calc(.31 + var(--near,0) * .35);
   animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
-html.test2-information #board .l-over .target.kind-strengthen { fill:#a6d49b; stroke:#a5d294; }
+html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-bloom) { fill:#a6d49b; stroke:#a5d294; }
 html.test2-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:#db917a; }
-html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
+html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
 html.test2-information #board .l-over .will-cut,
 html.test2-information #board .l-over .blast-affected {
   fill:#db806e; fill-opacity:.12; stroke:#d99179; stroke-width:1.15; stroke-opacity:.58;
@@ -267,6 +273,21 @@ html.test2-information #board .l-over .selected.receptive-active {
   fill:#e2d7ba; fill-opacity:.20; stroke:#e1d0a9; stroke-opacity:.70; stroke-width:1.35;
   pointer-events:none;
 }
+/* Selected and previewed tiles use the same flat hex well as a legal move. */
+html.test2-information #board .l-over :is(.selected,.ghost-tile) {
+  stroke-dasharray:none; stroke-width:1.2; fill-opacity:.19; stroke-opacity:.74; pointer-events:none;
+}
+html.test2-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-bloom,.kind-grow) {
+  fill:#a6d49b; stroke:#a5d294;
+}
+html.test2-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
+  fill:#e5a18b; stroke:#db917a;
+}
+html.test2-information #board .l-territory-contour .territory-contour {
+  stroke-width:.82; stroke-linecap:round; stroke-linejoin:round; opacity:.75;
+}
+html.test2-information #board .l-territory-contour .territory-contour.p0 { stroke:#c9e9a9; }
+html.test2-information #board .l-territory-contour .territory-contour.p1 { stroke:#e4a289; }
 @media (prefers-reduced-motion:reduce) { html.test2-information :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; } }
 html.test2-information.reduce-motion :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #board .l-over .target.kind-grow { animation:none; transition:none; } }

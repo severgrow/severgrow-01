@@ -26,7 +26,7 @@ const rects = (page:Page) => page.evaluate(() => {
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
   const width = Number.parseInt(label,10);
-  const size = width >= 1500 ? 64 : 44;
+  const size = width >= 1500 ? 72 : 44;
   check(near(r.led.y,r.context.y)&&near(r.undo.y,r.tips.y)&&near(r.tips.y,r.sort.y),`${label}: exactly two aligned rows`);
   check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
   check(near(r.led.width,2*size+4)&&near(r.led.height,size)&&near(r.context.width,size)&&near(r.context.height,size),`${label}: supplied shells fit their responsive coded footprints`);
@@ -185,11 +185,20 @@ try {
   }),'Bloom: centre shows a recipe containing the highest card rank');
   await branch.locator('#smart-bloom-button').click();
   check(await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: compact recipe drawer opens');
+  check(await branch.locator('#smart-bloom-selector').evaluate(el=>{
+    const drawer=el.getBoundingClientRect();
+    const cockpit=document.querySelector('#test2-box')!.getBoundingClientRect();
+    return drawer.left>=cockpit.left-.5 && drawer.right<=cockpit.right+.5;
+  }),'Bloom: even a long recipe drawer stays within the cockpit side margins');
   await branch.screenshot({path:`${dir}/390x844-bloom-selector.png`});
   await branch.keyboard.press('Escape');
   check(!await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: Escape closes the recipe drawer');
   await branch.locator('#smart-bloom-button').click();
   await branch.locator('#smart-bloom-selector button[aria-label*="Dew 7"]').click();
+  check(await branch.locator('#board .target.kind-bloom').count()>0,
+    'Bloom: legal placement hexes use the same green flat-hex well as Strengthen');
+  check(await branch.locator('#board .target.kind-bloom').evaluateAll(nodes=>nodes.every(node=>!node.getAttribute('d')?.includes('Q'))),
+    'Bloom: placement wells keep straight, consistent hex geometry');
   const first=await hexCenter(branch,'-3,0'); await branch.touchscreen.tap(first.x,first.y);
   await branch.locator('#smart-context').click();
   check(await branch.locator('#smart-selector button[data-action^="clear:"]').count()===1,'Bloom: Clear remains reachable');
