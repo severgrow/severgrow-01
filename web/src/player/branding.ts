@@ -21,6 +21,9 @@ html.test2-branding .game { max-width: none; margin: 0; }
    shared .screen padding would reserve the same insets again, shrinking the
    board and leaving an unused band below the hand. Safari tabs keep it. */
 html.test2-branding.home-screen-app #game { padding: 0; }
+/* Reserve the home indicator once, inside the play grid; its background still
+   paints to the physical screen edge while the dock stays above the gesture. */
+html.test2-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
 html.test2-branding .play { --board-margin: 2px; }
 html.test2-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;
