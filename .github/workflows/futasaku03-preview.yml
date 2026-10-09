@@ -1,0 +1,97 @@
+name: Futasaku 0.3 Pages preview
+
+# Runs from Futasaku0.3 only. The existing Main/Dev/Test2 workflow and refs are
+# untouched; their currently published SHAs are rebuilt and checked for parity.
+on:
+  push:
+    branches: [Futasaku0.3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: preview
+      - name: Read exact published source commits
+        id: published
+        run: |
+          curl -fsSL --retry 3 -H 'Cache-Control: no-cache' \
+            "https://severgrow.github.io/severgrow-01/release.json?preview=$(date +%s)" \
+            -o published-release.json
+          node --input-type=module -e '
+            import { readFileSync, appendFileSync } from "node:fs";
+            const release = JSON.parse(readFileSync("published-release.json", "utf8"));
+            for (const key of ["main", "test", "test2"]) {
+              if (!/^[0-9a-f]{40}$/.test(release[key])) throw Error(`Invalid published ${key} SHA`);
+              appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${release[key]}\n`);
+            }
+          '
+      - name: Check out published versions without moving their branches
+        env:
+          MAIN_SHA: ${{ steps.published.outputs.main }}
+          DEV_SHA: ${{ steps.published.outputs.test }}
+          TEST2_SHA: ${{ steps.published.outputs.test2 }}
+        run: |
+          git -C preview fetch --no-tags origin "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
+          git -C preview worktree add --detach "$GITHUB_WORKSPACE/live" "$MAIN_SHA"
+          git -C preview worktree add --detach "$GITHUB_WORKSPACE/dev" "$DEV_SHA"
+          git -C preview worktree add --detach "$GITHUB_WORKSPACE/candidate" "$TEST2_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: preview/package-lock.json
+      - name: Install and validate Futasaku 0.3
+        working-directory: preview
+        run: |
+          npm ci
+          npm run check
+          CHANNEL=test2 npm run web:build
+          CHANNEL=test2 node scripts/check-channel-assets.mjs
+      - name: Rebuild current published versions at their exact SHAs
+        run: |
+          cd live
+          npm ci
+          npm run web:build
+          cd ../dev
+          if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
+          CHANNEL=test npm run web:build
+          cd ../candidate
+          if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
+          CHANNEL=test2 npm run web:build
+      - name: Compose four routes and verify existing public bytes
+        env:
+          MAIN_SHA: ${{ steps.published.outputs.main }}
+          DEV_SHA: ${{ steps.published.outputs.test }}
+          TEST2_SHA: ${{ steps.published.outputs.test2 }}
+        run: |
+          node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
+            "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
+          node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
+          node preview/scripts/check-pages-parity.mjs site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
