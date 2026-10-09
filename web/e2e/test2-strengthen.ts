@@ -20,16 +20,19 @@ try {
   await page.addInitScript(save => {
     (window as any).__name = (f: unknown) => f;
     localStorage.setItem('main2:severgrow.save.v7', save);
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound:false,music:false,coach:false,reduceMotion:true,autoSkip:false }));
+    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound:false,music:false,coach:false,reduceMotion:false,autoSkip:false }));
   },JSON.stringify(oldSave));
   await page.goto(`http://localhost:${port}/`);
   await page.locator('#menu-continue').click();
   await page.waitForFunction(() => !(window as any).__severgrow.busy());
   assert.deepEqual(await page.evaluate(() => (window as any).__severgrow.state()), before);
-  await page.locator(`#hand [data-card="${action.card}"]`).click();
+  // The live Grow pulse intentionally keeps the card moving, so Playwright's
+  // stability wait never resolves while full motion is enabled.
+  await page.locator(`#hand [data-card="${action.card}"]`).evaluate(el => (el as HTMLButtonElement).click());
   const targets = await page.locator('#board .target.kind-strengthen').count();
   console.log(`Strengthen targets after rank-8 selection: ${targets}`);
   await page.locator('#board g.hex-cell[data-key="-1,1"]').click();
+  await page.waitForSelector('#board .tile[data-key="-1,1"] .seed-stone-glint');
   await page.waitForFunction(() => !(window as any).__severgrow.busy());
   const after = await page.evaluate(() => (window as any).__severgrow.state());
   assert.deepEqual(after,apply(before,action));

@@ -26,17 +26,22 @@ try {
     assert(recipe.glow.includes('drop-shadow'));
     assert.equal(recipe.animation.includes('test2-recipe-projector'),!reduced);
     const before = await page.evaluate(()=>(window as any).__severgrow.state());
-    const sprout = legalActions(viewFor(before,0)).find(a=>a.t==='Sprout');
-    assert(sprout?.t==='Sprout');
-    await page.evaluate(action=>(window as any).__severgrow.playFor(action,0),sprout);
+    const move = legalActions(viewFor(before,0)).find(a=>a.t===(v3?'Sprout':'Bloom'));
+    assert(move?.t==='Sprout'||move?.t==='Bloom');
+    await page.evaluate(action=>(window as any).__severgrow.playFor(action,0),move);
     if (!reduced) await page.waitForFunction(()=>document.querySelector('#test2-outcome-light')?.getAnimations().some(a=>a.playState==='running'));
-    const stone = await page.locator(`#board .tile[data-key="${coordKey(sprout.coord)}"] .seed-stone-shadow`).evaluate(el=>({
+    const key = coordKey(move.t==='Bloom'?move.hexes[0]!:move.coord);
+    const stone = await page.locator(`#board .tile[data-key="${key}"] .seed-stone-shadow`).evaluate(el=>({
       fill:getComputedStyle(el).fill, x:el.getAttribute('cx'), y:el.getAttribute('cy'),
     }));
     assert(stone.fill.includes('seed-stone-shadow'));
     assert(Number(stone.x)>0 && Number(stone.y)>0);
     if (reduced) assert.equal(await page.locator('#test2-outcome-light').evaluate(el=>el.getAnimations().length),0);
     else assert.equal(await page.locator('#test2-outcome-light').getAttribute('data-tone'),'good');
+    if (!v3 && !reduced) {
+      await page.waitForFunction(()=>document.querySelector('#smart-panel')?.classList.contains('hardware-reflect'));
+      assert.equal(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').animationName),'test2-hardware-reflect');
+    } else assert.equal(await page.locator('#smart-panel').evaluate(el=>el.classList.contains('hardware-reflect')),false);
     assert.deepEqual(errors,[]);
     await page.close();
   }

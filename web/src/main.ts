@@ -89,7 +89,7 @@ const theme = () => themeOf(settings.palette);
 const look = () => materialLook(settings.palette, settings.materialDetail, settings.reduceMotion);
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
-import { setSeedStoneStrength } from './ui/seedstone.js';
+import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
 let DesignView: typeof BoardView = BoardView;
 const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2'
   ? await import('./player/branding.js') : null;
@@ -1536,7 +1536,12 @@ async function playStep(step: Step, my: number) {
       const num = tileEl?.querySelector('.tile-num');
       if (num && step.to > step.from) {
         const stone = IS_TEST2 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
-        const setShown = (value: number) => stone ? setSeedStoneStrength(stone, value) : (num.textContent = String(value));
+        const setShown = (value: number) => {
+          if (stone) {
+            setSeedStoneStrength(stone, value);
+            if (value === step.to && m > 0) glintSeedStone(stone);
+          } else num.textContent = String(value);
+        };
         const n = step.to - step.from;
         for (let i = 1; i <= n; i++) setTimeout(() => setShown(step.from + i), (i * 260 * f) / n);
         setShown(step.from);

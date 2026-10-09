@@ -32,6 +32,18 @@ export function setSeedStoneStrength(stone: SVGGElement | null, strength: number
   if (value) value.textContent = String(strength);
 }
 
+/** A glancing edge reflection when the mechanical stone settles on its new value. */
+export function glintSeedStone(stone: SVGGElement | null) {
+  if (!stone || document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  stone.querySelector('.seed-stone-glint')?.remove();
+  const glint = el('path', { class: 'seed-stone-glint', d: 'M-6.5-4.8 Q-5.4-6.5-3.8-6.9',
+    fill: 'none', stroke: '#fff2c9', 'stroke-width': .7, 'stroke-linecap': 'round',
+    'pointer-events': 'none', opacity: 0 }, stone);
+  const light = glint.animate([{ opacity: 0 }, { opacity: .83, offset: .26 }, { opacity: 0 }],
+    { duration: 370, easing: 'ease-out' });
+  light.onfinish = () => glint.remove();
+}
+
 export function drawSeedStone(parent: SVGGElement, key: string, x: number, y: number, strength: number, owner: Player) {
   const stone = el('g', { class: 'seed-stone', transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) scale(0.66)`,
     'data-key': key, 'data-owner': owner, 'data-strength': strength }, parent);

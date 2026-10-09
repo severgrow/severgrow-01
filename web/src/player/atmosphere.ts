@@ -62,6 +62,7 @@ export function mountAtmosphere(): OutcomeLight {
   let running: Animation | null = null;
   let lastStart = 0;
   let lastStrength = 0;
+  let reflectFrame = 0;
   mounted = {
     pulse(tone, strength) {
       if (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -75,8 +76,20 @@ export function mountAtmosphere(): OutcomeLight {
         { opacity: 0, offset: 0 }, { opacity: peak, offset: .23 },
         { opacity: peak * .46, offset: .49 }, { opacity: 0, offset: 1 },
       ], { duration: 880, easing: 'cubic-bezier(.2,.55,.4,1)' });
+      if (strength >= .68) {
+        const panel = document.getElementById('smart-panel');
+        if (panel) {
+          cancelAnimationFrame(reflectFrame);
+          panel.classList.remove('hardware-reflect');
+          reflectFrame = requestAnimationFrame(() => panel.classList.add('hardware-reflect'));
+        }
+      }
     },
-    reset() { running?.cancel(); running = null; lastStart = 0; lastStrength = 0; },
+    reset() {
+      running?.cancel(); running = null; lastStart = 0; lastStrength = 0;
+      cancelAnimationFrame(reflectFrame);
+      document.getElementById('smart-panel')?.classList.remove('hardware-reflect');
+    },
   };
 
   const board = document.querySelector<SVGSVGElement>('#board');

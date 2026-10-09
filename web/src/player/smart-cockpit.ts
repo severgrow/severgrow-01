@@ -67,6 +67,20 @@ html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .han
   content:''; position:absolute; inset:0; border-radius:0; pointer-events:none;
   background:url('./hardware/button-frame-supplied.webp') center / contain no-repeat; z-index:0;
 }
+/* Major board events briefly catch the existing metal edges. Only the shell
+   images brighten; LED cells, icons, and the panel geometry stay untouched. */
+html.test2-information #smart-panel.hardware-reflect :is(#smart-led,#smart-context,#test2-actions > .hand-slot)::before {
+  animation:test2-hardware-reflect 640ms ease-out;
+}
+@keyframes test2-hardware-reflect {
+  0%,100% { filter:none; }
+  27% { filter:brightness(1.14) drop-shadow(0 0 2px rgba(246,207,137,.24)); }
+  55% { filter:brightness(1.06) drop-shadow(0 0 1px rgba(246,207,137,.10)); }
+}
+html.test2-information.reduce-motion #smart-panel.hardware-reflect :is(#smart-led,#smart-context,#test2-actions > .hand-slot)::before { animation:none; }
+@media (prefers-reduced-motion:reduce) {
+  html.test2-information #smart-panel.hardware-reflect :is(#smart-led,#smart-context,#test2-actions > .hand-slot)::before { animation:none; }
+}
 html.test2-information .dock #test2-box :is(#smart-context,#test2-actions > .hand-slot) :is(svg,.i) { position:relative; z-index:1; }
 html.test2-information #test2-box #smart-context { grid-column:3; grid-row:1; cursor:pointer; }
 html.test2-information #test2-box #smart-context svg { width:21px; height:21px; }
