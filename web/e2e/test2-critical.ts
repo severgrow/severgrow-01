@@ -11,6 +11,7 @@ import type { State } from '../../src/engine/index.js';
 // Run the focused sort/pile regression after the board-turn suite, before this
 // script opens its own preview server on the same port.
 await import('./test2-sort-layout.js');
+await import('./foundation-restart.js');
 const BASE = process.env.TEST2_URL ?? 'http://localhost:4192/';
 const server = process.env.TEST2_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.TEST2_DIST ?? 'dist' }, preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.TEST2_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });

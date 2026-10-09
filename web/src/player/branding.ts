@@ -1,6 +1,6 @@
 // Futasaku 0.3 uses the Test2 presentation; historical channels keep their existing brand.
-import logoUrl from '../assets/futasaku-emblem.png?url';
-import wordmarkUrl from '../assets/futasaku-white.png?url';
+import logoUrl from '../assets/futasaku-emblem.webp?url';
+import wordmarkUrl from '../assets/futasaku-white.webp?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 

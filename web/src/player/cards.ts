@@ -107,7 +107,9 @@ export function mountCards() {
     // A failed art request leaves readable cards and the current game fully playable.
   });
   const attributes = ['aria-label', 'aria-description', 'title', 'alt'];
-  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable]');
+  // The board's SVG contains no Fruit wording. Its tiles are rebuilt during
+  // play, so walking that entire subtree for text translation wastes work.
+  const excluded = (node: Node) => (node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement)?.closest('script, style, textarea, input, [contenteditable], #board');
   const translate = (node: Node) => {
     if (excluded(node)) return;
     if (node.nodeType === Node.TEXT_NODE) {

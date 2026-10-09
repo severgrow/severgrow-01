@@ -2,7 +2,7 @@
 // can swap its stone without repainting the terrain. The atlas holds light 1-9 in
 // rows 0-2 and charcoal 1-9 in rows 3-5. The source and cropped viewport stay in
 // SVG, so mobile uses one decoded image for all counters.
-import atlasUrl from '../assets/futasaku-stone-atlas.png?url';
+import atlasUrl from '../assets/futasaku-stone-atlas.webp?url';
 import type { Player } from '../../../src/engine/index.js';
 import { el } from './geom.js';
 

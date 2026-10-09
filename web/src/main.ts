@@ -673,6 +673,11 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   displayTurnStart = state.phase === 'DRAW' ? state : null;
   epoch++;
   for (const w of [...waiters]) w();
+  // A previous match may still be counting its score when New Game is tapped.
+  // Its next animation frame must never write into this match's scoreboard.
+  cancelAnimationFrame(scoreRaf);
+  scoreRaf = 0;
+  for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
   session = new Session(state, HUMAN, log, base);
   finalShown = false;
@@ -2792,8 +2797,14 @@ function renderHand(v: View, advice: Advice | null) {
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = comboGroups(v.hand);
-  // remember where every card was, so a reorder (Sort) slides them into place (FLIP)
-  const before = new Map([...hand.querySelectorAll<HTMLElement>('[data-card]')].map((b) => [Number(b.dataset.card), b.getBoundingClientRect()]));
+  // FLIP needs layout reads only when card membership or order changes. Selection,
+  // phase updates and bot moves otherwise forced two full hand measurements.
+  const flip = !settings.reduceMotion && settings.speed !== 'skip' &&
+    (hand.children.length !== cards.length || cards.some((card, index) =>
+      (hand.children[index] as HTMLElement | undefined)?.dataset.card !== String(card.id)));
+  const before = new Map<number, DOMRect>();
+  if (flip) for (const b of hand.querySelectorAll<HTMLElement>('[data-card]'))
+    before.set(Number(b.dataset.card), b.getBoundingClientRect());
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
@@ -2845,7 +2856,7 @@ function renderHand(v: View, advice: Advice | null) {
     if (hand.children[i] !== b) hand.insertBefore(b, hand.children[i] ?? null);
   });
   for (const b of existing.values()) b.remove();
-  if (!settings.reduceMotion && settings.speed !== 'skip') {
+  if (flip) {
     for (const b of hand.querySelectorAll<HTMLElement>('[data-card]')) {
       const was = before.get(Number(b.dataset.card));
       const now = b.getBoundingClientRect();
@@ -2881,7 +2892,13 @@ function renderPiles(v: View, advice: Advice | null) {
   const top = v.discard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
-  t.innerHTML = top ? cardFace(top) : '';
+  // Keep the physical top card mounted while its identity is unchanged.
+  // Replacing it on every unrelated render restarted styling and DOM observers.
+  const faceKey = top ? `${top.id}:${top.suit}:${top.rank}` : '';
+  if (t.dataset.faceKey !== faceKey) {
+    t.innerHTML = top ? cardFace(top) : '';
+    t.dataset.faceKey = faceKey;
+  }
   if (IS_TEST2) renderPileMeter($('deck-count'), v.deckCount);
   else $('deck-count').textContent = String(v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
@@ -2916,8 +2933,8 @@ function renderPiles(v: View, advice: Advice | null) {
   if (IS_TEST2) {
     // A new card combination, regardless of board space. Duplicate faces don't create one.
     const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
-    const before = new Set(bloomGroups(v.hand).map(g => key(g.cards)));
-    const createsBloom = !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
+    const before = looks.discard.enabled && top ? new Set(bloomGroups(v.hand).map(g => key(g.cards))) : null;
+    const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
     $('discard').classList.toggle('test2-bloom-draw', looks.discard.enabled && createsBloom);
   }
   $('deck').setAttribute('aria-label', `Deck: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
