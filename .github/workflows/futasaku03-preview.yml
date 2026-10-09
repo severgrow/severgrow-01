@@ -1,10 +1,11 @@
 name: Futasaku 0.3 Pages preview
 
-# Runs from Futasaku0.3 only. The existing Main/Dev/Test2 workflow and refs are
-# untouched; their currently published SHAs are rebuilt and checked for parity.
+# Runs from the futa0.3 deployment ref, which points to a validated Futasaku0.3
+# commit. The existing Main/Dev/Test2 workflow and refs stay untouched; their
+# currently published SHAs are rebuilt and checked for parity.
 on:
   push:
-    branches: [Futasaku0.3]
+    branches: [futa0.3]
   workflow_dispatch:
 
 permissions:
