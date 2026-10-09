@@ -62,7 +62,7 @@ const matching = (v: View, legal: readonly Action[], sel: Sel, skip: Skip = null
       isBoardAction(a) &&
       (skip === 'card' || sel.card === null || moveCards(a).some((id) => sameCard(v, sel.card!, id))) &&
       (skip === 'hex' || sel.hex === null || touchesHex(a, sel.hex)) &&
-      (skip === 'kind' || sel.kind === null || kindOf(a) === sel.kind),
+      (skip === 'kind' || (sel.kind === null ? !(a.t === 'MegaBomb' && sel.card !== null) : kindOf(a) === sel.kind)),
   );
 
 /** v0.5: the three kinds of Sprout target, each with its own words (not colour alone). */
@@ -131,9 +131,10 @@ const familyOf = (cards: readonly Card[]) => (cards.every((c) => c.rank === card
  * other"): a set keeps the card that best fits the rest of the hand; a run blooms its highest
  * numbers (a picked card narrows it to the groups holding that card).
  */
-export const moveButtons = (v: View, legal: readonly Action[], sel: Sel) => {
+export const moveButtons = (v: View, legal: readonly Action[], sel: Sel, showEveryRecipe = false) => {
   const byId = new Map(v.hand.map((c) => [c.id, c]));
   const kinds = kindsAvailable(v, legal, sel).filter((k) => k.kind.startsWith('bloom-'));
+  if (showEveryRecipe) return kinds.map(k=>({...k,kinds:[k.kind]}));
   const fam = new Map<string, { kind: string; label: string; count: number; score: number; kinds: string[] }>();
   for (const k of kinds) {
     const cards = kindCards(k.kind).map((id) => byId.get(id)!).filter(Boolean);

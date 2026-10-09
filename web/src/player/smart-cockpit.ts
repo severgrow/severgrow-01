@@ -29,6 +29,8 @@ const priority: Record<string, number> = { back: -1, clear: 0, confirm: 1, cance
 
 export const SMART_COCKPIT_CSS = `
 html.test2-information #step-cue { display:none !important; }
+/* The match computer owns instructions; leave the entire board unobstructed. */
+html.test2-information #board-wrap :is(#draw-info,#captions,#banner,#root-warn,#turn-pill) { display:none !important; }
 html.test2-information #tool-skip { display:none !important; }
 html.test2-information .cam-whole { display:none !important; }
 html.test2-information #test2-box {
@@ -108,17 +110,17 @@ html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll v
 html.test2-information #smart-led-window.led-pulse #smart-led-cells { filter:brightness(1.22); }
 /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
 html.test2-information #smart-led-spill {
-  position:absolute; left:-14px; top:calc(var(--control-size) - 4px);
-  width:calc(2 * var(--control-size) + var(--control-gap) + 28px);
-  height:calc(var(--control-size) + var(--control-gap) + 18px);
-  overflow:hidden; pointer-events:none; z-index:7;
-  opacity:.32; mix-blend-mode:screen;
-  -webkit-mask-image:radial-gradient(ellipse 78% 83% at 50% 0%,#000 4%,rgba(0,0,0,.65) 43%,transparent 100%);
-  mask-image:radial-gradient(ellipse 78% 83% at 50% 0%,#000 4%,rgba(0,0,0,.65) 43%,transparent 100%);
+  position:absolute; left:-38px; top:calc(var(--control-size) - 17px);
+  width:calc(2 * var(--control-size) + var(--control-gap) + 76px);
+  height:calc(var(--control-size) + var(--control-gap) + 42px);
+  overflow:visible; pointer-events:none; z-index:7;
+  opacity:.31; mix-blend-mode:screen;
+  -webkit-mask-image:radial-gradient(ellipse 69% 66% at 50% 19%,#000 8%,rgba(0,0,0,.55) 57%,transparent 100%);
+  mask-image:radial-gradient(ellipse 69% 66% at 50% 19%,#000 8%,rgba(0,0,0,.55) 57%,transparent 100%);
 }
 html.test2-information #smart-led-spill-cells {
-  display:block; position:absolute; left:22px; top:5px; height:26px;
-  filter:blur(8px) brightness(1.3); scale:1 1.65; transform-origin:top;
+  display:block; position:absolute; left:46px; top:18px; height:26px;
+  filter:blur(13px) brightness(1.4); scale:1.2 2.1; transform-origin:top;
 }
 html.test2-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 html.test2-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.42; }
@@ -126,11 +128,14 @@ html.test2-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.4
    controls retain their exact existing footprint. */
 @media (min-width:1500px) {
   html.test2-information[data-layout='side'] #test2-box {
-    --control-size:52px; --box-tools:164px; --box-pile:62px; --box-piles:132px;
-    height:128px; grid-template-rows:52px 52px;
+    --control-size:64px; --box-tools:200px; --box-pile:78px; --box-piles:164px;
+    height:144px; grid-template-rows:64px 64px;
   }
   html.test2-information[data-layout='side'] #test2-box .pile-card {
-    --pile-h:88px; --cw:62px; --ch:88px; width:62px; height:88px;
+    --pile-h:111px; --cw:78px; --ch:111px; width:78px; height:111px;
+  }
+  html.test2-information[data-layout='side'][data-step='draw'] .dock > #test2-box {
+    --box-piles:200px;
   }
 }
 html.test2-information #smart-selector {
@@ -195,10 +200,11 @@ html.test2-information #smart-bloom-selector {
 html.test2-information #smart-bloom-selector[hidden] { display:none; }
 html.test2-information #smart-bloom-selector button {
   display:flex; align-items:center; justify-content:center; flex:0 0 auto; min-width:96px; min-height:44px;
-  border:1px solid rgba(201,198,186,.24); border-radius:9px; padding:4px 9px;
-  background:rgba(8,10,9,.45); color:var(--control-ivory); touch-action:manipulation;
+  border:0; border-radius:0; padding:4px 9px;
+  background:transparent; color:var(--control-ivory); touch-action:manipulation;
 }
-html.test2-information #smart-bloom-selector button:is(:hover,:focus-visible) { border-color:var(--control-amber); background:rgba(196,150,88,.12); }
+html.test2-information #smart-bloom-selector button:hover .test2-combination { filter:brightness(1.2); }
+html.test2-information #smart-bloom-selector button:focus-visible { outline:1px solid var(--control-amber); outline-offset:-2px; }
 html.test2-information #test2-box #smart-bloom-selector .test2-combination { display:flex; flex-wrap:nowrap; gap:3px; }
 html.test2-information #test2-box #smart-bloom-selector .test2-mini-card { flex:0 0 20px; width:20px; min-width:20px; height:34px; padding:2px; }
 html.test2-information #test2-box #smart-bloom-selector .test2-mini-card .c-num { font-size:13px; }
@@ -229,12 +235,31 @@ html.test2-information #board .l-over .receptive-well {
   fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
   pointer-events:none;
 }
+html.test2-information #board .l-over .receptive-well.kind-strengthen { fill:rgba(99,171,96,.055); }
+html.test2-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.055); }
 html.test2-information #board .l-over .target.kind-grow {
   fill:#ded6bd; fill-opacity:calc(.055 + var(--near,0) * .16);
   stroke:#d8c8a5; stroke-width:1.15; stroke-opacity:calc(.30 + var(--near,0) * .35);
   stroke-dasharray:none; animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
+html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-replace,.kind-fruit) {
+  stroke-dasharray:none; stroke-width:1.15;
+  fill-opacity:calc(.055 + var(--near,0) * .16);
+  stroke-opacity:calc(.31 + var(--near,0) * .35);
+  animation:target-in .2s ease-out both;
+  transition:fill-opacity .14s ease,stroke-opacity .14s ease;
+}
+html.test2-information #board .l-over .target.kind-strengthen { fill:#a6d49b; stroke:#a5d294; }
+html.test2-information #board .l-over .target:is(.kind-replace,.kind-fruit) { fill:#e5a18b; stroke:#db917a; }
+html.test2-information #board .l-over .target:is(.kind-strengthen,.kind-replace,.kind-fruit):hover { fill-opacity:.23; stroke-opacity:.74; }
+html.test2-information #board .l-over .will-cut,
+html.test2-information #board .l-over .blast-affected {
+  fill:#db806e; fill-opacity:.12; stroke:#d99179; stroke-width:1.15; stroke-opacity:.58;
+  stroke-dasharray:none; pointer-events:none;
+}
+html.test2-information #board .l-over .blast-affected { fill-opacity:.18; stroke-opacity:.76; }
+html.test2-information #board .l-over .selected.blast-selected { fill:#e5a18b; fill-opacity:.25; stroke:#e5aa90; stroke-width:1.5; stroke-opacity:.88; pointer-events:none; }
 html.test2-information #board .l-over .target.kind-grow:hover {
   fill-opacity:.24; stroke-opacity:.72;
 }

@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { coordKey, newGame } from '../../src/engine/index.js';
+import { allNeighbors, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, State } from '../../src/engine/index.js';
 import { positionSave } from './position.js';
 import { hexCenter } from './drawing.js';
 
 const base = newGame(3107);
 const target = {q:-1,r:2};
-const state: State = { ...base, phase:'ACT', board:{...base.board,[coordKey(target)]:{owner:1 as Player,strength:9}},
+const blastBoard={...base.board,[coordKey(target)]:{owner:1 as Player,strength:9}};
+for(const neighbor of allNeighbors(target))if(blastBoard[coordKey(neighbor)]===null)blastBoard[coordKey(neighbor)]={owner:1,strength:4};
+const state: State = { ...base, phase:'ACT', board:blastBoard,
   hands:[[{id:1000,suit:null,rank:0},{id:1001,suit:null,rank:0},{id:1002,suit:0,rank:3}],base.hands[1]] };
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium',args:['--no-sandbox']});
@@ -26,6 +28,9 @@ try {
     await page.goto('http://localhost:4199/');
     await page.click('#menu-continue');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
+    await page.locator('#hand [data-card="1000"]').click();
+    assert((await page.locator('#board .target.kind-fruit').count())>0,'a tapped Bomb remains the existing single-card action');
+    await page.keyboard.press('Escape');
     assert.equal(await page.locator('#smart-bloom-button .test2-mini-card').count(),width<600 ? 2 : 3);
     await page.click('#smart-bloom-button');
     if (width >= 600) {
@@ -34,6 +39,11 @@ try {
     }
     assert.equal(await page.evaluate(() => (window as any).__severgrow.pending()),null);
     const centre=await hexCenter(page,coordKey(target));
+    await page.mouse.move(centre.x,centre.y);
+    await page.waitForFunction(() => document.querySelectorAll('#board .blast-affected').length>0);
+    assert.equal(await page.locator('#board .blast-affected').count(),5,'hover previews the five other enemy tiles affected by this blast');
+    await page.mouse.click(centre.x,centre.y);
+    assert.equal(await page.locator('#board .blast-affected').count(),5,'blast footprint remains visible while confirmation is pending');
     await page.mouse.click(centre.x,centre.y);
     await page.waitForFunction(() => (window as any).__severgrow.state().board['-1,2'] === null);
     const after=await page.evaluate(() => (window as any).__severgrow.state() as State);

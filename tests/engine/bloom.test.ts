@@ -1,4 +1,4 @@
-// v0.7 Bloom: the only combo. A set (3-4 cards, one number, different suits) or a run (3-4
+// Bloom: a set (3–6 cards, one number) or a run (3–6
 // cards, one suit, numbers in a row, no wraparound) grows one tile per card, each with its own
 // card's number, on a connected cluster of any shape that touches my network (before the move).
 import { describe, expect, it } from 'vitest';
@@ -63,16 +63,16 @@ describe('which cards can bloom', () => {
     expect(code(s, bloom([10, 11, 12], TRIANGLE))).toBeNull();
     expect(code(s, bloom([10, 11, 12, 13], [...TRIANGLE, '0,2']))).toBeNull();
   });
-  it('wrong number in a set, a repeated suit, a gap, wraparound, mixed suits, 2 cards, 5 cards, a Fruit card', () => {
+  it('rejects mixed numbers, gaps, wraparound, mixed suits, 2 cards and a Fruit card', () => {
     expect(code(s, bloom([1, 2, 20], TRIANGLE))).toBe('RUN_MIXED_SUITS'); // 5,5,4: not a set, not one suit
-    expect(code(s, bloom([12, 1, 2], TRIANGLE))).toBe('SET_DUPLICATE_SUIT'); // two 5s in suit 0
+    expect(code(s, bloom([12, 1, 2], TRIANGLE))).toBeNull(); // repeated suit is a valid same-rank set
     expect(code(s, bloom([10, 11, 13], TRIANGLE))).toBe('RUN_NOT_CONSECUTIVE');
     expect(code(s, bloom([22, 23, 24], TRIANGLE))).toBe('RUN_MIXED_SUITS');
     const wrap = position({ hand: [c(30, 1, 8), c(31, 1, 9), c(32, 1, 1)] });
     expect(code(wrap, bloom([30, 31, 32], TRIANGLE))).toBe('RUN_NOT_CONSECUTIVE');
     expect(code(s, bloom([10, 20, 12], TRIANGLE))).toBe('RUN_MIXED_SUITS');
     expect(code(s, bloom([1, 2], ['-1,1', '-1,2']))).toBe('BLOOM_WRONG_SIZE');
-    expect(code(s, bloom([10, 11, 12, 13, 14], [...TRIANGLE, '0,2', '1,1']))).toBe('BLOOM_WRONG_SIZE');
+    expect(code(s, bloom([10, 11, 12, 13, 14], [...TRIANGLE, '0,2', '1,1']))).toBeNull();
     expect(code(s, bloom([1, 2, 72], TRIANGLE))).toBe('NOT_A_NUMBER_CARD');
   });
   it('four of a kind used as 3 cards keeps the fourth; a 5-card run used as 3 or 4 consecutive cards', () => {
@@ -217,10 +217,10 @@ describe('legalActions for Blooms', () => {
     }
     expect(tri.length).toBe(3);
   });
-  it('the list is deterministic, and identical cards are listed once', () => {
+  it('the list is deterministic, and the repeated suit has its own four-card recipe', () => {
     const twin = position({ hand: [c(1, 0, 5), c(2, 1, 5), c(3, 2, 5), c(40, 2, 5)] });
     const a = legalBlooms(twin);
-    expect(a.some((x) => x.cards.includes(40))).toBe(false);
+    expect(a.some((x) => x.cards.includes(40) && x.cards.length===4)).toBe(true);
     expect(JSON.stringify(legalBlooms(twin))).toBe(JSON.stringify(a));
   });
   it('a Fruit card is never in a listed Bloom', () => {

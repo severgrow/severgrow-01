@@ -46,7 +46,9 @@ describe('tap a card, then a hex', () => {
     expect(legal).toContainEqual(a);
     expect(touchesHex(a, hex)).toBe(true);
     expect(moveCards(a).some(same(card.id))).toBe(true);
-    const n = legal.filter(isBoard).filter((x) => touchesHex(x, hex) && moveCards(x).some(same(card.id))).length;
+    // Placement permutations of one Bloom recipe share one option in this
+    // chooser; the painted route resolves the placement separately.
+    const n = options(v, legal, sel).length;
     const seen = new Set(Array.from({ length: n }, (_, i) => JSON.stringify(pendingAction(v, legal, { ...sel, option: i }))));
     expect(seen.size).toBe(n);
   });

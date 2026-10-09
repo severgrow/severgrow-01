@@ -12,6 +12,12 @@ default (see the appendix).
 
 ## Changelog
 
+**Futasaku0.3 current Bloom extension** (rules version `futasaku0.3-six-card-bloom`)
+- A Bloom uses 3–6 numbered cards. A run is consecutive ranks of one suit, with no wrap or repeated rank. A set is one rank across any suits; duplicate physical copies of a suit may appear in the same set. Three cards are still the minimum.
+- The hex placement remains one connected claimable cluster touching the player's network. Each card supplies its own strength. Earlier recorded rules versions keep their original 3–4 card, different-suit set rule for replay. The separate deadwood scoring rule remains unchanged.
+- The Futasaku0.3 Mega Bomb and equal no-draw final turns remain as previously implemented. This extension does not change those actions.
+
+
 **v0.8: a Fruit card uses the turn's Sprout** (rules version `v0.8-fruit-sprout`, bot version `bots-v0.10`)
 - **One of three per Grow step:** a Sprout, a Strengthen or a Fruit card (they share the turn's
   `sproutsPerTurn` allowance, 1). After a Fruit card no Sprout, Strengthen or second Fruit card

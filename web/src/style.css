@@ -3926,6 +3926,18 @@ html.final-turns .game::after {
   pointer-events: none;
 }
 .territory-pulse { pointer-events: none; }
+.territory-branch {
+  fill:none; stroke:#dcf3b7; stroke-width:1.8; stroke-linecap:round;
+  stroke-dasharray:13 87; stroke-dashoffset:100; stroke-opacity:0;
+  filter:blur(.8px); animation:territory-heartbeat 10s linear infinite;
+}
+.territory-branch.p1 { stroke:#ffd090; stroke-width:1.55; }
+@keyframes territory-heartbeat {
+  0%,8% { stroke-dashoffset:100; stroke-opacity:0; }
+  12% { stroke-opacity:.24; }
+  21% { stroke-dashoffset:0; stroke-opacity:0; }
+  100% { stroke-dashoffset:0; stroke-opacity:0; }
+}
 .amb-pulse {
   fill: none;
   stroke: color-mix(in srgb, var(--c-you) 55%, #fff);

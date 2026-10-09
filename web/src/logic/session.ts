@@ -1,7 +1,7 @@
 // One game as the page plays it: the engine state, what the player has picked, and
 // a record of each turn. All moves go through here; it only plays legal moves, and
 // a move can only be confirmed once.
-import { apply, legalActions, viewFor } from '../../../src/engine/index.js';
+import { IllegalActionError, apply, legalActions, viewFor } from '../../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../../src/engine/index.js';
 import { buildSteps } from './anim.js';
 import type { Step } from './anim.js';
@@ -93,8 +93,13 @@ export class Session {
     const s = this.state;
     if (s.phase === 'GAME_OVER' || s.actor !== who) return null;
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
-    if (!legal.some((a) => same(a, action))) return null;
-    const after = apply(s, action);
+    const enumerated=legal.some((a) => same(a, action));
+    // Five/six-card Blooms expose every recipe in the legal menu while the
+    // exact player-painted tile assignment is validated on demand by apply.
+    if (!enumerated && !(action.t==='Bloom' && action.cards.length>=5 && who===this.viewer)) return null;
+    let after:State;
+    try { after=apply(s,action); }
+    catch(error) { if (!enumerated && error instanceof IllegalActionError) return null; throw error; }
     // Growing tiles, Strengthen, a Fruit card (and pressing "Throw a card") reveal nothing new, so the player
     // may take them back. A draw, a throw or any bot move makes everything before final.
     if (who === this.viewer && (action.t === 'Bloom' || action.t === 'MegaBomb' || action.t === 'Sprout' || action.t === 'PlayFruit' || action.t === 'EndAct')) this.undoStack.push({ state: s, n: this.log.length });

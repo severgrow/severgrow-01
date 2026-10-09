@@ -5,12 +5,14 @@ import type { RulesConfig } from './types.js';
 
 export const PREVIOUS_RULES_VERSION = 'v0.8-fruit-sprout';
 export const PREVIOUS_03_RULES_VERSION = 'futasaku0.3-unlimited-strengthen';
-export const CURRENT_RULES_VERSION = 'futasaku0.3-mega-bomb-final-turns';
+export const PREVIOUS_MEGA_RULES_VERSION = 'futasaku0.3-mega-bomb-final-turns';
+export const CURRENT_RULES_VERSION = 'futasaku0.3-six-card-bloom';
 
 /** Accepted rules for deterministic replay and existing game tickets. */
 export const RULES_VERSIONS: Readonly<Record<string, Readonly<RulesConfig>>> = Object.freeze({
-  [PREVIOUS_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthenLimitPerGame: 2, deckFinalTurns:false }),
-  [PREVIOUS_03_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, deckFinalTurns:false }),
+  [PREVIOUS_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthenLimitPerGame: 2, deckFinalTurns:false, expandedBloom:false }),
+  [PREVIOUS_03_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, deckFinalTurns:false, expandedBloom:false }),
+  [PREVIOUS_MEGA_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, expandedBloom:false }),
   [CURRENT_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG }),
 });
 

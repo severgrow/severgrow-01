@@ -32,7 +32,8 @@ const bruteDeadwood = (hand: Card[]): number => {
     const others: Card[] = [];
     rest.forEach((c, i) => ((mask >> i) & 1 ? group : others).push(c));
     if (group.length < 3) continue;
-    if (isValidRun(group) || isValidSet(group)) best = Math.min(best, bruteDeadwood(others));
+    // Deadwood still uses the original 3–4 different-suit meld scoring.
+    if (isValidRun(group) || isValidSet(group, false)) best = Math.min(best, bruteDeadwood(others));
   }
   return best;
 };

@@ -1,14 +1,14 @@
 // The autosave keeps a seed, action list and rules version. Test2 saves migrate to the
 // unlimited Strengthen default; unknown versions and illegal logs still start fresh.
 import { describe, expect, it } from 'vitest';
-import { CURRENT_RULES_VERSION, PREVIOUS_RULES_VERSION, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import { CURRENT_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, legalActions, newGame, rulesConfig, viewFor } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { SAVE_KEY, decodeSave, encodeSave } from '../src/logic/persist.js';
 import { Session } from '../src/logic/session.js';
 
 /** A session several moves in, every move (both sides) through the session. */
-const played = (seed: number, moves: number) => {
-  const s = new Session(newGame(seed), 0);
+const played = (seed: number, moves: number, legacy = false) => {
+  const s = new Session(newGame(seed, legacy ? rulesConfig(PREVIOUS_RULES_VERSION)! : {}), 0);
   for (let i = 0; i < moves && s.state.phase !== 'GAME_OVER'; i++) {
     const who = s.state.actor;
     s.play(GreedyBot.chooseAction(viewFor(s.state, who)), who);
@@ -66,13 +66,29 @@ describe('autosave: seed + actions (v0.7)', () => {
   });
 
   it('continues a Test2 save from an exact upgraded snapshot', () => {
-    const s = played(19, 20);
+    const s = played(19, 20, true);
     const raw = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
     const loaded = decodeSave(JSON.stringify({ ...raw, rules: PREVIOUS_RULES_VERSION }))!;
     expect(loaded.actions).toEqual([]);
     expect(loaded.base).toEqual(loaded.state);
     expect(loaded.state.config.strengthenLimitPerGame).toBe(-1);
     expect(loaded.state.board).toEqual(s.state.board);
+  });
+
+  it('replays the previous 0.3 Bloom rules before upgrading the active match', () => {
+    const seed=23;
+    const s=new Session(newGame(seed,rulesConfig(PREVIOUS_MEGA_RULES_VERSION)!),0);
+    for(let i=0;i<20 && s.state.phase!=='GAME_OVER';i++) {
+      const who=s.state.actor;
+      s.play(GreedyBot.chooseAction(viewFor(s.state,who)),who);
+    }
+    const raw=JSON.parse(encodeSave({seed,actions:s.log,coach:null,level:7}));
+    const loaded=decodeSave(JSON.stringify({...raw,rules:PREVIOUS_MEGA_RULES_VERSION}))!;
+    expect(loaded).not.toBeNull();
+    expect(loaded.state.board).toEqual(s.state.board);
+    expect(loaded.state.config.expandedBloom).toBe(true);
+    expect(loaded.actions).toEqual([]);
+    expect(loaded.base).toEqual(loaded.state);
   });
 
   it('an unknown level becomes 7', () => {

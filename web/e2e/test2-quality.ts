@@ -85,8 +85,16 @@ for(const bad of ['{junk',JSON.stringify({v:1,seed:42,actions:[]})]){
       check(t!=='confirm','tutorial never points at hidden Confirm');
       if(t.startsWith('card:'))await p.locator(`#hand [data-card="${t.slice(5)}"]`).click();
       else if(t.startsWith('hex:'))await p.locator(`#board g.hex-cell[data-key="${t.slice(4)}"]`).click();
-      else if(t.startsWith('kind:'))await p.locator(`#moves [data-kind="${t.slice(5)}"]`).click();
-      else {const sel=({deck:'#deck',discard:'#discard',end:'#moves .end',cancel:'#moves .cancel',button:'#moves .btn.primary'} as Record<string,string>)[t];assert(sel);await p.locator(sel).first().click();}
+      else if(t.startsWith('kind:')) {
+        const label=await p.locator(`#moves [data-kind="${t.slice(5)}"]`).first().getAttribute('aria-label');
+        await p.locator('#smart-bloom-button').click();
+        if(await p.locator('#smart-bloom-selector').isVisible()) await p.locator('#smart-bloom-selector').getByRole('menuitem',{name:label ?? ''}).first().click();
+      }
+      else if(t==='end'||t==='cancel'||t==='button') {
+        await p.locator('#smart-context').click();
+        if(await p.locator('#smart-selector').isVisible()) await p.locator('#smart-selector button').first().click();
+      }
+      else {const sel=({deck:'#deck',discard:'#discard'} as Record<string,string>)[t];assert(sel);await p.locator(sel).first().click();}
       await p.waitForTimeout(80);
       if(await p.evaluate(()=>(window as any).__severgrow.state().history.length)>before)break;
     }
@@ -119,7 +127,7 @@ console.log('Cards, save corruption, blocked storage and completed-game statisti
   await p.goto(BASE+'/test2/');await wait(p);await p.waitForFunction(async()=>(await navigator.serviceWorker.getRegistration())?.active?.scriptURL.endsWith('/test2/test2-sw.js'));await p.reload();await wait(p);
   check(await p.evaluate(async()=>{const m=await (await fetch('design-v3/manifest.json?r=1')).json();return m.tiers.lo.length>0&&!!m.hash;}),'Test2 never serves a stale art manifest');
   const scope=await p.evaluate(()=>navigator.serviceWorker.controller?.scriptURL);check(scope?.endsWith('/test2/test2-sw.js'),'Test2 scoped worker controls candidate');
-  await p.goto(BASE+'/test2/?seed=42');await wait(p);await p.click('#deck');await p.waitForTimeout(300);
+  await p.goto(BASE+'/test2/?seed=42');await wait(p);await p.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click());await p.waitForTimeout(300);
   await p.goto(BASE+'/test2/');await wait(p);await c.setOffline(true);await p.reload();await wait(p);
   check(await p.locator('#menu-continue').isVisible(),'offline saved-game launch');await p.click('#menu-continue');await p.waitForTimeout(300);check(await p.evaluate(()=>!!(window as any).__severgrow.state()),'offline resume');
   const keys=await p.evaluate(()=>caches.keys());check(keys.includes('test-sentinel')&&keys.includes('severgrow-v2-scoped')&&keys.includes('severor-main2-v2')&&!keys.includes('severor-main2-v1'),'channel caches coexist; the old Test2 cache is dropped');

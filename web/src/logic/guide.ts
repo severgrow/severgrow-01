@@ -47,7 +47,7 @@ export const guideTarget = (
     const d = v.hand.find((h) => h.id === x);
     return !!c && !!d && c.suit === d.suit && c.rank === d.rank;
   };
-  if (goal.t === 'Bloom') {
+  if (goal.t === 'Bloom' || goal.t === 'MegaBomb') {
     if (sel.kind !== goalKind) return sel.kind === null && sel.card === null && sel.hex === null ? { kind: 'kind', move: goalKind } : { kind: 'cancel' };
     if (sel.card !== null && !goal.cards.some(copyOf(sel.card))) return { kind: 'cancel' };
     return { kind: 'preset' };

@@ -554,7 +554,7 @@ describe('general legality', () => {
     illegal(s(wrap), go(wrap), 'RUN_NOT_CONSECUTIVE');
     const dupSuit = [c(MOSS, 6), c(MOSS, 6), c(DEW, 6)];
     illegal(
-      s(dupSuit),
+      makeState({ phase:'ACT', hands:[[...dupSuit,...junk(3)],junk(7)], config:{expandedBloom:false} }),
       { t: 'Bloom', cards: ids(dupSuit), hexes: [{ q: -1, r: 1 }, { q: -1, r: 2 }, { q: 0, r: 1 }] },
       'SET_DUPLICATE_SUIT',
     );

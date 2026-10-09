@@ -30,6 +30,7 @@ describe('DEFAULT_CONFIG', () => {
       board: null,
       reshuffleDiscard: false,
       deckFinalTurns: true,
+      expandedBloom: true,
     });
   });
 

@@ -27,29 +27,27 @@ export const validateRun = (cards: readonly Card[]): Card[] => {
 };
 
 /**
- * Validates a set (spec 8.3): 3 or 4 cards, identical rank, all different suits.
+ * Validates a same-rank Bloom of 3–6 cards, including repeated suits.
  * Returns the cards in input order. Throws IllegalActionError.
  */
-export const validateSet = (cards: readonly Card[]): Card[] => {
+export const validateSet = (cards: readonly Card[], expanded = true): Card[] => {
   numbered(cards);
-  if (cards.length < 3 || cards.length > 4) throw new IllegalActionError('SET_WRONG_SIZE', 'a set is 3 or 4 cards');
+  if (cards.length < 3 || cards.length > (expanded ? 6 : 4)) throw new IllegalActionError('SET_WRONG_SIZE', 'invalid set size');
   const rank = cards[0]!.rank;
   if (cards.some((c) => c.rank !== rank)) throw new IllegalActionError('SET_MIXED_RANKS', 'a set is one rank');
-  if (new Set(cards.map((c) => c.suit)).size !== cards.length) {
-    throw new IllegalActionError('SET_DUPLICATE_SUIT', 'set cards must all be different suits');
-  }
+  if (!expanded && new Set(cards.map(c=>c.suit)).size !== cards.length) throw new IllegalActionError('SET_DUPLICATE_SUIT', 'a legacy set uses different suits');
   return [...cards];
 };
 
 /**
- * v0.7 Bloom cards: a set (3-4 cards, one number, different suits) or a run (3-4 cards, one
+ * Bloom cards: a set (3–6 cards, one number) or a run (3–6 cards, one
  * suit, numbers in a row, no wraparound). Returns the kind and the cards in ascending order
  * (ties by id). Throws IllegalActionError.
  */
-export const validateBloom = (cards: readonly Card[]): { kind: 'set' | 'run'; cards: Card[] } => {
+export const validateBloom = (cards: readonly Card[], expanded = true): { kind: 'set' | 'run'; cards: Card[] } => {
   numbered(cards);
-  if (cards.length < 3 || cards.length > 4) throw new IllegalActionError('BLOOM_WRONG_SIZE', 'a bloom is 3 or 4 cards');
-  if (cards.every((c) => c.rank === cards[0]!.rank)) return { kind: 'set', cards: byRank(validateSet(cards)) };
+  if (cards.length < 3 || cards.length > (expanded ? 6 : 4)) throw new IllegalActionError('BLOOM_WRONG_SIZE', 'invalid bloom size');
+  if (cards.every((c) => c.rank === cards[0]!.rank)) return { kind: 'set', cards: byRank(validateSet(cards, expanded)) };
   return { kind: 'run', cards: validateRun(cards) };
 };
 
@@ -64,7 +62,7 @@ const passes = (fn: () => unknown): boolean => {
 };
 
 export const isValidRun = (cards: readonly Card[]): boolean => passes(() => validateRun(cards));
-export const isValidSet = (cards: readonly Card[]): boolean => passes(() => validateSet(cards));
+export const isValidSet = (cards: readonly Card[], expanded = true): boolean => passes(() => validateSet(cards, expanded));
 
 /** Looks up distinct card ids in a hand, in input order. Throws IllegalActionError. */
 export const takeCards = (hand: readonly Card[], ids: readonly number[]): Card[] => {

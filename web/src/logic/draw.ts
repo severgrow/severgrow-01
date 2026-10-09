@@ -4,7 +4,7 @@
 // flips it). Pure functions only: the page turns pointer positions into hex keys and asks
 // these what the shape is and which of the engine's legal Blooms it matches. Nothing here
 // changes the game; a shape that matches no legal Bloom can never be committed.
-import { DIRECTIONS, coordKey, hexDistance, parseKey } from '../../../src/engine/index.js';
+import { DIRECTIONS, IllegalActionError, boardCoords, claimBlocker, coordKey, hexDistance, parseKey, planBloom } from '../../../src/engine/index.js';
 import type { Action, View } from '../../../src/engine/index.js';
 import { simulate, threats } from '../../../src/bots/evaluate.js';
 import { kindOf } from './interaction.js';
@@ -72,7 +72,7 @@ export const hexesAlong = (a: Pt, b: Pt, keys: ReadonlySet<string>): string[] =>
  * One card group to bloom (a kind "bloom-N-ids"): its numbers in ascending order, whether it
  * is a run (different numbers: the paint order matters), and every legal Bloom of it.
  */
-export type Combo = { kind: string; n: number; ranks: number[]; run: boolean; actions: Bloom[]; hexes: Set<string>; byKey: Map<string, Bloom> };
+export type Combo = { kind: string; n: number; ranks: number[]; run: boolean; actions: Bloom[]; hexes: Set<string>; byKey: Map<string, Bloom>; view?: View; completion?: Map<string,boolean> };
 
 /** The lookup key of a Bloom: its hexes in card order (a set: in any order, so sorted). */
 const keyOf = (hexes: readonly string[], run: boolean) => (run ? hexes.join(' ') : [...hexes].sort().join(' '));
@@ -87,7 +87,9 @@ export const comboFor = (v: View, legal: readonly Action[], sel: Sel): Combo | n
   const run = new Set(ranks).size > 1;
   const byKey = new Map<string, Bloom>();
   for (const a of actions) byKey.set(keyOf(a.hexes.map(coordKey), run), a);
-  return { kind, n: ranks.length, ranks, run, actions, hexes: new Set(actions.flatMap((a) => a.hexes.map(coordKey))), byKey };
+  return { kind, n: ranks.length, ranks, run, actions,
+    hexes: new Set(ranks.length >= 5 ? boardCoords(v.config).map(coordKey) : actions.flatMap((a) => a.hexes.map(coordKey))),
+    byKey, ...(ranks.length >= 5 ? {view:v,completion:new Map<string,boolean>()} : {}) };
 };
 
 /** The number the i-th painted hex receives (lowest first; Reverse: highest first). */
@@ -97,8 +99,16 @@ export const rankAt = (c: Combo, i: number, reverse: boolean): number => (revers
 const cardOrder = (_c: Combo, shape: readonly string[], reverse: boolean): string[] => (reverse ? [...shape].reverse() : [...shape]);
 
 /** The legal Bloom painted exactly like this (a run: in this order), or null. */
-export const paintMatch = (c: Combo, shape: readonly string[], reverse = false): Bloom | null =>
-  shape.length === c.n ? (c.byKey.get(keyOf(cardOrder(c, shape, reverse), c.run)) ?? null) : null;
+export const paintMatch = (c: Combo, shape: readonly string[], reverse = false): Bloom | null => {
+  if (shape.length !== c.n) return null;
+  const order=cardOrder(c,shape,reverse);
+  const existing=c.byKey.get(keyOf(order,c.run));
+  if (existing) return existing;
+  if (!c.view) return null;
+  const action:Bloom={t:'Bloom',cards:c.actions[0]!.cards,hexes:order.map(parseKey)};
+  try { planBloom(c.view,c.view.player,c.view.hand,action.cards,action.hexes); return action; }
+  catch(error) { if (error instanceof IllegalActionError) return null; throw error; }
+};
 
 const touches = (shape: readonly string[], key: string) => shape.some((k) => hexDistance(parseKey(k), parseKey(key)) === 1);
 
@@ -113,6 +123,21 @@ const paintOrder = (_c: Combo, a: Bloom, reverse: boolean): string[] => {
  * run: with the number it would receive) and touches the shape. Empty shape: the legal starts.
  */
 export const drawNext = (c: Combo, shape: readonly string[], reverse = false): Set<string> => {
+  if (c.view) {
+    const view=c.view;
+    const memo=c.completion!;
+    const candidates=(partial:readonly string[])=>[...c.hexes].filter(key=>
+      !partial.includes(key) && (partial.length===0 || touches(partial,key)) &&
+      claimBlocker(view,view.player,parseKey(key),rankAt(c,partial.length,reverse))===null);
+    const completes=(partial:string[]):boolean=>{
+      if (partial.length===c.n) return paintMatch(c,partial,reverse)!==null;
+      const signature=`${reverse}:${partial.join('|')}`;
+      const cached=memo.get(signature); if (cached!==undefined) return cached;
+      for (const key of candidates(partial)) if (completes([...partial,key])) {memo.set(signature,true);return true;}
+      memo.set(signature,false);return false;
+    };
+    return new Set(candidates(shape).filter(key=>completes([...shape,key])));
+  }
   const out = new Set<string>();
   const m = shape.length;
   if (m >= c.n) return out;
@@ -139,6 +164,14 @@ export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c
 export const bloomEndpoints = (c: Combo, start: string, reverse = false): Set<string> => {
   const out = new Set<string>();
   const next = drawNext(c, [start], reverse);
+  if (c.view) {
+    const visit=(shape:string[])=>{
+      if(shape.length===c.n){const end=shape.at(-1)!;if(end!==start&&!next.has(end))out.add(end);return;}
+      for(const key of drawNext(c,shape,reverse))visit([...shape,key]);
+    };
+    visit([start]);
+    return out;
+  }
   for (const action of c.actions) {
     const keys = action.hexes.map(coordKey);
     if (!keys.includes(start)) continue;
@@ -153,6 +186,22 @@ export const bloomEndpoints = (c: Combo, start: string, reverse = false): Set<st
  * severed enemy network, more enemy territory and safer resulting territory. */
 export const endpointBloom = (c: Combo, start: string, end: string, reverse = false, v?: View): Bloom | null => {
   if (start === end || drawNext(c, [start], reverse).has(end)) return null;
+  if (c.view) {
+    let best: { action:Bloom; merit:number } | null=null;
+    const visit=(shape:string[])=>{
+      if (shape.length===c.n) {
+        if (shape.at(-1)!==end) return;
+        const action=paintMatch(c,shape,reverse); if(!action)return;
+        const sim=v?simulate(v,action):null;
+        const merit=sim?(sim.wins?10000:0)+sim.botCut*100+sim.taken*20+sim.points*2-sim.myLoss*100:0;
+        if(!best||merit>best.merit)best={action,merit};
+        return;
+      }
+      for(const key of drawNext(c,shape,reverse)) if(key!==end||shape.length===c.n-1)visit([...shape,key]);
+    };
+    visit([start]);
+    return (best as {action:Bloom;merit:number}|null)?.action??null;
+  }
   let best: { action: Bloom; distance: number; index: number; merit: number } | null = null;
   for (const [index, action] of c.actions.entries()) {
     const keys = action.hexes.map(coordKey);
@@ -270,10 +319,19 @@ export const suggestBloom = (v: View, blooms: readonly Bloom[], key: string): Bl
 
 // ---------- desktop: one click to start, one to finish (the keyboard uses the same machine) ----------
 
-export type Desk = { phase: 'idle' } | { phase: 'live'; start: string; hover: string };
+export type Desk = { phase: 'idle' } | { phase: 'live'; start: string; hover: string; trail?: string[] };
 export const DESK_IDLE: Desk = Object.freeze({ phase: 'idle' }) as Desk;
 export const deskCancel = (): Desk => DESK_IDLE;
 export const deskHover = (d: Desk, key: string): Desk => (d.phase === 'live' ? { ...d, hover: key } : d);
+/** A fine pointer can trace a legal route between its two clicks. Keep the
+ * route only while it remains a valid partial Bloom; the usual shortest route
+ * remains available if the pointer crosses an invalid or ambiguous hex. */
+export const deskTrace = (c: Combo, d: Desk, key: string, reverse = false): Desk => {
+  if (d.phase !== 'live') return d;
+  const trail = d.trail ?? [d.start];
+  const next = paintEnter(c,trail,key,reverse);
+  return { ...d, hover:key, trail:next };
+};
 
 /**
  * The desktop shape, grown from the start towards the hovered hex, deterministically: each
@@ -294,6 +352,7 @@ export const growToward = (c: Combo, start: string, hover: string, reverse = fal
 /** The live shape while the desktop painting follows the mouse. */
 export const deskShape = (v: View, c: Combo, d: Desk, reverse = false): Ghost => {
   if (d.phase !== 'live') return { tiles: [], action: null, reason: null };
+  if (d.trail?.length === c.n && d.trail.at(-1) === d.hover && paintMatch(c,d.trail,reverse)) return paintGhost(v,c,d.trail,reverse);
   return paintGhost(v, c, growToward(c, d.start, d.hover, reverse), reverse);
 };
 

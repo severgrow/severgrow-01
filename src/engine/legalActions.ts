@@ -18,11 +18,11 @@ const representatives = (hand: readonly Card[], skipId: number | null = null, nu
   return reps;
 };
 
-/** v0.7: runs of exactly 3 or 4 consecutive numbers in one suit (one representative per suit/number). */
-const runGroups = (reps: Map<string, Card>): Card[][] => {
+/** Consecutive 3–6 card runs in one suit (one representative per suit/number). */
+const runGroups = (reps: Map<string, Card>, expanded: boolean): Card[][] => {
   const groups: Card[][] = [];
   for (const suit of SUITS) {
-    for (const k of [3, 4]) {
+    for (const k of (expanded ? [3, 4, 5, 6] : [3, 4])) {
       for (let lo = MIN_RANK; lo + k - 1 <= MAX_RANK; lo++) {
         const run = Array.from({ length: k }, (_, i) => reps.get(`${suit}:${lo + i}`));
         if (run.every((c) => c !== undefined)) groups.push(run as Card[]);
@@ -32,27 +32,33 @@ const runGroups = (reps: Map<string, Card>): Card[][] => {
   return groups;
 };
 
-/** Card groups that form valid 3- or 4-card sets. */
-const setGroups = (reps: Map<string, Card>): Card[][] => {
+/** One deterministic representative for every same-rank suit multiset. Physical
+ * duplicate cards may appear in a set, but swapping identical copies does not
+ * create a second cockpit recipe. */
+const setGroups = (hand: readonly Card[], expanded: boolean): Card[][] => {
   const groups: Card[][] = [];
   for (let rank = MIN_RANK; rank <= MAX_RANK; rank++) {
-    const bySuit = SUITS.map((s) => reps.get(`${s}:${rank}`)).filter((c): c is Card => c !== undefined);
-    for (let mask = 1; mask < 1 << bySuit.length; mask++) {
-      const g = bySuit.filter((_, i) => (mask >> i) & 1);
-      if (g.length === 3 || g.length === 4) groups.push(g);
+    const same = hand.filter(c=>c.suit!==null && c.rank===rank).sort((a,b)=>a.suit!-b.suit! || a.id-b.id);
+    const seen = new Set<string>();
+    for (let mask = 1; mask < 1 << same.length; mask++) {
+      const g = same.filter((_,i)=>(mask & (1<<i))!==0);
+      if (g.length < 3 || g.length > (expanded ? 6 : 4)) continue;
+      if (!expanded && new Set(g.map(c=>c.suit)).size !== g.length) continue;
+      const signature = g.map(c=>c.suit).join(',');
+      if (!seen.has(signature)) { seen.add(signature); groups.push(g); }
     }
   }
   return groups;
 };
 
-/** v0.7: every card group in the hand that can bloom (identical copies once): runs first, then sets. */
-export const bloomGroups = (hand: readonly Card[]): { kind: 'set' | 'run'; cards: Card[] }[] => {
+/** Every card recipe in hand that can Bloom (identical copies once). */
+export const bloomGroups = (hand: readonly Card[], expanded = true): { kind: 'set' | 'run'; cards: Card[] }[] => {
   const reps = representatives(hand);
-  return [...runGroups(reps).map((cards) => ({ kind: 'run' as const, cards })), ...setGroups(reps).map((cards) => ({ kind: 'set' as const, cards }))];
+  return [...runGroups(reps, expanded).map((cards) => ({ kind: 'run' as const, cards })), ...setGroups(hand, expanded).map((cards) => ({ kind: 'set' as const, cards }))];
 };
 
 /** All connected k-hex subsets of `allowed`, each in board order, deduplicated. */
-const connectedSubsets = (allowed: Coord[], k: number): Coord[][] => {
+const connectedSubsets = (allowed: Coord[], k: number, starts?: ReadonlySet<string>): Coord[][] => {
   const order = new Map(allowed.map((c, i) => [coordKey(c), i]));
   const seen = new Set<string>();
   const out: Coord[][] = [];
@@ -72,7 +78,7 @@ const connectedSubsets = (allowed: Coord[], k: number): Coord[][] => {
       }
     }
   };
-  for (const c of allowed) grow([c]);
+  for (const c of allowed) if (!starts || starts.has(coordKey(c))) grow([c]);
   return out;
 };
 
@@ -83,7 +89,7 @@ const permutations = (n: number): number[][] => {
   for (const rest of permutations(n - 1)) for (let i = 0; i <= rest.length; i++) out.push([...rest.slice(0, i), n - 1, ...rest.slice(i)]);
   return out.sort((a, b) => a.join(',').localeCompare(b.join(',')));
 };
-const PERMS = [0, 1, 2, 3, 4].map(permutations);
+const PERMS = [0, 1, 2, 3, 4, 5, 6].map(permutations);
 
 /**
  * v0.7: one legal Bloom choice in compact form: a card group (ascending), a cluster of hexes
@@ -105,13 +111,13 @@ export const bloomChoices = (v: View): BloomChoice[] => {
   };
   const touching = new Set(board.filter((c) => touchesNetwork(v.board, p, c)).map(coordKey));
   const clusters = new Map<string, Coord[][]>();
-  for (const g of bloomGroups(v.hand)) {
+  for (const g of bloomGroups(v.hand, v.config.expandedBloom !== false)) {
     const ranks = g.cards.map((c) => c.rank);
     const top = Math.max(...ranks);
     const ck = `${top}:${g.cards.length}`;
     if (!clusters.has(ck)) {
-      const all = connectedSubsets(claimableBy(top), g.cards.length);
-      clusters.set(ck, v.config.bloomMustTouchNetwork ? all.filter((h) => h.some((c) => touching.has(coordKey(c)))) : all);
+      const all = connectedSubsets(claimableBy(top), g.cards.length, v.config.bloomMustTouchNetwork ? touching : undefined);
+      clusters.set(ck, all);
     }
     for (const hexes of clusters.get(ck)!) {
       if (g.kind === 'set') {
@@ -119,7 +125,14 @@ export const bloomChoices = (v: View): BloomChoice[] => {
         continue;
       }
       const ok = hexes.map((h) => new Set(ranks.filter((r) => claimBlocker(v, p, h, r) === null)));
-      const orders = PERMS[g.cards.length]!.filter((perm) => perm.every((hi, ci) => ok[hi]!.has(ranks[ci]!)));
+      const orders: number[][] = [];
+      for (const perm of PERMS[g.cards.length]!) {
+        if (perm.every((hi, ci) => ok[hi]!.has(ranks[ci]!))) orders.push(perm);
+        // Large Blooms use a bounded selection for bot/selector lookahead.
+        // The complete set of player-painted placements is checked directly
+        // by planBloom in the drawing interaction, so it is never capped.
+        if (g.cards.length >= 5 && orders.length >= 8) break;
+      }
       if (orders.length > 0) out.push({ kind: 'run', cards: g.cards, hexes, orders });
     }
   }

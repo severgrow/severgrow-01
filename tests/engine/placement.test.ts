@@ -239,7 +239,7 @@ describe('Bloom from a set', () => {
   });
 
   it('enforces set card rules (same rank, different suits)', () => {
-    const f = fixture();
+    const f = fixture({config:{expandedBloom:false}});
     const dup = [card(1, MOSS, 6), card(2, MOSS, 6), card(3, DEW, 6)];
     expect(codeOf(() => planBloom(f, 0, dup, ids(dup), cluster3))).toBe('SET_DUPLICATE_SUIT');
     const mixed = [card(1, MOSS, 6), card(2, ASH, 7), card(3, DEW, 6)];

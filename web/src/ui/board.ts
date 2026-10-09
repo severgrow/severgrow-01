@@ -61,6 +61,9 @@ export type Overlay = {
   selectedHex: string | null;
   ghosts: Ghost[];
   cutKeys: string[];
+  /** Enemy tiles removed by a hovered Mega Bomb, separate from its launch hex. */
+  blastKeys?: string[];
+  blastTarget?: string | null;
   weak: Spot[];
   opps: Spot[];
   coachHexes: string[];
@@ -495,14 +498,15 @@ export class BoardView {
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
-        if (IS_TEST2 && kind === 'grow') el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well', 'aria-hidden': 'true' }, over);
-        el('path', { d: hexPath(key, S - 3, IS_TEST2 && kind === 'grow' ? 'flat' : st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
+        if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
+        el('path', { d: hexPath(key, S - 3, IS_TEST2 ? 'flat' : st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
-        if (kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
+        if (!IS_TEST2 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
       }
     }
-    for (const key of o.cutKeys) el('path', { d: hexPath(key, S * 0.7, st.tileShape), class: 'will-cut' }, over);
+    for (const key of o.cutKeys) el('path', { d: hexPath(key, IS_TEST2 ? S - 4 : S * .7, IS_TEST2 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
+    for (const key of o.blastKeys ?? []) el('path', { d: hexPath(key, S - 4, 'flat'), class: 'blast-affected', 'data-key': key }, over);
     // overhaul item 10: the veins the move would grow, drawn on before the tiles
     for (const [a, b] of IS_TEST2 ? [] : (o.ghostLinks ?? [])) {
       const A = centerOf(a);
@@ -523,7 +527,7 @@ export class BoardView {
       const { x, y } = centerOf(key);
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
-    if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, IS_TEST2 && !board[o.selectedHex] ? 'flat' : st.tileShape), class: `selected${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}` }, over);
+    if (o.selectedHex) el('path', { d: hexPath(o.selectedHex, S - 2, IS_TEST2 ? 'flat' : st.tileShape), class: `selected${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
     // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
     if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
     if (o.cutKeys.length > 0 && o.ghosts.length > 0) this.badge(over, [...o.cutKeys].sort()[0]!, `−${o.cutKeys.length}`, 'opp cut-gain');
@@ -807,13 +811,27 @@ export class BoardView {
       let gradient = defs.querySelector(`#${glowId}`);
       if (!gradient) {
         gradient = el('radialGradient', { id: glowId }, defs);
-        el('stop', { offset: '0%', 'stop-color': owner === 0 ? '#f8ffe7' : '#ffe2a5', 'stop-opacity': owner === 0 ? .45 : .6 }, gradient);
-        el('stop', { offset: '48%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff913f', 'stop-opacity': owner === 0 ? .18 : .22 }, gradient);
+        el('stop', { offset: '0%', 'stop-color': owner === 0 ? '#f8ffe7' : '#ffe2a5', 'stop-opacity': owner === 0 ? .28 : .38 }, gradient);
+        el('stop', { offset: '48%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff913f', 'stop-opacity': owner === 0 ? .11 : .14 }, gradient);
         el('stop', { offset: '100%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': 0 }, gradient);
       }
       const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
       for (const key of joined) el('path', { d: hexPath(key, S * 1.01, this.style.tileShape) }, clip);
       const surface = el('g', { class: `territory-pulse p${owner}`, 'clip-path': `url(#${clipId})` }, layer);
+      // A faint heartbeat travels through a spanning tree of the territory.
+      // The clip keeps every branch on tile surfaces, with nothing visible
+      // between pulses or in the gaps between separate board pieces.
+      const distances = new Map<string,number>([[root,0]]);
+      const queue = [root];
+      while (queue.length) {
+        const from = queue.shift()!;
+        for (const to of allNeighbors(parseKey(from)).map(coordKey).filter(key=>joined.has(key) && !distances.has(key)).sort()) {
+          distances.set(to,distances.get(from)!+1); queue.push(to);
+          const a=centerOf(from), b=centerOf(to);
+          el('path',{d:`M${a.x.toFixed(2)},${a.y.toFixed(2)}L${b.x.toFixed(2)},${b.y.toFixed(2)}`,pathLength:100,
+            class:`territory-branch p${owner}`,style:`animation-delay:${(distances.get(from)!*.54).toFixed(2)}s`},surface);
+        }
+      }
       const light = el('g', { opacity: 0 }, surface);
       el('circle', { cx: 0, cy: 0, r: S * (owner === 0 ? 1.08 : .88), fill: `url(#${glowId})` }, light);
       // A narrower magma glint gives the volcano a little more bite, but it still
@@ -821,11 +839,11 @@ export class BoardView {
       if (owner === 1) el('circle', { cx: 0, cy: 0, r: S * .3, fill: `url(#${glowId})`, opacity: .62 }, light);
       const points = route.map(key => centerOf(key));
       const path = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join('');
-      const duration = `${Math.min(21, Math.max(7, route.length * .38)).toFixed(1)}s`;
+      const duration = `${Math.min(28, Math.max(9, route.length * .50)).toFixed(1)}s`;
       const begin = owner ? '-3.2s' : '0s';
       el('animateMotion', { path, dur: duration, begin, repeatCount: 'indefinite', calcMode: 'linear' }, light);
       // The first glimmer is already present on the home tile, where the route begins.
-      el('animate', { attributeName: 'opacity', values: '.18;.74;.74;0', keyTimes: '0;.08;.88;1', dur: duration, begin, repeatCount: 'indefinite' }, light);
+      el('animate', { attributeName: 'opacity', values: '.12;.53;.53;0', keyTimes: '0;.08;.88;1', dur: duration, begin, repeatCount: 'indefinite' }, light);
     }
   }
   veinsTouching(keys: Set<string>) {

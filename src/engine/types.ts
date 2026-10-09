@@ -23,6 +23,8 @@ export type RulesConfig = {
   reshuffleDiscard: boolean;
   /** False only for archived replays made before fair deck-end turns and Mega Bomb. */
   deckFinalTurns: boolean;
+  /** Legacy recorded matches retain the original 3–4 card Bloom recipes. */
+  expandedBloom?: boolean;
   handSize: number;
   copiesPerCard: number;
   /** Must be even (mirrored pairs). */

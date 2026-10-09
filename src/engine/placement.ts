@@ -49,7 +49,7 @@ export const planBloom = (
   hexes: readonly Coord[],
 ): Placement => {
   const given = takeCards(hand, cardIds);
-  validateBloom(given);
+  validateBloom(given, ctx.config.expandedBloom !== false);
   if (!Array.isArray(hexes)) throw new IllegalActionError('MALFORMED_ACTION', 'hexes must be an array');
   if (hexes.length !== given.length) throw new IllegalActionError('HEX_COUNT_MISMATCH', 'a bloom claims exactly one hex per card');
   const coords = hexes.map(assertCoord);

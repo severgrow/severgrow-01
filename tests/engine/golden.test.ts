@@ -28,7 +28,7 @@ describe('golden games', () => {
       // Keep Main's original fixtures. Only disabled Lab metadata is normalized.
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
-      const { board, reshuffleDiscard, deckFinalTurns, ...classicConfig } = rest.config;
+      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, ...classicConfig } = rest.config;
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });

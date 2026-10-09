@@ -66,11 +66,12 @@ describe('sets (Bloom cards)', () => {
     expect(validateSet([card(1, MOSS, 6), card(2, ASH, 6), card(3, DEW, 6)])).toHaveLength(3);
   });
 
-  it('rejects 2-card and 5-card sets', () => {
+  it('rejects 2-card and 7-card sets, while allowing duplicate suits through 6', () => {
     expect(isValidSet([card(1, MOSS, 6), card(2, ASH, 6)])).toBe(false);
     expect(codeOf(() => validateSet([card(1, MOSS, 6), card(2, ASH, 6)]))).toBe('SET_WRONG_SIZE');
     const five = [card(1, MOSS, 6), card(2, ASH, 6), card(3, DEW, 6), card(4, EMBER, 6), card(5, MOSS, 6)];
-    expect(codeOf(() => validateSet(five))).toBe('SET_WRONG_SIZE');
+    expect(validateSet(five)).toHaveLength(5);
+    expect(codeOf(() => validateSet([...five,card(6, ASH, 6),card(7, DEW, 6)]))).toBe('SET_WRONG_SIZE');
   });
 
   it('rejects mixed ranks', () => {
@@ -79,10 +80,10 @@ describe('sets (Bloom cards)', () => {
     expect(codeOf(() => validateSet(cards))).toBe('SET_MIXED_RANKS');
   });
 
-  it('rejects duplicate suits (two copies of the same card)', () => {
+  it('allows duplicate suits when cards are distinct copies of the same rank', () => {
     const cards = [card(1, MOSS, 6), card(2, MOSS, 6), card(3, DEW, 6)];
-    expect(isValidSet(cards)).toBe(false);
-    expect(codeOf(() => validateSet(cards))).toBe('SET_DUPLICATE_SUIT');
+    expect(isValidSet(cards)).toBe(true);
+    expect(validateSet(cards)).toHaveLength(3);
   });
 });
 

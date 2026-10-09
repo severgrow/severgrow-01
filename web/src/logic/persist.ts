@@ -3,7 +3,7 @@
 // and the rules version are kept; resuming replays them (the engine is deterministic), so a
 // save is small. A game started from a set position (the browser tests, the lab) also keeps
 // that position as its `base`; the game itself never writes one for an ordinary game.
-import { CURRENT_RULES_VERSION, PREVIOUS_03_RULES_VERSION, PREVIOUS_RULES_VERSION, apply, replay, rulesConfig } from '../../../src/engine/index.js';
+import { CURRENT_RULES_VERSION, PREVIOUS_03_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, apply, replay, rulesConfig } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
 import { LEVELS } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
@@ -21,14 +21,15 @@ export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
     const s = JSON.parse(raw ?? '') as { v?: number; rules?: string; seed?: number; actions?: Action[]; coach?: C | null; level?: number; base?: State };
     const legacy = s?.rules === PREVIOUS_RULES_VERSION;
     const older03 = s?.rules === PREVIOUS_03_RULES_VERSION;
-    if (s?.v !== 7 || (!legacy && !older03 && s.rules !== CURRENT_RULES_VERSION) || !Number.isSafeInteger(s.seed) || !Array.isArray(s.actions)) return null;
+    const oldMega = s?.rules === PREVIOUS_MEGA_RULES_VERSION;
+    if (s?.v !== 7 || (!legacy && !older03 && !oldMega && s.rules !== CURRENT_RULES_VERSION) || !Number.isSafeInteger(s.seed) || !Array.isArray(s.actions)) return null;
     const originalBase = s.base ?? null;
     if (originalBase && (!originalBase.board || !originalBase.hands || !originalBase.config || typeof originalBase.phase !== 'string' || !Array.isArray(originalBase.fruitKnown))) return null;
-    const oldConfig = legacy || older03 ? rulesConfig(s.rules!)! : null;
-    const base = originalBase && oldConfig ? { ...originalBase, config:{...originalBase.config,deckFinalTurns:false} } : originalBase;
+    const oldConfig = legacy || older03 || oldMega ? rulesConfig(s.rules!)! : null;
+    const base = originalBase && oldConfig ? { ...originalBase, config:{...originalBase.config,deckFinalTurns:oldConfig.deckFinalTurns,expandedBloom:false} } : originalBase;
     const restored = base ? s.actions.reduce<State>((st, a) => apply(st, a), base) : replay(s.seed!, s.actions, oldConfig ?? {});
     const state = oldConfig && restored.phase !== 'GAME_OVER'
-      ? { ...restored,config:{...restored.config,deckFinalTurns:true,strengthenLimitPerGame:-1},startingPlayer:restored.startingPlayer ?? (restored.turnNumber % 2 ? restored.turnPlayer : (1-restored.turnPlayer) as 0|1),deckFinal:null }
+      ? { ...restored,config:{...restored.config,deckFinalTurns:true,strengthenLimitPerGame:-1,expandedBloom:true},startingPlayer:restored.startingPlayer ?? (restored.turnNumber % 2 ? restored.turnPlayer : (1-restored.turnPlayer) as 0|1),deckFinal:null }
       : restored;
     const level = LEVELS.includes(s.level as Level) ? (s.level as Level) : 7;
     // A migrated match continues from one exact snapshot. Its earlier actions were

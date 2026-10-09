@@ -4,7 +4,7 @@ import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -20,13 +20,13 @@ import {
   DESK_IDLE,
   comboFor,
   deskClick,
+  deskTrace,
   deskHover,
   deskShape,
   drawNext,
   bloomEndpoints,
   drawStarts,
   endpointBloom,
-  growToward,
   hexAtPoint,
   hexesAlong,
   keyStep,
@@ -881,9 +881,7 @@ function feedCamera(v: View) {
 
 function checkOverlap(v: View) {
   if (!session || !thumbLayout) return;
-  const vv = window.visualViewport;
-  const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight);
+  const { w, h } = gameViewport();
   const cfg = session.state.config;
   const maxHand = cfg.handSize + 1;
   const side = thumbLayout.side;
@@ -958,6 +956,7 @@ function checkOverlap(v: View) {
 }
 
 function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+  drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
   overlapFor = null;
@@ -2115,8 +2114,27 @@ function safeArea() {
   return { safeTop: px(cs.paddingTop), safeBottom: px(cs.paddingBottom), safeLeft: px(cs.paddingLeft), safeRight: px(cs.paddingRight) };
 }
 
+/** The iPhone Home Screen web view can report a content viewport ending above
+ * the physical screen. `screen.height` supplies the missing bottom strip when
+ * its width matches this full-screen portrait app. Safari tabs keep their
+ * visual viewport, including the browser's own bars. */
+function gameViewport() {
+  const vv = window.visualViewport;
+  const w = Math.round(vv?.width ?? window.innerWidth);
+  const homeScreen = document.documentElement.classList.contains('home-screen-app');
+  const screenFits = homeScreen && w <= 600 && window.innerHeight > w &&
+    Math.abs(window.screen.width - w) <= 2 &&
+    window.screen.height >= window.innerHeight &&
+    window.screen.height - window.innerHeight < window.innerHeight * .16;
+  const h = Math.round(homeScreen
+    ? Math.max(window.innerHeight, screenFits ? window.screen.height : 0)
+    : (vv?.height ?? window.innerHeight));
+  return { w, h };
+}
+
 let firstToolTips: () => void = () => {};
 let layoutKey = '';
+let drawPileAnchorKey = '';
 /** Draw brings the two pile instruments toward the first hand card, without moving
  * their counters separately or letting them cover the cockpit's action buttons. */
 function alignDrawPiles() {
@@ -2124,9 +2142,12 @@ function alignDrawPiles() {
   const piles = box?.querySelector<HTMLElement>(':scope > .piles');
   if (!box || !piles) return;
   if (document.documentElement.dataset.step !== 'draw' || document.documentElement.dataset.thumb === 'left') {
+    drawPileAnchorKey = '';
     piles.style.setProperty('--test2-draw-shift', '0px');
     return;
   }
+  const anchorKey = `${layoutKey}|${session?.state.turnNumber ?? 0}`;
+  if (drawPileAnchorKey === anchorKey) return;
   const handCard = document.querySelector<HTMLElement>('#hand .card');
   const actions = document.getElementById('smart-panel') ?? document.getElementById('test2-actions');
   if (!handCard) return;
@@ -2141,16 +2162,13 @@ function alignDrawPiles() {
   const rightLimit = Math.min(window.innerWidth - 8, (actions?.getBoundingClientRect().left ?? window.innerWidth) - 8);
   const room = Math.max(0, rightLimit - baseLeft - piles.offsetWidth);
   piles.style.setProperty('--test2-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
+  drawPileAnchorKey = anchorKey;
 }
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
-  const vv = window.visualViewport;
-  const w = Math.round(vv?.width ?? window.innerWidth);
-  // In standalone iOS the visual viewport can omit the home-indicator strip
-  // even though the fixed game screen spans it. Use the layout viewport there;
-  // safeArea() already reserves the indicator for interactive content.
-  const h = Math.round(document.documentElement.classList.contains('home-screen-app')
-    ? window.innerHeight : (vv?.height ?? window.innerHeight));
+  const { w, h } = gameViewport();
+  if (document.documentElement.classList.contains('home-screen-app'))
+    document.documentElement.style.setProperty('--futasaku-app-height', `${h}px`);
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
@@ -2333,6 +2351,7 @@ function ghostExtras(v: View, pending: Action | null, ghosts: { key: string }[])
   return { ghostLinks: ghostLinks(v.board, v.player, ghosts.map((g) => g.key)), atRisk: worse };
 }
 
+let blastHoverKey: string | null = null;
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age }) => ({ key, owner, age })), focusKey, fresh: freshKeys() };
@@ -2353,6 +2372,14 @@ function renderBoard(v: View, advice: Advice | null) {
       coachHexes: advice && !anySel && !IS_TEST2 ? advice.hexes.map(coordKey) : [],
       usable: true,
     };
+    if (sel.kind?.startsWith('bloom-mega-')) {
+      const target = pending?.t === 'MegaBomb' ? coordKey(pending.target) : blastHoverKey;
+      const action = target ? session.legal.find(a=>a.t==='MegaBomb' && coordKey(a.target)===target) : undefined;
+      if (action?.t === 'MegaBomb') {
+        const blast = planMegaBomb(session.state,HUMAN,v.hand,action.cards,action.target);
+        o = { ...o, blastKeys:blast.destroyed.map(coordKey).filter(key=>key!==target),blastTarget:target };
+      }
+    }
     const dc = drawCombo();
     // overhaul item 7: before drawing only the starts; while drawing only what can come next
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
@@ -2566,7 +2593,7 @@ function renderControls(v: View, advice: Advice | null) {
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
-    const kindButtons = moveButtons(v, legal, sel);
+    const kindButtons = moveButtons(v, legal, sel, IS_TEST2);
     // two or more ways to bloom: one "Bloom" button opens the list of choices (they never
     // crowd the row or run off the screen); a single way gets its own button
     const many = kindButtons.length > 1;
@@ -2884,6 +2911,10 @@ function renderHand(v: View, advice: Advice | null) {
   sortBtn.title = sortWords;
   hand.style.setProperty('--n', String(n));
   hand.classList.toggle('waiting', !myTurn());
+  // The first layout pass can run before the hand has cards. Establish the
+  // Draw pile anchor as soon as its resting hand geometry exists; sorting only
+  // reorders those cards and must never establish the anchor for the first time.
+  if (IS_TEST2 && v.phase === 'DRAW' && !drawPileAnchorKey) requestAnimationFrame(alignDrawPiles);
 }
 
 const rememberCardRects = () => {
@@ -3109,7 +3140,7 @@ function maybeAutoPlay() {
   // through the drawing path, so an inferred placement never spends a partly chosen group.
   const sprout = IS_TEST2 && (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
   const a = sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
-  if (a && (!IS_TEST2 || a.t !== 'Bloom') && !asksConfirm(a)) humanPlay(a);
+  if (a && (!IS_TEST2 || (a.t !== 'Bloom' && a.t !== 'MegaBomb')) && !asksConfirm(a)) humanPlay(a);
 }
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
@@ -3124,6 +3155,23 @@ function onCardTap(id: number) {
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn()) return;
+  if (IS_TEST2 && session.view.phase === 'ACT') {
+    const hasCombo = session.legal.some(a=>a.t==='Bloom' || a.t==='MegaBomb');
+    if (grewThisTurn() && hasCombo) {
+      // A hand-card tap after Grow is a direct path to Throw. The first tap
+      // selects that very card; a second tap confirms it in the normal flow.
+      const end = session.legal.find(a=>a.t==='EndAct');
+      if (end) {
+        humanPlay(end);
+        session.tapCard(id);
+        render();
+        return;
+      }
+    }
+    // The double-Bomb recipe is entered only through its cockpit control.
+    // Picking a Bomb from the hand remains the existing single-card action.
+    if (session.sel.kind?.startsWith('bloom-mega-') && session.view.hand.some(c=>c.id===id && c.suit===null)) session.cancel();
+  }
   // the test copy: no Confirm box; tapping a card of the waiting move again places it
   if (FEATURES.tapAgain && session.pending && (!IS_TEST2 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
@@ -3148,7 +3196,7 @@ function onCardTap(id: number) {
 // ---------- painting a Bloom (v0.7) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null; viewport: string };
-type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; redraw?: boolean; suggested?: boolean };
+type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; mouseLast?: Pt | null; redraw?: boolean; suggested?: boolean };
 const DRAW0: DrawUi = { shape: [], reverse: false, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
@@ -3178,7 +3226,7 @@ function paintDraw() {
     const c = drawCombo();
     if (!c || !session) return;
     const g = session.presetMove ? null : drawGhostNow(c);
-    const shape = draw.desk.phase === 'live' ? growToward(c, draw.desk.start, draw.desk.hover, draw.reverse) : draw.shape;
+    const shape = draw.desk.phase === 'live' ? g?.tiles.map(tile=>tile.key) ?? [] : draw.shape;
     const blocked = session.presetMove ? [] : [...unavailable(session.view, c, shape, draw.reverse).keys()];
     board.ghost(g || blocked.length ? {
       tiles: g?.tiles ?? [],
@@ -3256,6 +3304,10 @@ function finishDraw(a: Meld) {
  */
 function drawTap(c: Combo, key: string, type: string) {
   const v = session!.view;
+  if (draw.desk.phase === 'live' && draw.desk.trail?.at(-1) === key) {
+    const traced = paintMatch(c,draw.desk.trail,draw.reverse);
+    if (traced) return finishDraw(traced);
+  }
   if (IS_TEST2 && (draw.shape.length === 1 || draw.desk.phase === 'live')) {
     const start = draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]!;
     const shortcut = endpointBloom(c, start, key, draw.reverse, v);
@@ -3278,7 +3330,7 @@ function drawTap(c: Combo, key: string, type: string) {
     if (draw.desk.phase === 'live' && r.desk.phase === 'live' && key !== draw.desk.start && drawStarts(c, draw.reverse).has(key) && !deskShape(v, c, r.desk, draw.reverse).action) {
       draw = { ...draw, desk: { phase: 'live', start: key, hover: key }, shape: [] };
     } else draw = { ...draw, desk: r.desk, shape: [] };
-    if (r.desk.phase === 'live' && draw.desk.phase === 'live') drawTick(0);
+    if (r.desk.phase === 'live' && draw.desk.phase === 'live') { draw.mouseLast = draw.ptr?.start ?? null; drawTick(0); }
     paintDraw();
     return;
   }
@@ -3328,9 +3380,13 @@ const drawHandlers = {
     const keys = new Set(board.boardKeys);
     // after a first click the live shape follows the pointer, button held or not
     if (draw.desk.phase === 'live') {
-      const k = hexAtPoint(p.x, p.y, keys);
-      if (k && k !== draw.desk.hover) {
-        draw = { ...draw, desk: deskHover(draw.desk, k), msg: IS_TEST2 ? null : draw.msg };
+      const crossed = hexesAlong(draw.mouseLast ?? p,p,keys);
+      draw.mouseLast = p;
+      const k = crossed.at(-1) ?? hexAtPoint(p.x,p.y,keys);
+      if (k && (k !== draw.desk.hover || crossed.length > 1)) {
+        let desk: Desk = draw.desk;
+        for (const entered of crossed) desk = deskTrace(c,desk,entered,draw.reverse);
+        draw = { ...draw, desk:deskHover(desk,k), msg: IS_TEST2 ? null : draw.msg };
         paintDraw();
       }
       if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
@@ -3385,6 +3441,7 @@ const drawHandlers = {
     const ptr = draw.ptr;
     if (!c || !ptr || ptr.id !== e.pointerId) return;
     draw.ptr = null;
+    if (ptr.type === 'mouse' && draw.desk.phase === 'idle') draw.mouseLast = ptr.start;
     if (IS_TEST2 && !inside) return cancelDraw('Painting cancelled');
     if (!ptr.moved) {
       // A coach/list/sole-placement preview is a complete choice. Selecting one of its
@@ -3452,14 +3509,17 @@ function onHexTap(key: string) {
   // Tapping the previewed hex again plays the move (same as Confirm).
   if (session.sel.hex === key && session.pending && (!IS_TEST2 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout'))) return humanPlay(session.pending);
   session.tapHex(key);
-  if (session.sel.kind?.startsWith('bloom-mega-') && session.pending?.t === 'MegaBomb') return humanPlay(session.pending);
   inspectKey = session.pending ? null : key;
   render();
   maybeAutoPlay();
 }
 
 function onInspect(key: string | null) {
-  if (IS_TEST2) return;
+  if (IS_TEST2) {
+    if (!session?.sel.kind?.startsWith('bloom-mega-') || busy()) return;
+    if (blastHoverKey !== key) { blastHoverKey = key; renderBoard(session.view,null); }
+    return;
+  }
   // hovering never moves a pinned tile card
   if (cardPinned) return;
   inspectKey = key;

@@ -14,7 +14,7 @@ describe('tickets', () => {
   it('a ticket carries the server-chosen seed, the level, the rules version and expires in 2 hours', () => {
     const t = ticketFor(42, 5, 1000);
     expect(t).toMatchObject({ id: 't-42-5', playerId: 'p1', seed: 42, level: 5, rulesVersion: RULES_VERSION, botVersion: BOT_VERSION, expiresAt: 1000 + 2 * H, used: false });
-    expect(RULES_VERSION).toBe('futasaku0.3-mega-bomb-final-turns');
+    expect(RULES_VERSION).toBe('futasaku0.3-six-card-bloom');
     expect(BOT_VERSION).toBe(CURRENT_BOT_VERSION);
   });
 });

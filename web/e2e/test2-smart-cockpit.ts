@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import type { Page } from 'playwright-core';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { hexDistance, legalActions, viewFor } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
 
 const BASE = process.env.TEST2_URL ?? 'http://localhost:4198/';
@@ -26,7 +26,7 @@ const rects = (page:Page) => page.evaluate(() => {
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
   const width = Number.parseInt(label,10);
-  const size = width >= 1500 ? 52 : 44;
+  const size = width >= 1500 ? 64 : 44;
   check(near(r.led.y,r.context.y)&&near(r.undo.y,r.tips.y)&&near(r.tips.y,r.sort.y),`${label}: exactly two aligned rows`);
   check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
   check(near(r.led.width,2*size+4)&&near(r.led.height,size)&&near(r.context.width,size)&&near(r.context.height,size),`${label}: supplied shells fit their responsive coded footprints`);
@@ -113,7 +113,7 @@ try {
   await page.screenshot({path:`${dir}/390x844-bloom.png`});
   const beforeBloom = await page.evaluate(() => (window as any).__severgrow.state());
   const cards = [6,43,61];
-  const bloomAction = legalActions(viewFor(beforeBloom,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === cards.join(','));
+  const bloomAction = legalActions(viewFor(beforeBloom,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === cards.join(',') && hexDistance(action.hexes[0]!,action.hexes.at(-1)!)>1);
   check(!!bloomAction && bloomAction.t === 'Bloom','Bloom: selected set has a legal board route');
   if (bloomAction?.t === 'Bloom') {
     for (const coord of [bloomAction.hexes[0]!,bloomAction.hexes.at(-1)!]) {
@@ -200,6 +200,20 @@ try {
   await branch.locator('#smart-selector button[data-action^="clear:"]').click();
   check(await branch.locator('#moves .draw-clear').count()===0,'Bloom: Clear executes existing action');
   await branch.close();
+  const skipBloom=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await skipBloom.addInitScript(()=>localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})));
+  await skipBloom.goto(`${BASE}?seed=3`); await skipBloom.waitForSelector('#deck.ready');
+  await skipBloom.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(skipBloom,'ACT');
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.playFor({t:'Sprout',card:9,coord:{q:-3,r:2}},0)),'Grow: setup move succeeds');
+  await skipBloom.waitForFunction(()=>!(window as any).__severgrow.busy());
+  check(await skipBloom.locator('#smart-bloom').isVisible(),'Grow: Bloom remains optional after Sprout');
+  const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
+  await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: first card tap enters Throw');
+  check(await skipBloom.locator(`#hand [data-card="${throwCard}"].test2-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
+  await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: second card tap confirms discard');
+  await skipBloom.close();
   const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
   await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await cameraPage.goto(`${BASE}?seed=1`); await cameraPage.waitForSelector('#deck.ready');
