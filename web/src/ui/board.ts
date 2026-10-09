@@ -3,7 +3,7 @@
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
 import { FEATURES, IS_TEST2 } from '../channel.js';
-import { allNeighbors, boardCoords, connectedKeys, coordKey, homeCoord, parseKey } from '../../../src/engine/index.js';
+import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
 import type { Spot } from '../logic/weakspots.js';
@@ -231,6 +231,7 @@ export class BoardView {
     this.style = style;
     this.look = look;
     this.shownVeins = new Set();
+    this.previousContourEdges = [new Set(),new Set()];
     const svg = this.svg;
     svg.replaceChildren();
     const coords = boardCoords(config);
@@ -417,6 +418,7 @@ export class BoardView {
 
   /** Redraws the networks and overlays for `board`. */
   protected lastRender: [Record<string, Tile | null>, Overlay] | null = null;
+  private previousContourEdges: [Set<string>, Set<string>] = [new Set(),new Set()];
 
   render(board: Record<string, Tile | null>, o: Overlay) {
     this.lastRender = [board, o];
@@ -464,6 +466,10 @@ export class BoardView {
       try { joined = connectedKeys(board, this.config, owner); }
       catch { continue; }
       const segments: string[] = [];
+      const fresh: { path:string; distance:number }[] = [];
+      const seen = new Set<string>();
+      const hadContour = this.previousContourEdges[owner].size > 0;
+      const home = parseKey(this.rootKey(owner));
       for (const key of joined) {
         const centre = centerOf(key);
         const corners = cornerPts(key, S - 1.5);
@@ -477,10 +483,21 @@ export class BoardView {
             return (q.x - centre.x) * mx + (q.y - centre.y) * my >
               (p.x - centre.x) * mx + (p.y - centre.y) * my ? candidate : best;
           });
-          if (!joined.has(across)) segments.push(`M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`);
+          if (!joined.has(across)) {
+            const edge = `${key}:${i}`;
+            const path = `M${a[0].toFixed(2)},${a[1].toFixed(2)}L${b[0].toFixed(2)},${b[1].toFixed(2)}`;
+            seen.add(edge);
+            if (hadContour && !this.previousContourEdges[owner].has(edge)) fresh.push({path,distance:hexDistance(home,parseKey(key))});
+            else segments.push(path);
+          }
         }
       }
       if (segments.length) el('path', { d: segments.join(''), class: `territory-contour p${owner}`, fill: 'none' }, layer);
+      const nearest = Math.min(...fresh.map(edge=>edge.distance));
+      for (const edge of fresh) el('path', { d:edge.path, pathLength:1,
+        class:`territory-contour p${owner} grow-in`,fill:'none',
+        style:`animation-delay:${((edge.distance-nearest)*.07).toFixed(2)}s` }, layer);
+      this.previousContourEdges[owner] = seen;
     }
   }
 
@@ -543,7 +560,7 @@ export class BoardView {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
         if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
-        el('path', { d: hexPath(key, S - 3, IS_TEST2 ? 'flat' : st.tileShape), class: `target kind-${kind}`, 'data-key': key, 'data-kind': kind }, over);
+        el('path', { d: hexPath(key, S - 3, IS_TEST2 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
         if (!IS_TEST2 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);

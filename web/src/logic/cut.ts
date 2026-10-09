@@ -123,7 +123,8 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   }
 
   const low = o.effects === 'low';
-  const shake = calm || low ? (calm && !low && tier !== 'small' ? 2 : 0) : Math.min(6, L.shake + (o.effects === 'high' && tier !== 'huge' ? 1 : 0));
+  // Only a major sever moves the board. The link flash carries smaller cuts.
+  const shake = calm || low || (tier !== 'big' && tier !== 'huge') ? 0 : Math.min(6, L.shake + (o.effects === 'high' && tier !== 'huge' ? 1 : 0));
   const flashAlpha = calm || low ? 0 : Math.min(FLASH_MAX_ALPHA, L.flashAlpha);
   const zoom = calm || low ? 1 : L.zoom;
 
@@ -137,10 +138,10 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   const antic = first && !calm ? L.anticipation : 0;
   if (antic) push('anticipation', antic);
   const hit = calm ? 0 : low ? 40 : L.hitstop;
-  if (flashAlpha > 0) push('flash', Math.min(FLASH_MAX_MS, hit), false);
   if (zoom > 1) push('zoom', hit + L.pulse, false);
   if (hit) push('hitstop', hit);
   push('pulse', L.pulse);
+  if (flashAlpha > 0) push('flash', Math.min(FLASH_MAX_MS, hit), false);
   push('snap', 120, false);
   const maxRing = Math.max(0, ...rings.map((r) => r.ring));
   const step = maxRing > 0 ? Math.min(RIPPLE_STEP_MS, RIPPLE_CAP_MS / maxRing) : 0;
@@ -150,7 +151,7 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   stages.push({ name: 'ripple', at: rippleAt, dur: rippleLen });
   t = rippleAt + rippleLen;
   push('crumble', L.crumble, false);
-  stages.push({ name: 'payoff', at: Math.max(rippleAt + 120, t - 160), dur: L.payoff });
+  stages.push({ name: 'payoff', at: t, dur: L.payoff });
   let total = Math.max(t + L.crumble, ...stages.map((s) => s.at + s.dur));
 
   // the cap: squeeze everything but the hit-stop (keeps its ~100ms) into 1.8s

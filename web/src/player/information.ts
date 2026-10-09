@@ -39,7 +39,7 @@ export const INFORMATION_CSS = `
   opacity: .38 !important;
   filter: grayscale(.85) brightness(.72) !important;
   box-shadow: none !important;
-  transition: none !important;
+  transition: opacity calc(180ms * var(--anim,1)) ease-out, filter calc(180ms * var(--anim,1)) ease-out !important;
 }
 .test2-information #moves .test2-skip {
   color: var(--c-muted); background: transparent; border: 1px solid var(--c-line);

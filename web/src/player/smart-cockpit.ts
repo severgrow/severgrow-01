@@ -224,22 +224,24 @@ html.test2-information[data-step='grow'][data-test2-waiting='true'] #smart-bloom
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #smart-bloom-button .test2-combination { animation:none !important; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #smart-bloom-button .test2-combination { animation:none !important; } }
 html.test2-information #test2-box #smart-bloom-button .test2-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:2px; max-width:100%; }
-html.test2-information #test2-box #smart-bloom-button .test2-mini-card { flex:0 0 17px; width:17px; min-width:17px; height:28px; padding:1px; border-radius:3px; }
-html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-num { font-size:11px; }
-html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-suit svg { width:11px; height:11px; }
+html.test2-information #test2-box #smart-bloom-button .test2-mini-card { flex:0 0 clamp(21px,2vw,23px); width:clamp(21px,2vw,23px); min-width:clamp(21px,2vw,23px); height:clamp(33px,3.1vw,36px); padding:1px; border-radius:3px; }
+html.test2-information #test2-box #smart-bloom-button .test2-combination:has(.test2-mini-card:nth-child(5)) .test2-mini-card { flex-basis:17px; width:17px; min-width:17px; height:29px; }
+html.test2-information #test2-box #smart-bloom-button .test2-combination:has(.test2-mini-card:nth-child(6)) .test2-mini-card { flex-basis:16px; width:16px; min-width:16px; }
+html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-num { font-size:12px; }
+html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-suit svg { width:12px; height:12px; }
 html.test2-information #smart-bloom-count { position:absolute; right:2px; top:1px; font:600 9px/1 var(--font-mono,monospace); color:var(--control-ivory); }
 html.test2-information #smart-bloom-count[hidden] { display:none; }
 html.test2-information #smart-bloom-selector {
-  position:absolute; bottom:calc(100% + 14px); left:50%; transform:translateX(-50%); z-index:12;
-  display:flex; gap:4px; width:max-content; max-width:100%;
-  overflow-x:auto; overflow-y:hidden; padding:6px; box-sizing:border-box;
-  border:1px solid rgba(201,198,186,.32); border-radius:13px;
-  background:var(--hardware-surface); box-shadow:var(--hardware-edge),0 7px 18px rgba(0,0,0,.55);
+  position:absolute; bottom:calc(100% + 6px); left:6px; right:6px; z-index:12;
+  display:flex; gap:0; width:auto; max-width:none;
+  overflow-x:auto; overflow-y:hidden; padding:3px; box-sizing:border-box;
+  border:1px solid rgba(201,198,186,.26); border-radius:9px;
+  background:#171918; box-shadow:0 7px 18px rgba(0,0,0,.5);
 }
 html.test2-information #smart-bloom-selector[hidden] { display:none; }
 html.test2-information #smart-bloom-selector button {
-  display:flex; align-items:center; justify-content:center; flex:0 0 auto; min-width:96px; min-height:44px;
-  border:0; border-radius:0; padding:4px 9px;
+  display:flex; align-items:center; justify-content:center; flex:1 0 auto; min-width:76px; min-height:44px;
+  border:0; border-radius:0; padding:3px 6px;
   background:transparent; color:var(--control-ivory); touch-action:manipulation;
 }
 html.test2-information #smart-bloom-selector button:hover .test2-combination { filter:brightness(1.2); }
@@ -324,6 +326,11 @@ html.test2-information #board .l-territory-contour .territory-contour {
 }
 html.test2-information #board .l-territory-contour .territory-contour.p0 { stroke:#c9e9a9; }
 html.test2-information #board .l-territory-contour .territory-contour.p1 { stroke:#e4a289; }
+html.test2-information #board .l-territory-contour .territory-contour.grow-in {
+  stroke-dasharray:1; animation:draw-on calc(280ms * var(--anim,1)) ease-out both;
+}
+html.test2-information.reduce-motion #board .l-territory-contour .territory-contour.grow-in { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.test2-information #board .l-territory-contour .territory-contour.grow-in { animation:none; } }
 @media (prefers-reduced-motion:reduce) { html.test2-information :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; } }
 html.test2-information.reduce-motion :is(#smart-led-cells,#smart-led-spill-cells).scrolling { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #board .l-over .target.kind-grow { animation:none; transition:none; } }
@@ -469,7 +476,7 @@ export function mountSmartCockpit() {
   const machine = new DisplayMachine(setText);
   const phaseMessage = () => {
     const root = document.documentElement;
-    if (root.dataset.step === 'opp') return 'OPPONENT TURN';
+    if (root.dataset.step === 'opp') return 'WAIT';
     if (root.dataset.step === 'draw') return 'DRAW';
     if (root.dataset.step === 'throw') return 'THROW';
     if (root.dataset.test2Bloom === 'true') return 'BLOOM READY';
@@ -558,6 +565,7 @@ export function mountSmartCockpit() {
         : first?.source.id === 'tool-skip' ? 'FAST FORWARD' : '';
       if (hint) machine.hint(hint);
     }
+    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red'});
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');

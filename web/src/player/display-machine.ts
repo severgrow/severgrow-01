@@ -95,7 +95,7 @@ export class DisplayMachine {
   }
   private scheduleIdle(delay = 6000) {
     window.clearTimeout(this.idleTimer);
-    if (this.active || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
+    if (this.active || this.instruction === 'WAIT' || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
     this.idleTimer = window.setTimeout(() => {
       if (this.active) return;
       this.idleCycles++;

@@ -176,6 +176,7 @@ try {
   await branch.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(branch,'ACT');
   check(await branch.locator('#smart-bloom-selector button').count()>1,'Bloom: multiple recipes are listed separately');
   check(await branch.locator('#smart-bloom-button').evaluate(el=>getComputedStyle(el).backgroundImage)==='none','Bloom: centre recipe has no hardware frame');
+  check(await branch.locator('#smart-bloom-button .test2-mini-card').first().evaluate(el=>el.getBoundingClientRect().width)>=21,'Bloom: centre recipe is readable at phone scale');
   check(await branch.locator('#smart-bloom-button').evaluate(el=>{
     const rank=(node:Element)=>Math.max(...[...node.querySelectorAll('.c-num')].map(n=>Number(n.textContent)||0));
     return rank(el)===Math.max(...[...document.querySelectorAll('#smart-bloom-selector button')].map(rank));
@@ -185,8 +186,9 @@ try {
   check(await branch.locator('#smart-bloom-selector').evaluate(el=>{
     const drawer=el.getBoundingClientRect();
     const cockpit=document.querySelector('#test2-box')!.getBoundingClientRect();
-    return drawer.left>=cockpit.left-.5 && drawer.right<=cockpit.right+.5;
-  }),'Bloom: even a long recipe drawer stays within the cockpit side margins');
+    return Math.abs(drawer.left-(cockpit.left+6))<1 && Math.abs(drawer.right-(cockpit.right-6))<1;
+  }),'Bloom: recipe drawer shares the cockpit side margins exactly');
+  check(await branch.locator('#smart-bloom-selector button').evaluateAll(buttons=>buttons.every(button=>getComputedStyle(button).borderWidth==='0px' && getComputedStyle(button).backgroundColor==='rgba(0, 0, 0, 0)')),'Bloom: recipes have no individual boxes');
   await branch.screenshot({path:`${dir}/390x844-bloom-selector.png`});
   await branch.keyboard.press('Escape');
   check(!await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: Escape closes the recipe drawer');

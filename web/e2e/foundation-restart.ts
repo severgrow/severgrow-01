@@ -44,7 +44,11 @@ try {
   await click('#level-grid [data-difficulty="beginner"]');
   await page.waitForTimeout(850);
   const restarted = await page.evaluate(() => (window as any).__severgrow.state() as State);
-  assert.equal(restarted.phase, 'DRAW');
+  // New Futasaku matches can give the opening turn to the opponent. A restart
+  // may already be animating that turn when this check runs.
+  assert.notEqual(restarted.seed, grown.seed);
+  assert.equal(restarted.startingPlayer, (restarted.seed & 1) === 1 ? 1 : 0);
+  assert.notEqual(restarted.phase, 'GAME_OVER');
   assert.equal(await page.locator('#score-you').textContent(), '0', 'old score animation cannot overwrite new game');
   assert.deepEqual(errors, []);
   console.log('Fresh match cancels previous score count: passed');

@@ -63,7 +63,6 @@ import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
-import { LEVEL_ICONS } from './ui/levelIcons.js';
 import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficultyById } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
@@ -487,8 +486,8 @@ function renderLevelGrid() {
       const selected = store.get('severgrow.difficulty') ?? defaultDifficultyForLevel(settings.level);
       b.className = `level-tile difficulty-tile${selected === tier.id ? ' on' : ''}`;
       b.dataset.difficulty = tier.id;
-      b.setAttribute('aria-label', `${tier.label}, ${tier.note}. Choose this difficulty and start a new game.`);
-      b.innerHTML = `<span class="lt-icon">${LEVEL_ICONS[tier.levels.at(-1)!]}</span><span class="lt-name">${tier.label}</span><span class="lt-note">${tier.note}</span>`;
+      b.setAttribute('aria-label', `${tier.label}. Start a new game at this difficulty.`);
+      b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();
         const seed = randomSeed();
@@ -1404,7 +1403,7 @@ async function anticipate(m: Moment, f: number, my: number) {
 /** The impact of a big moment: shake, thud, banner, vibration, then a brief freeze (hit-stop). */
 async function impact(m: Moment, f: number, my: number) {
   const b = m.budget;
-  if (b.shake > 0) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
+  if (b.shake > 0 && !IS_TEST2) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
   if (b.thud) sound.thud();
   if (b.vibrate) vibrate(settings.vibration, b.vibrate);
   if (m.banner && m.first) banner(m.banner, 'big');
@@ -1505,16 +1504,21 @@ async function playStep(step: Step, my: number) {
         const hp = hapticFor('draw', settings);
         if (hp) vibrate(true, hp as number | number[]);
         const to = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        const from = (step.from === 'deck' ? $('deck') : $('discard')).getBoundingClientRect();
+        const from = ((step.from === 'deck' ? $('deck') : $('discard')).querySelector<HTMLElement>('.pile-card') ?? (step.from === 'deck' ? $('deck') : $('discard'))).getBoundingClientRect();
         if (to) {
           const r = to.getBoundingClientRect();
+          const dx = from.left + from.width / 2 - r.left - r.width / 2;
+          const dy = from.top + from.height / 2 - r.top - r.height / 2;
           const frames = IS_TEST2
-            ? [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.82', opacity: 0.65 }, { translate: '0 0', scale: '1', opacity: 1 }]
+            ? m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
+              : [{ translate: `${dx}px ${dy}px`, scale: `${(from.height / Math.max(r.height, 1)).toFixed(2)}`, opacity: 1 },
+                 { translate: `${(dx * .48).toFixed(1)}px ${(dy * .48 - 18).toFixed(1)}px`, scale: '.92', opacity: 1, offset:.5 },
+                 { translate: '0 0', scale: '1', opacity: 1 }]
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_TEST2 ? 300 : 420) * f, easing: IS_TEST2 ? 'cubic-bezier(.18,.76,.22,1)' : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_TEST2 ? 330 : 420) * f, fill:'backwards', easing: IS_TEST2 ? 'cubic-bezier(.22,.72,.24,1)' : 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.click();
-        await wait((IS_TEST2 ? 170 : 240) * f, my);
+        await wait((IS_TEST2 ? 330 : 240) * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
         await wait(quickShow ? quickShow.show.draw : 120 * f, my);
@@ -1527,26 +1531,27 @@ async function playStep(step: Step, my: number) {
       const b = mo.budget;
       await anticipate(mo, f, my);
       if (!show()) return;
-      const per = (step.style === 'bloom' ? 60 : 0) * f;
-      // v0.7: a Bloom pops outward from its first hex (the lowest number), a quick staggered ripple
-      const cx = centerOf(step.tiles[0]!.key).x;
-      const cy = centerOf(step.tiles[0]!.key).y;
+      const per = (step.style === 'bloom' ? 70 : 0) * f;
+      // A Bloom reaches the nearest tiles first, measured from the acting player's home.
+      const home = parseKey(board.rootKey(by));
+      const firstDistance = Math.min(...step.tiles.map(tile => hexDistance(home,parseKey(tile.key))));
       const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       step.tiles.forEach((t, i) => {
         const tileEl = board.tile(t.key);
-        const p = centerOf(t.key);
-        const delay = step.style === 'bloom' ? (Math.hypot(p.x - cx, p.y - cy) / (S * 1.7)) * per : 0;
+        const delay = step.style === 'bloom' ? (hexDistance(home,parseKey(t.key)) - firstDistance) * per : 0;
         last = Math.max(last, delay);
         const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
         // Squash and stretch: a quick pop that overshoots and settles.
         const frames: Keyframe[] =
           m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
-            : step.style === 'sprout'
-              ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
-              : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
-        anim(tileEl, frames, { duration: (step.style === 'sprout' ? 460 : st.ms) * f, delay, easing: 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+            : IS_TEST2
+              ? [{ transform: `translateY(${Math.min(st.drop,8)}px) scale(.72)`, opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1 }]
+              : step.style === 'sprout'
+                ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
+                : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
+        anim(tileEl, frames, { duration: IS_TEST2 ? 280 * f : (step.style === 'sprout' ? 460 : st.ms) * f, delay: delay + (IS_TEST2 && m > 0 ? 280 * f : 0), easing: IS_TEST2 ? 'cubic-bezier(.2,.75,.25,1)' : 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
         // overhaul item 17: blades spring up, a puff of spores (mine) as it lands, a heavier tap for the top rank
         if (m > 0 && !b.fadeOnly) {
           tileEl?.classList.add('spring');
@@ -1573,7 +1578,7 @@ async function playStep(step: Step, my: number) {
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
       if (mo.tier === 'big') await impact(mo, f, my);
-      await wait(last + 420 * f, my);
+      await wait(last + (IS_TEST2 ? 560 : 420) * f, my);
       return;
     }
     case 'sever': {
@@ -1671,14 +1676,18 @@ async function playStep(step: Step, my: number) {
       // The opponent's card is represented by the pile update; its old flight crossed the
       // player's board and felt like a card thrown at the camera.
       const from = step.player === HUMAN ? cardRects.get(step.card.id) : null;
-      if (from) flyCard(step.card, from, $('discard').getBoundingClientRect(), f);
+      if (from) {
+        flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
+        const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+        if (source) source.style.visibility = 'hidden';
+      }
       if (step.player === HUMAN) {
         const hp = hapticFor('throw', settings);
         if (hp) vibrate(true, hp as number | number[]);
       }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : 320 * f, my);
+      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_TEST2 && from ? 330 * f : 320 * f, my);
       show();
       return;
     }
@@ -1806,7 +1815,8 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
         anim(wrap, [{ scale: '1' }, { scale: '0.988' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
         break;
       case 'flash':
-        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius));
+        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius,
+          c.keys.find(key=>hexDistance(parseKey(key),parseKey(c.origin))===1)));
         break;
       case 'zoom':
         at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: 'ease-out', transformOrigin: origin } as KeyframeAnimationOptions));
@@ -1857,7 +1867,7 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
             [{ opacity: 1, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.04)', offset: 0.15 }, { opacity: 0.9, transform: 'scale(0.96)', offset: 0.55 }, { opacity: 0, transform: 'scale(0.7) translateY(3px)' }]
           : // moss: it dries (the withering style), curls a little and drops away
             [{ opacity: 1, transform: 'scale(1) rotate(0deg)' }, { opacity: 0.95, transform: 'scale(0.95)', offset: 0.45 }, { opacity: 0, transform: `scale(0.6) rotate(${t.ring % 2 ? 8 : -8}deg) translateY(4px)` }];
-    el.classList.add('withering');
+    at(t.at, () => el.classList.add('withering'));
     anim(el, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
     if (motes) drift(t.key, t.at + t.dur * 0.5, f, motes);
   }
@@ -2589,6 +2599,11 @@ function renderBoard(v: View, advice: Advice | null) {
       return { ...sides, ...m, tapped: cardPinned && inspectKey === sides.key, strangled, won: !busy() && res?.reason === 'strangle' && res.winner === p };
     });
     board.setHomes(states);
+    // Only the player's home breathes, and only while it feeds a joined tile.
+    const homeKey = board.rootKey(HUMAN);
+    const joinedHome = Object.entries(queue.board).some(([key,tile]) => tile?.owner === HUMAN && !tile.root && hexDistance(parseKey(key),parseKey(homeKey)) === 1);
+    board.homeEls[HUMAN]?.classList.toggle('joined-pulse',joinedHome && !settings.reduceMotion);
+    board.homeEls[BOT]?.classList.remove('joined-pulse');
     const warn = $('root-warn');
     warn.hidden = !(states[HUMAN]!.danger && v.phase !== 'GAME_OVER');
   }

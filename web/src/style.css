@@ -831,7 +831,7 @@ svg.usable .hex-cell {
   animation: none;
 }
 .vein.fragile {
-  animation: flicker 2.8s ease-in-out infinite;
+  animation: flicker 5.2s ease-in-out infinite;
 }
 @keyframes flicker {
   0%,
@@ -847,6 +847,17 @@ svg.usable .hex-cell {
   60% {
     opacity: 0.55;
   }
+}
+/* The same physical beat lives on the home artwork for every skin. It stops
+   as soon as the home has no adjacent living territory. */
+.landmark.joined-pulse :is(.default-home-art,.skin-home-art,.lm-body) {
+  transform-box:fill-box; transform-origin:center;
+  animation:joined-home-breathe calc(3.4s * var(--anim,1)) ease-in-out infinite;
+}
+@keyframes joined-home-breathe { 0%,100% { transform:scale(1); } 50% { transform:scale(1.065); } }
+.reduce-motion .landmark.joined-pulse :is(.default-home-art,.skin-home-art,.lm-body) { animation:none; }
+@media (prefers-reduced-motion:reduce) {
+  .landmark.joined-pulse :is(.default-home-art,.skin-home-art,.lm-body) { animation:none; }
 }
 .veins .vein.loose {
   stroke: var(--c-muted);
@@ -945,6 +956,7 @@ svg.usable .hex-cell {
   transform-box: fill-box;
   transform-origin: center;
 }
+.target.coached { animation:none !important; }
 @keyframes coach-breathe {
   50% {
     transform: scale(0.92);
@@ -978,7 +990,7 @@ svg.usable .hex-cell {
 }
 /* My weakest link, pulsing gently by default (a setting): a soft ring that grows and fades. */
 .badge.pulse .badge-ring {
-  animation: weak-pulse 2.6s ease-out infinite;
+  animation: weak-pulse calc(4.6s * var(--anim,1)) ease-out infinite;
   transform-box: fill-box;
   transform-origin: center;
 }
@@ -2049,25 +2061,20 @@ svg.usable .hex-cell {
   gap: 8px;
 }
 .difficulty-tile {
-  min-height: 64px;
+  min-height: 52px;
   aspect-ratio: auto;
-  grid-template-columns: 52px 1fr;
-  grid-template-rows: auto auto;
-  justify-items: start;
-  align-content: center;
-  column-gap: 12px;
-  row-gap: 3px;
-  padding: 10px 16px;
+  display: grid;
+  place-items: center;
+  padding: 9px 16px;
   border-radius: 13px;
   border-color: rgba(209,194,158,.23);
   background: linear-gradient(155deg, #222220, #111210 75%);
   box-shadow: inset 0 1px rgba(248,231,196,.09), 0 3px 10px rgba(0,0,0,.18);
-  text-align: left;
+  text-align: center;
+  font-size: .94rem;
+  letter-spacing: .085em;
+  color: #eadbb8;
 }
-.difficulty-tile .lt-icon { grid-row: 1 / 3; grid-column: 1; width: 40px; height: 40px; }
-.difficulty-tile .lt-icon svg { width: 32px; height: 32px; }
-.difficulty-tile .lt-name { grid-column: 2; font-size: .94rem; letter-spacing: .085em; color: #eadbb8; }
-.difficulty-tile .lt-note { grid-column: 2; color: #aaa497; font-size: .74rem; }
 .difficulty-tile.on { border-color: rgba(218,188,124,.57); box-shadow: inset 0 1px rgba(248,231,196,.11), 0 0 12px rgba(196,151,70,.1); }
 .go-sub {
   margin: 6px 0 0;

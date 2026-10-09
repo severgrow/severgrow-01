@@ -71,10 +71,14 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤35%), `ms` long (≤60ms). */
-  function cutFlash(key: string, ms: number, alpha: number, radius: number) {
+  function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string) {
     if (ms <= 0 || alpha <= 0) return;
     const { x, y } = centerOf(key);
-    const c = el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
+    const other = linkTo ? centerOf(linkTo) : null;
+    const c = IS_TEST2 && other
+      ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
+          fill:'none',stroke:'#fff2d2','stroke-width':2.8,'stroke-linecap':'round' }, board.fx)
+      : el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
     removeAfter(anim(c, [{ opacity: alpha }, { opacity: 0 }], { duration: ms, easing: 'ease-out', fill: 'forwards' }), c, ms + 40);
   }
 
@@ -174,9 +178,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_TEST2
-        ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: .92 }]
+        ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
+          { transform: `translate(${dx * .52}px, ${dy * .52 - 24}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: .92 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_TEST2 ? 280 : 440) * f;
+    const duration = (IS_TEST2 ? 330 : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_TEST2 ? 'cubic-bezier(.25,.72,.25,1)' : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 

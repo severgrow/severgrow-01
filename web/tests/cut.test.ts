@@ -70,13 +70,14 @@ describe('the timeline limits', () => {
     }
   });
 
-  it('the shake is 2 to 6px and grows with the tier', () => {
+  it('only large cuts give the board one short shake', () => {
     const px = [1, 3, 5, 8].map((n) => cutPlan(cut(n), NORMAL).shakePx);
-    for (const p of px) {
+    expect(px.slice(0,2)).toEqual([0,0]);
+    for (const p of px.slice(2)) {
       expect(p).toBeGreaterThanOrEqual(2);
       expect(p).toBeLessThanOrEqual(6);
     }
-    for (let i = 1; i < px.length; i++) expect(px[i]!).toBeGreaterThan(px[i - 1]!);
+    expect(px[3]).toBeGreaterThan(px[2]!);
     expect(cutPlan(cut(8), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(6);
   });
 
@@ -100,7 +101,8 @@ describe('the timeline limits', () => {
     const at = (n: string) => p.stages.find((s) => s.name === n)!.at;
     const order = ['anticipation', 'hitstop', 'pulse', 'snap', 'ripple', 'crumble'];
     for (let i = 1; i < order.length; i++) expect(at(order[i]!)).toBeGreaterThanOrEqual(at(order[i - 1]!));
-    expect(at('payoff')).toBeGreaterThan(at('ripple'));
+    expect(at('flash')).toBeGreaterThanOrEqual(at('pulse'));
+    expect(at('payoff')).toBeGreaterThanOrEqual(Math.max(...p.tiles.map(tile=>tile.at+tile.dur)));
     expect(p.banner).toBe('Cut off 6!');
     expect(p.float).toBe('−6');
     expect(p.haptic).toBe('cutBig');
