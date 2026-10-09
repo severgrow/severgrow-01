@@ -215,11 +215,9 @@ html.test2-information #test2-box #smart-bloom-selector .test2-combination { dis
 html.test2-information #test2-box #smart-bloom-selector .test2-mini-card { flex:0 0 20px; width:20px; min-width:20px; height:34px; padding:2px; }
 html.test2-information #test2-box #smart-bloom-selector .test2-mini-card .c-num { font-size:13px; }
 html.test2-information #test2-box #smart-bloom-selector .test2-mini-card .c-suit svg { width:13px; height:13px; }
-/* The visible top card is the stack face at +2/+4px, depending on the layer count. */
-html.test2-information .dock #test2-box #deck[data-layers='2'] { --pile-front-offset:2px; }
-html.test2-information .dock #test2-box #deck:is([data-layers='3'],[data-layers='4']) { --pile-front-offset:4px; }
-html.test2-information .dock #test2-box #deck .pile-meta .pile-count { left:calc(50% + var(--pile-front-offset,0px)); transform:translateX(-50%); }
-html.test2-information .dock #test2-box #discard .pile-meta .pile-count { left:50%; transform:translateX(-50%); }
+/* The deck's back artwork and the discard face use the same card footprint.
+   Stack pseudo-layers sit behind it and do not move its visual centre. */
+html.test2-information .dock #test2-box :is(#deck,#discard) .pile-meta .pile-count { left:50%; transform:translateX(-50%); }
 /* Match the illustrated card's printed corners instead of the legacy card silhouette. */
 html.test2-information.test2-card-art-ready #hand .card:has(>.test2-card-art) { border-radius:calc(var(--cw) * .075); }
 html.test2-information.test2-card-art-ready #hand .card > .test2-card-art { border-radius:inherit; }

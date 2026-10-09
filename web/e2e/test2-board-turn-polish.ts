@@ -150,9 +150,9 @@ async function geometry(page: Page, width: number, height: number, label: string
   const meterAlignment = await page.evaluate(() => ['deck','discard'].map(id => {
     const pile = document.querySelector(`#${id} .pile-card`)!.getBoundingClientRect();
     const meter = document.querySelector(`#${id} .pile-meter`)!.getBoundingClientRect();
-    return Math.abs(pile.left-meter.left);
+    return Math.abs((pile.left + pile.width / 2) - (meter.left + meter.width / 2));
   }));
-  check(meterAlignment.every(gap => gap < .6), `${label}: each mechanical counter starts at its pile's left edge (${meterAlignment})`);
+  check(meterAlignment.every(gap => gap < .6), `${label}: each mechanical counter is centred under its visible card (${meterAlignment})`);
   const atmosphere = await page.evaluate(async () => {
     const grain = document.querySelector<HTMLElement>('#test2-film-grain')!;
     const css = getComputedStyle(grain), box = grain.getBoundingClientRect();
@@ -627,11 +627,11 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
       const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
       const actions = document.querySelector<HTMLElement>('#test2-actions')!.getBoundingClientRect();
-      return { first: first.left, deck: deck.left, meter: meter.left, meterBottom: meter.bottom, boxBottom: box.bottom,
+      return { first: first.left, deck: deck.left, meter: meter.left, centreGap: Math.abs(deck.left + deck.width/2 - meter.left - meter.width/2), meterBottom: meter.bottom, boxBottom: box.bottom,
         right: piles.getBoundingClientRect().right,
         actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--test2-draw-shift')) || 0 };
     });
-    check(drawPiles.scale >= 1.15 && Math.abs(drawPiles.deck-drawPiles.meter) < .6,
+    check(drawPiles.scale >= 1.15 && drawPiles.centreGap < .6,
       `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
     if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.actions - 6,
       `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
@@ -861,20 +861,19 @@ async function bloomMenuFit() {
     },positionSave({state:positioned}));
     await page.goto(base); await page.click('#menu-continue'); await idle(page);
     equal(await state(page),positioned,'multiple Bloom choices fixture resumes exactly');
-    const toggle = page.locator('#moves > .bloom-toggle');
+    const toggle = page.locator('#smart-bloom-button');
     check(await toggle.isVisible(),'multiple Bloom choices have a menu control');
     await toggle.click();
-    const panel = page.locator('#moves .bloom-options');
+    const panel = page.locator('#smart-bloom-selector');
     const count = await panel.locator('button').count();
     check(count > 1,`Bloom fixture presents several choices (${count})`);
     const size = await page.evaluate(() => {
-      const panel = document.querySelector<HTMLElement>('#moves .bloom-options')!.getBoundingClientRect();
-      const toggle = document.querySelector<HTMLElement>('#moves > .bloom-toggle')!.getBoundingClientRect();
+      const panel = document.querySelector<HTMLElement>('#smart-bloom-selector')!.getBoundingClientRect();
       const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
-      return {width:panel.width,boxWidth:box.width,left:panel.left,right:panel.right,toggleLeft:toggle.left};
+      return {width:panel.width,boxWidth:box.width,left:panel.left,right:panel.right,boxLeft:box.left,boxRight:box.right};
     });
-    check(size.width <= Math.min(280,size.boxWidth*.75) && Math.abs(size.left-size.toggleLeft) <= 50 && size.right <= 390,
-      `multiple Bloom choices fit beside their current control (${JSON.stringify(size)})`);
+    check(size.width <= size.boxWidth + 1 && size.left >= size.boxLeft - 1 && size.right <= size.boxRight + 1,
+      `multiple Bloom choices stay within cockpit side margins (${JSON.stringify(size)})`);
     await page.screenshot({path:`${dir}/390x664-bloom-menu-open.png`});
   } finally { await page.close(); }
 }
@@ -953,6 +952,15 @@ try {
   if (process.env.TEST2_POLISH_ONLY === 'gold') {
     await goldFrameVisuals();
     console.log(`${checks} gold-frame checks passed`);
+  } else if (process.env.TEST2_POLISH_ONLY === 'alignment') {
+    const safe = await open(390,844,219682080);
+    try {
+      await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.test2-branding .game > .hud { top:24px; }' });
+      await safe.page.setViewportSize({ width:390,height:843 });
+      await safe.page.waitForTimeout(250);
+      await geometry(safe.page,390,843,'phone with notch/home indicator');
+      console.log(`${checks} safe-area alignment checks passed`);
+    } finally { await safe.page.close(); }
   } else {
   await drawGlow();
   await bloomMenuFit();
