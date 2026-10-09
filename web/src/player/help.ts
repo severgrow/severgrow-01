@@ -4,7 +4,7 @@
 export const HELP_SHEET_ID = 'sheet-test2-help';
 
 type HelpKind = 'tip' | 'coach';
-type HelpHooks = { sheet: (id: string | null) => void };
+type HelpHooks = { sheet: (id: string | null) => void; onBulb?: () => void };
 
 export const mountHelp = (hooks: HelpHooks) => {
   const slot = document.getElementById('test2-help-slot');
@@ -185,7 +185,7 @@ export const mountHelp = (hooks: HelpHooks) => {
     trigger.setAttribute('aria-expanded', 'true');
     wasOpen = true;
   };
-  trigger.addEventListener('click', () => { if (!blocked) open(); });
+  trigger.addEventListener('click', () => { if (!blocked) { if (hooks.onBulb) hooks.onBulb(); else open(); } });
   close.addEventListener('click', closeHelp);
 
   // Closing first lets the existing "Show me where" handler place its arrow on the board.
@@ -236,14 +236,17 @@ export const mountHelp = (hooks: HelpHooks) => {
       const hasCoach = !coach.hidden;
       // Smart cockpit keeps this physical control in place even when help is unavailable.
       trigger.hidden = false;
-      trigger.disabled = blocked || (!hasTip && !hasCoach);
+      trigger.disabled = blocked || (!hooks.onBulb && !hasTip && !hasCoach);
       slot.closest<HTMLElement>('#test2-information-rail')?.setAttribute('data-help', trigger.hidden ? 'off' : 'on');
       if (dialog.hidden) kind = hasCoach ? 'coach' : 'tip';
       const tipTitle = document.getElementById('first-tip-title')?.textContent?.trim() || 'Game help';
       const progress = document.getElementById('coach-step');
       const step = progress?.textContent?.trim().replace(/^Tip\s+/i, '') || '';
       if (step && progress) progress.textContent = `Tip ${step}`;
-      if (hasTip && !hasCoach) {
+      if (hooks.onBulb) {
+        trigger.title = 'Match Intel';
+        trigger.setAttribute('aria-label','Match Intel: public discard history and match facts');
+      } else if (hasTip && !hasCoach) {
         const topic = /bloom/i.test(tipTitle) ? 'Bloom' : tipTitle;
         trigger.title = `Learn: ${topic}`;
         trigger.setAttribute('aria-label', `Learn: ${tipTitle}. Open the full explanation.`);

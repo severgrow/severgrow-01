@@ -4,7 +4,7 @@ import { IS_TEST, IS_TEST2, FEATURES } from './channel.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, hexDistance, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -68,6 +68,9 @@ import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficu
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
+import { tutorialAccepts, tutorialChapter, tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT } from './logic/tutorial-script.js';
+import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
+import type { GlassSurface } from './player/glass-surface.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -115,7 +118,7 @@ if (V3_MODE) document.documentElement.classList.add('design-v3');
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
-import { fillIcons } from './ui/icons.js';
+import { fillIcons, ICONS } from './ui/icons.js';
 import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
@@ -209,11 +212,16 @@ const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
 
 // ---------- game state ----------
 
-type CoachProgress = { step: number; taught: TipId[]; known: string[]; choice: number; summaryDone: boolean };
+type CoachProgress = { step: number; taught: TipId[]; known: string[]; choice: number; summaryDone: boolean; tutorial?: { chapter: number; step: number } };
 const freshCoach = (): CoachProgress => ({ step: 0, taught: [], known: [], choice: 0, summaryDone: false });
 
 let session: Session | null = null;
 let coach: CoachProgress = freshCoach();
+let glassSurface: GlassSurface | null = null;
+let intelState: State | null = null;
+let tutorialDisplayKey = '';
+let tutorialTransitionPending = false;
+let tutorialFreeTimer = 0;
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
@@ -395,7 +403,9 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
       const turnNo = Math.ceil(s.turnNumber / 2);
       const remembered = difficultyById(store.get('severgrow.difficulty') ?? '');
       const tier = remembered?.levels.some(level => level === saved!.level) ? remembered.label : difficultyById(defaultDifficultyForLevel(saved!.level))!.label;
-      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">${tier} · level ${saved!.level} · turn ${turnNo}</span>`;
+      $('menu-continue').innerHTML = saved!.coach?.tutorial
+        ? `<span class="vb-name">Continue tutorial</span><span class="vb-sub">Part ${saved!.coach.tutorial.chapter+1} · right where you left off</span>`
+        : `<span class="vb-name">Continue</span><span class="vb-sub">${tier} · level ${saved!.level} · turn ${turnNo}</span>`;
       $('menu-continue').classList.add('version-btn');
     } else $('menu-continue').textContent = 'Continue';
     {
@@ -410,6 +420,10 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
 }
 
 function sheet(id: string | null) {
+  if (id && glassSurface?.isOpen()) {
+    glassSurface.hide();
+    $('test2-help-button').setAttribute('aria-expanded','false');
+  }
   if (openSheet) openSheet.hidden = true;
   openSheet = id ? $(id) : null;
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
@@ -640,6 +654,11 @@ const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_
 
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
   epoch++;
+  tutorialTransitionPending = false;
+  tutorialDisplayKey = '';
+  clearTimeout(tutorialFreeTimer);
+  glassSurface?.hide();
+  intelState=null;
   for (const w of [...waiters]) w();
   // A previous match may still be counting its score when New Game is tapped.
   // Its next animation frame must never write into this match's scoreboard.
@@ -795,7 +814,11 @@ async function mountPlayerEnhancements() {
     outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
     (await import('./player/information.js')).mountInformation();
     (await import('./player/cards.js')).mountCards();
-    test2Help = (await import('./player/help.js')).mountHelp({ sheet });
+    glassSurface = (await import('./player/glass-surface.js')).mountGlassSurface(() => {
+      $('test2-help-button').setAttribute('aria-expanded','false');
+      $('test2-help-button').focus();
+    });
+    test2Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
     if (session) render();
@@ -933,18 +956,90 @@ function startGame(seed: number, level: Level = settings.level, watch: { level: 
   store.set(SEEN_KEY, '1');
   gameLevel = level;
   // the test copy: the Lab's active experiment (none: the classic game)
-  const state = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
-  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). You go first.`];
-  beginSession(state, null);
+  const opening = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
+  // New Futasaku matches choose a side from their seed. Keep the authored base
+  // in the save only when the opponent starts, so older seed-only saves retain
+  // their original first player and deterministic replay.
+  const opponentStarts = IS_TEST2 && (seed & 1) === 1;
+  const state: State = opponentStarts ? { ...opening, startingPlayer: BOT, turnPlayer: BOT, actor: BOT } : opening;
+  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
+  beginSession(state, null, [], opponentStarts ? state : null);
   dealIn();
   firstToolTips();
   save();
+  announceTurn(state.turnPlayer);
+}
+
+function startTutorial() {
+  const state=tutorialChapter(0);
+  log=['A small match, played to learn.'];
+  gameLevel=7;
+  tipOpen=null;
+  beginSession(state,{...freshCoach(),tutorial:{chapter:0,step:0}},[],state);
+  save();
   announceTurn(HUMAN);
+}
+
+function completeTutorial() {
+  const my=epoch;
+  glassSurface?.hide();
+  smartCockpit?.event({message:'NICE.',priority:97,duration:850,mode:'green'});
+  window.setTimeout(() => { if (my===epoch && coach.tutorial) smartCockpit?.event({message:'点',priority:98,duration:650,mode:'amber'}); },900);
+  window.setTimeout(() => {
+    if (my!==epoch || !coach.tutorial) return;
+    store.remove(SAVE_KEY);
+    coach=freshCoach();
+    glassSurface?.hide();
+    showScreen('menu');
+  },1750);
+}
+
+function advanceTutorialChapter(chapter: number) {
+  if (chapter>=TUTORIAL_CHAPTER_COUNT) return completeTutorial();
+  const state=tutorialChapter(chapter);
+  log=[`Tutorial chapter ${chapter+1}.`];
+  beginSession(state,{...freshCoach(),tutorial:{chapter,step:0}},[],state);
+  save();
+  announceTurn(HUMAN);
+}
+
+function tutorialAfterPlay(p: Played, by: Player) {
+  const progress=coach.tutorial;
+  if (!progress) return;
+  const lesson=tutorialLesson(progress.chapter,progress.step);
+  if (!lesson) return;
+  if (lesson.action==='FreeTurn') {
+    if (by===HUMAN && (p.after.turnPlayer!==HUMAN || p.after.phase==='GAME_OVER')) {
+      progress.step++;
+      tutorialTransitionPending=true;
+      const my=epoch;
+      void idle().then(()=>{if(my===epoch) advanceTutorialChapter(TUTORIAL_CHAPTER_COUNT);});
+    }
+    return;
+  }
+  if (lesson.action==='Opponent') {
+    if (by!==BOT || (p.after.actor!==HUMAN && p.after.phase!=='GAME_OVER')) return;
+  } else if (by!==HUMAN || !tutorialAccepts(lesson,p.action,p.before)) return;
+  progress.step++;
+  tutorialDisplayKey='';
+  if (tutorialLesson(progress.chapter,progress.step)) return;
+  tutorialTransitionPending=true;
+  const my=epoch;
+  void idle().then(()=>{if(my===epoch) advanceTutorialChapter(progress.chapter+1);});
 }
 
 function continueGame() {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
+  const lesson=saved.coach?.tutorial;
+  if (lesson && !tutorialLesson(lesson.chapter,lesson.step)) {
+    // The completed action is saved before its closing animation finishes. If
+    // the page closes in that gap, resume at the next authored chapter.
+    if (lesson.chapter+1<TUTORIAL_CHAPTER_COUNT) return advanceTutorialChapter(lesson.chapter+1);
+    store.remove(SAVE_KEY);
+    showScreen('menu');
+    return;
+  }
   log = ['Welcome back.'];
   watching = null;
   if (IS_TEST) {
@@ -959,7 +1054,7 @@ function continueGame() {
 
 let adviceMemo: { key: string; state: State; advice: Advice | null } | null = null;
 function currentAdvice(): Advice | null {
-  if (!session || session.state.actor !== HUMAN || session.state.phase === 'GAME_OVER') return null;
+  if (!session || coach.tutorial || session.state.actor !== HUMAN || session.state.phase === 'GAME_OVER') return null;
   const key = `${coach.choice}|${settings.coach}|${coach.step}`;
   if (adviceMemo && adviceMemo.state === session.state && adviceMemo.key === key) return adviceMemo.advice;
   const advice = coachAdvice({ view: session.view, step: coach.step, enabled: settings.coach, taught: coach.taught, known: coach.known }, coach.choice);
@@ -982,17 +1077,21 @@ function rememberRemoved(steps: readonly Step[], before: State) {
 }
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
-  const displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+  let displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+  if (displayEvent?.personality && coach.tutorial && coach.tutorial.chapter<5) {
+    const {personality: _personality,...quiet}=displayEvent;
+    displayEvent=quiet;
+  }
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER' && !watching) {
+    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
   }
   log = log.slice(0, 300);
-  if (by === HUMAN) {
+  if (by === HUMAN && !coach.tutorial) {
     coach.step++;
     if (advice?.tip && !coach.taught.includes(advice.tip.id)) coach.taught.push(advice.tip.id);
     if (advice) coach.known = advice.known;
@@ -1008,6 +1107,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   }
   markMoment(p.steps, p.before);
   queue.push(p.steps);
+  tutorialAfterPlay(p,by);
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
@@ -1020,7 +1120,12 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
 
 /** The player plays `a` (from Confirm, a single tap, or the coach). */
 function humanPlay(a: Action) {
-  if (!session) return;
+  if (!session || (coach.tutorial && tutorialTransitionPending)) return;
+  const lesson=coach.tutorial && tutorialLesson(coach.tutorial.chapter,coach.tutorial.step);
+  if (lesson && !tutorialAccepts(lesson,a,session.state)) {
+    glassSurface?.nudge();
+    return;
+  }
   fastForward();
   const advice = currentAdvice();
   rememberCardRects();
@@ -1050,7 +1155,14 @@ const posKey = (s: State) => `${s.seed}|${s.turnNumber}|${s.phase}|${s.actor}|${
 let botPlan: BotPlan | null = null;
 /** The opponent's empty turn is on show: the draw, throw and next turn start are quick. */
 let quickShow: Beats | null = null;
-const askFor = (st: State) => askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+const askFor = (st: State) => {
+  const lesson=coach.tutorial && tutorialLesson(coach.tutorial.chapter,coach.tutorial.step);
+  if (lesson?.action==='Opponent') {
+    const action=tutorialOpponentAction(legalActions(viewFor(st,BOT)));
+    if (action) return Promise.resolve(action);
+  }
+  return askBot(viewFor(st, BOT), gameLevel, botSeed(st.seed, gameLevel, st.turnNumber, st.history?.length ?? 0));
+};
 async function planBotTurn(from: State): Promise<BotPlan> {
   const keys: string[] = [];
   const actions: Action[] = [];
@@ -1065,7 +1177,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 }
 
 function scheduleBot() {
-  if (!session || botBusy) return;
+  if (!session || botBusy || tutorialTransitionPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
   // the Lab's "Watch a game" (test copy only): a second opponent plays my seat
@@ -1245,7 +1357,7 @@ let skippedFrom: State | null = null;
  * shows why and a Continue button (renderControls).
  */
 function autoAdvance() {
-  if (!session || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  if (!session || coach.tutorial || !myTurn() || busy() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
@@ -1870,6 +1982,11 @@ function render() {
   renderFirstTip(v);
   updateTest2Help();
   smartCockpit?.sync();
+  renderTutorial();
+  if (glassSurface?.isOpen() && intelState!==session.state) {
+    intelState=session.state;
+    glassSurface.intel(matchIntel(v,session.state.history ?? [],openingPublicDiscard(session.state,session.base)));
+  }
   if (!IS_TEST2 && placeTeachingPanel && thumbLayout) {
     const keys = targetHexes(v, session.legal, session.sel);
     requestAnimationFrame(() => {
@@ -1888,7 +2005,18 @@ function render() {
 let autoQueued = false;
 /** Optional teaching yields to the player's move and to other sheets. */
 function updateTest2Help() {
-  test2Help?.update({ blocked: !session || busy() || (!!openSheet && openSheet.id !== 'sheet-test2-help') || !!session?.pending || !!draw.shape.length || cardPinned || session?.state.phase === 'GAME_OVER' });
+  const unavailable=!session || !!coach.tutorial || !!openSheet || session.state.phase==='GAME_OVER';
+  test2Help?.update({ blocked: IS_TEST2 ? unavailable : unavailable || busy() || !!session?.pending || !!draw.shape.length || cardPinned });
+}
+
+function toggleMatchIntel() {
+  if (!glassSurface || !session || coach.tutorial) return;
+  if (glassSurface.isOpen()) { glassSurface.close(); intelState=null; return; }
+  const model = matchIntel(session.view,session.state.history ?? [],openingPublicDiscard(session.state,session.base));
+  glassSurface.intel(model);
+  intelState=session.state;
+  $('test2-help-button').setAttribute('aria-expanded','true');
+  document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
 }
 
 
@@ -2429,17 +2557,27 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-skip').hidden = !busy();
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
-  const noReplay = session.lastTurnOf(BOT).length === 0;
+  const noReplay = !session.canReplayOpponent;
   $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
   $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
   const undoOk = session.canUndo && !busy();
+  const replayOk = !undoOk && !busy() && session.canReplayOpponent;
   // Positioning pass: Undo always holds its slot (opposite Sort), dimmed and disabled until a move
   // can be taken back, so it appearing never moves anything and Sort is never alone
   $('tool-undo').hidden = false;
-  ($('tool-undo') as HTMLButtonElement).disabled = !undoOk;
+  const undoSlot = $('tool-undo') as HTMLButtonElement;
+  undoSlot.disabled = !undoOk && !replayOk;
+  const slotMode = replayOk ? 'replay' : 'undo';
+  if (undoSlot.dataset.mode !== slotMode) {
+    undoSlot.dataset.mode = slotMode;
+    const icon = undoSlot.querySelector<HTMLElement>('.i');
+    if (icon) { icon.dataset.icon = slotMode; icon.innerHTML = ICONS[slotMode]!; }
+  }
+  undoSlot.setAttribute('aria-label', replayOk ? `Replay ${OPP.theirs} last turn` : 'Undo: take back your last move');
+  undoSlot.title = replayOk ? `Replay ${OPP.theirs} last turn` : 'Take back your last move (you can until you throw)';
   // Step 4: the homes (tree, volcano): idle life, a calm worried state and the "sides blocked"
   // ring in danger (or when tapped), smothered or withered after a Strangle. Public information.
   {
@@ -2798,7 +2936,7 @@ function renderRisks(risks: ReturnType<typeof riskLines>) {
 /** First-time tips for Fruit and Strengthen: shown once, until dismissed (re-open from How to play). */
 function renderFirstTip(v: View) {
   const card = $('first-tip');
-  if (!session || (openSheet && (!IS_TEST2 || openSheet.id !== 'sheet-test2-help'))) {
+  if (!session || coach.tutorial || (openSheet && (!IS_TEST2 || openSheet.id !== 'sheet-test2-help'))) {
     card.hidden = true;
     return;
   }
@@ -2812,6 +2950,44 @@ function renderFirstTip(v: View) {
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
   $('first-tip-demo').hidden = tipOpen !== 'draw';
+}
+
+function renderTutorial() {
+  const progress=coach.tutorial;
+  if (!progress || !session || !glassSurface) return;
+  const lesson=tutorialLesson(progress.chapter,progress.step);
+  if (!lesson) return;
+  const selected=session.sel.card;
+  const selectors:string[]=[];
+  const selectingBloom=!!session.sel.kind?.startsWith('bloom-');
+  const text=lesson.action==='MegaBomb' && session.pending?.t==='MegaBomb' ? 'TAP AGAIN TO LAUNCH.'
+    : selectingBloom && lesson.action==='MegaBomb' ? 'CHOOSE THE BLAST.'
+    : selectingBloom && lesson.action==='Bloom' ? 'PLACE THREE CONNECTED TILES.'
+    : selected!==null && lesson.action==='PlayFruit' ? 'CHOOSE AN ENEMY TILE.'
+    : selected!==null && lesson.action==='Sprout' ? 'TAP THE LIT TILE.' : lesson.text;
+  if (lesson.focus==='deck') selectors.push('#deck');
+  else if (lesson.focus==='discard') selectors.push('#discard');
+  else if (lesson.focus==='context') selectors.push('#smart-context');
+  else if (lesson.focus==='card') selectors.push('#hand .card');
+  else if (lesson.focus==='bloom') {
+    if (selectingBloom) selectors.push(lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board-wrap');
+    else selectors.push('#smart-bloom-button');
+  } else if (lesson.focus==='tile' && lesson.tile) {
+    const wanted=lesson.card
+      ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
+      : session.view.hand.find(c=>c.suit===null);
+    if (selected!==wanted?.id && wanted) selectors.push(`#hand .card[data-card="${wanted.id}"]`);
+    selectors.push(`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`);
+  }
+  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}`;
+  if (tutorialDisplayKey!==key) {
+    tutorialDisplayKey=key;
+    glassSurface.tutorial(text,progress.chapter,selectors,{gentle:progress.chapter>=4,arrow:progress.chapter<8});
+    if (lesson.action==='FreeTurn') {
+      clearTimeout(tutorialFreeTimer);
+      tutorialFreeTimer=window.setTimeout(()=>glassSurface?.hide(),1400);
+    }
+  } else glassSurface.refresh();
 }
 
 function showTip(id: FirstTip) {
@@ -3727,9 +3903,14 @@ bind('go-other', () => {
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
-  settings = { ...settings, coach: true };
-  saveSettings();
-  startGame(TUTORIAL_SEED, 7); // the tutorial is tuned for the classic opponent
+  if (!IS_TEST2) {
+    settings={...settings,coach:true};
+    saveSettings();
+    startGame(TUTORIAL_SEED,7);
+    return;
+  }
+  if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
+  startTutorial();
 });
 bind('menu-settings', () => sheet('sheet-settings'));
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
@@ -3760,10 +3941,15 @@ bind('gm-main', () => {
   showScreen('menu');
 });
 bind('restart-tutorial', () => {
-  settings = { ...settings, coach: true };
-  saveSettings();
+  if (!IS_TEST2) {
+    settings={...settings,coach:true};
+    saveSettings();
+    sheet(null);
+    startGame(randomSeed());
+    return;
+  }
   sheet(null);
-  startGame(randomSeed());
+  startTutorial();
 });
 bind('scrim', () => sheet(null));
 for (const b of document.querySelectorAll<HTMLElement>('[data-close]')) b.addEventListener('click', () => sheet(null));
@@ -3856,7 +4042,10 @@ bind('tool-replay', () => replayBotTurn());
     tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
   };
 }
-bind('tool-undo', () => undoMove());
+bind('tool-undo', () => {
+  if (session?.canUndo) undoMove();
+  else if (session?.canReplayOpponent) replayBotTurn();
+});
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {
   gameOverDismissed = true;
@@ -4131,7 +4320,8 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('
   // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
   for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
-} else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
+} else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
+else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
 
 window.dispatchEvent(new Event('severor-ready'));

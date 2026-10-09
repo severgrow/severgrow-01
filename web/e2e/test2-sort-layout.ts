@@ -70,7 +70,7 @@ try {
       localStorage.setItem('main2:severgrow-thumb', JSON.stringify({ side: s }));
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: false, handSort: 'suit' }));
     }, side);
-    await page.goto(`${BASE}?seed=1`);
+    await page.goto(`${BASE}?seed=2`);
     await page.waitForSelector('#hand .card');
     await page.waitForFunction(() => (window as any).__severgrow && !(window as any).__severgrow.busy());
     await page.waitForTimeout(1100); // let the intended Draw entrance settle before measuring

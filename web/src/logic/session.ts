@@ -1,7 +1,7 @@
 // One game as the page plays it: the engine state, what the player has picked, and
 // a record of each turn. All moves go through here; it only plays legal moves, and
 // a move can only be confirmed once.
-import { IllegalActionError, apply, legalActions, viewFor } from '../../../src/engine/index.js';
+import { IllegalActionError, apply, legalActions, newGame, viewFor } from '../../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../../src/engine/index.js';
 import { buildSteps } from './anim.js';
 import type { Step } from './anim.js';
@@ -19,6 +19,7 @@ export class Session {
   private undoStack: { state: State; n: number }[] = [];
   /** overhaul item 20: every play that cut tiles off (for "Replay the biggest cut") */
   private cuts: { n: number; played: Played }[] = [];
+  private restoredOpponentTurn: Played[] | null = null;
   private cache: { state: State; view: View; legal: Action[] } | null = null;
   /** Polish pass 3: a drawn line or clump waiting for Confirm (replaces the picked move while legal). */
   private drawn: Action | null = null;
@@ -106,6 +107,7 @@ export class Session {
     else this.undoStack = [];
     const played: Played = { before: s, action, after, steps: buildSteps(s, action, after, this.viewer) };
     this.state = after;
+    this.restoredOpponentTurn = null;
     this.log.push(action);
     this.sel = EMPTY_SEL;
     this.drawn = null;
@@ -121,6 +123,11 @@ export class Session {
   /** True when the player can take back their last move. */
   get canUndo(): boolean {
     return this.undoStack.length > 0 && this.state.actor === this.viewer && this.state.phase !== 'GAME_OVER';
+  }
+
+  /** The previous completed turn belongs to the opponent; no hidden cards are read. */
+  get canReplayOpponent(): boolean {
+    return this.state.actor === this.viewer && this.state.phase !== 'GAME_OVER' && this.state.turnNumber > 1 && this.log.length > 0;
   }
 
   /** Takes back the player's last move of this turn. Returns false if there is none. */
@@ -149,6 +156,20 @@ export class Session {
   /** Every action of `player`'s latest turn (for "Replay last turn"). */
   lastTurnOf(player: Player): Played[] {
     for (let i = this.turns.length - 1; i >= 0; i--) if (this.turns[i]!.player === player) return this.turns[i]!.plays;
-    return [];
+    // A reloaded save stores its seed and action log, not animation objects. Rebuild
+    // only the immediately preceding opponent turn, and only when Replay is tapped.
+    if (player === this.viewer || this.state.turnPlayer !== this.viewer) return [];
+    if (this.restoredOpponentTurn) return this.restoredOpponentTurn;
+    const wantedTurn = this.state.turnNumber - 1;
+    let before = this.base ?? newGame(this.state.seed, this.state.config);
+    const plays: Played[] = [];
+    for (const action of this.log) {
+      const after = apply(before, action);
+      if (before.turnNumber === wantedTurn && before.turnPlayer === player)
+        plays.push({ before, action, after, steps: buildSteps(before, action, after, this.viewer) });
+      before = after;
+    }
+    this.restoredOpponentTurn = plays;
+    return plays;
   }
 }

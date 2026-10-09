@@ -97,31 +97,26 @@ try {
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#test2-help-button');
-    check(await page.locator('#sheet-test2-help').isVisible(), `${width}: explicit help opens`);
-    await page.locator('#sheet-test2-help').evaluate(element => Promise.all(element.getAnimations().map(animation => animation.finished)));
+    check(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(), `${width}: Match Intel opens in the glass`);
     const layout = await page.evaluate(() => {
-      const sheet = document.querySelector('#sheet-test2-help') as HTMLElement;
-      const message = document.querySelector('#coach-suggested') as HTMLElement;
+      const sheet = document.querySelector('#futasaku-glass') as HTMLElement;
       const r = sheet.getBoundingClientRect();
-      const controls = [...sheet.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.getClientRects().length);
+      const close = sheet.querySelector<HTMLButtonElement>('.intel-close')!;
+      const target=close.getBoundingClientRect();
+      const dock=document.getElementById('dock')!.getBoundingClientRect();
       return { fits: r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1,
-        unclipped: message.scrollWidth <= message.clientWidth + 1 && getComputedStyle(message).whiteSpace === 'normal',
-        taps: controls.every(button => { const b = button.getBoundingClientRect(); return b.width >= 44 && b.height >= 44; }),
-        progress: document.querySelector('#coach-step')?.textContent,
+        aligned:r.left>=dock.left-1&&r.right<=dock.right+1,
+        taps:target.width>=44&&target.height>=44,
+        cards:sheet.querySelectorAll('.intel-card').length,
         overflow: sheet.scrollWidth > sheet.clientWidth + 1 };
     });
-    if (!layout.fits || layout.overflow) console.log('sheet layout', layout, await page.locator('#sheet-test2-help').boundingBox());
+    if (!layout.fits || layout.overflow) console.log('sheet layout', layout, await page.locator('#futasaku-glass').boundingBox());
     await page.screenshot({ path: `/tmp/main2-shots/info-${width}x${height}-help.png` });
-    check(layout.fits && !layout.overflow, `${width}: dialog fits viewport`);
-    check(layout.unclipped, `${width}: full advice is readable`);
-    check(layout.taps, `${width}: controls have 44px targets`);
-    check(layout.progress?.startsWith('Tip '), `${width}: progress is labelled`);
-    await page.keyboard.press('Tab');
-    check(await page.evaluate(() => !!document.activeElement?.closest('#sheet-test2-help')), `${width}: keyboard remains in help`);
-    await page.click('#coach-show');
-    check(!await page.locator('#sheet-test2-help').isVisible(), `${width}: Show closes help`);
-    check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(before), `${width}: reading help leaves state intact`);
-    check(await page.locator('#guide-arrow').isVisible(), `${width}: Show points to actual move`);
+    check(layout.fits && layout.aligned && !layout.overflow, `${width}: glass fits the cockpit and viewport`);
+    check(layout.taps && layout.cards>0, `${width}: close target and public card thumbnail are present`);
+    await page.keyboard.press('Escape');
+    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes Match Intel`);
+    check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(before), `${width}: reading Match Intel leaves state intact`);
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
@@ -142,8 +137,8 @@ try {
       `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);
     await page.click('#test2-help-button');
     await page.keyboard.press('Escape');
-    check(!await page.locator('#sheet-test2-help').isVisible(), `${width}: Escape closes`);
-    check(await page.evaluate(() => document.activeElement?.id === 'test2-help-button'), `${width}: focus returns to Hint`);
+    check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes`);
+    check(await page.evaluate(() => document.activeElement?.id === 'test2-help-button'), `${width}: focus returns to Match Intel`);
     const boundaries = await page.evaluate(() => {
       const rail = document.querySelector('#test2-information-rail')!.getBoundingClientRect();
       const board = document.querySelector('#board-wrap')!.getBoundingClientRect();

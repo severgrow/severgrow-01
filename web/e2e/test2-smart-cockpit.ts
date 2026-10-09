@@ -44,7 +44,7 @@ try {
       localStorage.setItem('main2:severgrow-thumb',JSON.stringify({side:which}));
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true}));
     },side);
-    await page.goto(`${BASE}?seed=1`); await page.waitForSelector('#deck.ready');
+    await page.goto(`${BASE}?seed=2`); await page.waitForSelector('#deck.ready');
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
     await page.waitForTimeout(1100); // intentional Draw entrance finishes before anchoring assertions
     let start=await rects(page); aligned(start,`${name} Draw`);
@@ -70,6 +70,7 @@ try {
       check(Math.abs(now.piles[0]!.pile.x-x)<1&&Math.abs(now.piles[1]!.pile.x-start.piles[1]!.pile.x)<1,`${name}: sorting keeps both piles anchored`);
     }
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(page,'ACT');
+    await page.locator('#test2-box > .piles').evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished)));
     const grow=await rects(page);aligned(grow,`${name} Grow`);
     if(mobile && width/height>=.53) {
       const map=await page.evaluate(()=>{
@@ -78,7 +79,7 @@ try {
       });
       const controlLeft=Math.min(grow.piles[0]!.pile.left,grow.piles[1]!.pile.left,grow.panel.left);
       const controlRight=Math.max(grow.piles[0]!.pile.right,grow.piles[1]!.pile.right,grow.panel.right);
-      check(Math.abs(map.left-controlLeft)<7&&Math.abs(map.right-controlRight)<7,`${name}: map and cockpit controls share outer margins`);
+      check(Math.abs(map.left-controlLeft)<7&&Math.abs(map.right-controlRight)<7,`${name}: map and cockpit controls share outer margins (${JSON.stringify({map,controlLeft,controlRight})})`);
       check(map.top>=-1&&map.bottom<=grow.panel.top+15,`${name}: enlarged map stays between header and controls`);
     }
     check(await page.locator('#deck-count,#discard-count').evaluateAll(nodes=>nodes.every(node=>{
@@ -106,8 +107,10 @@ try {
   check(await page.locator('#smart-bloom-button .test2-combination .test2-mini-card').count()===3,'Bloom: cockpit shows symbolic recipe cards');
   await page.locator('#smart-bloom-button').click();
   check(!await page.locator('#smart-bloom-selector').isVisible(),'Bloom: single recipe selects on one tap');
-  await page.waitForTimeout(1400); // the context-change cue briefly explains Cancel first
-  check(await page.locator('#smart-led-text').innerText()==='0:0','Bloom: display returns to its resting score');
+  const bloomView=viewFor(await page.evaluate(()=>(window as any).__severgrow.state()),0);
+  const restingScore=`${bloomView.score}:${bloomView.opponentScore}`;
+  await page.waitForFunction(expected=>document.getElementById('smart-led-text')?.textContent?.trim()===expected,restingScore,{timeout:6000});
+  check(await page.locator('#smart-led-text').innerText()===restingScore,'Bloom: display returns to its resting score');
   await page.screenshot({path:`${dir}/390x844-bloom.png`});
   const beforeBloom = await page.evaluate(() => (window as any).__severgrow.state());
   const cards = [6,43,61];
@@ -150,7 +153,7 @@ try {
   await discard.close();
   const wells=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await wells.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
-  await wells.goto(`${BASE}?seed=1`); await wells.waitForSelector('#deck.ready');
+  await wells.goto(`${BASE}?seed=2`); await wells.waitForSelector('#deck.ready');
   await wells.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(wells,'ACT');
   await wells.locator('#hand .card.playable').first().click();
   const target=wells.locator('#board .target.kind-grow').first(); await target.waitFor();
@@ -219,7 +222,7 @@ try {
   await skipBloom.close();
   const cameraPage=await browser.newPage({viewport:{width:1280,height:800}});
   await cameraPage.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
-  await cameraPage.goto(`${BASE}?seed=1`); await cameraPage.waitForSelector('#deck.ready');
+  await cameraPage.goto(`${BASE}?seed=2`); await cameraPage.waitForSelector('#deck.ready');
   const board=await cameraPage.locator('#board-wrap').boundingBox();
   check(!!board,'Camera: board has a visible viewport');
   if(board) { await cameraPage.mouse.move(board.x+board.width/2,board.y+board.height/2); await cameraPage.mouse.wheel(0,-600); }
