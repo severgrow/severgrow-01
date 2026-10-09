@@ -13,6 +13,8 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { displayEventForPlay } from './player/display-readout.js';
+import { outcomeCue } from './player/outcome-light.js';
+import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
 import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
@@ -223,6 +225,7 @@ let shownScores: [number, number] = [0, 0];
 const hiddenCards = new Set<number>();
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
+const outcomeSteps = new WeakMap<Step, { tone: 'good' | 'bad'; strength: number }>();
 let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
@@ -705,6 +708,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   lastBoard = null;
   showScreen('game');
   smartCockpit?.reset();
+  outcomeLight?.reset();
   scheduleBot();
 }
 
@@ -726,6 +730,7 @@ function dealIn() {
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let test2Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
+let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
 /** The replay button: hidden in the test copy (its code stays). */
@@ -827,7 +832,7 @@ async function mountPlayerEnhancements() {
 
   await Promise.all(loads);
   if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2') {
-    (await import('./player/atmosphere.js')).mountAtmosphere();
+    outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
     (await import('./player/information.js')).mountInformation();
     (await import('./player/cards.js')).mountCards();
     test2Help = (await import('./player/help.js')).mountHelp({ sheet });
@@ -1036,6 +1041,8 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   }
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
   rememberRemoved(p.steps, p.before);
+  const cue = IS_TEST2 ? outcomeCue(p.steps, HUMAN) : null;
+  if (cue) outcomeSteps.set(cue.step, cue);
   markMoment(p.steps, p.before);
   queue.push(p.steps);
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
@@ -1241,6 +1248,9 @@ function fastForward() {
 
 /** Book-keeping for a step that is shown (with or without animation). */
 function settleStep(s: Step, animated: boolean) {
+  const cue = outcomeSteps.get(s);
+  if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
+  outcomeSteps.delete(s);
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
     const former = removedTiles.get(s);

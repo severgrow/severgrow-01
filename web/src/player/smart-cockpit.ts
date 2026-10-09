@@ -185,8 +185,23 @@ html.test2-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expand
 }
 html.test2-information #smart-bloom-button:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #smart-bloom-button:active { transform:translateY(1px) scale(.98); }
+/* A tiny film registration drift lives on the projected recipe alone. The control
+   remains transparent; the coloured ink and card edges provide all its light. */
+html.test2-information #smart-bloom-button .test2-combination {
+  animation:test2-recipe-projector 7.3s steps(1,end) infinite;
+  filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.32));
+}
+html.test2-information #smart-bloom-button .test2-mini-card {
+  opacity:.88; text-shadow:0 0 2px currentColor;
+  box-shadow:0 0 1.5px currentColor,inset 0 0 1px currentColor;
+}
+@keyframes test2-recipe-projector {
+  0%,18%,20%,51%,53%,83%,85%,100% { opacity:.9; translate:0 0; }
+  19%,52% { opacity:.82; translate:.28px -.2px; }
+  84% { opacity:.94; translate:-.22px .16px; }
+}
 html.test2-information[data-step='grow'][data-test2-waiting='true'] #smart-bloom-button:not([aria-expanded='true']) .test2-combination {
-  animation:test2-card-breathe 1.35s ease-in-out infinite;
+  animation:test2-card-breathe 1.35s ease-in-out infinite,test2-recipe-projector 7.3s steps(1,end) infinite;
 }
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #smart-bloom-button .test2-combination { animation:none !important; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #smart-bloom-button .test2-combination { animation:none !important; } }

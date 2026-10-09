@@ -19,6 +19,20 @@ let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow.state() as State);
 const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__severgrow; return h && !h.busy() && h.state()?.actor === 0; }, undefined, { timeout: 30000 });
+// Fanned cards intentionally overlap. Click a visible piece of the requested card,
+// rather than Playwright's centre point, which can belong to the next card.
+const clickVisibleCard = async (p: Page, id: number) => {
+  const point = await p.locator(`#hand [data-card="${id}"]`).evaluate(el => {
+    const r = el.getBoundingClientRect();
+    for (const xf of [.08, .2, .35, .5, .7, .9]) for (const yf of [.2, .45, .7, .85]) {
+      const x = r.left + r.width * xf, y = r.top + r.height * yf;
+      if (document.elementFromPoint(x, y)?.closest('#hand .card') === el) return { x, y };
+    }
+    return null;
+  });
+  assert(point, `Card ${id} has an exposed clickable surface`);
+  await p.mouse.click(point.x, point.y);
+};
 mkdirSync('/tmp/main2-shots', { recursive: true });
 try {
 for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,800],[1440,900],[1600,980],[1920,1080]]) {
@@ -48,7 +62,7 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   check(JSON.stringify(grown) === JSON.stringify(apply(before, { t:'Draw', from:'deck' })), `${w}: draw matches engine`);
   const action = legalActions(viewFor(grown,0)).find(a=>a.t==='Sprout');
   assert(action?.t === 'Sprout');
-  await page.locator(`#hand [data-card="${action.card}"]`).click();
+  await clickVisibleCard(page, action.card);
   const key = `${action.coord.q},${action.coord.r}`;
   const target = page.locator(`#board g.hex-cell[data-key="${key}"]`);
   const box = await target.boundingBox(); assert(box);
@@ -80,10 +94,10 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   before = await state(page);
   const discard = legalActions(viewFor(before,0)).find(a=>a.t==='Discard'); assert(discard?.t==='Discard');
   const throwCard = page.locator(`#hand [data-card="${discard.card}"]`);
-  await throwCard.click();
+  await clickVisibleCard(page, discard.card);
   check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: selecting Throw leaves engine state unchanged`);
   check(await throwCard.evaluate(el => el.classList.contains('test2-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
-  await throwCard.click();
+  await clickVisibleCard(page, discard.card);
   await page.waitForTimeout(100);
   check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual card throw`);
   await idle(page);

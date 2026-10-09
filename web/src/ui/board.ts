@@ -242,6 +242,13 @@ export class BoardView {
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
+    if (IS_TEST2) {
+      const shadow = el('radialGradient', { id: this.id('seed-stone-shadow'), cx: '.4', cy: '.34', r: '.68' }, defs);
+      el('stop', { offset: '0%', 'stop-color': '#080906', 'stop-opacity': .39 }, shadow);
+      el('stop', { offset: '46%', 'stop-color': '#080906', 'stop-opacity': .19 }, shadow);
+      el('stop', { offset: '100%', 'stop-color': '#080906', 'stop-opacity': 0 }, shadow);
+      svg.style.setProperty('--seed-stone-shadow', this.url('seed-stone-shadow'));
+    }
     // Bot fill patterns (colour-blind safe: the bot's tiles always carry a pattern).
     const hatch = el('pattern', { id: this.id('pat-hatch'), width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 2.2, height: 6, class: 'pat-ink' }, hatch);

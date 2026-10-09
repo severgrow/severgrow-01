@@ -707,7 +707,7 @@ svg.usable .hex-cell {
 #board .seed-stone { pointer-events: none; transform-box: view-box; transform-origin: 0 0; }
 .default-art-sprite, .default-rock-art, .default-rock-shadow, .default-ground-art, .default-home-art, .default-cell-rim { pointer-events: none; }
 .default-art-tile > path { pointer-events: none; }
-.seed-stone-shadow { fill: rgba(0, 0, 0, .4); }
+.seed-stone-shadow { fill: var(--seed-stone-shadow, rgba(0, 0, 0, .4)); }
 .seed-stone-art { pointer-events: none; overflow: hidden; }
 .seed-stone-value { display: none; }
 .mark-ink {

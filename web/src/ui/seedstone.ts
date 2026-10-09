@@ -35,7 +35,7 @@ export function setSeedStoneStrength(stone: SVGGElement | null, strength: number
 export function drawSeedStone(parent: SVGGElement, key: string, x: number, y: number, strength: number, owner: Player) {
   const stone = el('g', { class: 'seed-stone', transform: `translate(${x.toFixed(2)},${y.toFixed(2)}) scale(0.66)`,
     'data-key': key, 'data-owner': owner, 'data-strength': strength }, parent);
-  el('ellipse', { cx: 0, cy: 8.7, rx: 8.7, ry: 2, class: 'seed-stone-shadow' }, stone);
+  el('ellipse', { cx: 1.7, cy: 9.1, rx: 8.9, ry: 2.6, class: 'seed-stone-shadow' }, stone);
   const art = el('svg', { x: -10.5, y: -10.5, width: 21, height: 21,
     viewBox: stoneViewBox(owner,strength), class: 'seed-stone-art', overflow: 'hidden', 'aria-hidden': 'true' }, stone);
   el('image', { href: atlasUrl, x: 0, y: 0, width: 1024, height: 1536 }, art);

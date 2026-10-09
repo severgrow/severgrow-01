@@ -9,12 +9,25 @@ export const ATMOSPHERE_CSS = `
 }
 #test2-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #test2-board-backdrop { display: block; }
+#test2-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
+body:has(#game:not([hidden])) #test2-outcome-light { display:block; }
+#test2-outcome-light[data-tone='good'] {
+  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(89,177,107,.19),rgba(63,119,76,.06) 50%,transparent 83%),
+             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(92,164,102,.09),transparent 82%);
+}
+#test2-outcome-light[data-tone='bad'] {
+  background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(188,79,61,.18),rgba(113,54,45,.06) 50%,transparent 83%),
+             radial-gradient(ellipse 35% 48% at 79% 73%,rgba(164,77,54,.08),transparent 82%);
+}
 #test2-map-rim { pointer-events: none; }
 #board .hex-cell.normal.test2-empty { filter: brightness(1.15); }
 `;
 
-export function mountAtmosphere() {
-  if (document.getElementById('test2-film-grain')) return;
+export type OutcomeLight = { pulse: (tone: 'good' | 'bad', strength: number) => void; reset: () => void };
+let mounted: OutcomeLight | null = null;
+
+export function mountAtmosphere(): OutcomeLight {
+  if (mounted) return mounted;
   const style = document.createElement('style');
   style.id = 'test2-atmosphere-style';
   style.textContent = ATMOSPHERE_CSS;
@@ -42,10 +55,32 @@ export function mountAtmosphere() {
   const backdrop = document.createElement('div');
   backdrop.id = 'test2-board-backdrop';
   backdrop.setAttribute('aria-hidden', 'true');
-  document.getElementById('texture')?.append(backdrop);
+  const outcome = document.createElement('div');
+  outcome.id = 'test2-outcome-light';
+  outcome.setAttribute('aria-hidden', 'true');
+  document.getElementById('texture')?.append(backdrop,outcome);
+  let running: Animation | null = null;
+  let lastStart = 0;
+  let lastStrength = 0;
+  mounted = {
+    pulse(tone, strength) {
+      if (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const now = performance.now();
+      if (now - lastStart < 380 && strength <= lastStrength) return;
+      lastStart = now; lastStrength = strength;
+      running?.cancel();
+      outcome.dataset.tone = tone;
+      const peak = Math.min(.82, Math.max(.22, strength * .75));
+      running = outcome.animate([
+        { opacity: 0, offset: 0 }, { opacity: peak, offset: .23 },
+        { opacity: peak * .46, offset: .49 }, { opacity: 0, offset: 1 },
+      ], { duration: 880, easing: 'cubic-bezier(.2,.55,.4,1)' });
+    },
+    reset() { running?.cancel(); running = null; lastStart = 0; lastStrength = 0; },
+  };
 
   const board = document.querySelector<SVGSVGElement>('#board');
-  if (!board) return;
+  if (!board) return mounted;
   let signature = '';
   const rim = () => {
     const paths = [...board.querySelectorAll<SVGPathElement>('.l-base .hex-cell > .hex')];
@@ -105,4 +140,5 @@ export function mountAtmosphere() {
   };
   new MutationObserver(lightEmptyCells).observe(board, { childList: true, subtree: true });
   lightEmptyCells();
+  return mounted;
 }
