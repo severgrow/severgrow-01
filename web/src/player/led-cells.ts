@@ -45,9 +45,30 @@ const GLYPHS: Record<string, string> = {
   '+':'00000/00100/00100/11111/00100/00100/00000',
   '…':'00000/00000/00000/00000/00000/00000/10101',
   '•':'00000/00000/00100/01110/00100/00000/00000',
+  '♥':'00000/01010/11111/11111/01110/00100/00000',
+  '✦':'00100/00100/11111/01110/11111/00100/00100',
 };
 
-const ADVANCE = 14.5;
+export type LedTone = 'amber' | 'red' | 'green' | 'ivory' | 'pink' | 'cyan' | 'score';
+export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes';
+export const ledMotifFrames = (motif: LedMotif): readonly string[] => ({
+  stars:['• ✦ •','✦ • ✦','• ✦ •','✦ ✦','• ✦ •'],
+  heart:['•','♥','♥','•'],
+  shock:['•','• •','✦ • ✦','• •','•'],
+  scatter:['•••','• •','•  •','• •','•••'],
+  eyes:['• •','• •','••','• •'],
+})[motif];
+const INK: Record<Exclude<LedTone,'score'>, { fill:string; glow:string }> = {
+  amber:{ fill:'#f5d8a4', glow:'rgba(255,195,104,.78)' },
+  red:{ fill:'#e4705e', glow:'rgba(234,68,48,.82)' },
+  green:{ fill:'#a9d886', glow:'rgba(143,210,111,.70)' },
+  ivory:{ fill:'#f5ead1', glow:'rgba(255,233,182,.66)' },
+  pink:{ fill:'#edabc0', glow:'rgba(237,150,178,.65)' },
+  cyan:{ fill:'#a7d3d0', glow:'rgba(132,209,206,.58)' },
+};
+
+export const LED_ADVANCE = 14.5;
+const ADVANCE = LED_ADVANCE;
 const DOT_X = 2.3;
 const SEPARATOR = ' • ';
 export const ledMessageWidth = (message: string) => Math.max(1, message.length * ADVANCE - 1);
@@ -55,6 +76,13 @@ export const ledMarqueeTravel = (message: string) => ledMessageWidth(`${message}
 
 /** Readable static shorthand for the physical window when motion is reduced. The full copy stays in the live region. */
 export function ledStaticMessage(message: string) {
+  if (/^\d+:\d+$/.test(message)) return message;
+  if (message === 'YOU WIN') return 'WIN';
+  if (message === 'OPP WINS') return 'LOSS';
+  if (message === 'DRAW GAME') return 'DRAW';
+  if (message === 'YOU LEAD') return 'LEAD';
+  if (message === 'OPP LEADS') return 'OPP';
+  if (/^OPP \+\d+$/.test(message)) return `O+${message.slice(5)}`;
   const score = /^YOU (\d+) • (\d+) OPP$/.exec(message);
   if (score) {
     const both = `${score[1]}:${score[2]}`;
@@ -80,7 +108,7 @@ export function ledStaticMessage(message: string) {
 }
 
 /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */
-export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false, mode: 'amber'|'red' = 'amber') {
+export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false, mode: LedTone = 'amber') {
   const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
   const width = ledMessageWidth(shown);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -91,6 +119,7 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
   const ctx = canvas.getContext('2d');
   if (!ctx) return width;
   ctx.scale(dpr, dpr);
+  const colon = mode === 'score' ? shown.indexOf(':') : -1;
   for (let i = 0; i < shown.length; i++) {
     const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
     if (!rows) continue;
@@ -103,8 +132,9 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
       ctx.beginPath();
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       if (lit) {
-        ctx.fillStyle = mode === 'red' ? '#e4705e' : '#f5d8a4';
-        ctx.shadowColor = mode === 'red' ? 'rgba(234,68,48,.82)' : 'rgba(255,195,104,.78)'; ctx.shadowBlur = mode === 'red' ? 4 : 3.4;
+        const tone = mode === 'score' ? (i < colon ? 'green' : i > colon ? 'red' : 'amber') : mode;
+        ctx.fillStyle = INK[tone].fill;
+        ctx.shadowColor = INK[tone].glow; ctx.shadowBlur = tone === 'red' ? 4 : 3.4;
         ctx.fill();
       }
       ctx.shadowBlur = 0;

@@ -78,7 +78,6 @@ ${T} .title {
   font-size: clamp(2.5rem, 7.5vw + 0.9rem, 4.25rem);
 }
 ${T} .levels-head h2,
-${T} .welcome-title,
 ${T} .sheet-head h2,
 ${T} .gameover .go-title,
 ${T} .lab h1,
@@ -95,11 +94,6 @@ ${T} .gameover .go-title {
   letter-spacing: -0.02em;
   font-size: clamp(1.75rem, 3.6vw + 1rem, 3rem);
   text-wrap: balance; /* never a lone "7!" on the second line */
-}
-${T} .welcome-title {
-  display: block;
-  font-size: 1.2rem;
-  margin-bottom: 2px;
 }
 ${T} .levels-head h2 {
   font-size: clamp(1.45rem, 2.4vw + 0.9rem, 2rem);
@@ -143,7 +137,6 @@ ${T} .sheet-body,
 ${T} .prose,
 ${T} .coach,
 ${T} .first-tip,
-${T} .welcome,
 ${T} .tooltip {
   line-height: var(--lh-body);
 }
@@ -203,8 +196,6 @@ ${T} .tile-num,
 ${T} .ghost-num,
 ${T} .c-num,
 ${T} .pile-count,
-${T} .lt-num,
-${T} .lt-wins,
 ${T} .go-score,
 ${T} .badge,
 ${T} .gm-scores b {
@@ -216,8 +207,7 @@ ${T} .c-num {
   line-height: 1;
   letter-spacing: -0.01em;
 }
-${T} .pile-count,
-${T} .lt-wins {
+${T} .pile-count {
   line-height: 1;
 }
 /* tile numbers: with 'dominant-baseline: central' Commissioner's digits sit 0.087em above the em

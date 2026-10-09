@@ -22,8 +22,8 @@ try {
     return game?.state()?.actor === 0 && !game.busy();
   });
   await click('#menu-new');
-  await page.locator('#level-grid [data-level="1"]').waitFor({ state: 'attached' });
-  await click('#level-grid [data-level="1"]');
+  await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
+  await click('#level-grid [data-difficulty="beginner"]');
   await idle();
   // DOM click exercises the real handler without Playwright waiting for the
   // deliberately pulsing deck/card to stop moving.
@@ -39,9 +39,9 @@ try {
   });
   await page.waitForFunction(() => Number(document.querySelector('#score-you')?.textContent) > 0);
   await click('#hud-menu');
-  await click('#menu-new');
-  await page.locator('#level-grid [data-level="1"]').waitFor({ state: 'attached' });
-  await click('#level-grid [data-level="1"]');
+  await click('#gm-new');
+  await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
+  await click('#level-grid [data-difficulty="beginner"]');
   await page.waitForTimeout(850);
   const restarted = await page.evaluate(() => (window as any).__severgrow.state() as State);
   assert.equal(restarted.phase, 'DRAW');

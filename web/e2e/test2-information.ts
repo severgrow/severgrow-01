@@ -34,16 +34,19 @@ try {
     appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&
     appIcon.icons.some((icon: {purpose:string})=>icon.purpose==='maskable'),
     'Android icons decode at the declared sizes with a separate mask-safe icon and Test2-local launch scope');
+  await menu.click('#menu-tutorial');
+  await menu.waitForFunction(() => !!(window as any).__severgrow.state());
   for (const topic of ['fruit', 'strengthen', 'draw']) {
-    await menu.click('#menu-howto');
+    await menu.click('#hud-menu');
+    await menu.click('#gm-howto');
     await menu.locator(`#howto-body [data-tip="${topic}"]`).click();
-    check(await menu.locator('#sheet-test2-help').isVisible(), `${topic}: explicit lesson opens before a game`);
+    check(await menu.locator('#sheet-test2-help').isVisible(), `${topic}: explicit lesson opens during a game`);
     check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-test2-help').innerText()), `${topic}: help uses Bomb terminology`);
     if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
     check(!await menu.locator('#sheet-test2-help').isVisible(), `${topic}: acknowledgement closes help`);
-    check(!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: reading doesn't create a game`);
+    check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the tutorial game available`);
   }
   await menu.close();
   for (const [width, height, large, left, v3] of [[360,640,false,false,false],[390,664,true,true,true],[390,844,false,false,true],[430,932,true,false,false],[768,1024,false,false,false],[1440,900,false,false,true]] as const) {
@@ -89,7 +92,7 @@ try {
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
     check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
     check(!await page.locator('#step-cue').isVisible(), `${width}: routine board prompt is gone`);
-    check((await page.locator('#smart-led-text').innerText()) === 'DRAW', `${width}: Draw appears immediately in the LED`);
+    check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: live score rests in the LED`);
     check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
@@ -122,7 +125,7 @@ try {
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    check((await page.locator('#smart-led-text').innerText()) === 'GROW OR SKIP', `${width}: Grow LED follows state`);
+    check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: score remains after Draw`);
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
     const cockpit = await page.evaluate(() => {
       const rect=(id:string)=>document.getElementById(id)!.getBoundingClientRect();

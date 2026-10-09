@@ -13,6 +13,7 @@ import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { displayEventForPlay } from './player/display-readout.js';
+import type { DisplayEvent } from './player/display-readout.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
@@ -59,10 +60,12 @@ import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
-import { LEVELS, botSeed } from '../../src/bots/levels.js';
+import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
 import { LEVEL_ICONS } from './ui/levelIcons.js';
+import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficultyById } from './logic/difficulty.js';
+import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { previewMove } from './logic/preview.js';
@@ -102,18 +105,10 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   await import('./ui/design-v2.css');
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
-// the V3 look (menu -> V3, or ?design=v3; remembered in this channel's own storage): the same
-// game on the skinned renderer with the V3 art. Its code loads only when the look is on.
-const V3_KEY = 'severgrow.look.v3';
-const V3_MODE = FEATURES.v3 && (() => {
-  const q = new URLSearchParams(location.search).get('design');
-  try {
-    if (q === 'v3') localStorage.setItem(V3_KEY, '1');
-    return q === 'v3' || localStorage.getItem(V3_KEY) === '1';
-  } catch {
-    return q === 'v3';
-  }
-})();
+// Skins are not a public choice yet. Keep the V3 renderer available for local
+// art checks; old saved V3 preferences and URLs now open the default board.
+const V3_MODE = FEATURES.v3 && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  && new URLSearchParams(location.search).get('skin-preview') === 'v3';
 const v3 = V3_MODE ? await Promise.all([import('./ui/skin/SkinBoardView.js'), import('./skins/forestVolcanoV3.js')]) : null;
 const defaultArt = IS_TEST2 && !V3_MODE ? await import('./ui/defaultArtBoard.js') : null;
 if (V3_MODE) document.documentElement.classList.add('design-v3');
@@ -127,7 +122,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, WELCOME, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -226,6 +221,7 @@ const hiddenCards = new Set<number>();
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
 const outcomeSteps = new WeakMap<Step, { tone: 'good' | 'bad'; strength: number }>();
+const displaySteps = new WeakMap<Step, DisplayEvent>();
 let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
@@ -241,31 +237,6 @@ const boardSvg = $('board') as unknown as SVGSVGElement;
 const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3)
   : defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
   : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
-// the menu's V3 option: switches the look and reloads (the game in progress is saved)
-if (FEATURES.v3) {
-  const row = document.createElement('div');
-  row.className = 'menu-row';
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.id = 'menu-v3';
-  b.className = `btn ghost menu-v3${V3_MODE ? ' on' : ''}`;
-  b.textContent = V3_MODE ? 'Leave V3' : 'V3';
-  b.setAttribute('aria-pressed', String(V3_MODE));
-  b.addEventListener('click', () => {
-    try {
-      if (V3_MODE) localStorage.removeItem(V3_KEY);
-      else localStorage.setItem(V3_KEY, '1');
-    } catch {
-      /* storage blocked: the address carries it */
-    }
-    const u = new URL(location.href);
-    if (V3_MODE) u.searchParams.delete('design');
-    else u.searchParams.set('design', 'v3');
-    location.href = u.pathname + u.search;
-  });
-  row.appendChild(b);
-  document.querySelector('#menu .menu-buttons')?.appendChild(row);
-}
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -422,29 +393,17 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     if (canContinue) {
       const s = saved!.state;
       const turnNo = Math.ceil(s.turnNumber / 2);
-      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">Level ${saved!.level} · turn ${turnNo}</span>`;
+      const remembered = difficultyById(store.get('severgrow.difficulty') ?? '');
+      const tier = remembered?.levels.some(level => level === saved!.level) ? remembered.label : difficultyById(defaultDifficultyForLevel(saved!.level))!.label;
+      $('menu-continue').innerHTML = `<span class="vb-name">Continue</span><span class="vb-sub">${tier} · level ${saved!.level} · turn ${turnNo}</span>`;
       $('menu-continue').classList.add('version-btn');
     } else $('menu-continue').textContent = 'Continue';
     {
       $('menu-new').classList.toggle('primary', !canContinue);
       $('menu-new').classList.toggle('ghost', canContinue);
     }
-    // First visit: point new players at the tutorial.
-    const firstVisit = !canContinue && stats.played === 0 && store.get(SEEN_KEY) === null;
-    $('menu-welcome').hidden = !firstVisit;
-    // Step 7: the first-run welcome card: the three steps of a turn, the goal, the tutorial
-    if (firstVisit && !$('menu-welcome').firstChild) {
-      $('menu-welcome').innerHTML = `<b class="welcome-title">${WELCOME.title}</b><ol class="welcome-steps">${WELCOME.steps.map((st) => `<li><span class="i" data-icon="${st.icon}"></span><b>${st.name}</b><span>${st.text}</span></li>`).join('')}</ol><p class="welcome-goal">${WELCOME.goal}</p><p class="welcome-tut">${WELCOME.tutorial}</p>`;
-      fillIcons($('menu-welcome'));
-    }
-    $('menu-tutorial').classList.toggle('primary', firstVisit);
-    $('menu-tutorial').classList.toggle('ghost', !firstVisit);
-    if (firstVisit) {
-      $('menu-new').classList.remove('primary');
-      $('menu-new').classList.add('ghost');
-    }
-    // the overall record
-    $('menu-stats').textContent = statsLine(stats);
+    $('menu-tutorial').classList.remove('primary');
+    $('menu-tutorial').classList.add('ghost');
   }
   $('gameover').hidden = true;
   render();
@@ -500,7 +459,7 @@ function renderHowTo() {
   ].join('');
 }
 
-/** The 3x3 level screen: number, name, one line, and my wins at that level. */
+/** New matches choose one of five named tiers; the exact engine level is saved with the match. */
 document.addEventListener('click', (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]');
   if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || (IS_TEST2 && t.dataset.tip === 'draw'))) showTip(t.dataset.tip);
@@ -508,19 +467,22 @@ document.addEventListener('click', (e) => {
 
 function renderLevelGrid() {
   $('level-grid').replaceChildren(
-    ...LEVELS.map((lv) => {
+    ...DIFFICULTIES.map((tier) => {
       const b = document.createElement('button');
       b.type = 'button';
-      const wins = stats.winsByLevel[lv - 1] ?? 0;
-      b.className = `level-tile${settings.level === lv ? ' on' : ''}${lv === 7 ? ' classic' : ''}`;
-      b.dataset.level = String(lv);
-      b.setAttribute('aria-label', `Level ${lv}, ${LEVEL_INFO[lv].name}${lv === 7 ? `, the classic ${OPP.noun}` : ''}. You won ${wins} time${wins === 1 ? '' : 's'}.`);
-      b.innerHTML = `<span class="lt-num num">${lv}</span>${wins ? `<span class="lt-wins num">${wins}</span>` : ''}<span class="lt-icon">${LEVEL_ICONS[lv]}</span><span class="lt-name">${LEVEL_INFO[lv].name}</span>`;
+      const selected = store.get('severgrow.difficulty') ?? defaultDifficultyForLevel(settings.level);
+      b.className = `level-tile difficulty-tile${selected === tier.id ? ' on' : ''}`;
+      b.dataset.difficulty = tier.id;
+      b.setAttribute('aria-label', `${tier.label}, ${tier.note}. Choose this difficulty and start a new game.`);
+      b.innerHTML = `<span class="lt-icon">${LEVEL_ICONS[tier.levels.at(-1)!]}</span><span class="lt-name">${tier.label}</span><span class="lt-note">${tier.note}</span>`;
       b.addEventListener('click', () => {
         sound.unlock();
-        settings = { ...settings, level: lv };
+        const seed = randomSeed();
+        const level = chooseDifficultyLevel(tier.id as DifficultyId, seed);
+        store.set('severgrow.difficulty', tier.id);
+        settings = { ...settings, level };
         saveSettings();
-        startGame(randomSeed(), lv);
+        startGame(seed, level);
       });
       return b;
     }),
@@ -676,9 +638,7 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-let displayTurnStart: State | null = null;
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
-  displayTurnStart = state.phase === 'DRAW' ? state : null;
   epoch++;
   for (const w of [...waiters]) w();
   // A previous match may still be counting its score when New Game is tapped.
@@ -707,7 +667,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   applyLayout();
   lastBoard = null;
   showScreen('game');
-  smartCockpit?.reset();
+  smartCockpit?.reset(v.score,v.opponentScore);
   outcomeLight?.reset();
   scheduleBot();
 }
@@ -1022,8 +982,7 @@ function rememberRemoved(steps: readonly Step[], before: State) {
 }
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
-  const displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN,displayTurnStart) : null;
-  if (p.steps.some(step=>step.k==='turn')) displayTurnStart = p.after;
+  const displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
@@ -1043,12 +1002,15 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   rememberRemoved(p.steps, p.before);
   const cue = IS_TEST2 ? outcomeCue(p.steps, HUMAN) : null;
   if (cue) outcomeSteps.set(cue.step, cue);
+  if (displayEvent) {
+    const anchor = cue?.step ?? p.steps.find(step=>step.k==='sync');
+    if (anchor) displaySteps.set(anchor,displayEvent);
+  }
   markMoment(p.steps, p.before);
   queue.push(p.steps);
   // the opponent's turn starts: work it out now, so its pace is known when its turn is shown
   if (p.after.phase === 'DRAW' && p.after.turnPlayer === BOT) void planBotTurn(p.after).then((plan) => (botPlan = plan));
   save();
-  if (displayEvent) smartCockpit?.event(displayEvent);
   if (!p.before.deckFinal && p.after.deckFinal) smartCockpit?.event({message:p.after.deckFinal.remaining === 2 ? 'FINAL TURNS' : 'FINAL TURN',priority:75,duration:1500,mode:'amber'});
   else if (p.before.deckFinal?.remaining === 2 && p.after.deckFinal?.remaining === 1) smartCockpit?.event({message:'LAST TURN',priority:75,duration:1500,mode:'amber'});
   render();
@@ -1248,6 +1210,9 @@ function fastForward() {
 
 /** Book-keeping for a step that is shown (with or without animation). */
 function settleStep(s: Step, animated: boolean) {
+  const displayEvent = displaySteps.get(s);
+  if (displayEvent && animated) smartCockpit?.event(displayEvent);
+  displaySteps.delete(s);
   const cue = outcomeSteps.get(s);
   if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
   outcomeSteps.delete(s);
@@ -1267,6 +1232,7 @@ function settleStep(s: Step, animated: boolean) {
   if (s.k === 'sync') {
     if (animated) countScores(s.scores);
     else shownScores = [s.scores[HUMAN], s.scores[BOT]];
+    smartCockpit?.score(s.scores[HUMAN],s.scores[BOT]);
   }
   if (!animated && s.k === 'sever') caption(captionFor(s, HUMAN)!, s.origin, s.player === HUMAN ? 'bad' : 'good');
 }
@@ -2067,6 +2033,7 @@ function renderHud() {
   const st = session.state;
   renderDebug(st);
   if (!busy()) shownScores = [session.view.score, session.view.opponentScore];
+  if (!busy()) smartCockpit?.score(session.view.score,session.view.opponentScore);
   $('score-you').textContent = String(shownScores[0]);
   $('score-bot').textContent = String(shownScores[1]);
   const scoreKey = `${shownScores[0]}:${shownScores[1]}:${document.documentElement.className}`;
@@ -3069,10 +3036,8 @@ function renderGameOver() {
   $('go-sub').textContent = won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
-  const target = won ? Math.min(9, gameLevel + 1) : Math.max(1, gameLevel - 1);
-  other.hidden = target === gameLevel;
-  other.textContent = won ? `Try Level ${target}` : 'Try a lower level';
-  other.dataset.level = String(target);
+  other.hidden = false;
+  other.textContent = 'Change difficulty';
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
@@ -3757,10 +3722,8 @@ $('hand').addEventListener('pointerout', (e) => {
   card?.style.removeProperty('--tilt-y');
 });
 bind('go-other', () => {
-  const lv = Number($('go-other').dataset.level) as Level;
-  settings = { ...settings, level: lv };
-  saveSettings();
-  startGame(randomSeed(), lv);
+  $('gameover').hidden = true;
+  showScreen('levels');
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
@@ -3768,7 +3731,6 @@ bind('menu-tutorial', () => {
   saveSettings();
   startGame(TUTORIAL_SEED, 7); // the tutorial is tuned for the classic opponent
 });
-bind('menu-howto', () => sheet('sheet-howto'));
 bind('menu-settings', () => sheet('sheet-settings'));
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
   renderSettingsLab();
@@ -3788,7 +3750,7 @@ bind('gm-resume', () => sheet(null));
 bind('gm-new', () => {
   if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
   sheet(null);
-  startGame(randomSeed());
+  showScreen('levels');
 });
 bind('gm-howto', () => sheet('sheet-howto'));
 bind('gm-settings', () => sheet('sheet-settings'));

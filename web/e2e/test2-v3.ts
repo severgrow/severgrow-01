@@ -30,7 +30,7 @@ try {
       sessionStorage.setItem('seeded', '1');
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
     });
-    await page.goto('http://localhost:4193/?seed=219682080&design=v3');
+    await page.goto('http://localhost:4193/?seed=219682080&skin-preview=v3');
     await idle(page);
     // Ground painting and asset decoding are asynchronous, especially under CI load.
     await page.waitForFunction(() => !!document.querySelector('#board pattern[id$="skin-ground"] image')?.getAttribute('href'), undefined, { timeout: 30000 });
@@ -72,11 +72,10 @@ try {
     check(JSON.stringify(await state(page)) === JSON.stringify(grown), `${w}: Undo restores exact state`);
     await page.screenshot({ path: `/tmp/main2-shots/v3-${w}x${h}.png` });
     check(errors.length === 0, `${w}: no errors (${errors.join(' | ')})`);
-    // the menu option leaves V3
-    await page.evaluate(() => (document.querySelector('#menu-v3') as HTMLElement).click());
-    await page.waitForLoadState('load');
-    await page.waitForTimeout(1500);
-    check(await page.evaluate(() => !(document.querySelector('#board') as SVGSVGElement).dataset.skin && !location.search.includes('design=v3')), `${w}: Leave V3 returns to the normal look`);
+    // No public skin chooser: a regular URL, including the former flag, uses the default look.
+    await page.goto('http://localhost:4193/?seed=219682080&design=v3');
+    await idle(page);
+    check(await page.evaluate(() => !(document.querySelector('#board') as SVGSVGElement).dataset.skin && !document.querySelector('#menu-v3')), `${w}: default board is the only public skin`);
     await page.close();
   }
   console.log(`${checks} V3 checks passed`);

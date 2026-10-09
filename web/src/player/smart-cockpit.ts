@@ -1,5 +1,6 @@
 /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
-import { drawLedCells, ledMarqueeTravel, ledMessageWidth, ledStaticMessage } from './led-cells.js';
+import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage } from './led-cells.js';
+import type { LedTone } from './led-cells.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
 import type { DisplayEvent } from './display-readout.js';
@@ -96,7 +97,7 @@ html.test2-information #test2-box #test2-actions > .hand-slot:disabled :is(svg,.
 html.test2-information #test2-box #smart-context:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.test2-information #test2-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
-  padding:8px; box-sizing:border-box; border:0; border-radius:12px;
+  padding:8px 6px; box-sizing:border-box; border:0; border-radius:12px;
   background:#111312; box-shadow:none; position:relative;
 }
 html.test2-information #test2-box #smart-led::before {
@@ -105,7 +106,7 @@ html.test2-information #test2-box #smart-led::before {
 }
 html.test2-information #test2-box #smart-led-window {
   display:flex; align-items:center; justify-content:center; overflow:hidden; width:100%; height:100%; padding:0; box-sizing:border-box; position:relative;
-  border-radius:4px; background:#090c0b; box-shadow:none; z-index:1;
+  border-radius:6px; background:#090c0b; box-shadow:none; z-index:1;
 }
 html.test2-information #test2-box #smart-led-window::before {
   content:''; position:absolute; inset:0; pointer-events:none;
@@ -117,6 +118,9 @@ html.test2-information #test2-box #smart-led-text {
 }
 html.test2-information #test2-box #smart-led-cells {
   display:block; flex:none; width:auto; height:26px; position:relative;
+}
+@media (min-width:1500px) {
+  html.test2-information #smart-led[data-mode='score'] #smart-led-cells { scale:1.32; }
 }
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
@@ -254,8 +258,13 @@ html.test2-information[data-step='grow'] #hand:not(.waiting) .card.playable:not(
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card:not(.test2-throw-picked) { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53),0 5px 12px rgba(20,11,10,.34); }
 html.test2-information[data-step='throw'] #hand:not(.waiting) .card.test2-throw-picked { box-shadow:0 0 0 1px rgba(222,110,83,.5),0 0 7px 1px rgba(190,68,47,.53) !important; }
 html.test2-information #discard .gd-halo { inset:0; border-radius:6px; }
-/* Draw enlarges both piles without a second halo behind either card. */
-html.test2-information[data-step='draw'] :is(#deck,#discard) .pile-card { box-shadow:none !important; }
+/* Both legal draw choices catch a cool white edge light on the actual card.
+   The discard's amber edge is reserved for a card that completes a combo. */
+html.test2-information[data-step='draw'] :is(#deck,#discard).ready .pile-card {
+  border-radius:calc(var(--cw) * .075);
+  box-shadow:0 0 0 1px rgba(239,234,220,.63),0 0 8px 1px rgba(242,237,224,.27) !important;
+}
+html.test2-information[data-step='draw'] #discard.test2-bloom-draw .pile-card { box-shadow:none !important; }
 html.test2-information[data-step='draw'] :is(#deck,#discard) .gd-fx { display:none !important; }
 html.test2-information[data-step='draw'] #discard.ready:not(.test2-bloom-draw) .pile-top.card { border-color:var(--c-line); box-shadow:0 1px 2px rgba(0,0,0,.4); }
 html.test2-information[data-step='draw'] #discard.test2-bloom-draw .pile-top.card {
@@ -352,8 +361,10 @@ export function mountSmartCockpit() {
   let lastPhase = '';
   let lastAction = '';
   let lastText = '';
-  let lastMode: 'amber'|'red' = 'amber';
+  let lastMode: LedTone = 'amber';
   let lastCompact = false;
+  let lastMotif: DisplayFrame['motif'];
+  let motifTimer = 0;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
@@ -390,28 +401,50 @@ export function mountSmartCockpit() {
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     windowEl.classList.toggle('led-pulse',!!frame.pulse && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches);
-    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact) return;
+    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif) return;
     const previous = lastText;
-    const animateReel = previous && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const animated = !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const scoreTick = animated && mode === 'score' && lastMode === 'score' && previous.length === value.length;
+    const animateReel = previous && animated && !scoreTick;
     for (const running of reel) running.cancel(); reel = [];
+    window.clearInterval(motifTimer);
     windowEl.querySelector('.led-reel-old')?.remove();
     let old: HTMLCanvasElement | null = null;
-    if (animateReel) {
+    if (animateReel || scoreTick) {
       old = document.createElement('canvas'); old.className = 'led-reel-old';
       old.width = cells.width; old.height = cells.height;
       old.getContext('2d')?.drawImage(cells,0,0);
       old.style.cssText = `position:absolute;width:${cells.style.width};height:26px;left:${cells.classList.contains('scrolling') ? '0' : '50%'};top:50%;transform:translate(${cells.classList.contains('scrolling') ? '0' : '-50%'},-50%);pointer-events:none`;
+      if (scoreTick) {
+        const ctx = old.getContext('2d');
+        const dpr = old.width / ledMessageWidth(previous);
+        for (let i = 0; i < previous.length; i++) if (previous[i] === value[i])
+          ctx?.clearRect(i * LED_ADVANCE * dpr,0,LED_ADVANCE * dpr,old.height);
+      }
       windowEl.append(old);
     }
-    lastText = value; lastMode = mode; lastCompact = !!frame.compact; text.textContent = value; led.title = value; led.dataset.mode = mode;
+    lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif;
+    text.textContent = value; led.title = value; led.dataset.mode = mode;
     cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
     requestAnimationFrame(() => {
-      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact) { old?.remove(); return; }
+      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif) { old?.remove(); return; }
       const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
       const shown = reduced || frame.compact ? ledStaticMessage(value) : value;
-      const scrolling = !reduced && ledMessageWidth(shown) > windowEl.clientWidth - 2;
-      drawLedCells(cells,shown,scrolling,mode);
-      drawLedCells(spillCells,shown,scrolling,mode);
+      const scrolling = !frame.motif && !reduced && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
+      if (frame.motif) {
+        const frames = ledMotifFrames(frame.motif);
+        let index = 0;
+        const paint = () => {
+          const picture = frames[index++ % frames.length]!;
+          drawLedCells(cells,picture,false,mode);
+          drawLedCells(spillCells,picture,false,mode);
+        };
+        paint();
+        motifTimer = window.setInterval(paint,88);
+      } else {
+        drawLedCells(cells,shown,scrolling,mode);
+        drawLedCells(spillCells,shown,scrolling,mode);
+      }
       if (scrolling) {
         const travel = ledMarqueeTravel(shown);
         for (const target of [cells,spillCells]) {
@@ -421,10 +454,15 @@ export function mountSmartCockpit() {
         }
       }
       if (old && old.isConnected) {
-        const duration = 190;
-        const outgoing = old.animate([{translate:'0 0',opacity:1},{translate:'0 26px',opacity:0}],{duration,easing:'linear'});
-        const incoming = cells.animate([{translate:'0 -26px',opacity:0},{translate:'0 0',opacity:1}],{duration,easing:'linear'});
-        reel = [outgoing,incoming]; outgoing.onfinish = () => old?.remove();
+        if (scoreTick) {
+          const tick = old.animate([{translate:'0 0',opacity:1},{translate:'0 2px',opacity:0}],{duration:180,easing:'ease-out'});
+          reel = [tick]; tick.onfinish = () => old?.remove();
+        } else {
+          const duration = 190;
+          const outgoing = old.animate([{translate:'0 0',opacity:1},{translate:'0 26px',opacity:0}],{duration,easing:'linear'});
+          const incoming = cells.animate([{translate:'0 -26px',opacity:0},{translate:'0 0',opacity:1}],{duration,easing:'linear'});
+          reel = [outgoing,incoming]; outgoing.onfinish = () => old?.remove();
+        }
       }
     });
   };
@@ -504,7 +542,7 @@ export function mountSmartCockpit() {
     else refreshMessage();
   });
   window.addEventListener('resize', () => { lastText = ''; machine.repaint(); });
-  return { sync() {
+  return { score: (you:number,opp:number) => machine.score(you,opp), sync() {
     const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
     if (reduced !== lastReduced) { lastReduced = reduced; lastText = ''; machine.repaint(); }
     syncBloom();
@@ -527,5 +565,6 @@ export function mountSmartCockpit() {
     context.title = context.getAttribute('aria-label') ?? '';
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
-  }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event), reset: () => machine.reset(phaseMessage()) };
+  }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event),
+    reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp) };
 }

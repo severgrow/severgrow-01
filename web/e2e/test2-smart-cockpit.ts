@@ -48,11 +48,11 @@ try {
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
     await page.waitForTimeout(1100); // intentional Draw entrance finishes before anchoring assertions
     let start=await rects(page); aligned(start,`${name} Draw`);
-    check(await page.locator('#smart-led-text').innerText()==='DRAW',`${name}: immediate Draw LED`);
+    check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Draw`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
     const materials=await page.evaluate(()=>['hand-sort','deck-count','smart-led'].map(id=>getComputedStyle(document.getElementById(id)!,'::before').backgroundImage));
     check(materials[0]!.includes('button-frame-supplied.webp')&&materials[1]!.includes('counter-frame-supplied.webp')&&materials[2]!.includes('display-frame-supplied.webp'),`${name}: each coded control uses the supplied frame art`);
-    check(await page.locator('#smart-led-cells').evaluate(el=>el.getBoundingClientRect().height)===26,`${name}: LED uses the enlarged full-height glyph canvas`);
+    check(await page.locator('#smart-led-cells').evaluate(el=>el.getBoundingClientRect().height)>=26,`${name}: LED uses full-height glyphs and scales up on large desktop`);
     check(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied display art keeps its proportions`);
     check(await page.locator('#deck-count').evaluate(el=>getComputedStyle(el,'::before').backgroundSize)==='contain',`${name}: supplied counter art keeps its proportions`);
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
@@ -84,13 +84,13 @@ try {
     check(await page.locator('#deck-count,#discard-count').evaluateAll(nodes=>nodes.every(node=>{
       const style=getComputedStyle(node);return style.width==='34px'&&style.height==='18px';
     })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);
-    check(await page.locator('#smart-led-text').innerText()==='GROW OR SKIP',`${name}: immediate Grow LED`);
+    check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Grow`);
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
     check(!await page.locator('#smart-context').isDisabled(),`${name}: Skip in context slot`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
-    check(await page.locator('#smart-led-text').innerText()==='THROW',`${name}: immediate Throw LED`);
+    check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: context neutral when throwing`);
@@ -107,7 +107,7 @@ try {
   await page.locator('#smart-bloom-button').click();
   check(!await page.locator('#smart-bloom-selector').isVisible(),'Bloom: single recipe selects on one tap');
   await page.waitForTimeout(1400); // the context-change cue briefly explains Cancel first
-  check(await page.locator('#smart-led-text').innerText()==='BLOOM READY','Bloom: LED names selected phase');
+  check(await page.locator('#smart-led-text').innerText()==='0:0','Bloom: display returns to its resting score');
   await page.screenshot({path:`${dir}/390x844-bloom.png`});
   const beforeBloom = await page.evaluate(() => (window as any).__severgrow.state());
   const cards = [6,43,61];
@@ -124,14 +124,10 @@ try {
     await page.waitForFunction(previous => (window as any).__severgrow.state().history.length === previous && !(window as any).__severgrow.busy(),beforeBloom.history.length);
     check(await page.locator('#smart-bloom').isVisible(),'Bloom: Undo restores the available recipe');
     await page.evaluate(action=>(window as any).__severgrow.playFor(action,0),bloomAction);
-    await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('BLOOM +'));
-    check(await page.locator('#smart-led').getAttribute('data-mode')==='red','LED: completed Bloom triggers a brief red result');
-    await page.waitForFunction(()=>document.querySelector('#smart-led-text')?.textContent?.startsWith('YOU '));
-    await page.waitForFunction(()=>document.querySelector('#smart-led')?.getAttribute('data-mode')==='amber');
-    check(await page.locator('#smart-led-text').innerText()===await page.evaluate(()=>{
-      const root=document.documentElement;
-      return root.dataset.step==='throw'?'THROW':root.dataset.step==='draw'?'DRAW':root.dataset.step==='opp'?'OPPONENT TURN':root.dataset.test2Bloom==='true'?'BLOOM READY':'GROW OR SKIP';
-    }),'LED: result and score return to current phase');
+    await page.waitForFunction(()=>/^\+\d+$/.test(document.querySelector('#smart-led-text')?.textContent??''));
+    check(await page.locator('#smart-led').getAttribute('data-mode')==='green','LED: completed Bloom shows an actual green tile gain');
+    await page.waitForFunction(()=>document.querySelector('#smart-led')?.getAttribute('data-mode')==='score');
+    check(/^\d+:\d+$/.test(await page.locator('#smart-led-text').innerText()),'LED: result returns to live score');
   }
   // A real Bloom result owns the sign until its event → score sequence finishes.
   await page.waitForTimeout(2600);
