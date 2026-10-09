@@ -91,6 +91,10 @@ import { setSeedStoneStrength } from './ui/seedstone.js';
 let DesignView: typeof BoardView = BoardView;
 const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2'
   ? await import('./player/branding.js') : null;
+if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
+  document.documentElement.classList.add('home-screen-app');
+}
 branding?.mountBranding();
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   await import('./ui/design-v2.css');
@@ -2142,7 +2146,11 @@ function alignDrawPiles() {
 function applyLayout() {
   const vv = window.visualViewport;
   const w = Math.round(vv?.width ?? window.innerWidth);
-  const h = Math.round(vv?.height ?? window.innerHeight);
+  // In standalone iOS the visual viewport can omit the home-indicator strip
+  // even though the fixed game screen spans it. Use the layout viewport there;
+  // safeArea() already reserves the indicator for interactive content.
+  const h = Math.round(document.documentElement.classList.contains('home-screen-app')
+    ? window.innerHeight : (vv?.height ?? window.innerHeight));
   const radius = session?.state.config.boardRadius ?? 3;
   // the Lab (test copy): a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;

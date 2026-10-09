@@ -108,18 +108,31 @@ html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll v
 html.test2-information #smart-led-window.led-pulse #smart-led-cells { filter:brightness(1.22); }
 /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
 html.test2-information #smart-led-spill {
-  position:absolute; left:0; top:var(--control-size); width:calc(2 * var(--control-size) + var(--control-gap));
-  height:calc(var(--control-size) + var(--control-gap)); overflow:hidden; pointer-events:none; z-index:7;
+  position:absolute; left:-14px; top:calc(var(--control-size) - 4px);
+  width:calc(2 * var(--control-size) + var(--control-gap) + 28px);
+  height:calc(var(--control-size) + var(--control-gap) + 18px);
+  overflow:hidden; pointer-events:none; z-index:7;
   opacity:.32; mix-blend-mode:screen;
-  -webkit-mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.5) 37%,transparent 76%);
-  mask-image:linear-gradient(to bottom,#000 0%,rgba(0,0,0,.5) 37%,transparent 76%);
+  -webkit-mask-image:radial-gradient(ellipse 78% 83% at 50% 0%,#000 4%,rgba(0,0,0,.65) 43%,transparent 100%);
+  mask-image:radial-gradient(ellipse 78% 83% at 50% 0%,#000 4%,rgba(0,0,0,.65) 43%,transparent 100%);
 }
 html.test2-information #smart-led-spill-cells {
-  display:block; position:absolute; left:8px; top:1px; height:26px;
-  filter:blur(5px) brightness(1.3); scale:1 1.35; transform-origin:top;
+  display:block; position:absolute; left:22px; top:5px; height:26px;
+  filter:blur(8px) brightness(1.3); scale:1 1.65; transform-origin:top;
 }
 html.test2-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 html.test2-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.42; }
+/* On a wide desktop the cockpit and its piles grow as one instrument. Phone
+   controls retain their exact existing footprint. */
+@media (min-width:1500px) {
+  html.test2-information[data-layout='side'] #test2-box {
+    --control-size:52px; --box-tools:164px; --box-pile:62px; --box-piles:132px;
+    height:128px; grid-template-rows:52px 52px;
+  }
+  html.test2-information[data-layout='side'] #test2-box .pile-card {
+    --pile-h:88px; --cw:62px; --ch:88px; width:62px; height:88px;
+  }
+}
 html.test2-information #smart-selector {
   position:absolute; right:0; top:0; z-index:10;
   display:flex; gap:var(--control-gap); width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);

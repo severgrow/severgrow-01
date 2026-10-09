@@ -19,16 +19,20 @@ const rects = (page:Page) => page.evaluate(() => {
   const r = (id:string) => document.getElementById(id)!.getBoundingClientRect();
   const panel=r('smart-panel'), led=r('smart-led'), context=r('smart-context');
   const undo=r('tool-undo'), tips=r('test2-help-button'), sort=r('hand-sort');
-  const piles=['deck','discard'].map(id=>({ pile:r(id), count:r(`${id}-count`), frontOffset:parseFloat(getComputedStyle(document.getElementById(id)!).getPropertyValue('--pile-front-offset'))||0 }));
+  const piles=['deck','discard'].map(id=>({ pile:r(id), count:r(`${id}-count`),
+    frontOffset:parseFloat(getComputedStyle(document.getElementById(id)!).getPropertyValue('--pile-front-offset'))||0,
+    baseWidth:parseFloat(getComputedStyle(document.getElementById(id)!).getPropertyValue('--box-pile'))||50 }));
   return { panel,led,context,undo,tips,sort,piles,box:r('test2-box') };
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
+  const width = Number.parseInt(label,10);
+  const size = width >= 1500 ? 52 : 44;
   check(near(r.led.y,r.context.y)&&near(r.undo.y,r.tips.y)&&near(r.tips.y,r.sort.y),`${label}: exactly two aligned rows`);
   check(near(r.led.width,r.undo.width+r.tips.width+(r.tips.x-r.undo.right))&&near(r.context.width,r.undo.width),`${label}: LED spans two buttons`);
-  check(near(r.led.width,92)&&near(r.led.height,44)&&near(r.context.width,44)&&near(r.context.height,44),`${label}: generated shells keep the original outer footprints`);
+  check(near(r.led.width,2*size+4)&&near(r.led.height,size)&&near(r.context.width,size)&&near(r.context.height,size),`${label}: supplied shells fit their responsive coded footprints`);
   check([r.context,r.undo,r.tips,r.sort].every(b=>b.width>=44&&b.height>=44),`${label}: four 44px targets`);
   check(near(r.context.x,r.sort.x)&&near(r.led.x,r.undo.x)&&near(r.led.right,r.tips.right),`${label}: fixed three-column grid`);
-  check(r.piles.every(({pile,count,frontOffset})=>near(pile.x+pile.width/2+frontOffset*pile.width/50,count.x+count.width/2)),`${label}: meters centred under visible top cards`);
+  check(r.piles.every(({pile,count,frontOffset,baseWidth})=>near(pile.x+pile.width/2+frontOffset*pile.width/baseWidth,count.x+count.width/2)),`${label}: meters centred under visible top cards`);
   check(r.panel.left>=r.box.left-1&&r.panel.right<=r.box.right+1,`${label}: panel remains inside cockpit`);
 };
 

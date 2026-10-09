@@ -17,6 +17,10 @@ html.test2-branding.slim-hud .game > .hud {
 }
 html.test2-branding .game > #race { display: none !important; }
 html.test2-branding .game { max-width: none; margin: 0; }
+/* iOS home-screen apps expose the notch/home insets to the layout code. The
+   shared .screen padding would reserve the same insets again, shrinking the
+   board and leaving an unused band below the hand. Safari tabs keep it. */
+html.test2-branding.home-screen-app #game { padding: 0; }
 html.test2-branding .play { --board-margin: 2px; }
 html.test2-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;

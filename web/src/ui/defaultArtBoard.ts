@@ -31,10 +31,11 @@ if (typeof Image !== 'undefined') {
   }
 }
 
-/** Align every painted hex, including both homes, to the board's hex edges. */
+/** The supplied hex art's upper-right edge is its visual base. Turn that edge
+ * onto the board's bottom side without rotating the board or its hitboxes. */
 const artAngle = () => {
   const axis = toScreen(1, 0);
-  return Math.atan2(axis.y, axis.x) * 180 / Math.PI + 180;
+  return Math.atan2(axis.y, axis.x) * 180 / Math.PI + 120;
 };
 
 const f = (n: number) => n.toFixed(2);
@@ -123,7 +124,11 @@ export class DefaultArtBoardView extends BoardView {
       const { x, y } = centerOf(key);
       const rock = rockUrls[Math.floor(hash(`${key}:v3-rock`) * rockUrls.length)]!;
       el('ellipse', { cx: x, cy: y + 7, rx: 22, ry: 13, fill: 'rgba(0,0,0,.17)', class: 'default-rock-shadow' }, g);
-      el('image', { href: rock, x: x - 29, y: y - 29, width: 58, height: 58, class: 'default-rock-art' }, g);
+      // The five source clusters have point-up silhouettes. A half hex turn
+      // brings their broad faces onto this flat-top lattice; the small inset
+      // keeps every irregular variant inside its own cell.
+      const rocks = el('g', { transform: `translate(${f(x)},${f(y)}) rotate(-30)` }, g);
+      el('image', { href: rock, x: -27, y: -27, width: 54, height: 54, class: 'default-rock-art' }, rocks);
     }
   }
 

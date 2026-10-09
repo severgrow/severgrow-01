@@ -278,9 +278,9 @@ const shapeUnits = (sh: Shape, orient: Orient, m: number) => {
 const isSide = (v: Viewport) => (v.w >= 760 && v.w >= v.h) || (v.w > v.h && v.h <= 560);
 
 /** The card size for a full hand in `width` px: big numerals, at least MIN_SLICE of each card. */
-export const cardSize = (width: number, maxHand = MAX_HAND) => {
+export const cardSize = (width: number, maxHand = MAX_HAND, cap = 72) => {
   const avail = width - 2 * (HAND_EDGE + SORT_W); // the fan sits between the two fixed end slots
-  const w = Math.max(44, Math.min(72, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
+  const w = Math.max(44, Math.min(cap, Math.floor(avail - (maxHand - 1) * MIN_SLICE), Math.floor(width * 0.2)));
   const slice = Math.min(w + 4, Math.floor((avail - w) / (maxHand - 1)));
   return { w, h: Math.round(w * 1.42), slice };
 };
@@ -360,8 +360,8 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
 
   if (isSide(v)) {
     // wide screens: board on the left, the dock as a column on the right
-    const dockW = Math.min(420, Math.max(340, Math.round(W * 0.32)));
-    const card = cardSize(dockW, maxHand);
+    const dockW = Math.min(600, Math.max(420, Math.round(W * 0.30)));
+    const card = cardSize(dockW, maxHand, Math.min(94, Math.round(dockW * 0.16)));
     const rows = { table: Math.max(HEIGHTS.table, card.h + PILE_LABEL), hand: card.h + HEIGHTS.handPad };
     const zone: Box = { x: sl + BOARD_MARGIN, y: top, w: W - dockW - 3 * BOARD_MARGIN, h: v.h - top - sb - BOARD_MARGIN };
     const fit = bestFit(zone.w, zone.h, radius);
