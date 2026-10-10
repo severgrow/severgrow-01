@@ -98,6 +98,10 @@ try {
     const before = await page.evaluate(() => (window as any).__severgrow.state());
     await page.click('#futa04-help-button');
     check(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(), `${width}: Match Intel opens in the glass`);
+    // The glass can still hold its pre-open responsive rect for one frame after the click, so
+    // measuring too early reads a stale (mobile) box; wait for layout to settle first. The
+    // assertion below is unchanged.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const layout = await page.evaluate(() => {
       const sheet = document.querySelector('#futasaku-glass') as HTMLElement;
       const r = sheet.getBoundingClientRect();
