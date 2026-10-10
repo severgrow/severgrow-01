@@ -1,8 +1,9 @@
 // UI overhaul Part 2: the cinematic cut. Every limit in the brief, checked on the pure plan.
 import { describe, expect, it } from 'vitest';
-import { CUT_CAP_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
+import { CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
 import type { CutInput, CutOptions } from '../src/logic/cut.js';
 import { buildSteps } from '../src/logic/anim.js';
+import { MOTION } from '../src/logic/motion.js';
 import { playGame } from './ui-helpers.js';
 
 const NORMAL: CutOptions = { speed: 1, reduceMotion: false, effects: 'normal' };
@@ -62,23 +63,66 @@ describe('the timeline limits', () => {
       }
   });
 
-  it('the impact hit-stop is about 100ms for Medium and bigger', () => {
-    for (const n of [3, 5, 8]) {
+  it('the impact hit-stop belongs to Big and Huge only', () => {
+    for (const n of [5, 8]) {
       const h = cutPlan(cut(n), NORMAL).stages.find((s) => s.name === 'hitstop')!;
       expect(h.dur).toBeGreaterThanOrEqual(HITSTOP_MS - 10);
       expect(h.dur).toBeLessThanOrEqual(HITSTOP_MS + 30);
     }
+    for (const n of [1, 3]) expect(cutPlan(cut(n), NORMAL).stages.some((s) => s.name === 'hitstop')).toBe(false);
   });
 
-  it('only large cuts give the board one short shake', () => {
+  it('only large cuts give the board one short shake, within 4px (6px huge ceiling)', () => {
     const px = [1, 3, 5, 8].map((n) => cutPlan(cut(n), NORMAL).shakePx);
     expect(px.slice(0,2)).toEqual([0,0]);
     for (const p of px.slice(2)) {
       expect(p).toBeGreaterThanOrEqual(2);
       expect(p).toBeLessThanOrEqual(6);
     }
+    expect(px[2]).toBeLessThanOrEqual(SHAKE_MAX_BIG);
     expect(px[3]).toBeGreaterThan(px[2]!);
-    expect(cutPlan(cut(8), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(6);
+    expect(px[3]).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
+    expect(cutPlan(cut(8), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
+    expect(cutPlan(cut(5), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(SHAKE_MAX_BIG);
+  });
+
+  it('Small and Medium never move the camera; the zoom stays ≤1.03', () => {
+    for (const n of [1, 2, 3, 4]) {
+      const p = cutPlan(cut(n), NORMAL);
+      expect(p.zoom).toBe(1);
+      expect(p.stages.some((s) => s.name === 'zoom')).toBe(false);
+    }
+    for (const n of [5, 8]) {
+      const p = cutPlan(cut(n), NORMAL);
+      expect(p.zoom).toBeGreaterThan(1);
+      expect(p.zoom).toBeLessThanOrEqual(1.03);
+    }
+  });
+
+  it('a Small cut dies within quick + move and folds flat, with one link flash', () => {
+    const limit = MOTION.quick + MOTION.move;
+    for (const n of [1, 2]) {
+      const p = cutPlan(cut(n), NORMAL);
+      expect(p.tier).toBe('small');
+      for (const t of p.tiles) expect(t.dur).toBeLessThanOrEqual(limit);
+      expect(p.flash.ms).toBeGreaterThan(0);
+      expect(p.flash.ms).toBeLessThanOrEqual(CUT_FLASH_MS);
+      expect(p.flash.alpha).toBeLessThanOrEqual(FLASH_MAX_ALPHA);
+    }
+  });
+
+  it('one drift mote per dying tile, and only on Big and Huge', () => {
+    for (const n of [1, 3]) expect(cutPlan(cut(n), NORMAL).motes).toBe(0);
+    for (const n of [5, 8]) expect(cutPlan(cut(n), NORMAL).motes).toBe(1);
+    expect(cutPlan(cut(8), { ...NORMAL, effects: 'low' }).motes).toBe(0);
+    expect(cutPlan(cut(8), { ...NORMAL, reduceMotion: true }).motes).toBe(0);
+  });
+
+  it('leaves a faint scar after the wave, except with Low effects or Reduce motion', () => {
+    expect(cutPlan(cut(1), NORMAL).scar).toBe(true);
+    expect(cutPlan(cut(8), NORMAL).scar).toBe(true);
+    expect(cutPlan(cut(8), { ...NORMAL, effects: 'low' }).scar).toBe(false);
+    expect(cutPlan(cut(8), { ...NORMAL, reduceMotion: true }).scar).toBe(false);
   });
 
   it(`the ripple: one ring every ${RIPPLE_STEP_MS}ms outward from the cut, all started within ${RIPPLE_CAP_MS}ms`, () => {
@@ -125,13 +169,15 @@ describe('variants', () => {
     }
   });
 
-  it('Reduce motion: a fade only (no shake, flash, zoom or ripple)', () => {
+  it('Reduce motion: one 200ms fade, no shake, flash, zoom or stagger', () => {
     const p = cutPlan(cut(8), { ...NORMAL, reduceMotion: true });
     expect(p.stages.map((s) => s.name)).toEqual(['fade', 'payoff']);
+    expect(p.stages.find((s) => s.name === 'fade')!.dur).toBe(REDUCE_FADE_MS);
     expect(p.shakePx).toBe(0);
     expect(p.flash.alpha).toBe(0);
     expect(p.zoom).toBe(1);
     expect(new Set(p.tiles.map((t) => t.at))).toEqual(new Set([0]));
+    expect(new Set(p.tiles.map((t) => t.dur))).toEqual(new Set([REDUCE_FADE_MS]));
   });
 
   it('Effects Low: no shake, flash or zoom', () => {

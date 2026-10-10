@@ -22,6 +22,13 @@ export const FLASH_MAX_ALPHA = 0.35;
 export const RIPPLE_STEP_MS = 70;
 export const RIPPLE_CAP_MS = 700;
 export const HITSTOP_MS = 100;
+/** The cut's one link flash (Small and up): at most this long, whatever the speed. */
+export const CUT_FLASH_MS = 60;
+/** Shake ceilings: only Big and Huge move the board, and never beyond these. */
+export const SHAKE_MAX_BIG = 4;
+export const SHAKE_MAX_HUGE = 6;
+/** Reduce motion: one plain fade (no shake, zoom or stagger), then the payoff. */
+export const REDUCE_FADE_MS = 200;
 /** Replays play at half speed. */
 export const CUT_REPLAY_SPEED = 0.5;
 
@@ -70,6 +77,10 @@ export type CutPlan = {
   float: string;
   haptic: FeedbackEvent | null;
   duckMs: number;
+  /** drifting motes per dying tile: one on Big/Huge, none on the calmer cuts */
+  motes: number;
+  /** leave a faint scar on the cut edge after the wave */
+  scar: boolean;
   /** the whole sequence, ms (at the given speed) */
   total: number;
 };
@@ -80,11 +91,13 @@ const dist = (a: string, b: string) => {
   return Math.max(Math.abs(p.q - q.q), Math.abs(p.r - q.r), Math.abs(p.q + p.r - q.q - q.r));
 };
 
+// How each tier reads. Small/Medium stay still (no shake, no zoom): the link flash and the
+// folding tiles carry them. Only Big and Huge move the board, and only within the ceilings.
 const LOOK: Record<CutTier, { anticipation: number; hitstop: number; flashAlpha: number; zoom: number; pulse: number; shake: number; death: number; crumble: number; payoff: number }> = {
-  small: { anticipation: 0, hitstop: 60, flashAlpha: 0.15, zoom: 1, pulse: 90, shake: 2, death: 320, crumble: 220, payoff: 300 },
-  medium: { anticipation: 90, hitstop: HITSTOP_MS, flashAlpha: 0.22, zoom: 1.01, pulse: 110, shake: 3, death: 360, crumble: 260, payoff: 360 },
-  big: { anticipation: 140, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 130, shake: 5, death: 380, crumble: 280, payoff: 400 },
-  huge: { anticipation: 180, hitstop: HITSTOP_MS + 20, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 150, shake: 6, death: 400, crumble: 300, payoff: 420 },
+  small: { anticipation: 0, hitstop: 0, flashAlpha: 0.22, zoom: 1, pulse: 80, shake: 0, death: 440, crumble: 220, payoff: 300 },
+  medium: { anticipation: 90, hitstop: 0, flashAlpha: 0.24, zoom: 1, pulse: 100, shake: 0, death: 400, crumble: 240, payoff: 360 },
+  big: { anticipation: 140, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 130, shake: SHAKE_MAX_BIG, death: 380, crumble: 280, payoff: 400 },
+  huge: { anticipation: 180, hitstop: HITSTOP_MS + 20, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 150, shake: SHAKE_MAX_HUGE, death: 400, crumble: 300, payoff: 420 },
 };
 
 const HAPTIC: Record<CutTier, FeedbackEvent> = { small: 'cutSmall', medium: 'cutMedium', big: 'cutBig', huge: 'cutHuge' };
@@ -103,8 +116,9 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   const rings = c.keys.map((k) => ({ key: k, ring: dist(k, c.origin) })).sort((a, b) => a.ring - b.ring || (a.key < b.key ? -1 : 1));
 
   if (o.reduceMotion) {
-    // Reduce motion: one plain fade, everything at once; no shake, flash or zoom.
-    const dur = 300;
+    // Reduce motion: one plain 200ms fade, everything at once, then the payoff text; no shake,
+    // flash, zoom or stagger.
+    const dur = REDUCE_FADE_MS;
     const total = Math.round((dur + 200) * speed);
     return {
       tier,
@@ -117,14 +131,18 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
       banner,
       float,
       haptic,
+      motes: 0,
+      scar: false,
       duckMs: total,
       total,
     };
   }
 
   const low = o.effects === 'low';
-  // Only a major sever moves the board. The link flash carries smaller cuts.
-  const shake = calm || low || (tier !== 'big' && tier !== 'huge') ? 0 : Math.min(6, L.shake + (o.effects === 'high' && tier !== 'huge' ? 1 : 0));
+  const major = tier === 'big' || tier === 'huge';
+  // Only a major sever moves the board, and never past its ceiling. The link flash carries
+  // small and medium cuts; only Big and Huge get the hit-stop, shake and micro zoom.
+  const shake = calm || low || !major ? 0 : Math.min(tier === 'huge' ? SHAKE_MAX_HUGE : SHAKE_MAX_BIG, L.shake + (o.effects === 'high' && tier !== 'huge' ? 1 : 0));
   const flashAlpha = calm || low ? 0 : Math.min(FLASH_MAX_ALPHA, L.flashAlpha);
   const zoom = calm || low ? 1 : L.zoom;
 
@@ -137,11 +155,11 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   };
   const antic = first && !calm ? L.anticipation : 0;
   if (antic) push('anticipation', antic);
-  const hit = calm ? 0 : low ? 40 : L.hitstop;
+  const hit = calm || !major ? 0 : low ? 40 : L.hitstop;
   if (zoom > 1) push('zoom', hit + L.pulse, false);
   if (hit) push('hitstop', hit);
   push('pulse', L.pulse);
-  if (flashAlpha > 0) push('flash', Math.min(FLASH_MAX_MS, hit), false);
+  if (flashAlpha > 0) push('flash', Math.min(FLASH_MAX_MS, CUT_FLASH_MS), false);
   push('snap', 120, false);
   const maxRing = Math.max(0, ...rings.map((r) => r.ring));
   const step = maxRing > 0 ? Math.min(RIPPLE_STEP_MS, RIPPLE_CAP_MS / maxRing) : 0;
@@ -164,11 +182,13 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
     stages: stages.map((s) => ({ name: s.name, at: sc(s.at), dur: s.name === 'flash' ? Math.min(FLASH_MAX_MS, Math.round(s.dur * speed)) : sc(s.dur) })),
     tiles: tiles.map((x) => ({ key: x.key, at: sc(x.at), dur: sc(x.dur), ring: x.ring })),
     shakePx: shake,
-    flash: { ms: flashAlpha > 0 ? Math.min(FLASH_MAX_MS, Math.round(Math.min(FLASH_MAX_MS, hit) * speed)) : 0, alpha: flashAlpha, radius: tier === 'huge' ? 2.5 : tier === 'big' ? 2 : 1.4 },
+    flash: { ms: flashAlpha > 0 ? Math.min(FLASH_MAX_MS, Math.round(CUT_FLASH_MS * speed)) : 0, alpha: flashAlpha, radius: tier === 'huge' ? 2.5 : tier === 'big' ? 2 : 1.4 },
     zoom,
     banner,
     float,
     haptic,
+    motes: low ? 0 : major ? 1 : 0,
+    scar: !low,
     duckMs: 0,
     total: 0,
   };

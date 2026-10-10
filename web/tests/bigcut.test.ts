@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import { Session } from '../src/logic/session.js';
+import { CUT_CAP_MS, SHAKE_MAX_HUGE, cutPlan } from '../src/logic/cut.js';
 
 const cutSize = (steps: { k: string; keys?: string[] }[]) => steps.filter((s) => s.k === 'sever').reduce((n, s) => n + (s.keys?.length ?? 0), 0);
 
@@ -25,6 +26,31 @@ describe('the biggest cut of the game', () => {
         expect(b!.before.board).toBeTruthy();
       }
     }
+  });
+});
+
+describe('the biggest cut plays as one gesture', () => {
+  it('a real biggest cut respects the cap, the shake ceiling and the single payoff', () => {
+    let checked = 0;
+    for (const seed of [3, 5, 12]) {
+      const s = new Session(newGame(seed), 0);
+      for (let i = 0; i < 4000 && s.state.phase !== 'GAME_OVER'; i++) {
+        s.play(GreedyBot.chooseAction(viewFor(s.state, s.state.actor)), s.state.actor);
+      }
+      const b = s.biggestCut;
+      if (!b) continue;
+      for (const step of b.steps) {
+        if (step.k !== 'sever') continue;
+        const victimTiles = Object.values(b.before.board).filter((t) => t && t.owner === step.player && !t.root).length;
+        const plan = cutPlan({ origin: step.origin, keys: step.keys, victimTiles, mine: step.player === 0 }, { speed: 1, reduceMotion: false, effects: 'normal' });
+        expect(plan.total).toBeLessThanOrEqual(CUT_CAP_MS);
+        // one floating payoff for the whole cut, never one per tile
+        expect(plan.float).toBe(`−${step.keys.length}`);
+        expect(plan.shakePx).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });
 

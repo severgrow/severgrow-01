@@ -9,6 +9,7 @@ declare const __CHANNEL__: string;
 const IS_TEST2 = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test2';
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
+import { EASE, MOTION } from '../logic/motion.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -63,11 +64,19 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     else setTimeout(done, ms);
   };
 
-  /** A soft ring spreading from a hex (photosensitivity: at most 35% strength, fading at once). */
-  function flash(key: string, f: number, big: boolean) {
+  /**
+   * A soft ring spreading from a hex (photosensitivity: at most 35% strength, fading at once).
+   * `dark` draws the Mega Bomb's short dark pulse instead; `ms`/`radius` size the pulse to the
+   * destroyed set (opacity stays at or under 40%).
+   */
+  function flash(key: string, f: number, big: boolean, opts: { ms?: number; dark?: boolean; radius?: number } = {}) {
     const { x, y } = centerOf(key);
-    const c = el('circle', { cx: x, cy: y, r: S * 0.5, class: `fx-flash${big ? ' big' : ''}` }, board.fx);
-    removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: 0.35 }, { transform: `scale(${big ? 3.2 : 2.2})`, opacity: 0 }], { duration: 520 * Math.max(f, 0.3), easing: 'ease-out', fill: 'forwards' }), c, 600);
+    const r0 = S * (opts.radius ?? 0.5);
+    const c = el('circle', { cx: x, cy: y, r: r0, class: `fx-flash${big ? ' big' : ''}${opts.dark ? ' dark' : ''}` }, board.fx);
+    const ms = opts.ms ?? 520 * Math.max(f, 0.3);
+    const alpha = opts.dark ? 0.4 : 0.35;
+    const grow = big ? 3.2 : opts.radius ? Math.max(2.2, opts.radius * 1.7) : 2.2;
+    removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: alpha }, { transform: `scale(${grow})`, opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 60);
   }
 
   /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤35%), `ms` long (≤60ms). */
@@ -79,7 +88,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
           fill:'none',stroke:'#fff2d2','stroke-width':2.8,'stroke-linecap':'round' }, board.fx)
       : el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
-    removeAfter(anim(c, [{ opacity: alpha }, { opacity: 0 }], { duration: ms, easing: 'ease-out', fill: 'forwards' }), c, ms + 40);
+    removeAfter(anim(c, [{ opacity: alpha }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 40);
   }
 
   /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
@@ -95,15 +104,15 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     }
   }
 
-  /** A few grey motes drifting up and away from a cut-off tile. */
-  function drift(key: string, delay: number, f: number, n = 2) {
+  /** One grey mote drifting up and away from a cut-off tile (a short ash fade). */
+  function drift(key: string, delay: number, f: number, n = 1) {
     if (motion() === 0) return;
     const { x, y } = centerOf(key);
     const k = particles.take(n);
     for (let i = 0; i < k; i++) {
       const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
       const c = el('circle', { cx: x, cy: y, r: 1.6, class: 'fx-mote' }, board.fx);
-      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.8 }, { transform: `translate(${dx}px, ${-S * 0.9}px)`, opacity: 0 }], { duration: 900 * f, delay: delay + i * 60, easing: 'ease-out', fill: 'both' }), 1200);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.8 }, { transform: `translate(${dx}px, ${-S * 0.55}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * 60, easing: EASE.out, fill: 'both' }), MOTION.move * f + 200);
     }
   }
 
@@ -122,9 +131,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     return { x: p.x - wrap.left, y: p.y - wrap.top };
   }
 
-  function floatText(text: string, key: string, tone: string, f: number) {
-    // The board tells this story directly for now; keep the effect for a later caption pass.
-    if (IS_TEST2) return;
+  function floatText(text: string, key: string, tone: string, f: number, force = false) {
+    // Test2 tells most of this through the LED and the outcome light; a cut's single −N is the
+    // one floating payoff it keeps (and never with Reduce motion, which the caller guards).
+    if (IS_TEST2 && !force) return;
     const d = document.createElement('div');
     d.className = `float num ${tone}`;
     d.textContent = text;
@@ -175,15 +185,19 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = to.left + to.width / 2 - (from.left + from.width / 2);
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const sc = to.height / Math.max(from.height, 1);
+    // Draw/Throw keeps its 330ms beat; the last 80ms sets the card down: it settles to 92% and
+    // fades, so the pile reads as "received", not deleted.
+    const land = sc * 0.92;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_TEST2
         ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
           { transform: `translate(${dx * .52}px, ${dy * .52 - 24}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${sc})`, opacity: .92 }]
+          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .758 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
     const duration = (IS_TEST2 ? 330 : 440) * f;
-    removeAfter(anim(d, frames, { duration, easing: IS_TEST2 ? 'cubic-bezier(.25,.72,.25,1)' : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
+    removeAfter(anim(d, frames, { duration, easing: IS_TEST2 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
   function flyBack(from: HTMLElement, to: HTMLElement, f: number) {
@@ -197,12 +211,22 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.4)`, opacity: 0 }], { duration: 400 * f, easing: 'ease-in', fill: 'forwards' }), d, 0);
   }
 
-  /** Strengthen: a thin ring expanding outward from a tile (bigger shine for a top rank). */
+  /** One quiet ring, only on the tile that just changed (bigger shine for a top rank). */
   const ring = (key: string, f: number, big: boolean) => {
     const { x, y } = centerOf(key);
     const c = el('circle', { cx: x, cy: y, r: S * 0.55, class: `fx-ring${big ? ' big' : ''}` }, board.fx);
-    const a = anim(c, [{ transform: 'scale(0.6)', opacity: 0.95 }, { transform: `scale(${big ? 2.1 : 1.6})`, opacity: 0 }], { duration: 620 * f, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' } as KeyframeAnimationOptions);
-    removeAfter(a, c, 700 * f);
+    const ms = (big ? MOTION.moment : MOTION.move) * f;
+    const a = anim(c, [{ transform: 'scale(0.6)', opacity: 0.95 }, { transform: `scale(${big ? 2.1 : 1.6})`, opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' } as KeyframeAnimationOptions);
+    removeAfter(a, c, ms + 60);
+  };
+
+  /** After a cut wave: the removed hexes' edges linger faintly, then go (about 400ms). */
+  const scar = (keys: readonly string[], f: number) => {
+    if (motion() === 0 || keys.length === 0) return;
+    const g = el('g', { class: 'fx-scar' }, board.fx);
+    for (const key of keys) el('path', { d: board.hexPath(key, S - 1.6), class: 'fx-scar-edge' }, g);
+    const ms = 400 * Math.max(f, 0.5);
+    removeAfter(anim(g, [{ opacity: 0.3 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), g, ms + 40);
   };
   /** Fruit: spore puffs stream from each given-up tile to the target. */
   const stream = (from: readonly string[], to: string, f: number, n: number) => {
@@ -224,5 +248,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  return { flash, cutFlash, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
 };
