@@ -20,6 +20,7 @@ assert(worker.includes(prior) && !worker.includes('futasaku-04-preview'), 'Revie
 writeFileSync(workerPath, worker.replace(prior, scoped));
 const page = readFileSync(join(site, route, 'index.html'), 'utf8');
 assert(page.includes('./assets/'), 'Preview must use relative asset paths');
-assert(page.includes('/futasaku-04-preview/'), 'Preview boot must isolate Futasaku 0.4 storage');
+// The boot script stores the address inside a regular expression, so the slashes are escaped.
+assert(page.includes('futasaku-04-preview') && page.includes("'futasaku04:'"), 'Preview boot must isolate Futasaku 0.4 storage');
 assert(readFileSync(join(site, 'futasaku-03-preview', 'release.json'), 'utf8').includes('"channel": "Futasaku0.3"'), 'Futasaku 0.3 release must stay in place');
 console.log(`Added /${route}/ at ${commit}`);

@@ -32,7 +32,7 @@ describe('Futasaku preview routes', () => {
     mkdirSync(preview);
     try {
       writeFileSync(join(site, 'sw.js'), "const CACHE = 'severgrow-v2-scoped';\nif (/\\/test2?(\\/|$)/.test(path)) return;\n");
-      writeFileSync(join(preview, 'index.html'), '<script src="./assets/app.js"></script>\n<script>/futasaku-04-preview/</script>\n');
+      writeFileSync(join(preview, 'index.html'), '<script src="./assets/app.js"></script>\n<script>var prefix = /\\/futasaku-04-preview\\//.test(location.pathname) ? \'futasaku04:\' : \'\';</script>\n');
       const commit = 'a'.repeat(40);
       const run = (script: string) => execFileSync(process.execPath, [new URL(`./scripts/${script}`, root).pathname, site, preview, commit], { encoding: 'utf8' });
       expect(run('compose-futasaku-preview.mjs')).toContain('/futasaku-03-preview/');
@@ -43,7 +43,9 @@ describe('Futasaku preview routes', () => {
       expect(published).not.toContain('/\\/test2?(\\/|$)/');
       expect(JSON.parse(readFileSync(join(site, 'futasaku-03-preview', 'release.json'), 'utf8'))).toEqual({ channel: 'Futasaku0.3', commit });
       expect(JSON.parse(readFileSync(join(site, 'futasaku-04-preview', 'release.json'), 'utf8'))).toEqual({ channel: 'Futasaku0.4', commit });
-      expect(readFileSync(join(site, 'futasaku-04-preview', 'index.html'), 'utf8')).toContain('/futasaku-04-preview/');
+      const page = readFileSync(join(site, 'futasaku-04-preview', 'index.html'), 'utf8');
+      expect(page).toContain('futasaku-04-preview');
+      expect(page).toContain("'futasaku04:'");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
