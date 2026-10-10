@@ -2,7 +2,7 @@
 // join them back to each root), and overlays (targets, previews, weak spots).
 // Also holds the board's animation effects. It never changes game state: it draws
 // whatever board it is given.
-import { FEATURES, IS_TEST2 } from '../channel.js';
+import { FEATURES, IS_FUTA04 } from '../channel.js';
 import { allNeighbors, boardCoords, connectedKeys, coordKey, hexDistance, homeCoord, parseKey } from '../../../src/engine/index.js';
 import type { Player, RulesConfig, Terrain, Tile } from '../../../src/engine/index.js';
 import type { Ghost } from '../logic/preview.js';
@@ -158,11 +158,11 @@ export class BoardView {
   protected id = (name: string) => `${this.uid}-${name}`;
   protected url = (name: string) => `url(#${this.id(name)})`;
   /**
-   * The outline every overlay, badge, glow and spotlight shares. Test2 paints flat tiles, so an
+   * The outline every overlay, badge, glow and spotlight shares. Futa04 paints flat tiles, so an
    * overlay must use the flat grid too, matching the tile and the legal-move wells instead of the
    * wobbly organic silhouette. On the other channels this is the palette's tile shape.
    */
-  protected shape(): ThemeStyle['tileShape'] { return IS_TEST2 ? 'flat' : this.style.tileShape; }
+  protected shape(): ThemeStyle['tileShape'] { return IS_FUTA04 ? 'flat' : this.style.tileShape; }
 
   constructor(
     readonly svg: SVGSVGElement,
@@ -212,7 +212,7 @@ export class BoardView {
   /** Draws the drawing ghost on its own layer (nothing else is redrawn). */
   /** Draws the drawing ghost on its own layer (nothing else is redrawn). Hexes are reconciled by
    *  signature: ones already on the board are kept (so a growing shape never flickers), and only a
-   *  hex the player has just painted animates in. Every hex uses the flat grid on Test2, so the
+   *  hex the player has just painted animates in. Every hex uses the flat grid on Futa04, so the
    *  painted shape matches the legal-move wells exactly. */
   ghost(g: GhostView | null) {
     const layer = this.layers.draw;
@@ -222,7 +222,7 @@ export class BoardView {
     }
     const st = this.style;
     const maxRank = this.config.maxRank;
-    const shape = IS_TEST2 ? ('flat' as const) : st.tileShape;
+    const shape = IS_FUTA04 ? ('flat' as const) : st.tileShape;
     const live = new Set<string>();
     for (const t of g.tiles) {
       const sig = `t:${t.key}:${t.strength}:${t.ok ? 1 : 0}`;
@@ -230,9 +230,9 @@ export class BoardView {
       const kept = this.ghostPool.get(sig);
       if (kept) { kept.classList.toggle('blocked', !!g.blocked); continue; }
       const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
-      el('path', { d: hexPath(t.key, IS_TEST2 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
+      el('path', { d: hexPath(t.key, IS_FUTA04 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
-      if (IS_TEST2) drawSeedStone(gg, t.key, x, y, t.strength, 0);
+      if (IS_FUTA04) drawSeedStone(gg, t.key, x, y, t.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
       this.ghostPool.set(sig, gg);
     }
@@ -274,7 +274,7 @@ export class BoardView {
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
     const defs = el('defs', {}, svg);
-    if (IS_TEST2) {
+    if (IS_FUTA04) {
       const shadow = el('radialGradient', { id: this.id('seed-stone-shadow'), cx: '.4', cy: '.34', r: '.68' }, defs);
       el('stop', { offset: '0%', 'stop-color': '#080906', 'stop-opacity': .39 }, shadow);
       el('stop', { offset: '46%', 'stop-color': '#080906', 'stop-opacity': .19 }, shadow);
@@ -356,9 +356,9 @@ export class BoardView {
     for (const key of this.keys) {
       const t = terrain[key] ?? 'normal';
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
-      el('path', { d: hexPath(key, S - 1.2, IS_TEST2 ? 'flat' : style.tileShape), class: `hex ${t}` }, g);
+      el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : style.tileShape), class: `hex ${t}` }, g);
       this.drawCell(g, key, t);
-      if (t === 'rich' && !IS_TEST2) {
+      if (t === 'rich' && !IS_FUTA04) {
         // The "2" badge sits above the tiles, so it stays visible when a tile is here.
         const { x, y } = centerOf(key);
         const b = el('g', { class: 'gold-badge', 'data-key': key }, this.layers.marks);
@@ -381,7 +381,7 @@ export class BoardView {
   }
   /** The material of one empty, gold or rock hex (under everything). */
   protected drawCell(g: SVGGElement, key: string, t: Terrain) {
-    const visibleTerrain = IS_TEST2 && t === 'rich' ? 'normal' : t;
+    const visibleTerrain = IS_FUTA04 && t === 'rich' ? 'normal' : t;
     drawMaterial(materialFor(null, visibleTerrain), 'cell', this.ctx(g, key));
     if (visibleTerrain === 'normal' && this.look.textures) el('path', { d: hexPath(key, S - 3, this.style.tileShape), class: 'soil-grain', fill: this.url('soil') }, g);
   }
@@ -479,7 +479,7 @@ export class BoardView {
       this.tileEls.set(key, this.drawTile(tiles, key, t, maxRank));
     }
     this.drawGlows(board);
-    if (IS_TEST2) {
+    if (IS_FUTA04) {
       this.drawTerritoryContour(board);
       for (const key of this.richKeys) {
         const { x, y } = centerOf(key);
@@ -539,7 +539,7 @@ export class BoardView {
   protected drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
     for (const s of o.scars) {
       if (board[s.key]) continue;
-      if (IS_TEST2) {
+      if (IS_FUTA04) {
         const g = el('g', { class: 'last-round-art', 'data-key': s.key, opacity: .2 }, scars);
         this.drawTile(g, s.key, s.tile ?? { owner: s.owner, strength: 1, root: false }, this.config.maxRank);
         g.querySelectorAll('.seed-stone,.gold-frame,.tile-num,.num-plate').forEach(node => node.remove());
@@ -551,9 +551,9 @@ export class BoardView {
     }
   }
 
-  /** Futasaku 0.3 lets adjacent tile art carry territory; no permanent connector is drawn. */
+  /** Futasaku 0.4 lets adjacent tile art carry territory; no permanent connector is drawn. */
   protected drawVeins(board: Record<string, Tile | null>, o: Overlay, veins: SVGGElement) {
-    if (IS_TEST2) { this.shownVeins.clear(); return; }
+    if (IS_FUTA04) { this.shownVeins.clear(); return; }
     const st = this.style;
     // Veins: thick, glowing links back to the root. Thickness and brightness follow how
     // many tiles depend on each link; fragile links (cutting them removes tiles) are thin
@@ -580,7 +580,7 @@ export class BoardView {
     const { over } = this.layers;
     const st = this.style;
     const maxRank = this.config.maxRank;
-    if (!IS_TEST2) {
+    if (!IS_FUTA04) {
       for (const badge of this.layers.marks.querySelectorAll<SVGGElement>('.gold-badge')) badge.classList.toggle('on-tile', !!board[badge.dataset.key ?? badge.getAttribute('data-key') ?? '']);
     }
 
@@ -588,28 +588,28 @@ export class BoardView {
     if (o.targets) {
       for (const key of this.keys) {
         if (o.targets.has(key) || key === o.selectedHex) continue;
-        el('path', { d: hexPath(key, S - 1.2, IS_TEST2 ? 'flat' : st.tileShape), class: 'dim' }, over);
+        el('path', { d: hexPath(key, S - 1.2, IS_FUTA04 ? 'flat' : st.tileShape), class: 'dim' }, over);
       }
       for (const key of o.targets) {
         const kind = o.targetKinds?.[key] ?? 'grow';
         // A legal empty socket gets a recessed inner edge beneath the existing target hitbox.
-        if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
-        el('path', { d: hexPath(key, S - 3, IS_TEST2 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
+        if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: `receptive-well kind-${kind}`, 'aria-hidden': 'true' }, over);
+        el('path', { d: hexPath(key, S - 3, IS_FUTA04 ? 'flat' : st.tileShape), class: `target kind-${kind}${o.coachHexes.includes(key) ? ' coached' : ''}`, 'data-key': key, 'data-kind': kind }, over);
         // a shape, not only a colour: + strengthens my tile, ⇆ replaces a bot tile
         // (a Fruit card's targets keep a calm ring, no badge)
-        if (!IS_TEST2 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
+        if (!IS_FUTA04 && kind !== 'grow' && kind !== 'fruit') this.markBadge(over, key, kind === 'strengthen' ? '+' : '⇆', kind);
       }
     }
     for (const key of o.cutKeys) {
-      if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
-      el('path', { d: hexPath(key, IS_TEST2 ? S - 3 : S * .7, IS_TEST2 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
+      if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
+      el('path', { d: hexPath(key, IS_FUTA04 ? S - 3 : S * .7, IS_FUTA04 ? 'flat' : st.tileShape), class: 'will-cut' }, over);
     }
     for (const key of o.blastKeys ?? []) {
-      if (IS_TEST2) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
+      if (IS_FUTA04) el('path', { d: hexPath(key, S - 5, 'flat'), class: 'receptive-well kind-replace' }, over);
       el('path', { d: hexPath(key, S - 3, 'flat'), class: 'blast-affected', 'data-key': key }, over);
     }
     // overhaul item 10: the veins the move would grow, drawn on before the tiles
-    for (const [a, b] of IS_TEST2 ? [] : (o.ghostLinks ?? [])) {
+    for (const [a, b] of IS_FUTA04 ? [] : (o.ghostLinks ?? [])) {
       const A = centerOf(a);
       const B = centerOf(b);
       const t = 0.28;
@@ -618,10 +618,10 @@ export class BoardView {
     for (const g of o.ghosts) {
       const gg = el('g', { class: `ghost${g.replaces ? ' replaces' : ''}` }, over);
       const previewKind = o.selectedKind === 'strengthen' || o.selectedKind === 'bloom' ? o.selectedKind : g.replaces ? 'replace' : 'grow';
-      if (IS_TEST2) el('path', { d: hexPath(g.key, S - 5, 'flat'), class: `receptive-well kind-${previewKind}` }, gg);
-      el('path', { d: hexPath(g.key, IS_TEST2 ? S - 3 : S * tileScale(g.strength, maxRank), IS_TEST2 ? 'flat' : st.tileShape), class: `ghost-tile kind-${previewKind}` }, gg);
+      if (IS_FUTA04) el('path', { d: hexPath(g.key, S - 5, 'flat'), class: `receptive-well kind-${previewKind}` }, gg);
+      el('path', { d: hexPath(g.key, IS_FUTA04 ? S - 3 : S * tileScale(g.strength, maxRank), IS_FUTA04 ? 'flat' : st.tileShape), class: `ghost-tile kind-${previewKind}` }, gg);
       const { x, y } = centerOf(g.key);
-      if (IS_TEST2) drawSeedStone(gg, g.key, x, y, g.strength, 0);
+      if (IS_FUTA04) drawSeedStone(gg, g.key, x, y, g.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(g.strength);
       if (g.replaces) el('path', { d: star(x + S * 0.5, y - S * 0.5, 6), class: 'spark-mark' }, gg);
     }
@@ -632,8 +632,8 @@ export class BoardView {
     }
     if (o.selectedHex) {
       const selectedKind = o.selectedKind ?? o.targetKinds?.[o.selectedHex] ?? 'grow';
-      if (IS_TEST2 && !o.targets?.has(o.selectedHex)) el('path', { d: hexPath(o.selectedHex, S - 5, 'flat'), class: `receptive-well kind-${selectedKind}` }, over);
-      el('path', { d: hexPath(o.selectedHex, IS_TEST2 ? S - 3 : S - 2, IS_TEST2 ? 'flat' : st.tileShape), class: `selected kind-${selectedKind}${IS_TEST2 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
+      if (IS_FUTA04 && !o.targets?.has(o.selectedHex)) el('path', { d: hexPath(o.selectedHex, S - 5, 'flat'), class: `receptive-well kind-${selectedKind}` }, over);
+      el('path', { d: hexPath(o.selectedHex, IS_FUTA04 ? S - 3 : S - 2, IS_FUTA04 ? 'flat' : st.tileShape), class: `selected kind-${selectedKind}${IS_FUTA04 && o.targets?.has(o.selectedHex) && !board[o.selectedHex] ? ' receptive-active' : ''}${o.blastTarget===o.selectedHex ? ' blast-selected' : ''}` }, over);
     }
     // overhaul item 10: "−N" on my tile the move leaves weakest, and on the opponent tiles it cuts
     if (o.atRisk) this.badge(over, o.atRisk.key, `−${o.atRisk.loss}`, 'weak at-risk');
@@ -643,7 +643,7 @@ export class BoardView {
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
     if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, this.shape()), class: 'focus' }, over);
     // UX pass: what the opponent changed last turn: a small spark at the top of each hex
-    for (const key of IS_TEST2 ? [] : (o.fresh ?? [])) {
+    for (const key of IS_FUTA04 ? [] : (o.fresh ?? [])) {
       if (!board[key]) continue;
       const { x, y } = centerOf(key);
       const g = el('g', { class: `fresh-mark${this.look.motion ? ' arrive' : ''}`, 'data-key': key }, over);
@@ -742,7 +742,7 @@ export class BoardView {
       el('path', { d, class: 'tile-edge' }, g);
       const ns = numberStyle(kind, tt, this.paletteId);
       if (t.owner === 0 && !this.richKeys.has(key)) drawLawnDetail(g, key, x, y, t.strength, this.paletteId);
-      if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
+      if (IS_FUTA04) drawSeedStone(g, key, x, y, t.strength, t.owner);
       else {
         el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`plate-${kind}`), style: `opacity:${ns.plateAlpha.toFixed(2)}` }, g);
         el('text', { x, y: y - S * 0.06, class: 'num tile-num world', style: `fill:${ns.ink}` }, g).textContent = String(t.strength);
@@ -752,7 +752,7 @@ export class BoardView {
     }
     // The material (moss or fire) with its lowkey depth; then the number and marker, crisp on top.
     drawMaterial(mat, 'tile', this.ctx(g, key, S * k, t.strength));
-    if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
+    if (IS_FUTA04) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else el('text', { x, y: y - S * 0.06, class: 'num tile-num' }, g).textContent = String(t.strength);
     this.mark(g, x, y + S * k * 0.52, t.owner === 0 ? st.youMark : st.botMark);
     return g;
@@ -869,7 +869,7 @@ export class BoardView {
     g.replaceChildren();
     this.svg.classList.toggle('sway', !!plan?.sway);
     if (!plan) return;
-    if (IS_TEST2) {
+    if (IS_FUTA04) {
       if (plan.sway) this.drawTerritoryPulses(g);
     } else for (const p of plan.pulses) {
       const A = centerOf(p.from);
@@ -884,7 +884,7 @@ export class BoardView {
       const { x, y } = centerOf(b.key);
       el('circle', { cx: (x + b.dx * S).toFixed(1), cy: (y + b.dy * S).toFixed(1), r: 2.2, class: 'amb-bubble', style: `animation-delay:${b.delay}s` }, g);
     }
-    for (const e of IS_TEST2 ? [] : plan.embers) {
+    for (const e of IS_FUTA04 ? [] : plan.embers) {
       const { x, y } = centerOf(e.key);
       el('circle', { cx: (x + e.dx * S).toFixed(1), cy: (y - S * 0.2).toFixed(1), r: 1.1, class: 'amb-ember', style: `animation-delay:${e.delay}s` }, g);
     }

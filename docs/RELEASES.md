@@ -18,7 +18,7 @@ Candidate publication requires the full unit/type check, original Classic per-ac
 asset isolation, and nine-viewport browser critical flow. Additional local HTTPS quality checks
 cover palettes, fonts, hand sizes, keyboard controls, tutorial, statistics, corrupt/blocked storage,
 scoped offline resume, and repeated missing-asset recovery. Record actual results and outstanding
-real-device checks for this version in `docs/FUTASAKU_0_3_BASELINE.md`.
+real-device checks for this version in `docs/FUTASAKU_0_4_BASELINE.md`.
 Older Test2 results remain in `MAIN2_PROGRESS.md` at source commit
 `89d438c1b3fca253292d1b8a9eabffcf5e2da315`.
 

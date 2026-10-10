@@ -85,7 +85,7 @@ try {
   await page.locator('#tool-undo').evaluate(element=>(element as HTMLElement).click());
   await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:20000});
   assert.deepEqual(await state(),played,'Replay is visual only');
-  await page.locator('#test2-help-button').evaluate(element=>(element as HTMLElement).click());
+  await page.locator('#futa04-help-button').evaluate(element=>(element as HTMLElement).click());
   assert.equal(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(),true);
   assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'public discarded card art is visible');
   for (const width of [360,390,430]) {
@@ -111,8 +111,8 @@ try {
   s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Draw'&&a.from==='deck')!),true);
   await page.locator('#hand .card').first().evaluate(element=>(element as HTMLElement).click());
-  assert.equal(await page.locator('#test2-help-button').isEnabled(),true,'Match Intel stays reachable while choosing a card');
-  await page.locator('#test2-help-button').evaluate(element=>(element as HTMLElement).click());
+  assert.equal(await page.locator('#futa04-help-button').isEnabled(),true,'Match Intel stays reachable while choosing a card');
+  await page.locator('#futa04-help-button').evaluate(element=>(element as HTMLElement).click());
   assert.equal(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(),true);
   await page.locator('#futasaku-glass .intel-close').click();
   s=await state();

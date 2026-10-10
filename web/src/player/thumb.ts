@@ -1,4 +1,4 @@
-// Approved player phone extras (Test and Test2): the "thumb layout" settings
+// Approved player phone extras (Test and Futa04): the "thumb layout" settings
 // (Thumb layout, Hand side) and the idle tip shown faintly over the board. The layout itself is
 // computed by the one layout engine (logic/layout.ts, computeLayout's `thumb` variant).
 export type ThumbPrefs = { thumb: boolean; side: 'right' | 'left'; idleTip: boolean };

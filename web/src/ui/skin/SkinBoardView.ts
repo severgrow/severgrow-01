@@ -9,7 +9,7 @@
 // (tier.ts). Anything the skin's files don't have yet falls back (greybox colours from the
 // skin, the board's own home drawings, no props), so final art drops in without code changes.
 import { allNeighbors, connectedKeys, coordKey, parseKey } from '../../../../src/engine/index.js';
-import { IS_TEST2 } from '../../channel.js';
+import { IS_FUTA04 } from '../../channel.js';
 import type { Player, Terrain, Tile } from '../../../../src/engine/index.js';
 import { looseEdges, networkEdges } from '../../logic/network.js';
 import { getOrient, toScreen } from '../../logic/orient.js';
@@ -75,7 +75,7 @@ export class SkinBoardView extends BoardView {
     this.painter = new GroundPainter(skin, this.assets);
     // Warm first-frame art while the menu is visible. A quick start shares
     // these in-flight requests; a later high-tier choice releases them.
-    if (IS_TEST2) void this.assets.setTier('lo').then(() =>
+    if (IS_FUTA04) void this.assets.setTier('lo').then(() =>
       this.assets.preload(['textures/empty_', 'homes/', 'props/rock/', 'tiles/', 'textures/', 'masks/flat/'], 8000));
     this.net = [{ ...skin.network[0] }, { ...skin.network[1] }];
     svg.classList.add('skin-board');
@@ -115,7 +115,7 @@ export class SkinBoardView extends BoardView {
     if (this.groundUrl) this.groundImg.setAttribute('href', this.groundUrl);
     this.netDefs = el('g', {}, defs);
     // the number plates: a soft disc behind the digit, in each player's colours
-    if (!IS_TEST2) this.skin.numbers.forEach((n, p) => {
+    if (!IS_FUTA04) this.skin.numbers.forEach((n, p) => {
       const gr = el('radialGradient', { id: this.id(`skin-plate-${p}`), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
       el('stop', { offset: 0, 'stop-color': n.plate, 'stop-opacity': 1 }, gr);
       el('stop', { offset: 0.62, 'stop-color': n.plate, 'stop-opacity': 0.92 }, gr);
@@ -134,7 +134,7 @@ export class SkinBoardView extends BoardView {
   protected override drawCell(g: SVGGElement, key: string, t: Terrain) {
     // the ground is one picture: every hex reaches over the grid gap; a faint seam keeps the grid readable
     const d = hexPath(key, S * 1.035, 'flat');
-    const mat = this.skin.materials[this.skin.cells[t === 'rich' && !IS_TEST2 ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
+    const mat = this.skin.materials[this.skin.cells[t === 'rich' && !IS_FUTA04 ? 'rich' : t === 'rock' ? 'rock' : 'normal']];
     el('path', { d, class: 'skin-proxy', fill: mat?.proxy.base ?? '#262a28' }, g);
     el('path', { d, class: `skin-cell ${t}`, fill: this.url('skin-ground') }, g);
     void key;
@@ -199,10 +199,10 @@ export class SkinBoardView extends BoardView {
     const tier = a.tier;
     // Ground textures start alongside the visible sprites, then the painter
     // reuses those requests. A later move's props do not delay the first frame.
-    if (IS_TEST2) void a.preload(['textures/empty_', 'textures/', 'masks/flat/'], 8000);
+    if (IS_FUTA04) void a.preload(['textures/empty_', 'textures/', 'masks/flat/'], 8000);
     else await a.preload(['tiles/', 'network/', 'homes/', 'props/', 'fx/', 'states/']);
     if (a.tier !== tier) return;
-    if (!IS_TEST2) {
+    if (!IS_FUTA04) {
       const style = await a.json<Record<string, Partial<NetworkLook>>>(this.skin.networkStyle);
       if (a.tier !== tier) return;
       const merge = (n: SkinDef['network'][number]): NetworkLook => ({ ...n, ...(style?.[n.key] ?? {}), widths: { ...n.widths, ...(style?.[n.key]?.widths ?? {}) } });
@@ -227,7 +227,7 @@ export class SkinBoardView extends BoardView {
         return { src, size: r?.size ?? set.size, ...(r?.minStrength ? { minStrength: r.minStrength } : {}), ...(anim ? { anim } : {}) };
       });
     }
-    if (IS_TEST2) {
+    if (IS_FUTA04) {
       const visible = new Set([...a.list('homes/'), ...a.list('props/rock/')]);
       for (const [key, tile] of Object.entries(this.lastRender?.[0] ?? {})) {
         if (tile && !tile.root) {
@@ -239,14 +239,14 @@ export class SkinBoardView extends BoardView {
       if (a.tier !== tier) return;
       void a.preload(['tiles/', 'props/', 'fx/', 'states/'], 8000);
     }
-    this.linkArt = IS_TEST2 ? [[], []] : await Promise.all(
+    this.linkArt = IS_FUTA04 ? [[], []] : await Promise.all(
       this.net.map(async (n) =>
         n.links
           ? (await Promise.all(a.list(n.links).map(async (f) => ({ f, img: await a.image(f) })))).flatMap(({ f, img }) => (img ? [{ url: a.url(f), aspect: img.width / img.height }] : []))
           : [],
       ),
     );
-    this.strips = IS_TEST2 ? [null, null] : await Promise.all(
+    this.strips = IS_FUTA04 ? [null, null] : await Promise.all(
       this.net.map(async (n) => {
         const img = n.strip ? await a.image(n.strip) : null;
         return img && n.strip ? { url: a.url(n.strip), w: img.width, h: img.height } : null;
@@ -293,7 +293,7 @@ export class SkinBoardView extends BoardView {
     const g = el('g', { class: 'skin-rocks', 'aria-hidden': 'true' }, this.layers.base);
     for (const key of this.keys) {
       const t = this.terrain[key];
-      if (t !== 'rock' && (t !== 'rich' || IS_TEST2)) continue;
+      if (t !== 'rock' && (t !== 'rich' || IS_FUTA04)) continue;
       const defs = this.propDefs[this.skin.cells[t]] ?? [];
       if (!defs.length) continue;
       const def = defs[Math.floor(hash(`${key}:${t}`) * defs.length)]!;
@@ -356,13 +356,13 @@ export class SkinBoardView extends BoardView {
     for (const key of this.keys) {
       const { x, y } = centerOf(key);
       const terr = this.terrain[key] ?? 'normal';
-      const cellMat = skin.cells[terr === 'rich' && !IS_TEST2 ? 'rich' : terr === 'rock' ? 'rock' : 'normal'];
+      const cellMat = skin.cells[terr === 'rich' && !IS_FUTA04 ? 'rich' : terr === 'rock' ? 'rock' : 'normal'];
       const t = board[key];
-      const base = { key, x, y, rich: terr === 'rich' && !IS_TEST2, mirror: hash(`${key}:m`) > 0.5 };
+      const base = { key, x, y, rich: terr === 'rich' && !IS_FUTA04, mirror: hash(`${key}:m`) > 0.5 };
       if (t) {
         const mat = skin.owners[t.owner];
         cells.push({ ...base, material: mat, coverage: this.strength9(t), tint: joined.has(key) ? null : (this.tints[mat] ?? null) });
-      } else if (!IS_TEST2 && scars.has(key) && !this.propDefs.dead?.length) {
+      } else if (!IS_FUTA04 && scars.has(key) && !this.propDefs.dead?.length) {
         const s = scars.get(key)!;
         const mat = skin.owners[s.owner];
         const age = Math.min(2, s.age ?? 0);
@@ -405,7 +405,7 @@ export class SkinBoardView extends BoardView {
     const want = new Map<string, { key: string; m: NonNullable<SkinDef['ambient']>['motes'][number] }>();
     if (amb && this.look.motion && (this.tilePx() || 0) >= 48) {
       for (const m of amb.motes) {
-        if (IS_TEST2 && m.material === this.skin.owners[1]) continue; // pause rising ember motes; keep leaves
+        if (IS_FUTA04 && m.material === this.skin.owners[1]) continue; // pause rising ember motes; keep leaves
         if (!this.assets.has(m.src)) continue;
         const keys = this.keys.filter((k) => {
           const t = board[k];
@@ -478,8 +478,8 @@ export class SkinBoardView extends BoardView {
     };
     const mine = sides[0]!;
     if (mine.length >= 2) {
-      // Park the butterfly experiment in Futasaku 0.3; the drifting leaf stays.
-      if (!IS_TEST2) {
+      // Park the butterfly experiment in Futasaku 0.4; the drifting leaf stays.
+      if (!IS_FUTA04) {
         const n = Math.min(3, Math.ceil(mine.length / 5));
         for (let i = 0; i < n; i++) {
           const salt = `bfly${i}`;
@@ -510,7 +510,7 @@ export class SkinBoardView extends BoardView {
     const theirs = sides[1]!;
     if (theirs.length) {
       // Keep the volcanic smoke and lava warmth, but pause the separate flame sprites.
-      if (!IS_TEST2) {
+      if (!IS_FUTA04) {
         const flames = Math.min(4, Math.ceil(theirs.length / 3));
         for (let i = 0; i < flames; i++) {
           const k = theirs[Math.floor(hash(`flame${i}:k`) * theirs.length)]!;
@@ -535,7 +535,7 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
-    if (IS_TEST2) {
+    if (IS_FUTA04) {
       const defs = this.svg.querySelector('defs')!;
       for (const s of o.scars) {
         if (board[s.key] || !s.tile) continue;
@@ -581,7 +581,7 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawVeins(board: Record<string, Tile | null>, o: Overlay, veins: SVGGElement) {
-    if (IS_TEST2) { this.shownVeins.clear(); return; }
+    if (IS_FUTA04) { this.shownVeins.clear(); return; }
     const now = new Set<string>();
     const fresh = this.shownVeins.size > 0;
     const tilePx = this.tilePx() || 60;
@@ -632,7 +632,7 @@ export class SkinBoardView extends BoardView {
     el('image', { href: this.assets.url(src), x: x - sz / 2, y: y - sz / 2, width: sz, height: sz, class: 'skin-lava-glow', filter: `url(#${this.id('life-hot')})`, preserveAspectRatio: 'none', style: rot + phase(3.6 + hash(`${key}:gd`) * 2.6, 'g') }, holder);
     const embers = s9 >= 7 ? 2 : s9 >= 3 ? 1 : 0;
     const ember = this.skin.ambient?.motes.find((m) => m.material === this.skin.owners[1])?.src;
-    if (!IS_TEST2 && ember && this.assets.has(ember))
+    if (!IS_FUTA04 && ember && this.assets.has(ember))
       for (let i = 0; i < embers; i++) {
         const a = hash(`${key}:ea${i}`) * Math.PI * 2;
         const r = 7 + hash(`${key}:er${i}`) * 13;
@@ -815,7 +815,7 @@ export class SkinBoardView extends BoardView {
     }
     // The home landmark sits above the tile layer. Draw its existing outer rim in
     // the overlay layer so that the same territory contour remains visible at the source.
-    if (edge && !IS_TEST2) el('path', { d: edge, class: `tile-edge skin-edge skin-rim${t.root ? ' skin-home-rim' : ''}` }, t.root ? this.layers.over : g);
+    if (edge && !IS_FUTA04) el('path', { d: edge, class: `tile-edge skin-edge skin-rim${t.root ? ' skin-home-rim' : ''}` }, t.root ? this.layers.over : g);
     void d;
     if (t.root) return g;
     // a tile cut off from its home shows wilted / ashen props instead of its living ones (painted
@@ -825,7 +825,7 @@ export class SkinBoardView extends BoardView {
     for (const pr of placeProps(key, defs, budget, cut ? 9 : s9)) this.prop(g, x, y, pr, key);
     // the channel's ownership shape (a circle or diamond) where it keeps them, for colour-blind players
     this.mark(g, x, y + S * 0.56, t.owner === 0 ? this.style.youMark : this.style.botMark);
-    if (IS_TEST2) drawSeedStone(g, key, x, y, t.strength, t.owner);
+    if (IS_FUTA04) drawSeedStone(g, key, x, y, t.strength, t.owner);
     else {
       const n = skin.numbers[t.owner];
       el('circle', { cx: x, cy: y - S * 0.06, r: S * 0.34, class: 'num-plate', fill: this.url(`skin-plate-${t.owner}`), style: `opacity:${n.plateAlpha}` }, g);

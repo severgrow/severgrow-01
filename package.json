@@ -1,6 +1,6 @@
 {
   "name": "futasaku",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Futasaku: deterministic game engine and browser client",
   "type": "module",

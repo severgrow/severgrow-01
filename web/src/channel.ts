@@ -1,11 +1,11 @@
-// Futasaku 0.3 uses the Test2 presentation. Historical channels remain for
+// Futasaku 0.4 uses the Futa04 presentation. Historical channels remain for
 // compatibility checks; each channel keeps its established storage namespace.
 declare const __CHANNEL__: string;
-export type Channel = 'live' | 'test' | 'test2';
-export const CHANNEL: Channel = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'test2') ? __CHANNEL__ : 'live';
+export type Channel = 'live' | 'test' | 'futa04';
+export const CHANNEL: Channel = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04') ? __CHANNEL__ : 'live';
 export const IS_TEST = CHANNEL === 'test';
-export const IS_TEST2 = CHANNEL === 'test2';
-const modern = IS_TEST || IS_TEST2;
+export const IS_FUTA04 = CHANNEL === 'futa04';
+const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
   phoneLayout: modern,
@@ -24,8 +24,8 @@ export const FEATURES = Object.freeze({
   v3: modern,
   watch: IS_TEST,
 });
-const isPreviewHost = typeof location !== 'undefined' && (location.hostname.endsWith('.chatgpt.site') || location.pathname.includes('/futasaku-03-preview/'));
-export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? (isPreviewHost ? 'futasaku03:' : 'main2:') : '';
+const isPreviewHost = typeof location !== 'undefined' && (location.hostname.endsWith('.chatgpt.site') || location.pathname.includes('/futa0.4/'));
+export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:') : '';
 if (STORAGE_PREFIX && typeof Storage !== 'undefined') {
   const proto = Storage.prototype;
   const get = proto.getItem, set = proto.setItem, remove = proto.removeItem;

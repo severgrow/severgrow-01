@@ -20,7 +20,7 @@ jobs:
       - run: npm run check
       - run: npm run web:build && node scripts/check-channel-assets.mjs
       - run: CHANNEL=test npm run web:build
-      - run: CHANNEL=test2 npm run web:build && CHANNEL=test2 node scripts/check-channel-assets.mjs
+      - run: CHANNEL=futa04 npm run web:build && CHANNEL=futa04 node scripts/check-channel-assets.mjs
 
   browser:
     # Independent suites use separate runners, keeping their assertions and avoiding
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, test2-critical, test2-v3, test2-information]
+        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, futa04-critical, futa04-v3, futa04-information]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -39,8 +39,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
-      - if: matrix.suite != 'test2-critical' && matrix.suite != 'test2-v3' && matrix.suite != 'test2-information'
+      - if: matrix.suite != 'futa04-critical' && matrix.suite != 'futa04-v3' && matrix.suite != 'futa04-information'
         run: npm run web:build
-      - if: matrix.suite == 'test2-critical' || matrix.suite == 'test2-v3' || matrix.suite == 'test2-information'
-        run: CHANNEL=test2 npm run web:build
+      - if: matrix.suite == 'futa04-critical' || matrix.suite == 'futa04-v3' || matrix.suite == 'futa04-information'
+        run: CHANNEL=futa04 npm run web:build
       - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}

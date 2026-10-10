@@ -28,8 +28,8 @@ const CSS = `
 #futasaku-glass .intel-cards { display:flex; flex-wrap:wrap; align-items:flex-start; gap:5px; margin-bottom:10px; }
 #futasaku-glass .intel-card-wrap { position:relative; flex:none; }
 #futasaku-glass .intel-card { display:block; position:relative; width:28px; height:40px; border-radius:3px; box-sizing:border-box; overflow:hidden; background:#171918; border:1px solid #958a70; }
-#futasaku-glass .intel-card .test2-card-art { position:absolute; inset:0; display:block; border-radius:inherit; background-size:300% 300%; background-repeat:no-repeat; }
-#futasaku-glass .intel-card.fruit .test2-card-art { background-size:cover; background-position:center; }
+#futasaku-glass .intel-card .futa04-card-art { position:absolute; inset:0; display:block; border-radius:inherit; background-size:300% 300%; background-repeat:no-repeat; }
+#futasaku-glass .intel-card.fruit .futa04-card-art { background-size:cover; background-position:center; }
 #futasaku-glass .intel-card .c-num { position:absolute; top:1px; left:2px; z-index:1; font:800 11px/1 monospace; }
 #futasaku-glass .intel-card .c-suit { display:none; }
 #futasaku-glass .intel-card-count { position:absolute; right:-3px; bottom:-3px; min-width:13px; height:13px; padding:0 2px; border-radius:5px; background:#24221e; border:1px solid #a99c81; font:700 9px/12px monospace; text-align:center; }

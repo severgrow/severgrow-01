@@ -16,7 +16,7 @@ const boot = (channel: string) => {
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
-  it.each(['live', 'test', 'test2'])('%s isolates local and session storage', (channel) => {
+  it.each(['live', 'test', 'futa04'])('%s isolates local and session storage', (channel) => {
     const { policy, Storage } = boot(channel);
     for (const store of [new Storage(), new Storage()]) {
       store.data.set('sentinel', 'Main'); store.data.set('test:sentinel', 'Dev');
@@ -28,8 +28,8 @@ describe('release channel policy', () => {
       expect(store.data.get('test:sentinel')).toBe('Dev');
     }
   });
-  it('Test2 has approved player features without owner icons or experiments', () => {
-    const f = boot('test2').policy.FEATURES;
+  it('Futa04 has approved player features without owner icons or experiments', () => {
+    const f = boot('futa04').policy.FEATURES;
     for (const k of ['typography', 'phoneLayout', 'guidance', 'desktopCoach', 'slimHeader', 'tapAgain', 'smartCamera', 'mapBehindCards']) expect(f[k]).toBe(true);
     for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks']) expect(f[k]).toBe(false);
   });

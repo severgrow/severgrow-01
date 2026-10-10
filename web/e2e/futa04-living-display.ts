@@ -32,7 +32,7 @@ try {
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#deck .pile-card')!).boxShadow.includes('239, 234, 220'));
     const white=await page.locator('#deck .pile-card').evaluate(el=>getComputedStyle(el).boxShadow);
     check(white.includes('239, 234, 220'),`${width}: legal deck draw has restrained white card-edge light`);
-    if(!await page.locator('#discard.test2-bloom-draw').count() && await page.locator('#discard.ready').count())
+    if(!await page.locator('#discard.futa04-bloom-draw').count() && await page.locator('#discard.ready').count())
       check((await page.locator('#discard .pile-card').evaluate(el=>getComputedStyle(el).boxShadow)).includes('239, 234, 220'),`${width}: ordinary legal discard draw shares white edge light`);
     await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
     await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());

@@ -1,7 +1,7 @@
-// Observe 20 complete Classic games in the actual Test2 browser renderer.
+// Observe 20 complete Classic games in the actual Futa04 browser renderer.
 // Real UI actions cover Draw, Sprout/Fruit placement, Throw and phase controls.
 // Complex Bloom placements use the existing test session hook; counts are reported.
-// Build CHANNEL=test2 first. PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/test2-messages.ts
+// Build CHANNEL=futa04 first. PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/futa04-messages.ts
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -14,12 +14,12 @@ import { chooseLevelAction, botSeed } from '../../src/bots/levels.js';
 const count = Number(process.env.MESSAGE_GAMES ?? 20);
 const startIndex = Number(process.env.MESSAGE_START ?? 0);
 const tag = process.env.MESSAGE_TAG ?? 'messages';
-const dir = `/tmp/test2-${tag}`;
+const dir = `/tmp/futa04-${tag}`;
 mkdirSync(dir, { recursive: true });
 const port = Number(process.env.MESSAGE_PORT ?? 4196);
-const base = process.env.TEST2_URL ?? `http://localhost:${port}/`;
-const server = process.env.TEST2_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.TEST2_DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.TEST2_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
+const base = process.env.FUTA04_URL ?? `http://localhost:${port}/`;
+const server = process.env.FUTA04_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
+const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.FUTA04_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
 const presets = [[360,640],[390,664],[390,844],[1280,800],[1440,900]] as const;
 const read = (p: Page) => p.evaluate(() => (window as any).__severgrow.state() as State);
 const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__severgrow, s = h?.state(); return s && !h.busy() && (s.actor === 0 || s.phase === 'GAME_OVER'); }, undefined, { timeout: 40000 });
@@ -76,7 +76,7 @@ async function run(index: number) {
   const v3 = index % 2 === 1;
   const large = index % 5 === 1;
   const g: Game = { index,seed,viewport:`${w}x${h}`,look:v3?'V3':'default',large,winner:null,actions:0,uiActions:0,hookActions:0,failures:[],observations:[],historyActions:0,screenshots:[] };
-  const p = await browser.newPage({ viewport:{width:w,height:h},isMobile:w<600,hasTouch:w<600,ignoreHTTPSErrors:!!process.env.TEST2_URL });
+  const p = await browser.newPage({ viewport:{width:w,height:h},isMobile:w<600,hasTouch:w<600,ignoreHTTPSErrors:!!process.env.FUTA04_URL });
   const errors: string[] = []; p.on('pageerror', e => errors.push(e.message));
   await p.addInitScript(({large,level}) => {
     (window as any).__name = (f: unknown) => f;
@@ -85,7 +85,7 @@ async function run(index: number) {
     (window as any).__messageSamples = [];
     let previous = '';
     setInterval(() => {
-      const ids = ['step-cue','turn-pill','test2-notice-slot','test2-help-button','coach','first-tip','hint','draw-info','root-warn','confirm'];
+      const ids = ['step-cue','turn-pill','futa04-notice-slot','futa04-help-button','coach','first-tip','hint','draw-info','root-warn','confirm'];
       const visible = ids.flatMap(id => {
         const el = document.getElementById(id); if(!el) return [];
         const r = el.getBoundingClientRect(), s = getComputedStyle(el);

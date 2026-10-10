@@ -1,26 +1,26 @@
-// Test2-only presentation. Both grain and rim are baked once; no live noise/blur filter,
+// Futa04-only presentation. Both grain and rim are baked once; no live noise/blur filter,
 // animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
-#test2-film-grain {
+#futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
   opacity: .12; background-repeat: repeat; background-size: 128px 128px;
   user-select: none;
 }
-#test2-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
-body:has(#game:not([hidden])) #test2-board-backdrop { display: block; }
-#test2-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
-body:has(#game:not([hidden])) #test2-outcome-light { display:block; }
-#test2-outcome-light[data-tone='good'] {
+#futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
+body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
+#futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
+body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
+#futa04-outcome-light[data-tone='good'] {
   background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(89,177,107,.19),rgba(63,119,76,.06) 50%,transparent 83%),
              radial-gradient(ellipse 35% 48% at 79% 73%,rgba(92,164,102,.09),transparent 82%);
 }
-#test2-outcome-light[data-tone='bad'] {
+#futa04-outcome-light[data-tone='bad'] {
   background:radial-gradient(ellipse 59% 63% at 43% 53%,rgba(188,79,61,.18),rgba(113,54,45,.06) 50%,transparent 83%),
              radial-gradient(ellipse 35% 48% at 79% 73%,rgba(164,77,54,.08),transparent 82%);
 }
-#test2-map-rim { pointer-events: none; }
-#board .hex-cell.normal.test2-empty { filter: brightness(1.15); }
+#futa04-map-rim { pointer-events: none; }
+#board .hex-cell.normal.futa04-empty { filter: brightness(1.15); }
 `;
 
 export type OutcomeLight = { pulse: (tone: 'good' | 'bad', strength: number) => void; reset: () => void };
@@ -29,11 +29,11 @@ let mounted: OutcomeLight | null = null;
 export function mountAtmosphere(): OutcomeLight {
   if (mounted) return mounted;
   const style = document.createElement('style');
-  style.id = 'test2-atmosphere-style';
+  style.id = 'futa04-atmosphere-style';
   style.textContent = ATMOSPHERE_CSS;
   document.head.append(style);
   const grain = document.createElement('div');
-  grain.id = 'test2-film-grain';
+  grain.id = 'futa04-film-grain';
   grain.setAttribute('aria-hidden', 'true');
   const tile = document.createElement('canvas');
   tile.width = tile.height = 128;
@@ -53,10 +53,10 @@ export function mountAtmosphere(): OutcomeLight {
     document.body.append(grain);
   }
   const backdrop = document.createElement('div');
-  backdrop.id = 'test2-board-backdrop';
+  backdrop.id = 'futa04-board-backdrop';
   backdrop.setAttribute('aria-hidden', 'true');
   const outcome = document.createElement('div');
-  outcome.id = 'test2-outcome-light';
+  outcome.id = 'futa04-outcome-light';
   outcome.setAttribute('aria-hidden', 'true');
   document.getElementById('texture')?.append(backdrop,outcome);
   let running: Animation | null = null;
@@ -99,7 +99,7 @@ export function mountAtmosphere(): OutcomeLight {
     const paths = [...board.querySelectorAll<SVGPathElement>('.l-base .hex-cell > .hex')];
     if (!paths.length) return;
     const shape = paths.map(path => path.getAttribute('d') ?? '').join(' ');
-    if (shape === signature && board.querySelector('#test2-map-rim')) return;
+    if (shape === signature && board.querySelector('#futa04-map-rim')) return;
     const boxes = paths.map(path => path.getBBox());
     const pad = 24;
     const x = Math.min(...boxes.map(box => box.x)) - pad;
@@ -133,12 +133,12 @@ export function mountAtmosphere(): OutcomeLight {
     b.shadowOffsetX = 0; b.shadowBlur = 0; b.globalCompositeOperation = 'destination-out';
     b.drawImage(mask, 0, 0);
     const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    image.id = 'test2-map-rim';
+    image.id = 'futa04-map-rim';
     image.setAttribute('aria-hidden', 'true');
     image.setAttribute('x', String(x)); image.setAttribute('y', String(y));
     image.setAttribute('width', String(w)); image.setAttribute('height', String(h));
     image.setAttribute('href', baked.toDataURL());
-    board.querySelector('#test2-map-rim')?.remove();
+    board.querySelector('#futa04-map-rim')?.remove();
     board.insertBefore(image, board.querySelector('.l-base'));
     signature = shape;
   };
@@ -149,7 +149,7 @@ export function mountAtmosphere(): OutcomeLight {
   const lightEmptyCells = () => {
     const occupied = new Set([...board.querySelectorAll('.tile[data-key]')].map(tile=>tile.getAttribute('data-key')));
     for (const cell of board.querySelectorAll('.l-base .hex-cell.normal'))
-      cell.classList.toggle('test2-empty', !occupied.has(cell.getAttribute('data-key')));
+      cell.classList.toggle('futa04-empty', !occupied.has(cell.getAttribute('data-key')));
   };
   new MutationObserver(lightEmptyCells).observe(board, { childList: true, subtree: true });
   lightEmptyCells();

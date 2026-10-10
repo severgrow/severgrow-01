@@ -1,10 +1,10 @@
-// Approved player step guidance (Test and Test2): a small crafted plate on the map
+// Approved player step guidance (Test and Futa04): a small crafted plate on the map
 // the moment a step starts (an icon, the step's words, three step pips), and the step's own
 // controls as the clear hero (CSS in lab-css.ts, keyed on <html data-step data-guide>). The step
 // comes from the game's own state (main.ts passes the phase and whose turn it is); nothing here
 // keeps a separate idea of the step.
 import { STEP_CUE } from '../../../src/strings.js';
-import { IS_TEST2 } from '../channel.js';
+import { IS_FUTA04 } from '../channel.js';
 
 export type Step = 'draw' | 'grow' | 'throw' | 'opp';
 export type GuideMode = 'full' | 'subtle' | 'off';
@@ -122,9 +122,9 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
    *  controls, the nearest free spot down the map (empty hexes first). */
   const place = () => {
     if (!wrap) return;
-    // Test2's nonblocking instruction is centred by CSS. It has no separate reserved row,
+    // Futa04's nonblocking instruction is centred by CSS. It has no separate reserved row,
     // and never searches for a free hex or moves when the battlefield changes.
-    if (IS_TEST2) return;
+    if (IS_FUTA04) return;
     const B = wrap.getBoundingClientRect();
     const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
     const W = { left: B.left, top: B.top, width: B.width, height: Math.max(0, B.height - under) };

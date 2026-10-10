@@ -1,11 +1,11 @@
-name: Futasaku 0.3 Pages preview
+name: Futasaku 0.4 Pages preview
 
-# Runs from the futa0.3 deployment ref, which points to a validated Futasaku0.3
+# Runs from the futa0.4 deployment ref, which points to a validated Futasaku0.4
 # commit. The existing Main/Dev/Test2 workflow and refs stay untouched; their
 # currently published SHAs are rebuilt and checked for parity.
 on:
   push:
-    branches: [futa0.3]
+    branches: [futa0.4]
   workflow_dispatch:
 
 permissions:
@@ -54,13 +54,13 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: preview/package-lock.json
-      - name: Install and validate Futasaku 0.3
+      - name: Install and validate Futasaku 0.4
         working-directory: preview
         run: |
           npm ci
           npm run check
-          CHANNEL=test2 npm run web:build
-          CHANNEL=test2 node scripts/check-channel-assets.mjs
+          CHANNEL=futa04 npm run web:build
+          CHANNEL=futa04 node scripts/check-channel-assets.mjs
       - name: Rebuild current published versions at their exact SHAs
         run: |
           cd live

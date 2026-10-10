@@ -1,4 +1,4 @@
-/** Current Futasaku 0.3 cockpit: real game actions, geometry and visual states. */
+/** Current Futasaku 0.4 cockpit: real game actions, geometry and visual states. */
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -9,8 +9,8 @@ import type { State, Tile } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 
-const BASE = process.env.TEST2_URL ?? 'http://localhost:4198/';
-const server = process.env.TEST2_URL ? null : await preview({ configFile:'web/vite.config.ts', preview:{ port:4198, strictPort:true }, logLevel:'silent' });
+const BASE = process.env.FUTA04_URL ?? 'http://localhost:4198/';
+const server = process.env.FUTA04_URL ? null : await preview({ configFile:'web/vite.config.ts', preview:{ port:4198, strictPort:true }, logLevel:'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath:process.env.PW_CHROMIUM } : {}), args:['--no-sandbox'] });
 const dir = '/tmp/futasaku-smart-cockpit'; mkdirSync(dir,{recursive:true});
 let checks = 0;
@@ -20,9 +20,9 @@ const near=(a:number,b:number)=>Math.abs(a-b)<.7;
 const rects = (page:Page) => page.evaluate(() => {
   const r = (id:string) => document.getElementById(id)!.getBoundingClientRect();
   const panel=r('smart-panel'), led=r('smart-led'), context=r('smart-context');
-  const undo=r('tool-undo'), tips=r('test2-help-button'), sort=r('hand-sort');
+  const undo=r('tool-undo'), tips=r('futa04-help-button'), sort=r('hand-sort');
   const piles=['deck','discard'].map(id=>({ pile:r(id), card:document.querySelector(`#${id} .pile-card`)!.getBoundingClientRect(), count:r(`${id}-count`) }));
-  return { panel,led,context,undo,tips,sort,piles,box:r('test2-box') };
+  return { panel,led,context,undo,tips,sort,piles,box:r('futa04-box') };
 });
 const aligned = (r:Awaited<ReturnType<typeof rects>>,label:string) => {
   const width = Number.parseInt(label,10);
@@ -60,7 +60,7 @@ try {
     check(!await page.locator('#step-cue').isVisible(),`${name}: routine board prompt removed`);
     check(await page.locator('#smart-context').isDisabled(),`${name}: neutral context during Draw`);
     check(await page.locator('#tool-undo').isDisabled(),`${name}: Undo visible but unavailable at start`);
-    check(await page.locator('#discard.test2-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
+    check(await page.locator('#discard.futa04-bloom-draw').count()===0,`${name}: ordinary discard has no combo cue`);
     check(await page.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no extra discard draw rectangle`);
     check(await page.locator('#deck .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none',`${name}: no draw halo behind the deck`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-draw.png`});
@@ -72,7 +72,7 @@ try {
       check(Math.abs(now.piles[0]!.pile.x-x)<1&&Math.abs(now.piles[1]!.pile.x-start.piles[1]!.pile.x)<1,`${name}: sorting keeps both piles anchored`);
     }
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(page,'ACT');
-    await page.locator('#test2-box > .piles').evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished)));
+    await page.locator('#futa04-box > .piles').evaluate(element=>Promise.all(element.getAnimations().map(animation=>animation.finished)));
     const grow=await rects(page);aligned(grow,`${name} Grow`);
     if(mobile && width/height>=.53) {
       const map=await page.evaluate(()=>{
@@ -106,7 +106,7 @@ try {
   await page.goto(`${BASE}?seed=3`);await page.waitForSelector('#deck.ready');
   await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click());await waitPhase(page,'ACT');
   check(await page.locator('#smart-bloom-selector button').count()===1,'Bloom: one distinct recipe, independent of placement routes');
-  check(await page.locator('#smart-bloom-button .test2-combination .test2-mini-card').count()===3,'Bloom: cockpit shows symbolic recipe cards');
+  check(await page.locator('#smart-bloom-button .futa04-combination .futa04-mini-card').count()===3,'Bloom: cockpit shows symbolic recipe cards');
   await page.locator('#smart-bloom-button').click();
   check(!await page.locator('#smart-bloom-selector').isVisible(),'Bloom: single recipe selects on one tap');
   const bloomView=viewFor(await page.evaluate(()=>(window as any).__severgrow.state()),0);
@@ -148,7 +148,7 @@ try {
   const discard=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await discard.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); });
   await discard.goto(`${BASE}?seed=14`); await discard.waitForSelector('#discard.ready');
-  check(await discard.locator('#discard.test2-bloom-draw').count()===1,'Draw: discard card creates a new Bloom combination');
+  check(await discard.locator('#discard.futa04-bloom-draw').count()===1,'Draw: discard card creates a new Bloom combination');
   check(await discard.locator('#discard .gd-fx').evaluate(el=>getComputedStyle(el).display)==='none','Draw: old discard rectangle is removed');
   check((await discard.locator('#discard .pile-top').evaluate(el=>getComputedStyle(el).transform))!=='none','Draw: combo-relevant top card lifts within its own pile');
   await discard.screenshot({path:`${dir}/390x844-combo-discard.png`});
@@ -178,7 +178,7 @@ try {
   await branch.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(branch,'ACT');
   check(await branch.locator('#smart-bloom-selector button').count()>1,'Bloom: multiple recipes are listed separately');
   check(await branch.locator('#smart-bloom-button').evaluate(el=>getComputedStyle(el).backgroundImage)==='none','Bloom: centre recipe has no hardware frame');
-  check(await branch.locator('#smart-bloom-button .test2-mini-card').first().evaluate(el=>el.getBoundingClientRect().width)>=21,'Bloom: centre recipe is readable at phone scale');
+  check(await branch.locator('#smart-bloom-button .futa04-mini-card').first().evaluate(el=>el.getBoundingClientRect().width)>=21,'Bloom: centre recipe is readable at phone scale');
   check(await branch.locator('#smart-bloom-button').evaluate(el=>{
     const rank=(node:Element)=>Math.max(...[...node.querySelectorAll('.c-num')].map(n=>Number(n.textContent)||0));
     return rank(el)===Math.max(...[...document.querySelectorAll('#smart-bloom-selector button')].map(rank));
@@ -188,7 +188,7 @@ try {
   const bloomDrawer = () => branch.evaluate(() => {
     const node=document.querySelector<HTMLElement>('#smart-bloom-selector')!;
     const drawer=node.getBoundingClientRect();
-    const cockpit=document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+    const cockpit=document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
     return {left:drawer.left,right:drawer.right,width:drawer.width,cockpitLeft:cockpit.left,cockpitRight:cockpit.right,cockpitWidth:cockpit.width,scrollWidth:node.scrollWidth,clientWidth:node.clientWidth};
   });
   const few=await bloomDrawer();
@@ -254,7 +254,7 @@ try {
   check(await painted.locator('#board .l-draw .ghost[data-probe="first"]').count()===1,'Bloom: a painted hex is kept as the shape grows (no flicker)');
   await painted.mouse.up();
   await painted.close();
-  // Every overlay, badge, spotlight and glow must use the flat grid too (Test2 paints flat
+  // Every overlay, badge, spotlight and glow must use the flat grid too (Futa04 paints flat
   // tiles), so nothing wears the wobbly organic silhouette next to a flat tile or legal well.
   const layers=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await layers.addInitScript(save=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.save.v7',save); localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); },(()=>{
@@ -288,7 +288,7 @@ try {
   const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: first card tap enters Throw');
-  check(await skipBloom.locator(`#hand [data-card="${throwCard}"].test2-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
+  check(await skipBloom.locator(`#hand [data-card="${throwCard}"].futa04-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: second card tap confirms discard');
   await skipBloom.close();

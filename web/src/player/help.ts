@@ -1,87 +1,87 @@
-/** Test2 teaching lives behind one readable disclosure, never over playable hexes.
+/** Futa04 teaching lives behind one readable disclosure, never over playable hexes.
  * Move the original nodes so their game-owned content, dismissal and coach actions stay intact.
  */
-export const HELP_SHEET_ID = 'sheet-test2-help';
+export const HELP_SHEET_ID = 'sheet-futa04-help';
 
 type HelpKind = 'tip' | 'coach';
 type HelpHooks = { sheet: (id: string | null) => void; onBulb?: () => void };
 
 export const mountHelp = (hooks: HelpHooks) => {
-  const slot = document.getElementById('test2-help-slot');
+  const slot = document.getElementById('futa04-help-slot');
   const coach = document.getElementById('coach');
   const firstTip = document.getElementById('first-tip');
-  if (!slot || !coach || !firstTip) throw new Error('Test2 help requires its rail and original teaching panels');
+  if (!slot || !coach || !firstTip) throw new Error('Futa04 help requires its rail and original teaching panels');
 
   const style = document.createElement('style');
-  style.id = 'test2-help-style';
+  style.id = 'futa04-help-style';
   style.textContent = `
-    .test2-information .dock .table-row > .hint-line { display: none; }
-    #test2-actions {
+    .futa04-information .dock .table-row > .hint-line { display: none; }
+    #futa04-actions {
       grid-column: 3; grid-row: 2; display: flex; align-items: center;
       justify-content: center; gap: 16px; height: 28px; min-width: 0;
     }
-    #test2-actions > .hand-slot { flex: 0 0 28px; margin: 0; position: relative; inset: auto; }
-    #test2-actions .i { width: 16px; height: 16px; }
-    #test2-actions > .hand-slot[hidden] { display: grid; visibility: hidden; pointer-events: none; }
-    #test2-help-button { touch-action: manipulation; }
-    #test2-help-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
-    html[data-thumb] #test2-actions {
+    #futa04-actions > .hand-slot { flex: 0 0 28px; margin: 0; position: relative; inset: auto; }
+    #futa04-actions .i { width: 16px; height: 16px; }
+    #futa04-actions > .hand-slot[hidden] { display: grid; visibility: hidden; pointer-events: none; }
+    #futa04-help-button { touch-action: manipulation; }
+    #futa04-help-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+    html[data-thumb] #futa04-actions {
       position: absolute; left: var(--t-moves-x);
       top: calc(var(--t-moves-y) + var(--t-moves-h) - 44px);
       width: calc(100% - var(--t-moves-x) - 8px); height: 44px;
       justify-content: flex-end; gap: 4px; z-index: 3;
     }
-    html[data-thumb] #test2-actions > .hand-slot { flex-basis: 44px; width: 44px; height: 44px; }
-    html[data-thumb] #test2-actions > .hand-slot::after { display: none; }
-    html[data-thumb] #test2-actions .i { width: 20px; height: 20px; }
+    html[data-thumb] #futa04-actions > .hand-slot { flex-basis: 44px; width: 44px; height: 44px; }
+    html[data-thumb] #futa04-actions > .hand-slot::after { display: none; }
+    html[data-thumb] #futa04-actions .i { width: 20px; height: 20px; }
     html[data-thumb] .dock .table-row > .moves {
       width: calc(100% - var(--t-moves-x) - 8px);
       height: calc(var(--t-moves-h) - 48px); justify-content: flex-end;
     }
-    html[data-thumb='left'] #test2-actions,
+    html[data-thumb='left'] #futa04-actions,
     html[data-thumb='left'] .dock .table-row > .moves {
       left: 8px; width: calc(var(--t-discard-x) - 18px); justify-content: flex-start;
     }
-    #sheet-test2-help {
+    #sheet-futa04-help {
       display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 8px;
       max-height: min(86dvh, 760px); overflow: hidden;
     }
-    .reduce-motion #sheet-test2-help { animation: none; }
-    #sheet-test2-help[hidden], #sheet-test2-help [hidden], #test2-help-button[hidden] { display: none; }
-    #sheet-test2-help .sheet-head { position: relative; min-height: 48px; z-index: 1; }
-    #sheet-test2-help .sheet-head h2 { white-space: normal; overflow: visible; }
-    #sheet-test2-help .test2-help-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 8px; }
-    #sheet-test2-help .test2-help-content {
+    .reduce-motion #sheet-futa04-help { animation: none; }
+    #sheet-futa04-help[hidden], #sheet-futa04-help [hidden], #futa04-help-button[hidden] { display: none; }
+    #sheet-futa04-help .sheet-head { position: relative; min-height: 48px; z-index: 1; }
+    #sheet-futa04-help .sheet-head h2 { white-space: normal; overflow: visible; }
+    #sheet-futa04-help .futa04-help-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 8px; }
+    #sheet-futa04-help .futa04-help-content {
       position: static !important; inset: auto !important; width: auto !important;
       max-width: none; max-height: none; margin: 0; padding: 4px 0;
       border: 0; border-radius: 0; background: transparent;
       font-size: 1rem; line-height: 1.5; overflow: visible;
     }
-    #sheet-test2-help .coach-head { flex-wrap: wrap; min-height: 44px; gap: 6px 10px; }
-    #sheet-test2-help .coach-head .muted { white-space: nowrap; }
-    #sheet-test2-help .coach-head .i { flex: 0 0 auto; }
-    #sheet-test2-help .coach p, #sheet-test2-help .first-tip p { margin: 12px 0; }
-    #sheet-test2-help .coach-main { font-size: 1.08rem; }
-    #sheet-test2-help .coach .tip, #sheet-test2-help .coach #coach-why { font-size: 1rem; }
-    #sheet-test2-help #coach-suggested, #sheet-test2-help #coach-tip,
-    #sheet-test2-help #coach-why, #sheet-test2-help #first-tip-title,
-    #sheet-test2-help #first-tip-text {
+    #sheet-futa04-help .coach-head { flex-wrap: wrap; min-height: 44px; gap: 6px 10px; }
+    #sheet-futa04-help .coach-head .muted { white-space: nowrap; }
+    #sheet-futa04-help .coach-head .i { flex: 0 0 auto; }
+    #sheet-futa04-help .coach p, #sheet-futa04-help .first-tip p { margin: 12px 0; }
+    #sheet-futa04-help .coach-main { font-size: 1.08rem; }
+    #sheet-futa04-help .coach .tip, #sheet-futa04-help .coach #coach-why { font-size: 1rem; }
+    #sheet-futa04-help #coach-suggested, #sheet-futa04-help #coach-tip,
+    #sheet-futa04-help #coach-why, #sheet-futa04-help #first-tip-title,
+    #sheet-futa04-help #first-tip-text {
       white-space: normal; overflow: visible; text-overflow: clip;
       -webkit-line-clamp: unset; max-height: none; word-break: normal;
     }
-    #sheet-test2-help button {
+    #sheet-futa04-help button {
       min-width: 44px; min-height: 44px; white-space: normal; line-height: 1.25;
       touch-action: manipulation;
     }
-    #sheet-test2-help .coach-actions { gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-    #sheet-test2-help .coach-actions .btn, #sheet-test2-help #coach-hide { padding: 10px 12px; }
-    #sheet-test2-help .draw-demo { margin: 12px auto; }
+    #sheet-futa04-help .coach-actions { gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    #sheet-futa04-help .coach-actions .btn, #sheet-futa04-help #coach-hide { padding: 10px 12px; }
+    #sheet-futa04-help .draw-demo { margin: 12px auto; }
   `;
   document.head.append(style);
 
   const trigger = document.createElement('button');
-  trigger.id = 'test2-help-button';
-  trigger.className = 'hand-slot test2-help-button';
+  trigger.id = 'futa04-help-button';
+  trigger.className = 'hand-slot futa04-help-button';
   trigger.type = 'button';
   trigger.hidden = true;
   trigger.setAttribute('aria-haspopup', 'dialog');
@@ -89,30 +89,30 @@ export const mountHelp = (hooks: HelpHooks) => {
   trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-label', 'Tips');
   trigger.title = 'Tips';
-  // Keep the existing controls and handlers; only their Test2 presentation moves.
+  // Keep the existing controls and handlers; only their Futa04 presentation moves.
   const actions = document.createElement('div');
-  actions.id = 'test2-actions';
+  actions.id = 'futa04-actions';
   actions.setAttribute('role', 'group');
   actions.setAttribute('aria-label', 'Undo, hint and arrange cards');
   const undo = document.getElementById('tool-undo');
   const sort = document.getElementById('hand-sort');
   const table = document.querySelector('.dock > .table-row');
-  if (!undo || !sort || !table) throw new Error('Test2 hint requires the existing card controls');
+  if (!undo || !sort || !table) throw new Error('Futa04 hint requires the existing card controls');
   trigger.innerHTML = '<span class="i"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/></svg></span>';
   actions.append(undo, trigger, sort);
   table.append(actions);
 
   const dialog = document.createElement('section');
   dialog.id = HELP_SHEET_ID;
-  dialog.className = 'sheet test2-help-sheet';
+  dialog.className = 'sheet futa04-help-sheet';
   dialog.hidden = true;
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
-  dialog.setAttribute('aria-labelledby', 'test2-help-title');
+  dialog.setAttribute('aria-labelledby', 'futa04-help-title');
   const header = document.createElement('header');
   header.className = 'sheet-head';
   const title = document.createElement('h2');
-  title.id = 'test2-help-title';
+  title.id = 'futa04-help-title';
   title.textContent = 'Game help';
   const close = document.createElement('button');
   close.className = 'icon-only';
@@ -122,11 +122,11 @@ export const mountHelp = (hooks: HelpHooks) => {
   close.textContent = '×';
   header.append(title, close);
   const body = document.createElement('div');
-  body.className = 'sheet-body test2-help-body';
+  body.className = 'sheet-body futa04-help-body';
   const tipPanel = document.createElement('div');
-  tipPanel.className = 'test2-help-panel test2-help-tip';
+  tipPanel.className = 'futa04-help-panel futa04-help-tip';
   const coachPanel = document.createElement('div');
-  coachPanel.className = 'test2-help-panel test2-help-coach';
+  coachPanel.className = 'futa04-help-panel futa04-help-coach';
   tipPanel.append(firstTip);
   coachPanel.append(coach);
   body.append(tipPanel, coachPanel);
@@ -138,8 +138,8 @@ export const mountHelp = (hooks: HelpHooks) => {
     panel.classList.remove('teaching-compact');
     for (const property of ['position', 'left', 'width', 'top', 'bottom']) panel.style.removeProperty(property);
   }
-  coach.classList.add('test2-help-content');
-  firstTip.classList.add('test2-help-content');
+  coach.classList.add('futa04-help-content');
+  firstTip.classList.add('futa04-help-content');
   const coachHide = document.getElementById('coach-hide');
   if (coachHide) {
     coachHide.classList.remove('icon-only');
@@ -237,7 +237,7 @@ export const mountHelp = (hooks: HelpHooks) => {
       // Smart cockpit keeps this physical control in place even when help is unavailable.
       trigger.hidden = false;
       trigger.disabled = blocked || (!hooks.onBulb && !hasTip && !hasCoach);
-      slot.closest<HTMLElement>('#test2-information-rail')?.setAttribute('data-help', trigger.hidden ? 'off' : 'on');
+      slot.closest<HTMLElement>('#futa04-information-rail')?.setAttribute('data-help', trigger.hidden ? 'off' : 'on');
       if (dialog.hidden) kind = hasCoach ? 'coach' : 'tip';
       const tipTitle = document.getElementById('first-tip-title')?.textContent?.trim() || 'Game help';
       const progress = document.getElementById('coach-step');

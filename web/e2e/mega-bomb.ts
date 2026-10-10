@@ -40,7 +40,7 @@ try {
     await page.locator('#hand [data-card="1000"]').click();
     assert((await page.locator('#board .target.kind-fruit').count())>0,'a tapped Bomb remains the existing single-card action');
     await page.keyboard.press('Escape');
-    assert.equal(await page.locator('#smart-bloom-button .test2-mini-card').count(),width<600 ? 2 : 3);
+    assert.equal(await page.locator('#smart-bloom-button .futa04-mini-card').count(),width<600 ? 2 : 3);
     await page.click('#smart-bloom-button');
     if (width >= 600) {
       assert((await page.locator('#smart-bloom-selector button').count())>=2);

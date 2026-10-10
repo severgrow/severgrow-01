@@ -1,10 +1,10 @@
-// Explicit Test2 help and message checks. No game hooks are used to perform these moves.
+// Explicit Futa04 help and message checks. No game hooks are used to perform these moves.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import { apply } from '../../src/engine/index.js';
 
-const external = process.env.TEST2_URL;
+const external = process.env.FUTA04_URL;
 const server = external ? null : await preview({ configFile: 'web/vite.config.ts', preview: { port: 4195, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox', '--ignore-certificate-errors'], ...(external && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
 const base = external ?? 'http://localhost:4195/';
@@ -33,19 +33,19 @@ try {
   check(appIcon.name==='Futasaku' && appIcon.start==='./' && appIcon.scope==='./' && appIcon.icons.length===3 &&
     appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&
     appIcon.icons.some((icon: {purpose:string})=>icon.purpose==='maskable'),
-    'Android icons decode at the declared sizes with a separate mask-safe icon and Test2-local launch scope');
+    'Android icons decode at the declared sizes with a separate mask-safe icon and Futa04-local launch scope');
   await menu.click('#menu-tutorial');
   await menu.waitForFunction(() => !!(window as any).__severgrow.state());
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
     await menu.locator(`#howto-body [data-tip="${topic}"]`).click();
-    check(await menu.locator('#sheet-test2-help').isVisible(), `${topic}: explicit lesson opens during a game`);
-    check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-test2-help').innerText()), `${topic}: help uses Bomb terminology`);
+    check(await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: explicit lesson opens during a game`);
+    check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-futa04-help').innerText()), `${topic}: help uses Bomb terminology`);
     if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
-    check(!await menu.locator('#sheet-test2-help').isVisible(), `${topic}: acknowledgement closes help`);
+    check(!await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: acknowledgement closes help`);
     check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the tutorial game available`);
   }
   await menu.close();
@@ -61,10 +61,10 @@ try {
     await page.goto(`${base}?seed=219682080${v3 ? '&design=v3' : ''}`);
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
-    check(await page.locator('#test2-help-button').isVisible(), `${width}: hint is discoverable`);
+    check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);
     const tools = await page.evaluate(() => {
-      const hint = document.querySelector<HTMLElement>('#test2-help-button')!;
-      const buttons = ['tool-undo', 'test2-help-button', 'hand-sort'].map(id => document.getElementById(id)!);
+      const hint = document.querySelector<HTMLElement>('#futa04-help-button')!;
+      const buttons = ['tool-undo', 'futa04-help-button', 'hand-sort'].map(id => document.getElementById(id)!);
       const boxes = buttons.map(button => button.getBoundingClientRect());
       const obstacles = [...document.querySelectorAll<HTMLElement>('#deck, #discard, #moves button, #hand .card')]
         .filter(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden')
@@ -79,7 +79,7 @@ try {
         separate: boxes.every((box, i) => !i || box.left >= boxes[i-1]!.right + 3),
         fits: boxes.every(box => box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight),
         matching: style.border === undo.border && style.backgroundColor === undo.backgroundColor && style.color === undo.color,
-        offMap: hint.closest('#test2-information-rail') === null && hint.parentElement?.id === 'test2-actions',
+        offMap: hint.closest('#futa04-information-rail') === null && hint.parentElement?.id === 'futa04-actions',
         taps: buttons.every((button, i) => { const box = boxes[i]!; const pseudo = getComputedStyle(button,'::after');
           const extra = pseudo.display !== 'none' ? 16 : 0;
           return box.width+extra >= 44 && box.height+extra >= 44;
@@ -96,7 +96,7 @@ try {
     check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
     const before = await page.evaluate(() => (window as any).__severgrow.state());
-    await page.click('#test2-help-button');
+    await page.click('#futa04-help-button');
     check(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(), `${width}: Match Intel opens in the glass`);
     const layout = await page.evaluate(() => {
       const sheet = document.querySelector('#futasaku-glass') as HTMLElement;
@@ -124,7 +124,7 @@ try {
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
     const cockpit = await page.evaluate(() => {
       const rect=(id:string)=>document.getElementById(id)!.getBoundingClientRect();
-      const led=rect('smart-led'),context=rect('smart-context'),undo=rect('tool-undo'),tips=rect('test2-help-button'),sort=rect('hand-sort');
+      const led=rect('smart-led'),context=rect('smart-context'),undo=rect('tool-undo'),tips=rect('futa04-help-button'),sort=rect('hand-sort');
       const close=(a:number,b:number)=>Math.abs(a-b)<1;
       return { top:close(led.top,context.top),bottom:close(undo.top,tips.top)&&close(tips.top,sort.top),
         width:close(led.width,undo.width+tips.width+(tips.left-undo.right)),
@@ -135,21 +135,21 @@ try {
     });
     check(cockpit.top&&cockpit.bottom&&cockpit.width&&cockpit.columns&&cockpit.fixed&&cockpit.icon&&cockpit.count===4,
       `${width}: LED and four fixed buttons align in exactly two rows (${JSON.stringify(cockpit)})`);
-    await page.click('#test2-help-button');
+    await page.click('#futa04-help-button');
     await page.keyboard.press('Escape');
     check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes`);
-    check(await page.evaluate(() => document.activeElement?.id === 'test2-help-button'), `${width}: focus returns to Match Intel`);
+    check(await page.evaluate(() => document.activeElement?.id === 'futa04-help-button'), `${width}: focus returns to Match Intel`);
     const boundaries = await page.evaluate(() => {
-      const rail = document.querySelector('#test2-information-rail')!.getBoundingClientRect();
+      const rail = document.querySelector('#futa04-information-rail')!.getBoundingClientRect();
       const board = document.querySelector('#board-wrap')!.getBoundingClientRect();
       const panel = document.querySelector('#smart-panel')!.getBoundingClientRect();
-      const box = document.querySelector('#test2-box')!.getBoundingClientRect();
+      const box = document.querySelector('#futa04-box')!.getBoundingClientRect();
       return rail.top>=board.top && rail.bottom<=board.bottom && panel.left>=box.left-1 && panel.right<=box.right+1 &&
-        document.querySelector('#test2-information-rail')!.parentElement?.id === 'board-wrap';
+        document.querySelector('#futa04-information-rail')!.parentElement?.id === 'board-wrap';
     });
     check(boundaries, `${width}: notices stay over board and LED controls stay inside cockpit`);
     await page.click('#hud-menu');
-    check(!await page.locator('#test2-help-button').isVisible(), `${width}: Pause suppresses background help`);
+    check(!await page.locator('#futa04-help-button').isVisible(), `${width}: Pause suppresses background help`);
     check(errors.length === 0, `${width}: no browser errors (${errors.join(' | ')})`);
     await page.screenshot({ path: `/tmp/main2-shots/info-${width}x${height}-pause.png` });
     await page.close();

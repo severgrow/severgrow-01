@@ -1,4 +1,4 @@
-/** Focused checks for Futasaku 0.3's card flights and network wave. */
+/** Focused checks for Futasaku 0.4's card flights and network wave. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -185,7 +185,7 @@ try {
   assert.equal(await menu.locator('#level-grid button svg,#level-grid button .lt-note').count(),0,'difficulty choices are names only');
   await menu.screenshot({path:'/tmp/futasaku-03-difficulty.png'});
   await menu.close();
-  console.log('Futasaku 0.3 motion checks passed: Draw/Throw, Bloom, Small/Huge cut, Reduce motion and the Mega Bomb');
+  console.log('Futasaku 0.4 motion checks passed: Draw/Throw, Bloom, Small/Huge cut, Reduce motion and the Mega Bomb');
 } finally {
   await page.close(); await browser.close(); await server.close();
 }

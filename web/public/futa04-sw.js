@@ -1,4 +1,4 @@
-// Test2 owns only its scope and cache. It never deletes Main or experimental caches.
+// Futa04 owns only its scope and cache. It never deletes Main or experimental caches.
 //
 // What it may answer from its cache, and what it must ask the network for first:
 // - pages: network first (offline: the cached page)
@@ -6,11 +6,11 @@
 //   for as file?v=<content hash>): cache first, they are immutable
 // - everything else (the art manifest, icons, any unversioned file): network first, falling
 //   back to the cache only when offline. A stale copy is never preferred to a fresh one.
-// Each new version of this worker drops the older Test2 caches (only its own, by prefix).
-const PREFIX = scopeIsPreview() ? 'futasaku03-' : 'severor-main2-';
+// Each new version of this worker drops the older Futa04 caches (only its own, by prefix).
+const PREFIX = scopeIsPreview() ? 'futa04-' : 'severor-main2-';
 function scopeIsPreview() {
   const url = new URL(self.registration.scope);
-  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futasaku-03-preview/');
+  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/');
 }
 const CACHE = `${PREFIX}v2`;
 const scope = new URL(self.registration.scope);
@@ -19,7 +19,7 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(shell)));
 });
-// drop older Test2 caches; also on every page load, since an outgoing worker can still write to
+// drop older Futa04 caches; also on every page load, since an outgoing worker can still write to
 // its cache for a moment after this one takes over
 const purge = () => caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))));
 self.addEventListener('activate', (e) => e.waitUntil(purge().then(() => self.clients.claim())));

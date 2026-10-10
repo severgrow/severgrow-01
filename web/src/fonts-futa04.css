@@ -1,4 +1,4 @@
-/* Test2's display and UI faces are declared in the first stylesheet, before
+/* Futa04's display and UI faces are declared in the first stylesheet, before
    module imports. The menu never paints in a substitute face on a cold load. */
 @font-face {
   font-family: 'Besley';

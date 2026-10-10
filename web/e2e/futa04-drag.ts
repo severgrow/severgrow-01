@@ -1,12 +1,12 @@
 // Browser check for the drag layer (an extra path on top of the taps). Real pointer gestures
 // verify: a tiny move stays a tap, a drag from the deck draws, a drag onto a legal hex grows
 // the exact tile a tap would, a release over nothing commits nothing, and a drag onto the
-// throw pile offers the same discard. Runs against the built Test2 page.
+// throw pile offers the same discard. Runs against the built Futa04 page.
 //
 // Even seeds are used so the human starts at turn 1 (odd seeds make the opponent go first).
 //
 //   PW_CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-//     node --import tsx web/e2e/test2-drag.ts
+//     node --import tsx web/e2e/futa04-drag.ts
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
@@ -14,10 +14,10 @@ import { preview } from 'vite';
 import { coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 
-const BASE = process.env.TEST2_URL ?? 'http://localhost:4194/';
-const server = process.env.TEST2_URL
+const BASE = process.env.FUTA04_URL ?? 'http://localhost:4194/';
+const server = process.env.FUTA04_URL
   ? null
-  : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.TEST2_DIST ?? 'dist' }, preview: { port: 4194, strictPort: true }, logLevel: 'silent' });
+  : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port: 4194, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({
   ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}),
   args: ['--no-sandbox'],
@@ -126,7 +126,7 @@ for (const [w, h, touch] of [[390, 844, true], [1440, 900, false]] as const) {
       }
     } catch { /* storage blocked */ }
     const settings = JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'never' });
-    for (const k of ['severgrow.settings.v1', 'main2:severgrow.settings.v1', 'test2:severgrow.settings.v1', 'test:severgrow.settings.v1'])
+    for (const k of ['severgrow.settings.v1', 'main2:severgrow.settings.v1', 'futa04:severgrow.settings.v1', 'test:severgrow.settings.v1'])
       localStorage.setItem(k, settings);
   });
 

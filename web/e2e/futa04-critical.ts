@@ -1,6 +1,6 @@
 // The Smart Cockpit changes the control surface; check its current responsive behavior
 // before the engine-facing critical flows instead of the retired board-control geometry.
-import './test2-smart-cockpit.js';
+import './futa04-smart-cockpit.js';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -10,11 +10,11 @@ import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 // Run the focused sort/pile regression after the board-turn suite, before this
 // script opens its own preview server on the same port.
-await import('./test2-sort-layout.js');
+await import('./futa04-sort-layout.js');
 await import('./foundation-restart.js');
-const BASE = process.env.TEST2_URL ?? 'http://localhost:4192/';
-const server = process.env.TEST2_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.TEST2_DIST ?? 'dist' }, preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
-const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.TEST2_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
+const BASE = process.env.FUTA04_URL ?? 'http://localhost:4192/';
+const server = process.env.FUTA04_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
+const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.FUTA04_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
 let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow.state() as State);
@@ -37,7 +37,7 @@ mkdirSync('/tmp/main2-shots', { recursive: true });
 try {
 for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,800],[1440,900],[1600,980],[1920,1080]]) {
   const phone = w! <= 600;
-  const page = await browser.newPage({ viewport: { width: w!, height: h! }, hasTouch: phone, isMobile: phone, ignoreHTTPSErrors: Boolean(process.env.TEST2_URL) });
+  const page = await browser.newPage({ viewport: { width: w!, height: h! }, hasTouch: phone, isMobile: phone, ignoreHTTPSErrors: Boolean(process.env.FUTA04_URL) });
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => {
     (window as any).__name = (f: unknown) => f;
@@ -96,7 +96,7 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   const throwCard = page.locator(`#hand [data-card="${discard.card}"]`);
   await clickVisibleCard(page, discard.card);
   check(JSON.stringify(await state(page)) === JSON.stringify(before), `${w}: selecting Throw leaves engine state unchanged`);
-  check(await throwCard.evaluate(el => el.classList.contains('test2-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
+  check(await throwCard.evaluate(el => el.classList.contains('futa04-throw-picked') && getComputedStyle(el).filter === 'grayscale(1)'), `${w}: Throw selection is enlarged and colorless`);
   await clickVisibleCard(page, discard.card);
   await page.waitForTimeout(100);
   check((await state(page)).history!.some(e => e.t === 'Discard' && e.card === discard.card), `${w}: actual card throw`);

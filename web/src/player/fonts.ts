@@ -1,4 +1,4 @@
-// Approved typography v2 for Test and Test2; legacy live keeps Alegreya Sans:
+// Approved typography v2 for Test and Futa04; legacy live keeps Alegreya Sans:
 //   Besley (display / brand): the Futasaku wordmark, page and sheet titles, the result title, the
 //     level selector's heading. About a tenth of the type; never interface copy or numbers.
 //   Commissioner (UI / functional): everything else: buttons, the step plate, cards, labels,

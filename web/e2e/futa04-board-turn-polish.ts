@@ -1,6 +1,6 @@
-// Behavioral checks for the Test2 board/turn polish. Build CHANNEL=test2 first.
-// PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/test2-board-turn-polish.ts
-// TEST2_URL / TEST2_DIST may target an existing preview or an isolated built folder.
+// Behavioral checks for the Futa04 board/turn polish. Build CHANNEL=futa04 first.
+// PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/futa04-board-turn-polish.ts
+// FUTA04_URL / FUTA04_DIST may target an existing preview or an isolated built folder.
 // Hooks only read the session: every Draw, placement, Undo, Skip and Throw uses real UI input.
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -16,15 +16,15 @@ import { positionSave } from './position.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { fixture } from '../../tests/helpers.js';
 
-const port = Number(process.env.TEST2_POLISH_PORT ?? 4198);
-const external = process.env.TEST2_URL;
+const port = Number(process.env.FUTA04_POLISH_PORT ?? 4198);
+const external = process.env.FUTA04_URL;
 const base = external ?? `http://localhost:${port}/`;
-const server = external ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.TEST2_DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
+const server = external ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(external && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
-const dir = '/tmp/test2-board-turn-polish';
+const dir = '/tmp/futa04-board-turn-polish';
 mkdirSync(dir, { recursive: true });
 const presets = [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,800],[1440,900],[1600,980],[1920,1080]] as const;
-const filter = process.env.TEST2_POLISH_VIEWPORTS?.split(',');
+const filter = process.env.FUTA04_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
@@ -66,13 +66,13 @@ async function evidence(page: Page, name: string) {
   if (bytes.length > 192 * 1024) bytes = await page.screenshot({ type: 'jpeg', quality: 15, scale: 'css' });
   evidenceWritten.add(name);
   if (bytes.length > 192 * 1024) {
-    console.log(`TEST2_SCREENSHOT_OMITTED ${name}.jpg exceeds 192 KiB`);
+    console.log(`FUTA04_SCREENSHOT_OMITTED ${name}.jpg exceeds 192 KiB`);
     return;
   }
   writeFileSync(`${dir}/${name}.jpg`,bytes);
-  console.log(`TEST2_SCREENSHOT_BEGIN ${name}.jpg image/jpeg ${bytes.length} bytes`);
+  console.log(`FUTA04_SCREENSHOT_BEGIN ${name}.jpg image/jpeg ${bytes.length} bytes`);
   console.log(bytes.toString('base64'));
-  console.log(`TEST2_SCREENSHOT_END ${name}.jpg`);
+  console.log(`FUTA04_SCREENSHOT_END ${name}.jpg`);
 }
 
 async function open(width: number, height: number, seed: number, v3 = false) {
@@ -154,9 +154,9 @@ async function geometry(page: Page, width: number, height: number, label: string
   }));
   check(meterAlignment.every(gap => gap < .6), `${label}: each mechanical counter is centred under its visible card (${meterAlignment})`);
   const atmosphere = await page.evaluate(async () => {
-    const grain = document.querySelector<HTMLElement>('#test2-film-grain')!;
+    const grain = document.querySelector<HTMLElement>('#futa04-film-grain')!;
     const css = getComputedStyle(grain), box = grain.getBoundingClientRect();
-    const rim = document.querySelector<SVGImageElement>('#test2-map-rim')!;
+    const rim = document.querySelector<SVGImageElement>('#futa04-map-rim')!;
     const image = new Image(); image.src = rim.getAttribute('href')!; await image.decode();
     const pixels = document.createElement('canvas'); pixels.width = image.naturalWidth; pixels.height = image.naturalHeight;
     const context = pixels.getContext('2d')!; context.drawImage(image,0,0);
@@ -173,7 +173,7 @@ async function geometry(page: Page, width: number, height: number, label: string
       return ink[(py*pixels.width+px)*4+3] ?? 255;
     };
     const cleanSeams = cells.every((a,i)=>cells.slice(i+1).every(b=>distance(a,b)>nearest*1.05 || at((a.x+b.x)/2,(a.y+b.y)/2)===0));
-    const backdrop = getComputedStyle(document.querySelector('#test2-board-backdrop')!);
+    const backdrop = getComputedStyle(document.querySelector('#futa04-board-backdrop')!);
     return { coverage: box.left === 0 && box.top === 0 && box.width === innerWidth && box.height === innerHeight,
       opacity: Number(css.opacity), pointer: css.pointerEvents, static: css.animationName === 'none' && css.filter === 'none',
       tile: css.backgroundSize, background: css.backgroundImage.startsWith('url("data:image/png'),
@@ -200,7 +200,7 @@ async function geometry(page: Page, width: number, height: number, label: string
     const board = document.querySelector<SVGSVGElement>('#board')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
     const play = document.querySelector<HTMLElement>('#game > .play')!;
-    const rail = document.querySelector<HTMLElement>('#test2-information-rail')!;
+    const rail = document.querySelector<HTMLElement>('#futa04-information-rail')!;
     const hud = document.querySelector<HTMLElement>('#game > .hud')!;
     const cells = [...board.querySelectorAll<SVGGElement>('.hex-cell')];
     // The crystals have a soft halo; board fit is defined by the hex outlines,
@@ -237,7 +237,7 @@ async function geometry(page: Page, width: number, height: number, label: string
 
 async function controls(page: Page, label: string) {
   const blocked = await page.evaluate(() => {
-    const selectors = ['#hud-menu', '#deck', '#discard', '#tool-undo', '#hand-sort', '#test2-help-button', '#moves .end'];
+    const selectors = ['#hud-menu', '#deck', '#discard', '#tool-undo', '#hand-sort', '#futa04-help-button', '#moves .end'];
     return selectors.flatMap(selector => [...document.querySelectorAll<HTMLElement>(selector)].flatMap(element => {
       if (element.hidden || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') return [];
       const box = element.getBoundingClientRect();
@@ -255,7 +255,7 @@ async function controls(page: Page, label: string) {
 }
 
 async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) {
-  await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.documentElement.classList.contains('test2-idle-ready'), phase);
+  await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.documentElement.classList.contains('futa04-idle-ready'), phase);
   const result = await page.evaluate(() => {
     const cue = document.querySelector<HTMLElement>('#step-cue')!;
     const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
@@ -284,15 +284,15 @@ async function pulseCheck(page: Page, label: string) {
     const reduced = root.classList.contains('reduce-motion');
     root.classList.remove('reduce-motion');
     const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
-    const animation = text.getAnimations().find(a => (a as CSSAnimation).animationName === 'test2-cue-breathe');
+    const animation = text.getAnimations().find(a => (a as CSSAnimation).animationName === 'futa04-cue-breathe');
     if (!animation) { root.classList.toggle('reduce-motion', reduced); return null; }
     animation.pause(); animation.currentTime = 0;
     const small = getComputedStyle(text).transform;
     animation.currentTime = 1550;
     const large = getComputedStyle(text).transform;
     animation.play();
-    const card = document.querySelector('#hand .card.playable:not(.test2-throw-picked)');
-    const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'test2-card-breathe');
+    const card = document.querySelector('#hand .card.playable:not(.futa04-throw-picked)');
+    const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'futa04-card-breathe');
     const growEdge = card ? getComputedStyle(card).boxShadow : '';
     const handBlob = getComputedStyle(document.querySelector('#hand')!, '::before').content;
     root.classList.add('reduce-motion');
@@ -316,7 +316,7 @@ async function idleTiming(page: Page, label: string) {
   const start = Date.now();
   await page.waitForTimeout(2700);
   check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: no prompt during the first 2.7 idle seconds`);
-  await page.waitForFunction(() => document.documentElement.classList.contains('test2-idle-ready'));
+  await page.waitForFunction(() => document.documentElement.classList.contains('futa04-idle-ready'));
   check(Date.now()-start >= 2950, `${label}: prompt waits three seconds after interaction`);
   await cue(page, 'draw', label);
   await page.keyboard.press('Shift');
@@ -404,7 +404,7 @@ async function finishTurn(page: Page, label: string) {
   const deck = await page.locator('#deck').evaluate(el => ({ opacity: Number(getComputedStyle(el).opacity), filter: getComputedStyle(el).filter }));
   check(deck.opacity < .55 && deck.filter.includes('grayscale'), `${label}: dimmed deck makes Throw visually distinct from Grow`);
   const throwLook = await page.evaluate(() => {
-    const card = document.querySelector('#hand .card:not(.test2-throw-picked)')!;
+    const card = document.querySelector('#hand .card:not(.futa04-throw-picked)')!;
     const halo = document.querySelector('#discard .gd-halo')!;
     const ring = document.querySelector('#discard .gd-ring')!;
     return { cardFilter:getComputedStyle(card).filter, cardAnimation:getComputedStyle(card).animationName,
@@ -419,12 +419,12 @@ async function finishTurn(page: Page, label: string) {
     const root = document.documentElement;
     const reduced = root.classList.contains('reduce-motion');
     root.classList.remove('reduce-motion');
-    const card = document.querySelector('#hand .card:not(.test2-throw-picked)')!;
+    const card = document.querySelector('#hand .card:not(.futa04-throw-picked)')!;
     const result = { card: getComputedStyle(card).animationName, light: getComputedStyle(card).boxShadow };
     root.classList.toggle('reduce-motion', reduced);
     return result;
   });
-  check(throwPulse.card === 'test2-card-breathe' && throwPulse.light.includes('186, 66, 47'),
+  check(throwPulse.card === 'futa04-card-breathe' && throwPulse.light.includes('186, 66, 47'),
     `${label}: Throw pulses the whole card while its edge light stays attached (${JSON.stringify(throwPulse)})`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
@@ -435,14 +435,14 @@ async function finishTurn(page: Page, label: string) {
     assert(botActions.length < 20, 'bounded opponent turn');
   }
   await page.evaluate(() => {
-    (window as any).__test2OpponentReadiness = null;
+    (window as any).__futa04OpponentReadiness = null;
     const observer = new MutationObserver(() => {
       if (document.documentElement.dataset.step !== 'opp') return;
       const card = document.querySelector('#hand .card');
       const cue = document.querySelector('#step-cue')!;
       if (!card) return;
       const css = getComputedStyle(card);
-      (window as any).__test2OpponentReadiness = { opacity:Number(css.opacity),filter:css.filter,
+      (window as any).__futa04OpponentReadiness = { opacity:Number(css.opacity),filter:css.filter,
         hidden:getComputedStyle(cue).visibility === 'hidden',text:cue.querySelector('.cue-text')?.textContent };
       observer.disconnect();
     });
@@ -455,13 +455,13 @@ async function finishTurn(page: Page, label: string) {
     check(await picked.evaluate(el => getComputedStyle(el).touchAction === 'manipulation'),
       `${label}: the mobile Throw card prevents double-tap browser zoom`);
   }
-  const selection = await picked.evaluate(el => ({ selected:el.classList.contains('test2-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
+  const selection = await picked.evaluate(el => ({ selected:el.classList.contains('futa04-throw-picked'), filter:getComputedStyle(el).filter, transform:getComputedStyle(el).transform }));
   check(selection.selected && selection.filter === 'grayscale(1)' && selection.transform !== 'none',`${label}: Throw preview is enlarged and completely desaturated`);
   const other = legalActions(viewFor(before,0)).find(a => a.t === 'Discard' && a.card !== discard.card);
   if (other?.t === 'Discard') {
     await tapCard(page,other.card);
     equal(await state(page),before,`${label}: selecting another card changes the preview without throwing`);
-    equal(await page.locator('#hand .test2-throw-picked').getAttribute('data-card'),String(other.card),`${label}: only the new card is selected`);
+    equal(await page.locator('#hand .futa04-throw-picked').getAttribute('data-card'),String(other.card),`${label}: only the new card is selected`);
     await tapCard(page,discard.card);
     equal(await state(page),before,`${label}: returning to the first card still waits for confirmation`);
   }
@@ -474,7 +474,7 @@ async function finishTurn(page: Page, label: string) {
   }
   equal(await state(page), expected, `${label}: actual Volcano opponent turn matches every deterministic engine/bot action`);
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);
-  const opponent = await page.evaluate(() => (window as any).__test2OpponentReadiness);
+  const opponent = await page.evaluate(() => (window as any).__futa04OpponentReadiness);
   check(opponent?.opacity <= .4 && opponent.filter.includes('grayscale') && opponent.filter.includes('brightness'),`${label}: actual opponent turn substantially darkens/desaturates the hand (${JSON.stringify(opponent)})`);
   check(opponent?.hidden && opponent.text === '',`${label}: opponent turn has no board message`);
   check(!await page.locator('#confirm').isVisible(), `${label}: Throw and opponent turn leave no confirmation`);
@@ -515,7 +515,7 @@ async function sproutFlow(width: number, height: number) {
     const action = legalActions(viewFor(grown,0)).find(action => action.t === 'Sprout');
     assert(action?.t === 'Sprout');
     await page.locator(`#hand [data-card="${action.card}"]`).click();
-    check(await page.evaluate(() => document.documentElement.classList.contains('test2-move-active') || document.documentElement.classList.contains('gd-picked')),`${label}: cue suppression begins immediately with card selection`);
+    check(await page.evaluate(() => document.documentElement.classList.contains('futa04-move-active') || document.documentElement.classList.contains('gd-picked')),`${label}: cue suppression begins immediately with card selection`);
     await page.waitForTimeout(160);
     const hidden = await page.locator('#step-cue').evaluate(element => getComputedStyle(element).visibility === 'hidden' || Number(getComputedStyle(element).opacity) === 0 || (element as HTMLElement).hidden);
     check(hidden, `${label}: Grow cue disappears when its requested card action begins`);
@@ -621,15 +621,15 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     await geometry(page,width,height,label);
     await page.waitForTimeout(350);
     const drawPiles = await page.evaluate(() => {
-      const piles = document.querySelector<HTMLElement>('#test2-box > .piles')!;
+      const piles = document.querySelector<HTMLElement>('#futa04-box > .piles')!;
       const first = document.querySelector<HTMLElement>('#hand .card')!.getBoundingClientRect();
       const deck = document.querySelector<HTMLElement>('#deck .pile-card')!.getBoundingClientRect();
       const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
-      const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
-      const actions = document.querySelector<HTMLElement>('#test2-actions')!.getBoundingClientRect();
+      const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
+      const actions = document.querySelector<HTMLElement>('#futa04-actions')!.getBoundingClientRect();
       return { first: first.left, deck: deck.left, meter: meter.left, centreGap: Math.abs(deck.left + deck.width/2 - meter.left - meter.width/2), meterBottom: meter.bottom, boxBottom: box.bottom,
         right: piles.getBoundingClientRect().right,
-        actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--test2-draw-shift')) || 0 };
+        actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--futa04-draw-shift')) || 0 };
     });
     check(drawPiles.scale >= 1.15 && drawPiles.centreGap < .6,
       `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
@@ -652,7 +652,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
         const size = await page.evaluate(() => {
           const panel = document.querySelector<HTMLElement>('#moves .bloom-options')!.getBoundingClientRect();
           const toggle = document.querySelector<HTMLElement>('#moves > .bloom-toggle')!.getBoundingClientRect();
-          const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+          const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
           return { width: panel.width, boxWidth: box.width, left: panel.left, toggleLeft: toggle.left };
         });
         check(size.width <= Math.min(280, size.boxWidth * .75) && Math.abs(size.left - size.toggleLeft) <= 50,
@@ -662,16 +662,16 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       await choicesToggle.click();
     }
     if (width === 390 && height === 844) {
-      await page.waitForFunction(() => document.documentElement.dataset.test2Waiting === 'true');
+      await page.waitForFunction(() => document.documentElement.dataset.futa04Waiting === 'true');
       const bloomPulse = await page.evaluate(() => {
         const root = document.documentElement, reduced = root.classList.contains('reduce-motion');
         root.classList.remove('reduce-motion');
-        const icon = document.querySelector('#moves > .kind:not(.on) .test2-combination');
+        const icon = document.querySelector('#moves > .kind:not(.on) .futa04-combination');
         const name = icon ? getComputedStyle(icon).animationName : null;
         root.classList.toggle('reduce-motion', reduced);
         return name;
       });
-      check(bloomPulse === 'test2-card-breathe', `${label}: available Bloom cards pulse gently in the cockpit`);
+      check(bloomPulse === 'futa04-card-breathe', `${label}: available Bloom cards pulse gently in the cockpit`);
     }
     const kind = `bloom-3-${action.cards.join('.')}`;
     const pick = async () => {
@@ -684,22 +684,22 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     };
     if (width === 390 && height === 664) await evidence(page,'390x664-bloom-choices');
     await pick();
-    check(await page.locator('#moves .test2-skip').evaluate(button => !!button.querySelector('svg') && !button.textContent?.trim() && button.getAttribute('aria-label')?.startsWith('Skip')),`${label}: Bloom retains an accessible icon-only Skip button`);
-    check(await page.locator('#moves .test2-skip').isEnabled(),`${label}: subdued Skip remains usable`);
-    equal(await page.locator('#hand .test2-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
+    check(await page.locator('#moves .futa04-skip').evaluate(button => !!button.querySelector('svg') && !button.textContent?.trim() && button.getAttribute('aria-label')?.startsWith('Skip')),`${label}: Bloom retains an accessible icon-only Skip button`);
+    check(await page.locator('#moves .futa04-skip').isEnabled(),`${label}: subdued Skip remains usable`);
+    equal(await page.locator('#hand .futa04-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
-    await page.waitForFunction(() => document.documentElement.classList.contains('test2-idle-ready'));
+    await page.waitForFunction(() => document.documentElement.classList.contains('futa04-idle-ready'));
     equal((await page.locator('#step-cue .cue-text').textContent())?.trim(),'Bloom',`${label}: idle Bloom uses only its short prompt`);
     check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity)>0),`${label}: idle Bloom remains visible with a combination selected`);
     await controls(page,label+' selected Bloom');
     await evidence(page,`${width}x${height}-bloom-ready`);
     const cockpit = await page.evaluate(() => {
-      const box = document.querySelector('#test2-box')!.getBoundingClientRect();
+      const box = document.querySelector('#futa04-box')!.getBoundingClientRect();
       const kind = document.querySelector('#moves > .kind')!.getBoundingClientRect();
-      const piles = document.querySelector('#test2-box > .piles')!.getBoundingClientRect();
-      const faces = [...document.querySelectorAll('#test2-box .pile-card')].map(el => el.getBoundingClientRect());
-      const actions = document.querySelector('#test2-actions')!.getBoundingClientRect();
-      const miniCards = [...document.querySelectorAll('#moves > .kind .test2-mini-card')].map(el=>el.getBoundingClientRect());
+      const piles = document.querySelector('#futa04-box > .piles')!.getBoundingClientRect();
+      const faces = [...document.querySelectorAll('#futa04-box .pile-card')].map(el => el.getBoundingClientRect());
+      const actions = document.querySelector('#futa04-actions')!.getBoundingClientRect();
+      const miniCards = [...document.querySelectorAll('#moves > .kind .futa04-mini-card')].map(el=>el.getBoundingClientRect());
       const kindStyle = getComputedStyle(document.querySelector('#moves > .kind')!);
       return { fits: kind.left >= box.left && kind.right <= box.right && kind.top >= box.top && kind.bottom <= box.bottom,
         separated: kind.left >= piles.right && kind.right <= actions.left && faces.every(face => face.right <= kind.left),
@@ -757,11 +757,11 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     check(bounce,`${label}: occupied tile tap gives a brief boink`);
     check(!await page.locator('#tooltip').isVisible(),`${label}: tapping an occupied tile opens no explanation`);
     equal(await state(page),placed,`${label}: touching a tile changes no game state`);
-    await page.waitForFunction(()=>!document.querySelector('#board .test2-boink'),undefined,{timeout:2000});
-    equal(await page.locator('#board .test2-boink').count(),0,`${label}: boink returns completely to the original appearance`);
+    await page.waitForFunction(()=>!document.querySelector('#board .futa04-boink'),undefined,{timeout:2000});
+    equal(await page.locator('#board .futa04-boink').count(),0,`${label}: boink returns completely to the original appearance`);
     await page.evaluate(reduced=>document.documentElement.classList.toggle('reduce-motion',reduced),reduced);
     await tapHex(page,tapped,touch);
-    check(await page.locator(`#board .tile[data-key="${tapped}"]`).evaluate(el=>!el.getAnimations().some(a=>a.id==='test2-boink')),
+    check(await page.locator(`#board .tile[data-key="${tapped}"]`).evaluate(el=>!el.getAnimations().some(a=>a.id==='futa04-boink')),
       `${label}: reduced motion suppresses the tile boink`);
     const empty = Object.entries(placed.board).find(([key,tile])=>!tile && placed.terrain[key]==='normal')?.[0];
     if (empty) await tapHex(page,empty,touch);
@@ -831,7 +831,7 @@ async function drawGlow() {
       await page.goto(base); await page.waitForFunction(() => !!(window as any).__severgrow);
       await page.click('#menu-continue'); await idle(page);
       equal(await state(page),game,`${label}: exact real position resumes`);
-      equal(await page.locator('#discard').evaluate(el=>el.classList.contains('test2-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
+      equal(await page.locator('#discard').evaluate(el=>el.classList.contains('futa04-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
       equal(await page.locator('#deck.coach-glow').count(),0,`${label}: no square Deck recommendation`);
       equal(await page.locator('.pile-label:visible').count(),0,`${label}: pile labels are hidden`);
       check((await page.locator('#discard').getAttribute('aria-label'))?.startsWith('Throw pile:'),`${label}: accessible pile name remains`);
@@ -869,7 +869,7 @@ async function bloomMenuFit() {
     check(count > 1,`Bloom fixture presents several choices (${count})`);
     const size = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('#smart-bloom-selector')!.getBoundingClientRect();
-      const box = document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+      const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
       return {width:panel.width,boxWidth:box.width,left:panel.left,right:panel.right,boxLeft:box.left,boxRight:box.right};
     });
     check(size.width <= size.boxWidth + 1 && size.left >= size.boxLeft - 1 && size.right <= size.boxRight + 1,
@@ -949,13 +949,13 @@ async function goldFrameVisuals() {
 }
 
 try {
-  if (process.env.TEST2_POLISH_ONLY === 'gold') {
+  if (process.env.FUTA04_POLISH_ONLY === 'gold') {
     await goldFrameVisuals();
     console.log(`${checks} gold-frame checks passed`);
-  } else if (process.env.TEST2_POLISH_ONLY === 'alignment') {
+  } else if (process.env.FUTA04_POLISH_ONLY === 'alignment') {
     const safe = await open(390,844,219682080);
     try {
-      await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.test2-branding .game > .hud { top:24px; }' });
+      await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.futa04-branding .game > .hud { top:24px; }' });
       await safe.page.setViewportSize({ width:390,height:843 });
       await safe.page.waitForTimeout(250);
       await geometry(safe.page,390,843,'phone with notch/home indicator');
@@ -978,7 +978,7 @@ try {
   try {
     const before = await state(safe.page);
     // Model an iPhone notch/home indicator; the existing screen and inset probe agree.
-    await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.test2-branding .game > .hud { top:24px; }' });
+    await safe.page.addStyleTag({ content: '#game { padding-top:24px; padding-bottom:34px; } #safe-probe { padding-top:24px; padding-bottom:34px; } html.futa04-branding .game > .hud { top:24px; }' });
     await safe.page.setViewportSize({ width:390,height:843 });
     await safe.page.waitForTimeout(250);
     await geometry(safe.page,390,843,'phone with notch/home indicator');

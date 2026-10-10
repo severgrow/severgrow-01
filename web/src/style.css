@@ -634,7 +634,7 @@ html.kbd .board:focus-visible {
   stroke-width: 0.9;
 }
 /* In Futasaku the metal frame, rather than a ground tint, identifies a bonus hex. */
-html.test2-information .hex.rich {
+html.futa04-information .hex.rich {
   fill: var(--c-hexFill);
   stroke: var(--c-line);
   stroke-width: 1;
@@ -647,11 +647,11 @@ html.test2-information .hex.rich {
   filter: sepia(.12) saturate(1.34) hue-rotate(7deg) brightness(1.17) contrast(1.05);
 }
 /* A V3 board enters on its finished painting, never on grey placeholder hexes. */
-html.test2-information.design-v3 #board.skin-board:not(.skin-ground-ready) {
+html.futa04-information.design-v3 #board.skin-board:not(.skin-ground-ready) {
   opacity: 0;
   pointer-events: none;
 }
-html.test2-information.design-v3 #board.skin-board {
+html.futa04-information.design-v3 #board.skin-board {
   transition: opacity 120ms ease-out;
 }
 #board .gold-frame.empty {

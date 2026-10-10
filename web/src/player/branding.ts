@@ -1,11 +1,11 @@
-// Futasaku 0.3 uses the Test2 presentation; historical channels keep their existing brand.
+// Futasaku 0.4 uses the Futa04 presentation; historical channels keep their existing brand.
 import logoUrl from '../assets/futasaku-emblem.webp?url';
 import wordmarkUrl from '../assets/futasaku-white.webp?url';
 import { bestFit, boardUnits } from '../logic/layout.js';
 import type { Layout, Viewport } from '../logic/layout.js';
 
 export const BRANDING_CSS = `
-html.test2-branding.slim-hud .game > .hud {
+html.futa04-branding.slim-hud .game > .hud {
   position: fixed;
   inset: env(safe-area-inset-top) env(safe-area-inset-right) auto env(safe-area-inset-left);
   width: auto;
@@ -15,30 +15,30 @@ html.test2-branding.slim-hud .game > .hud {
   padding: 0 6px;
   gap: 8px;
 }
-html.test2-branding .game > #race { display: none !important; }
-html.test2-branding .game { max-width: none; margin: 0; }
+html.futa04-branding .game > #race { display: none !important; }
+html.futa04-branding .game { max-width: none; margin: 0; }
 /* iOS home-screen apps expose the notch/home insets to the layout code. The
    shared .screen padding would reserve the same insets again, shrinking the
    board and leaving an unused band below the hand. Safari tabs keep it. */
-html.test2-branding.home-screen-app #game { padding: 0; }
+html.futa04-branding.home-screen-app #game { padding: 0; }
 /* Reserve the home indicator once, inside the play grid; its background still
    paints to the physical screen edge while the dock stays above the gesture. */
-html.test2-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
-html.test2-branding.home-screen-app,
-html.test2-branding.home-screen-app body { height:var(--futasaku-app-height,100dvh); }
-html.test2-branding.home-screen-app :is(#game,#texture) {
+html.futa04-branding.home-screen-app #game > .play { padding-bottom: env(safe-area-inset-bottom); }
+html.futa04-branding.home-screen-app,
+html.futa04-branding.home-screen-app body { height:var(--futasaku-app-height,100dvh); }
+html.futa04-branding.home-screen-app :is(#game,#texture) {
   height:var(--futasaku-app-height,100dvh); bottom:auto;
 }
-html.test2-branding .play { --board-margin: 2px; }
-html.test2-branding[data-layout='stack'] .board-wrap {
+html.futa04-branding .play { --board-margin: 2px; }
+html.futa04-branding[data-layout='stack'] .board-wrap {
   margin-left: 2px;
   margin-right: 2px;
 }
-html.test2-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
+html.futa04-branding[data-layout='side'] .dock { align-self: end; row-gap: 8px; }
 /* The screen already reserves the notch/home-indicator insets. */
-html.test2-branding .dock { padding-bottom: 4px; }
-html.test2-branding[data-thumb] .dock { padding: 0; }
-html.test2-branding #hud-brand {
+html.futa04-branding .dock { padding-bottom: 4px; }
+html.futa04-branding[data-thumb] .dock { padding: 0; }
+html.futa04-branding #hud-brand {
   grid-column: 3;
   justify-self: end;
   height: var(--futasaku-logo-height, 22px);
@@ -50,15 +50,15 @@ html.test2-branding #hud-brand {
   pointer-events: none;
   user-select: none;
 }
-html.test2-branding #hud-menu,
-html.test2-branding #hud-brand { position: relative; top: 0; }
-html.test2-branding #menu #terrarium { display: none !important; }
-html.test2-branding #menu #logo {
+html.futa04-branding #hud-menu,
+html.futa04-branding #hud-brand { position: relative; top: 0; }
+html.futa04-branding #menu #terrarium { display: none !important; }
+html.futa04-branding #menu #logo {
   display: block !important;
   width: min(240px, 58vw, 29dvh);
   margin: 0 auto 16px;
 }
-html.test2-branding #menu #logo svg { display: block; width: 100%; height: auto; }
+html.futa04-branding #menu #logo svg { display: block; width: 100%; height: auto; }
 `;
 
 /** Presentation-only boxes. Card sizes, hand order, tile coordinates and inputs are unchanged. */
@@ -140,12 +140,12 @@ export function drawLogo() {
 }
 
 export function mountBranding() {
-  document.documentElement.classList.add('test2-branding');
+  document.documentElement.classList.add('futa04-branding');
   document.title = 'Futasaku';
   const title = document.querySelector('#menu .title');
   if (title) title.textContent = 'Futasaku';
   const style = document.createElement('style');
-  style.id = 'test2-branding-style';
+  style.id = 'futa04-branding-style';
   style.textContent = BRANDING_CSS;
   document.head.append(style);
   const race = document.getElementById('race');

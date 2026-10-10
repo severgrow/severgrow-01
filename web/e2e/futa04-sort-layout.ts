@@ -4,20 +4,20 @@ import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import type { Page } from 'playwright-core';
 
-const BASE = process.env.TEST2_URL ?? 'http://localhost:4192/';
-const server = process.env.TEST2_URL ? null : await preview({ configFile: 'web/vite.config.ts', preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
+const BASE = process.env.FUTA04_URL ?? 'http://localhost:4192/';
+const server = process.env.FUTA04_URL ? null : await preview({ configFile: 'web/vite.config.ts', preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 let checks = 0;
 
 type Position = { step: string; groupX: number; groupY: number; shift: string; deckX: number; discardX: number; deckCountX: number; discardCountX: number; order: string };
 const position = (page: Page): Promise<Position> => page.evaluate(() => {
-  const group = document.querySelector<HTMLElement>('#test2-box > .piles')!;
+  const group = document.querySelector<HTMLElement>('#futa04-box > .piles')!;
   const deck = document.querySelector<HTMLElement>('#deck')!;
   const discard = document.querySelector<HTMLElement>('#discard')!;
   return {
     step: document.documentElement.dataset.step ?? '',
     groupX: group.getBoundingClientRect().x, groupY: group.getBoundingClientRect().y,
-    shift: group.style.getPropertyValue('--test2-draw-shift'),
+    shift: group.style.getPropertyValue('--futa04-draw-shift'),
     deckX: deck.offsetLeft, discardX: discard.offsetLeft,
     deckCountX: document.querySelector<HTMLElement>('#deck-count')!.offsetLeft,
     discardCountX: document.querySelector<HTMLElement>('#discard-count')!.offsetLeft,
@@ -34,8 +34,8 @@ async function sortWithoutPileTravel(page: Page, name: string, phase: 'draw' | '
       (window as any).__sortSamples = [];
       const until = performance.now() + 450;
       const sample = () => {
-        const group = document.querySelector<HTMLElement>('#test2-box > .piles')!;
-        (window as any).__sortSamples.push({ x: group.getBoundingClientRect().x, y: group.getBoundingClientRect().y, shift: group.style.getPropertyValue('--test2-draw-shift') });
+        const group = document.querySelector<HTMLElement>('#futa04-box > .piles')!;
+        (window as any).__sortSamples.push({ x: group.getBoundingClientRect().x, y: group.getBoundingClientRect().y, shift: group.style.getPropertyValue('--futa04-draw-shift') });
         if (performance.now() < until) requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);

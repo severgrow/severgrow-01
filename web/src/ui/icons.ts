@@ -51,7 +51,7 @@ export const FRUIT_SVG = wrap(
     '<circle cx="6" cy="4.5" r=".6" fill="currentColor"/><circle cx="18.5" cy="4" r=".5" fill="currentColor"/><circle cx="20.5" cy="7.5" r=".45" fill="currentColor"/>',
 );
 
-/** Test2 bomb: full round body, tilted collar, curved fuse and a restrained star spark. */
+/** Futa04 bomb: full round body, tilted collar, curved fuse and a restrained star spark. */
 export const BOMB_SVG = /* @__PURE__ */ wrap(
   '<circle cx="9.8" cy="14.2" r="7.2" fill="currentColor" fill-opacity=".2"/>' +
   '<path d="m11.9 7.3 1.3-3.5 3.2 1.2-1.3 3.5M14.9 4.3C17.1 1.2 18.7 1.5 20 3.4"/>' +

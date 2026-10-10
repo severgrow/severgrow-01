@@ -1,5 +1,5 @@
-// Test2's V3 look: the critical flow in V3 at phone and desktop sizes (build with CHANNEL=test2).
-//   CHANNEL=test2 npm run web:build && npx tsx web/e2e/test2-v3.ts
+// Futa04's V3 look: the critical flow in V3 at phone and desktop sizes (build with CHANNEL=futa04).
+//   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/futa04-v3.ts
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';

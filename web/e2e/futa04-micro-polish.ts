@@ -17,30 +17,30 @@ try {
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click());
     await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());
     if (v3) await page.waitForFunction(()=>document.querySelector('#board')?.getAttribute('data-skin')==='forest-volcano-v3');
-    const recipe = await page.locator('#smart-bloom-button .test2-combination').evaluate(el=>({
+    const recipe = await page.locator('#smart-bloom-button .futa04-combination').evaluate(el=>({
       animation:getComputedStyle(el).animationName,
       background:getComputedStyle(el.parentElement!).backgroundColor,
       glow:getComputedStyle(el).filter,
     }));
     assert.equal(recipe.background,'rgba(0, 0, 0, 0)');
     assert(recipe.glow.includes('drop-shadow'));
-    assert.equal(recipe.animation.includes('test2-recipe-projector'),!reduced);
+    assert.equal(recipe.animation.includes('futa04-recipe-projector'),!reduced);
     const before = await page.evaluate(()=>(window as any).__severgrow.state());
     const move = legalActions(viewFor(before,0)).find(a=>a.t===(v3?'Sprout':'Bloom'));
     assert(move?.t==='Sprout'||move?.t==='Bloom');
     await page.evaluate(action=>(window as any).__severgrow.playFor(action,0),move);
-    if (!reduced) await page.waitForFunction(()=>document.querySelector('#test2-outcome-light')?.getAnimations().some(a=>a.playState==='running'));
+    if (!reduced) await page.waitForFunction(()=>document.querySelector('#futa04-outcome-light')?.getAnimations().some(a=>a.playState==='running'));
     const key = coordKey(move.t==='Bloom'?move.hexes[0]!:move.coord);
     const stone = await page.locator(`#board .tile[data-key="${key}"] .seed-stone-shadow`).evaluate(el=>({
       fill:getComputedStyle(el).fill, x:el.getAttribute('cx'), y:el.getAttribute('cy'),
     }));
     assert(stone.fill.includes('seed-stone-shadow'));
     assert(Number(stone.x)>0 && Number(stone.y)>0);
-    if (reduced) assert.equal(await page.locator('#test2-outcome-light').evaluate(el=>el.getAnimations().length),0);
-    else assert.equal(await page.locator('#test2-outcome-light').getAttribute('data-tone'),'good');
+    if (reduced) assert.equal(await page.locator('#futa04-outcome-light').evaluate(el=>el.getAnimations().length),0);
+    else assert.equal(await page.locator('#futa04-outcome-light').getAttribute('data-tone'),'good');
     if (!v3 && !reduced) {
       await page.waitForFunction(()=>document.querySelector('#smart-panel')?.classList.contains('hardware-reflect'));
-      assert.equal(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').animationName),'test2-hardware-reflect');
+      assert.equal(await page.locator('#smart-led').evaluate(el=>getComputedStyle(el,'::before').animationName),'futa04-hardware-reflect');
     } else assert.equal(await page.locator('#smart-panel').evaluate(el=>el.classList.contains('hardware-reflect')),false);
     assert.deepEqual(errors,[]);
     await page.close();

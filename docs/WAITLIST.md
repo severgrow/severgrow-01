@@ -29,8 +29,8 @@ All 14 entries reviewed against pinned Dev fa674ff89e9bc1cae30b84bbf6dd307eb78bc
 | Lab | Excluded; Test development only; Classic defaults verified against Main |
 
 Historical Test2 verification is recorded in `MAIN2_PROGRESS.md` at the frozen
-source commit `89d438c1b3fca253292d1b8a9eabffcf5e2da315`. Futasaku 0.3
-verification is recorded in `docs/FUTASAKU_0_3_BASELINE.md`.
+source commit `89d438c1b3fca253292d1b8a9eabffcf5e2da315`. Futasaku 0.4
+verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 
 ## Original waiting entries
 
