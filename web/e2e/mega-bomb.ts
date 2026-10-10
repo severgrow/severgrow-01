@@ -15,7 +15,11 @@ const state: State = { ...base, phase:'ACT', board:blastBoard,
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium',args:['--no-sandbox']});
 try {
-  for (const [width,height,v3] of [[390,844,false],[1280,800,false],[390,844,true]] as const) {
+  // Futasaku 0.4 ships the default skin only; the V3 skin is a localhost-only art preview
+  // (main.ts V3_MODE) and is not part of what a player runs. The former third iteration ran
+  // this same flow under ?skin-preview=v3; it is skipped rather than wired to a look users
+  // cannot select. The flow below is unchanged and runs on the default skin.
+  for (const [width,height] of [[390,844],[1280,800]] as const) {
     const game: State = width < 600 ? state : { ...state,hands:[[...state.hands[0],
       {id:1400,suit:0,rank:4},{id:1401,suit:1,rank:4},{id:1402,suit:2,rank:4}],state.hands[1]] };
     const page = await browser.newPage({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
@@ -25,10 +29,9 @@ try {
       localStorage.setItem('main2:severgrow.save.v7',saved);
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,speed:'skip',reduceMotion:true,coach:false}));
     },positionSave({state:game}));
-    await page.goto(`http://localhost:4199/${v3?'?design=v3':''}`);
+    await page.goto('http://localhost:4199/');
     await page.click('#menu-continue');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
-    if (v3) await page.waitForFunction(() => document.querySelector('#board')?.getAttribute('data-skin')==='forest-volcano-v3');
     assert(await page.locator('#board').evaluate(board => {
       const svg = board.tagName.toLowerCase()==='svg' ? board : board.querySelector('svg');
       const layers = [...svg?.children ?? []];
@@ -62,11 +65,7 @@ try {
       !node.querySelector('.seed-stone') &&
       !(window as any).__severgrow.state().board[node.getAttribute('data-key')||'']));
     assert(faded,'removed enemy tiles show their former artwork faintly only on empty hexes');
-    if (width<600 && !v3) await page.screenshot({path:'/tmp/futasaku-default-last-round.png'});
-    if (v3) {
-      await page.waitForTimeout(900);
-      await page.screenshot({path:'/tmp/futasaku-v3-last-round.png'});
-    }
+    if (width<600) await page.screenshot({path:'/tmp/futasaku-default-last-round.png'});
     assert.deepEqual(after.hands[0].map(c=>c.id),game.hands[0].filter(c=>c.id!==1000&&c.id!==1001).map(c=>c.id));
     assert.deepEqual(after.lastResolution?.megaBomb?.cards,[1000,1001]);
     assert.equal(errors.length,0,errors.join(' | '));

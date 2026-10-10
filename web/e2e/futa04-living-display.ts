@@ -3,11 +3,21 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
+import type { State } from '../../src/engine/index.js';
+import type { Page } from 'playwright-core';
 
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4224,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
 let checks=0;
 const check=(value:unknown,label:string)=>{assert(value,label);checks++;};
+/** The LED's resting face is the human's live score ("0:0", or "0:1" when the futa04 new-game
+ *  seed gave the opening to the bot). Read the expected value from the engine so the assertion
+ *  is deterministic no matter which side the random new-game seed starts. */
+const restingScore=async(page:Page)=>{
+  const state=await page.evaluate(()=>(window as any).__severgrow.state() as State);
+  const view=viewFor(state,0);
+  return `${view.score}:${view.opponentScore}`;
+};
 try {
   for(const [width,height] of [[390,844],[1920,1080]] as const){
     const page=await browser.newPage({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
@@ -27,7 +37,8 @@ try {
     await page.waitForFunction(() => !!(window as any).__ready);
     await page.locator('#menu-continue').click();
     check(await page.evaluate(()=>(window as any).__severgrow.settings().level)===level,`${width}: exact chosen level survives reload`);
-    check(await page.locator('#smart-led-text').innerText()==='0:0',`${width}: score is resting display during Draw`);
+    const resting=await restingScore(page);
+    check(await page.locator('#smart-led-text').innerText()===resting,`${width}: score is resting display during Draw (${resting})`);
     check(await page.locator('#smart-led').getAttribute('data-mode')==='score',`${width}: player/opponent score uses coloured LED mode`);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#deck .pile-card')!).boxShadow.includes('239, 234, 220'));
     const white=await page.locator('#deck .pile-card').evaluate(el=>getComputedStyle(el).boxShadow);
@@ -36,7 +47,8 @@ try {
       check((await page.locator('#discard .pile-card').evaluate(el=>getComputedStyle(el).boxShadow)).includes('239, 234, 220'),`${width}: ordinary legal discard draw shares white edge light`);
     await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
     await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());
-    check(await page.locator('#smart-led-text').innerText()==='0:0',`${width}: score remains during Grow`);
+    const grown=await restingScore(page);
+    check(await page.locator('#smart-led-text').innerText()===grown,`${width}: score remains during Grow (${grown})`);
     await page.screenshot({path:`/tmp/futasaku-living-display-${width}.png`});
     check(errors.length===0,`${width}: no browser errors (${errors.join(' | ')})`);
     await page.close();

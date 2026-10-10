@@ -49,7 +49,10 @@ try {
     check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the tutorial game available`);
   }
   await menu.close();
-  for (const [width, height, large, left, v3] of [[360,640,false,false,false],[390,664,true,true,true],[390,844,false,false,true],[430,932,true,false,false],[768,1024,false,false,false],[1440,900,false,false,true]] as const) {
+  // Futasaku 0.4 ships the default skin; the V3 skin is a localhost-only art preview
+  // (main.ts V3_MODE), so these viewports no longer select it. The layout, cockpit and Match
+  // Intel assertions below are skin-independent and now run on the default art only.
+  for (const [width, height, large, left] of [[360,640,false,false],[390,664,true,true],[390,844,false,false],[430,932,true,false],[768,1024,false,false],[1440,900,false,false]] as const) {
     const page = await browser.newPage({ viewport: { width, height }, hasTouch: width < 800, isMobile: width < 600, ignoreHTTPSErrors: true });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -58,7 +61,7 @@ try {
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ coach: true, sound: false, music: false, reduceMotion: true, speed: 'fast', autoSkip: false, largeText: large }));
       localStorage.setItem('main2:severgrow-thumb', JSON.stringify({ side: left ? 'left' : 'right' }));
     }, { large, left });
-    await page.goto(`${base}?seed=219682080${v3 ? '&design=v3' : ''}`);
+    await page.goto(`${base}?seed=219682080`);
     await page.waitForFunction(() => (window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
     await page.waitForTimeout(250);
     check(await page.locator('#futa04-help-button').isVisible(), `${width}: hint is discoverable`);

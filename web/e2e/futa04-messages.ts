@@ -73,9 +73,11 @@ const perform = async (p: Page, a: Action, before: State, game: Game) => {
 async function run(index: number) {
   const [w,h] = presets[index % presets.length]!;
   const seed = index === 0 ? 219682080 : 1009 + index * 7919;
-  const v3 = index % 2 === 1;
   const large = index % 5 === 1;
-  const g: Game = { index,seed,viewport:`${w}x${h}`,look:v3?'V3':'default',large,winner:null,actions:0,uiActions:0,hookActions:0,failures:[],observations:[],historyActions:0,screenshots:[] };
+  // Futasaku 0.4 ships the default skin; the V3 skin is a localhost-only art preview
+  // (main.ts V3_MODE). Alternate games used to run as "V3"; every game now runs on the default
+  // look that a player actually sees, which is what this observation suite is about.
+  const g: Game = { index,seed,viewport:`${w}x${h}`,look:'default',large,winner:null,actions:0,uiActions:0,hookActions:0,failures:[],observations:[],historyActions:0,screenshots:[] };
   const p = await browser.newPage({ viewport:{width:w,height:h},isMobile:w<600,hasTouch:w<600,ignoreHTTPSErrors:!!process.env.FUTA04_URL });
   const errors: string[] = []; p.on('pageerror', e => errors.push(e.message));
   await p.addInitScript(({large,level}) => {
@@ -107,7 +109,7 @@ async function run(index: number) {
     },120);
   },{large,level:1+(index%4)});
   try {
-    await p.goto(`${base}?seed=${seed}${v3?'&design=v3':''}`); await idle(p); await p.waitForTimeout(350);
+    await p.goto(`${base}?seed=${seed}`); await idle(p); await p.waitForTimeout(350);
     for(let n=0;n<650;n++) {
       await idle(p); const before=await read(p); if(before.phase==='GAME_OVER')break;
       const legal=legalActions(viewFor(before,0)); assert(legal.length,'no human legal actions');

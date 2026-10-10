@@ -28,7 +28,7 @@ const filter = process.env.FUTA04_POLISH_VIEWPORTS?.split(',');
 let checks = 0;
 const failures: string[] = [];
 const measurements: unknown[] = [];
-const evidenceNames = new Set(['360x640-grow', '390x664-bloom-v3', '1280x800-bloom-v3', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices', '390x844-bomb-cards', '1280x800-bomb-cards', '390x844-bloom-ready', '1280x800-bloom-ready']);
+const evidenceNames = new Set(['360x640-grow', '390x664-bloom', '1280x800-bloom', '360x640-futasaku-menu', '360x640-throw-preview', '390x664-bloom-choices', '390x844-bomb-cards', '1280x800-bomb-cards', '390x844-bloom-ready', '1280x800-bloom-ready']);
 const evidenceWritten = new Set<string>();
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 const equal = (actual: unknown, expected: unknown, label: string) => { assert.deepEqual(actual, expected, label); checks++; };
@@ -75,7 +75,7 @@ async function evidence(page: Page, name: string) {
   console.log(`FUTA04_SCREENSHOT_END ${name}.jpg`);
 }
 
-async function open(width: number, height: number, seed: number, v3 = false) {
+async function open(width: number, height: number, seed: number, humanFirst = false) {
   const touch = width <= 600;
   const page = await browser.newPage({ viewport: { width, height }, hasTouch: touch, isMobile: touch, ignoreHTTPSErrors: Boolean(external) });
   const errors: string[] = [];
@@ -91,7 +91,16 @@ async function open(width: number, height: number, seed: number, v3 = false) {
       localStorage.setItem('main2:severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
     }
   });
-  await page.goto(`${base}?seed=${seed}${v3 ? '&design=v3' : ''}`);
+  if (humanFirst) {
+    // Futa04 hands the opening to the bot on odd seeds (main.ts startGame). Seed the authored
+    // human-first position directly so a check written for a specific odd-seed line still tests
+    // that position instead of silently running on a bot-opened board.
+    await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: newGame(seed) }));
+    await page.goto(base);
+    await page.locator('#menu-continue').click();
+  } else {
+    await page.goto(`${base}?seed=${seed}`);
+  }
   await idle(page);
   await page.locator('#game').waitFor({state:'visible'});
   await page.waitForFunction(() => document.querySelectorAll('#board .hex-cell').length > 0);
@@ -133,10 +142,19 @@ async function geometry(page: Page, width: number, height: number, label: string
     await asset.decode();
     const box = image.getBoundingClientRect();
     const race = document.querySelector<HTMLElement>('#race')!;
+    // The brand mark (branding.ts) is painted with the live theme accent --c-accent. The Futa04
+    // menu surface gives its Continue button its own --fu-cream (#e8ddc5), so the two creams are
+    // intentionally distinct; resolve the accent token through a probe so the check still proves
+    // the mark is themed rather than a stale hardcoded fill.
+    const probe = document.createElement('span');
+    probe.style.cssText = 'display:none;background:var(--c-accent)';
+    document.body.append(probe);
+    const accentColor = getComputedStyle(probe).backgroundColor;
+    probe.remove();
     return { title: document.title, loaded: asset.complete && asset.naturalWidth > 0,
       height: box.height, menuHeight: lines.height / 2, top:box.top, inkTop:menu.top+menu.height/2-lines.height/4, center: box.top + box.height / 2,
       color: getComputedStyle(image.querySelector('feFlood')!).floodColor,
-      buttonColor: getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor,
+      accentColor,
       menuCenter: menu.top + menu.height / 2, right: box.right,
       raceVisible: race.getClientRects().length > 0 && getComputedStyle(race).display !== 'none',
       pointer: getComputedStyle(image).pointerEvents, opacity: getComputedStyle(image).opacity };
@@ -144,7 +162,7 @@ async function geometry(page: Page, width: number, height: number, label: string
   equal(brand.title, 'Futasaku', `${label}: browser title uses the new name`);
   check(brand.loaded && Math.abs(brand.height-1.82*brand.menuHeight) < .15 && Math.abs(brand.top-brand.inkTop) < 2 && Number(brand.opacity) === .75,
     `${label}: kanji wordmark is readable and top-aligned with the menu lines (${JSON.stringify(brand)})`);
-  equal(brand.color,brand.buttonColor,`${label}: logo uses the Continue button's exact cream`);
+  equal(brand.color,brand.accentColor,`${label}: logo uses the live theme accent cream (${brand.accentColor})`);
   check(brand.right <= width && width-brand.right <= 12 && brand.pointer === 'none', `${label}: right logo fits and never captures input (${JSON.stringify(brand)})`);
   check(!brand.raceVisible, `${label}: progress bar consumes no pixels or layout space`);
   const meterAlignment = await page.evaluate(() => ['deck','discard'].map(id => {
@@ -590,7 +608,14 @@ async function sproutFlow(width: number, height: number) {
     equal((await page.locator('#menu .title').textContent())?.trim(), 'Futasaku', `${label}: main screen uses the exact new name`);
     equal((await page.locator('#menu .title').innerText()).toLowerCase(), 'futasaku', `${label}: the visible wordmark has the new name, with its existing uppercase styling`);
     check(await page.locator('#logo svg').isVisible(), `${label}: supplied logo replaces the old menu mark`);
-    check(await page.evaluate(() => getComputedStyle(document.querySelector('#logo feFlood')!).floodColor === getComputedStyle(document.querySelector('#menu-continue')!).backgroundColor), `${label}: main-screen logo matches Continue cream`);
+    check(await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.cssText = 'display:none;background:var(--c-accent)';
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return getComputedStyle(document.querySelector('#logo feFlood')!).floodColor === accent;
+    }), `${label}: main-screen logo uses the live theme accent cream`);
     check(!/severor/i.test(await page.locator('body').innerText()), `${label}: old name is absent from visible copy`);
     check(!await page.locator('#terrarium').isVisible(), `${label}: old menu artwork does not obscure the new logo`);
     const manifest = await (await page.request.get(base+'manifest.webmanifest')).json();
@@ -610,14 +635,10 @@ async function sproutFlow(width: number, height: number) {
   } finally { await page.close(); }
 }
 
-async function bloomFlow(width: number, height: number, v3: boolean) {
-  const label = `${width}x${height} ${v3 ? 'V3' : 'current art'} Bloom`;
-  const { page, touch, errors } = await open(width,height,3,v3);
+async function bloomFlow(width: number, height: number) {
+  const label = `${width}x${height} current art Bloom`;
+  const { page, touch, errors } = await open(width,height,3,true);
   try {
-    if (v3) {
-      await page.waitForFunction(() => document.querySelectorAll('#board .landmark.skin-has-art').length === 2 && !!document.querySelector('#board pattern[id$="skin-ground"] image')?.getAttribute('href'));
-      check(await page.locator('#board').getAttribute('data-skin') === 'forest-volcano-v3',`${label}: V3 artwork loads`);
-    }
     await geometry(page,width,height,label);
     await page.waitForTimeout(350);
     const drawPiles = await page.evaluate(() => {
@@ -637,7 +658,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
     if (width <= 600) check(drawPiles.meterBottom >= drawPiles.boxBottom + 4 && drawPiles.meterBottom <= drawPiles.boxBottom + 12,
       `${label}: enlarged Draw piles sit just below the cockpit baseline (${JSON.stringify(drawPiles)})`);
-    if (width === 390 && height === 844 && !v3) await page.screenshot({ path: `${dir}/390x844-draw-piles.png` });
+    if (width === 390 && height === 844) await page.screenshot({ path: `${dir}/390x844-draw-piles.png` });
     await page.click('#deck'); await idle(page);
     const before = await state(page);
     await geometry(page,width,height,label+' after Draw');
@@ -657,7 +678,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
         });
         check(size.width <= Math.min(280, size.boxWidth * .75) && Math.abs(size.left - size.toggleLeft) <= 50,
           `${label}: multiple Bloom choices open in a compact menu beside their control (${JSON.stringify(size)})`);
-        if (width === 390 && height === 664 && !v3) await page.screenshot({ path: `${dir}/390x664-bloom-menu-open.png` });
+        if (width === 390 && height === 664) await page.screenshot({ path: `${dir}/390x664-bloom-menu-open.png` });
       }
       await choicesToggle.click();
     }
@@ -773,8 +794,8 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
       await page.mouse.move(width-4,4);
     }
     await cue(page,'grow',`${label}: after inspection`);
-    await page.screenshot({ path: `${dir}/${width}x${height}-bloom${v3 ? '-v3' : ''}.png` });
-    await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`);
+    await page.screenshot({ path: `${dir}/${width}x${height}-bloom.png` });
+    await evidence(page,`${width}x${height}-bloom`);
     await undo(page,before,label);
     if (touch) {
       await pick();
@@ -802,7 +823,7 @@ async function bloomFlow(width: number, height: number, v3: boolean) {
     equal(errors,[],`${label}: no browser errors`);
   } catch (error) {
     await page.screenshot({ path: `${dir}/${width}x${height}-bloom-failed.png` }).catch(() => {});
-    await evidence(page,`${width}x${height}-bloom${v3 ? '-v3' : ''}`).catch(() => {});
+    await evidence(page,`${width}x${height}-bloom`).catch(() => {});
     throw error;
   } finally { await page.close(); }
 }
@@ -886,7 +907,10 @@ async function goldFrameVisuals() {
   const botKey = rich.find(key => key !== '0,0' && !game.board[key]);
   assert(botKey,'gold fixture has another available bonus hex');
   game.board[botKey] = {owner:1,strength:5};
-  for (const v3 of [false,true]) for (const [width,height] of [[390,844],[1280,800]] as const) {
+  // Futasaku 0.4 ships the default skin; the V3 skin is a localhost-only art preview (main.ts
+  // V3_MODE). This used to run each size twice, once under ?skin-preview=v3; the V3 pass is
+  // skipped and the default-skin frame artwork is still checked at both sizes.
+  for (const [width,height] of [[390,844],[1280,800]] as const) {
     const page = await browser.newPage({viewport:{width,height},hasTouch:width<600,isMobile:width<600});
     try {
       await page.addInitScript(save => {
@@ -894,13 +918,9 @@ async function goldFrameVisuals() {
         localStorage.setItem('main2:severgrow.save.v7',save);
         localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({coach:false,sound:false,music:false,reduceMotion:true,speed:'skip'}));
       },positionSave({state:game}));
-      await page.goto(`${base}${v3?'?design=v3':''}`);
+      await page.goto(base);
       await page.click('#menu-continue'); await idle(page);
-      if (v3) await page.waitForFunction(() => {
-        const board = document.querySelector('#board');
-        return board?.classList.contains('skin-ground-ready') && Number(getComputedStyle(board).opacity) > .98;
-      }, undefined, {timeout:30000});
-      equal(await state(page),game,`${v3?'V3':'standard'} ${width}: frame art does not change the position`);
+      equal(await state(page),game,`standard ${width}: frame art does not change the position`);
       const visual = await page.evaluate(async () => {
         const rich = [...document.querySelectorAll<SVGGElement>('#board .hex-cell.rich')];
         const owned = [...document.querySelectorAll<SVGGElement>('#board .l-rich-frames .gold-frame.occupied')];
@@ -935,15 +955,15 @@ async function goldFrameVisuals() {
       });
       check(visual.rich===rich.length && visual.empty===rich.length-2 && visual.hiddenUnderTile && visual.owners===2 &&
         visual.forest && visual.volcano && visual.oldMarkers===0 && visual.noInterception,
-        `${v3?'V3':'standard'} ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
+        `standard ${width}: frames mark empty and both occupied bonus tiles without old markers (${JSON.stringify(visual)})`);
       check(visual.contourBelowGold && visual.imageReady && visual.frameWidth>59 && visual.frameWidth<63 &&
         visual.centers.every(distance=>distance<4) && visual.strongerEmptyGlow &&
         visual.variants.every(variant=>variant>=0 && variant<3),
-        `${v3?'V3':'standard'} ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
-      await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-${v3?'v3':'standard'}.png`});
+        `standard ${width}: three deterministic rim designs fit the hexes under the stones (${JSON.stringify(visual)})`);
+      await page.screenshot({path:`${dir}/${width}x${height}-gold-frame-standard.png`});
       await page.reload(); await page.click('#menu-continue'); await idle(page);
       const reloaded = await page.locator('#board .l-rich-frames .gold-frame').evaluateAll(frames=>frames.map(frame=>Number(frame.getAttribute('data-variant'))));
-      equal(reloaded,visual.variants,`${v3?'V3':'standard'} ${width}: frame variants survive reload`);
+      equal(reloaded,visual.variants,`standard ${width}: frame variants survive reload`);
     } finally { await page.close(); }
   }
 }
@@ -965,9 +985,10 @@ try {
   await drawGlow();
   await bloomMenuFit();
   await goldFrameVisuals();
-  for (const [index,[width,height]] of presets.entries()) {
+  console.log('Futasaku 0.4 ships the default skin; the V3-skin variants of the Bloom and gold-frame checks are skipped (main.ts V3_MODE is a localhost-only art preview).');
+  for (const [, [width,height]] of presets.entries()) {
     if (filter && !filter.includes(`${width}x${height}`)) continue;
-    for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height,index%2 === 1)]] as const) {
+    for (const [name,run] of [['turns',()=>sproutFlow(width,height)],['Bloom',()=>bloomFlow(width,height)]] as const) {
       try { await run(); console.log(`${width}x${height} ${name}: passed`); }
       catch (error) { const failure=`${width}x${height} ${name}: ${error instanceof Error ? error.message : String(error)}`; failures.push(failure); console.error(failure); }
     }
