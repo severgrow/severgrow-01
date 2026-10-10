@@ -1,5 +1,5 @@
 /** Futasaku 0.3 cockpit presentation. Game-owned buttons remain the action source. */
-import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage } from './led-cells.js';
+import { LED_ADVANCE, drawLedCells, ledMarqueeTravel, ledMessageWidth, ledMotifFrames, ledStaticMessage, ledToken } from './led-cells.js';
 import type { LedTone } from './led-cells.js';
 import { DisplayMachine } from './display-machine.js';
 import type { DisplayFrame } from './display-machine.js';
@@ -125,7 +125,17 @@ html.test2-information #test2-box #smart-led-cells {
 html.test2-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.test2-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
-html.test2-information #smart-led-window.led-pulse #smart-led-cells { filter:brightness(1.22); }
+/* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion. */
+html.test2-information #smart-led-window.led-pulse { animation:smart-led-pulse 1050ms ease-in-out; }
+@keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.16); } }
+html.test2-information #smart-led-window.led-flash-cut { animation:smart-led-flash-cut 380ms ease-out; }
+@keyframes smart-led-flash-cut { 0% { filter:brightness(1.9) contrast(1.06); } 100% { filter:none; } }
+html.test2-information #smart-led-window.led-flash-bloom { animation:smart-led-flash-bloom 320ms ease-out; }
+@keyframes smart-led-flash-bloom { 0% { filter:brightness(1.5); } 100% { filter:none; } }
+html.test2-information.reduce-motion #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
+@media (prefers-reduced-motion:reduce) {
+  html.test2-information #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
+}
 /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
 html.test2-information #smart-led-spill {
   position:absolute; left:-38px; top:calc(var(--control-size) - 17px);
@@ -218,9 +228,6 @@ html.test2-information #smart-bloom-button .test2-mini-card {
   19%,52% { opacity:.82; translate:.28px -.2px; }
   84% { opacity:.94; translate:-.22px .16px; }
 }
-html.test2-information[data-step='grow'][data-test2-waiting='true'] #smart-bloom-button:not([aria-expanded='true']) .test2-combination {
-  animation:test2-card-breathe 1.35s ease-in-out infinite,test2-recipe-projector 7.3s steps(1,end) infinite;
-}
 html.test2-information:is(.test2-move-active,.test2-information-blocked,.reduce-motion) #smart-bloom-button .test2-combination { animation:none !important; }
 @media (prefers-reduced-motion:reduce) { html.test2-information #smart-bloom-button .test2-combination { animation:none !important; } }
 html.test2-information #test2-box #smart-bloom-button .test2-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:2px; max-width:100%; }
@@ -232,8 +239,8 @@ html.test2-information #test2-box #smart-bloom-button .test2-mini-card .c-suit s
 html.test2-information #smart-bloom-count { position:absolute; right:2px; top:1px; font:600 9px/1 var(--font-mono,monospace); color:var(--control-ivory); }
 html.test2-information #smart-bloom-count[hidden] { display:none; }
 html.test2-information #smart-bloom-selector {
-  position:absolute; bottom:calc(100% + 6px); left:6px; right:6px; z-index:12;
-  display:flex; gap:0; width:auto; max-width:none;
+  position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:12;
+  display:flex; gap:0; width:max-content; max-width:calc(100% - 12px);
   overflow-x:auto; overflow-y:hidden; padding:3px; box-sizing:border-box;
   border:1px solid rgba(201,198,186,.26); border-radius:9px;
   background:#171918; box-shadow:0 7px 18px rgba(0,0,0,.5);
@@ -321,6 +328,32 @@ html.test2-information #board .l-over :is(.selected,.ghost-tile):is(.kind-streng
 html.test2-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
   fill:#e5a18b; stroke:#db917a;
 }
+/* The hexes being painted: the same flat grid, green ink and stroke as a legal well, so the
+   shape you draw reads as one family with the legal-move highlights. Each hex pops softly as
+   it joins the shape (the group holds the ink and its stone, so both arrive together). */
+html.test2-information #board .l-draw .ghost-tile {
+  fill:#a6d49b; fill-opacity:.19;
+  stroke:#a5d294; stroke-width:1.15; stroke-opacity:.74;
+  stroke-dasharray:none; animation:none;
+  transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
+}
+html.test2-information #board .l-draw .ghost.cant .ghost-tile {
+  fill:#e5a18b; stroke:#db917a;
+}
+html.test2-information #board .l-draw .ghost.blocked:not(.cant) .ghost-tile { fill-opacity:.11; }
+html.test2-information #board .l-draw .ghost {
+  transform-box:fill-box; transform-origin:center;
+  animation:draw-hex-pop 260ms cubic-bezier(.2,.9,.32,1.12) both;
+  will-change:transform;
+}
+@keyframes draw-hex-pop {
+  0% { transform:scale(.58); opacity:0; }
+  55% { transform:scale(1.06); opacity:1; }
+  100% { transform:scale(1); opacity:1; }
+}
+html.test2-information.reduce-motion #board .l-draw .ghost { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.test2-information #board .l-draw .ghost { animation:none; } }
+html.test2-information #board .l-draw .ghost.cant .ghost-tile { stroke-opacity:.82; }
 html.test2-information #board .l-territory-contour .territory-contour {
   stroke-width:.82; stroke-linecap:round; stroke-linejoin:round; opacity:.75;
 }
@@ -371,7 +404,9 @@ export function mountSmartCockpit() {
   let lastMode: LedTone = 'amber';
   let lastCompact = false;
   let lastMotif: DisplayFrame['motif'];
+  let lastFlash: DisplayFrame['flash'];
   let motifTimer = 0;
+  let flashTimer = 0;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
   const close = () => { selector.hidden = true; context.setAttribute('aria-expanded','false'); };
@@ -407,10 +442,11 @@ export function mountSmartCockpit() {
   };
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
-    windowEl.classList.toggle('led-pulse',!!frame.pulse && !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches);
-    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif) return;
+    const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    windowEl.classList.toggle('led-pulse',!!frame.pulse && !reduceNow());
+    if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
-    const animated = !document.documentElement.classList.contains('reduce-motion') && !window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const animated = !reduceNow();
     const scoreTick = animated && mode === 'score' && lastMode === 'score' && previous.length === value.length;
     const animateReel = previous && animated && !scoreTick;
     for (const running of reel) running.cancel(); reel = [];
@@ -430,13 +466,15 @@ export function mountSmartCockpit() {
       }
       windowEl.append(old);
     }
-    lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif;
+    lastText = value; lastMode = mode; lastCompact = !!frame.compact; lastMotif = frame.motif; lastFlash = frame.flash;
     text.textContent = value; led.title = value; led.dataset.mode = mode;
     cells.classList.remove('scrolling'); spillCells.classList.remove('scrolling');
     requestAnimationFrame(() => {
-      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif) { old?.remove(); return; }
-      const reduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-      const shown = reduced || frame.compact ? ledStaticMessage(value) : value;
+      if (value !== lastText || mode !== lastMode || !!frame.compact !== lastCompact || frame.motif !== lastMotif || frame.flash !== lastFlash) { old?.remove(); return; }
+      const reduced = reduceNow();
+      // A recognised caption/banner gets its short token even with motion on; other copy keeps its scroll.
+      const token = ledToken(value);
+      const shown = token ?? (reduced || frame.compact ? ledStaticMessage(value) : value);
       const scrolling = !frame.motif && !reduced && mode !== 'score' && ledMessageWidth(shown) > windowEl.clientWidth - 2;
       if (frame.motif) {
         const frames = ledMotifFrames(frame.motif);
@@ -451,6 +489,13 @@ export function mountSmartCockpit() {
       } else {
         drawLedCells(cells,shown,scrolling,mode);
         drawLedCells(spillCells,shown,scrolling,mode);
+      }
+      window.clearTimeout(flashTimer);
+      windowEl.classList.remove('led-flash-cut','led-flash-bloom');
+      if (frame.flash && !reduced) {
+        void windowEl.offsetWidth; // restart the one-shot accent
+        windowEl.classList.add(frame.flash === 'bloom' ? 'led-flash-bloom' : 'led-flash-cut');
+        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'),420);
       }
       if (scrolling) {
         const travel = ledMarqueeTravel(shown);
@@ -479,8 +524,8 @@ export function mountSmartCockpit() {
     if (root.dataset.step === 'opp') return 'WAIT';
     if (root.dataset.step === 'draw') return 'DRAW';
     if (root.dataset.step === 'throw') return 'THROW';
-    if (root.dataset.test2Bloom === 'true') return 'BLOOM READY';
-    if (root.dataset.step === 'grow') return 'GROW OR SKIP';
+    if (root.dataset.test2Bloom === 'true') return 'BLOOM';
+    if (root.dataset.step === 'grow') return 'GROW';
     return 'FUTASAKU';
   };
   machine.reset(phaseMessage());
@@ -560,12 +605,12 @@ export function mountSmartCockpit() {
     if (key !== signature) { close(); signature = key; renderSelector(); }
     const first = current[0];
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
-      const hint = first?.icon === 'clear' ? 'CLEAR SHAPE' : first?.icon === 'reverse' ? 'REVERSE ORDER'
-        : first?.icon === 'cancel' ? 'CANCEL SELECTION' : first?.icon === 'bloom' ? 'BLOOM READY'
-        : first?.source.id === 'tool-skip' ? 'FAST FORWARD' : '';
+      const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
+        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM'
+        : first?.source.id === 'tool-skip' ? 'SKIP' : '';
       if (hint) machine.hint(hint);
     }
-    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red'});
+    if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
@@ -574,5 +619,10 @@ export function mountSmartCockpit() {
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
   }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event),
+    /** Hold a drag word (DRAW/PLACE/THROW/BLOOM/MEGA) on the sign; null clears it. Never FAST. */
+    led: (word:string|null) => {
+      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber');
+      else machine.release();
+    },
     reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp) };
 }

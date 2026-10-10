@@ -5,8 +5,7 @@
 // Each stays wholly inside its own hex. Procedural SVG, deterministic (the look varies only by
 // a hash of the tile), drawn once per board in the board's colours and kept across renders
 // (only classes change: idle, danger, tapped, strangled). No live filters.
-import { DIRECTIONS } from '../../../src/engine/index.js';
-import { el } from './geom.js';
+import { S, el } from './geom.js';
 import { toScreen } from '../logic/orient.js';
 import type { Orient } from '../logic/orient.js';
 import { landmarkBox, landmarkVariant } from '../logic/landmark.js';
@@ -153,42 +152,56 @@ const volcano = (g: SVGGElement, c: Colors, look: MaterialLook, key: string) => 
   g.style.setProperty('--lm-phase', `${(v.phase * -7).toFixed(2)}s`);
 };
 
+// The side of the home hex that faces engine direction i, as the two hex corners bounding it
+// (corner j sits at board angle 60j - 30). Same order as the engine's DIRECTIONS.
+const SIDE_CORNERS: readonly (readonly [number, number])[] = [[0, 1], [5, 0], [4, 5], [3, 4], [2, 3], [1, 2]];
+
 /**
  * Draws a home landmark at a tile centre and returns its group (kept across renders). The
- * group also holds the "sides blocked" ring, shown only in danger or when the home is tapped.
+ * group also holds the "sides closed" edges: one segment per home side, drawn on that side of
+ * the hex just inside its border. Only the blocked sides are ever visible.
  */
 export const drawLandmark = (parent: SVGGElement, kind: LandmarkKind, key: string, at: { x: number; y: number }, orient: Orient, colors: Colors, look: MaterialLook): SVGGElement => {
   const g = el('g', { class: `landmark lm-${kind}`, 'data-key': key, transform: `translate(${f(at.x)},${f(at.y)})` }, parent);
   const body = el('g', { class: 'lm-body', transform: `scale(${fitScale(kind, orient).toFixed(3)})` }, g);
   const inner = el('g', { class: 'lm-sprite' }, body);
   (kind === 'tree' ? tree : volcano)(inner, colors, look, key);
-  // the ring and its count sit above the drawing, so they are never hidden by it
+  // the edges sit above the drawing, so they are never hidden by it
   const ring = el('g', { class: 'lm-ring' }, g);
-  // one segment per side, centred on that neighbour's direction (engine order, either orientation)
-  for (let i = 0; i < 6; i++) {
-    const d = DIRECTIONS[i]!;
-    const v = toScreen(Math.sqrt(3) * (d.q + d.r / 2), 1.5 * d.r);
-    const mid = Math.atan2(v.y, v.x);
-    const a0 = mid - (27 * Math.PI) / 180;
-    const a1 = mid + (27 * Math.PI) / 180;
-    const r = 31;
-    el('path', { d: `M${f(Math.cos(a0) * r)},${f(Math.sin(a0) * r)} A${r},${r} 0 0 1 ${f(Math.cos(a1) * r)},${f(Math.sin(a1) * r)}`, class: 'lm-seg', 'data-i': i }, ring);
-  }
-  el('text', { x: 0, y: 22.5, class: 'lm-count num' }, ring);
+  // each segment traces its own side of the hex, a little inside the border (engine order)
+  const apothem = (S * Math.sqrt(3)) / 2;
+  const shrink = (apothem - 3) / apothem;
+  const corner = (j: number) => {
+    const a = (Math.PI / 180) * (60 * j - 30);
+    const p = toScreen(S * Math.cos(a), S * Math.sin(a));
+    return { x: p.x * shrink, y: p.y * shrink };
+  };
+  const corners = Array.from({ length: 6 }, (_, j) => corner(j));
+  SIDE_CORNERS.forEach(([a, b], i) => {
+    const p = corners[a]!;
+    const q = corners[b]!;
+    el('path', { d: `M${f(p.x)},${f(p.y)} L${f(q.x)},${f(q.y)}`, class: 'lm-seg', 'data-i': i }, ring);
+  });
   return g;
 };
 
-/** Updates a landmark's state classes and its ring (how many of its 6 sides are blocked). */
-export const setLandmarkState = (g: SVGGElement, s: { sides: boolean[]; blocked: number; danger: boolean; ring: boolean; tapped: boolean; strangled: boolean; won: boolean; idle: boolean; worried: boolean }) => {
+/** Updates a landmark's state classes and its edges (which of its 6 sides are closed). */
+export const setLandmarkState = (g: SVGGElement, s: { sides: boolean[]; enemy: boolean[]; blocked: number; danger: boolean; ring: boolean; tapped: boolean; strangled: boolean; won: boolean; idle: boolean; worried: boolean }) => {
   g.classList.toggle('idle', s.idle && !s.strangled);
   g.classList.toggle('danger', s.danger && !s.strangled);
   g.classList.toggle('worried', s.worried && !s.strangled);
-  g.classList.toggle('show-ring', (s.ring || s.tapped) && !s.strangled);
+  // the edges show only while the home is hemmed in (3+ sides and at least one enemy); a tap
+  // inspects the home but never forces them on.
+  const show = s.ring && !s.strangled;
+  g.classList.toggle('show-ring', show);
+  g.classList.toggle('ring-soft', show && s.blocked <= 3);
+  g.classList.toggle('ring-strong', show && s.blocked >= 4);
   g.classList.toggle('strangled', s.strangled);
   g.classList.toggle('won', s.won);
-  g.querySelectorAll('.lm-seg').forEach((seg, i) => seg.classList.toggle('on', !!s.sides[i]));
-  const t = g.querySelector('.lm-count');
-  if (t) t.textContent = `${s.blocked}/6`;
+  g.querySelectorAll('.lm-seg').forEach((seg, i) => {
+    seg.classList.toggle('on', show && !!s.sides[i]);
+    seg.classList.toggle('enemy', !!s.enemy[i]);
+  });
 };
 
 /** A one-off reaction: the tree's heartbeat or the volcano's thump (tap), restartable. */

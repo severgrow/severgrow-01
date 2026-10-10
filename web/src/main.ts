@@ -17,7 +17,8 @@ import type { DisplayEvent } from './player/display-readout.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
-import { growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { EMPTY_SEL, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import {
   DESK_IDLE,
@@ -55,10 +56,12 @@ import { perfStart, perfStep } from './logic/perf.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
+import { EASE, MOTION } from './logic/motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
+import { mountInstallButton } from './logic/install.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
@@ -117,6 +120,8 @@ if (V3_MODE) document.documentElement.classList.add('design-v3');
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
+import { mountDragLayer } from './ui/drag-layer.js';
+import { PILE_GRAB_PX } from './logic/drag.js';
 import { fillIcons, ICONS } from './ui/icons.js';
 import { getPixelGrid, setPixelGrid } from './ui/geom.js';
 import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
@@ -208,6 +213,8 @@ let replaySpeed = REPLAY_SPEED;
 const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1) * (replaying ? 1 / replaySpeed : 1);
 /** How much things move (0 when reduce motion is on). */
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
+/** Bloom's wave: one tile per 45ms, capped so the whole bloom ends inside a moment (600ms). */
+const BLOOM_STAGGER_MS = 45;
 
 // ---------- game state ----------
 
@@ -253,7 +260,21 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, sparks, spark, drift, ring, stream, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+
+/** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
+function quietAmbient(on: boolean) {
+  document.documentElement.classList.toggle('moment-quiet', on);
+}
+/** One heartbeat on the active home (an existing landmark animation, a single iteration). */
+function beatHome(p: Player, my: number) {
+  const home = board.homeEls[p];
+  if (!home || motion() === 0) return;
+  home.classList.remove('turn-beat');
+  void home.getBoundingClientRect();
+  home.classList.add('turn-beat');
+  setTimeout(() => { if (my === epoch) home.classList.remove('turn-beat'); }, 1000);
+}
 
 const save = () => {
   if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
@@ -521,6 +542,7 @@ function syncSettingsForm() {
   });
   segmented('effects-seg', EFFECTS, settings.effects, cap, (e) => {
     settings.effects = e;
+    sound.setEffects(e);
   });
   segmented('detail-seg', DETAILS, settings.materialDetail, cap, (d) => {
     settings.materialDetail = d;
@@ -564,6 +586,7 @@ function restoreLab() {
 function finishLabChange() {
   saveSettings();
   sound.enabled = settings.sound;
+  sound.setEffects(settings.effects);
   if (settings.sound || settings.music) sound.unlock();
   sound.setMix(settings);
   sound.setMusic(settings.music);
@@ -1077,8 +1100,8 @@ function rememberRemoved(steps: readonly Step[], before: State) {
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
   let displayEvent = IS_TEST2 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
-  if (displayEvent?.personality && coach.tutorial && coach.tutorial.chapter<5) {
-    const {personality: _personality,...quiet}=displayEvent;
+  if (displayEvent?.flavour && coach.tutorial && coach.tutorial.chapter<5) {
+    const {flavour: _flavour,...quiet}=displayEvent;
     displayEvent=quiet;
   }
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
@@ -1293,6 +1316,7 @@ function fastForward() {
   if (queue.pending === 0 && !pumping) return;
   epoch++;
   replaying = false;
+  quietAmbient(false);
   board.focus(null);
   for (const w of [...waiters]) w();
   // Finish our own one-off effects (never the endless CSS decorations like the root pulse).
@@ -1435,12 +1459,14 @@ function watchFrames() {
 function smootherMode() {
   const before = settings.effects;
   settings = { ...settings, effects: 'low' };
+  sound.setEffects('low');
   saveSettings();
   store.set(SMOOTH_KEY, '1');
   const note = $('smoother');
   note.hidden = false;
   $('smoother-undo').onclick = () => {
     settings = { ...settings, effects: before };
+    sound.setEffects(before);
     saveSettings();
     note.hidden = true;
     render();
@@ -1509,15 +1535,17 @@ async function playStep(step: Step, my: number) {
           const r = to.getBoundingClientRect();
           const dx = from.left + from.width / 2 - r.left - r.width / 2;
           const dy = from.top + from.height / 2 - r.top - r.height / 2;
+          // Draw: out of the pile and into the hand with a 4% scale overshoot, then rest.
           const frames = IS_TEST2
             ? m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
               : [{ translate: `${dx}px ${dy}px`, scale: `${(from.height / Math.max(r.height, 1)).toFixed(2)}`, opacity: 1 },
-                 { translate: `${(dx * .48).toFixed(1)}px ${(dy * .48 - 18).toFixed(1)}px`, scale: '.92', opacity: 1, offset:.5 },
+                 { translate: `${(dx * .42).toFixed(1)}px ${(dy * .42 - 14).toFixed(1)}px`, scale: '.96', opacity: 1, offset:.5 },
+                 { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
                  { translate: '0 0', scale: '1', opacity: 1 }]
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_TEST2 ? 330 : 420) * f, fill:'backwards', easing: IS_TEST2 ? 'cubic-bezier(.22,.72,.24,1)' : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_TEST2 ? 330 : 420) * f, fill:'backwards', easing: IS_TEST2 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
         }
-        sound.click();
+        sound.draw();
         await wait((IS_TEST2 ? 330 : 240) * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
@@ -1531,44 +1559,68 @@ async function playStep(step: Step, my: number) {
       const b = mo.budget;
       await anticipate(mo, f, my);
       if (!show()) return;
-      const per = (step.style === 'bloom' ? 70 : 0) * f;
-      // A Bloom reaches the nearest tiles first, measured from the acting player's home.
+      // Bloom arrives in a slow wave, 45ms outward from its anchor; the stagger is capped so the
+      // last tile and its draw-on vein finish inside one "moment" (600ms). A Sprout just lands.
+      const bloom = step.style === 'bloom';
       const home = parseKey(board.rootKey(by));
       const firstDistance = Math.min(...step.tiles.map(tile => hexDistance(home,parseKey(tile.key))));
+      const stagger = bloom ? BLOOM_STAGGER_MS * f : 0;
+      const staggerCap = (MOTION.moment - MOTION.move) * f;
       const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
+      let anchor: string | null = null;
+      let anchorDist = Infinity;
       step.tiles.forEach((t, i) => {
         const tileEl = board.tile(t.key);
-        const delay = step.style === 'bloom' ? (hexDistance(home,parseKey(t.key)) - firstDistance) * per : 0;
+        const d = hexDistance(home,parseKey(t.key));
+        if (d < anchorDist) { anchorDist = d; anchor = t.key; }
+        const delay = bloom ? Math.min((d - firstDistance) * stagger, staggerCap) : 0;
         last = Math.max(last, delay);
         const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
-        // Squash and stretch: a quick pop that overshoots and settles.
+        // The sprout settle: scale up from 0.86 at the centre with a spring, then press 1px in.
         const frames: Keyframe[] =
           m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
             : IS_TEST2
-              ? [{ transform: `translateY(${Math.min(st.drop,8)}px) scale(.72)`, opacity: 0 }, { transform: 'translateY(0) scale(1)', opacity: 1 }]
+              ? [{ transform: 'scale(0.86)', opacity: 0 }, { transform: 'scale(1.02)', opacity: 1, offset: 0.72 }, { transform: 'translateY(1px) scale(1)', offset: 0.9 }, { transform: 'translateY(0) scale(1)' }]
               : step.style === 'sprout'
                 ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
                 : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
-        anim(tileEl, frames, { duration: IS_TEST2 ? 280 * f : (step.style === 'sprout' ? 460 : st.ms) * f, delay: delay + (IS_TEST2 && m > 0 ? 280 * f : 0), easing: IS_TEST2 ? 'cubic-bezier(.2,.75,.25,1)' : 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
-        // overhaul item 17: blades spring up, a puff of spores (mine) as it lands, a heavier tap for the top rank
+        anim(tileEl, frames, { duration: IS_TEST2 ? MOTION.move * f : (step.style === 'sprout' ? 460 : st.ms) * f, delay, easing: IS_TEST2 ? EASE.spring : 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+        // overhaul item 17: blades spring up as the tile lands; a heavier tap for the top rank
         if (m > 0 && !b.fadeOnly) {
           tileEl?.classList.add('spring');
           setTimeout(() => tileEl?.classList.remove('spring'), delay + 900 * f);
-          if (b.particles > 0 && by === HUMAN && !t.replaced) drift(t.key, delay + st.ms * 0.55 * f, f, st.heavy ? 3 : 1);
+          if (!IS_TEST2 && b.particles > 0 && by === HUMAN && !t.replaced) drift(t.key, delay + st.ms * 0.55 * f, f, st.heavy ? 3 : 1);
         }
         const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
         if (hp && by === HUMAN && (st.heavy || i === 0)) setTimeout(() => vibrate(true, hp as number | number[]), delay + st.ms * 0.6 * f);
         if (t.replaced) {
-          // The bot's tile dissolves into sparks as mine takes its place.
-          sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
-          setTimeout(() => sound.sparks(), delay);
-        } else if (mo.tier === 'big' && b.particles > 0) sparks(t.key, by === HUMAN ? 'you' : 'bot', delay, f, Math.round(b.particles / step.tiles.length));
+          // The bot's tile dissolves into sparks as mine takes its place (a newcomer should not
+          // land on an old tile in silence), then the new one gets its quiet ring.
+          if (m > 0) {
+            sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
+            setTimeout(() => sound.sparks(), delay);
+          }
+          if (m > 0 && !b.fadeOnly && !bloom) ring(t.key, f, st.heavy);
+        } else if (IS_TEST2 && !bloom) {
+          // A normal Sprout: one quiet ring on the new tile, no sparks.
+          if (m > 0 && !b.fadeOnly) ring(t.key, f, st.heavy);
+        } else if (!IS_TEST2 && mo.tier === 'big' && b.particles > 0) {
+          sparks(t.key, by === HUMAN ? 'you' : 'bot', delay, f, Math.round(b.particles / step.tiles.length));
+        }
+        // the wood tick that lands: one per tile, lower and heavier for a higher rank
+        if (!bloom) {
+          const str = t.strength ?? 1;
+          const maxRank = session?.state.config.maxRank ?? 9;
+          if (st.heavy) sound.placeTop(str, maxRank, delay / 1000);
+          else sound.place(str, maxRank, delay / 1000);
+        }
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
-      if (mo.tier === 'small' && b.particles > 0) spark(step.tiles[0]!.key, 120 * f, f);
-      sound.grow(pitchLadder(step.tiles.length, mo.chain), per || 60);
+      // Bloom: one soft flash on the anchor, never one per tile.
+      if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
+      if (bloom) sound.bloom();
       // Part 3 D: a few spores drift home to my root from what I just grew (Eye candy)
       if (settings.eyeCandy && by === HUMAN && m > 0 && b.particles > 0) {
         const home = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
@@ -1594,12 +1646,32 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'megaBomb': {
-      if (!show()) return;
-      flash(step.target,f,false);
-      if (m > 0) for (const key of step.destroyed) sparks(key,step.player === HUMAN ? 'you' : 'bot',0,f,2);
-      if (settings.sound) sound.thud();
-      if (step.player === HUMAN) vibrate(settings.vibration,18);
-      await wait(280 * f,my);
+      // Mega Bomb is its own disappearance, not a cut: no cutPlan, no ripple, no banner.
+      const center = parseKey(step.target);
+      const mine = step.player === HUMAN;
+      quietAmbient(true);
+      // one dark pulse from the target, sized to the destroyed set (opacity ≤0.4, duration quick)
+      let lastRing = 0;
+      for (const key of step.destroyed) lastRing = Math.max(lastRing, hexDistance(parseKey(key), center));
+      flash(step.target, f, false, { dark: true, ms: MOTION.quick * f, radius: Math.min(4, lastRing + 1) });
+      if (settings.sound) sound.megaBomb();
+      if (mine) vibrate(settings.vibration, 18);
+      // a heavy drop only when the bomb actually lands on a large set
+      if (m > 0 && step.destroyed.length >= 4) anim($('board-wrap'), shakeFrames(3), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+      // destroyed tiles punch inward at their own centre, staggered by ring: 30ms per ring, <700ms
+      for (const key of step.destroyed) {
+        const ring = hexDistance(parseKey(key), center);
+        const delay = Math.min(ring * 30, 400) * f;
+        anim(board.tile(key), [
+          { transform: 'scale(1)', opacity: 1 },
+          { transform: 'scale(0.72)', opacity: 1, offset: 0.5 },
+          { transform: 'scale(0)', opacity: 0.5 },
+        ], { duration: MOTION.move * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
+        drift(key, delay + MOTION.move * 0.4 * f, f, 1); // one ash mote each
+      }
+      await wait(Math.min(700, lastRing * 30 + MOTION.move) * f, my);
+      quietAmbient(false);
+      show();
       return;
     }
     case 'remove': {
@@ -1614,22 +1686,23 @@ async function playStep(step: Step, my: number) {
       const top = step.to >= (session?.state.config.maxRank ?? 9);
       if (!show()) return;
       const tileEl = board.tile(step.key);
-      if (m > 0 && !mo.budget.fadeOnly) anim(tileEl, [{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.16 * m})`, offset: 0.35 }, { transform: `scale(${1 - 0.03 * m})`, offset: 0.7 }, { transform: 'scale(1)' }], { duration: 420 * f, easing: 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
-      if (m > 0) ring(step.key, f, top);
       const num = tileEl?.querySelector('.tile-num');
-      if (num && step.to > step.from) {
-        const stone = IS_TEST2 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
+      const stone = IS_TEST2 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
+      // The number brightens and ticks from → to over one "quick" beat; no bounce.
+      if (m > 0 && !mo.budget.fadeOnly) anim(stone ?? num ?? tileEl, [{ opacity: 0.5 }, { opacity: 1 }], { duration: MOTION.quick * f, easing: EASE.out, fill: 'both' });
+      if (m > 0 && !mo.budget.fadeOnly) ring(step.key, f, top);
+      if ((num || stone) && step.to > step.from) {
         const setShown = (value: number) => {
           if (stone) {
             setSeedStoneStrength(stone, value);
             if (value === step.to && m > 0) glintSeedStone(stone);
-          } else num.textContent = String(value);
+          } else if (num) num.textContent = String(value);
         };
         const n = step.to - step.from;
-        for (let i = 1; i <= n; i++) setTimeout(() => setShown(step.from + i), (i * 260 * f) / n);
+        for (let i = 1; i <= n; i++) setTimeout(() => setShown(step.from + i), (i * MOTION.quick * f) / n);
         setShown(step.from);
       }
-      if (settings.sound) sound.thud();
+      if (settings.sound) sound.strengthen();
       if (top && mo.budget.particles > 0) sparks(step.key, step.player === HUMAN ? 'you' : 'bot', 120 * f, f, Math.min(8, mo.budget.particles));
       vibrate(settings.vibration && settings.effects !== 'low', 12);
       const cap = captionFor(step, HUMAN);
@@ -1658,7 +1731,7 @@ async function playStep(step: Step, my: number) {
       // the burst: spores puff out, a soft thud
       if (b.particles > 0) sparks(step.target, mine ? 'you' : 'bot', 0, f, Math.max(6, Math.round(b.particles / (mine ? 2 : 3))));
       flash(step.target, f, false);
-      if (settings.sound) sound.thud();
+      if (settings.sound) sound.fruit();
       {
         const hp = hapticFor('throw', settings);
         if (hp && mine) vibrate(true, hp as number | number[]);
@@ -1711,7 +1784,7 @@ async function playStep(step: Step, my: number) {
           sound.snap();
         } else if (b.k === 'smother' || b.k === 'wither') {
           loserEl?.classList.add('strangled');
-          loserEl?.classList.remove('idle', 'danger', 'worried', 'show-ring');
+          loserEl?.classList.remove('idle', 'danger', 'worried', 'show-ring', 'ring-soft', 'ring-strong');
           if (b.k === 'smother') sound.sigh();
           else sound.grind();
         } else if (b.k === 'bloom' || b.k === 'roar') {
@@ -1730,6 +1803,8 @@ async function playStep(step: Step, my: number) {
     case 'turn': {
       if (!show()) return;
       announceTurn(step.player, step.player === HUMAN && step.final ? 'Your last turn' : undefined);
+      // Only the now-active home answers, with one existing heartbeat; the other stays still.
+      beatHome(step.player, my);
       // My turn starts: a soft glow passes over my hand.
       if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
       // an empty opponent turn starts at once (its quick beats are in its plan)
@@ -1742,7 +1817,8 @@ async function playStep(step: Step, my: number) {
     case 'end': {
       if (!show()) return;
       const won = step.result.winner === HUMAN;
-      sound.fanfare(won);
+      if (won) sound.win();
+      else sound.lose();
       {
         const hp = hapticFor(won ? 'win' : 'lose', settings);
         if (hp) vibrate(true, hp as number | number[]);
@@ -1796,7 +1872,7 @@ let lastAmbKey = '';
  * flash and a micro zoom, the vein pulse, the snap and shake, the ripple of dying tiles (moss
  * withers, lava cools and crumbles), the scar, and the payoff. `quiet`: no payoff (Fruit).
  */
-async function playCut(c: CutInput, first: boolean, chain: number, f: number, my: number, quiet = false) {
+async function playCut(c: CutInput, first: boolean, _chain: number, f: number, my: number, quiet = false) {
   const plan = cutPlan(c, { speed: f, reduceMotion: settings.reduceMotion || motion() === 0, effects: settings.effects }, first);
   document.documentElement.dataset.cutTier = plan.tier; // (read by the filmstrip tool: where the cut starts)
   const at = (ms: number, fn: () => void) => setTimeout(() => my === epoch && fn(), ms);
@@ -1808,18 +1884,29 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
   // the veins' blur glow draws a black box in Chrome while tiles animate under it; it is also the
   // costliest thing on the board, so it rests during the cut (the next redraw brings it back)
   document.querySelectorAll('svg.board .veins[filter]').forEach((g) => g.removeAttribute('filter'));
+  // dim the ambient skin loops for the moment, so the cut reads
+  quietAmbient(true);
   if (!quiet) sound.duck(plan.duckMs);
   for (const s of plan.stages) {
     switch (s.name) {
-      case 'anticipation':
-        anim(wrap, [{ scale: '1' }, { scale: '0.988' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
+      case 'anticipation': {
+        // Only Big and Huge lean the camera; small and medium cuts never move it.
+        if (plan.tier === 'big' || plan.tier === 'huge') anim(wrap, [{ scale: '1' }, { scale: '0.99' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
+        // the doomed links brighten and shorten a little toward the cut origin
+        const doomed = board.veinsTouching(keys);
+        for (const v of doomed) {
+          v.classList.add('straining');
+          anim(v, [{ opacity: 1, strokeDashoffset: '0' }, { opacity: 1, strokeDashoffset: '0.06' }], { duration: s.dur, easing: EASE.out, fill: 'forwards' });
+        }
+        if (doomed.length) setTimeout(() => doomed.forEach((v) => v.classList.remove('straining')), s.dur + 60);
         break;
+      }
       case 'flash':
         at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius,
           c.keys.find(key=>hexDistance(parseKey(key),parseKey(c.origin))===1)));
         break;
       case 'zoom':
-        at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: 'ease-out', transformOrigin: origin } as KeyframeAnimationOptions));
+        at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: EASE.out, transformOrigin: origin } as KeyframeAnimationOptions));
         break;
       case 'pulse':
         at(s.at, () => {
@@ -1831,8 +1918,11 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
         break;
       case 'snap':
         at(s.at, () => {
-          sound.snap(2 ** ((2 * chain) / 12));
-          if (plan.shakePx > 0) anim(wrap, shakeFrames(plan.shakePx), { duration: 260 * Math.max(f, 0.5) });
+          // one cut family, recognisable at every size; losing tiles uses the duller, lower cutMe
+          const cue: 'cutSmall' | 'cutMedium' | 'cutBig' | 'cutHuge' | 'cutMe' = c.mine ? 'cutMe'
+            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'medium' ? 'cutMedium' : 'cutSmall';
+          sound[cue]();
+          if (plan.shakePx > 0) anim(wrap, shakeFrames(plan.shakePx), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
           const hp = plan.haptic && hapticFor(plan.haptic, settings);
           if (hp && !quiet) vibrate(true, hp as number | number[]);
         });
@@ -1845,7 +1935,8 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
       case 'payoff':
         if (!quiet)
           at(s.at, () => {
-            floatText(plan.float, c.origin, c.mine ? 'bad' : 'good', f);
+            // one floating −N for the whole cut, never a number per tile (never with Reduce motion)
+            if (plan.stages[0]?.name !== 'fade') floatText(plan.float, c.origin, c.mine ? 'bad' : 'good', f, true);
             if (plan.banner) banner(plan.banner, c.mine ? 'calm' : 'big');
           });
         break;
@@ -1853,25 +1944,32 @@ async function playCut(c: CutInput, first: boolean, chain: number, f: number, my
         break;
     }
   }
-  // the ripple: each tile dies in its own material
-  const motes = settings.effects === 'low' || plan.stages[0]?.name === 'fade' ? 0 : plan.tier === 'huge' ? 2 : 1;
+  // the ripple: each tile darkens, flattens to 0.9 on Y, then drops away from the surviving
+  // network (a fold along the link for small cuts). Not a random fade, not confetti.
+  const fading = plan.stages[0]?.name === 'fade';
+  const originPt = centerOf(c.origin);
   for (const t of plan.tiles) {
-    const el = board.tile(t.key);
+    const tileEl = board.tile(t.key);
     const lava = queue.board[t.key]?.owner === BOT;
-    if (!el) continue;
+    if (!tileEl) continue;
+    const p = centerOf(t.key);
+    const len = Math.hypot(p.x - originPt.x, p.y - originPt.y) || 1;
+    const ax = ((p.x - originPt.x) / len) * 5;
+    const ay = ((p.y - originPt.y) / len) * 5;
     const frames: Keyframe[] =
-      plan.stages[0]?.name === 'fade'
+      fading
         ? [{ opacity: 1 }, { opacity: 0 }]
-        : lava
-          ? // lava: a last flare, then it cools (the withering style darkens it) and sinks into crumbs
-            [{ opacity: 1, transform: 'scale(1)' }, { opacity: 1, transform: 'scale(1.04)', offset: 0.15 }, { opacity: 0.9, transform: 'scale(0.96)', offset: 0.55 }, { opacity: 0, transform: 'scale(0.7) translateY(3px)' }]
-          : // moss: it dries (the withering style), curls a little and drops away
-            [{ opacity: 1, transform: 'scale(1) rotate(0deg)' }, { opacity: 0.95, transform: 'scale(0.95)', offset: 0.45 }, { opacity: 0, transform: `scale(0.6) rotate(${t.ring % 2 ? 8 : -8}deg) translateY(4px)` }];
-    at(t.at, () => el.classList.add('withering'));
-    anim(el, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: 'ease-in', transformOrigin: 'center' } as KeyframeAnimationOptions);
-    if (motes) drift(t.key, t.at + t.dur * 0.5, f, motes);
+        : plan.tier === 'small'
+          ? [{ opacity: 1, transform: 'scale(1, 1)' }, { opacity: 0.85, transform: 'scaleX(1.06) scaleY(0.5)', offset: 0.55 }, { opacity: 0, transform: 'scaleX(1.1) scaleY(0.12)' }]
+          : [{ opacity: 1, transform: 'scale(1, 1)' }, { opacity: lava ? 0.85 : 0.8, transform: 'scale(1, 0.9)', offset: 0.4 }, { opacity: 0, transform: `scale(${lava ? 0.85 : 0.86}, 0.64) translate(${ax}px, ${ay + 3}px)` }];
+    at(t.at, () => tileEl.classList.add('withering'));
+    anim(tileEl, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: EASE.out, transformOrigin: 'center' } as KeyframeAnimationOptions);
+    if (plan.motes) drift(t.key, t.at + t.dur * 0.5, f, plan.motes);
   }
+  // after the wave: a faint scar on the cut edge for ~400ms, then it is gone
+  if (plan.scar) at(Math.max(0, ...plan.tiles.map((t) => t.at + t.dur)), () => scar(c.keys, f));
   await wait(plan.total, my);
+  quietAmbient(false);
 }
 
 /** the result screen's count-up plays once per game */
@@ -1879,6 +1977,8 @@ let goCounted = false;
 
 /** the final-turns banner shows once per game */
 let finalShown = false;
+/** the final-turns cue plays once, when the endgame shade comes on */
+let finalSoundOn = false;
 
 let scoreRaf = 0;
 function countScores(to: [number, number]) {
@@ -2186,6 +2286,8 @@ function renderHud() {
   const finalOn = ft.final && st.phase !== 'GAME_OVER';
   document.documentElement.classList.toggle('final-turns', finalOn);
   sound.setCalm(finalOn);
+  if (finalOn && !finalSoundOn && settings.sound) sound.finalTurns();
+  finalSoundOn = finalOn;
   if (finalOn && !st.deckFinal && !finalShown && !busy() && st.actor === HUMAN && ft.banner) {
     finalShown = true;
     banner(ft.banner, 'calm');
@@ -2496,12 +2598,22 @@ function ghostExtras(v: View, pending: Action | null, ghosts: { key: string }[])
 }
 
 let blastHoverKey: string | null = null;
+/** While a hand card is dragged, the board shows its legal hexes without changing the tap selection. */
+let dragSel: Sel | null = null;
+/** The legal hex a drag is over (the board's own cue), and the drag's cached screen-to-board matrix. */
+let dragHoverKey: string | null = null;
+let dragInv: DOMMatrix | null = null;
+/** A board-only repaint while a drag is active: no hand re-render, so the dimmed source stays put. */
+function refreshBoardDrag() {
+  if (!session) return;
+  renderBoard(session.view, currentAdvice());
+}
 function renderBoard(v: View, advice: Advice | null) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age, tile }) => ({ key, owner, age, tile })), focusKey, fresh: freshKeys() };
   if (myTurn() && !busy()) {
-    const sel = session.sel;
-    const pending = session.pending;
+    const sel = dragSel ?? session.sel;
+    const pending = dragSel ? null : session.pending;
     const pv = pending ? previewMove(v, pending) : null;
     const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
     const kinds = !pending && (sel.card !== null || sel.kind !== null) && !drawCombo() ? targetKinds(v, session.legal, sel) : null;
@@ -2512,7 +2624,7 @@ function renderBoard(v: View, advice: Advice | null) {
       targets,
       ...(kinds || bloomTint && targets ? { targetKinds: Object.fromEntries(
         [...targets ?? []].map(key => [key, bloomTint ?? kinds?.get(key) ?? 'grow'])) } : {}),
-      selectedHex: sel.hex ?? (pending?.t === 'RotPick' ? coordKey(pending.coord) : null),
+      selectedHex: dragHoverKey ?? (sel.hex ?? (pending?.t === 'RotPick' ? coordKey(pending.coord) : null)),
       selectedKind: pending?.t === 'Bloom' ? 'bloom' : pending?.t === 'Sprout' ? sproutKind(v, pending) : pending?.t === 'MegaBomb' ? 'replace' : sel.kind?.startsWith('bloom-') ? 'bloom' : undefined,
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
@@ -3669,6 +3781,7 @@ const drawHandlers = {
     // released early: the partial shape stays (with Clear); a full shape that can't go shakes
     if (draw.shape.length === c.n) {
       board.shake(settings.reduceMotion);
+      if (settings.sound) sound.illegal();
       draw = { ...draw, msg: paintProblem(session!.view, c, draw.shape, draw.reverse) };
     }
     render();
@@ -3801,6 +3914,7 @@ function replayBotTurn() {
   session.cancel();
   replaying = true;
   replaySpeed = REPLAY_SPEED;
+  sound.reset(); // the same steps pick the same variations as the first time
   queue.reset(turn[0]!.before.board);
   const v0 = viewFor(turn[0]!.before, HUMAN);
   shownScores = [v0.score, v0.opponentScore];
@@ -4001,6 +4115,106 @@ bind('discard', () => {
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
+
+// ---------- drag layer (an extra path on top of the taps) ----------
+// A drag only ever plays an action the engine already lists as legal, so it can never fire
+// something a tap could not in the same state. A move under 10px stays a tap: this layer
+// only steps in past the threshold, and it suppresses the click that would otherwise
+// double-fire a committed drag. Taps, buttons, the Confirm setting and board painting are
+// untouched.
+const dragLayer = mountDragLayer({
+  canDrag: () => !!session && myTurn() && !busy() && session.state.phase !== 'GAME_OVER',
+  view: () => session?.view ?? null,
+  legal: () => (session && myTurn() && !busy() ? session.legal : []),
+  sel: () => session?.sel ?? EMPTY_SEL,
+  keyAt: (x, y) => board.keyAtClient(x, y, dragInv),
+  pointOf: (key) => {
+    const p = board.screenPoint(key);
+    return { x: p.x, y: p.y };
+  },
+  overDiscardPile: (x, y) => {
+    const r = $('discard').getBoundingClientRect();
+    const dx = Math.max(r.left - x, 0, x - r.right);
+    const dy = Math.max(r.top - y, 0, y - r.bottom);
+    return Math.hypot(dx, dy) <= PILE_GRAB_PX;
+  },
+  upperBoard: (y) => {
+    const r = board.svg.getBoundingClientRect();
+    return r.height > 0 && y < r.top + r.height / 2;
+  },
+  commit: (a) => {
+    // Match the tap path exactly. A pile tap draws at once (no Confirm); a hand action
+    // respects the "Confirm moves" setting, so a drag never fires something a tap would not.
+    if (a.t === 'Draw') {
+      // A draw's own haptic is subtle (Effects High only): give the commit one clear tick.
+      vibrate(settings.vibration, 12);
+      return humanPlay(a);
+    }
+    if (asksConfirm(a)) {
+      session?.preset(a);
+      render();
+      return;
+    }
+    humanPlay(a);
+  },
+  openBloom: (cardId) => {
+    if (!session) return;
+    session.cancel();
+    session.sel = { card: cardId, hex: null, kind: null, option: 0 };
+    render();
+  },
+  led: (word) => smartCockpit?.led(word),
+  onShape: (shape) => {
+    // Mirror a Bloom drag into the board's existing paint ghost, only when the board is not
+    // itself being painted (one gesture at a time). Empty clears it.
+    if (!session || draw.ptr) return;
+    if (!shape.length) {
+      draw = { ...draw, shape: [] };
+      board.ghost(null);
+      return;
+    }
+    draw = { ...draw, shape: [...shape], msg: null };
+    paintDraw();
+  },
+  onCardFocus: (cardId) => {
+    if (!session) {
+      dragSel = null;
+      return;
+    }
+    if (cardId === null) {
+      dragSel = null;
+      refreshBoardDrag();
+      return;
+    }
+    const card = session.view.hand.find((c) => c.id === cardId);
+    const mega = card?.suit === null ? session.legal.find((a) => a.t === 'MegaBomb' && a.cards.includes(cardId)) : undefined;
+    const kind = session.sel.kind?.startsWith('bloom-') ? session.sel.kind : mega ? kindOf(mega) : null;
+    dragSel = { card: cardId, hex: null, kind, option: 0 };
+    refreshBoardDrag();
+  },
+  onHoverKey: (key) => {
+    if (dragHoverKey === key) return;
+    dragHoverKey = key;
+    refreshBoardDrag();
+  },
+  onDragBegin: () => {
+    // Measure the screen-to-board matrix once per drag, not once per pointer move.
+    dragInv = board.screenCTMInverse();
+  },
+  onDragEnd: () => {
+    dragInv = null;
+    dragHoverKey = null;
+  },
+  onEnterTarget: () => {
+    const hp = hapticFor('press', settings);
+    if (hp) vibrate(true, hp as number | number[]);
+  },
+  reducedMotion: () => settings.reduceMotion || motion() === 0,
+  flyBack: (from, to) => flyBack(from, to, timeScale()),
+});
+dragLayer.attachHand($('hand'));
+dragLayer.attachDeck($('deck'));
+dragLayer.attachDiscard($('discard'));
 if (FEATURES.weakTools) bind('tool-weak', () => {
   settings = { ...settings, weakSpots: !settings.weakSpots };
   saveSettings();
@@ -4312,12 +4526,14 @@ document.addEventListener('keydown', (e) => {
 
 await mountPlayerEnhancements();
 fillIcons();
+mountInstallButton();
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 if (!IS_TEST2) onPhotosReady(() => {
   lastBoard = null;
   if (!busy()) render();
 });
 sound.enabled = settings.sound;
+sound.setEffects(settings.effects);
 sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();

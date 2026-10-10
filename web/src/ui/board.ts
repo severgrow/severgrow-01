@@ -28,6 +28,7 @@ import { drawLandmark, setLandmarkState } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { drawGoldFrame } from './goldframes.js';
+import { hexAtPoint } from '../logic/draw.js';
 
 export { FULL_LOOK, S, centerOf, el, noiseTile, star };
 
@@ -136,6 +137,8 @@ export class BoardView {
   /** Polish pass 3: drawing mode (lines and clumps drawn with a finger or the mouse). */
   private drawing = false;
   private drawHandlers: DrawHandlers | null = null;
+  /** The drawing ghost is reconciled by signature, so a growing shape keeps its hexes (no flicker). */
+  private ghostPool = new Map<string, SVGElement>();
   /** Polish pass 3: the top-rank glow settings (and a strength multiplier, for the lab's comparison). */
   private glowOpts: GlowOpts = { setting: 'subtle', effects: 'normal', reduceMotion: false };
   private glowScale = 1;
@@ -154,6 +157,12 @@ export class BoardView {
   private readonly uid = `b${++boardCount}`;
   protected id = (name: string) => `${this.uid}-${name}`;
   protected url = (name: string) => `url(#${this.id(name)})`;
+  /**
+   * The outline every overlay, badge, glow and spotlight shares. Test2 paints flat tiles, so an
+   * overlay must use the flat grid too, matching the tile and the legal-move wells instead of the
+   * wobbly organic silhouette. On the other channels this is the palette's tile shape.
+   */
+  protected shape(): ThemeStyle['tileShape'] { return IS_TEST2 ? 'flat' : this.style.tileShape; }
 
   constructor(
     readonly svg: SVGSVGElement,
@@ -197,25 +206,47 @@ export class BoardView {
     this.drawing = on;
     this.drawHandlers = on ? h : null;
     this.svg.classList.toggle('drawing', on);
-    if (!on) this.layers?.draw.replaceChildren();
+    if (!on) { this.layers?.draw.replaceChildren(); this.ghostPool.clear(); }
   }
 
   /** Draws the drawing ghost on its own layer (nothing else is redrawn). */
+  /** Draws the drawing ghost on its own layer (nothing else is redrawn). Hexes are reconciled by
+   *  signature: ones already on the board are kept (so a growing shape never flickers), and only a
+   *  hex the player has just painted animates in. Every hex uses the flat grid on Test2, so the
+   *  painted shape matches the legal-move wells exactly. */
   ghost(g: GhostView | null) {
     const layer = this.layers.draw;
-    layer.replaceChildren();
-    if (!g) return;
+    if (!g) {
+      if (this.ghostPool.size > 0) { layer.replaceChildren(); this.ghostPool.clear(); }
+      return;
+    }
     const st = this.style;
     const maxRank = this.config.maxRank;
+    const shape = IS_TEST2 ? ('flat' as const) : st.tileShape;
+    const live = new Set<string>();
     for (const t of g.tiles) {
+      const sig = `t:${t.key}:${t.strength}:${t.ok ? 1 : 0}`;
+      live.add(sig);
+      const kept = this.ghostPool.get(sig);
+      if (kept) { kept.classList.toggle('blocked', !!g.blocked); continue; }
       const gg = el('g', { class: `ghost draw-ghost${t.ok ? '' : ' cant'}${g.blocked ? ' blocked' : ''}`, 'data-key': t.key }, layer);
-      el('path', { d: hexPath(t.key, S * tileScale(t.strength, maxRank), st.tileShape), class: 'ghost-tile' }, gg);
+      el('path', { d: hexPath(t.key, IS_TEST2 ? S - 3 : S * tileScale(t.strength, maxRank), shape), class: 'ghost-tile' }, gg);
       const { x, y } = centerOf(t.key);
       if (IS_TEST2) drawSeedStone(gg, t.key, x, y, t.strength, 0);
       else el('text', { x, y: y + 1, class: 'ghost-num' }, gg).textContent = String(t.strength);
+      this.ghostPool.set(sig, gg);
     }
-    for (const k of g.unavailable ?? []) el('path', { d: hexPath(k, S * 0.9, st.tileShape), class: 'draw-unavailable', 'data-key': k }, layer);
-    if (g.cursor) el('path', { d: hexPath(g.cursor, S - 1.5, st.tileShape), class: 'draw-cursor' }, layer);
+    for (const k of g.unavailable ?? []) {
+      const sig = `u:${k}`;
+      live.add(sig);
+      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, el('path', { d: hexPath(k, S * 0.9, shape), class: 'draw-unavailable', 'data-key': k }, layer));
+    }
+    if (g.cursor) {
+      const sig = `c:${g.cursor}`;
+      live.add(sig);
+      if (!this.ghostPool.has(sig)) this.ghostPool.set(sig, el('path', { d: hexPath(g.cursor, S - 1.5, shape), class: 'draw-cursor' }, layer));
+    }
+    for (const [sig, node] of this.ghostPool) if (!live.has(sig)) { node.remove(); this.ghostPool.delete(sig); }
   }
 
   /** A small shake of the ghost: lifting the finger on a shape that can't be placed does nothing else. */
@@ -321,6 +352,7 @@ export class BoardView {
       draw: el('g', { class: 'l-draw' }, svg),
       fx: el('g', { class: 'l-fx' }, svg),
     };
+    this.ghostPool.clear();
     for (const key of this.keys) {
       const t = terrain[key] ?? 'normal';
       const g = el('g', { class: `hex-cell ${t}`, 'data-key': key }, this.layers.base);
@@ -494,9 +526,11 @@ export class BoardView {
       }
       if (segments.length) el('path', { d: segments.join(''), class: `territory-contour p${owner}`, fill: 'none' }, layer);
       const nearest = Math.min(...fresh.map(edge=>edge.distance));
+      // A Bloom wave: 45ms outward from the new edge, capped so the last vein draws on inside
+      // one "moment" (600ms) with its tile.
       for (const edge of fresh) el('path', { d:edge.path, pathLength:1,
         class:`territory-contour p${owner} grow-in`,fill:'none',
-        style:`animation-delay:${((edge.distance-nearest)*.07).toFixed(2)}s` }, layer);
+        style:`animation-delay:${Math.min((edge.distance-nearest)*.045,.32).toFixed(2)}s` }, layer);
       this.previousContourEdges[owner] = seen;
     }
   }
@@ -607,7 +641,7 @@ export class BoardView {
     for (const w of o.weak) this.badge(over, w.key, `−${w.loss}`, 'weak');
     if (o.pulse && !o.weak.some((w) => w.key === o.pulse!.key)) this.badge(over, o.pulse.key, `−${o.pulse.loss}`, 'weak pulse');
     for (const w of o.opps) this.badge(over, w.key, `−${w.loss}`, 'opp');
-    if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, st.tileShape), class: 'focus' }, over);
+    if (o.focusKey) el('path', { d: hexPath(o.focusKey, S - 1, this.shape()), class: 'focus' }, over);
     // UX pass: what the opponent changed last turn: a small spark at the top of each hex
     for (const key of IS_TEST2 ? [] : (o.fresh ?? [])) {
       if (!board[key]) continue;
@@ -742,7 +776,7 @@ export class BoardView {
       const kind = t.owner === 0 ? 'moss' : 'lava';
       const glow = topGlow(vigour(t.strength, this.config.maxRank), kind, this.glowOpts);
       if (!glow) continue;
-      const sprite = glowSprite(glow.color, glow.blur, this.style.tileShape);
+      const sprite = glowSprite(glow.color, glow.blur, this.shape());
       if (!sprite) continue;
       now.add(key);
       const { x, y } = centerOf(key);
@@ -806,7 +840,7 @@ export class BoardView {
   private badge(parent: SVGGElement, key: string, text: string, kind: 'weak' | 'opp' | 'weak pulse' | 'weak at-risk' | 'opp cut-gain') {
     const { x, y } = centerOf(key);
     const g = el('g', { class: `badge ${kind}` }, parent);
-    el('path', { d: hexPath(key, S - 3, this.style.tileShape), class: 'badge-ring' }, g);
+    el('path', { d: hexPath(key, S - 3, this.shape()), class: 'badge-ring' }, g);
     el('rect', { x: x + 2, y: y - S * 0.95, width: 22, height: 15, rx: 7.5, class: 'badge-bg' }, g);
     el('text', { x: x + 13, y: y - S * 0.95 + 8, class: 'badge-text num' }, g).textContent = text;
   }
@@ -823,7 +857,7 @@ export class BoardView {
       return;
     }
     const vb = this.svg.viewBox.baseVal;
-    const holes = keys.map((k) => hexPath(k, S + 1, this.style.tileShape)).join('');
+    const holes = keys.map((k) => hexPath(k, S + 1, this.shape())).join('');
     g.replaceChildren();
     el('path', { d: `M${vb.x},${vb.y}h${vb.width}v${vb.height}h${-vb.width}Z${holes}`, 'fill-rule': 'evenodd', class: 'dim-mask' }, g);
     g.classList.add('on');
@@ -887,7 +921,7 @@ export class BoardView {
         el('stop', { offset: '100%', 'stop-color': owner === 0 ? '#cfffaa' : '#ff782f', 'stop-opacity': 0 }, gradient);
       }
       const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
-      for (const key of joined) el('path', { d: hexPath(key, S * 1.01, this.style.tileShape) }, clip);
+      for (const key of joined) el('path', { d: hexPath(key, S * 1.01, this.shape()) }, clip);
       const surface = el('g', { class: `territory-pulse p${owner}`, 'clip-path': `url(#${clipId})` }, layer);
       // A faint heartbeat travels through a spanning tree of the territory.
       // The clip keeps every branch on tile surfaces, with nothing visible
@@ -934,7 +968,24 @@ export class BoardView {
     const pt = new DOMPoint(x, y).matrixTransform(m);
     return { x: pt.x, y: pt.y };
   }
+  /**
+   * The board hex under a client point, using the same hit test the board already uses while
+   * drawing (a finger at a corner never slips into a neighbour). Null: a gap or off the board.
+   * The drag layer maps a finger over the board to a legal hex with this. `inverse` caches the
+   * screen-to-board matrix for a whole drag (measured once) instead of once per pointer move.
+   */
+  keyAtClient(clientX: number, clientY: number, inverse?: DOMMatrix | null): string | null {
+    const m = inverse ?? this.screenCTMInverse();
+    if (!m) return null;
+    const p = new DOMPoint(clientX, clientY).matrixTransform(m);
+    return hexAtPoint(p.x, p.y, new Set(this.keys));
+  }
+  /** The screen-to-board matrix (inverse of the SVG's CTM), or null. Measured once per drag. */
+  screenCTMInverse(): DOMMatrix | null {
+    const m = this.svg.getScreenCTM();
+    return m ? m.inverse() : null;
+  }
   hexPath(key: string, size: number) {
-    return hexPath(key, size, this.style.tileShape);
+    return hexPath(key, size, this.shape());
   }
 }

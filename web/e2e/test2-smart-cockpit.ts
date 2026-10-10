@@ -4,8 +4,10 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import type { Page } from 'playwright-core';
-import { hexDistance, legalActions, viewFor } from '../../src/engine/index.js';
+import { hexDistance, legalActions, newGame, viewFor } from '../../src/engine/index.js';
+import type { State, Tile } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
+import { positionSave } from './position.js';
 
 const BASE = process.env.TEST2_URL ?? 'http://localhost:4198/';
 const server = process.env.TEST2_URL ? null : await preview({ configFile:'web/vite.config.ts', preview:{ port:4198, strictPort:true }, logLevel:'silent' });
@@ -183,11 +185,23 @@ try {
   }),'Bloom: centre shows a recipe containing the highest card rank');
   await branch.locator('#smart-bloom-button').click();
   check(await branch.locator('#smart-bloom-selector').isVisible(),'Bloom: compact recipe drawer opens');
-  check(await branch.locator('#smart-bloom-selector').evaluate(el=>{
-    const drawer=el.getBoundingClientRect();
-    const cockpit=document.querySelector('#test2-box')!.getBoundingClientRect();
-    return Math.abs(drawer.left-(cockpit.left+6))<1 && Math.abs(drawer.right-(cockpit.right-6))<1;
-  }),'Bloom: recipe drawer shares the cockpit side margins exactly');
+  const bloomDrawer = () => branch.evaluate(() => {
+    const node=document.querySelector<HTMLElement>('#smart-bloom-selector')!;
+    const drawer=node.getBoundingClientRect();
+    const cockpit=document.querySelector<HTMLElement>('#test2-box')!.getBoundingClientRect();
+    return {left:drawer.left,right:drawer.right,width:drawer.width,cockpitLeft:cockpit.left,cockpitRight:cockpit.right,cockpitWidth:cockpit.width,scrollWidth:node.scrollWidth,clientWidth:node.clientWidth};
+  });
+  const few=await bloomDrawer();
+  check(few.width<few.cockpitWidth-12+0.5,'Bloom: a short recipe list hugs its recipe cards instead of filling the cockpit');
+  check(Math.abs((few.left+few.right)/2-(few.cockpitLeft+few.cockpitRight)/2)<1.5,'Bloom: the hugging drawer stays centred in the cockpit');
+  check(few.left>=few.cockpitLeft-1 && few.right<=few.cockpitRight+1,'Bloom: the hugging drawer stays inside the cockpit margins');
+  // Only a crowded list may fill the cockpit width, and then it scrolls.
+  await branch.locator('#smart-bloom-selector').evaluate(el=>{ for(let i=0;i<12;i++){const b=document.createElement('button');b.type='button';b.setAttribute('role','menuitem');b.dataset.temp='1';b.textContent='×';el.append(b);} });
+  const many=await bloomDrawer();
+  check(Math.abs(many.width-(many.cockpitWidth-12))<1.5,'Bloom: a crowded recipe list fills the cockpit width');
+  check(many.scrollWidth>many.clientWidth+1,'Bloom: a crowded recipe list becomes scrollable');
+  check(many.left>=many.cockpitLeft-1 && many.right<=many.cockpitRight+1,'Bloom: a crowded drawer stays inside the cockpit margins');
+  await branch.locator('#smart-bloom-selector [data-temp]').evaluateAll(nodes=>nodes.forEach(node=>node.remove()));
   check(await branch.locator('#smart-bloom-selector button').evaluateAll(buttons=>buttons.every(button=>getComputedStyle(button).borderWidth==='0px' && getComputedStyle(button).backgroundColor==='rgba(0, 0, 0, 0)')),'Bloom: recipes have no individual boxes');
   await branch.screenshot({path:`${dir}/390x844-bloom-selector.png`});
   await branch.keyboard.press('Escape');
@@ -208,6 +222,62 @@ try {
   await branch.locator('#smart-selector button[data-action^="clear:"]').click();
   check(await branch.locator('#moves .draw-clear').count()===0,'Bloom: Clear executes existing action');
   await branch.close();
+  // The hexes being painted use the same flat hex and green ink as a legal well; each one pops
+  // in as it joins the shape, and the ones already painted are never re-mounted (no flicker).
+  const painted=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await painted.addInitScript(()=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:false})); });
+  await painted.goto(`${BASE}?seed=4`); await painted.waitForSelector('#deck.ready');
+  await painted.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click()); await waitPhase(painted,'ACT');
+  const kind=await painted.locator('#moves [data-kind^="bloom-"]').first().getAttribute('data-kind');
+  check(!!kind,'Bloom: a Bloom recipe is offered while painting');
+  await painted.evaluate(k=>(window as any).__severgrow.pickKind(k),kind);
+  await painted.locator('#board .target.kind-bloom').first().waitFor();
+  const startKey=await painted.locator('#board .target.kind-bloom').first().getAttribute('data-key');
+  const from=await hexCenter(painted,startKey!);
+  await painted.mouse.move(from.x,from.y);
+  await painted.mouse.down();
+  await painted.mouse.move(from.x+9,from.y+7,{steps:3}); // start the drag: the first hex lands, nothing commits
+  await painted.waitForFunction(()=>document.querySelector('#board .l-draw .ghost-tile'));
+  await painted.locator('#board .l-draw .ghost').first().evaluate(el=>el.setAttribute('data-probe','first'));
+  const drawn=await painted.locator('#board .l-draw .ghost-tile').first().getAttribute('d');
+  const well=await painted.locator('#board .l-over .target.kind-bloom').first().getAttribute('d');
+  check(!!drawn && !/[QqCcAa]/.test(drawn),'Bloom: the painted hex uses the same straight hex geometry as a legal well');
+  check(drawn===well,'Bloom: the painted hex matches a legal well exactly');
+  const ink=await painted.evaluate(()=>{ const t=document.querySelector('#board .l-draw .ghost-tile')!; const cs=getComputedStyle(t); return `${cs.fill}|${cs.stroke}|${cs.strokeWidth}`; });
+  const wellInk=await painted.evaluate(()=>{ const t=document.querySelector('#board .l-over .target.kind-bloom')!; const cs=getComputedStyle(t); return `${cs.fill}|${cs.stroke}|${cs.strokeWidth}`; });
+  check(ink===wellInk,`Bloom: the painted hex uses the same green ink as a legal well (${ink} vs ${wellInk})`);
+  check(await painted.locator('#board .l-draw .ghost-tile').first().evaluate(el=>getComputedStyle(el).animationName)==='none','Bloom: the painted hex keeps its ink steady (no legacy breathe)');
+  check(await painted.locator('#board .l-draw .ghost').first().evaluate(el=>getComputedStyle(el).animationName)==='draw-hex-pop','Bloom: each painted hex pops in as it joins the shape');
+  // extend by one more hex and prove the first hex was kept, not re-mounted
+  const growKey=await painted.locator(`#board .target.kind-bloom:not([data-key="${startKey}"])`).first().getAttribute('data-key');
+  if(growKey){ const to=await hexCenter(painted,growKey); await painted.mouse.move(to.x,to.y,{steps:5}); await painted.waitForTimeout(120); }
+  check(await painted.locator('#board .l-draw .ghost[data-probe="first"]').count()===1,'Bloom: a painted hex is kept as the shape grows (no flicker)');
+  await painted.mouse.up();
+  await painted.close();
+  // Every overlay, badge, spotlight and glow must use the flat grid too (Test2 paints flat
+  // tiles), so nothing wears the wobbly organic silhouette next to a flat tile or legal well.
+  const layers=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await layers.addInitScript(save=>{ (window as any).__name=(fn:unknown)=>fn; localStorage.setItem('main2:severgrow.save.v7',save); localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})); },(()=>{
+    const g=newGame(2001); const board:Record<string,Tile|null>={...g.board};
+    const put=(k:string,t:Tile)=>{board[k]=t;};
+    put('-2,2',{owner:0,strength:0,root:true}); put('-2,1',{owner:0,strength:1}); put('-2,0',{owner:0,strength:2}); put('-2,-1',{owner:0,strength:3});
+    put('2,-2',{owner:1,strength:0,root:true}); put('1,-1',{owner:1,strength:2}); put('0,0',{owner:1,strength:3}); put('-1,0',{owner:1,strength:4});
+    put('-2,3',{owner:0,strength:9});
+    const terrain={...g.terrain}; for(const k of ['-2,2','-2,1','-2,0','-2,-1','-2,3','2,-2','1,-1','0,0','-1,0'])terrain[k]='normal';
+    const state:State={...g,board,terrain,phase:'ACT',actor:0,turnPlayer:0};
+    return positionSave({state});
+  })());
+  await layers.goto(BASE); await layers.locator('#menu-continue').click();
+  await layers.waitForFunction(()=>document.getElementById('board')?.querySelector('.hex') && !(window as any).__severgrow.busy());
+  await layers.waitForTimeout(700);
+  const overlay=await layers.evaluate(()=>{
+    const all=[...document.querySelectorAll('#board .badge-ring,#board .target,#board .l-draw .ghost-tile,#board defs clipPath path,#board .l-dim path,#board .focus')].map(el=>el.getAttribute('d')||'');
+    return { total:all.length, curved:all.filter(d=>/[QqCcAa]/.test(d)) };
+  });
+  check(overlay.total>0,`Overlays: the crafted position draws at least one overlay (${overlay.total})`);
+  check(overlay.curved.length===0,`Overlays: badges, targets, spotlights and clips all use the flat grid (curved: ${overlay.curved.length})`);
+  check(await layers.locator('#board .badge-ring').count()>=1,'Overlays: the weak-link badge ring is drawn');
+  await layers.close();
   const skipBloom=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   await skipBloom.addInitScript(()=>localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true})));
   await skipBloom.goto(`${BASE}?seed=3`); await skipBloom.waitForSelector('#deck.ready');
