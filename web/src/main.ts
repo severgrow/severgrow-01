@@ -1647,6 +1647,10 @@ async function playStep(step: Step, my: number) {
     }
     case 'megaBomb': {
       // Mega Bomb is its own disappearance, not a cut: no cutPlan, no ripple, no banner.
+      // A fast-forwarded or abandoned step must not dim the board (moment-quiet). This branch
+      // animates the doomed tiles before show() moves the queue on, so unlike the branches that
+      // render first it guards with the plain epoch check (the one the sever branch uses).
+      if (my !== epoch) return;
       const center = parseKey(step.target);
       const mine = step.player === HUMAN;
       quietAmbient(true);

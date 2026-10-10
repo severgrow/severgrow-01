@@ -177,14 +177,18 @@ try {
     } finally { await p.close(); }
   }
 
-  const menu = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  // A fresh context: the pages above leave a live save in the shared context's localStorage,
+  // and #menu-new prompts before it opens the levels when a save exists. An isolated context
+  // (empty storage) makes this block deterministic; the assertion's intent is unchanged.
+  const menuCtx = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  const menu = await menuCtx.newPage();
   await menu.goto('http://localhost:4199/');
   await menu.locator('#menu-new').click();
   await menu.locator('#levels').waitFor({state:'visible'});
   assert.deepEqual(await menu.locator('#level-grid button').allTextContents(),['BEGINNER','EASY','MEDIUM','HARD','PRO']);
   assert.equal(await menu.locator('#level-grid button svg,#level-grid button .lt-note').count(),0,'difficulty choices are names only');
   await menu.screenshot({path:'/tmp/futasaku-03-difficulty.png'});
-  await menu.close();
+  await menuCtx.close();
   console.log('Futasaku 0.4 motion checks passed: Draw/Throw, Bloom, Small/Huge cut, Reduce motion and the Mega Bomb');
 } finally {
   await page.close(); await browser.close(); await server.close();
