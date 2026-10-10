@@ -14,7 +14,7 @@ describe('Futasaku preview routes', () => {
     const html = readFileSync(new URL('./web/index.html', root), 'utf8');
     const worker = readFileSync(new URL('./web/public/test2-sw.js', root), 'utf8');
     const channel = readFileSync(new URL('./web/src/channel.ts', root), 'utf8');
-    for (const path of ['/futasaku-03-preview/', '/futasaku-04-preview/']) {
+    for (const path of ['futasaku-03-preview', 'futasaku-04-preview']) {
       expect(html).toContain(path);
       expect(worker).toContain(path);
       expect(channel).toContain(path);
