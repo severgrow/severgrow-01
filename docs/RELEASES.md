@@ -31,3 +31,14 @@ Test2 from the current experimental Dev revision published alongside it.
 The owner authorized the minimal default-branch Pages workflow exception to retain `/test2/`.
 That authorization does not permit merging candidate game code into Main. The ordinary strict
 Main promotion process still requires an explicit request, passing checks, and a reviewed PR.
+
+## Futasaku preview routes
+
+The current game is also published from the allowed `futa0.3` Pages ref, without
+replacing Main, Test or Test2. Each preview has its own address, saves and
+offline cache. Both routes are built from that ref's commit.
+
+| Version | Address | Storage | Offline cache |
+| --- | --- | --- | --- |
+| Futasaku 0.3 | https://severgrow.github.io/severgrow-01/futasaku-03-preview/ | `futasaku03:` | `futasaku03-` |
+| Futasaku 0.4 | https://severgrow.github.io/severgrow-01/futasaku-04-preview/ | `futasaku04:` | `futasaku04-` |

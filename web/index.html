@@ -8,7 +8,7 @@
       // If one of them fails to load, reload once from a fresh address (never in a loop).
       (function () {
         // Use native operations captured before channel.ts patches Storage.prototype.
-        var prefix = /\.chatgpt\.site$/.test(location.hostname) || /\/futasaku-03-preview\//.test(location.pathname) ? 'futasaku03:' : /\/test2\//.test(location.pathname) ? 'main2:' : /\/test\//.test(location.pathname) ? 'test:' : '';
+        var prefix = /\.chatgpt\.site$/.test(location.hostname) || /\/futasaku-03-preview\//.test(location.pathname) ? 'futasaku03:' : /\/futasaku-04-preview\//.test(location.pathname) ? 'futasaku04:' : /\/test2\//.test(location.pathname) ? 'main2:' : /\/test\//.test(location.pathname) ? 'test:' : '';
         var key = prefix + 'fresh-reload';
         if (typeof Storage === 'undefined') return;
         var get = Storage.prototype.getItem, set = Storage.prototype.setItem, remove = Storage.prototype.removeItem;

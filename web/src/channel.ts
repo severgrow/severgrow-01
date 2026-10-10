@@ -24,8 +24,16 @@ export const FEATURES = Object.freeze({
   v3: modern,
   watch: IS_TEST,
 });
-const isPreviewHost = typeof location !== 'undefined' && (location.hostname.endsWith('.chatgpt.site') || location.pathname.includes('/futasaku-03-preview/'));
-export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? (isPreviewHost ? 'futasaku03:' : 'main2:') : '';
+// Each published preview keeps its own saves. The 0.3 address and the ChatGPT
+// host stay on futasaku03; the 0.4 address uses futasaku04. Test2 itself stays main2.
+const previewStoragePrefix = (): string | null => {
+  if (typeof location === 'undefined') return null;
+  const path = location.pathname;
+  if (location.hostname.endsWith('.chatgpt.site') || path.includes('/futasaku-03-preview/')) return 'futasaku03:';
+  if (path.includes('/futasaku-04-preview/')) return 'futasaku04:';
+  return null;
+};
+export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_TEST2 ? (previewStoragePrefix() ?? 'main2:') : '';
 if (STORAGE_PREFIX && typeof Storage !== 'undefined') {
   const proto = Storage.prototype;
   const get = proto.getItem, set = proto.setItem, remove = proto.removeItem;
