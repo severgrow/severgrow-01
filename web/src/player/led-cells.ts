@@ -104,8 +104,47 @@ export function ledStaticMessage(message: string) {
   if (message === 'MEGA BOMB') return 'MEGA';
   if (/^[+-]\d+ TILES$/.test(message)) return message.split(' ')[0]!;
   if (message === 'UNDONE') return 'UNDO';
+  if (message === 'FUTASAKU') return 'FUTA';
+  if (message === 'CANCEL') return 'CANCEL';
+  const cut = /^CUT-(\d+)$/.exec(message);
+  if (cut) return cut[1]!.length < 2 ? `CUT-${cut[1]}` : `C-${cut[1]}`;
   if (message.length <= 5) return message;
   return message.split(' ')[0]!.slice(0,5);
+}
+
+/**
+ * Short LED form for long, known game copy (captions, banners, warnings). Returns null when
+ * the copy is not recognised, so unfamiliar text keeps its existing scroll/shorthand path.
+ * The live region always keeps the full sentence; this only shapes the physical window.
+ */
+export function ledToken(message: string): string | null {
+  const m = message.toUpperCase().replace(/\s+/g, ' ').trim();
+  const num = (re: RegExp, index = 1): string | null => { const g = re.exec(m); return g ? g[index]! : null; };
+  let n: string | null;
+  if ((n = num(/^YOU CUT OFF (\d+) (?:OPPONENT )?TILES?!?$/))) return `CUT+${n}`;
+  if ((n = num(/^YOUR OPPONENT CUT OFF (\d+) OF YOUR TILES$/))) return `CUT-${n}`;
+  if ((n = num(/^YOU TOOK OVER (\d+) (?:OPPONENT )?TILES?!?$/))) return `+${n}`;
+  if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?, TAKING (\d+) OF YOURS$/, 2))) return `-${n}`;
+  if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?$/))) return `OPP+${n}`;
+  if (m === 'YOUR TREE IS SURROUNDED!' || m === "OPPONENT'S VOLCANO IS SURROUNDED!") return 'CAUGHT';
+  if ((n = num(/^STRENGTHENED (\d+) . (\d+)$/, 2))) return `UP${n}`;
+  if ((n = num(/^YOUR OPPONENT STRENGTHENED A (\d+) TO A (\d+)$/, 2))) return `UP${n}`;
+  if (m.startsWith('FRUITED!')) return 'FRUIT';
+  if ((n = num(/^OPPONENT USED A FRUIT CARD ON YOUR (\d+)$/))) return `-${n}`;
+  if ((n = num(/^MEGA BOMB CLEARED (\d+) TILES$/))) return `BOOM${n}`;
+  if (m === 'PLAY IT IN YOUR GROW STEP.') return 'GROW';
+  if (m === 'FRUIT IS BACK NEXT TURN') return 'NEXT';
+  if (m === 'NO OPPONENT TILE BY YOURS') return 'NONE';
+  if (m === 'HOME IN DANGER') return 'WARN';
+  if (m === 'STRANGLED!') return 'ENDED';
+  if (m === 'BIG GROW!') return 'GROW+';
+  if ((n = num(/^CUT OFF (\d+)!$/))) return `CUT-${n}`;
+  if ((n = num(/^LOST (\d+) TILES$/))) return `LOST${n}`;
+  if ((n = num(/^LAST (\d+) TURNS$/))) return `LAST${n}`;
+  if (m === 'LAST TURN' || m === 'DECK EMPTY: LAST TURN') return 'LAST';
+  if (m === 'THE DECK IS RUNNING LOW') return 'LOW';
+  if (m.startsWith('REPLAY:')) return 'REPLAY';
+  return null;
 }
 
 /** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */

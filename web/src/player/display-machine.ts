@@ -1,7 +1,8 @@
 import type { DisplayEvent } from './display-readout.js';
+import { FlavourDeck } from './led-flavour.js';
 import type { LedMotif, LedTone } from './led-cells.js';
 
-export type DisplayFrame = { text: string; mode: LedTone; pulse?: boolean; compact?: boolean; motif?: LedMotif };
+export type DisplayFrame = { text: string; mode: LedTone; pulse?: boolean; compact?: boolean; motif?: LedMotif; flash?: 'cut' | 'bloom' };
 
 /** One match-scoped clock owns the sign. Its resting face is always the real score. */
 export class DisplayMachine {
@@ -13,16 +14,18 @@ export class DisplayMachine {
   private idleReturn = 0;
   private epoch = 0;
   private eventCount = 0;
-  private lastReactionAt = -10;
-  private recentReactions: string[] = [];
+  private flavour = new FlavourDeck();
   private idleCycles = 0;
   private idleSecretShown = false;
+  /** A drag is holding a word on the sign; timers and idle reminders stay out of the way. */
+  private held = false;
   private frame: DisplayFrame = { text:'', mode:'score' };
   constructor(private readonly show: (frame: DisplayFrame) => void) {}
 
   private emit(frame: DisplayFrame) {
     if (this.frame.text === frame.text && this.frame.mode === frame.mode &&
-      this.frame.pulse === frame.pulse && this.frame.motif === frame.motif) return;
+      this.frame.pulse === frame.pulse && this.frame.motif === frame.motif &&
+      this.frame.flash === frame.flash) return;
     this.frame = frame;
     this.show(frame);
   }
@@ -43,50 +46,62 @@ export class DisplayMachine {
     window.clearTimeout(this.idleTimer);
     window.clearTimeout(this.idleReturn);
   }
+  private reduced() {
+    return typeof document !== 'undefined' &&
+      (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+  }
+  /** A flavour line for this moment, or null. Rare, and never twice in a row for one kind. */
   private pickReaction(event: DisplayEvent): string | null {
-    this.eventCount++;
-    const personality = event.personality;
-    if (!personality || (event.priority < 95 && this.eventCount - this.lastReactionAt < 3)) return null;
-    // Cosmetic choice is reproducible and never consumes the engine's random stream.
-    let hash = 2166136261;
-    for (const char of event.key ?? `${event.message}:${this.eventCount}`)
-      hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-    if ((hash >>> 0) % 100 >= personality.chance) return null;
-    const choices = personality.lines.filter(line => !this.recentReactions.includes(line));
-    const pool = choices.length ? choices : personality.lines;
-    const chosen = pool[((hash >>> 8) % pool.length)] ?? null;
-    if (chosen) {
-      this.lastReactionAt = this.eventCount;
-      this.recentReactions.push(chosen);
-      this.recentReactions = this.recentReactions.slice(-2);
-    }
-    return chosen;
+    if (!event.flavour) return null;
+    return this.flavour.draw(event.flavour.kind, event.flavour.pool, event.key ?? `${event.message}:${this.eventCount}`);
   }
   event(event: DisplayEvent) {
     if (this.active && this.active.priority > event.priority) return;
+    this.held = false;
     this.clearTimers();
     this.active = event;
+    this.eventCount++;
     const id = ++this.epoch;
-    const reaction = this.pickReaction(event);
-    const reduced = typeof document !== 'undefined' && (document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches);
-    const message = () => {
-      if (id !== this.epoch) return;
-      this.emit({text:event.message,mode:event.mode ?? 'amber',compact:event.message.length <= 12});
-      this.timer = window.setTimeout(() => this.finish(id),event.duration);
-    };
-    if (reaction && !reduced && event.personality?.motif) {
-      this.emit({text:'',mode:event.personality.tone ?? event.mode ?? 'amber',motif:event.personality.motif});
+    const reaction = this.reduced() ? null : this.pickReaction(event);
+    const tone = event.flavour?.pool.tone ?? event.mode ?? 'amber';
+    this.emit({text:event.message,mode:event.mode ?? 'amber',compact:event.message.length <= 12,
+      ...(event.accent?{flash:event.accent}:{}),...(event.pulse?{pulse:true}:{})});
+    // The fact lands first and holds for its full duration. A flavour line may only follow it.
+    const motif = event.flavour?.pool.motif;
+    if (reaction && motif) {
       this.timer = window.setTimeout(() => {
         if (id !== this.epoch) return;
-        this.emit({text:reaction,mode:event.personality?.tone ?? event.mode ?? 'amber',compact:true});
-        this.timer = window.setTimeout(message,680);
-      },440);
-    } else if (reaction && !reduced) {
-      this.emit({text:reaction,mode:event.personality?.tone ?? event.mode ?? 'amber',compact:true});
-      this.timer = window.setTimeout(message,680);
-    } else message();
+        this.emit({text:'',mode:tone,motif});
+        this.timer = window.setTimeout(() => {
+          if (id !== this.epoch) return;
+          this.emit({text:reaction,mode:tone,compact:true});
+          this.timer = window.setTimeout(() => this.finish(id),620);
+        },440);
+      },event.duration);
+    } else if (reaction) {
+      this.timer = window.setTimeout(() => {
+        if (id !== this.epoch) return;
+        this.emit({text:reaction,mode:tone,compact:true});
+        this.timer = window.setTimeout(() => this.finish(id),620);
+      },event.duration);
+    } else {
+      this.timer = window.setTimeout(() => this.finish(id),event.duration);
+    }
   }
   hint(text: string) { this.event({message:text,priority:20,duration:1050,mode:'amber'}); }
+  /** Hold a word on the sign for the length of a drag; `release` restores the resting face. */
+  hold(text: string, mode: LedTone = 'amber') {
+    this.held = true;
+    this.clearTimers();
+    this.active = null;
+    this.emit({text,mode,compact:text.length<=12});
+  }
+  release() {
+    if (!this.held) return;
+    this.held = false;
+    this.rest();
+    this.scheduleIdle();
+  }
   private finish(id: number) {
     if (id !== this.epoch) return;
     this.active = null;
@@ -116,6 +131,7 @@ export class DisplayMachine {
     window.clearTimeout(this.idleTimer);
     window.clearTimeout(this.idleReturn);
     this.idleCycles = 0;
+    if (this.held) return;
     if (!this.active) {
       this.rest();
       this.scheduleIdle();
@@ -125,9 +141,9 @@ export class DisplayMachine {
     ++this.epoch;
     this.clearTimers();
     this.active = null;
+    this.held = false;
     this.eventCount = 0;
-    this.lastReactionAt = -10;
-    this.recentReactions = [];
+    this.flavour.reset();
     this.idleCycles = 0;
     this.idleSecretShown = false;
     this.instruction = text;
