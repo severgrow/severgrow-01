@@ -36,15 +36,20 @@ const state = (page: Page): Promise<State> => page.evaluate(() => (window as any
 const idle = (page: Page) => page.waitForFunction(() => { const h = (window as any).__severgrow; return h?.state() && !h.busy() && (h.state().actor === 0 || h.state().phase === 'GAME_OVER'); }, undefined, { timeout: 30000 });
 const rawSave = (page: Page): Promise<string | null> => page.evaluate(() => Object.entries(localStorage).find(([key]) => key === 'main2:severgrow.save.v7')?.[1] ?? null);
 const savedMatches = async (page: Page, label: string) => equal(decodeSave(await rawSave(page))?.state, await state(page), `${label}: autosave replays the exact current state`);
-// The fan intentionally overlaps; use a visibly exposed point instead of covered card centres.
+// The fan intentionally overlaps; find that card's exposed region instead of assuming its
+// centre is tappable (a coarse grid misses thin strips, a first-hit scan picks brittle edges).
+// Tap the exposed point closest to the region's centroid so small layout shifts keep the hit.
 async function tapCard(page: Page, id: number) {
-  const point = await page.locator(`#hand [data-card="${id}"]`).evaluate(el => {
-    const r=el.getBoundingClientRect();
-    for (const fy of [.18,.3,.45,.6,.8]) for (const fx of [.15,.3,.5,.7,.85]) {
-      const x=r.left+r.width*fx,y=r.top+r.height*fy;
-      if (document.elementFromPoint(x,y)?.closest('[data-card]') === el) return {x,y};
+  const card = page.locator(`#hand [data-card="${id}"]`);
+  await card.evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)).catch(() => {})).catch(() => {});
+  const point = await card.evaluate(el => {
+    const r=el.getBoundingClientRect(), hits: {x:number;y:number}[] = [];
+    for (let y=r.top+1;y<r.bottom;y+=3) for (let x=r.left+1;x<r.right;x+=3) {
+      if (document.elementFromPoint(x,y)?.closest('[data-card]') === el) hits.push({x,y});
     }
-    return null;
+    if (!hits.length) return null;
+    const cx = hits.reduce((sum,p)=>sum+p.x,0)/hits.length, cy = hits.reduce((sum,p)=>sum+p.y,0)/hits.length;
+    return hits.reduce((best,p) => Math.hypot(p.x-cx,p.y-cy) < Math.hypot(best.x-cx,best.y-cy) ? p : best);
   });
   assert(point,`card ${id} retains an exposed, real tap target`);
   if (await page.evaluate(() => matchMedia('(pointer: coarse)').matches)) await page.touchscreen.tap(point.x,point.y);
@@ -236,7 +241,10 @@ async function geometry(page: Page, width: number, height: number, label: string
   check(info.homes.some(home => home.tree) && info.homes.some(home => home.volcano), `${label}: current Forest and Volcano art remains`);
   check(info.rail.height <= 36, `${label}: no full-height instruction row (${info.rail.height}px)`);
   check(info.play.top <= info.hud.bottom + 37, `${label}: map follows the compact header (${info.play.top-info.hud.bottom}px gap)`);
-  check(info.grid.left >= -1 && info.grid.right <= width+1 && info.grid.top >= info.hud.bottom-1 && info.grid.bottom <= height+1, `${label}: complete board stays within the viewport`);
+  // Futa04 draws a full-bleed board under a slim overlay header instead of reserving a HUD row,
+  // so the map legitimately reaches y=0. The retired check forced it below the HUD; assert the
+  // complete grid stays inside the viewport instead.
+  check(info.grid.left >= -1 && info.grid.right <= width+1 && info.grid.top >= -1 && info.grid.bottom <= height+1, `${label}: complete board stays within the viewport (${JSON.stringify(info.grid)})`);
   // At the shortest supported heights the fixed upright map is height-bound;
   // keep it substantial without rotating it to fill the width.
   if (width <= 600) check(info.grid.width >= width * (height < 700 ? .75 : .90), `${label}: upright phone grid remains substantial (${info.grid.width.toFixed(1)}px)`);
@@ -255,7 +263,8 @@ async function geometry(page: Page, width: number, height: number, label: string
 
 async function controls(page: Page, label: string) {
   const blocked = await page.evaluate(() => {
-    const selectors = ['#hud-menu', '#deck', '#discard', '#tool-undo', '#hand-sort', '#futa04-help-button', '#moves .end'];
+    // The move row is hidden in Futa04; Skip/End Act now live in the smart cockpit's context slot.
+    const selectors = ['#hud-menu', '#deck', '#discard', '#tool-undo', '#hand-sort', '#futa04-help-button', '#smart-context'];
     return selectors.flatMap(selector => [...document.querySelectorAll<HTMLElement>(selector)].flatMap(element => {
       if (element.hidden || !element.getClientRects().length || getComputedStyle(element).visibility === 'hidden') return [];
       const box = element.getBoundingClientRect();
@@ -267,79 +276,87 @@ async function controls(page: Page, label: string) {
   equal(blocked, [], `${label}: essential controls fit and receive taps`);
   check(await page.evaluate(() => {
     const dock = document.querySelector('#dock')!.getBoundingClientRect();
-    return [...document.querySelectorAll('#moves > button')].filter(button => button.getClientRects().length)
-      .every(button => button.getBoundingClientRect().top >= dock.top-1);
-  }), `${label}: move controls never spill upward into the map`);
+    // The visible cockpit controls (tool panel and Bloom recipe) must stay inside the dock.
+    return [...document.querySelectorAll('#smart-panel, #futa04-box > #smart-bloom')].filter(el => el.getClientRects().length)
+      .every(el => { const box = el.getBoundingClientRect(); return box.top >= dock.top-1 && box.bottom <= dock.bottom+1; });
+  }), `${label}: cockpit controls never spill upward into the map`);
 }
 
+// Futa04 retired the floating map plate. guide.ts still builds #step-cue, but the information
+// and smart-cockpit CSS keep it display:none; the cockpit "match computer" LED owns the step and
+// main.ts exposes it as <html data-step>. Wait on that step plus the __severgrow busy() signal
+// (the retired futa04-idle-ready class no longer exists), then prove the plate is gone and the LED
+// stands in for it inside the cockpit.
 async function cue(page: Page, phase: 'draw' | 'grow' | 'throw', label: string) {
-  await page.waitForFunction(phase => document.documentElement.dataset.step === phase && document.documentElement.classList.contains('futa04-idle-ready'), phase);
+  await page.waitForFunction(want => document.documentElement.dataset.step === want && !(window as any).__severgrow.busy(), phase, { timeout: 30000 });
   const result = await page.evaluate(() => {
-    const cue = document.querySelector<HTMLElement>('#step-cue')!;
-    const wrap = document.querySelector<HTMLElement>('#board-wrap')!;
-    const map = wrap.getBoundingClientRect();
-    const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
-    const box = cue.getBoundingClientRect(), css = getComputedStyle(cue);
-    return { text: cue.querySelector('.cue-text')?.textContent, visible: css.visibility !== 'hidden' && css.display !== 'none' && Number(css.opacity) > 0, pointer: css.pointerEvents,
-      fontSize: parseFloat(getComputedStyle(cue.querySelector('.cue-text')!).fontSize), font:getComputedStyle(cue.querySelector('.cue-text')!).fontFamily, opacity:Number(css.opacity),
-      centered: Math.abs(box.x+box.width/2-(map.x+map.width/2)) < 3 && Math.abs(box.y+box.height/2-(map.y+(map.height-under)/2)) < 3 };
+    const plate = document.querySelector<HTMLElement>('#step-cue')!;
+    const led = document.querySelector<HTMLElement>('#smart-led')!;
+    const box = document.querySelector<HTMLElement>('#futa04-box')!;
+    const r = led.getBoundingClientRect(), b = box.getBoundingClientRect();
+    const css = getComputedStyle(plate);
+    return { step: document.documentElement.dataset.step, plateRects: plate.getClientRects().length,
+      plateHidden: css.display === 'none' || css.visibility === 'hidden' || Number(css.opacity) === 0,
+      ledVisible: r.width > 0 && r.height > 0 && getComputedStyle(led).visibility !== 'hidden',
+      ledInside: r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1 };
   });
-  check(result.visible && result.text?.trim().toLowerCase() === phase, `${label}: correct ${phase} cue is visible`);
-  check(result.centered && result.pointer === 'none', `${label}: ${phase} cue is centered in the usable map and cannot intercept input`);
-  check(result.font.includes('Besley') && result.opacity === .6536, `${label}: Besley cue is a further 5% fainter`);
+  check(result.step === phase && result.plateHidden && result.plateRects === 0, `${label}: the retired floating ${phase} plate is gone`);
+  check(result.ledVisible && result.ledInside, `${label}: the cockpit LED carries the ${phase} step and cannot cover the map`);
   if (phase === 'grow' && label.startsWith('1280x800') && !label.includes('inspection')) await pulseCheck(page,label);
-  check(result.fontSize >= 30,`${label}: ${phase} cue remains legible at ${result.fontSize}px`);
 }
 
+// The retired plate's own breathe animation is gone. Futa04's live equivalents are the
+// whole-playable-card pulse on a Grow turn (information.ts futa04-card-breathe) and the LED's
+// one-shot attention pulse (smart-cockpit CSS), both suppressed by Reduce Motion.
 async function pulseCheck(page: Page, label: string) {
   const before = await state(page);
   // The runner can request reduced motion at the OS/browser level. Explicitly test the
   // normal-motion mode, then restore the browser preference after testing the game toggle.
   const browserReduced = await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const appReduced = await page.evaluate(() => document.documentElement.classList.contains('reduce-motion'));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  const result = await page.evaluate(() => {
-    const root = document.documentElement;
-    const reduced = root.classList.contains('reduce-motion');
-    root.classList.remove('reduce-motion');
-    const text = document.querySelector<HTMLElement>('#step-cue .cue-text')!;
-    const animation = text.getAnimations().find(a => (a as CSSAnimation).animationName === 'futa04-cue-breathe');
-    if (!animation) { root.classList.toggle('reduce-motion', reduced); return null; }
-    animation.pause(); animation.currentTime = 0;
-    const small = getComputedStyle(text).transform;
-    animation.currentTime = 1550;
-    const large = getComputedStyle(text).transform;
-    animation.play();
-    const card = document.querySelector('#hand .card.playable:not(.futa04-throw-picked)');
-    const cardPulse = card?.getAnimations().some(a => (a as CSSAnimation).animationName === 'futa04-card-breathe');
-    const growEdge = card ? getComputedStyle(card).boxShadow : '';
-    const handBlob = getComputedStyle(document.querySelector('#hand')!, '::before').content;
-    root.classList.add('reduce-motion');
-    // Chromium may retain the paused Animation object briefly after CSS removes it.
-    // The computed animation is the player's effective reduced-motion state.
-    const motionName = getComputedStyle(text).animationName;
-    const noMotion = motionName === 'none';
-    root.classList.toggle('reduce-motion', reduced);
-    return { small, large, cardPulse, growEdge, handBlob, off: noMotion, motionName };
+  const card = await page.evaluate(() => {
+    document.documentElement.classList.remove('reduce-motion');
+    const node = document.querySelector('#hand .card.playable:not(.futa04-throw-picked)');
+    return { pulse: node?.getAnimations().some(a => (a as CSSAnimation).animationName === 'futa04-card-breathe') ?? false,
+      edge: node ? getComputedStyle(node).boxShadow : '', blob: getComputedStyle(document.querySelector('#hand')!, '::before').content };
   });
+  // The LED re-shows the step word for one pulse after six quiet seconds (display-machine.ts);
+  // motion must stay enabled while that frame is emitted or the one-shot class is skipped.
+  await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'GROW', undefined, { timeout: 12000 });
+  const led = await page.evaluate(() => {
+    const win = document.querySelector<HTMLElement>('#smart-led-window')!;
+    const motion = win.classList.contains('led-pulse');
+    document.documentElement.classList.add('reduce-motion');
+    const name = getComputedStyle(win).animationName;
+    return { motion, name };
+  });
+  // Restore the exact motion state this check started from before any later click.
+  await page.evaluate(on => document.documentElement.classList.toggle('reduce-motion', on), appReduced);
   await page.emulateMedia({ reducedMotion: browserReduced ? 'reduce' : 'no-preference' });
-  check(result && result.small !== result.large && result.large.includes('1.085') && result.cardPulse &&
-    result.growEdge.includes('119, 179, 116') && result.handBlob === 'none' && result.off,
-    `${label}: larger idle cue and whole playable-card pulse actually run; Reduce Motion disables them (${JSON.stringify(result)})`);
+  check(card.pulse && card.edge.includes('88, 171, 86') && card.blob === 'none',
+    `${label}: whole playable-card pulse runs and the old hand blob is gone (${JSON.stringify(card)})`);
+  check(led.motion && led.name === 'none',
+    `${label}: the LED idle pulse runs with motion and is suppressed under Reduce Motion (${JSON.stringify(led)})`);
   equal(await state(page), before, `${label}: pulses cannot change game state`);
 }
 
+// The retired plate never shows. Futa04's live idle reminder is the LED re-showing the step word
+// for one pulse after six quiet seconds (display-machine.ts scheduleIdle(6000)); this replaces the
+// old three-second futa04-idle-ready class on #step-cue.
 async function idleTiming(page: Page, label: string) {
   const before = await state(page);
   await page.keyboard.press('Shift');
   const start = Date.now();
   await page.waitForTimeout(2700);
-  check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: no prompt during the first 2.7 idle seconds`);
-  await page.waitForFunction(() => document.documentElement.classList.contains('futa04-idle-ready'));
-  check(Date.now()-start >= 2950, `${label}: prompt waits three seconds after interaction`);
-  await cue(page, 'draw', label);
+  check(await page.locator('#step-cue').evaluate(el => getComputedStyle(el).display === 'none'),
+    `${label}: the retired plate stays hidden during the first 2.7 idle seconds`);
+  check(await page.locator('#smart-led-text').innerText() !== 'DRAW', `${label}: the LED shows no step hint during the first 2.7 idle seconds`);
+  await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'DRAW', undefined, { timeout: 12000 });
+  check(Date.now()-start >= 5900, `${label}: the LED reminder waits six seconds after interaction`);
   await page.keyboard.press('Shift');
   await page.waitForTimeout(160);
-  check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: new input promptly hides idle guidance`);
+  check(await page.locator('#smart-led-text').innerText() !== 'DRAW', `${label}: new input promptly hides idle guidance`);
   equal(await state(page),before,`${label}: the idle timer changes no game state`);
 }
 
@@ -381,7 +398,7 @@ async function fruitFlow(width: number, height: number) {
     await page.locator('#hud-menu').focus();
     equal(await state(page),before,'Card focus and counter styling change no state');
     await evidence(page,`${width}x${height}-bomb-cards`);
-    await page.locator(`#hand [data-card="${action.card}"]`).click();
+    await tapCard(page,action.card);
     equal(await state(page),before,'Fruit: choosing the card alone does not spend it');
     await tapHex(page,coordKey(action.target),width < 600);
     equal(await state(page),apply(before,action),'Fruit: first valid target tap executes with Confirm=Always');
@@ -409,7 +426,9 @@ async function undo(page: Page, before: State, label: string) {
 async function endGrow(page: Page, before: State, label: string) {
   await page.keyboard.press('Escape');
   await controls(page, label);
-  await page.locator('#moves .end, #moves .empty-continue').first().click();
+  // Skip/End Act moved into the smart cockpit's context slot (same pattern as futa04-critical).
+  await page.locator('#smart-context').click();
+  if (await page.locator('#smart-selector').isVisible()) await page.locator('#smart-selector button[data-action^="skip:"]').first().click();
   equal(await state(page), apply(before, { t: 'EndAct' }), `${label}: real Skip/Throw advances the engine once`);
   await idle(page);
   await cue(page, 'throw', label);
@@ -419,6 +438,8 @@ async function finishTurn(page: Page, label: string) {
   const before = await state(page);
   const discard = legalActions(viewFor(before,0)).find(action => action.t === 'Discard');
   assert(discard?.t === 'Discard', `${label}: has a legal throw`);
+  // The Throw dim is a 160ms CSS transition; let it settle before measuring.
+  await page.waitForTimeout(220);
   const deck = await page.locator('#deck').evaluate(el => ({ opacity: Number(getComputedStyle(el).opacity), filter: getComputedStyle(el).filter }));
   check(deck.opacity < .55 && deck.filter.includes('grayscale'), `${label}: dimmed deck makes Throw visually distinct from Grow`);
   const throwLook = await page.evaluate(() => {
@@ -442,7 +463,8 @@ async function finishTurn(page: Page, label: string) {
     root.classList.toggle('reduce-motion', reduced);
     return result;
   });
-  check(throwPulse.card === 'futa04-card-breathe' && throwPulse.light.includes('186, 66, 47'),
+  // The ember edge colour is the current smart-cockpit rgba(190,68,47) red.
+  check(throwPulse.card === 'futa04-card-breathe' && throwPulse.light.includes('190, 68, 47'),
     `${label}: Throw pulses the whole card while its edge light stays attached (${JSON.stringify(throwPulse)})`);
   let expected = apply(before, discard);
   const botActions: Action[] = [];
@@ -460,8 +482,11 @@ async function finishTurn(page: Page, label: string) {
       const cue = document.querySelector('#step-cue')!;
       if (!card) return;
       const css = getComputedStyle(card);
+      // The retired floating plate is always display:none; "no board message" now means it
+      // renders no pixels instead of the old empty cue-text check.
       (window as any).__futa04OpponentReadiness = { opacity:Number(css.opacity),filter:css.filter,
-        hidden:getComputedStyle(cue).visibility === 'hidden',text:cue.querySelector('.cue-text')?.textContent };
+        hidden:getComputedStyle(cue).display === 'none' || getComputedStyle(cue).visibility === 'hidden',
+        pixels:cue.getClientRects().length };
       observer.disconnect();
     });
     observer.observe(document.documentElement,{ attributes:true,attributeFilter:['data-step'] });
@@ -494,7 +519,7 @@ async function finishTurn(page: Page, label: string) {
   check(botActions.some(action => action.t === 'Draw') && botActions.some(action => action.t === 'EndAct'), `${label}: Volcano completed its real turn`);
   const opponent = await page.evaluate(() => (window as any).__futa04OpponentReadiness);
   check(opponent?.opacity <= .4 && opponent.filter.includes('grayscale') && opponent.filter.includes('brightness'),`${label}: actual opponent turn substantially darkens/desaturates the hand (${JSON.stringify(opponent)})`);
-  check(opponent?.hidden && opponent.text === '',`${label}: opponent turn has no board message`);
+  check(opponent?.hidden && opponent.pixels === 0,`${label}: opponent turn renders no board message`);
   check(!await page.locator('#confirm').isVisible(), `${label}: Throw and opponent turn leave no confirmation`);
   await savedMatches(page, label);
   return botActions;
@@ -527,21 +552,26 @@ async function sproutFlow(width: number, height: number) {
     equal(grown, apply(initial,{ t:'Draw',from:'deck' }), `${label}: actual Draw preserves engine parity`);
     await page.waitForTimeout(200);
     await geometry(page,width,height,label+' after Draw');
-    check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity) === 0), `${label}: Draw transitions without an immediate Grow prompt`);
+    check(await page.locator('#smart-led-text').innerText() !== 'GROW', `${label}: Draw transitions without an immediate Grow prompt`);
     await cue(page,'grow',label);
     await evidence(page,`${width}x${height}-grow`);
     const action = legalActions(viewFor(grown,0)).find(action => action.t === 'Sprout');
     assert(action?.t === 'Sprout');
-    await page.locator(`#hand [data-card="${action.card}"]`).click();
+    // Fanned cards overlap; tap an exposed point instead of Playwright's covered centre.
+    await tapCard(page,action.card);
     check(await page.evaluate(() => document.documentElement.classList.contains('futa04-move-active') || document.documentElement.classList.contains('gd-picked')),`${label}: cue suppression begins immediately with card selection`);
     await page.waitForTimeout(160);
-    const hidden = await page.locator('#step-cue').evaluate(element => getComputedStyle(element).visibility === 'hidden' || Number(getComputedStyle(element).opacity) === 0 || (element as HTMLElement).hidden);
-    check(hidden, `${label}: Grow cue disappears when its requested card action begins`);
+    const hidden = await page.evaluate(() => {
+      const plate = document.querySelector<HTMLElement>('#step-cue')!;
+      const led = document.getElementById('smart-led-text');
+      return plate.getClientRects().length === 0 && getComputedStyle(plate).display === 'none' && led?.textContent?.trim() !== 'GROW';
+    });
+    check(hidden, `${label}: Grow step hint stays suppressed once its card action begins`);
     const rock = Object.keys(grown.terrain).find(key => grown.terrain[key] === 'rock')!;
     await tapHex(page,rock,touch);
     equal(await state(page), grown, `${label}: invalid rock tap neither places nor spends a card`);
     // Invalid inspection may clear the selection; select the real card again before choosing a valid spot.
-    await page.locator(`#hand [data-card="${action.card}"]`).click();
+    await tapCard(page,action.card);
     await tapHex(page,coordKey(action.coord),touch);
     equal(await state(page), apply(grown,action), `${label}: first valid target tap immediately places the Sprout`);
     await idle(page);
@@ -561,8 +591,9 @@ async function sproutFlow(width: number, height: number) {
       return { dx: Math.abs(group.x - hex.left - hex.width / 2),
         dy: Math.abs(group.y - hex.top - hex.height / 2), transform: stone.getAttribute('transform') };
     }, coordKey(action.coord));
-    check(stonePlacement.dx < 5 && stonePlacement.dy < 5 && stonePlacement.transform?.endsWith('scale(0.6)'),
-      `${label}: the 20% larger strength stone sits at the hex centre (${JSON.stringify(stonePlacement)})`);
+    // seedstone.ts draws the enlarged stone at scale(0.66) (was 0.6 when this check was written).
+    check(stonePlacement.dx < 5 && stonePlacement.dy < 5 && stonePlacement.transform?.endsWith('scale(0.66)'),
+      `${label}: the enlarged strength stone sits at the hex centre (${JSON.stringify(stonePlacement)})`);
     await savedMatches(page,label+' Sprout');
     await undo(page,grown,label+' Sprout');
     const illegalEmpty = Object.keys(grown.terrain).find(key => !grown.board[key] && grown.terrain[key] === 'normal' &&
@@ -575,7 +606,7 @@ async function sproutFlow(width: number, height: number) {
     await tapHex(page,coordKey(action.coord),touch);
     equal(await state(page),grown,`${label}: legal empty-tile tap only previews a destination`);
     check(await page.locator('#board .selected').count()>0,`${label}: legal destination is visibly selected`);
-    await page.locator(`#hand [data-card="${action.card}"]`).click();
+    await tapCard(page,action.card);
     equal(await state(page),apply(grown,action),`${label}: tapping a card after a legal destination immediately places the Sprout`);
     await undo(page,grown,label+' board-first Sprout');
     equal(await page.locator('#board .hex-cell').evaluateAll(cells => cells.map(cell => [cell.getAttribute('data-key'),cell.querySelector('.hex')?.getAttribute('d')])), paths, `${label}: Draw, placement and Undo retain the board geometry`);
@@ -647,14 +678,16 @@ async function bloomFlow(width: number, height: number) {
       const deck = document.querySelector<HTMLElement>('#deck .pile-card')!.getBoundingClientRect();
       const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
       const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
-      const actions = document.querySelector<HTMLElement>('#futa04-actions')!.getBoundingClientRect();
+      // The cockpit tools are now the smart panel (#futa04-actions is display:contents and reports
+      // a 0×0 rect); measure the visible panel edge the piles must stay clear of.
+      const tools = document.querySelector<HTMLElement>('#smart-panel')!.getBoundingClientRect();
       return { first: first.left, deck: deck.left, meter: meter.left, centreGap: Math.abs(deck.left + deck.width/2 - meter.left - meter.width/2), meterBottom: meter.bottom, boxBottom: box.bottom,
         right: piles.getBoundingClientRect().right,
-        actions: actions.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--futa04-draw-shift')) || 0 };
+        tools: tools.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--futa04-draw-shift')) || 0 };
     });
     check(drawPiles.scale >= 1.15 && drawPiles.centreGap < .6,
       `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
-    if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.actions - 6,
+    if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.tools - 6,
       `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
     if (width <= 600) check(drawPiles.meterBottom >= drawPiles.boxBottom + 4 && drawPiles.meterBottom <= drawPiles.boxBottom + 12,
       `${label}: enlarged Draw piles sit just below the cockpit baseline (${JSON.stringify(drawPiles)})`);
@@ -665,42 +698,60 @@ async function bloomFlow(width: number, height: number) {
     const keys = ['-2,1','-1,1','0,1'];
     const action = legalActions(viewFor(before,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === '6,43,61' && action.hexes.map(coordKey).join('|') === keys.join('|'));
     assert(action?.t === 'Bloom', `${label}: seeded legal Bloom`);
-    const choicesToggle = page.locator('#moves > .bloom-toggle');
-    if (await choicesToggle.count()) {
+    // The Bloom recipe moved from the hidden #moves row into the cockpit: #smart-bloom-button
+    // selects a single recipe on one tap, or opens the #smart-bloom-selector drawer for several.
+    const choicesToggle = page.locator('#smart-bloom-button');
+    if (await choicesToggle.count() && await page.locator('#smart-bloom-selector button').count() > 1) {
       await choicesToggle.click();
-      const menu = page.locator('#moves .bloom-options');
-      if (await menu.isVisible() && await menu.locator('button').count() > 1) {
+      const menu = page.locator('#smart-bloom-selector');
+      if (await menu.isVisible()) {
         const size = await page.evaluate(() => {
-          const panel = document.querySelector<HTMLElement>('#moves .bloom-options')!.getBoundingClientRect();
-          const toggle = document.querySelector<HTMLElement>('#moves > .bloom-toggle')!.getBoundingClientRect();
+          const panel = document.querySelector<HTMLElement>('#smart-bloom-selector')!.getBoundingClientRect();
+          const toggle = document.querySelector<HTMLElement>('#smart-bloom-button')!.getBoundingClientRect();
           const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
-          return { width: panel.width, boxWidth: box.width, left: panel.left, toggleLeft: toggle.left };
+          return { width: panel.width, boxWidth: box.width, left: panel.left, right: panel.right, boxLeft: box.left, boxRight: box.right, toggleCenter: toggle.left + toggle.width / 2 };
         });
-        check(size.width <= Math.min(280, size.boxWidth * .75) && Math.abs(size.left - size.toggleLeft) <= 50,
-          `${label}: multiple Bloom choices open in a compact menu beside their control (${JSON.stringify(size)})`);
+        check(size.width <= size.boxWidth - 11 && size.left >= size.boxLeft - 1 && size.right <= size.boxRight + 1 &&
+          Math.abs((size.left + size.width / 2) - size.toggleCenter) <= 60,
+          `${label}: multiple Bloom choices open in a compact drawer near their control (${JSON.stringify(size)})`);
         if (width === 390 && height === 664) await page.screenshot({ path: `${dir}/390x664-bloom-menu-open.png` });
+        await choicesToggle.click();
       }
-      await choicesToggle.click();
     }
     if (width === 390 && height === 844) {
       await page.waitForFunction(() => document.documentElement.dataset.futa04Waiting === 'true');
+      // The cockpit recipe keeps its gentle film-registration drift (smart-cockpit CSS
+      // futa04-recipe-projector), which replaces the retired in-row combination breathe.
       const bloomPulse = await page.evaluate(() => {
         const root = document.documentElement, reduced = root.classList.contains('reduce-motion');
         root.classList.remove('reduce-motion');
-        const icon = document.querySelector('#moves > .kind:not(.on) .futa04-combination');
+        const icon = document.querySelector('#smart-bloom-button .futa04-combination');
         const name = icon ? getComputedStyle(icon).animationName : null;
         root.classList.toggle('reduce-motion', reduced);
         return name;
       });
-      check(bloomPulse === 'futa04-card-breathe', `${label}: available Bloom cards pulse gently in the cockpit`);
+      check(bloomPulse === 'futa04-recipe-projector', `${label}: the cockpit Bloom recipe keeps its gentle drift animation`);
     }
     const kind = `bloom-3-${action.cards.join('.')}`;
     const pick = async () => {
-      const button = page.locator(`#moves [data-kind="${kind}"]`);
-      if (!await button.isVisible()) await page.locator('#moves .bloom-toggle').click();
-      // Escape clears a partial painting and retains its selected Bloom group.
-      if (await button.getAttribute('aria-pressed') !== 'true') await button.click();
-      if (await page.locator('#moves .bloom-options').isVisible()) await page.locator('#moves .bloom-toggle').click();
+      const source = page.locator(`#moves [data-kind="${kind}"]`);
+      // Select the wanted recipe only when it is not already active: the smart Bloom button
+      // executes the underlying kind button, which toggles off if pressed again.
+      if (await source.getAttribute('aria-pressed') !== 'true') {
+        await page.locator('#smart-bloom-button').click();
+        const drawer = page.locator('#smart-bloom-selector');
+        if (await drawer.isVisible()) {
+          const ranks = action.cards.map(id => before.hands[0].find(card => card.id === id)!.rank).sort((a, b) => a - b);
+          const picked = await page.evaluate(want => {
+            const key = want.join(',');
+            const match = [...document.querySelectorAll<HTMLButtonElement>('#smart-bloom-selector button')]
+              .find(button => [...button.querySelectorAll('.c-num')].map(node => Number(node.textContent)).sort((a, b) => a - b).join(',') === key);
+            match?.click();
+            return !!match;
+          }, ranks);
+          assert(picked, `${label}: the wanted Bloom recipe is offered in the cockpit drawer`);
+        }
+      }
       await page.waitForTimeout(50);
     };
     if (width === 390 && height === 664) await evidence(page,'390x664-bloom-choices');
@@ -709,26 +760,28 @@ async function bloomFlow(width: number, height: number) {
     check(await page.locator('#moves .futa04-skip').isEnabled(),`${label}: subdued Skip remains usable`);
     equal(await page.locator('#hand .futa04-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
-    await page.waitForFunction(() => document.documentElement.classList.contains('futa04-idle-ready'));
-    equal((await page.locator('#step-cue .cue-text').textContent())?.trim(),'Bloom',`${label}: idle Bloom uses only its short prompt`);
-    check(await page.locator('#step-cue').evaluate(el => Number(getComputedStyle(el).opacity)>0),`${label}: idle Bloom remains visible with a combination selected`);
+    // The retired plate is gone; Futa04 shows the selected Bloom group on the LED after its
+    // six idle seconds ("BLOOM" is phaseMessage() when data-futa04-bloom is true).
+    await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'BLOOM', undefined, { timeout: 12000 });
+    equal((await page.locator('#smart-led-text').textContent())?.trim(),'BLOOM',`${label}: idle Bloom uses only its short LED prompt`);
+    check(!await page.locator('#step-cue').isVisible(),`${label}: idle Bloom keeps the retired plate hidden`);
     await controls(page,label+' selected Bloom');
     await evidence(page,`${width}x${height}-bloom-ready`);
     const cockpit = await page.evaluate(() => {
       const box = document.querySelector('#futa04-box')!.getBoundingClientRect();
-      const kind = document.querySelector('#moves > .kind')!.getBoundingClientRect();
+      const bloom = document.querySelector('#smart-bloom-button')!.getBoundingClientRect();
+      const panel = document.querySelector('#smart-panel')!.getBoundingClientRect();
       const piles = document.querySelector('#futa04-box > .piles')!.getBoundingClientRect();
       const faces = [...document.querySelectorAll('#futa04-box .pile-card')].map(el => el.getBoundingClientRect());
-      const actions = document.querySelector('#futa04-actions')!.getBoundingClientRect();
-      const miniCards = [...document.querySelectorAll('#moves > .kind .futa04-mini-card')].map(el=>el.getBoundingClientRect());
-      const kindStyle = getComputedStyle(document.querySelector('#moves > .kind')!);
-      return { fits: kind.left >= box.left && kind.right <= box.right && kind.top >= box.top && kind.bottom <= box.bottom,
-        separated: kind.left >= piles.right && kind.right <= actions.left && faces.every(face => face.right <= kind.left),
-        mini: miniCards.every(face=>face.width >= 20 && Math.abs(face.bottom-actions.bottom) <= 12),
-        frameFree: kindStyle.borderWidth === '0px' && kindStyle.boxShadow === 'none',
+      const miniCards = [...document.querySelectorAll('#smart-bloom-button .futa04-mini-card')].map(el => el.getBoundingClientRect());
+      const bloomStyle = getComputedStyle(document.querySelector('#smart-bloom-button')!);
+      return { fits: bloom.left >= box.left && bloom.right <= box.right && bloom.top >= box.top && bloom.bottom <= box.bottom,
+        separated: bloom.left >= piles.right - 1 && bloom.right <= panel.left + 1 && faces.every(face => face.right <= bloom.left),
+        mini: miniCards.length > 0 && miniCards.every(face => face.width >= 16 && face.bottom <= panel.bottom + 1 && face.bottom >= panel.top - 1),
+        frameFree: bloomStyle.borderWidth === '0px' && bloomStyle.boxShadow === 'none' && bloomStyle.backgroundImage === 'none',
         weak: [...document.querySelectorAll('#board .badge.weak')].some(el => getComputedStyle(el).display !== 'none') };
     });
-    check(cockpit.fits && cockpit.separated && cockpit.mini && cockpit.frameFree && !cockpit.weak, `${label}: frameless Bloom combinations sit on the cockpit baseline, clear of piles/tools; no weak-link badges`);
+    check(cockpit.fits && cockpit.separated && cockpit.mini && cockpit.frameFree && !cockpit.weak, `${label}: frameless Bloom recipe sits on the cockpit baseline, clear of piles/tools; no weak-link badges`);
     await tapHex(page,keys[0]!,touch);
     equal(await state(page),before,`${label}: starting a partial Bloom does not prematurely spend cards`);
     await tapHex(page,'-1,0',touch);
