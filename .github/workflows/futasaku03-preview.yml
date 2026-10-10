@@ -1,8 +1,9 @@
 name: Futasaku 0.3 Pages preview
 
-# Runs from the futa0.3 deployment ref, which points to a validated Futasaku0.3
-# commit. The existing Main/Dev/Test2 workflow and refs stay untouched; their
-# currently published SHAs are rebuilt and checked for parity.
+# Runs from the futa0.3 deployment ref. GitHub Pages only accepts that ref and
+# main. This publishes isolated /futasaku-03-preview/ and /futasaku-04-preview/
+# routes from the same validated commit. Main, Dev and Test2 stay untouched;
+# their currently published SHAs are rebuilt and checked for parity.
 on:
   push:
     branches: [futa0.3]
@@ -72,7 +73,7 @@ jobs:
           cd ../candidate
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
           CHANNEL=test2 npm run web:build
-      - name: Compose four routes and verify existing public bytes
+      - name: Compose five routes and verify existing public bytes
         env:
           MAIN_SHA: ${{ steps.published.outputs.main }}
           DEV_SHA: ${{ steps.published.outputs.test }}
@@ -81,6 +82,7 @@ jobs:
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
+          node preview/scripts/compose-futasaku-04-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

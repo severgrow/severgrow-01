@@ -7,10 +7,12 @@
 // - everything else (the art manifest, icons, any unversioned file): network first, falling
 //   back to the cache only when offline. A stale copy is never preferred to a fresh one.
 // Each new version of this worker drops the older Test2 caches (only its own, by prefix).
-const PREFIX = scopeIsPreview() ? 'futasaku03-' : 'severor-main2-';
-function scopeIsPreview() {
+const PREFIX = previewCachePrefix() ?? 'severor-main2-';
+function previewCachePrefix() {
   const url = new URL(self.registration.scope);
-  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futasaku-03-preview/');
+  if (url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futasaku-03-preview/')) return 'futasaku03-';
+  if (url.pathname.includes('/futasaku-04-preview/')) return 'futasaku04-';
+  return null;
 }
 const CACHE = `${PREFIX}v2`;
 const scope = new URL(self.registration.scope);
