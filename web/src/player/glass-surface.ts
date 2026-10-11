@@ -203,8 +203,8 @@ const measureTarget = (selector: string, shape: FocusShape): Tracked | null => {
   };
 };
 
-/** Chunky pointing hand — fingertip at roughly (14, 4), 56px tall. */
-const POINTER_HAND = `<g class="focus-pointer"><path class="focus-pointer-body" d="M14 4c1.4-1.8 4.2-.6 4.2 1.6v14.2l2.4-2.1c1.4-1.2 3.6-.2 3.4 1.6l-1.1 9.6c-.4 3.2-3.1 5.6-6.3 5.6H9.2c-2.8 0-5.2-2-5.7-4.7L1.8 24.2c-.5-2.2 1.1-4.2 3.3-4.2h2.1V10.2c0-2.1 2.4-3.2 3.9-1.8L14 12.4V4z"/></g>`;
+/** Chunky pointing hand — index fingertip near (18, 2), ~56px tall, cream + dark outline. */
+const POINTER_HAND = `<g class="focus-pointer"><path class="focus-pointer-body" d="M16.5 2.2c1.1-1.3 3.4-.4 3.4 1.4V20l2.8-2.6c1.3-1.2 3.5-.2 3.3 1.6l-1.2 10.2c-.4 3.4-3.3 5.9-6.7 5.9H9.6c-2.9 0-5.4-2.1-5.9-5L2 26.4c-.5-2.3 1.2-4.4 3.5-4.4h2.2v-8.6c0-1.9 2.2-2.9 3.6-1.6l2.4 2.2V3.6c0-1.8 2.2-2.7 3.3-1.4z"/></g>`;
 
 export type GlassSurface = ReturnType<typeof mountGlassSurface>;
 export const mountGlassSurface = (onClose: () => void) => {
