@@ -188,3 +188,26 @@ export const STEP_CUE = Object.freeze({
   kicker: Object.freeze({ draw: 'Step 1 of 3', grow: 'Step 2 of 3', throw: 'Step 3 of 3' }),
   kickerOpp: 'Their turn',
 });
+
+/** Tutorial Pro window copy. Filled out in the Pro overhaul; stubs keep imports compiling. */
+export const TUTORIAL = Object.freeze({
+  showMe: 'Show me',
+  skip: 'Skip',
+  chapters: [] as ReadonlyArray<{ id: string; title: string; lessons: ReadonlyArray<{ instruction: string; why?: string }> }>,
+  chapterDone: 'Chapter done',
+  free: 'Your turn. No guide.',
+  recap: Object.freeze([
+    'Draw. Grow. Throw.',
+    'Keep joined, cut theirs.',
+    'Surround their home to win',
+  ]),
+  playReal: 'Play a real game',
+  replayChapter: 'Replay a chapter',
+  praise: Object.freeze(['Clean.', 'Nice.', 'There it is.', 'Easy.'] as const),
+  wrong: Object.freeze([
+    'Not that one. This one.',
+    'Close. Try the glowing one.',
+    'Other side.',
+  ] as const),
+  bloomHints: 'Show bloom hints',
+});

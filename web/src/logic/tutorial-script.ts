@@ -11,10 +11,86 @@ type ChapterSpec = {
   final?: boolean;
 };
 
-export type TutorialFocus = 'deck' | 'discard' | 'card' | 'tile' | 'context' | 'bloom' | 'none';
+export type TutorialFocus = 'deck' | 'discard' | 'card' | 'tile' | 'context' | 'bloom' | 'none' | 'home' | 'button' | 'explainer';
+export type TutorialChapterId =
+  | 'goal' | 'turn' | 'bloom' | 'strengthen' | 'cut' | 'skip' | 'buttons'
+  | 'bomb' | 'blast' | 'throw-pile' | 'win' | 'final' | 'free';
 export type TutorialLesson = {
   id: string; text: string; focus: TutorialFocus; card?: CardSpec; tile?: Coord;
-  action: Action['t'] | 'Opponent' | 'FreeTurn';
+  cardId?: number;
+  /** Short instruction (≤6 words). Falls back to `text` until the Pro copy lands. */
+  instruction?: string;
+  why?: string;
+  action: Action['t'] | 'Opponent' | 'FreeTurn' | 'Next';
+};
+export type LessonTarget = { kind: TutorialFocus | 'none'; selector: string; shape: 'hex' | 'card' | 'pill' | 'none' };
+
+/** Final Pro chapter order (13). Count stays 10 until the chapter rewrite lands. */
+export const TUTORIAL_CHAPTER_IDS = Object.freeze([
+  'goal', 'turn', 'bloom', 'strengthen', 'cut', 'skip', 'buttons',
+  'bomb', 'blast', 'throw-pile', 'win', 'final', 'free',
+] as const satisfies readonly TutorialChapterId[]);
+
+export const wordCount = (line: string | undefined | null): number =>
+  !line || line.trim().length === 0 ? 0 : line.trim().split(/\s+/).length;
+
+/** Old 10-chapter saves → start of the matching new chapter by lesson family. */
+const OLD_CHAPTER_TO_ID: readonly TutorialChapterId[] = [
+  'turn', 'strengthen', 'skip', 'cut', 'bloom', 'bomb', 'blast', 'throw-pile', 'final', 'free',
+];
+
+export const migrateTutorialProgress = (
+  raw: { chapter: number; step: number } | null | undefined,
+): { chapter: number; step: number } => {
+  if (!raw || typeof raw.chapter !== 'number' || typeof raw.step !== 'number'
+    || !Number.isInteger(raw.chapter) || !Number.isInteger(raw.step)
+    || raw.chapter < 0 || raw.chapter >= OLD_CHAPTER_TO_ID.length) {
+    return { chapter: 0, step: 0 };
+  }
+  const id = OLD_CHAPTER_TO_ID[raw.chapter]!;
+  const chapter = TUTORIAL_CHAPTER_IDS.indexOf(id);
+  return { chapter: chapter < 0 ? 0 : chapter, step: 0 };
+};
+
+export const resolveLessonTarget = (lesson: TutorialLesson, state: State): LessonTarget | null => {
+  if (lesson.focus === 'none' || lesson.action === 'FreeTurn') {
+    return { kind: 'none', selector: '', shape: 'none' };
+  }
+  if (lesson.focus === 'deck') return { kind: 'deck', selector: '#deck', shape: 'pill' };
+  if (lesson.focus === 'discard') return { kind: 'discard', selector: '#discard', shape: 'pill' };
+  if (lesson.focus === 'context') return { kind: 'context', selector: '#smart-context', shape: 'pill' };
+  if (lesson.focus === 'bloom') return { kind: 'bloom', selector: '#smart-bloom-button', shape: 'pill' };
+  if (lesson.focus === 'card') {
+    const card = lesson.cardId != null
+      ? state.hands[0].find(c => c.id === lesson.cardId)
+      : lesson.card
+        ? state.hands[0].find(c => c.suit === lesson.card![0] && c.rank === lesson.card![1])
+        : state.hands[0][0];
+    if (!card) return null;
+    return { kind: 'card', selector: `#hand .card[data-card="${card.id}"]`, shape: 'card' };
+  }
+  if (lesson.focus === 'tile' && lesson.tile) {
+    return { kind: 'tile', selector: `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`, shape: 'hex' };
+  }
+  if (lesson.focus === 'home' && lesson.tile) {
+    return { kind: 'home', selector: `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`, shape: 'hex' };
+  }
+  if (lesson.focus === 'button' && lesson.id) {
+    return { kind: 'button', selector: `[data-tutorial-btn="${lesson.id}"]`, shape: 'pill' };
+  }
+  if (lesson.focus === 'explainer') return { kind: 'explainer', selector: '#futasaku-glass', shape: 'none' };
+  return null;
+};
+
+export const tutorialFeedback = (
+  kind: 'wrong' | 'praise' | 'chapter-done' | 'idle',
+  _lesson?: TutorialLesson,
+): string => {
+  // Stub until strings land in P3/P4 — wrong answer so Pro tests stay red.
+  if (kind === 'wrong') return '';
+  if (kind === 'praise') return '';
+  if (kind === 'chapter-done') return '';
+  return '';
 };
 
 const lessons: TutorialLesson[][] = [
@@ -118,7 +194,7 @@ export const tutorialChapter = (chapter: number): State => {
 
 /** Early lessons accept only the intended legal move; the last lesson is free. */
 export const tutorialAccepts = (lesson: TutorialLesson, action: Action, state: State): boolean => {
-  if (lesson.action === 'FreeTurn') return true;
+  if (lesson.action === 'FreeTurn' || lesson.action === 'Next') return true;
   if (lesson.action === 'Opponent' || action.t !== lesson.action) return false;
   if (action.t === 'Draw') return action.from === (lesson.focus === 'discard' ? 'discard' : 'deck');
   if (action.t === 'Sprout') {

@@ -2,9 +2,22 @@
 // remembered in the browser. They can be opened again from the "How to play" sheet.
 // `fruitAny` only remembers that the "any strength" hint was shown once.
 import { FRUIT, OPP } from '../../../src/strings.js';
+import type { Action, View } from '../../../src/engine/index.js';
 export const TIPS_KEY = 'severgrow.tips.v1';
 export type TipId = 'fruit' | 'strengthen' | 'draw';
 export type TipsSeen = Record<TipId | 'fruitAny', boolean>;
+
+/** Card-id groups that currently have a legal Bloom (engine only — never invent). Stub until P6. */
+export const bloomHintGroups = (_view: View, legal: readonly Action[]): number[][] => {
+  void _view;
+  const groups: number[][] = [];
+  for (const action of legal) {
+    if (action.t !== 'Bloom') continue;
+    const key = [...action.cards].sort((a, b) => a - b).join(',');
+    if (!groups.some(g => [...g].sort((a, b) => a - b).join(',') === key)) groups.push([...action.cards]);
+  }
+  return groups;
+};
 
 export const TIPS: Record<TipId, { title: string; text: string }> = {
   strengthen: {
