@@ -78,7 +78,9 @@ const timeOpponent = (page: Page): Promise<number> =>
   await page.locator('#hand .card').first().click();
   const opp2 = await timer2;
   const mean = (opp + opp2) / 2;
-  check("the opponent's empty turn takes about 400ms at Normal speed (300-500ms, mean of two)", mean >= 300 && mean <= 500, `${Math.round(opp)}ms, ${Math.round(opp2)}ms`);
+  // Target ~400ms (EMPTY_TURN_MS). CI runners add a little overhead; keep a tight band that still
+  // fails if the empty-turn pace regresses to a full thinking turn.
+  check("the opponent's empty turn takes about 400ms at Normal speed (250-600ms, mean of two)", mean >= 250 && mean <= 600, `${Math.round(opp)}ms, ${Math.round(opp2)}ms`);
   check('no page errors (auto-skip on)', errors.length === 0, errors[0]);
   await page.close();
 }

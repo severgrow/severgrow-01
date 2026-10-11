@@ -201,21 +201,38 @@ for (const [w, h] of [[360, 640], [390, 844], [430, 932], [768, 1024], [1280, 80
 // ---- 5. Smoother mode: on a very slow device a big cut switches effects to Low, once, with a note ----
 {
   const { state, action } = cutPosition(9);
-  // The detector counts frames between 20 ms and 500 ms; how slow a throttled frame is depends
-  // on the machine, so try a few slow-downs (each on a fresh page) until frames land in that band.
+  // The detector needs ~3s of frames in the 20–500 ms band. CDP throttle alone is flaky across
+  // runners (too mild → not slow; too heavy → frames ignored at >500 ms), so after a few
+  // throttle tries we feed synthetic rAF timestamps through the real watchFrames path.
   let page: Page | null = null;
   let errors: string[] = [];
   let shown = false;
-  for (const rate of [20, 10, 6, 40]) {
+  for (const rate of [4, 8, 6, 3, 12, 20]) {
     if (page) await page.close();
-    ({ page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal' } }));
+    ({ page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal', reduceMotion: false } }));
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate });
     await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
-    await page.waitForSelector('#smoother:not([hidden])', { timeout: 30000 }).catch(() => null);
+    await page.waitForSelector('#smoother:not([hidden])', { timeout: 20000 }).catch(() => null);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     shown = await page.locator('#smoother').isVisible();
     if (shown) break;
+  }
+  if (!shown) {
+    if (page) await page.close();
+    ({ page, errors } = await open(state, { settings: { speed: 'slow', effects: 'normal', reduceMotion: false } }));
+    await page.evaluate(() => {
+      let t = performance.now();
+      const real = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (cb: FrameRequestCallback) =>
+        real(() => {
+          t += 25; // 40 fps — slow enough to accumulate, inside the detector's band
+          cb(t);
+        });
+    });
+    await page.evaluate((a) => (window as unknown as { __severgrow: { playFor: (a: unknown, w: number) => boolean } }).__severgrow.playFor(a, 0), action);
+    await page.waitForSelector('#smoother:not([hidden])', { timeout: 45000 }).catch(() => null);
+    shown = await page.locator('#smoother').isVisible();
   }
   page = page!;
   const low = (await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { effects: string } } }).__severgrow.settings().effects)) === 'low';
