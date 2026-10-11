@@ -1309,13 +1309,12 @@ function continueGame() {
   if (!saved) return startGame(randomSeed());
   const lesson = saved.coach?.tutorial;
   if (lesson) {
-    const migrated = migrateTutorialProgress(lesson);
-    // Old 10-chapter saves land on the matching new chapter by lesson id.
-    if (lesson.chapter < 10 && (migrated.chapter !== lesson.chapter || !tutorialLesson(lesson.chapter, lesson.step)?.instruction)) {
+    const current = tutorialLesson(lesson.chapter, lesson.step);
+    // Old 10-chapter saves lack the new instruction field — map them by lesson family.
+    // Valid 13-chapter progress must resume as-is (chapter 1 is "Your turn", not Strengthen).
+    if (!current?.instruction) {
+      const migrated = migrateTutorialProgress(lesson);
       if (tutorialLesson(migrated.chapter, 0)) return advanceTutorialChapter(migrated.chapter);
-      return startTutorial(0);
-    }
-    if (!tutorialLesson(lesson.chapter, lesson.step)) {
       if (lesson.chapter + 1 < TUTORIAL_CHAPTER_COUNT) return advanceTutorialChapter(lesson.chapter + 1);
       store.remove(SAVE_KEY);
       showScreen('menu');
@@ -5128,7 +5127,10 @@ document.addEventListener('keydown', (e) => {
     active: tutorialGate.isActive(),
     mode: tutorialGate.mode(),
     allow: tutorialGate.allow(),
+    wouldBlock: (target: EventTarget | null) => tutorialGate!.wouldBlock(target),
   } : null,
+  tutorial: () => coach.tutorial ? { ...coach.tutorial } : null,
+  tutorialNext: () => tutorialNext(),
   exitTutorial: () => exitTutorial(),
 };
 

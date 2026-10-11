@@ -288,18 +288,25 @@ export const mountGlassSurface = (onClose: () => void) => {
       { side: 'top', room: tracked.top - 16, x: tracked.cx - HAND_W / 2, y: tracked.top - GAP - HAND_H, bobX: 0, bobY: 10, rot: 180 },
       { side: 'bottom', room: innerHeight - tracked.bottom - 16, x: tracked.cx - HAND_W / 2, y: tracked.bottom + GAP, bobX: 0, bobY: -10, rot: 0 },
     ];
-    const overlapsPanel = (x: number, y: number) =>
-      x < panelRect.right && x + HAND_W > panelRect.left && y < panelRect.bottom && y + HAND_H > panelRect.top;
+    const fan = document.getElementById('hand')?.getBoundingClientRect() ?? null;
+    const overlaps = (x: number, y: number, r: DOMRect) =>
+      x < r.right && x + HAND_W > r.left && y < r.bottom && y + HAND_H > r.top;
     const onScreen = (x: number, y: number) =>
       x >= 4 && y >= 4 && x + HAND_W <= innerWidth - 4 && y + HAND_H <= innerHeight - 4;
-    // Prefer the side with most free space; never sit on the glass window side.
+    // Prefer the side with most free space; never sit on the glass, the hand fan, or off-screen.
     const usable = candidates
       .filter(c => {
         if (c.side === 'top' && panelSide === 'top') return false;
         if (c.side === 'bottom' && panelSide === 'bottom') return false;
         if (c.room < HAND_H + GAP) return false;
         if (!onScreen(c.x, c.y)) return false;
-        if (overlapsPanel(c.x, c.y)) return false;
+        if (overlaps(c.x, c.y, panelRect)) return false;
+        if (fan && overlaps(c.x, c.y, fan)) return false;
+        // Never cover the target itself.
+        if (overlaps(c.x, c.y, {
+          left: tracked.left, top: tracked.top, right: tracked.right, bottom: tracked.bottom,
+          width: tracked.w, height: tracked.h, x: tracked.left, y: tracked.top, toJSON: () => ({}),
+        } as DOMRect)) return false;
         return true;
       })
       .sort((a, b) => b.room - a.room);

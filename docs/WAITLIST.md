@@ -34,6 +34,11 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 
 ## Original waiting entries
 
+### Tutorial focus lock + pointer redo
+- Date: 2026-10-11 · Commits: `f9b90ac` … `bac1768` (+ lock e2e / screens) · In test / `futa-test` only — do not lock yet
+- Hard capture-phase input gate during every guided step: only the glowing target and the glass buttons (Next / Show me / Skip / Chapters / Exit) react. Menu, settings, history, Sort, Undo, piles, other cards/hexes, camera pan/zoom, long-press, and shortcuts are dead. Inert chrome + Exit tutorial + Back release the lock. Dim is ~70% black with grey backdrop-filter; cream ring + lift + hand pointer; wrong-tap soft tick / shake / rotating “Tap the glowing one.” lines (400ms rate limit). One target per step; look-and-tap for homes/buttons. Preview: `?tutorial=1` and `?tutorial=1&chapter=N`. Screens: `docs/screens/tutorial/` (chapter-01…13, lock-*, pointer-options.png).
+- Check before locking in: `CHANNEL=futa-test npx tsx web/e2e/futa04-tutorial-lock.ts` and `futa04-tutorial-intel.ts` at 360/390/430/1280; Reduce motion (no pulse) + Sound off (no tick); Exit and Back clear inert; normal games have no gate; pointer never covers target/window/hand fan; Bloom paint by touch drag still works; bundle (`glass-surface` ~7.0 KB gzip).
+
 ### Tutorial Pro overhaul (13 chapters, one glass window, focus layer)
 - Date: 2026-10-11 · Commits: `25a3185`, `b0534d2`, `1735bd4` (+ proof commit) · In test / `futa-test` only
 - Rebuilt tutorial teaching: 13 chapters (goal, turn, bloom set+run, strengthen, cut, skip, buttons, bomb, blast, throw pile, how you win with real Strangle, final turn, free), one Match Intel–style glass window, shaped glow + chunky pointer with RAF tracking, praise/wrong/idle feedback, chapter menu / skip / replay, bloom hand hints, copy fixes (no “15 moves”, Bloom 3–6). Screens in `docs/screens/tutorial/`.

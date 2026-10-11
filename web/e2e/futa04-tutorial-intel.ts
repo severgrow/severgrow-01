@@ -16,8 +16,16 @@ const state=()=>page.evaluate(()=>(window as any).__severgrow.state() as State);
 const play=(action:Action,who:0|1=0)=>page.evaluate(([a,p])=>(window as any).__severgrow.playFor(a,p),[action,who] as const);
 const base='http://localhost:4197/';
 try {
-  await page.addInitScript(reduced=>localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({speed:'fast',reduceMotion:reduced,sound:false,music:false,coach:false,eyeCandy:!reduced})),reducedMotion);
+  await page.addInitScript(reduced=>{
+    localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({speed:'fast',reduceMotion:reduced,sound:false,music:false,coach:false,eyeCandy:!reduced}));
+  },reducedMotion);
   await page.goto(base);
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.includes('severgrow') && !key.includes('settings')) localStorage.removeItem(key);
+    }
+  });
+  await page.reload();
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-tutorial').click();
   assert.equal((await state()).seed,51000);
@@ -42,19 +50,36 @@ try {
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-continue').click();
   assert.deepEqual(await state(),beforeRefresh,'tutorial resumes the exact authored position');
+  await page.waitForSelector('#futasaku-glass:not([hidden])');
+  const resumedTut=await page.evaluate(()=>(window as any).__severgrow.tutorial());
+  assert.equal(Number(resumedTut?.chapter),1,'resume keeps the Your-turn chapter');
 
-  for(let chapter=1;chapter<TUTORIAL_CHAPTER_COUNT-1;chapter++) {
-    await page.waitForFunction(ch=>{
-      const glass=document.querySelector('#futasaku-glass .glass-dots');
-      const dots=[...glass?.querySelectorAll('.glass-dot')??[]];
-      return dots[ch]?.getAttribute('data-on')==='1' || !!(window as any).__severgrow?.state();
-    },chapter,{timeout:20000});
+  // Finish the current Your-turn chapter with the test hook, then jump chapter-by-chapter.
+  // Full UI lock coverage lives in futa04-tutorial-lock.ts.
+  {
+    const steps=tutorialLessons(1);
+    for(let index=1;index<steps.length;index++) {
+      const lesson=tutorialLesson(1,index)!;
+      if(lesson.action==='Opponent') break;
+      await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
+      const before=await state();
+      const action=legalActions(viewFor(before,0)).find(candidate=>tutorialAccepts(lesson,candidate,before));
+      assert(action,`chapter 2: ${lesson.id} must have a real legal action`);
+      assert.equal(await play(action),true,`chapter 2: ${lesson.id} applies`);
+      await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
+      await page.waitForTimeout(700);
+    }
+  }
+  for(let chapter=2;chapter<TUTORIAL_CHAPTER_COUNT-1;chapter++) {
+    await page.goto(`${base}?tutorial=1&chapter=${chapter+1}`);
+    await page.waitForFunction(()=>!!(window as any).__severgrow.tutorialGate?.()?.active,undefined,{timeout:20000});
+    await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
     const steps=tutorialLessons(chapter);
-    for(let index=chapter===1?1:0;index<steps.length;index++) {
+    for(let index=0;index<steps.length;index++) {
       const lesson=tutorialLesson(chapter,index)!;
       if(lesson.action==='Opponent') break;
       if(lesson.action==='Next') {
-        await page.locator('#futasaku-glass [data-tut="next"]').click();
+        await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
         await page.waitForTimeout(200);
         continue;
       }
@@ -65,15 +90,11 @@ try {
       const action=legalActions(viewFor(before,0)).find(candidate=>tutorialAccepts(lesson,candidate,before));
       assert(action,`chapter ${chapter+1}: ${lesson.id} must have a real legal action`);
       assert.equal(await play(action),true,`chapter ${chapter+1}: ${lesson.id} applies`);
-      if (lesson.id==='strength-throw') {
-        await page.goto(base);
-        await page.waitForFunction(()=>!!document.getElementById('menu-continue')&&!document.getElementById('menu-continue')!.hidden);
-        await page.locator('#menu-continue').click();
-      }
       await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
-      await page.waitForTimeout(700); // praise / chapter-done handoff
+      await page.waitForTimeout(700);
     }
   }
+  await page.goto(`${base}?tutorial=1&chapter=13`);
   await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent?.includes('No guide')
     || (window as any).__severgrow.state()?.seed===51010,undefined,{timeout:20000});
   // The final mini-turn is deliberately unrestricted; complete it with real actions.
