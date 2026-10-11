@@ -1,4 +1,4 @@
-// Behavioral checks for the Futa04 board/turn polish. Build CHANNEL=futa04 first.
+// Behavioral checks for the Futa04 board/turn polish. Build first (npm run web:build).
 // PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/futa04-board-turn-polish.ts
 // FUTA04_URL / FUTA04_DIST may target an existing preview or an isolated built folder.
 // Hooks only read the session: every Draw, placement, Undo, Skip and Throw uses real UI input.

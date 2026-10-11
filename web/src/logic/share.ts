@@ -19,7 +19,7 @@ export type ShareData = {
   highlights: string[];
   board: Record<string, Tile | null>;
   radius: number;
-  /** the Lab (test copy): the board's hexes when it is not the classic hexagon */
+  /** the Lab: the board's hexes when it is not the classic hexagon */
   cells?: readonly string[] | undefined;
   me: Player;
 };
@@ -58,7 +58,7 @@ export const shareLayout = (d: ShareData): ShareLayout => {
   const hlH = hl.length * (Math.round(34 * 1.25) + 12);
   const boardH = SHARE_H - M - hlH - 24 - y;
   const R = d.radius;
-  // the Lab (test copy): any set of hexes; the classic board is the hexagon of radius R
+  // the Lab: any set of hexes; the classic board is the hexagon of radius R
   const coords = d.cells ? d.cells.map(parseKey) : allCoords(R);
   const px = coords.map((c) => Math.sqrt(3) * (c.q + c.r / 2));
   const py = coords.map((c) => 1.5 * c.r);

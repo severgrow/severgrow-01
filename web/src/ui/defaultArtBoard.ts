@@ -1,5 +1,5 @@
 // The fast default board: small cropped sprites for both territories and homes, with
-// the existing V3 empty ground, rocks, gold frames and physical number stones.
+// the painted empty ground, rocks, gold frames and physical number stones.
 // It keeps BoardView's hitboxes, overlays and game interactions unchanged.
 import type { Player, Terrain, Tile } from '../../../src/engine/index.js';
 import { getOrient, toScreen } from '../logic/orient.js';
@@ -9,14 +9,17 @@ import { drawLandmark } from './landmarks.js';
 import { materialsOf } from '../logic/materials.js';
 import { drawSeedStone } from './seedstone.js';
 import { DEFAULT_ART_SPRITES } from './defaultArtSprites.js';
+import groundUrl from '../assets/board/empty-ground.webp?url';
+import rock1 from '../assets/board/rock-01.webp?url';
+import rock2 from '../assets/board/rock-02.webp?url';
+import rock3 from '../assets/board/rock-03.webp?url';
+import rock4 from '../assets/board/rock-04.webp?url';
+import rock5 from '../assets/board/rock-05.webp?url';
 
 // Territory art fills the cell. The framed homes instead fit their complete
 // masonry/wood border inside that same cell, including its six corners.
 const artSize = (index: number) => index >= 18 ? 68 : index < 9 ? 80 : 76;
-const v3 = (path: string) => new URL(`design-v3/lo/${path}`,
-  typeof document === 'undefined' ? 'http://localhost/' : document.baseURI).href;
-const groundUrl = v3('textures/empty_ground_01.webp');
-const rockUrls = Array.from({ length: 5 }, (_, i) => v3(`props/rock/rock_hex_0${i + 1}.webp`));
+const rockUrls = [rock1, rock2, rock3, rock4, rock5];
 
 // The small home and tile images start downloading while the menu is visible.
 // Once decoded, every repeat of a variant shares the browser's image cache.

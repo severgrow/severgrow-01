@@ -30,7 +30,7 @@ export const moveTier = (steps: readonly Step[], isGold: (key: string) => boolea
 /** A short banner for big moments only, or null. */
 export const tierBanner = (steps: readonly Step[]): string | null => {
   if (steps.some((s) => s.k === 'strangle')) return 'Strangled!';
-  if (steps.some((s) => s.k === 'fruit')) return 'Fruited!';
+  if (steps.some((s) => s.k === 'fruit')) return 'Bombed!';
   const cut = Math.max(0, ...steps.map((s) => (s.k === 'sever' ? s.keys.length : 0)));
   if (cut >= 4) return `Cut off ${cut}!`;
   if (steps.some((s) => s.k === 'grow' && s.tiles.length >= 5)) return 'Big grow!';

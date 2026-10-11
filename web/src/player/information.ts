@@ -1,6 +1,5 @@
-// Futa04 presentation only. The existing guide, effects and danger warning still supply every
+// Futasaku presentation only. The existing guide, effects and danger warning still supply every
 // word; prompts float over the map and disappear as soon as a move begins. No layout row.
-import { IS_FUTA04 } from '../channel.js';
 
 type Notice = { node: HTMLElement; priority: 'routine' | 'major'; text: string };
 
@@ -412,7 +411,7 @@ export const mountInformation = () => {
   const root = document.documentElement;
   const game = document.getElementById('game');
   const wrap = document.getElementById('board-wrap');
-  if (!IS_FUTA04 || !game || !wrap || document.getElementById('futa04-information-rail')) return;
+  if (!game || !wrap || document.getElementById('futa04-information-rail')) return;
   root.classList.add('futa04-information');
   const cockpit = document.querySelector<HTMLElement>('#dock > .table-row');
   if (cockpit) { cockpit.id = 'futa04-box'; cockpit.setAttribute('role', 'group'); cockpit.setAttribute('aria-label', 'Turn controls'); }

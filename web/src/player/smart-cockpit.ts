@@ -619,9 +619,9 @@ export function mountSmartCockpit() {
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
   }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event),
-    /** Hold a drag word (DRAW/PLACE/THROW/BLOOM/MEGA) on the sign; null clears it. Never FAST. */
+    /** Hold a drag word (DRAW/PLACE/THROW/BLOOM/BLAST) on the sign; null clears it. Never FAST. */
     led: (word:string|null) => {
-      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber');
+      if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'BLAST' ? 'green' : 'amber');
       else machine.release();
     },
     reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp) };

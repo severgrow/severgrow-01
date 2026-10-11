@@ -1,10 +1,9 @@
-// Approved player step guidance (Test and Futa04): a small crafted plate on the map
+// Approved player step guidance (Test and Futasaku): a small crafted plate on the map
 // the moment a step starts (an icon, the step's words, three step pips), and the step's own
 // controls as the clear hero (CSS in lab-css.ts, keyed on <html data-step data-guide>). The step
 // comes from the game's own state (main.ts passes the phase and whose turn it is); nothing here
 // keeps a separate idea of the step.
 import { STEP_CUE } from '../../../src/strings.js';
-import { IS_FUTA04 } from '../channel.js';
 
 export type Step = 'draw' | 'grow' | 'throw' | 'opp';
 export type GuideMode = 'full' | 'subtle' | 'off';
@@ -92,7 +91,6 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
   cue.setAttribute('aria-hidden', 'true');
   cue.innerHTML = `<div class="cue-plate"><span class="cue-icon"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></span><span class="cue-words"><span class="cue-kicker"></span><span class="cue-text"></span></span><span class="cue-pips"><i data-p="draw"></i><i data-p="grow"></i><i data-p="throw"></i></span></div>`;
   wrap?.appendChild(cue);
-  const plate = cue.querySelector<HTMLElement>('.cue-plate')!;
   const textEl = cue.querySelector<HTMLElement>('.cue-text')!;
   const kickEl = cue.querySelector<HTMLElement>('.cue-kicker')!;
   const iconEl = cue.querySelector<SVGSVGElement>('.cue-icon svg')!;
@@ -122,41 +120,9 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
    *  controls, the nearest free spot down the map (empty hexes first). */
   const place = () => {
     if (!wrap) return;
-    // Futa04's nonblocking instruction is centred by CSS. It has no separate reserved row,
+    // Futasaku's nonblocking instruction is centred by CSS. It has no separate reserved row,
     // and never searches for a free hex or moves when the battlefield changes.
-    if (IS_FUTA04) return;
-    const B = wrap.getBoundingClientRect();
-    const under = parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
-    const W = { left: B.left, top: B.top, width: B.width, height: Math.max(0, B.height - under) };
-    const rect = (e: Element) => e.getBoundingClientRect();
-    const hard = [...wrap.querySelectorAll('g.tile, .landmark, .gold-badge, .l-over > *, .badge, .ghost-tile, .ghost-num, .cam-whole, .cam-arrow')].map(rect).filter((r) => r.width > 0);
-    const rocks = [...wrap.querySelectorAll('g.hex-cell.rock')].map(rect).filter((r) => r.width > 0);
-    type Box = { left: number; top: number; right: number; bottom: number };
-    const hit = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-    const w = plate.offsetWidth;
-    const h = plate.offsetHeight;
-    const at = (cx: number, cy: number) => ({ left: W.left + cx - w / 2, right: W.left + cx + w / 2, top: W.top + cy - h / 2, bottom: W.top + cy + h / 2 });
-    const top = 10 + h / 2;
-    // candidates: the home spot first, then down the map in the centre, then the thirds
-    const spots: { x: number; y: number }[] = [];
-    for (let yi = 0; yi <= 20; yi++) {
-      const y = top + ((W.height - h - 20) * yi) / 20;
-      for (const xf of [0.5, 0.32, 0.68]) spots.push({ x: Math.min(W.width - w / 2 - 6, Math.max(w / 2 + 6, W.width * xf)), y });
-    }
-    for (const avoidRocks of [true, false]) {
-      const s = spots.find((p) => {
-        const r = at(p.x, p.y);
-        return !hard.some((x) => hit(r, x)) && (!avoidRocks || !rocks.some((x) => hit(r, x)));
-      });
-      if (s) return put(s.x, s.y);
-    }
-    // nowhere free: the home spot, quieter
-    cue.classList.add('faint');
-    put(W.width / 2, top);
-  };
-  const put = (x: number, y: number) => {
-    cue.style.left = `${x.toFixed(1)}px`;
-    cue.style.top = `${y.toFixed(1)}px`;
+    return;
   };
 
   const show = () => {

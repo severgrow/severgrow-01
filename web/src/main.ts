@@ -1,14 +1,13 @@
-// first: the release channel (the test copy keeps its own storage)
-import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
-// Futasaku in the browser. You (player 1) against the computer. All rules come from the
+// first: storage prefixes for saves and settings (channel.ts), before anything reads them
+import './channel.js';
+// Futasaku in the browser. You (seat 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
 import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
-import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
-import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
+import type { Action, Card, Player, State, Tile, View } from '../../src/engine/index.js';
+import { COACH_STEPS, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
-import { cutLoss } from './analysis.js';
 import { cardName, hexName, moveCards } from './names.js';
 import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
@@ -41,7 +40,6 @@ import {
   paintProblem,
   paintTap,
   proximity,
-  suggestBloom,
   unavailable,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
@@ -52,12 +50,11 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
-import { perfStart, perfStep } from './logic/perf.js';
-import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
+import { deckMoment, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
 import { EASE, MOTION } from './logic/motion.js';
-import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
+import { BOARD_MARGIN, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
@@ -99,25 +96,16 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
-let DesignView: typeof BoardView = BoardView;
-const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04'
-  ? await import('./player/branding.js') : null;
+const branding = await import('./player/branding.js');
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
   document.documentElement.classList.add('home-screen-app');
 }
 branding?.mountBranding();
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-  await import('./ui/design-v2.css');
-  DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
-}
-// Skins are not a public choice yet. Keep the V3 renderer available for local
-// art checks; old saved V3 preferences and URLs now open the default board.
-const V3_MODE = FEATURES.v3 && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
-  && new URLSearchParams(location.search).get('skin-preview') === 'v3';
-const v3 = V3_MODE ? await Promise.all([import('./ui/skin/SkinBoardView.js'), import('./skins/forestVolcanoV3.js')]) : null;
-const defaultArt = IS_FUTA04 && !V3_MODE ? await import('./ui/defaultArtBoard.js') : null;
-if (V3_MODE) document.documentElement.classList.add('design-v3');
+
+// The board's look (skins come later as new work; the old V3 skin is archived).
+const defaultArt = await import('./ui/defaultArtBoard.js');
+
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -125,7 +113,6 @@ import { mountDragLayer } from './ui/drag-layer.js';
 import { PILE_GRAB_PX } from './logic/drag.js';
 import { fillIcons, ICONS } from './ui/icons.js';
 import { getPixelGrid, setPixelGrid } from './ui/geom.js';
-import { onPhotosReady, photosForOrientation, warmPhotos } from './ui/photo.js';
 import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './logic/orient.js';
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
@@ -142,12 +129,9 @@ import type { Beats } from './logic/emptyturn.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
-if (IS_FUTA04) setFixedBoardOrient('flat');
+setFixedBoardOrient('flat');
 const COACH_KEY_OLD = 'severgrow.coach.enabled';
 const BOOT_PARAMS = new URLSearchParams(location.search);
-// the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
-const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
-if (DESIGN_MODE) document.documentElement.classList.add('design-v2');
 
 // ---------- small helpers ----------
 
@@ -200,7 +184,7 @@ let labActiveId = labBaseline ? store.get(LAB_ACTIVE_KEY) : null;
 let labCategory: LabCategory = LAB_PRESETS.find((preset) => preset.id === labActiveId)?.category ?? 'surface';
 // A previous automatic "Smoother mode" could leave this preview on Low effects. Restore
 // the normal visual level once; an explicit Reduce motion/device preference still applies.
-if (IS_FUTA04 && store.get(SMOOTH_KEY) && settings.effects === 'low') {
+if (store.get(SMOOTH_KEY) && settings.effects === 'low') {
   settings = { ...settings, effects: 'normal' };
   saveSettings();
 }
@@ -249,9 +233,8 @@ let cardRects = new Map<number, DOMRect>();
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
-const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3)
-  : defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
-  : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
+const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
+  : (new BoardView(boardSvg, boardHandlers));
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
 const announceTurn = (player: Player, label?: string) => {
@@ -261,7 +244,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, sparks, drift, ring, stream, scar, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -295,7 +278,7 @@ function applyTheme() {
   root.style.setProperty('--m-rim', String(lk.rim));
   root.classList.toggle('mat-textures', lk.textures);
   root.classList.toggle('mat-motion', lk.motion);
-  if (lk.textures && !IS_FUTA04) warmPhotos();
+
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
   // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
@@ -325,39 +308,6 @@ function drawSpores(on: boolean) {
     m.style.setProperty('--d', `${-((i * 11) % 40)}s`);
     box.appendChild(m);
   }
-}
-
-/**
- * Part 3 B: the opening splash: a vein grows from a root to a tile and the game's name appears.
- * Once per visit, about 1.6s, never blocks a tap (a tap ends it), still with Reduce motion.
- */
-function showSplash() {
-  let shown = false;
-  try {
-    shown = sessionStorage.getItem('severgrow.splash') === '1';
-    sessionStorage.setItem('severgrow.splash', '1');
-  } catch {
-    shown = true;
-  }
-  const plan = splashPlan({ reduceMotion: settings.reduceMotion, on: settings.eyeCandy, shownThisVisit: shown });
-  if (!plan.show) return;
-  const c = resolveColors(theme());
-  const box = $('splash');
-  box.innerHTML = `<svg viewBox="0 0 220 120" width="260" height="142" aria-hidden="true">
-    <path class="sp-vein" d="M40 92 C 70 92, 80 50, 110 52 S 160 30, 182 30" stroke="${c.you}" stroke-width="5" stroke-linecap="round" fill="none" pathLength="100"/>
-    <circle cx="40" cy="92" r="13" fill="${c.you}"/><circle cx="40" cy="92" r="6" fill="${c.bg}"/>
-    <polygon class="sp-tile" points="182,16 194,23 194,37 182,44 170,37 170,23" fill="${c.you}"/>
-  </svg><p class="sp-name">${GAME_TITLE}</p>`;
-  box.classList.toggle('still', !plan.animated);
-  box.style.setProperty('--sp-ms', `${plan.ms}ms`);
-  box.hidden = false;
-  const end = () => {
-    box.classList.add('out');
-    setTimeout(() => (box.hidden = true), 320);
-    document.removeEventListener('pointerdown', end, true);
-  };
-  document.addEventListener('pointerdown', end, true);
-  setTimeout(end, plan.ms);
 }
 
 /** Part 3 F: the menu's terrarium: a glass dome with a little living board inside (Eye candy). */
@@ -429,10 +379,8 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
         : `<span class="vb-name">Continue</span><span class="vb-sub">${tier} · level ${saved!.level} · turn ${turnNo}</span>`;
       $('menu-continue').classList.add('version-btn');
     } else $('menu-continue').textContent = 'Continue';
-    {
-      $('menu-new').classList.toggle('primary', !canContinue);
-      $('menu-new').classList.toggle('ghost', canContinue);
-    }
+    $('menu-new').classList.toggle('primary', !canContinue);
+    $('menu-new').classList.toggle('ghost', canContinue);
     $('menu-tutorial').classList.remove('primary');
     $('menu-tutorial').classList.add('ghost');
   }
@@ -450,7 +398,7 @@ function sheet(id: string | null) {
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
   if (id === 'sheet-menu') {
     setPaused(true);
-    if (FEATURES.slimHeader) fillMenuStatus();
+    fillMenuStatus();
   }
   else if (id === null) setPaused(false);
   $('scrim').hidden = !openSheet;
@@ -461,10 +409,8 @@ function sheet(id: string | null) {
     if (id === 'sheet-howto') renderHowTo();
     openSheet.querySelector<HTMLElement>('[data-close], button')?.focus();
   }
-  if (IS_FUTA04) {
-    document.documentElement.classList.toggle('futa04-information-blocked', !!openSheet);
-    updateFuta04Help();
-  }
+  document.documentElement.classList.toggle('futa04-information-blocked', !!openSheet);
+  updateFuta04Help();
 }
 
 function renderHowTo() {
@@ -482,7 +428,7 @@ function renderHowTo() {
       ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((cfg?.fruitCardCount ?? 4) > 0
-      ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Fruit card on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
+      ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Bomb on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
     `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
@@ -497,7 +443,7 @@ function renderHowTo() {
 /** New matches choose one of five named tiers; the exact engine level is saved with the match. */
 document.addEventListener('click', (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-tip]');
-  if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || (IS_FUTA04 && t.dataset.tip === 'draw'))) showTip(t.dataset.tip);
+  if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || t.dataset.tip === 'draw')) showTip(t.dataset.tip);
 });
 
 function renderLevelGrid() {
@@ -718,7 +664,6 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   scheduleBot();
 }
 
-
 /** Part 3 G: the opening deal: the hand flies in from the deck, card by card (Eye candy). */
 function dealIn() {
   if (!settings.eyeCandy || motion() === 0 || timeScale() === 0) return;
@@ -731,21 +676,16 @@ function dealIn() {
   });
 }
 
-/** The test copy's phone extras (thumb layout settings, idle tip): null in the live build. */
-/** The test copy's step guidance (the step's word on the map, the step's controls as the hero). */
-let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let futa04Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
-/** The replay button: hidden in the test copy (its code stays). */
-const REPLAY_BUTTON = FEATURES.replay;
-/** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
-if (!FEATURES.weakTools) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
-// the test copy: the header keeps only the menu button and the score bar; the scores, the turn
+/** The weak-spot corner icons are gone (their signals live on the map and the tile card). */
+for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
+// the header keeps only the menu button and the score bar; the scores, the turn
 // and History move into the menu (no player marks there: the colours say who is who)
-if (FEATURES.slimHeader) {
+{
   setSlimHud(true);
   document.documentElement.classList.add('slim-hud');
   const body = document.querySelector('#sheet-menu .sheet-body');
@@ -759,7 +699,7 @@ if (FEATURES.slimHeader) {
     box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
   }
 }
-/** The test copy's menu: the scores and the turn, as the header used to show them. */
+/** the menu: the scores and the turn, as the header used to show them. */
 function fillMenuStatus() {
   const you = document.getElementById('gm-score-you');
   if (!you) return;
@@ -769,91 +709,56 @@ function fillMenuStatus() {
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
 }
-/** The thumb layout in use (test copy, phones in portrait), or null. */
+/** The thumb layout in use (phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
 /** Thumb layout v2, smart overlap: how far (px) the board reaches under the fan right now. */
 let thumbOverlap = 0;
 let overlapFor: unknown = null;
-// the Lab (test copy only: this import is dropped from the live build)
-let lab: {
-  camera: ReturnType<typeof import('./player/camera.js').installCamera>;
-  overrides: () => Partial<RulesConfig>;
-  thinking: (on: boolean) => void;
-  watchingChanged: (w: { level: number; pause: number } | null) => void;
-} | null = null;
 let camera: ReturnType<typeof import('./player/camera.js').installCamera> | null = null;
-// Literal build guards keep player enhancements out of the legacy bundle.
-declare const __CHANNEL__: string;
 async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04')) {
-    placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
-    loads.push(import('./player/player-css.js').then((m) => {
-      const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
-      layoutKey = ''; applyLayout(); if (session) render();
-    }));
-    loads.push(import('./player/thumb.js').then((t) => {
-      thumbMod = t.mountThumb({
-        relayout: () => {
-          layoutKey = '';
-          render();
-          applyLayout();
-        },
-        reduceMotion: () => settings.reduceMotion,
-      });
-      layoutKey = '';
-      applyLayout();
+  loads.push(import('./player/player-css.js').then((m) => {
+    const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
+    layoutKey = ''; applyLayout(); if (session) render();
+  }));
+  loads.push(import('./player/thumb.js').then((t) => {
+    thumbMod = t.mountThumb({
+      relayout: () => {
+        layoutKey = '';
+        render();
+        applyLayout();
+      },
+      reduceMotion: () => settings.reduceMotion,
+    });
+    layoutKey = '';
+    applyLayout();
+    if (session) render();
+    // the step guidance (its setting sits under the phone layout rows)
+    return import('./player/guide.js').then((g) => {
+      guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
       if (session) render();
-      // the step guidance (its setting sits under the phone layout rows)
-      return import('./player/guide.js').then((g) => {
-        guideMod = g.mountGuide({ reduceMotion: () => settings.reduceMotion });
-        if (session) render();
-      });
-    }));
-    camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => smartCockpit?.sync() });
-  }
-  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
-    loads.push(import('./player/fonts.js').then((f) => f.applyFont()));
-    loads.push(import('./lab-mode/panel.js').then((m) => {
-      lab = m.mountLab({
-        sheet,
-        play: (_o, level) => startGame(randomSeed(), level as Level),
-        watch: (level, green, pause) => startGame(randomSeed(), level as Level, { level: green as Level, pause }),
-        setWatch: (w) => {
-          watching = w ? { level: w.level as Level, pause: w.pause } : null;
-          document.body.classList.toggle('lab-watching', !!watching);
-          render();
-          scheduleBot();
-        },
-        board: board.svg,
-        boardWrap: $('board-wrap'),
-        camera,
-      });
-    }));
-  }
+    });
+  }));
+  camera = (await import('./player/camera.js')).installCamera(board.svg, $('board-wrap'), { reduceMotion: () => settings.reduceMotion, changed: () => smartCockpit?.sync() });
 
-  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04') {
-    loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
-  }
+  loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
 
   await Promise.all(loads);
-  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04') {
-    outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
-    (await import('./player/information.js')).mountInformation();
-    (await import('./player/cards.js')).mountCards();
-    glassSurface = (await import('./player/glass-surface.js')).mountGlassSurface(() => {
-      $('futa04-help-button').setAttribute('aria-expanded','false');
-      $('futa04-help-button').focus();
-    });
-    futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
-    smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
-    layoutKey = '';
-    if (session) render();
-  }
+  outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
+  (await import('./player/information.js')).mountInformation();
+  (await import('./player/cards.js')).mountCards();
+  glassSurface = (await import('./player/glass-surface.js')).mountGlassSurface(() => {
+    $('futa04-help-button').setAttribute('aria-expanded','false');
+    $('futa04-help-button').focus();
+  });
+  futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
+  smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
+  layoutKey = '';
+  if (session) render();
 }
 
 /**
- * Thumb layout v2, smart overlap (test copy only): the board may reach under the fan's band by
+ * Thumb layout v2, smart overlap: the board may reach under the fan's band by
  * up to 15% of its height, but only where every hex under a card is empty or rock, far from
  * anything that could be played there this turn (my network: 4 hexes, a Bloom's reach; the
  * opponent's: 1), with no tile, home, gold hex, target highlight or Bloom painting under a card.
@@ -861,7 +766,7 @@ async function mountPlayerEnhancements() {
  * crossfade. Anything that would end up under a card cancels it at once.
  */
 /**
- * The test copy's smart camera (lab-mode/camera.ts): what it needs on every render. DEFAULT_TILE
+ * the smart camera (lab-mode/camera.ts): what it needs on every render. DEFAULT_TILE
  * is the classic board's tile (hexagon radius 3) on this screen with the current layout.
  */
 function feedCamera(v: View) {
@@ -971,19 +876,15 @@ function checkOverlap(v: View) {
   }
 }
 
-function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+function startGame(seed: number, level: Level = settings.level) {
   drawPileAnchorKey = '';
-  watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
   overlapFor = null;
-  if (IS_TEST) {
-    document.body.classList.toggle('lab-watching', !!watching);
-    lab?.watchingChanged(watching);
-  }
+
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  // the test copy: the Lab's active experiment (none: the classic game)
-  const opening = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
+  // the Lab's active experiment (none: the classic game)
+  const opening = newGame(seed, {});
   // The engine draws who starts from the seed (SPEC 5); the seed alone replays it.
   const state: State = opening;
   const opponentStarts = state.startingPlayer === BOT;
@@ -1072,11 +973,7 @@ function continueGame() {
     return;
   }
   log = ['Welcome back.'];
-  watching = null;
-  if (IS_TEST) {
-    document.body.classList.remove('lab-watching');
-    lab?.watchingChanged(null);
-  }
+
   gameLevel = saved.level;
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
@@ -1108,7 +1005,7 @@ function rememberRemoved(steps: readonly Step[], before: State) {
 }
 
 function afterPlay(p: Played, by: Player, advice: Advice | null) {
-  let displayEvent = IS_FUTA04 ? displayEventForPlay(p.before,p.after,p.steps,HUMAN) : null;
+  let displayEvent = displayEventForPlay(p.before,p.after,p.steps,HUMAN);
   if (displayEvent?.flavour && coach.tutorial && coach.tutorial.chapter<5) {
     const {flavour: _flavour,...quiet}=displayEvent;
     displayEvent=quiet;
@@ -1116,7 +1013,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   log.unshift(describe(p.before, p.action, p.after, HUMAN));
   if (p.after.phase === 'GAME_OVER' && p.after.result) {
     log.unshift(`${resultTitle(p.after.result, HUMAN)}. ${resultReason(p.after.result, HUMAN)}`);
-    if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
+    if (p.before.phase !== 'GAME_OVER' && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
     }
@@ -1130,7 +1027,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
   }
   for (const s of p.steps) if (s.k === 'draw' && s.player === HUMAN && s.card) hiddenCards.add(s.card.id);
   rememberRemoved(p.steps, p.before);
-  const cue = IS_FUTA04 ? outcomeCue(p.steps, HUMAN) : null;
+  const cue = outcomeCue(p.steps, HUMAN);
   if (cue) outcomeSteps.set(cue.step, cue);
   if (displayEvent) {
     const anchor = cue?.step ?? p.steps.find(step=>step.k==='sync');
@@ -1211,8 +1108,8 @@ function scheduleBot() {
   if (!session || botBusy || tutorialTransitionPending || starterDrawPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
-  // the Lab's "Watch a game" (test copy only): a second opponent plays my seat
-  if (st.actor !== BOT) return void (IS_TEST && watching && scheduleWatch());
+  // the Lab's "Watch a game": a second opponent plays my seat
+  if (st.actor !== BOT) return;
   botBusy = true;
   const my = epoch;
   void (async () => {
@@ -1220,7 +1117,7 @@ function scheduleBot() {
     if (my !== epoch || !session) return;
     const started = performance.now();
     thinking = true;
-    if (IS_TEST) lab?.thinking(true);
+
     renderHud();
     const st = session.state;
     if (st.phase === 'DRAW' && st.turnPlayer === BOT && botPlan?.keys[0] !== posKey(st)) botPlan = await planBotTurn(st);
@@ -1233,38 +1130,12 @@ function scheduleBot() {
     const left = beat - (performance.now() - started);
     if (left > 0) await wait(left, my);
     thinking = false;
-    if (IS_TEST) lab?.thinking(false);
+
     pill.botMoved();
     if (my !== epoch || !session) return;
     const p = session.play(action, BOT);
     botBusy = false;
     if (p) afterPlay(p, BOT, null);
-    else render();
-  })();
-}
-/** The Lab's "Watch a game": the level playing my seat and the pause after each move (null: I play). */
-let watching: { level: Level; pause: number } | null = null;
-function scheduleWatch() {
-  if (!session || botBusy || !watching) return;
-  botBusy = true;
-  const my = epoch;
-  // something on my side (a skipped animation, a new deal) can restart the step: try again
-  const retry = () => {
-    botBusy = false;
-    if (watching && session) setTimeout(scheduleBot, 60);
-  };
-  void (async () => {
-    await idle();
-    if (my !== epoch || !session || !watching) return retry();
-    const st = session.state;
-    const lvl = watching.level;
-    const action = await askBot(viewFor(st, HUMAN), lvl, botSeed(st.seed ^ 0x9e3779b9, lvl, st.turnNumber, st.history?.length ?? 0));
-    const grows = action.t === 'Bloom' || action.t === 'Sprout';
-    await wait(((grows ? 300 : 90) + (watching?.pause ?? 0)) * timeScale(), my);
-    if (my !== epoch || !session || !watching || session.state !== st) return retry();
-    const p = session.play(action, HUMAN);
-    botBusy = false;
-    if (p) afterPlay(p, HUMAN, null);
     else render();
   })();
 }
@@ -1436,51 +1307,15 @@ async function anticipate(m: Moment, f: number, my: number) {
 /** The impact of a big moment: shake, thud, banner, vibration, then a brief freeze (hit-stop). */
 async function impact(m: Moment, f: number, my: number) {
   const b = m.budget;
-  if (b.shake > 0 && !IS_FUTA04) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
+
   if (b.thud) sound.thud();
   if (b.vibrate) vibrate(settings.vibration, b.vibrate);
   if (m.banner && m.first) banner(m.banner, 'big');
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
 }
 
-/**
- * Part 4: Smoother mode. While moves animate, frame times are watched; under 50 fps for 3
- * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
- */
-let perf = perfStart();
-let perfRaf = 0;
 function watchFrames() {
-  if (IS_FUTA04) return; // no automatic effect downgrade or interruption in Futasaku 0.4
-  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
-  let last = performance.now();
-  const tick = (t: number) => {
-    const r = perfStep(perf, t - last);
-    perf = r.state;
-    last = t;
-    if (r.drop) {
-      perfRaf = 0;
-      return smootherMode();
-    }
-    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
-  };
-  perfRaf = requestAnimationFrame(tick);
-}
-function smootherMode() {
-  const before = settings.effects;
-  settings = { ...settings, effects: 'low' };
-  sound.setEffects('low');
-  saveSettings();
-  store.set(SMOOTH_KEY, '1');
-  const note = $('smoother');
-  note.hidden = false;
-  $('smoother-undo').onclick = () => {
-    settings = { ...settings, effects: before };
-    sound.setEffects(before);
-    saveSettings();
-    note.hidden = true;
-    render();
-  };
-  $('smoother-keep').onclick = () => (note.hidden = true);
+  return;
 }
 
 async function pump() {
@@ -1545,17 +1380,15 @@ async function playStep(step: Step, my: number) {
           const dx = from.left + from.width / 2 - r.left - r.width / 2;
           const dy = from.top + from.height / 2 - r.top - r.height / 2;
           // Draw: out of the pile and into the hand with a 4% scale overshoot, then rest.
-          const frames = IS_FUTA04
-            ? m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
+          const frames = m === 0 ? [{ opacity: 0 }, { opacity: 1 }]
               : [{ translate: `${dx}px ${dy}px`, scale: `${(from.height / Math.max(r.height, 1)).toFixed(2)}`, opacity: 1 },
                  { translate: `${(dx * .42).toFixed(1)}px ${(dy * .42 - 14).toFixed(1)}px`, scale: '.96', opacity: 1, offset:.5 },
                  { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
-                 { translate: '0 0', scale: '1', opacity: 1 }]
-            : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_FUTA04 ? 330 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+                 { translate: '0 0', scale: '1', opacity: 1 }];
+          anim(to, frames, { duration: 330 * f, fill:'backwards', easing: EASE.spring });
         }
         sound.draw();
-        await wait((IS_FUTA04 ? 330 : 240) * f, my);
+        await wait(330 * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
         await wait(quickShow ? quickShow.show.draw : 120 * f, my);
@@ -1575,7 +1408,6 @@ async function playStep(step: Step, my: number) {
       const firstDistance = Math.min(...step.tiles.map(tile => hexDistance(home,parseKey(tile.key))));
       const stagger = bloom ? BLOOM_STAGGER_MS * f : 0;
       const staggerCap = (MOTION.moment - MOTION.move) * f;
-      const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       let anchor: string | null = null;
       let anchorDist = Infinity;
@@ -1590,17 +1422,13 @@ async function playStep(step: Step, my: number) {
         const frames: Keyframe[] =
           m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
-            : IS_FUTA04
-              ? [{ transform: 'scale(0.86)', opacity: 0 }, { transform: 'scale(1.02)', opacity: 1, offset: 0.72 }, { transform: 'translateY(1px) scale(1)', offset: 0.9 }, { transform: 'translateY(0) scale(1)' }]
-              : step.style === 'sprout'
-                ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
-                : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
-        anim(tileEl, frames, { duration: IS_FUTA04 ? MOTION.move * f : (step.style === 'sprout' ? 460 : st.ms) * f, delay, easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+            : [{ transform: 'scale(0.86)', opacity: 0 }, { transform: 'scale(1.02)', opacity: 1, offset: 0.72 }, { transform: 'translateY(1px) scale(1)', offset: 0.9 }, { transform: 'translateY(0) scale(1)' }];
+        anim(tileEl, frames, { duration: MOTION.move * f, delay, easing: EASE.spring, transformOrigin: 'center' } as KeyframeAnimationOptions);
         // overhaul item 17: blades spring up as the tile lands; a heavier tap for the top rank
         if (m > 0 && !b.fadeOnly) {
           tileEl?.classList.add('spring');
           setTimeout(() => tileEl?.classList.remove('spring'), delay + 900 * f);
-          if (!IS_FUTA04 && b.particles > 0 && by === HUMAN && !t.replaced) drift(t.key, delay + st.ms * 0.55 * f, f, st.heavy ? 3 : 1);
+
         }
         const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
         if (hp && by === HUMAN && (st.heavy || i === 0)) setTimeout(() => vibrate(true, hp as number | number[]), delay + st.ms * 0.6 * f);
@@ -1612,11 +1440,9 @@ async function playStep(step: Step, my: number) {
             setTimeout(() => sound.sparks(), delay);
           }
           if (m > 0 && !b.fadeOnly && !bloom) ring(t.key, f, st.heavy);
-        } else if (IS_FUTA04 && !bloom) {
+        } else if (!bloom) {
           // A normal Sprout: one quiet ring on the new tile, no sparks.
           if (m > 0 && !b.fadeOnly) ring(t.key, f, st.heavy);
-        } else if (!IS_FUTA04 && mo.tier === 'big' && b.particles > 0) {
-          sparks(t.key, by === HUMAN ? 'you' : 'bot', delay, f, Math.round(b.particles / step.tiles.length));
         }
         // the wood tick that lands: one per tile, lower and heavier for a higher rank
         if (!bloom) {
@@ -1639,7 +1465,7 @@ async function playStep(step: Step, my: number) {
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
       if (mo.tier === 'big') await impact(mo, f, my);
-      await wait(last + (IS_FUTA04 ? 560 : 420) * f, my);
+      await wait(last + 560 * f, my);
       return;
     }
     case 'sever': {
@@ -1700,7 +1526,7 @@ async function playStep(step: Step, my: number) {
       if (!show()) return;
       const tileEl = board.tile(step.key);
       const num = tileEl?.querySelector('.tile-num');
-      const stone = IS_FUTA04 ? tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null : null;
+      const stone = tileEl?.querySelector<SVGGElement>('.seed-stone') ?? null;
       // The number brightens and ticks from → to over one "quick" beat; no bounce.
       if (m > 0 && !mo.budget.fadeOnly) anim(stone ?? num ?? tileEl, [{ opacity: 0.5 }, { opacity: 1 }], { duration: MOTION.quick * f, easing: EASE.out, fill: 'both' });
       if (m > 0 && !mo.budget.fadeOnly) ring(step.key, f, top);
@@ -1773,7 +1599,7 @@ async function playStep(step: Step, my: number) {
       }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 330 * f : 320 * f, my);
+      await wait(quickShow && step.player === BOT ? quickShow.show.discard : from ? 330 * f : 320 * f, my);
       show();
       return;
     }
@@ -2021,13 +1847,13 @@ function countScores(to: [number, number]) {
 const busy = () => queue.pending > 0 || pumping;
 const myTurn = () => !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 
-/** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
+/** Futasaku's idle prompt yields for every active move, including Bloom painting without a card. */
 function updateFuta04MoveActive() {
-  if (!IS_FUTA04) return;
+
   const active = !!session && !$('game').hidden && (busy() || session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null || !!session.pending || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr);
   document.documentElement.classList.toggle('futa04-move-active', active);
   document.documentElement.dataset.futa04Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
-  document.documentElement.dataset.futa04Waiting = String(myTurn() && !busy() && !watching);
+  document.documentElement.dataset.futa04Waiting = String(myTurn() && !busy());
   document.documentElement.dataset.futa04Turn = String(session?.state.turnNumber ?? '');
 }
 
@@ -2075,28 +1901,28 @@ function render() {
     if (only) session.preset(only);
   }
   board.setDrawing(!!combo, drawHandlers);
-  renderBoard(v, advice);
+  renderBoard(v);
   if (combo) paintDraw();
   else $('draw-info').hidden = true;
   renderControls(v, advice);
   $('dock').classList.toggle('confirming', !$('confirm').hidden);
   renderHand(v, advice);
-  renderPiles(v, advice);
-  if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
-  if (FEATURES.smartCamera && camera) {
+  renderPiles(v);
+  requestAnimationFrame(alignDrawPiles);
+  if (camera) {
     // what I am working on: the map (a card picked, painting, the opponent's turn) or the cards
     const mapFocus = !myTurn() || busy() || draw.shape.length > 0 || !!draw.ptr || session.sel.card !== null || session.sel.hex !== null;
     document.documentElement.dataset.focus = mapFocus ? 'map' : 'cards';
     feedCamera(v);
   }
-  if (FEATURES.phoneLayout && thumbLayout) checkOverlap(v);
-  // the test copy: the step's tip, faintly over the board after a few idle seconds (my turn, no
+  if (thumbLayout) checkOverlap(v);
+  // the step's tip, faintly over the board after a few idle seconds (my turn, no
   // animation, no Bloom being painted)
-  if (FEATURES.guidance && guideMod) {
+  if (guideMod) {
     // the step, from the game's own state: whose turn it is and the phase
     const st = session.state;
     const over = st.phase === 'GAME_OVER';
-    const step = over || watching ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
+    const step = over ? null : st.actor !== HUMAN ? 'opp' : st.phase === 'DRAW' ? 'draw' : st.phase === 'DISCARD' ? 'throw' : 'grow';
     guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
@@ -2110,13 +1936,7 @@ function render() {
     intelState=session.state;
     glassSurface.intel(matchIntel(v,session.state.history ?? [],openingPublicDiscard(session.state,session.base)));
   }
-  if (!IS_FUTA04 && placeTeachingPanel && thumbLayout) {
-    const keys = targetHexes(v, session.legal, session.sel);
-    requestAnimationFrame(() => {
-      placeTeachingPanel?.($('first-tip'), keys);
-      placeTeachingPanel?.($('coach'), keys);
-    });
-  }
+
   if (myTurn() && !busy() && v.phase === 'ACT' && !autoQueued) {
     autoQueued = true;
     setTimeout(() => {
@@ -2129,7 +1949,7 @@ let autoQueued = false;
 /** Optional teaching yields to the player's move and to other sheets. */
 function updateFuta04Help() {
   const unavailable=!session || !!coach.tutorial || !!openSheet || session.state.phase==='GAME_OVER';
-  futa04Help?.update({ blocked: IS_FUTA04 ? unavailable : unavailable || busy() || !!session?.pending || !!draw.shape.length || cardPinned });
+  futa04Help?.update({ blocked: unavailable });
 }
 
 function toggleMatchIntel() {
@@ -2141,7 +1961,6 @@ function toggleMatchIntel() {
   $('futa04-help-button').setAttribute('aria-expanded','true');
   document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
 }
-
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
 function renderGuide(advice: Advice | null) {
@@ -2155,18 +1974,18 @@ function renderGuide(advice: Advice | null) {
   let t = guideTarget(session.view, session.legal, session.sel, guideGoal, session.pending);
   if (t?.kind === 'preset') {
     // A line or clump: the coach shows its placement on the board, ready to confirm.
-    if (IS_FUTA04) draw = { ...DRAW0 };
+    draw = { ...DRAW0 };
     session.preset(guideGoal);
     render();
     return;
   }
-  if (IS_FUTA04 && t?.kind === 'confirm' && session.pending?.t === 'Bloom') {
+  if (t?.kind === 'confirm' && session.pending?.t === 'Bloom') {
     // Only an explicit demonstrated placement is ready; a bare inspected hex still needs
     // the player to choose the Bloom group before drawing its shape.
     t = session.presetMove?.t === 'Bloom'
       ? { kind: 'hex', key: coordKey(session.presetMove.hexes[0]!) }
       : { kind: 'kind', move: kindOf(session.pending)! };
-  } else if (FEATURES.tapAgain && t?.kind === 'confirm' && session.pending) {
+  } else if (t?.kind === 'confirm' && session.pending) {
     const card = moveCards(session.pending)[0];
     if (card !== undefined) t = { kind: 'card', id: card };
   }
@@ -2312,7 +2131,7 @@ function renderHud() {
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
+    : `<b>${st.turnPlayer === HUMAN ? ('Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -2356,10 +2175,10 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 function dockHint(v: View): Hint {
   if (!session) return { text: '', arrow: null };
   const h = hintFor(hintCtx(v));
-  if (IS_FUTA04 && session.presetMove?.t === 'Bloom') return { text: 'Tap a glowing hex to bloom', arrow: 'up' };
-  if (IS_FUTA04 && session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: 'Pick a card or Bloom', arrow: 'down' };
-  // the test copy: no Confirm box; a second tap on the card or the hex places the move
-  if (FEATURES.tapAgain && session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
+  if (session.presetMove?.t === 'Bloom') return { text: 'Tap a glowing hex to bloom', arrow: 'up' };
+  if (session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: 'Pick a card or Bloom', arrow: 'down' };
+  // no Confirm box; a second tap on the card or the hex places the move
+  if (session.pending && h.text.startsWith('Confirm,')) return { ...h, text: 'Tap again to place it' };
   return h;
 }
 
@@ -2429,16 +2248,16 @@ function applyLayout() {
   if (document.documentElement.classList.contains('home-screen-app'))
     document.documentElement.style.setProperty('--futasaku-app-height', `${h}px`);
   const radius = session?.state.config.boardRadius ?? 3;
-  // the Lab (test copy): a board of any shape fits by the box around its tiles
+  // the Lab: a board of any shape fits by the box around its tiles
   const shapeCfg = session?.state.config;
   setBoardShape(shapeCfg?.board ? { cells: shapeCfg.board.cells, rot: (o) => homeRotation(o, shapeCfg, HUMAN) } : null);
-  // the test copy's thumb layout (phones in portrait, the setting on): sized for the game's hand
-  const thumbSide = FEATURES.phoneLayout && thumbMod ? thumbMod.side(w, h) : null;
+  // the thumb layout (phones in portrait, the setting on): sized for the game's hand
+  const thumbSide = thumbMod ? thumbMod.side(w, h) : null;
   const maxHand = (shapeCfg?.handSize ?? 7) + 1;
   const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time);
   // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards)
-  const par = FEATURES.phoneLayout && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
+  const par = thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
@@ -2480,7 +2299,7 @@ function applyLayout() {
     setOrient(l.orient);
     setRotation(rot);
     setPixelGrid(grid);
-    if (familyChanged && !IS_FUTA04) photosForOrientation();
+
     if (session) {
       board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
       lastAmbBoard = null;
@@ -2491,8 +2310,8 @@ function applyLayout() {
   }
   const root = document.documentElement.style;
   const px = (n: number) => `${Math.round(n)}px`;
-  root.setProperty('--hud-h', px(FEATURES.slimHeader ? SLIM_HUD : HEIGHTS.hud));
-  root.setProperty('--race-h', px(FEATURES.slimHeader ? 0 : HEIGHTS.race));
+  root.setProperty('--hud-h', px(SLIM_HUD));
+  root.setProperty('--race-h', px(0));
   root.setProperty('--dock-h', px(l.dock.h));
   root.setProperty('--dock-w', px(l.dock.w));
   root.setProperty('--board-margin', `${BOARD_MARGIN}px`);
@@ -2505,7 +2324,7 @@ function applyLayout() {
   document.documentElement.dataset.layout = l.mode;
   board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
-  if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
+  requestAnimationFrame(alignDrawPiles);
 
 }
 window.addEventListener('resize', () => applyLayout());
@@ -2619,16 +2438,15 @@ let dragInv: DOMMatrix | null = null;
 /** A board-only repaint while a drag is active: no hand re-render, so the dimmed source stays put. */
 function refreshBoardDrag() {
   if (!session) return;
-  renderBoard(session.view, currentAdvice());
+  renderBoard(session.view);
 }
-function renderBoard(v: View, advice: Advice | null) {
+function renderBoard(v: View) {
   if (!session) return;
   let o: Overlay = { ...NO_OVERLAY, scars: scars.map(({ key, owner, age, tile }) => ({ key, owner, age, tile })), focusKey, fresh: freshKeys() };
   if (myTurn() && !busy()) {
     const sel = dragSel ?? session.sel;
     const pending = dragSel ? null : session.pending;
     const pv = pending ? previewMove(v, pending) : null;
-    const anySel = sel.card !== null || sel.kind !== null || sel.hex !== null;
     const kinds = !pending && (sel.card !== null || sel.kind !== null) && !drawCombo() ? targetKinds(v, session.legal, sel) : null;
     const targets = !pending && (sel.card !== null || sel.kind !== null) ? targetHexes(v, session.legal, sel) : null;
     const bloomTint = sel.kind?.startsWith('bloom-') ? (sel.kind.startsWith('bloom-mega-') ? 'replace' : 'bloom') : null;
@@ -2642,7 +2460,7 @@ function renderBoard(v: View, advice: Advice | null) {
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
-      coachHexes: advice && !anySel && !IS_FUTA04 ? advice.hexes.map(coordKey) : [],
+      coachHexes: [],
       usable: true,
     };
     if (sel.kind?.startsWith('bloom-mega-')) {
@@ -2658,12 +2476,12 @@ function renderBoard(v: View, advice: Advice | null) {
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) {
       const targets = drawNext(dc, drawn);
-      if (IS_FUTA04 && drawn.length === 1) for (const key of bloomEndpoints(dc, drawn[0]!, draw.reverse)) targets.add(key);
+      if (drawn.length === 1) for (const key of bloomEndpoints(dc, drawn[0]!, draw.reverse)) targets.add(key);
       o = { ...o, targets, selectedHex: null, coachHexes: [] };
     }
   }
-  if (!busy() && !FEATURES.weakTools) {
-    // the test copy: no weak-spot toggles; my most dangerous weak link always pulses gently
+  if (!busy()) {
+    // no weak-spot toggles; my most dangerous weak link always pulses gently
     // with its "-N" (the opponent's weak links are on their tile card, when tapped)
     if (v.phase !== 'GAME_OVER') o.pulse = weakSpots(v)[0] ?? null;
   } else if (!busy()) {
@@ -2693,7 +2511,7 @@ function renderBoard(v: View, advice: Advice | null) {
   // Positioning pass: the bottom-left slot always holds a tool (Skip while something animates,
   // otherwise Replay, dimmed until there is a turn to replay), so the "?" opposite is never alone
   const noReplay = !session.canReplayOpponent;
-  $('tool-replay').hidden = busy() || !REPLAY_BUTTON;
+  $('tool-replay').hidden = true;
   $('tool-replay').classList.toggle('off', noReplay);
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
   $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
@@ -2733,7 +2551,7 @@ function renderBoard(v: View, advice: Advice | null) {
     warn.hidden = !(states[HUMAN]!.danger && v.phase !== 'GAME_OVER');
   }
   placeCorners();
-  renderTooltip(v);
+  renderTooltip();
 }
 
 /**
@@ -2758,56 +2576,9 @@ function placeCorners() {
   wrap.style.setProperty('--b-bottom', `${Math.max(0, w.height - top - dh).toFixed(0)}px`);
 }
 
-function renderTooltip(v: View) {
-  const tip = $('tooltip');
-  if (IS_FUTA04 || !inspectKey || busy() || !session) {
-    tip.hidden = true;
-    return;
-  }
-  const key = inspectKey;
-  const t = v.board[key];
-  const terrain = v.terrain[key];
-  const name = hexName(parseKey(key), v.config.boardRadius);
-  const gold = terrain === 'rich';
-  let html: string;
-  if (terrain === 'rock') html = `<b>${name} · Rock</b><span>Nothing can grow here.</span>`;
-  else if (!t) {
-    const scar = scars.find((s) => s.key === key);
-    const cut = scar ? `<span class="muted">${scar.owner === HUMAN ? 'Your' : OPP.Label} tile here was cut off ${scar.age === 0 ? 'this turn' : scar.age === 1 ? 'a turn ago' : 'two turns ago'}.</span>` : '';
-    html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>${cut}`;
-  }
-  else {
-    const mine = t.owner === HUMAN;
-    const who = mine ? 'Your' : OPP.Label;
-    if (t.root) {
-      const sides = homeSides(v, t.owner);
-      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.blocked)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.blocked)}</span>`;
-    }
-    else {
-      const loss = cutLoss(v, key).length;
-      const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
-      const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
-      html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
-      // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only
-      if (!FEATURES.weakTools && !mine && opportunities(v, { anyReach: true, minLoss: 2 }).some((o) => o.key === key)) html += `<span class="tc-note">${OPP.Label} weak link: you can reach it now.</span>`;
-    }
-  }
-  // v0.6: in my Grow step, an opponent tile a Fruit card can remove offers "Use Fruit card"
-  const offer = cardPinned && myTurn() ? fruitOffer(v, session.legal, key) : null;
-  if (offer) html += `${offer.note ? `<span class="tc-note">${offer.note}</span>` : ''}<button type="button" class="btn primary small tc-fruit" data-fruit="${key}">${offer.label}</button>`;
-  tip.innerHTML = html;
-  tip.hidden = false;
-  tip.classList.toggle('pinned', cardPinned);
-  const p = boardWrapPoint(key);
-  const wrap = $('board-wrap').getBoundingClientRect();
-  tip.setAttribute('role', cardPinned ? 'dialog' : 'tooltip');
-  tip.setAttribute('aria-label', `Tile card: ${name}`);
-  const w = Math.min(250, wrap.width - 16);
-  tip.style.width = `${w}px`;
-  tip.style.left = `${Math.min(Math.max(p.x - w / 2, 8), wrap.width - w - 8)}px`;
-  const above = p.y > wrap.height * 0.45;
-  tip.style.top = above ? '' : `${p.y + S}px`;
-  tip.style.bottom = above ? `${wrap.height - p.y + S}px` : '';
+/** The old tile card stays hidden: Futasaku shows tile details in the cockpit instead. */
+function renderTooltip() {
+  $('tooltip').hidden = true;
 }
 
 const button = (text: string, cls: string, onClick: () => void, label?: string) => {
@@ -2823,9 +2594,9 @@ const button = (text: string, cls: string, onClick: () => void, label?: string) 
   return b;
 };
 
-/** Futa04 cockpit art. The accessible name remains the action, not the drawing. */
+/** Futasaku cockpit art. The accessible name remains the action, not the drawing. */
 const controlIcon = (control: HTMLButtonElement, name: 'skip' | 'cancel' | 'clear' | 'reverse' | 'previous' | 'next') => {
-  if (!IS_FUTA04) return;
+
   const label = control.getAttribute('aria-label') || control.textContent?.trim() || name;
   control.setAttribute('aria-label', label);
   control.title = label;
@@ -2881,12 +2652,12 @@ function renderControls(v: View, advice: Advice | null) {
   } else if (v.phase === 'ACT') {
     // Sprout first: tapping a card picks it. Say so while nothing is picked.
     const grow = growControls(legal);
-    const kindButtons = moveButtons(v, legal, sel, IS_FUTA04);
+    const kindButtons = moveButtons(v, legal, sel, true);
     // two or more ways to bloom: one "Bloom" button opens the list of choices (they never
     // crowd the row or run off the screen); a single way gets its own button
     const many = kindButtons.length > 1;
     let host: HTMLElement = moves;
-    if (!many && (!IS_FUTA04 || !sel.kind?.startsWith('bloom-'))) bloomMenu = false;
+    if (!many && (!sel.kind?.startsWith('bloom-'))) bloomMenu = false;
     if (many) {
       const chosen = kindButtons.find((k) => sel.kind === k.kind);
       const toggle = button(chosen ? shortKindLabel(chosen.kind) : BLOOM.Name, `kind bloom-toggle${chosen || bloomMenu ? ' on' : ''}`, () => {
@@ -2897,7 +2668,7 @@ function renderControls(v: View, advice: Advice | null) {
       sub.className = 'kind-keep';
       sub.textContent = BLOOM.choices(kindButtons.length);
       toggle.append(sub);
-      if (IS_FUTA04) renderBloomIcons(toggle, chosen?.kind ?? kindButtons[0]!.kind, v, true);
+      renderBloomIcons(toggle, chosen?.kind ?? kindButtons[0]!.kind, v, true);
       toggle.setAttribute('aria-haspopup', 'menu');
       toggle.setAttribute('aria-expanded', String(bloomMenu));
       moves.append(toggle);
@@ -2914,12 +2685,10 @@ function renderControls(v: View, advice: Advice | null) {
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         bloomMenu = false;
         session!.tapKind(k.kind);
-        if (IS_FUTA04) {
-          // A Bloom starts a fresh shape, including when a board hex was picked first.
-          session!.sel = { ...session!.sel, hex: null };
-          draw = { ...DRAW0 };
-          board.ghost(null);
-        }
+        // A Bloom starts a fresh shape, including when a board hex was picked first.
+        session!.sel = { ...session!.sel, hex: null };
+        draw = { ...DRAW0 };
+        board.ghost(null);
         render();
       });
       b.dataset.kind = k.kind;
@@ -2938,10 +2707,10 @@ function renderControls(v: View, advice: Advice | null) {
         b.setAttribute('aria-label', `${k.label}: ${cards.map((c) => c.rank).join(', ')}`);
       }
       b.setAttribute('aria-pressed', String(on));
-      if (IS_FUTA04) renderBloomIcons(b, k.kind, v, !many && (on || kindCards(k.kind).length > 4));
+      renderBloomIcons(b, k.kind, v, !many && (on || kindCards(k.kind).length > 4));
       host.append(b);
     }
-    if (IS_FUTA04 && !many && sel.kind?.startsWith('bloom-') && kindButtons.length) {
+    if (!many && sel.kind?.startsWith('bloom-') && kindButtons.length) {
       const chosenButton = moves.querySelector<HTMLButtonElement>('[data-kind]')!;
       const toggle = button('', 'kind bloom-toggle on', () => { bloomMenu = !bloomMenu; render(); });
       renderBloomIcons(toggle, sel.kind, v, true);
@@ -2953,10 +2722,10 @@ function renderControls(v: View, advice: Advice | null) {
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    const label = v.hand.length > 0 ? IS_FUTA04 ? 'Skip' : 'Throw a card' : 'End turn';
-    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+    const label = v.hand.length > 0 ? 'Skip' : 'End turn';
+    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${(v.hand.length > 0) ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel) moves.append(button(IS_FUTA04 ? 'Skip' : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
+    if (end && !pending && grow.skipLink && !anySel) moves.append(button('Skip', `link end skip${' futa04-skip'}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
@@ -2965,7 +2734,7 @@ function renderControls(v: View, advice: Advice | null) {
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
     }
   }
-  if (IS_FUTA04 && sel.kind?.startsWith('bloom-')) {
+  if (sel.kind?.startsWith('bloom-')) {
     const end = legal.find(a => a.t === 'EndAct');
     if (end && !moves.querySelector('.end')) moves.append(button('Skip', 'end futa04-skip', () => humanPlay(end), SPROUT.skipTitle));
   }
@@ -2985,10 +2754,8 @@ function renderControls(v: View, advice: Advice | null) {
     const i = Math.max(0, all.findIndex((a) => JSON.stringify(a) === JSON.stringify(pending)));
     const step = (d: number) => {
       const k = pending ? (i + d + all.length) % all.length : d > 0 ? 0 : all.length - 1;
-      if (IS_FUTA04) {
-        draw = { ...DRAW0 };
-        board.ghost(null);
-      }
+      draw = { ...DRAW0 };
+      board.ghost(null);
       session!.preset(all[k]!);
       render();
     };
@@ -2999,21 +2766,19 @@ function renderControls(v: View, advice: Advice | null) {
     moves.append(lab);
     moves.append(button('▶', 'ghost list-next', () => step(1), 'Next placement'));
   }
-  if (anySel && (!pending || IS_FUTA04)) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
+  if (anySel) moves.append(button('Cancel', 'ghost cancel', () => cancelSel()));
 
-  if (IS_FUTA04 && dc) {
+  if (dc) {
     const panel = moves.querySelector<HTMLElement>('.bloom-options');
     if (panel) for (const control of [...moves.children]) {
       if (control.matches('.draw-clear, .draw-reverse, .list-prev, .list-pos, .list-next, .cancel')) panel.append(control);
     }
   }
-  if (IS_FUTA04) {
-    for (const [selector, name] of [
-      ['.futa04-skip', 'skip'], ['.cancel', 'cancel'], ['.draw-clear', 'clear'],
-      ['.draw-reverse', 'reverse'], ['.list-prev', 'previous'], ['.list-next', 'next'],
-    ] as const) {
-      for (const control of moves.querySelectorAll<HTMLButtonElement>(selector)) controlIcon(control, name);
-    }
+  for (const [selector, name] of [
+    ['.futa04-skip', 'skip'], ['.cancel', 'cancel'], ['.draw-clear', 'clear'],
+    ['.draw-reverse', 'reverse'], ['.list-prev', 'previous'], ['.list-next', 'next'],
+  ] as const) {
+    for (const control of moves.querySelectorAll<HTMLButtonElement>(selector)) controlIcon(control, name);
   }
   if (pending) {
     const pv = previewMove(v, pending);
@@ -3036,12 +2801,12 @@ function renderControls(v: View, advice: Advice | null) {
     const onOpp = pending.t === 'Sprout' && v.board[coordKey(pending.coord)]?.owner === BOT;
     info.hidden = !onOpp || fruitOffer(v, legal, coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord)) === null;
     if (!info.hidden) info.dataset.key = coordKey((pending as Extract<Action, { t: 'Sprout' }>).coord);
-    // the test copy: no Confirm box (a second tap on the card or the hex places the move)
-    $('confirm').hidden = FEATURES.tapAgain;
+    // no Confirm box (a second tap on the card or the hex places the move)
+    $('confirm').hidden = true;
   }
 }
 
-/** Futa04 keeps the actual rank/suit combinations and accessible names, without instruction prose. */
+/** Futasaku keeps the actual rank/suit combinations and accessible names, without instruction prose. */
 function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View, compact = false) {
   const cards = kindCards(kind).map(id => v.hand.find(c => c.id === id)).filter(c => !!c);
   const icons = document.createElement('span');
@@ -3072,11 +2837,10 @@ function renderRisks(risks: ReturnType<typeof riskLines>) {
   box.hidden = risks.length === 0;
 }
 
-
 /** First-time tips for Fruit and Strengthen: shown once, until dismissed (re-open from How to play). */
 function renderFirstTip(v: View) {
   const card = $('first-tip');
-  if (!session || coach.tutorial || (openSheet && (!IS_FUTA04 || openSheet.id !== 'sheet-futa04-help'))) {
+  if (!session || coach.tutorial || (openSheet && openSheet.id !== 'sheet-futa04-help')) {
     card.hidden = true;
     return;
   }
@@ -3085,7 +2849,7 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen || (IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
+  card.hidden = !tipOpen || (!myTurn() || busy() || v.phase !== 'ACT');
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
@@ -3134,7 +2898,7 @@ function showTip(id: FirstTip) {
   tipOpen = id;
   sheet(null);
   render();
-  if (IS_FUTA04 && futa04Help) {
+  if (futa04Help) {
     // How to play can open before a game exists; fill this explicit lesson directly.
     $('first-tip-title').textContent = TIPS[id].title;
     $('first-tip-text').textContent = TIPS[id].text;
@@ -3153,7 +2917,7 @@ function renderHand(v: View, advice: Advice | null) {
   const picked = new Set(session.pending ? moveCards(session.pending) : []);
   const coachCards = advice && sel.card === null && !session.pending ? new Set(advice.cards) : new Set<number>();
   const cards = handOrder(v.hand, settings.handSort);
-  const bloomCards = IS_FUTA04 && myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
+  const bloomCards = myTurn() && !busy() ? new Set(sel.kind?.startsWith('bloom-')
     ? kindCards(sel.kind) : sel.card === null && sel.kind === null
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
@@ -3186,14 +2950,12 @@ function renderHand(v: View, advice: Advice | null) {
     const fs = c.suit === null ? fruitCardState(v, legal, c.id) : null;
     const firstFruit = c.suit === null && cards[i - 1]?.suit !== null && i > 0;
     b.className = `card ${suitClass(c)}${lifted ? ' lifted' : ''}${playable ? ' playable' : ''}${legal.length > 0 && !playable ? ' dim' : ''}${fs?.ready && myTurn() ? ' fruit-ready' : ''}${firstFruit ? ' fruit-gap' : ''}${coachCards.has(c.id) ? ' coach-glow' : ''}`;
-    if (IS_FUTA04) {
-      b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id));
-      b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
-    }
+    b.classList.toggle('futa04-bloom-card', bloomCards.has(c.id));
+    b.classList.toggle('futa04-throw-picked', session!.pending?.t === 'Discard' && session!.pending.card === c.id);
     if (fs?.reason && myTurn()) b.title = fs.reason;
     else b.removeAttribute('title');
     if (thumbLayout) {
-      // the test copy's thumb layout: each card on the arc, turned with it; picked: lifted outward
+      // the thumb layout: each card on the arc, turned with it; picked: lifted outward
       const p = fanSlots(thumbLayout, n)[i]!;
       b.style.setProperty('--fx', `${p.x.toFixed(1)}px`);
       b.style.setProperty('--fy', `${p.y.toFixed(1)}px`);
@@ -3207,9 +2969,9 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--rot', `${(off * spread).toFixed(2)}deg`);
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
-    if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
+    if (b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
-    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
+    b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
@@ -3224,8 +2986,8 @@ function renderHand(v: View, advice: Advice | null) {
       const dx = was === undefined ? 0 : was.left - now.left;
       const dy = was === undefined ? 0 : was.top - now.top;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) anim(b, [{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], {
-        duration: (IS_FUTA04 ? 190 : 280) * timeScale(),
-        easing: IS_FUTA04 ? 'cubic-bezier(.2,.72,.2,1)' : 'cubic-bezier(.2,.9,.3,1.25)',
+        duration: 190 * timeScale(),
+        easing: 'cubic-bezier(.2,.72,.2,1)',
       });
     }
   }
@@ -3240,7 +3002,7 @@ function renderHand(v: View, advice: Advice | null) {
   // The first layout pass can run before the hand has cards. Establish the
   // Draw pile anchor as soon as its resting hand geometry exists; sorting only
   // reorders those cards and must never establish the anchor for the first time.
-  if (IS_FUTA04 && v.phase === 'DRAW' && !drawPileAnchorKey) requestAnimationFrame(alignDrawPiles);
+  if (v.phase === 'DRAW' && !drawPileAnchorKey) requestAnimationFrame(alignDrawPiles);
 }
 
 const rememberCardRects = () => {
@@ -3252,7 +3014,7 @@ let lastDeckSeen = -1;
 /** the biggest the piles have been this game (for the stack thickness) */
 let deckFull = 1;
 
-function renderPiles(v: View, advice: Advice | null) {
+function renderPiles(v: View) {
   const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
   const top = v.discard.at(-1);
   const t = $('discard-top');
@@ -3264,13 +3026,11 @@ function renderPiles(v: View, advice: Advice | null) {
     t.innerHTML = top ? cardFace(top) : '';
     t.dataset.faceKey = faceKey;
   }
-  if (IS_FUTA04) renderPileMeter($('deck-count'), v.deckCount);
-  else $('deck-count').textContent = String(v.deckCount);
+  renderPileMeter($('deck-count'), v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  if (IS_FUTA04) renderPileMeter($('discard-count'), v.discard.length);
-  else $('discard-count').textContent = String(v.discard.length);
+  renderPileMeter($('discard-count'), v.discard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -3291,11 +3051,10 @@ function renderPiles(v: View, advice: Advice | null) {
     b.disabled = !look.enabled;
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
-    const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
-    b.classList.toggle('coach-glow', IS_FUTA04 ? false : coachOn);
+    b.classList.toggle('coach-glow', false);
     $(`${id}-hint`).textContent = look.hint ?? '';
   }
-  if (IS_FUTA04) {
+  {
     // A new card combination, regardless of board space. Duplicate faces don't create one.
     const key = (cards: readonly Card[]) => cards.map(c => `${c.suit}:${c.rank}`).sort().join('|');
     const before = looks.discard.enabled && top ? new Set(bloomGroups(v.hand).map(g => key(g.cards))) : null;
@@ -3309,7 +3068,7 @@ function renderPiles(v: View, advice: Advice | null) {
 function renderCoach(advice: Advice | null) {
   const box = $('coach');
   const showSummary = settings.coach && coach.step >= COACH_STEPS && !coach.summaryDone && session?.state.phase !== 'GAME_OVER';
-  box.hidden = !(advice || showSummary) || busy() || (IS_FUTA04 && !myTurn());
+  box.hidden = !(advice || showSummary) || busy() || (!myTurn());
   $('coach-advice').hidden = !advice;
   $('coach-summary').hidden = !showSummary || !!advice;
   if (advice) {
@@ -3460,17 +3219,17 @@ function cancelSel() {
 /** A clear choice (one move on the picked spot) plays at once: no Confirm, Undo can take it back. */
 function maybeAutoPlay() {
   if (!session || !myTurn() || busy()) return;
-  // Futa04 commits a complete card-and-target Sprout, including Strengthen. Blooms finish
+  // Futasaku commits a complete card-and-target Sprout, including Strengthen. Blooms finish
   // through the drawing path, so an inferred placement never spends a partly chosen group.
-  const sprout = IS_FUTA04 && (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
+  const sprout = (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
   const a = sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
-  if (a && (!IS_FUTA04 || (a.t !== 'Bloom' && a.t !== 'MegaBomb')) && !asksConfirm(a)) humanPlay(a);
+  if (a && (a.t !== 'Bloom' && a.t !== 'MegaBomb') && !asksConfirm(a)) humanPlay(a);
 }
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
 function asksConfirm(a: Action): boolean {
-  if (IS_FUTA04 && a.t === 'Discard') return true;
-  if (IS_FUTA04 && (a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit')) return false;
+  if (a.t === 'Discard') return true;
+  if (a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit') return false;
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
@@ -3479,7 +3238,7 @@ function onCardTap(id: number) {
   if (!session) return;
   if (busy()) fastForward();
   if (!myTurn()) return;
-  if (IS_FUTA04 && session.view.phase === 'ACT') {
+  if (session.view.phase === 'ACT') {
     const hasCombo = session.legal.some(a=>a.t==='Bloom' || a.t==='MegaBomb');
     if (grewThisTurn() && hasCombo) {
       // A hand-card tap after Grow is a direct path to Throw. The first tap
@@ -3496,8 +3255,8 @@ function onCardTap(id: number) {
     // Picking a Bomb from the hand remains the existing single-card action.
     if (session.sel.kind?.startsWith('bloom-mega-') && session.view.hand.some(c=>c.id===id && c.suit===null)) session.cancel();
   }
-  // the test copy: no Confirm box; tapping a card of the waiting move again places it
-  if (FEATURES.tapAgain && session.pending && (!IS_FUTA04 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
+  // no Confirm box; tapping a card of the waiting move again places it
+  if (session.pending && (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout') && moveCards(session.pending).includes(id)) return humanPlay(session.pending);
   sound.click();
   pickFruit(id);
   inspectKey = null;
@@ -3509,7 +3268,7 @@ function onCardTap(id: number) {
   // Throw step: tapping a card throws it (only the last card asks first, per "Confirm moves").
   if (session.view.phase === 'DISCARD' && session.pending?.t === 'Discard' && !asksConfirm(session.pending)) return humanPlay(session.pending);
   // A card with just one place to grow picks it at once: one tap plays it (Undo takes it back).
-  if (session.sel.card !== null && session.sel.hex === null && (!IS_FUTA04 || session.view.hand.find(c => c.id === session!.sel.card)?.suit !== null)) {
+  if (session.sel.card !== null && session.sel.hex === null && session.view.hand.find(c => c.id === session!.sel.card)?.suit !== null) {
     const only = [...targetHexes(session.view, session.legal, session.sel)];
     if (only.length === 1) session.tapHex(only[0]!);
   }
@@ -3570,9 +3329,7 @@ function renderDrawInfo(c: Combo, g: DrawGhost | null) {
   if (session!.presetMove) text = '';
   else if (g?.action) {
     const pv = previewMove(v, g.action);
-    text = IS_FUTA04
-      ? `${c.n}/${c.n}${pv?.warning ? ` · ${pv.warning}` : ''}${draw.msg ? ` · ${draw.msg}` : ''}`
-      : `${c.n}/${c.n} · ${pv?.chip ?? ''}${pv?.warning ? ` · ${pv.warning}` : ''}`;
+    text = `${c.n}/${c.n}${pv?.warning ? ` · ${pv.warning}` : ''}${draw.msg ? ` · ${draw.msg}` : ''}`;
   } else if (g?.reason) text = draw.msg ? `${g.reason} · ${draw.msg}` : g.reason;
   else if (draw.msg) text = draw.msg;
   box.textContent = text;
@@ -3632,7 +3389,7 @@ function drawTap(c: Combo, key: string, type: string) {
     const traced = paintMatch(c,draw.desk.trail,draw.reverse);
     if (traced) return finishDraw(traced);
   }
-  if (IS_FUTA04 && (draw.shape.length === 1 || draw.desk.phase === 'live')) {
+  if (draw.shape.length === 1 || draw.desk.phase === 'live') {
     const start = draw.desk.phase === 'live' ? draw.desk.start : draw.shape[0]!;
     const shortcut = endpointBloom(c, start, key, draw.reverse, v);
     if (shortcut) return finishDraw(shortcut);
@@ -3641,8 +3398,8 @@ function drawTap(c: Combo, key: string, type: string) {
     const r = deskClick(draw.desk, key, v, c, draw.reverse);
     if (r.finish) {
       // The desktop shape grows toward the pointer, so hovering rock can still suggest a
-      // legal nearby clump. Futa04 finishes only when the chosen hex belongs to that clump.
-      if (IS_FUTA04 && !r.finish.hexes.some((h) => coordKey(h) === key)) {
+      // legal nearby clump. Futasaku finishes only when the chosen hex belongs to that clump.
+      if (!r.finish.hexes.some((h) => coordKey(h) === key)) {
         draw = { ...draw, desk: deskHover(draw.desk, key), msg: 'Choose a glowing hex' };
         board.shake(settings.reduceMotion);
         paintDraw();
@@ -3666,15 +3423,7 @@ function drawTap(c: Combo, key: string, type: string) {
   const m = paintMatch(c, next, draw.reverse);
   if (m) return finishDraw(m);
   // the one-tap suggestion: a first tap shows the best Bloom through this hex, ready to confirm
-  if (!IS_FUTA04 && next.length === 1 && draw.shape.length === 1) {
-    const s = suggestBloom(v, c.actions, key);
-    if (s) {
-      session!.preset(s);
-      draw = { ...draw, suggested: true };
-      render();
-      return;
-    }
-  }
+
   render();
 }
 
@@ -3687,13 +3436,7 @@ const drawHandlers = {
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
     const keys = new Set(board.boardKeys);
     const key = hexAtPoint(p.x, p.y, keys);
-    if (!IS_FUTA04 && session.presetMove && !draw.suggested) {
-      // painting again over a waiting preview: the preview goes (and the one-placement shortcut
-      // does not bring it straight back while this painting is on)
-      session.preset(null);
-      draw = { ...draw, redraw: true };
-      render();
-    }
+
     draw.ptr = { id: e.pointerId, last: p, start: p, moved: false, downKey: key, type: e.pointerType, cur: key, viewport: `${innerWidth}:${innerHeight}` };
     // a hex is added when the finger lifts (a tap) or starts to move (a drag), not on touch
     paintDraw();
@@ -3710,7 +3453,7 @@ const drawHandlers = {
       if (k && (k !== draw.desk.hover || crossed.length > 1)) {
         let desk: Desk = draw.desk;
         for (const entered of crossed) desk = deskTrace(c,desk,entered,draw.reverse);
-        draw = { ...draw, desk:deskHover(desk,k), msg: IS_FUTA04 ? null : draw.msg };
+        draw = { ...draw, desk:deskHover(desk,k), msg: null };
         paintDraw();
       }
       if (draw.ptr && Math.hypot(p.x - draw.ptr.start.x, p.y - draw.ptr.start.y) > S * 0.25) draw.ptr.moved = true;
@@ -3723,7 +3466,7 @@ const drawHandlers = {
     if (ptr.viewport !== `${innerWidth}:${innerHeight}`) { draw.ptr = null; return; }
     if (!ptr.moved && Math.hypot(p.x - ptr.start.x, p.y - ptr.start.y) > S * 0.25) {
       ptr.moved = true;
-      if (IS_FUTA04 && session!.presetMove) {
+      if (session!.presetMove) {
         session!.preset(null);
         draw = { ...draw, redraw: true };
       }
@@ -3766,12 +3509,12 @@ const drawHandlers = {
     if (!c || !ptr || ptr.id !== e.pointerId) return;
     draw.ptr = null;
     if (ptr.type === 'mouse' && draw.desk.phase === 'idle') draw.mouseLast = ptr.start;
-    if (IS_FUTA04 && !inside) return cancelDraw('Painting cancelled');
+    if (!inside) return cancelDraw('Painting cancelled');
     if (!ptr.moved) {
       // A coach/list/sole-placement preview is a complete choice. Selecting one of its
       // ghost hexes places it, while an ordinary first touch keeps choosing the shape.
       const preset = session!.presetMove;
-      if (IS_FUTA04 && preset?.t === 'Bloom') {
+      if (preset?.t === 'Bloom') {
         if (ptr.downKey && preset.hexes.some((h) => coordKey(h) === ptr.downKey)) return finishDraw(preset);
         session!.preset(null);
         draw = { ...draw, redraw: true };
@@ -3785,7 +3528,7 @@ const drawHandlers = {
     if (draw.desk.phase === 'live') {
       const at = hexAtPoint(p.x, p.y, new Set(board.boardKeys));
       // A release in a gap must not substitute the last legal hovered destination.
-      if (IS_FUTA04 && !at) return cancelDraw('Painting cancelled');
+      if (!at) return cancelDraw('Painting cancelled');
       const k = at ?? draw.desk.hover;
       return drawTap(c, k, ptr.type);
     }
@@ -3808,13 +3551,13 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
-  const idleGrowSpot = IS_FUTA04 && myTurn() && session.view.phase === 'ACT' &&
+  const idleGrowSpot = myTurn() && session.view.phase === 'ACT' &&
     session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
     session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);
-  if (IS_FUTA04 && (!myTurn() ||
+  if (!myTurn() ||
       (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK') ||
       (session.view.phase === 'ACT' && ((!idleGrowSpot && session.sel.card === null && session.sel.kind === null) ||
-        hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard')))) {
+        hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard'))) {
     boinkTile(key);
     return;
   }
@@ -3832,7 +3575,7 @@ function onHexTap(key: string) {
   }
   cardPinned = false;
   // Tapping the previewed hex again plays the move (same as Confirm).
-  if (session.sel.hex === key && session.pending && (!IS_FUTA04 || (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout'))) return humanPlay(session.pending);
+  if (session.sel.hex === key && session.pending && (session.pending.t !== 'Bloom' && session.pending.t !== 'Sprout')) return humanPlay(session.pending);
   session.tapHex(key);
   inspectKey = session.pending ? null : key;
   render();
@@ -3840,18 +3583,12 @@ function onHexTap(key: string) {
 }
 
 function onInspect(key: string | null) {
-  if (IS_FUTA04) {
-    if (!session?.sel.kind?.startsWith('bloom-mega-') || busy()) return;
-    if (blastHoverKey !== key) { blastHoverKey = key; renderBoard(session.view,null); }
-    return;
-  }
-  // hovering never moves a pinned tile card
-  if (cardPinned) return;
-  inspectKey = key;
-  if (session) renderTooltip(session.view);
+  if (!session?.sel.kind?.startsWith('bloom-mega-') || busy()) return;
+  if (blastHoverKey !== key) { blastHoverKey = key; renderBoard(session.view); }
+  return;
 }
 
-/** Futa04 idle touch response. Never select a tile or change the session. */
+/** Futasaku idle touch response. Never select a tile or change the session. */
 function boinkTile(key: string) {
   if (!session?.view.board[key]) return;
   sound.click();
@@ -3884,10 +3621,7 @@ function reactHome(key: string) {
 
 /** Opens (and keeps open) the tile card for `key`, or closes it (null). Long-press does the same. */
 function pinCard(key: string | null) {
-  if (IS_FUTA04) { if (key) boinkTile(key); return; }
-  inspectKey = key;
-  cardPinned = key !== null;
-  render();
+  if (key) boinkTile(key); return;
 }
 
 /** "Use Fruit card" in the tile card: the Fruit card and this target are picked (Confirm per "Confirm moves"). */
@@ -4014,12 +3748,12 @@ bind('hand-sort', () => {
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
-// the test copy: a fan lying over the map is see-through until I touch it
+// a fan lying over the map is see-through until I touch it
 let fanSleep = 0;
 $('dock').addEventListener(
   'pointerdown',
   () => {
-    if (!FEATURES.mapBehindCards) return;
+
     document.documentElement.classList.add('fan-awake');
     clearTimeout(fanSleep);
     fanSleep = window.setTimeout(() => document.documentElement.classList.remove('fan-awake'), 3000);
@@ -4045,12 +3779,7 @@ bind('go-other', () => {
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
-  if (!IS_FUTA04) {
-    settings={...settings,coach:true};
-    saveSettings();
-    startGame(TUTORIAL_SEED,7);
-    return;
-  }
+
   if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
   startTutorial();
 });
@@ -4083,13 +3812,7 @@ bind('gm-main', () => {
   showScreen('menu');
 });
 bind('restart-tutorial', () => {
-  if (!IS_FUTA04) {
-    settings={...settings,coach:true};
-    saveSettings();
-    sheet(null);
-    startGame(randomSeed());
-    return;
-  }
+
   sheet(null);
   startTutorial();
 });
@@ -4228,15 +3951,7 @@ const dragLayer = mountDragLayer({
 dragLayer.attachHand($('hand'));
 dragLayer.attachDeck($('deck'));
 dragLayer.attachDiscard($('discard'));
-if (FEATURES.weakTools) bind('tool-weak', () => {
-  settings = { ...settings, weakSpots: !settings.weakSpots };
-  saveSettings();
-  render();
-});
-if (FEATURES.weakTools) bind('tool-targets', () => {
-  showOpps = !showOpps;
-  render();
-});
+
 bind('tool-skip', () => {
   pill.skip();
   fastForward();
@@ -4275,13 +3990,9 @@ bind('tool-replay', () => replayBotTurn());
     });
     for (const ev of ['pointerup', 'pointercancel'] as const) b.addEventListener(ev, () => clearTimeout(press));
   }
-  const KEY = 'severgrow.ctools.seen';
   /** The first time the tools show in a game: name each once (shield, then target). */
   firstToolTips = () => {
-    if (!FEATURES.weakTools || store.get(KEY)) return;
-    store.set(KEY, '1');
-    const tools = ['tool-weak', 'tool-targets'].map((id) => document.getElementById(id)).filter((b): b is HTMLElement => !!b && !b.hidden);
-    tools.forEach((b, i) => window.setTimeout(() => show(b, 2400), 900 + i * 2700));
+    return;
   };
 }
 bind('tool-undo', () => {
@@ -4470,11 +4181,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Install as an app and play offline (the service worker caches the page's own files).
-// the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
-if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
+// each route (/futa0.4/, /futa-test/) keeps its own worker scope and caches (futa04-sw.js)
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
   const registerOffline = () => {
     navigator.serviceWorker
-      .register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04' ? './futa04-sw.js' : './sw.js')
+      .register('./futa04-sw.js')
       // ask for a newer worker on every launch (browsers may otherwise keep an old one for a day);
       // a moment after registering, when the browser is free to run the check
       .then((r) => setTimeout(() => void r.update().catch(() => undefined), 1500))
@@ -4517,12 +4228,10 @@ document.addEventListener('keydown', (e) => {
   /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
   pickKind: (kind: string) => {
     if (!session) return;
-    session.sel = { ...session.sel, kind, ...(IS_FUTA04 ? { hex: null } : {}) };
-    if (IS_FUTA04) {
-      session.preset(null);
-      draw = { ...DRAW0 };
-      board.ghost(null);
-    }
+    session.sel = { ...session.sel, kind, ...({ hex: null }) };
+    session.preset(null);
+    draw = { ...DRAW0 };
+    board.ghost(null);
     render();
   },
   /** tests only (filmstrip): play this action for this player, as if chosen */
@@ -4541,16 +4250,13 @@ await mountPlayerEnhancements();
 fillIcons();
 mountInstallButton();
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
-if (!IS_FUTA04) onPhotosReady(() => {
-  lastBoard = null;
-  if (!busy()) render();
-});
+
 sound.enabled = settings.sound;
 sound.setEffects(settings.effects);
 sound.setMix(settings);
 sound.musicOn = settings.music;
 applyTheme();
-if (!IS_FUTA04) showSplash();
+
 const params = BOOT_PARAMS;
 // Positioning pass: the alignment overlay (the centre line and the 16pt margins), for checking
 // the layout by eye: ?align=1 (or ?align=0 to turn it off), remembered; the lab has a switch too
@@ -4560,12 +4266,9 @@ const params = BOOT_PARAMS;
   document.documentElement.classList.toggle('align-overlay', store.get(KEY) === '1');
 }
 const urlSeed = Number(params.get('seed'));
-if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('lab') === '1') {
-  // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
-  for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
-  void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
-} else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
+if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
 else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
-else showScreen('menu');
+// a tap on New game while optional UI mounts already opened the difficulty screen: stay there
+else if ($('levels').hidden) showScreen('menu');
 
 window.dispatchEvent(new Event('severor-ready'));

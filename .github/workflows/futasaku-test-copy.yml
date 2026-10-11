@@ -1,0 +1,22 @@
+name: Futasaku test copy pushed
+
+# A push to futa-test (the quick TEST: copy, AGENTS.md) asks the Futasaku publish workflow to run
+# from futa0.4, which rebuilds every route including /futa-test/. The deploy therefore always runs
+# from futa0.4, the branch the Pages environment already allows; no setting needs to change.
+# Keep this name different from "Test copy pushed": main's old deploy listens for that one.
+on:
+  push:
+    branches: [futa-test]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask futa0.4 to republish the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run futasaku04-preview.yml --repo "$GITHUB_REPOSITORY" --ref futa0.4

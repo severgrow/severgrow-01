@@ -1,4 +1,4 @@
-// Loaded only in Futa04. Rules, card identities and saved actions keep their existing names.
+// Loaded only in Futasaku. Rules, card identities and saved actions keep their existing names.
 import { bombText } from '../logic/bomb-text.js';
 import mossArt from '../assets/cards/moss.webp?url';
 import ashArt from '../assets/cards/ash.webp?url';

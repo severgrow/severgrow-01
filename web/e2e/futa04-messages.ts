@@ -1,7 +1,7 @@
 // Observe 20 complete Classic games in the actual Futa04 browser renderer.
 // Real UI actions cover Draw, Sprout/Fruit placement, Throw and phase controls.
 // Complex Bloom placements use the existing test session hook; counts are reported.
-// Build CHANNEL=futa04 first. PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/futa04-messages.ts
+// Build first (npm run web:build). PW_CHROMIUM=/usr/bin/chromium node --import tsx web/e2e/futa04-messages.ts
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';

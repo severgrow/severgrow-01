@@ -35,7 +35,7 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
   }
   const discarded = publicDiscardHistory(view,history,opening);
   const bombsInHand = view.hand.filter(card=>card.suit===null).length;
-  const observation = bombsInHand>=2 ? 'TWO BOMBS CAN BLOOM.'
+  const observation = bombsInHand>=2 ? 'TWO BOMBS CAN BLAST.'
     : view.phase==='ACT' && view.sproutsThisTurn===0 ? 'GROW CAN BE SKIPPED.'
     : view.discard.length ? 'WATCH THE DISCARD.' : null;
   return {discarded,score:[view.score,view.opponentScore],territory,

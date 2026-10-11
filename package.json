@@ -21,12 +21,12 @@
     "play": "tsx src/cli/play-cli.ts",
     "replay": "tsx src/cli/replay-cli.ts",
     "grid": "tsx src/sim/grid.ts",
-    "e2e": "tsx web/e2e/smoke.ts && tsx web/e2e/painting.ts && tsx web/e2e/overhaul.ts && tsx web/e2e/monkey.ts --steps=200 && tsx web/e2e/emptyturn.ts && tsx web/e2e/fruitcards.ts && tsx web/e2e/propass.ts",
+    "e2e": "tsx web/e2e/quick-smoke.ts && tsx web/e2e/futa04-critical.ts && tsx web/e2e/futa04-information.ts && tsx web/e2e/mega-bomb.ts && tsx web/e2e/monkey.ts --steps=200",
     "ladder": "tsx src/sim/ladder.ts",
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",
     "bot-timing": "tsx src/sim/bot-timing.ts",
-    "skin:manifest": "tsx web/skin-manifest.ts"
+    "check:build": "npm run web:build && node scripts/check-build-assets.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",

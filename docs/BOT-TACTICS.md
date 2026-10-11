@@ -1,5 +1,8 @@
 # Bot tactics: Blooms, Strengthen and Fruit cards (bots-v0.10)
 
+> Code names are used here: Fruit card = **Bomb**, Sprout = **Grow**, MegaBomb = **Blast**
+> (`docs/SPEC.md` section 0). Blast is scored like any other move by `planMegaBomb`.
+
 All levels read only their own View (my hand, the board, the discard pile, counts). They never
 see the opponent's hand or the deck order. Every decision is deterministic for a given seed:
 randomness only comes from the seeded PRNG. The code is in `src/bots/tactics.ts` (judging) and

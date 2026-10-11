@@ -28,12 +28,12 @@ export type Layout = {
   scale: number;
   /** the icon-only corner tools (40pt visible, 44pt hit area), in the zone's corners */
   tools: { weak: Box; targets: Box; replay: Box; help: Box };
-  /** the test copy's "thumb layout" (phones, portrait): the dock's parts, dock-local px */
+  /** the "thumb layout" (phones, portrait): the dock's parts, dock-local px */
   thumb?: Thumb;
 };
 
 /**
- * The thumb layout v2 (test copy only, phones held upright): the MAP FIRST. The board gets the
+ * The thumb layout v2 (phones held upright): the MAP FIRST. The board gets the
  * full width and at least 60% of the usable height; the dock below takes at most 40% of it.
  * The dock has two bands: the hand as a gentle fan (centre card flat, end cards tilted 7 degrees,
  * a shallow curve, a slight rise to the right), anchored at the right edge for the right thumb;
@@ -190,14 +190,14 @@ const mirrorThumb = (t: Thumb, W: number): Thumb => {
 export const HEIGHTS = { hud: 48, race: 8, table: 84, handPad: 20, bottomPad: 8 } as const;
 /** The largest hand a player can hold (hand size + the drawn card). */
 export const MAX_HAND = 8;
-/** The test copy's slim header: one 44pt row (the menu button and the score bar). */
+/** the slim header: one 44pt row (the menu button and the score bar). */
 export const SLIM_HUD = 44;
 let slimHud = false;
 // The active Futasaku board keeps the same tabletop orientation at every viewport size.
 // Historical channels still use the fit-based choice below.
 let fixedBoardOrient: Orient | null = null;
 export const setFixedBoardOrient = (orient: Orient | null) => { fixedBoardOrient = orient; };
-/** The test copy: the header keeps only the menu button and the score bar. */
+/** the header keeps only the menu button and the score bar. */
 export const setSlimHud = (on: boolean) => {
   slimHud = on;
 };
@@ -245,7 +245,7 @@ export const boardUnits = (radius: number, orient: Orient = 'pointy') => {
   return { w: 2 * halfW, h: 2 * halfH, x0: -halfW, y0: -halfH, hexW: Math.sqrt(3) * S };
 };
 
-// The Lab (test copy): a board of any shape. Its drawing area is the box around its tiles, turned
+// The Lab: a board of any shape. Its drawing area is the box around its tiles, turned
 // the way the page will turn it (the homes on the centre line). null: the classic hexagon.
 type Shape = { cells: readonly string[]; rot: (o: Orient) => number };
 let shape: Shape | null = null;
@@ -378,7 +378,7 @@ export const computeLayout = (v: Viewport, radius = 3, maxHand = MAX_HAND, thumb
   }
 
   if (thumb) {
-    // the test copy's thumb layout v2: the map first; the dock (at most 40% of the usable
+    // the thumb layout v2: the map first; the dock (at most 40% of the usable
     // height) below it. `overlap`: how far the board may reach under the fan's band (smart
     // overlap: granted by the page only where no tile, home, gold or target hex is under a card)
     // (the screen keeps the bottom safe area itself: the dock sits on it, 12pt up)

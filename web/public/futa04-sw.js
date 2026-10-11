@@ -1,4 +1,4 @@
-// Futa04 owns only its scope and cache. It never deletes Main or experimental caches.
+// Futasaku's worker owns only its scope and cache. It never deletes Main's or another route's caches.
 //
 // What it may answer from its cache, and what it must ask the network for first:
 // - pages: network first (offline: the cached page)
@@ -7,10 +7,12 @@
 // - everything else (the art manifest, icons, any unversioned file): network first, falling
 //   back to the cache only when offline. A stale copy is never preferred to a fresh one.
 // Each new version of this worker drops the older Futa04 caches (only its own, by prefix).
-const PREFIX = scopeIsPreview() ? 'futa04-' : 'severor-main2-';
-function scopeIsPreview() {
+// Each published route keeps its own caches: the test copy (/futa-test/) never shares the game's.
+const PREFIX = scopePrefix();
+function scopePrefix() {
   const url = new URL(self.registration.scope);
-  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/');
+  if (url.pathname.includes('/futa-test/')) return 'futatest-';
+  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/') ? 'futa04-' : 'severor-main2-';
 }
 const CACHE = `${PREFIX}v2`;
 const scope = new URL(self.registration.scope);

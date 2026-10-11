@@ -1,5 +1,9 @@
 # The bot ladder (v0.6 Fruit cards, bots-v0.8)
 
+> Last measured with bots-v0.8 on the v0.6 rules, with player 1 always starting. Re-run it
+> (`npm run ladder`) after any change to the opponent's levels. Old names: Fruit card = Bomb,
+> Sprout = Grow.
+
 Nine bot levels. Each must beat the level below it clearly, so picking a higher level always
 means a harder game. This file shows how that was checked and tuned.
 

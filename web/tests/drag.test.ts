@@ -40,7 +40,7 @@ const discardPhase = (state: State): State => ({ ...state, phase: 'DISCARD' });
 
 describe('drag thresholds and phase gates', () => {
   it('never shows FAST, only the five allowed words', () => {
-    expect(DRAG_LED_WORDS).toEqual(['DRAW', 'PLACE', 'THROW', 'BLOOM', 'MEGA']);
+    expect(DRAG_LED_WORDS).toEqual(['DRAW', 'PLACE', 'THROW', 'BLOOM', 'BLAST']);
     expect(DRAG_LED_WORDS).not.toContain('FAST');
   });
 
@@ -190,7 +190,7 @@ describe('bloom and Mega Bomb', () => {
     const onTarget = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: coordKey(mega.target) });
     expect(onTarget.mode).toBe('mega');
     expect(sameAction(onTarget.commit, mega)).toBe(true);
-    expect(onTarget.led).toBe('MEGA');
+    expect(onTarget.led).toBe('BLAST');
 
     const elsewhere = run(st, { kind: 'hand', cardId: bomb.id }, { boardKey: null });
     expect(elsewhere.mode).toBe('mega');

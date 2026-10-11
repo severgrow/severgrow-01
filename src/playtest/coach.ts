@@ -212,7 +212,7 @@ const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   const { say, v } = c;
   const reasons: string[] = [];
   if (m.wins) reasons.push(`This surrounds ${OPP.theirs} home, so you win right away.`);
-  if (isFruit) reasons.push(`A Fruit card removes an ${OPP.noun} tile, whatever its number.`);
+  if (isFruit) reasons.push(`A Bomb removes an ${OPP.noun} tile, whatever its number.`);
   if (m.botCut > 0) reasons.push(`This cuts ${OPP.theirs} link and removes ${m.taken + m.botCut} of their tiles.`);
   if (m.exposureAfter < m.exposureBefore) reasons.push(`This fixes a ${say('weak spot')} in your network.`);
   if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This replaces ${plural(m.taken, `a weaker ${OPP.noun} tile`, `weaker ${OPP.noun} tiles`)}.`);
@@ -241,7 +241,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
         ? [SPROUT.coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
     case 'strengthen':
-      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitCardCount > 0 ? ' or a Fruit card' : ''}.`];
+      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitCardCount > 0 ? ' or a Bomb' : ''}.`];
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
@@ -325,14 +325,14 @@ const BULLETS: Record<TipId, string> = {
   goal: 'Keep every tile joined to your home.',
   draw: 'Take from the throw pile only if it makes a combo.',
   combos: 'Cards that match or follow on can bloom.',
-  sprout: 'No combo? Sprout one card as one tile.',
+  sprout: 'No combo? Grow one card as one tile.',
   strength: `A stronger tile can replace a weaker ${OPP.noun} tile.`,
   gold: 'Gold hexes are worth 2 points.',
   connection: 'Protect weak spots that hold up many tiles.',
   cutting: `Cut ${OPP.theirs} weak spots to make their tiles wither.`,
   leftovers: 'Keep your leftover cards low to avoid rot.',
   knock: 'Knock only when you are clearly ahead.',
-  fruit: `Save Fruit cards for an ${OPP.noun} tile you cannot replace.`,
+  fruit: `Save Bombs for an ${OPP.noun} tile you cannot replace.`,
   strengthen: 'Strengthen the tile that holds many others up.',
   strangle: `Surround ${OPP.theirs} home to win at once.`,
   planning: `Before a big move, check what ${OPP.the} could cut.`,

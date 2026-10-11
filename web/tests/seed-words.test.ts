@@ -33,11 +33,11 @@ describe('the words "seed" and "plant" never reach the player', () => {
     for (const ok of ['seedling', 'plants', 'planting', 'Sprout', 'implanted']) expect(clean(ok), ok).toBe(true);
   });
 
-  it('one name for the one-card move: "Sprout", in one constant', () => {
-    expect(SPROUT.Name).toBe('Sprout');
-    expect(SPROUT.pick).toBe('Pick a card to sprout');
-    expect(SPROUT.skip).toBe('Skip sprout');
-    expect(SPROUT.suggest('D4', 'a 9')).toMatch(/^Sprout one tile/);
+  it('one name for the one-card move: "Grow" (code name Sprout), in one constant', () => {
+    expect(SPROUT.Name).toBe('Grow');
+    expect(SPROUT.pick).toBe('Pick a card to grow');
+    expect(SPROUT.skip).toBe('Skip grow');
+    expect(SPROUT.suggest('D4', 'a 9')).toMatch(/^Grow one tile/);
   });
 
   it('the strings file', () => {

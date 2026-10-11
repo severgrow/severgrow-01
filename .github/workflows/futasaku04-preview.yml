@@ -1,8 +1,9 @@
-name: Futasaku 0.4 Pages preview
+name: Publish Futasaku
 
-# Runs from the futa0.4 deployment ref, which points to a validated Futasaku0.4
-# commit. The existing Main/Dev/Test2 workflow and refs stay untouched; their
-# currently published SHAs are rebuilt and checked for parity.
+# Publishes the Pages site from futa0.4: /futa0.4/ (the game) and /futa-test/ (the test copy,
+# branch futa-test, when it exists). The older routes (/, /test/, /test2/) are rebuilt at their
+# exact published commits and checked byte-for-byte, so they never change.
+# Runs on a push to futa0.4 (after the full checks) and when futa-test asks for it.
 on:
   push:
     branches: [futa0.4]
@@ -20,11 +21,22 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: futa0.4
           path: preview
+      - name: Check out the test copy, if there is one
+        id: testcopy
+        run: |
+          if git -C preview ls-remote --exit-code --heads origin futa-test >/dev/null; then
+            git -C preview fetch --no-tags origin futa-test
+            git -C preview worktree add --detach "$GITHUB_WORKSPACE/testcopy" FETCH_HEAD
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Read exact published source commits
         id: published
         run: |
@@ -54,13 +66,19 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: preview/package-lock.json
-      - name: Install and validate Futasaku 0.4
+      - name: Install, check and build the game
         working-directory: preview
         run: |
           npm ci
-          npm run check
-          CHANNEL=futa04 npm run web:build
-          CHANNEL=futa04 node scripts/check-channel-assets.mjs
+          if [ "${{ github.event_name }}" = "push" ]; then npm run check; fi
+          npm run web:build
+          node scripts/check-build-assets.mjs
+      - name: Build the test copy (quick flow, no unit tests)
+        if: steps.testcopy.outputs.present == 'true'
+        working-directory: testcopy
+        run: |
+          if cmp -s package-lock.json ../preview/package-lock.json; then ln -s ../preview/node_modules node_modules; else npm ci; fi
+          npm run web:build
       - name: Rebuild current published versions at their exact SHAs
         run: |
           cd live
@@ -72,7 +90,7 @@ jobs:
           cd ../candidate
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
           CHANNEL=test2 npm run web:build
-      - name: Compose four routes and verify existing public bytes
+      - name: Compose every route and verify the older public bytes
         env:
           MAIN_SHA: ${{ steps.published.outputs.main }}
           DEV_SHA: ${{ steps.published.outputs.test }}
@@ -80,7 +98,12 @@ jobs:
         run: |
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
-          node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
+          if [ "${{ steps.testcopy.outputs.present }}" = "true" ]; then
+            node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" \
+              testcopy/web/dist "$(git -C testcopy rev-parse HEAD)"
+          else
+            node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
+          fi
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

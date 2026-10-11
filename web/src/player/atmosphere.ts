@@ -1,4 +1,4 @@
-// Futa04-only presentation. Both grain and rim are baked once; no live noise/blur filter,
+// Futasaku-only presentation. Both grain and rim are baked once; no live noise/blur filter,
 // animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `

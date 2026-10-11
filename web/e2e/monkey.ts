@@ -69,11 +69,12 @@ const run = async (name: string, touch: boolean, seed: number) => {
     if (sessionStorage.getItem('seeded')) return;
     sessionStorage.setItem('seeded', '1');
     localStorage.clear();
-    localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip' }));
+    // Futasaku keeps its settings under the main2: prefix on a local preview
+    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip' }));
   });
   await page.goto(BASE);
   await page.click('#menu-new');
-  await page.click('#level-grid [data-level="3"]');
+  await page.click('[data-difficulty="easy"]');
   const cdp: CDPSession | null = touch ? await page.context().newCDPSession(page) : null;
   const touchAt = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
     cdp!.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });

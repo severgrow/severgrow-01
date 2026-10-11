@@ -1,5 +1,14 @@
-# Futasaku 0.4 development notes
+# CLAUDE.md
 
-Read `AGENTS.md` and `docs/SPEC.md`. Work on `Futasaku0.3` only. The game rules are pure and deterministic; keep the engine free of clocks, I/O and unseeded randomness. Do not change gameplay or bot decisions during visual or cleanup tasks. Do not weaken tests or regenerate golden results to mask a regression.
-
-Build the current game with `CHANNEL=futa04 npm run web:build`, run `npm run check`, and run the relevant browser checks before a green commit. Preserve the existing save keys, boot event and action identifiers. Main, Dev and the frozen Main2.0 branch are outside this branch's development scope.
+- Read `AGENTS.md` (branches, the strict flow, `TEST:` mode, checks, code map) and `docs/SPEC.md`
+  (the rules, the source of truth) before any work.
+- All normal work is on `futa0.4`. `TEST:` tasks go only to `futa-test`. Never change `main`, `dev`,
+  `Main2.0`, `Futasaku0.3`, `futa0.3` or `archive/*`.
+- TypeScript strict, Vitest, Node 20.19+. Run `npm run check` before finishing any normal task.
+- `src/engine/` must stay pure and deterministic: no `Math.random`, no I/O, no timers.
+- Write tests first. Never change a rule or weaken a test to make it pass.
+- If the spec is ambiguous, stop and ask the owner.
+- Commit after each green milestone with a clear message.
+- Player text says "opponent", never "bot", and uses Grow, Bomb, Blast, Bloom, Strengthen, home.
+- Never commit secrets; for anything needing an account, key or paid plan, stop and tell the owner
+  exactly what to click. If a permission is blocked, say so; don't work around it.

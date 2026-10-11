@@ -1,6 +1,29 @@
-# Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
+# Decisions
 
-One line each: where the brief left room, what was chosen and why.
+One line each: where the brief left room, what was chosen and why. Newest first. Entries before
+Futasaku 0.4 use the old names (Sprout = Grow, Fruit card = Bomb, Mega Bomb = Blast).
+
+## Futasaku 0.4 cleanup (2026-10-11, owner's answers)
+
+- `futa0.4` is the only line going ahead; all work happens on it. `main` stays the frozen old game.
+- Everything not needed by Futasaku (old live and test channels, Lab, DESIGN art, the V3 skin and its
+  11 MB of art, old browser scripts) was removed; it is kept on `archive/futa0.4-before-cleanup`.
+  Skins come back later as new work.
+- Names: the game is only FUTASAKU; Fruit card = **Bomb**; Sprout = **Grow**; Mega Bomb = **Blast**.
+  Code names stay (saves and replays depend on them); `docs/SPEC.md` section 0 maps them.
+- The turn's Grow step allows one single-tile move (Grow, Strengthen or one Bomb); Bloom and Blast are
+  extra moves on top, any number.
+- Blast stays an extra move like Bloom (it does not use the turn's one Grow). A single Bomb still uses it.
+- Tie-break: equal score → the higher total strength of tiles wins → equal strength is a real draw.
+  Rules version `futasaku0.4`; older versions keep "a tie goes to player 2".
+- Who starts: a fair "lottery" at the start of each game, drawn by the engine from its own seed stream
+  and shown as a short "Who starts?" screen. It no longer depends on the seed's parity, so it is
+  independent of the opponent's level inside a difficulty.
+- Difficulty: Beginner = levels 1-2, Easy = 3-4 (no more shared level 3; level 1 is used again).
+- Parked rules (Knock, Rot, leftover cards) stay in the engine for now: removing them would touch the
+  save and replay format. They are off everywhere and described only in the archived history.
+- A new quick `TEST:` mode: branch `futa-test`, published at `/futa-test/`, its own storage
+  (`futatest:`), "TEST" in the tab title, changes listed in `docs/WAITLIST.md` until locked in.
 
 ## Positioning pass (v0.8.1)
 

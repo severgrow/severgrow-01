@@ -44,11 +44,11 @@ describe('the auto-skip plan', () => {
 describe('the reason, in one short line', () => {
   it('says whether a combo exists at all, and that no card can sprout', () => {
     const noCombo = [c(1, 0, 1), c(2, 1, 3), c(3, 2, 5), c(4, 3, 7)];
-    expect(emptyReason(noCombo)).toBe('No combo in your hand, and no card can sprout.');
+    expect(emptyReason(noCombo)).toBe('No combo in your hand, and no card can grow.');
     const set = [c(1, 0, 4), c(2, 1, 4), c(3, 2, 4)];
-    expect(emptyReason(set)).toBe('Your combos have no room, and no card can sprout.');
+    expect(emptyReason(set)).toBe('Your combos have no room, and no card can grow.');
     const run = [c(1, 0, 4), c(2, 0, 5), c(3, 0, 6)];
-    expect(emptyReason(run)).toBe('Your combos have no room, and no card can sprout.');
+    expect(emptyReason(run)).toBe('Your combos have no room, and no card can grow.');
     for (const h of [noCombo, set, run]) expect(emptyReason(h).length).toBeLessThanOrEqual(52);
   });
 });

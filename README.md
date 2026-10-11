@@ -1,35 +1,40 @@
-# Futasaku 0.4
+# Futasaku
 
-The browser game lives in `web/`; its deterministic rules live in `src/engine/`.
-This branch starts from the frozen Test2/Main2.0 commit
-`89d438c1b3fca253292d1b8a9eabffcf5e2da315`. The current Futasaku game is
-the `futa04` build:
+A two-player hex card game in the browser: draw a card, grow your network from your home, throw a
+card. Keep everything joined to your home, and cut your opponent's links. You play against a
+computer opponent at five difficulties.
+
+- **Rules:** [`docs/SPEC.md`](docs/SPEC.md) (the source of truth).
+- **How to work on it:** [`AGENTS.md`](AGENTS.md) (branches, checks, the quick `TEST:` mode).
+- **The game:** branch `futa0.4`, published at `https://severgrow.github.io/severgrow-01/futa0.4/`.
+- **The test copy:** branch `futa-test`, published at `https://severgrow.github.io/severgrow-01/futa-test/`.
+
+## Run it
+
+Node 20.19 or newer.
 
 ```sh
 npm ci
-CHANNEL=futa04 npm run web:build
-CHANNEL=futa04 npm run web:dev
-npm run check
+npm run web:dev        # play locally
+npm run web:build      # build into web/dist
+npm run check          # strict types + every unit test
 ```
 
-`web/dist/` is the production output. The plain `npm run web:build` command
-still targets the historical live channel; use `CHANNEL=futa04` when checking
-the Futasaku 0.4 game. No rule or save format was changed in this baseline.
+## What is where
 
 | Area | Home |
 | --- | --- |
-| Rules, actions, state and deterministic replay | `src/engine/` |
-| Computer player | `src/bots/` |
-| Browser wiring and input | `web/src/main.ts`, `web/src/logic/` |
-| Futa04 presentation and responsive layout | `web/src/player/` |
-| Board, cards, effects and audio | `web/src/ui/` |
-| Optional V3 board art | `web/src/ui/skin/`, `web/src/skins/`, `web/public/design-v3/` |
-| Save and settings compatibility | `web/src/logic/persist.ts`, `web/src/logic/settings.ts`, `web/src/channel.ts` |
-| Rule specification | `docs/SPEC.md` |
-| Unit and browser checks | `tests/`, `web/tests/`, `web/e2e/` |
+| Rules, state, replay (pure, deterministic) | `src/engine/` |
+| The opponent's levels | `src/bots/` |
+| Player words | `src/strings.ts` |
+| The page | `web/src/` (`main.ts`, `logic/`, `player/`, `ui/`) |
+| Tests | `tests/`, `web/tests/`, `web/e2e/` |
+| Docs | `docs/` (`SPEC.md`, `DECISIONS.md`, `WAITLIST.md`, `BOT-TACTICS.md`, `LADDER.md`) |
+| Old records | `docs/archive/` |
 
-The historical Test and live channels remain in this repository because some
-shared tests and build checks still exercise them. Their Lab and Design assets
-are not part of the Futa04 build. See
-[`docs/FUTASAKU_0_4_BASELINE.md`](docs/FUTASAKU_0_4_BASELINE.md) for the
-cleanup inventory and retained compatibility identifiers.
+## History
+
+Futasaku grew out of Severgrow/Severor (the old game, still on `main` at the site root). Everything
+removed in the Futasaku 0.4 cleanup (the old live and test channels, the Lab, DESIGN and V3 art) is
+kept on the branch `archive/futa0.4-before-cleanup`. The rules history is in
+[`docs/archive/SPEC-HISTORY.md`](docs/archive/SPEC-HISTORY.md).

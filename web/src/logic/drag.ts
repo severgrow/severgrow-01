@@ -19,8 +19,8 @@ export const FLICK_SPEED_PX_PER_MS = 0.6;
 export const PILE_GRAB_PX = 48;
 
 /** The words the cockpit sign may show while a drag is over a matching target. Never FAST. */
-export type DragLedWord = 'DRAW' | 'PLACE' | 'THROW' | 'BLOOM' | 'MEGA';
-export const DRAG_LED_WORDS: readonly DragLedWord[] = ['DRAW', 'PLACE', 'THROW', 'BLOOM', 'MEGA'];
+export type DragLedWord = 'DRAW' | 'PLACE' | 'THROW' | 'BLOOM' | 'BLAST';
+export const DRAG_LED_WORDS: readonly DragLedWord[] = ['DRAW', 'PLACE', 'THROW', 'BLOOM', 'BLAST'];
 
 /** What the drag would do if the pointer were released right now. */
 export type DragMode =
@@ -130,7 +130,7 @@ function resolveAct(input: DragInput, card: Card): DragResolution {
       return {
         active: true, mode: 'mega', commit, hoverKey: key,
         hover: commit ? 'legal' : key ? 'illegal' : 'none', shape: [], openOptions: false,
-        led: commit ? 'MEGA' : null,
+        led: commit ? 'BLAST' : null,
       };
     }
   }

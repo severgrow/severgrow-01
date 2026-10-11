@@ -81,7 +81,7 @@ describe('tap a card, then a hex', () => {
     expect(kindLabel('bloom-3-1.2.3')).toBe('Bloom 3 tiles');
     expect(kindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
     expect(shortKindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
-    expect(kindLabel('sprout')).toBe('Sprout one tile');
+    expect(kindLabel('sprout')).toBe('Grow one tile');
   });
 
   it('choosing a kind highlights only its hexes', () => {

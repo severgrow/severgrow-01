@@ -4,10 +4,7 @@ import { SUIT_NAMES } from '../../../src/engine/index.js';
 import type { Card } from '../../../src/engine/index.js';
 import type { BoardView } from './board.js';
 import { S, centerOf, el, star } from './board.js';
-import { BOMB_INDEX_SVG, BOMB_SVG, FRUIT_SVG, SUIT_SVG } from './icons.js';
-declare const __CHANNEL__: string;
-const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04';
-import { FRUIT } from '../../../src/strings.js';
+import { BOMB_INDEX_SVG, BOMB_SVG, SUIT_SVG } from './icons.js';
 import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION } from '../logic/motion.js';
 
@@ -34,12 +31,11 @@ export const suitClass = (c: Card): string => (c.suit === null ? 'fruit' : `s${c
  * mushroom in both places: a small corner index where the number sits, a big icon where the suit sits.
  */
 export const cardFace = (c: Card) => {
-  const art = IS_FUTA04 ? c.suit === null
+  const art = c.suit === null
     ? '<span class="futa04-card-art futa04-card-bomb" data-card-art="bomb" aria-hidden="true"></span>'
-    : `<span class="futa04-card-art" data-card-art="${c.suit}:${c.rank}" style="background-position:${((c.rank - 1) % 3) * 50}% ${Math.floor((c.rank - 1) / 3) * 50}%" aria-hidden="true"></span>`
-    : '';
+    : `<span class="futa04-card-art" data-card-art="${c.suit}:${c.rank}" style="background-position:${((c.rank - 1) % 3) * 50}% ${Math.floor((c.rank - 1) / 3) * 50}%" aria-hidden="true"></span>`;
   return art + (c.suit === null
-    ? `<span class="c-num c-idx" aria-hidden="true">${IS_FUTA04 ? BOMB_INDEX_SVG : FRUIT_SVG}</span><span class="c-suit c-fruit" title="${IS_FUTA04 ? 'Bomb' : FRUIT.print}">${IS_FUTA04 ? BOMB_SVG : FRUIT_SVG}</span>`
+    ? `<span class="c-num c-idx" aria-hidden="true">${BOMB_INDEX_SVG}</span><span class="c-suit c-fruit" title="Bomb">${BOMB_SVG}</span>`
     : `<span class="c-num num">${c.rank}</span><span class="c-suit" title="${SUIT_NAMES[c.suit]}">${SUIT_SVG[c.suit]}</span>`);
 };
 
@@ -52,7 +48,7 @@ export const shakeFrames = (a: number): Keyframe[] => [
 ];
 
 /** Effects bound to the board and the current animation speed / motion settings. */
-export const createEffects = (board: BoardView, timeScale: () => number, motion: () => number) => {
+export const createEffects = (board: BoardView, motion: () => number) => {
   // At most 60 particles on screen at once; each one frees its slot when it ends.
   const particles = new ParticleBudget(60);
   const particle = (node: Element, a: Animation | null, ms: number) => {
@@ -84,7 +80,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     if (ms <= 0 || alpha <= 0) return;
     const { x, y } = centerOf(key);
     const other = linkTo ? centerOf(linkTo) : null;
-    const c = IS_FUTA04 && other
+    const c = other
       ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
           fill:'none',stroke:'#fff2d2','stroke-width':2.8,'stroke-linecap':'round' }, board.fx)
       : el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
@@ -132,9 +128,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   function floatText(text: string, key: string, tone: string, f: number, force = false) {
-    // Futa04 tells most of this through the LED and the outcome light; a cut's single −N is the
+    // Futasaku tells most of this through the LED and the outcome light; a cut's single −N is the
     // one floating payoff it keeps (and never with Reduce motion, which the caller guards).
-    if (IS_FUTA04 && !force) return;
+    if (!force) return;
     const d = document.createElement('div');
     d.className = `float num ${tone}`;
     d.textContent = text;
@@ -145,36 +141,10 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(d, [{ transform: 'translate(-50%, -20%) scale(.7)', opacity: 0 }, { transform: 'translate(-50%, -90%) scale(1.15)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%, -200%) scale(1)', opacity: 0 }], { duration: 1600 * Math.max(f, 0.5), easing: 'ease-out', fill: 'forwards' }), d, 1600);
   }
 
-  function caption(text: string, key: string | null, tone: string) {
-    if (IS_FUTA04) return;
-    const box = $('captions');
-    const d = document.createElement('div');
-    d.className = `caption ${tone}`;
-    d.textContent = text;
-    const p = boardWrapPoint(key);
-    const wrap = $('board-wrap').getBoundingClientRect();
-    d.style.left = `${Math.min(Math.max(p.x, 110), wrap.width - 110)}px`;
-    d.style.top = `${Math.min(Math.max(p.y + (key ? S * 1.1 : 0), 20), wrap.height - 40)}px`;
-    box.querySelectorAll('.caption').forEach((c) => c.remove());
-    box.appendChild(d);
-    const ms = 2400 * Math.max(timeScale(), 0.7);
-    removeAfter(anim(d, [{ opacity: 0, transform: 'translate(-50%, 6px)' }, { opacity: 1, transform: 'translate(-50%, 0)', offset: 0.1 }, { opacity: 1, offset: 0.8 }, { opacity: 0, transform: 'translate(-50%, 0)' }], { duration: ms, fill: 'forwards' }), d, ms);
-  }
+  // Futasaku shows captions and banners on the cockpit display; the board keeps these as no-ops.
+  function caption(_text: string, _key: string | null, _tone: string) {}
 
-  function banner(text: string, tone?: 'you' | 'bot' | 'big' | 'calm') {
-    if (IS_FUTA04) return;
-    const b = $('banner');
-    b.textContent = text;
-    b.className = `banner ${tone ?? 'you'}`;
-    const f = Math.max(timeScale(), 0.5);
-    anim(
-      b,
-      motion() === 0
-        ? [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.75 }, { opacity: 0 }]
-        : [{ transform: 'translate(-50%, 0) translateX(-40vw)', opacity: 0 }, { transform: 'translate(-50%, 0)', opacity: 1, offset: 0.22 }, { transform: 'translate(-50%, 0)', opacity: 1, offset: 0.75 }, { transform: 'translate(-50%, 0) translateX(30vw)', opacity: 0 }],
-      { duration: 1300 * f, easing: 'ease-in-out', fill: 'both' },
-    );
-  }
+  function banner(_text: string, _tone?: 'you' | 'bot' | 'big' | 'calm') {}
 
   function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number) {
     const d = document.createElement('div');
@@ -190,14 +160,12 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const land = sc * 0.92;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
-      : IS_FUTA04
-        ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
+      : [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
           { transform: `translate(${dx * .52}px, ${dy * .52 - 24}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .758 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
-        : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 330 : 440) * f;
-    removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
+          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }];
+    const duration = 330 * f;
+    removeAfter(anim(d, frames, { duration, easing: EASE.out, fill: 'forwards' }), d, duration + 40);
   }
 
   function flyBack(from: HTMLElement, to: HTMLElement, f: number) {

@@ -1,4 +1,4 @@
-// The test copy's smart camera: which part of the map the board shows. It only moves the board's
+// the smart camera: which part of the map the board shows. It only moves the board's
 // SVG viewBox (the view, in board units), so everything that finds hexes through the board's
 // screen matrix (taps, painting a Bloom, highlights, ghosts, tile cards, the idle tip, badges)
 // follows it by itself. Landmarks and text stay upright: they are drawn in board units already.

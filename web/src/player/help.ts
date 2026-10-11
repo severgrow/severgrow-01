@@ -1,4 +1,4 @@
-/** Futa04 teaching lives behind one readable disclosure, never over playable hexes.
+/** Futasaku teaching lives behind one readable disclosure, never over playable hexes.
  * Move the original nodes so their game-owned content, dismissal and coach actions stay intact.
  */
 export const HELP_SHEET_ID = 'sheet-futa04-help';
@@ -89,7 +89,7 @@ export const mountHelp = (hooks: HelpHooks) => {
   trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-label', 'Tips');
   trigger.title = 'Tips';
-  // Keep the existing controls and handlers; only their Futa04 presentation moves.
+  // Keep the existing controls and handlers; only their Futasaku presentation moves.
   const actions = document.createElement('div');
   actions.id = 'futa04-actions';
   actions.setAttribute('role', 'group');

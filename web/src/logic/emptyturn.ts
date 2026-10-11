@@ -35,7 +35,7 @@ const hasCombo = (hand: readonly Card[]): boolean => {
 
 /** Why nothing can be played, in one short line (shown with auto-skip off). */
 export const emptyReason = (hand: readonly Card[]): string =>
-  `${hasCombo(hand) ? 'Your combos have no room' : 'No combo in your hand'}, and no card can sprout.`;
+  `${hasCombo(hand) ? 'Your combos have no room' : 'No combo in your hand'}, and no card can grow.`;
 
 /** A whole turn of the opponent with no board move in it. */
 export const isEmptyTurn = (actions: readonly Action[]): boolean => !actions.some(isBoardAction);

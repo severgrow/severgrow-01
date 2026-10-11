@@ -60,7 +60,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'Bloom':
       return `${BLOOM.oppDid(a.cards.length)} (${a.cards.map(name).join(', ')})${tail}`;
     case 'MegaBomb':
-      return `${OPP.The} launched a Mega Bomb at ${hn(a.target)}${tail}`;
+      return `${OPP.The} launched a Blast at ${hn(a.target)}${tail}`;
     case 'Sprout':
       return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':
@@ -85,7 +85,7 @@ export const moveSummary = (history: readonly Event[], me: Player): string | nul
   const grown = history.filter((e) => e.t === 'Sprout' && e.player === me).length;
   const strong = history.filter((e) => e.t === 'Strengthen' && e.player === me).length;
   const parts: string[] = [];
-  if (grown) parts.push(`sprouted ${count(grown, 'tile', 'tiles')}`);
+  if (grown) parts.push(`grew ${count(grown, 'single tile', 'single tiles')}`);
   if (strong) parts.push(`strengthened ${count(strong, 'tile', 'tiles')}`);
   return parts.length ? `You ${parts.join(' and ')}.` : null;
 };

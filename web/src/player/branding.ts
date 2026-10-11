@@ -1,4 +1,4 @@
-// Futasaku 0.4 uses the Futa04 presentation; historical channels keep their existing brand.
+// Futasaku 0.4 uses the Futasaku presentation; historical channels keep their existing brand.
 import logoUrl from '../assets/futasaku-emblem.webp?url';
 import wordmarkUrl from '../assets/futasaku-white.webp?url';
 import { bestFit, boardUnits } from '../logic/layout.js';

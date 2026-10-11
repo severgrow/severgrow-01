@@ -1,7 +1,7 @@
 {
   "name": "Futasaku",
   "short_name": "Futasaku",
-  "description": "Grow your network. Keep it joined to your root. Cut the bot's links.",
+  "description": "Grow your network. Keep it joined to your home. Cut your opponent's links.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,8 +9,8 @@
   "background_color": "#0d0e11",
   "theme_color": "#0d0e11",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "futasaku-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "futasaku-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "futasaku-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

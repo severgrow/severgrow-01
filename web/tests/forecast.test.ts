@@ -121,7 +121,7 @@ describe('the forecast bar: one short plain line per risk', () => {
     expect(lines[1]!.text).toContain('2');
     const fruit = riskLines(f({ kind: 'fruit', cutMine: ['a', 'b', 'c'] }));
     expect(fruit.map((l) => l.reason)).toEqual(['fruit']);
-    expect(fruit[0]!.text).toContain('Fruit card'); // v0.6: nothing of mine is given up any more
+    expect(fruit[0]!.text).toContain('Bomb'); // v0.6: nothing of mine is given up any more
     for (const l of [...lines, ...fruit]) {
       expect(l.icon.length).toBeGreaterThan(0);
       expect(l.text.length).toBeLessThanOrEqual(40);

@@ -33,7 +33,7 @@ describe('three kinds of Sprout target', () => {
     expect(kinds.get('1,0')).toBe('replace');
     expect(kinds.get('-2,1')).toBe('grow');
     expect(kinds.has('0,0')).toBe(false); // equal strength: not a target
-    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile', fruit: 'Remove with a Fruit card' }); // v0.6: + a Fruit card's targets
+    expect(TARGET_LABEL).toEqual({ grow: 'Grow on an empty hex', replace: 'Replace an enemy tile', strengthen: 'Strengthen my tile', fruit: 'Remove with a Bomb' }); // v0.6: + a Bomb's targets
     expect(sproutKind(v, { t: 'Sprout', card: id, coord: { q: -1, r: 1 } })).toBe('strengthen');
   });
 
@@ -56,7 +56,7 @@ describe('three kinds of Sprout target', () => {
 
 describe('first-time tips (remembered in the browser)', () => {
   it('a tip shows until dismissed, then never again; bad data reads as "nothing seen"', () => {
-    expect(TIPS.fruit.title).toMatch(/Fruit/);
+    expect(TIPS.fruit.title).toMatch(/Bomb/);
     expect(TIPS.strengthen.text).toMatch(/higher card/i);
     let seen = parseTips(null);
     expect(seen.fruit).toBe(false);
@@ -64,7 +64,7 @@ describe('first-time tips (remembered in the browser)', () => {
     expect(parseTips(JSON.stringify(seen))).toEqual({ fruit: true, strengthen: false, draw: false, fruitAny: false });
     expect(parseTips('{oops')).toEqual({ fruit: false, strengthen: false, draw: false, fruitAny: false });
     // v0.6: the one-time Fruit card tip, in the strings file's words
-    expect(TIPS.fruit.text).toBe('Fruit cards: play one on an opponent tile that touches yours to remove it, even a 9.');
+    expect(TIPS.fruit.text).toBe('Bombs: play one on an opponent tile that touches yours to remove it, even a 9. Two Bombs together make a Blast.');
     // polish pass 3: the drawing tip, in the words the How to play sheet uses too
     expect(TIPS.draw.text).toBe('Paint your bloom: drag over touching hexes, or tap them one by one. On a computer, click to start and click to finish.');
   });
@@ -85,7 +85,7 @@ describe('animation steps from the engine events', () => {
     expect(fs[0]).toEqual({ k: 'fruit', player: 0, card: { id: fruitId, suit: null, rank: 0 }, target: '1,0', strength: 9 });
     expect(fs.some((x) => x.k === 'sever')).toBe(true);
     expect(moveTier(fs, () => false)).toBe('big');
-    expect(tierBanner(fs)).toBe('Fruited!');
+    expect(tierBanner(fs)).toBe('Bombed!');
     // a small Strengthen is a small moment; to the top rank it is a medium one (a bigger shine)
     expect(moveTier(steps, () => false)).toBe('medium');
     expect(coordKey({ q: 1, r: 0 })).toBe('1,0');

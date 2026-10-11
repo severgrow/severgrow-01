@@ -37,7 +37,7 @@ html.futa04-information #game .dock::before {
 @media (prefers-reduced-motion:reduce) { html.futa04-information #game::before { animation:none; opacity:.025; transform:none; } }
 html.futa04-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
 /* ---- desktop (side layout): the coach and first-time tips get the empty space above the
-   piles, at full size, instead of a squeezed strip over the deck. Test copy only for now:
+   piles, at full size, instead of a squeezed strip over the deck. Futasaku:
    on docs/LIST-TO-IMPLEMENT.md to bring to the main game. ---- */
 html[data-layout='side'] .dock-overlays {
   top: auto;
@@ -609,7 +609,7 @@ html.cam-under[data-focus='map']:not(.fan-awake) .dock .hand-row > .hand-slot {
   transition: none;
 }
 
-/* ---- step guidance (test copy): a crafted plate on the map when a step starts; the step's
+/* ---- step guidance: a crafted plate on the map when a step starts; the step's
    controls as the hero. Only transform and opacity move (plus the words' tracking as they enter). ---- */
 :root {
   --gd-cream: 243, 230, 196;
