@@ -6,8 +6,8 @@ import {
   mountTutorialGate,
 } from '../src/logic/tutorial-gate.js';
 import {
-  TUTORIAL_CHAPTER_COUNT, resolveLessonTarget, tutorialChapter, tutorialLesson,
-  tutorialLessons, wordCount,
+  TUTORIAL_CHAPTER_COUNT, resolveLessonTarget, tutorialChapter, tutorialFeedback,
+  tutorialLesson, tutorialLessons, wordCount,
 } from '../src/logic/tutorial-script.js';
 
 /** Tiny DOM stub so gate mount tests run without happy-dom. */
@@ -198,6 +198,38 @@ describe('tutorial gate: mount lifecycle', () => {
     installDom();
     const gate = mountTutorialGate({ onBlocked: () => undefined });
     expect(gate.isActive()).toBe(false);
+  });
+});
+
+describe('tutorial gate: wrong-tap feedback', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'document');
+  });
+
+  it('rate-limits onBlocked to at most once per 400ms', () => {
+    const { doc, hud } = installDom();
+    const onBlocked = vi.fn();
+    let now = 1000;
+    (globalThis as unknown as { performance: { now: () => number } }).performance = { now: () => now };
+    const gate = mountTutorialGate({ onBlocked });
+    gate.set(allowedSelectorsForLesson(tutorialLesson(1, 0), '#deck', 'step'), 'step');
+    doc.dispatchCapture('click', hud);
+    doc.dispatchCapture('click', hud);
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+    now += 400;
+    doc.dispatchCapture('click', hud);
+    expect(onBlocked).toHaveBeenCalledTimes(2);
+    gate.clear();
+  });
+
+  it('rotates locked-area lines without stacking long copy', () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 8; i++) {
+      const line = tutorialFeedback('locked');
+      expect(wordCount(line)).toBeLessThanOrEqual(6);
+      seen.add(line);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(3);
   });
 });
 
