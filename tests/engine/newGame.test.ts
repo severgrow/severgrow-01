@@ -21,10 +21,10 @@ const allCards = (s: State) => [...s.hands[0], ...s.hands[1], ...s.deck, ...s.di
 describe('newGame', () => {
   const s = newGame(42);
 
-  it('starts with P1 to draw on turn 1', () => {
+  it('starts with the drawn starter to draw on turn 1 (SPEC 5)', () => {
     expect(s.phase).toBe('DRAW');
-    expect(s.turnPlayer).toBe(0);
-    expect(s.actor).toBe(0);
+    expect(s.turnPlayer).toBe(s.startingPlayer);
+    expect(s.actor).toBe(s.startingPlayer);
     expect(s.turnNumber).toBe(1);
     expect(s.drawnFromDiscard).toBeNull();
     expect(s.fruitPlayed).toBe(0);
@@ -164,7 +164,7 @@ describe('v0.6: Seed mode is gone, Sprout works from turn 1', () => {
   it('in 50 deals the first player can sprout on turn 1, right after the draw', () => {
     for (let seed = 1; seed <= 50; seed++) {
       const s = apply(newGame(seed), { t: 'Draw', from: 'deck' });
-      const sprouts = legalActions(viewFor(s, 0)).filter((a) => a.t === 'Sprout');
+      const sprouts = legalActions(viewFor(s, s.actor)).filter((a) => a.t === 'Sprout');
       expect(sprouts.length, `seed ${seed}`).toBeGreaterThan(0);
     }
   });
@@ -173,7 +173,8 @@ describe('v0.6: Seed mode is gone, Sprout works from turn 1', () => {
     const s = newGame(7);
     expect(s.config).not.toHaveProperty('ruleset');
     expect(s.config).not.toHaveProperty('unbiasedShuffle');
-    const after = apply(apply(newGame(7), { t: 'Draw', from: 'deck' }), legalActions(viewFor(apply(newGame(7), { t: 'Draw', from: 'deck' }), 0)).find((a) => a.t === 'Sprout')!);
+    const drawn = apply(newGame(7), { t: 'Draw', from: 'deck' });
+    const after = apply(drawn, legalActions(viewFor(drawn, drawn.actor)).find((a) => a.t === 'Sprout')!);
     for (const t of Object.values(after.board)) if (t) expect(Object.keys(t).sort()).not.toContain('seed');
   });
 });

@@ -35,7 +35,7 @@ const stateWith = (o: {
     hand.push(pool.splice(i, 1)[0]!);
   }
   const other = pool.splice(0, g.config.handSize);
-  return { ...g, board: f.board, terrain: f.terrain, hands: [hand, other], deck: pool, phase: 'ACT', ...o.patch };
+  return { ...g, board: f.board, terrain: f.terrain, hands: [hand, other], deck: pool, phase: 'ACT', turnPlayer: 0, actor: 0, startingPlayer: 0, ...o.patch };
 };
 const idOf = (s: State, suit: Suit, rank: number) => s.hands[s.turnPlayer].find((c) => c.suit === suit && c.rank === rank)!.id;
 const json = (x: unknown) => JSON.stringify(x);

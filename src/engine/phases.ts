@@ -1,12 +1,16 @@
 import { deadwood } from './deadwood.js';
 import { drawFromDeck, reshuffleDiscard } from './deck.js';
 import { deckExhaustionResult, strangleResult } from './result.js';
-import { scores } from './scoring.js';
+import { scores, strengths } from './scoring.js';
 import { sever } from './sever.js';
 import { strangleOutcome } from './strangle.js';
 import type { Coord, GameResult, Player, ResolutionSummary, State } from './types.js';
 
 export const opponent = (p: Player): Player => (p === 0 ? 1 : 0);
+
+/** End-of-game scoring (spec 8): Futasaku 0.4 breaks a tied score by total tile strength. */
+const scoreEnd = (s: State, dw: [number, number] | null, reason: 'deck_exhaustion' | 'turn_limit' = 'deck_exhaustion'): GameResult =>
+  deckExhaustionResult(scores(s), dw, reason, s.config.strengthTieBreak ? strengths(s) : null);
 
 /** Old saves lack startingPlayer; turn parity recovers it without assuming either seat. */
 export const startingPlayerOf = (s: State): Player => s.startingPlayer ?? (s.turnNumber % 2 ? s.turnPlayer : opponent(s.turnPlayer));
@@ -63,7 +67,7 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
       return { ...next, phase:'ACT', deckFinal:{...settled.deckFinal,remaining:1} };
     }
     const dw: [number,number] = [deadwood(settled.hands[0]),deadwood(settled.hands[1])];
-    return endGame(settled,deckExhaustionResult(scores(settled),leftoverRulesOn(settled) ? dw : null));
+    return endGame(settled,scoreEnd(settled, leftoverRulesOn(settled) ? dw : null));
   }
 
   const p = s.turnPlayer;
@@ -77,7 +81,7 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
   let refilled: State = { ...stocked, hands, deck };
   if (!s.config.deckFinalTurns && !s.config.reshuffleDiscard && (drawn.length < need || deck.length === 0)) {
     const dw: [number,number] = [deadwood(refilled.hands[0]),deadwood(refilled.hands[1])];
-    return endGame(refilled,deckExhaustionResult(scores(refilled),leftoverRulesOn(s) ? dw : null));
+    return endGame(refilled,scoreEnd(refilled, leftoverRulesOn(s) ? dw : null));
   }
   if (s.config.reshuffleDiscard) {
     // the deck never ends the game: only the turn limit does (a hand may stay short)
@@ -86,7 +90,7 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
     const nothingToDraw = refilled.deck.length === 0 && refilled.discard.length === 0;
     if (nothingToDraw || (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer)) {
       const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
-      return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, nothingToDraw ? undefined : 'turn_limit'));
+      return endGame(refilled, scoreEnd(refilled, leftoverRulesOn(s) ? dw : null, nothingToDraw ? undefined : 'turn_limit'));
     }
     return passTurn(refilled);
   }
@@ -94,7 +98,7 @@ export const finishTurn = (s: State, rotted: Coord[]): State => {
   if (s.config.maxTurnsPerPlayer > 0 && s.turnNumber >= 2 * s.config.maxTurnsPerPlayer) {
     // v0.4 turn limit: every game ends, scored like the deck running out.
     const dw: [number, number] = [deadwood(refilled.hands[0]), deadwood(refilled.hands[1])];
-    return endGame(refilled, deckExhaustionResult(scores(refilled), leftoverRulesOn(s) ? dw : null, 'turn_limit'));
+    return endGame(refilled, scoreEnd(refilled, leftoverRulesOn(s) ? dw : null, 'turn_limit'));
   }
   if (deck.length === 0 && !refilled.finalTurn) {
     const first = opponent(p);

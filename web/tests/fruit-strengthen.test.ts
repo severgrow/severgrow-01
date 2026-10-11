@@ -16,7 +16,7 @@ const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit | null, 
   const pool = [...g.hands[0], ...g.hands[1], ...g.deck];
   const h: Card[] = [];
   for (const [su, r] of hand) h.push(pool.splice(pool.findIndex((c) => c.suit === su && c.rank === r), 1)[0]!);
-  return { ...g, board: f.board, terrain: f.terrain, hands: [h, pool.splice(0, 7)], deck: pool, phase: 'ACT', ...patch };
+  return { ...g, board: f.board, terrain: f.terrain, hands: [h, pool.splice(0, 7)], deck: pool, phase: 'ACT', turnPlayer: 0, actor: 0, startingPlayer: 0, ...patch };
 };
 
 describe('three kinds of Sprout target', () => {

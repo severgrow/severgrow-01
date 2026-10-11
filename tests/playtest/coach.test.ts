@@ -101,7 +101,8 @@ describe('coach: suggestions', () => {
 });
 
 describe('coach: on and off', () => {
-  const v = viewFor(newGame(4), 0);
+  // a game the player opens (the engine draws the starter, SPEC 5)
+  const v = viewFor(newGame(4, { randomStarter: false }), 0);
 
   it(`is active for the first ${COACH_STEPS} steps only`, () => {
     expect(COACH_STEPS).toBe(15);
@@ -116,7 +117,7 @@ describe('coach: on and off', () => {
   });
 
   it('gives nothing when it is not the player’s move or the game is over', () => {
-    const s = apply(newGame(4), { t: 'Draw', from: 'deck' }); // player 1 is acting
+    const s = apply(newGame(4, { randomStarter: false }), { t: 'Draw', from: 'deck' }); // player 1 is acting
     expect(coachAdvice(input(viewFor(s, 1)))).toBeNull();
     const over: State = { ...s, phase: 'GAME_OVER', result: { winner: 0, reason: 'strangle', scores: [1, 0] } };
     expect(coachAdvice(input(viewFor(over, 0)))).toBeNull();
@@ -221,7 +222,7 @@ describe('coach: tactic tips and words', () => {
 const actState = (tiles: Record<string, [Player, number]>, hand: Card[]): View => {
   const f = fixture({ tiles });
   const base = newGame(1);
-  return viewFor({ ...base, board: f.board, terrain: f.terrain, hands: [hand, base.hands[1]], phase: 'ACT' }, 0);
+  return viewFor({ ...base, board: f.board, terrain: f.terrain, hands: [hand, base.hands[1]], phase: 'ACT', turnPlayer: 0, actor: 0, startingPlayer: 0 }, 0);
 };
 const sixes = [card(11, 1, 6), card(12, 2, 6), card(13, 3, 6)];
 const run345 = [card(1, 0, 3), card(2, 0, 4), card(3, 0, 5)];

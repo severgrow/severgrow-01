@@ -1,6 +1,6 @@
 // v0.7: Bloom is the only combo. Nothing may still name the old run action ("MeldRun",
 // "Hypha"), its set twin ("MeldSet"), or the line-only code and config. The one place they
-// may appear is the "Retired rules" appendix of docs/SPEC.md (descriptions only).
+// may appear is the "Retired rules" appendix of docs/archive/SPEC-HISTORY.md (descriptions only).
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -22,11 +22,11 @@ const files = (dir: string): string[] =>
   });
 
 describe('no old line or run action anywhere (v0.7)', () => {
-  it('outside the Retired rules appendix of docs/SPEC.md', () => {
+  it('outside the Retired rules appendix of the archived spec history', () => {
     const hits: string[] = [];
     for (const f of files(ROOT)) {
       let text = readFileSync(f, 'utf8');
-      if (f.endsWith(join('docs', 'SPEC.md'))) text = text.slice(0, text.indexOf('## Retired rules'));
+      if (f.endsWith(join('docs', 'archive', 'SPEC-HISTORY.md'))) text = text.slice(0, text.indexOf('## Retired rules'));
       text.split('\n').forEach((line, i) => {
         if (OLD.test(line) && !SCANNER_LINE.test(line)) hits.push(`${f.slice(ROOT.length + 1)}:${i + 1}: ${line.trim().slice(0, 90)}`);
       });

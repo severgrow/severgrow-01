@@ -69,7 +69,8 @@ const canStrangle = (s: State, acts: Action[]): boolean => {
 
 export const playGame = (seed: number, bots: [BotKind, BotKind], config: Partial<RulesConfig> = {}): GameRecord => {
   const players = [makeBot(bots[0], seed, 0), makeBot(bots[1], seed, 1)];
-  let s = newGame(seed, config);
+  // Simulations seat the starter at 0, so 'first player' figures and swapped starts stay exact.
+  let s = newGame(seed, { randomStarter: false, ...config });
   const rec: Omit<GameRecord, 'result' | 'turns' | 'noTileTurns' | 'comeback' | 'noTileTurnsEarly'> = {
     seed,
     bots,

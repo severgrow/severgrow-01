@@ -28,7 +28,10 @@ describe('golden games', () => {
       // Keep Main's original fixtures. Only disabled Lab metadata is normalized.
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
-      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, ...classicConfig } = rest.config;
+      // Futasaku 0.4 keys: off in the recorded rules (player 1 starts, ties go to player 2).
+      expect(rest.config.randomStarter).toBe(false);
+      expect(rest.config.strengthTieBreak).toBe(false);
+      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, randomStarter, strengthTieBreak, ...classicConfig } = rest.config;
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });

@@ -46,6 +46,7 @@ const makeState = (o: {
     phase: o.phase ?? 'DRAW',
     turnPlayer: tp,
     actor: tp,
+    startingPlayer: 0,
     ...o.patch,
   };
 };

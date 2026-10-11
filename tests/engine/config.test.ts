@@ -31,6 +31,8 @@ describe('DEFAULT_CONFIG', () => {
       reshuffleDiscard: false,
       deckFinalTurns: true,
       expandedBloom: true,
+      randomStarter: true, // Futasaku 0.4: the engine draws who starts
+      strengthTieBreak: true, // Futasaku 0.4: a tied score goes to strength, then a draw
     });
   });
 

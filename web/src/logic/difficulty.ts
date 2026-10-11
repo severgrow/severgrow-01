@@ -2,7 +2,7 @@ import type { Level } from '../../../src/bots/levels.js';
 
 /** A player-facing choice selects one existing bot level once per new match. */
 export const DIFFICULTIES = [
-  { id:'beginner', label:'BEGINNER', levels:[2,3], note:'Learn the rhythm' },
+  { id:'beginner', label:'BEGINNER', levels:[1,2], note:'Learn the rhythm' },
   { id:'easy', label:'EASY', levels:[3,4], note:'A gentle challenge' },
   { id:'medium', label:'MEDIUM', levels:[5,6,7], note:'A thoughtful rival' },
   { id:'hard', label:'HARD', levels:[8], note:'Every turn matters' },
@@ -15,4 +15,4 @@ export const chooseDifficultyLevel = (id: DifficultyId, seed: number): Level => 
   return choices[seed % choices.length]!;
 };
 export const defaultDifficultyForLevel = (level: Level): DifficultyId =>
-  level >= 9 ? 'pro' : level >= 8 ? 'hard' : level >= 5 ? 'medium' : level >= 4 ? 'easy' : 'beginner';
+  level >= 9 ? 'pro' : level >= 8 ? 'hard' : level >= 5 ? 'medium' : level >= 3 ? 'easy' : 'beginner';

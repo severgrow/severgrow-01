@@ -10,7 +10,7 @@ const c = (suit: Suit, rank: number): Card => ({ id: nextId++, suit, rank });
 const at = (tiles: Record<string, [0 | 1, number]>, hand: Card[], deck: Card[] = Array.from({ length: 20 }, () => c(0, 1))): State => {
   const f = fixture({ tiles });
   const base = newGame(1);
-  return { ...base, board: f.board, terrain: f.terrain, hands: [hand, [c(1, 2), c(2, 3), c(3, 4)]], deck, phase: 'ACT' };
+  return { ...base, board: f.board, terrain: f.terrain, hands: [hand, [c(1, 2), c(2, 3), c(3, 4)]], deck, phase: 'ACT', turnPlayer: 0, actor: 0, startingPlayer: 0 };
 };
 
 describe('v0.4 adversarial', () => {

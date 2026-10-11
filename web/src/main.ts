@@ -67,6 +67,7 @@ import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
 import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficultyById } from './logic/difficulty.js';
+import { showStarterDraw } from './player/starter-draw.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
@@ -674,8 +675,12 @@ function segmented<T extends string>(id: string, values: readonly T[], current: 
 
 const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000_000;
 
-function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
+/** True while the "who starts" draw is on screen: the opponent waits for it. */
+let starterDrawPending = false;
+function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null, starterDraw = false) {
   epoch++;
+  starterDrawPending = starterDraw;
+  if (!starterDraw) document.getElementById('starter-draw')?.remove();
   tutorialTransitionPending = false;
   tutorialDisplayKey = '';
   clearTimeout(tutorialFreeTimer);
@@ -979,17 +984,21 @@ function startGame(seed: number, level: Level = settings.level, watch: { level: 
   gameLevel = level;
   // the test copy: the Lab's active experiment (none: the classic game)
   const opening = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
-  // New Futasaku matches choose a side from their seed. Keep the authored base
-  // in the save only when the opponent starts, so older seed-only saves retain
-  // their original first player and deterministic replay.
-  const opponentStarts = IS_FUTA04 && (seed & 1) === 1;
-  const state: State = opponentStarts ? { ...opening, startingPlayer: BOT, turnPlayer: BOT, actor: BOT } : opening;
+  // The engine draws who starts from the seed (SPEC 5); the seed alone replays it.
+  const state: State = opening;
+  const opponentStarts = state.startingPlayer === BOT;
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
-  beginSession(state, null, [], opponentStarts ? state : null);
+  beginSession(state, null, [], null, true);
   dealIn();
-  firstToolTips();
   save();
-  announceTurn(state.turnPlayer);
+  const my = epoch;
+  void showStarterDraw(opponentStarts ? 'opponent' : 'you', timeScale(), settings.reduceMotion).then(() => {
+    if (my !== epoch) return;
+    starterDrawPending = false;
+    firstToolTips();
+    announceTurn(state.turnPlayer);
+    scheduleBot();
+  });
 }
 
 function startTutorial() {
@@ -1199,7 +1208,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 }
 
 function scheduleBot() {
-  if (!session || botBusy || tutorialTransitionPending) return;
+  if (!session || botBusy || tutorialTransitionPending || starterDrawPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
   // the Lab's "Watch a game" (test copy only): a second opponent plays my seat

@@ -20,7 +20,7 @@ const stateWith = (o: {
   const config = o.legacy ? LEGACY_V03 : {};
   const f = fixture({ ...(o.tiles ? { tiles: o.tiles } : {}), ...(o.rich ? { rich: o.rich } : {}), ...(o.rock ? { rock: o.rock } : {}), config });
   const base = newGame(1, config);
-  return { ...base, board: f.board, terrain: f.terrain, hands: [o.hand, base.hands[1]], phase: o.phase, ...(o.discard ? { discard: o.discard } : {}) };
+  return { ...base, board: f.board, terrain: f.terrain, hands: [o.hand, base.hands[1]], phase: o.phase, turnPlayer: 0, actor: 0, startingPlayer: 0, ...(o.discard ? { discard: o.discard } : {}) };
 };
 const card = (id: number, suit: 0 | 1 | 2 | 3, rank: number): Card => ({ id, suit, rank });
 

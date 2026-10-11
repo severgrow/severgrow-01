@@ -37,16 +37,19 @@ describe('events (spec 12, step 18)', () => {
   });
 
   it('records draws, with deck cards hidden from the opponent', () => {
+    // whoever starts (the engine draws it, spec 5) makes the first draw
     const s0 = newGame(5);
+    const p = s0.turnPlayer;
+    const o = p === 0 ? 1 : 0;
     const top = s0.deck[0]!;
     const s1 = apply(s0, { t: 'Draw', from: 'deck' });
-    expect(newEvents(s0, s1)).toEqual([{ t: 'Draw', player: 0, from: 'deck', card: top.id }]);
-    expect(eventsFor(s1, 0)).toEqual([{ t: 'Draw', player: 0, from: 'deck', card: top.id }]);
-    expect(eventsFor(s1, 1)).toEqual([{ t: 'Draw', player: 0, from: 'deck' }]);
+    expect(newEvents(s0, s1)).toEqual([{ t: 'Draw', player: p, from: 'deck', card: top.id }]);
+    expect(eventsFor(s1, p)).toEqual([{ t: 'Draw', player: p, from: 'deck', card: top.id }]);
+    expect(eventsFor(s1, o)).toEqual([{ t: 'Draw', player: p, from: 'deck' }]);
     const d = newGame(5);
     const taken = d.discard.at(-1)!;
     const d1 = apply(d, { t: 'Draw', from: 'discard' });
-    expect(eventsFor(d1, 1)).toEqual([{ t: 'Draw', player: 0, from: 'discard', card: taken.id }]);
+    expect(eventsFor(d1, o)).toEqual([{ t: 'Draw', player: p, from: 'discard', card: taken.id }]);
   });
 
   it('every event type that random play produces has the spec shape (parked rules on)', () => {

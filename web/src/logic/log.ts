@@ -12,7 +12,11 @@ export const resultTitle = (r: GameResult, me: Player): string =>
 
 export const resultReason = (r: GameResult, me: Player): string => {
   const won = r.winner === me;
-  const tie = r.scores[0] === r.scores[1] ? ` A tie goes to ${OPP.the}.` : '';
+  const strength = r.strengths ? `${r.strengths[me]} to ${r.strengths[other(me)]}` : '';
+  const tie = r.scores[0] !== r.scores[1] ? ''
+    : !r.strengths ? ` A tie goes to ${OPP.the}.`
+    : r.winner === null ? ` The scores were equal, and so was the total strength of the tiles (${strength}).`
+    : ` The scores were equal, so the total strength of the tiles decided it: ${strength}.`;
   switch (r.reason) {
     case 'double_strangle':
       return 'Both homes were surrounded at once.';

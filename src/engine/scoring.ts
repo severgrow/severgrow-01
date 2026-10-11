@@ -14,3 +14,12 @@ export const score = (ctx: BoardCtx, player: Player): number => {
 
 export const scores = (ctx: BoardCtx): [number, number] => [score(ctx, 0), score(ctx, 1)];
 
+/** Futasaku 0.4 tie-break: the sum of the numbers on a side's tiles (homes are worth 0). */
+export const strength = (ctx: BoardCtx, player: Player): number => {
+  let total = 0;
+  for (const tile of Object.values(ctx.board)) if (tile && tile.owner === player && !tile.root) total += tile.strength;
+  return total;
+};
+
+export const strengths = (ctx: BoardCtx): [number, number] => [strength(ctx, 0), strength(ctx, 1)];
+

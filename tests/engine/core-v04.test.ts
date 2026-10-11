@@ -51,6 +51,7 @@ const makeState = (o: {
     phase: o.phase ?? 'ACT',
     turnPlayer: tp,
     actor: tp,
+    startingPlayer: 0,
     ...o.patch,
   };
 };
@@ -325,12 +326,12 @@ describe('edge cases (v0.4)', () => {
     illegal(two, { t: 'Discard', card: taken.id }, 'REDUNDANT_DISCARD');
   });
 
-  it('(c) the game ends right after the turn whose refill came up short; a tie goes to Player 2', () => {
+  it('(c) the game ends right after the turn whose refill came up short; equal score and strength is a draw', () => {
     const s = makeState({ phase: 'DISCARD', hands: [[c(0, 1), c(1, 2), c(2, 3)], junk(7)], deck: [c(3, 4)] });
     const n = act(s, { t: 'Discard', card: s.hands[0][0]!.id });
     expect(n.phase).toBe('GAME_OVER');
     expect(n.hands[0]).toHaveLength(3); // 2 kept + the 1 card that existed
-    expect(n.result).toEqual({ winner: 1, reason: 'deck_exhaustion', scores: [0, 0] });
+    expect(n.result).toEqual({ winner: null, reason: 'deck_exhaustion', scores: [0, 0], strengths: [0, 0] });
   });
 
   it('(c) a refill that leaves the deck exactly empty also ends the game; higher score wins', () => {
@@ -342,11 +343,11 @@ describe('edge cases (v0.4)', () => {
 
 describe('turn limit (v0.4)', () => {
   it('the game ends right after turn 2 x maxTurnsPerPlayer, scored like the deck running out', () => {
-    // Player 2 finishes turn 60 (30 each): the game ends with reason turn_limit; a tie goes to Player 2.
+    // Player 2 finishes turn 60 (30 each): the game ends with reason turn_limit; equal score and strength is a draw.
     const s = makeState({ phase: 'DISCARD', turnPlayer: 1, hands: [junk(7), junk(8)], patch: { turnNumber: 60 } });
     const n = act(s, { t: 'Discard', card: s.hands[1][0]!.id });
     expect(n.phase).toBe('GAME_OVER');
-    expect(n.result).toEqual({ winner: 1, reason: 'turn_limit', scores: [0, 0] });
+    expect(n.result).toEqual({ winner: null, reason: 'turn_limit', scores: [0, 0], strengths: [0, 0] });
     // Turn 59 still passes to the next player.
     const t59 = makeState({ phase: 'DISCARD', hands: [junk(8), junk(7)], patch: { turnNumber: 59 } });
     expect(act(t59, { t: 'Discard', card: t59.hands[0][0]!.id }).phase).toBe('DRAW');

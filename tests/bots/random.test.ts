@@ -18,14 +18,16 @@ describe('RandomBot (spec 16)', () => {
   });
 
   it('is seeded: the same seed makes the same choices', () => {
-    const v = viewFor(newGame(3), 0);
+    const g = newGame(3);
+    const v = viewFor(g, g.actor);
     const a = createRandomBot(7);
     const b = createRandomBot(7);
     for (let i = 0; i < 50; i++) expect(a.chooseAction(v)).toEqual(b.chooseAction(v));
   });
 
   it('is roughly uniform over the legal actions', () => {
-    const v = viewFor(newGame(3), 0); // DRAW: deck or discard
+    const g = newGame(3);
+    const v = viewFor(g, g.actor); // DRAW: deck or discard
     const counts = { deck: 0, discard: 0 };
     const bot2 = createRandomBot(12);
     for (let i = 0; i < 2000; i++) {

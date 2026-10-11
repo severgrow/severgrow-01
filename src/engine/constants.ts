@@ -21,6 +21,8 @@ export const MAX_RANK = 9;
 /** Independent PRNG streams derived from the game seed. */
 export const TERRAIN_STREAM = 1;
 export const DECK_STREAM = 2;
+/** Futasaku 0.4: the draw for who starts. */
+export const STARTER_STREAM = 3;
 
 /** v0.6: a Fruit card's rank: it has no number, and counts 0 as a leftover card. */
 export const FRUIT_CARD_RANK = 0;

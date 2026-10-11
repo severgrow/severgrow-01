@@ -176,13 +176,13 @@ const sampleStates = (count: number, pick: (s: State) => boolean, config = {}): 
 describe('legalActions (spec 5, 13, 14.13)', () => {
   it('a non-actor view and a finished game have no actions', () => {
     const s = newGame(3);
-    expect(legalActions(viewFor(s, 1))).toEqual([]);
+    expect(legalActions(viewFor(s, s.actor === 0 ? 1 : 0))).toEqual([]);
     const over: State = { ...s, phase: 'GAME_OVER', result: { winner: 0, reason: 'strangle', scores: [0, 0] } };
     expect(legalActions(viewFor(over, 0))).toEqual([]);
   });
 
   it('opening: both draws are legal', () => {
-    expect(legalActions(viewFor(newGame(3), 0))).toEqual([
+    expect(legalActions(viewFor(newGame(3), newGame(3).actor))).toEqual([
       { t: 'Draw', from: 'deck' },
       { t: 'Draw', from: 'discard' },
     ]);
@@ -238,7 +238,7 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { id: 60, suit: 1, rank: 2 },
       { id: 61, suit: 1, rank: 2 },
     ];
-    const s: State = { ...s0, phase: 'DISCARD', hands: [hand, s0.hands[1]] };
+    const s: State = { ...s0, turnPlayer: 0, actor: 0, phase: 'DISCARD', hands: [hand, s0.hands[1]] };
     expect(legalActions(viewFor(s, 0))).toEqual([
       { t: 'Discard', card: 50 },
       { t: 'Discard', card: 60 },
@@ -260,7 +260,7 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { id: 60, suit: 0, rank: 4 },
       { id: 70, suit: 0, rank: 5 },
     ];
-    const s: State = { ...s0, phase: 'ACT', hands: [hand, s0.hands[1]], drawnFromDiscard: 50 };
+    const s: State = { ...s0, turnPlayer: 0, actor: 0, phase: 'ACT', hands: [hand, s0.hands[1]], drawnFromDiscard: 50 };
     const runs = legalActionsForState(s).filter((a) => a.t === 'Bloom');
     expect(runs.length).toBeGreaterThan(0);
     for (const a of runs) {

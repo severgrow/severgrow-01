@@ -54,7 +54,8 @@ const choke = (s: State, p: Player, key: string): boolean => {
 };
 
 export const playBloomGame = (seed: number): BloomRecord => {
-  let s: State = newGame(seed);
+  // Simulations seat the starter at 0, so 'first player' figures and swapped starts stay exact.
+  let s: State = newGame(seed, { randomStarter: false });
   const rec: BloomRecord = { seed, winner: null, reason: '', turns: 0, blooms: [], fruit: 0, early: [], behindAtMid: [false, false], grow: Object.fromEntries(BUCKETS.map((b) => [b, { steps: 0, holds: 0, playable: 0, nothing: 0, held: 0, possible: 0 }])) };
   const diffByTurn: number[] = [];
   let turn = { n: -1, bloomLegal: false, bloomed: false, tiles: 0, acted: false };

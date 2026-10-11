@@ -32,6 +32,8 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   reshuffleDiscard: false,
   deckFinalTurns: true,
   expandedBloom: true,
+  randomStarter: true,
+  strengthTieBreak: true,
 });
 
 /** Lowest allowed maxRank (v0.4). */
@@ -67,6 +69,8 @@ const BOOLEAN_KEYS = [
   'reshuffleDiscard',
   'deckFinalTurns',
   'expandedBloom',
+  'randomStarter',
+  'strengthTieBreak',
 ] as const;
 
 

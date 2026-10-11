@@ -3,8 +3,10 @@ import { createCards } from './cards.js';
 import { resolveConfig } from './config.js';
 import { drawFromDeck, shuffleDeck } from './deck.js';
 import { ConfigError } from './errors.js';
+import { STARTER_STREAM } from './constants.js';
+import { deriveSeed, mulberry32, randomInt } from './prng.js';
 import { generateTerrain } from './terrain.js';
-import type { Card, RulesConfig, State, Tile } from './types.js';
+import type { Card, Player, RulesConfig, State, Tile } from './types.js';
 
 /**
  * The deal (spec 5): one seeded shuffle, handSize to P1 then P2 from the top, then one card
@@ -19,8 +21,15 @@ export const dealOpening = (seed: number, config: RulesConfig): { hands: [Card[]
 };
 
 /**
+ * Who starts (spec 5, Futasaku 0.4): a fair 50/50 draw on its own seed stream, so it does not
+ * depend on the deal, the terrain or any other use of the seed. Archived rules: P1 starts.
+ */
+export const drawStarter = (seed: number, config: Pick<RulesConfig, 'randomStarter'>): Player =>
+  config.randomStarter ? (randomInt(mulberry32(deriveSeed(seed, STARTER_STREAM)), 2) as Player) : 0;
+
+/**
  * Setup (spec 5): terrain, cards, seeded shuffle, deal handSize to P1 then P2,
- * flip one discard, place both roots. P1 to draw on turn 1.
+ * flip one discard, place both roots, draw who starts. The starter draws on turn 1.
  */
 export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): State => {
   if (!Number.isSafeInteger(seed)) throw new ConfigError('INVALID_SEED', `seed must be an integer, got ${seed}`);
@@ -35,6 +44,7 @@ export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): Sta
   }
 
   const deal = dealOpening(seed, config);
+  const starter = drawStarter(seed, config);
 
   return {
     seed,
@@ -44,9 +54,9 @@ export const newGame = (seed: number, overrides: Partial<RulesConfig> = {}): Sta
     hands: deal.hands,
     deck: deal.deck,
     discard: deal.discard,
-    turnPlayer: 0,
-    startingPlayer: 0,
-    actor: 0,
+    turnPlayer: starter,
+    startingPlayer: starter,
+    actor: starter,
     phase: 'DRAW',
     drawnFromDiscard: null,
     fruitPlayed: 0,

@@ -14,7 +14,7 @@ describe('tickets', () => {
   it('a ticket carries the server-chosen seed, the level, the rules version and expires in 2 hours', () => {
     const t = ticketFor(42, 5, 1000);
     expect(t).toMatchObject({ id: 't-42-5', playerId: 'p1', seed: 42, level: 5, rulesVersion: RULES_VERSION, botVersion: BOT_VERSION, expiresAt: 1000 + 2 * H, used: false });
-    expect(RULES_VERSION).toBe('futasaku0.3-six-card-bloom');
+    expect(RULES_VERSION).toBe('futasaku0.4');
     expect(BOT_VERSION).toBe(CURRENT_BOT_VERSION);
   });
 });
@@ -45,7 +45,9 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
   });
 
   it('rejects a changed human action (not legal at that point)', () => {
-    const i = win.actions.findIndex((a, k) => k % 2 === 0 && a.t === 'Draw');
+    // a Draw the human (seat 0) made, whoever started
+    let s = newGame(win.seed);
+    const i = win.actions.findIndex((a) => { const human = s.actor === 0 && a.t === 'Draw'; s = apply(s, a); return human; });
     const bad = [...win.actions];
     bad[i] = { t: 'EndAct' };
     expect(verifyGame(t, bad, 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/not allowed/) });

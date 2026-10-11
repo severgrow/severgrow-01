@@ -25,6 +25,10 @@ export type RulesConfig = {
   deckFinalTurns: boolean;
   /** Legacy recorded matches retain the original 3–4 card Bloom recipes. */
   expandedBloom?: boolean;
+  /** Futasaku 0.4: the engine draws who starts from the seed (absent or false: P1 starts). */
+  randomStarter?: boolean;
+  /** Futasaku 0.4: a tied score goes to the higher total tile strength, then a draw (absent or false: P2 wins ties). */
+  strengthTieBreak?: boolean;
   handSize: number;
   copiesPerCard: number;
   /** Must be even (mirrored pairs). */
@@ -78,13 +82,15 @@ export type Phase = 'DRAW' | 'ACT' | 'DISCARD' | 'KNOCK' | 'ROT_PICK' | 'GAME_OV
 export type EndReason = 'knock' | 'deck_exhaustion' | 'turn_limit' | 'strangle' | 'double_strangle';
 
 export type GameResult = {
-  /** null only for double_strangle */
+  /** null for a draw: double_strangle, or (Futasaku 0.4) equal score and equal strength */
   winner: Player | null;
   reason: EndReason;
   undercut?: boolean;
   scores: [number, number];
   /** kept-hand deadwood at the end, when defined */
   deadwood?: [number, number];
+  /** Futasaku 0.4: total strength of each side's tiles, given when it broke (or failed to break) a tied score */
+  strengths?: [number, number];
 };
 
 export type ResolutionSummary = {

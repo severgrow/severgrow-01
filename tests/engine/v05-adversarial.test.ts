@@ -18,7 +18,7 @@ const stateWith = (o: { tiles: Record<string, [Player, number]>; hand: [Suit | n
   const p = o.player ?? 0;
   const otherHand = pool.splice(0, g.config.handSize);
   const hands: [Card[], Card[]] = p === 0 ? [hand, otherHand] : [otherHand, hand];
-  return { ...g, board: f.board, terrain: f.terrain, hands, deck: pool, phase: 'ACT', turnPlayer: p, actor: p, ...o.patch };
+  return { ...g, board: f.board, terrain: f.terrain, hands, deck: pool, phase: 'ACT', turnPlayer: p, actor: p, startingPlayer: 0, ...o.patch };
 };
 const FRUIT: [null, number] = [null, 0];
 const fruitOf = (s: State) => s.hands[s.turnPlayer].find((c) => c.suit === null)!.id;

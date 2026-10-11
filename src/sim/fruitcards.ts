@@ -37,7 +37,8 @@ const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
 export const playFruitGame = (seed: number, aFirst: boolean, config: Partial<RulesConfig>, levels: [Level, Level] = [7, 7]): FruitRecord => {
   const seats: [Level, Level] = aFirst ? levels : [levels[1], levels[0]];
-  let s: State = newGame(seed, config);
+  // Simulations seat the starter at 0, so 'first player' figures and swapped starts stay exact.
+  let s: State = newGame(seed, { randomStarter: false, ...config });
   const max = s.config.maxRank;
   const rec: FruitRecord = {
     seed,

@@ -8,7 +8,8 @@ describe('sim: one game record', () => {
   const g = playGame(7, ['greedy', 'greedy']);
 
   it('is consistent with the game’s own events', () => {
-    const end = replay(7, g.actions);
+    // the simulation seats the starter at 0 (src/sim/run.ts); replay with the same setting
+    const end = replay(7, g.actions, { randomStarter: false });
     const h = end.history!;
     expect(g.result).toEqual(end.result);
     expect(g.turns).toBe(end.turnNumber);

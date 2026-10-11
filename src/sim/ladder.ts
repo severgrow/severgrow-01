@@ -16,7 +16,8 @@ export type PairResult = { a: Level; b: Level; games: number; aWins: number; dra
 /** Plays one game; returns the winner's level seat (0 = a) and some numbers. */
 export const playPair = (a: Level, b: Level, seed: number, aFirst: boolean) => {
   const levels: [Level, Level] = aFirst ? [a, b] : [b, a];
-  let s: State = newGame(seed);
+  // Simulations seat the starter at 0, so 'first player' figures and swapped starts stay exact.
+  let s: State = newGame(seed, { randomStarter: false });
   let moves = 0;
   while (s.phase !== 'GAME_OVER') {
     const level = levels[s.actor];
