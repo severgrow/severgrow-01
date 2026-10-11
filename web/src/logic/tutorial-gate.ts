@@ -37,19 +37,30 @@ export const allowedSelectorsForLesson = (
   targetSelector: string,
   mode: GateMode,
 ): GateAllow => {
-  if (mode === 'off') return { selectors: [] };
+  if (mode === 'off') return { selectors: [] as string[] };
   if (mode === 'busy' || !lesson) {
-    return { selectors: [...GATE_WINDOW_SELECTORS], windowOnly: true };
+    return { selectors: [...GATE_WINDOW_SELECTORS] as string[], windowOnly: true };
   }
-  if (lesson.action === 'Next' || lesson.focus === 'explainer') {
+  if (lesson.focus === 'explainer') {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, '#futasaku-glass [data-tut="next"]'],
+      selectors: [...GATE_WINDOW_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
+    };
+  }
+  // Look-and-tap Next steps (homes, buttons): glow the named target; tapping it advances.
+  if (lesson.action === 'Next' && targetSelector) {
+    return {
+      selectors: [...GATE_WINDOW_SELECTORS, targetSelector, '#futasaku-glass [data-tut="next"]'] as string[],
+    };
+  }
+  if (lesson.action === 'Next') {
+    return {
+      selectors: [...GATE_WINDOW_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
     };
   }
   if (lesson.action === 'FreeTurn' || lesson.focus === 'none') {
-    return { selectors: [...GATE_WINDOW_SELECTORS], windowOnly: true };
+    return { selectors: [...GATE_WINDOW_SELECTORS] as string[], windowOnly: true };
   }
-  const selectors = [...GATE_WINDOW_SELECTORS];
+  const selectors: string[] = [...GATE_WINDOW_SELECTORS];
   if (targetSelector) selectors.push(targetSelector);
   // Bloom paint: allow the bloom button and every receptive hex while painting.
   if (lesson.action === 'Bloom' || lesson.action === 'MegaBomb') {

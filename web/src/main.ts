@@ -235,6 +235,7 @@ let tutorialIdleTimer = 0;
 let tutorialPraiseTimer = 0;
 let tutorialStatus: string | null = null;
 let tutorialTargetSelector = '';
+let tutorialLookTapCleanup: (() => void) | null = null;
 let tutorialCompleted = new Set<number>();
 let log: string[] = [];
 let queue = new AnimQueue({});
@@ -862,6 +863,10 @@ async function mountPlayerEnhancements() {
       $('futa04-help-button').setAttribute('aria-expanded','false');
       $('futa04-help-button').focus();
     });
+    tutorialGate = mountTutorialGate({
+      onBlocked: onTutorialBlocked,
+      isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
+    });
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
@@ -1044,7 +1049,34 @@ function clearTutorialTimers() {
   clearTimeout(tutorialPraiseTimer);
   tutorialStatus = null;
   tutorialTargetSelector = '';
+  tutorialLookTapCleanup?.();
+  tutorialLookTapCleanup = null;
   glassSurface?.setIdleHard?.(false);
+}
+
+/** Look-and-tap Next steps: the glowing control advances the lesson without a real move. */
+function armTutorialLookTap(selector: string) {
+  tutorialLookTapCleanup?.();
+  tutorialLookTapCleanup = null;
+  if (!selector) return;
+  const onTap = (event: Event) => {
+    const el = event.target as Element | null;
+    if (!el || typeof el.closest !== 'function' || !el.closest(selector)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    tutorialLookTapCleanup?.();
+    tutorialLookTapCleanup = null;
+    tutorialNext();
+  };
+  for (const name of ['pointerdown', 'click', 'touchstart'] as const) {
+    document.addEventListener(name, onTap, { capture: true });
+  }
+  tutorialLookTapCleanup = () => {
+    for (const name of ['pointerdown', 'click', 'touchstart'] as const) {
+      document.removeEventListener(name, onTap, { capture: true } as EventListenerOptions);
+    }
+  };
 }
 
 function releaseTutorialLock() {
@@ -1115,6 +1147,12 @@ function startTutorial(chapter = 0) {
   save();
   announceTurn(HUMAN);
   syncTutorialGate();
+  // So the browser Back button can leave the lock without trapping the player.
+  try {
+    if (history.state?.futasakuTutorial !== true) {
+      history.pushState({ futasakuTutorial: true, chapter }, '', location.href);
+    }
+  } catch { /* ignore */ }
 }
 
 function completeTutorial() {
@@ -3385,10 +3423,9 @@ function renderTutorial() {
       : selected!==null && lesson.action==='PlayFruit' ? 'Choose their tile.'
       : selected!==null && lesson.action==='Sprout' ? 'Tap the lit tile.' : lesson.text);
   // One target only. Card-then-tile lessons light the card first, then the tile.
-  // Next / explainer steps light only the Next button.
   let selector='';
   let shape: 'hex' | 'card' | 'pill' | 'none' = 'none';
-  if (lesson.action==='Next' || lesson.focus==='explainer') {
+  if (lesson.focus==='explainer') {
     selector='#futasaku-glass [data-tut="next"]'; shape='pill';
   } else if (lesson.focus==='deck') { selector='#deck'; shape='pill'; }
   else if (lesson.focus==='discard') { selector='#discard'; shape='pill'; }
@@ -3402,7 +3439,10 @@ function renderTutorial() {
     if (card) { selector=`#hand .card[data-card="${card.id}"]`; shape='card'; }
   } else if (lesson.focus==='bloom') {
     if (selectingBloom) {
-      selector=lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board .hex-cell.target, #board .target';
+      // Point at the named hex (or the first legal paint hex), never the board centre.
+      selector = lesson.tile
+        ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`
+        : '#board .hex-cell.target';
       shape='hex';
     } else { selector='#smart-bloom-button'; shape='pill'; }
   } else if (lesson.focus==='home' && lesson.tile) {
@@ -3437,7 +3477,9 @@ function renderTutorial() {
         shape: 'none',
         chapterCount: TUTORIAL_CHAPTER_COUNT,
         reduceMotion: settings.reduceMotion,
-        status: tutorialStatus ?? (lesson.action === 'Opponent' ? instruction : undefined),
+        ...(tutorialStatus || lesson.action === 'Opponent'
+          ? { status: tutorialStatus ?? instruction }
+          : {}),
         buttons: { skip: true, chapters: true, exit: true, next: false, showMe: false },
         handlers: {
           onSkip: tutorialSkip,
@@ -3477,6 +3519,13 @@ function renderTutorial() {
         },
       });
       armTutorialIdle();
+      // Homes / buttons tour: glow the control; tap it to advance (not a real move).
+      if (lesson.action === 'Next' && selector && lesson.focus !== 'explainer') {
+        armTutorialLookTap(selector);
+      } else {
+        tutorialLookTapCleanup?.();
+        tutorialLookTapCleanup = null;
+      }
     }
     if (lesson.action==='FreeTurn' && !lockedBusy) {
       clearTimeout(tutorialFreeTimer);
@@ -5074,6 +5123,13 @@ document.addEventListener('keydown', (e) => {
   busy: () => busy(),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
+  /** tests: tutorial focus lock */
+  tutorialGate: () => tutorialGate ? {
+    active: tutorialGate.isActive(),
+    mode: tutorialGate.mode(),
+    allow: tutorialGate.allow(),
+  } : null,
+  exitTutorial: () => exitTutorial(),
 };
 
 await mountPlayerEnhancements();
@@ -5104,8 +5160,23 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('
   for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
-else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') startTutorial();
-else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
+else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
+  const chapterRaw = Number(params.get('chapter'));
+  const chapter = Number.isInteger(chapterRaw) && chapterRaw >= 1 && chapterRaw <= TUTORIAL_CHAPTER_COUNT
+    ? chapterRaw - 1
+    : 0;
+  startTutorial(chapter);
+} else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+
+window.addEventListener('popstate', () => {
+  if (coach.tutorial) exitTutorial();
+});
+window.addEventListener('error', () => {
+  if (coach.tutorial) tutorialGate?.clear();
+});
+window.addEventListener('pagehide', () => {
+  tutorialGate?.clear();
+});
 
 window.dispatchEvent(new Event('severor-ready'));

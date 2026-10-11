@@ -223,41 +223,41 @@ export const TUTORIAL = Object.freeze({
   replayTutorial: 'Replay tutorial',
   chapters: Object.freeze([
     Object.freeze({ id: 'goal', title: 'Your goal', lessons: Object.freeze([
-      Object.freeze({ instruction: 'This is your home.', why: 'Everything you own must stay joined to it.' }),
-      Object.freeze({ instruction: 'That is theirs.', why: 'Surround it to win.' }),
+      Object.freeze({ instruction: 'Tap your home.', why: 'Everything you own must stay joined to it.' }),
+      Object.freeze({ instruction: 'Tap their home.', why: 'Surround it to win.' }),
     ]) }),
     Object.freeze({ id: 'turn', title: 'Your turn', lessons: Object.freeze([
-      Object.freeze({ instruction: 'Draw a card.', why: 'Your hand needs cards to grow.' }),
+      Object.freeze({ instruction: 'Tap the draw pile.', why: 'Your hand needs cards to grow.' }),
     ]) }),
     Object.freeze({ id: 'bloom', title: 'Bloom', lessons: Object.freeze([
-      Object.freeze({ instruction: 'What can bloom?', why: 'A set or a run of three to six.' }),
+      Object.freeze({ instruction: 'Tap Next.', why: 'A set or a run of three to six.' }),
     ]) }),
     Object.freeze({ id: 'strengthen', title: 'Strengthen', lessons: Object.freeze([
-      Object.freeze({ instruction: 'A higher card makes it stronger.', why: 'Same spot, bigger number.' }),
+      Object.freeze({ instruction: 'Tap the glowing card.', why: 'A higher card makes it stronger.' }),
     ]) }),
     Object.freeze({ id: 'cut', title: 'Cut', lessons: Object.freeze([
-      Object.freeze({ instruction: 'Break this link.', why: 'Cut tiles wither.' }),
+      Object.freeze({ instruction: 'Tap the glowing card.', why: 'Break this link. Cut tiles wither.' }),
     ]) }),
     Object.freeze({ id: 'skip', title: 'Skip Grow', lessons: Object.freeze([
-      Object.freeze({ instruction: 'You can skip Grow.', why: 'Usually growing helps more.' }),
+      Object.freeze({ instruction: 'Tap End Grow.', why: 'You can skip Grow this turn.' }),
     ]) }),
     Object.freeze({ id: 'buttons', title: 'Buttons', lessons: Object.freeze([
-      Object.freeze({ instruction: 'What are these buttons?', why: 'Tap Next to meet each control.' }),
+      Object.freeze({ instruction: 'Tap Next.', why: 'Meet each control one by one.' }),
     ]) }),
     Object.freeze({ id: 'bomb', title: 'Bomb', lessons: Object.freeze([
-      Object.freeze({ instruction: 'A Bomb removes any enemy tile.', why: 'Even a 9. It uses your Grow.' }),
+      Object.freeze({ instruction: 'Tap the Bomb card.', why: 'Removes any enemy tile. Uses Grow.' }),
     ]) }),
     Object.freeze({ id: 'blast', title: 'Blast', lessons: Object.freeze([
-      Object.freeze({ instruction: 'Two Bombs make a Blast.', why: 'Clears the tile and its neighbours.' }),
+      Object.freeze({ instruction: 'Tap Blast.', why: 'Clears the tile and its neighbours.' }),
     ]) }),
     Object.freeze({ id: 'throw-pile', title: 'Throw pile', lessons: Object.freeze([
-      Object.freeze({ instruction: 'Throw pile can finish blooms.', why: 'Watch what they throw.' }),
+      Object.freeze({ instruction: 'Tap the throw pile.', why: 'It can finish blooms.' }),
     ]) }),
     Object.freeze({ id: 'win', title: 'How you win', lessons: Object.freeze([
-      Object.freeze({ instruction: 'How do I win?', why: 'Surround their home, or most tiles.' }),
+      Object.freeze({ instruction: 'Tap Next.', why: 'Surround their home, or most tiles.' }),
     ]) }),
     Object.freeze({ id: 'final', title: 'Final turn', lessons: Object.freeze([
-      Object.freeze({ instruction: 'No card left.', why: 'This turn begins at Grow.' }),
+      Object.freeze({ instruction: 'Tap End Grow.', why: 'No card left. Grow comes first.' }),
     ]) }),
     Object.freeze({ id: 'free', title: 'Your turn, free', lessons: Object.freeze([
       Object.freeze({ instruction: 'Your turn. No guide.' }),

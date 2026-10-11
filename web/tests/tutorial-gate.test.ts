@@ -68,7 +68,7 @@ const installDom = () => {
       return rootEl.contains(n);
     }
     if (sel.startsWith('[data-tut')) return n.attrs.has('data-tut');
-    if (sel.startsWith('.')) return n.className.split(/\s+/).includes(sel.slice(1));
+    if (sel.startsWith('.')) return (n.className ?? '').split(/\s+/).includes(sel.slice(1));
     return n.tag === sel;
   };
   const body = make('body');

@@ -70,88 +70,88 @@ const L = (
 });
 
 const lessons: TutorialLesson[][] = [
-  // 1 GOAL
+  // 1 GOAL — glow the home; tap it to advance (no real action).
   [
-    L('goal-mine', 'This is your home.', 'Everything you own must stay joined to it.', 'home', 'Next', { tile: { q: -2, r: 2 } }),
-    L('goal-theirs', 'That is theirs.', 'Surround it to win.', 'home', 'Next', { tile: { q: 2, r: -2 } }),
+    L('goal-mine', 'Tap your home.', 'Everything you own must stay joined to it.', 'home', 'Next', { tile: { q: -2, r: 2 } }),
+    L('goal-theirs', 'Tap their home.', 'Surround it to win.', 'home', 'Next', { tile: { q: 2, r: -2 } }),
   ],
   // 2 YOUR TURN
   [
-    L('draw', 'Draw a card.', 'Your hand needs cards to grow.', 'deck', 'Draw'),
-    L('grow', 'Grow one tile.', 'Spend one card next to your home.', 'tile', 'Sprout', { card: [0, 4], tile: { q: -1, r: 1 } }),
-    L('connection', 'Keep it joined.', 'Cut-off tiles wither and score nothing.', 'context', 'EndAct'),
-    L('throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard', { card: [1, 2] }),
-    L('opponent', 'Their turn.', 'They grow the same way you do.', 'none', 'Opponent'),
+    L('draw', 'Tap the draw pile.', 'Your hand needs cards to grow.', 'deck', 'Draw'),
+    L('grow', 'Tap the glowing card.', 'Then the lit tile by your home.', 'tile', 'Sprout', { card: [0, 4], tile: { q: -1, r: 1 } }),
+    L('connection', 'Tap End Grow.', 'Cut-off tiles wither and score nothing.', 'context', 'EndAct'),
+    L('throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard', { card: [1, 2] }),
+    L('opponent', 'Watch their turn.', 'They grow the same way you do.', 'none', 'Opponent'),
   ],
-  // 3 BLOOM (explainer + set + reseat run)
+  // 3 BLOOM
   [
-    L('bloom-explain', 'What can bloom?', 'A set or a run of three to six.', 'explainer', 'Next'),
-    L('bloom-set', 'Bloom 3 tiles.', 'Three same numbers, different suits.', 'bloom', 'Bloom'),
-    L('bloom-set-after', 'Each card keeps its number.', 'Stronger cards make stronger tiles.', 'context', 'EndAct'),
-    L('bloom-set-throw', 'Throw one card.', 'Clear a card you do not need.', 'card', 'Discard'),
-    L('bloom-run', 'Bloom a run.', 'Numbers in a row, one suit.', 'bloom', 'Bloom', { reseat: 'bloom-run' }),
-    L('bloom-run-after', 'Each card keeps its number.', 'The tiles match the cards you spent.', 'context', 'EndAct'),
-    L('bloom-run-throw', 'Throw one card.', 'Then their turn begins.', 'card', 'Discard'),
+    L('bloom-explain', 'Tap Next.', 'A set or a run of three to six.', 'explainer', 'Next'),
+    L('bloom-set', 'Tap Bloom.', 'Three same numbers, different suits.', 'bloom', 'Bloom'),
+    L('bloom-set-after', 'Tap End Grow.', 'Stronger cards make stronger tiles.', 'context', 'EndAct'),
+    L('bloom-set-throw', 'Tap the glowing card.', 'Clear a card you do not need.', 'card', 'Discard'),
+    L('bloom-run', 'Tap Bloom.', 'Numbers in a row, one suit.', 'bloom', 'Bloom', { reseat: 'bloom-run' }),
+    L('bloom-run-after', 'Tap End Grow.', 'The tiles match the cards you spent.', 'context', 'EndAct'),
+    L('bloom-run-throw', 'Tap the glowing card.', 'Then their turn begins.', 'card', 'Discard'),
   ],
   // 4 STRENGTHEN
   [
-    L('strength', 'A higher card makes it stronger.', 'Same spot, bigger number.', 'tile', 'Sprout', { card: [0, 8], tile: { q: -1, r: 1 } }),
-    L('strength-done', 'Now end Grow.', 'You already used your one Grow.', 'context', 'EndAct'),
-    L('strength-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('strength', 'Tap the glowing card.', 'A higher card makes it stronger.', 'tile', 'Sprout', { card: [0, 8], tile: { q: -1, r: 1 } }),
+    L('strength-done', 'Tap End Grow.', 'You already used your one Grow.', 'context', 'EndAct'),
+    L('strength-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
   // 5 CUT
   [
-    L('cut', 'Break this link.', 'Cut tiles wither.', 'tile', 'Sprout', { card: [0, 8], tile: { q: 1, r: -1 } }),
-    L('cut-after', 'Watch them wither.', 'Their score drops when tiles fall.', 'context', 'EndAct'),
-    L('cut-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('cut', 'Tap the glowing card.', 'Break this link. Cut tiles wither.', 'tile', 'Sprout', { card: [0, 8], tile: { q: 1, r: -1 } }),
+    L('cut-after', 'Tap End Grow.', 'Their score drops when tiles fall.', 'context', 'EndAct'),
+    L('cut-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
   // 6 SKIP GROW
   [
-    L('skip', 'You can skip Grow.', 'Usually growing helps more.', 'context', 'EndAct'),
-    L('skip-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('skip', 'Tap End Grow.', 'You can skip Grow this turn.', 'context', 'EndAct'),
+    L('skip-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
-  // 7 BUTTONS
+  // 7 BUTTONS — glow the named control; tap it to advance (no real action).
   [
-    L('btn-explain', 'What are these buttons?', 'Tap Next to meet each control.', 'explainer', 'Next'),
-    L('btn-deck', 'This is the draw pile.', 'Tap it on your Draw step.', 'button', 'Next', { button: 'deck' }),
-    L('btn-discard', 'This is the throw pile.', 'You may take its top card.', 'button', 'Next', { button: 'discard' }),
-    L('btn-sort', 'Sort tidies your hand.', 'Same numbers and suits line up.', 'button', 'Next', { button: 'sort' }),
-    L('btn-undo', 'Undo takes back your last move.', 'Only on your turn.', 'button', 'Next', { button: 'undo' }),
-    L('btn-turns', 'Turns left are counted here.', 'Thirty turns each, then score.', 'button', 'Next', { button: 'turns' }),
-    L('btn-score', 'Score and race live here.', 'Most tiles wins if time runs out.', 'button', 'Next', { button: 'score' }),
-    L('btn-menu', 'Menu pauses the match.', 'Settings and How to play live here.', 'button', 'Next', { button: 'menu' }),
-    L('btn-history', 'History shows past moves.', 'Public cards only — nothing hidden.', 'button', 'Next', { button: 'history' }),
-    L('btn-word', 'The on-map word is the step.', 'Draw, Grow, or Throw.', 'button', 'Next', { button: 'word' }),
+    L('btn-explain', 'Tap Next.', 'Meet each control one by one.', 'explainer', 'Next'),
+    L('btn-deck', 'Tap the draw pile.', 'You draw from here.', 'button', 'Next', { button: 'deck' }),
+    L('btn-discard', 'Tap the throw pile.', 'You may take its top card.', 'button', 'Next', { button: 'discard' }),
+    L('btn-sort', 'Tap Sort.', 'Same numbers and suits line up.', 'button', 'Next', { button: 'sort' }),
+    L('btn-undo', 'Tap Undo.', 'Takes back your last move.', 'button', 'Next', { button: 'undo' }),
+    L('btn-turns', 'Tap Turns.', 'Thirty turns each, then score.', 'button', 'Next', { button: 'turns' }),
+    L('btn-score', 'Tap Score.', 'Most tiles wins if time runs out.', 'button', 'Next', { button: 'score' }),
+    L('btn-menu', 'Tap Menu.', 'Settings and How to play live here.', 'button', 'Next', { button: 'menu' }),
+    L('btn-history', 'Tap History.', 'Public cards only — nothing hidden.', 'button', 'Next', { button: 'history' }),
+    L('btn-word', 'Tap the step word.', 'Draw, Grow, or Throw.', 'button', 'Next', { button: 'word' }),
   ],
   // 8 BOMB
   [
-    L('bomb', 'A Bomb removes any enemy tile.', 'Even a 9. It uses your Grow.', 'tile', 'PlayFruit', { tile: { q: 0, r: 0 } }),
-    L('bomb-after', 'Your home stays safe.', 'You must touch the target tile.', 'context', 'EndAct'),
-    L('bomb-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('bomb', 'Tap the Bomb card.', 'Removes any enemy tile. Uses Grow.', 'tile', 'PlayFruit', { tile: { q: 0, r: 0 } }),
+    L('bomb-after', 'Tap End Grow.', 'Your home stays safe.', 'context', 'EndAct'),
+    L('bomb-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
   // 9 BLAST
   [
-    L('mega', 'Two Bombs make a Blast.', 'Clears the tile and its neighbours.', 'bloom', 'MegaBomb', { tile: { q: 1, r: -1 } }),
-    L('mega-after', 'Homes are safe.', 'It does not use your Grow.', 'context', 'EndAct'),
-    L('mega-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('mega', 'Tap Blast.', 'Clears the tile and its neighbours.', 'bloom', 'MegaBomb', { tile: { q: 1, r: -1 } }),
+    L('mega-after', 'Tap End Grow.', 'Homes are safe. Not your Grow.', 'context', 'EndAct'),
+    L('mega-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
   // 10 THROW PILE
   [
-    L('discard-draw', 'Throw pile can finish blooms.', 'Watch what they throw.', 'discard', 'Draw'),
-    L('discard-bloom', 'Use what you saw.', 'Bloom with the card you took.', 'bloom', 'Bloom'),
-    L('discard-after', 'Watch the discard.', 'It often completes a set or run.', 'context', 'EndAct'),
-    L('discard-throw', 'Throw one card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('discard-draw', 'Tap the throw pile.', 'It can finish blooms.', 'discard', 'Draw'),
+    L('discard-bloom', 'Tap Bloom.', 'Use the card you took.', 'bloom', 'Bloom'),
+    L('discard-after', 'Tap End Grow.', 'Watch what they throw.', 'context', 'EndAct'),
+    L('discard-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
   ],
   // 11 HOW YOU WIN
   [
-    L('win-explain', 'How do I win?', 'Surround their home, or most tiles.', 'explainer', 'Next'),
-    L('win-place', 'Close the ring.', 'The last neighbour ends it.', 'tile', 'Sprout', { card: [0, 5], tile: { q: 2, r: -1 } }),
+    L('win-explain', 'Tap Next.', 'Surround their home, or most tiles.', 'explainer', 'Next'),
+    L('win-place', 'Tap the glowing card.', 'Close the ring to win.', 'tile', 'Sprout', { card: [0, 5], tile: { q: 2, r: -1 } }),
   ],
   // 12 FINAL TURN
   [
-    L('final', 'No card left.', 'This turn begins at Grow.', 'context', 'EndAct'),
-    L('final-throw', 'Both get a fair last turn.', 'Then the higher score wins.', 'card', 'Discard'),
-    L('final-opponent', 'Their last turn.', 'Same fair Grow-first turn.', 'none', 'Opponent'),
+    L('final', 'Tap End Grow.', 'No card left. Grow comes first.', 'context', 'EndAct'),
+    L('final-throw', 'Tap the glowing card.', 'Both get a fair last turn.', 'card', 'Discard'),
+    L('final-opponent', 'Watch their turn.', 'Same fair Grow-first turn.', 'none', 'Opponent'),
   ],
   // 13 FREE
   [
@@ -202,10 +202,13 @@ export const tutorialLesson = (chapter: number, step: number): TutorialLesson | 
 export const tutorialChapterId = (chapter: number): TutorialChapterId | null => TUTORIAL_CHAPTER_IDS[chapter] ?? null;
 
 export const resolveLessonTarget = (lesson: TutorialLesson, state: State): LessonTarget | null => {
-  if (lesson.focus === 'none' || lesson.action === 'FreeTurn') {
+  if (lesson.focus === 'none' || lesson.action === 'FreeTurn' || lesson.action === 'Opponent') {
     return { kind: 'none', selector: '', shape: 'none' };
   }
-  if (lesson.focus === 'explainer') return { kind: 'explainer', selector: '#futasaku-glass', shape: 'none' };
+  // Pure explainers: only the Next button.
+  if (lesson.focus === 'explainer') {
+    return { kind: 'explainer', selector: '#futasaku-glass [data-tut="next"]', shape: 'pill' };
+  }
   if (lesson.focus === 'deck') return { kind: 'deck', selector: '#deck', shape: 'pill' };
   if (lesson.focus === 'discard') return { kind: 'discard', selector: '#discard', shape: 'pill' };
   if (lesson.focus === 'context') return { kind: 'context', selector: '#smart-context', shape: 'pill' };
