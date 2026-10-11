@@ -35,9 +35,9 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 ## Original waiting entries
 
 ### Tutorial Pro overhaul (13 chapters, one glass window, focus layer)
-- Date: 2026-10-11 · Commits: `25a3185`, `b0534d2`, (this batch) · In test / `futa-test` only
-- Rebuilt tutorial teaching: 13 chapters (goal, turn, bloom set+run, strengthen, cut, skip, buttons, bomb, blast, throw pile, how you win with real Strangle, final turn, free), one Match Intel–style glass window, shaped glow + chunky pointer with RAF tracking, praise/wrong/idle feedback, chapter menu / skip / replay, bloom hand hints, copy fixes (no “15 moves”, Bloom 3–6).
-- Check before locking in: full Playwright run at 360/390/430/1280; Reduce motion + Sound off; old `{chapter,step}` saves migrate; glow sits on fan cards and hexes during camera moves; pointer never covers the window; Strangle finish in the win chapter; bundle growth under 40 KB.
+- Date: 2026-10-11 · Commits: `25a3185`, `b0534d2`, `1735bd4` (+ proof commit) · In test / `futa-test` only
+- Rebuilt tutorial teaching: 13 chapters (goal, turn, bloom set+run, strengthen, cut, skip, buttons, bomb, blast, throw pile, how you win with real Strangle, final turn, free), one Match Intel–style glass window, shaped glow + chunky pointer with RAF tracking, praise/wrong/idle feedback, chapter menu / skip / replay, bloom hand hints, copy fixes (no “15 moves”, Bloom 3–6). Screens in `docs/screens/tutorial/`.
+- Check before locking in: full Playwright run at 360/390/430/1280; Reduce motion + Sound off; old `{chapter,step}` saves migrate; glow sits on fan cards and hexes during camera moves; pointer never covers the window; Strangle finish in the win chapter; bundle growth under 40 KB (`glass-surface` chunk ~6.4 KB gzip).
 
 ### Typography v2: Besley (display) + Commissioner (UI), tabular numbers
 - Date: 2026-10-05 · Commit: `fc6a4ec` · In test only (replaces the Fraunces + Plus Jakarta Sans pick)

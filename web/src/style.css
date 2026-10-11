@@ -3563,6 +3563,16 @@ html[data-layout='side'] .dock-overlays {
   transition: box-shadow 200ms ease, opacity 200ms ease;
 }
 .reduce-motion .dock .hand-row > .hand .card.bloom-hint { transition: none; }
+/* Tutorial chapter picker — above the play screen, not inside the hidden menu. */
+#tutorial-chapter-menu {
+  position: fixed; inset: 12px; z-index: 60; overflow: auto; padding: 16px;
+  border-radius: 15px; border: 1px solid rgba(214, 204, 177, 0.18);
+  background: rgba(8, 10, 10, 0.92); color: #f0e9dc;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+}
+#tutorial-chapter-menu h2 { margin: 0 0 12px; font: 700 18px/1.2 Commissioner, system-ui, sans-serif; }
+#tutorial-chapter-menu .menu-btn { display: block; width: 100%; margin: 0 0 8px; min-height: 44px; text-align: left; }
 /* cards of one combo share a small bracket: a thicker, coloured bottom edge */
 .dock .hand-row > .hand .card[data-combo] {
   border-bottom: 3.5px solid var(--combo-c, var(--c-accent));

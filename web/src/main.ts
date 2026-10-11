@@ -1141,9 +1141,10 @@ function openTutorialChapters() {
     const done = tutorialCompleted.has(i) ? ' ✓' : '';
     return `<button type="button" class="menu-btn ghost" data-tutorial-chapter="${i}"><span class="vb-name">${title}${done}</span></button>`;
   }).join('');
-  const host = document.getElementById('menu') ?? document.body;
   const box = document.createElement('div');
   box.id = 'tutorial-chapter-menu';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', TUTORIAL.menuChapters);
   box.innerHTML = `<h2>${TUTORIAL.menuChapters}</h2>${rows}<button type="button" class="menu-btn ghost" id="tutorial-chapter-close">Close</button>`;
   box.querySelectorAll<HTMLButtonElement>('[data-tutorial-chapter]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1153,7 +1154,7 @@ function openTutorialChapters() {
     });
   });
   box.querySelector('#tutorial-chapter-close')?.addEventListener('click', () => box.remove());
-  host.append(box);
+  document.body.append(box);
 }
 
 function armTutorialIdle() {
