@@ -535,28 +535,8 @@ export class SkinBoardView extends BoardView {
   }
 
   protected override drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
-    if (IS_FUTA04) {
-      const defs = this.svg.querySelector('defs')!;
-      for (const s of o.scars) {
-        if (board[s.key] || !s.tile) continue;
-        const src = this.tileSource(s.key, s.tile);
-        if (!src || !this.assets.has(src)) continue;
-        const clipId = this.id(`last-round-${s.key.replace(',', '-')}`);
-        if (!defs.querySelector(`#${clipId}`)) {
-          const clip = el('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' }, defs);
-          el('path', { d: hexPath(s.key, S, 'flat') }, clip);
-        }
-        const { x, y } = centerOf(s.key);
-        const size = S * 2.07;
-        const axis = toScreen(1, 0);
-        const turn = Math.atan2(axis.y, axis.x) * 180 / Math.PI;
-        const group = el('g', { class: 'last-round-art', 'data-key': s.key, opacity: .2, 'clip-path': `url(#${clipId})` }, scars);
-        el('image', { href: this.assets.url(src), x: x - size / 2, y: y - size / 2, width: size, height: size,
-          class: 'skin-tile-art', preserveAspectRatio: 'none',
-          ...(turn ? { transform: `rotate(${turn.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})` } : {}) }, group);
-      }
-      return;
-    }
+    // Futa04: cut-off tiles leave no remnant art — only live joined tiles remain.
+    if (IS_FUTA04) return;
     // with dead-wood sprites (props.dead): the empty ground and one burnt stump or log per lost hex
     const dead = this.propDefs.dead ?? [];
     for (const s of o.scars) {

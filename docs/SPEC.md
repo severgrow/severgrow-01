@@ -39,7 +39,7 @@ Each turn is **Draw → Grow → Throw**.
 
 1. **Draw** — take the top deck card or the top of the throw pile.
 2. **Grow** — place tiles. You get **one** ordinary Grow (or Strengthen, or single Bomb). **Bloom** and **Blast** are **extra** and do not use that one Grow. You may Bloom / Blast any number of times in any order with the Grow.
-3. **Throw** — discard one card. The turn then ends (Rot / Knock are off by default).
+3. **Throw** — discard one card. Any card in hand may be thrown, including a card just taken from the throw pile. The turn then ends (Rot / Knock are off by default).
 
 **Grow (one tile):** spend one numbered card to claim an empty hex next to your network, or replace a weaker enemy non-home tile, or Strengthen one of your own non-root tiles with a strictly higher card. Strengthening uses the same one-Grow allowance.
 
@@ -93,6 +93,14 @@ Config flag: `strengthTiebreak` (default on). Parked leftover-card / Knock paths
 ## Engine constraints
 
 `src/engine/` is pure and deterministic: no `Math.random`, no I/O, no timers. Randomness uses seeded `mulberry32` / `deriveSeed` streams only.
+
+---
+
+## Board size
+
+Product / normal Play uses **board radius 3** (37 hexes).
+
+**Tutorial exception (confirmed):** the guided tutorial uses **board radius 2** (19 hexes — one ring smaller, same hex shape). Normal games are unchanged. See `TUTORIAL_BOARD_RADIUS` in `web/src/logic/tutorial-script.ts`.
 
 ---
 

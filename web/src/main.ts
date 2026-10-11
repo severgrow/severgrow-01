@@ -1832,17 +1832,22 @@ function settleStep(s: Step, animated: boolean) {
   outcomeSteps.delete(s);
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
-    const former = removedTiles.get(s);
-    const keys = s.k === 'megaBomb' ? s.destroyed : s.keys;
-    for (const key of keys) {
-      const tile = former?.get(key);
-      if (!tile && s.k !== 'sever') continue;
-      scars = scars.filter(x => x.key !== key);
-      scars.push({ key, owner: tile?.owner ?? (s.k === 'remove' ? HUMAN : s.player), age: 0, ...(tile ? { tile } : {}) });
+    // Futa04: cut-off tiles leave no scar / remnant art — board shows live tiles only.
+    if (!IS_FUTA04) {
+      const former = removedTiles.get(s);
+      const keys = s.k === 'megaBomb' ? s.destroyed : s.keys;
+      for (const key of keys) {
+        const tile = former?.get(key);
+        if (!tile && s.k !== 'sever') continue;
+        scars = scars.filter(x => x.key !== key);
+        scars.push({ key, owner: tile?.owner ?? (s.k === 'remove' ? HUMAN : s.player), age: 0, ...(tile ? { tile } : {}) });
+      }
+    } else {
+      scars = [];
     }
     removedTiles.delete(s);
   }
-  if (s.k === 'turn') scars = scars.map((x) => ({ ...x, age: x.age + 1 })).filter((x) => x.age <= 1);
+  if (s.k === 'turn' && !IS_FUTA04) scars = scars.map((x) => ({ ...x, age: x.age + 1 })).filter((x) => x.age <= 1);
   if (s.k === 'sync') {
     if (animated) countScores(s.scores);
     else shownScores = [s.scores[HUMAN], s.scores[BOT]];
@@ -2501,8 +2506,8 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
     anim(tileEl, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: EASE.out, transformOrigin: 'center' } as KeyframeAnimationOptions);
     if (plan.motes) drift(t.key, t.at + t.dur * 0.5, f, plan.motes);
   }
-  // after the wave: a faint scar on the cut edge for ~400ms, then it is gone
-  if (plan.scar) at(Math.max(0, ...plan.tiles.map((t) => t.at + t.dur)), () => scar(c.keys, f));
+  // after the wave: a faint scar on the cut edge for ~400ms (not on Futa04 — no leftovers)
+  if (plan.scar && !IS_FUTA04) at(Math.max(0, ...plan.tiles.map((t) => t.at + t.dur)), () => scar(c.keys, f));
   await wait(plan.total, my);
   quietAmbient(false);
 }
@@ -2598,8 +2603,9 @@ function render() {
   renderHud();
   const combo = drawCombo();
   if (!combo && (draw.shape.length || draw.desk.phase === 'live' || draw.msg)) draw = { ...DRAW0 };
-  // exactly one place for this line or clump: show it ready, with Confirm (nothing to draw)
-  if (combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle' && !draw.redraw) {
+  // Classic only: a unique placement is shown ready with Confirm. Futa04 always paints —
+  // never pre-plant / pre-fill the bloom when the recipe is entered.
+  if (!IS_FUTA04 && combo && !session.pending && !draw.shape.length && draw.desk.phase === 'idle' && !draw.redraw) {
     const only = onlyPlacement(combo);
     if (only) session.preset(only);
   }
@@ -3223,7 +3229,7 @@ function renderBoard(v: View, advice: Advice | null) {
     // overhaul item 7: before drawing only the starts; while drawing only what can come next
     const drawn = draw.shape.length ? draw.shape : draw.desk.phase === 'live' ? [draw.desk.start] : [];
     if (dc && !pending) {
-      const targets = drawNext(dc, drawn);
+      const targets = drawNext(dc, drawn, draw.reverse);
       if (IS_FUTA04 && drawn.length === 1) for (const key of bloomEndpoints(dc, drawn[0]!, draw.reverse)) targets.add(key);
       o = { ...o, targets, selectedHex: null, coachHexes: [] };
     }
@@ -3338,7 +3344,7 @@ function renderTooltip(v: View) {
   let html: string;
   if (terrain === 'rock') html = `<b>${name} · Rock</b><span>Nothing can grow here.</span>`;
   else if (!t) {
-    const scar = scars.find((s) => s.key === key);
+    const scar = IS_FUTA04 ? undefined : scars.find((s) => s.key === key);
     const cut = scar ? `<span class="muted">${scar.owner === HUMAN ? 'Your' : OPP.Label} tile here was cut off ${scar.age === 0 ? 'this turn' : scar.age === 1 ? 'a turn ago' : 'two turns ago'}.</span>` : '';
     html = `<b>${name} · Empty${gold ? ' gold hex' : ''}</b><span>A tile here scores ${gold ? 2 : 1}.</span>${cut}`;
   }
@@ -4340,10 +4346,9 @@ function bloomReverseForCard(combo: Combo, cardId: number | null): boolean {
 }
 
 /**
- * Enter a Bloom recipe. In normal play, plant the natural first tile (unique start, or
- * closest to home) so the next tap continues. Tutorial Pro guided bloom leaves the shape
- * empty — the player must tap the first hex themselves (then draw / endpoint / 1-by-1).
- * When `cardId` is the high end of a run, paint highest-first so that card is tile one.
+ * Enter a Bloom recipe. Futa04 never pre-plants: empty shape + lit legal starts; the player
+ * places the first tile (then draw / endpoint / 1-by-1). Classic still plants the natural
+ * first hex. When `cardId` is the high end of a run, paint highest-first so that card is tile one.
  */
 function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   if (!session || !kind.startsWith('bloom-') || kind.startsWith('bloom-mega-')) return false;
@@ -4357,8 +4362,8 @@ function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   draw = { ...DRAW0, reverse };
   board.ghost(null);
   if (!combo) return true;
-  // Guided tutorial: no convenience auto-plant — first hex is player-initiated.
-  if (coach.tutorial && !tutorialFreePlayActive()) return true;
+  // Futa04: recipe entry leaves an empty shape; starts light via drawNext([], …).
+  if (IS_FUTA04) return true;
   const start = naturalBloomStart(combo, board.rootKey(HUMAN), reverse);
   if (start) {
     const planted = paintEnter(combo, [], start, reverse);
@@ -5121,10 +5126,11 @@ const dragLayer = mountDragLayer({
     const groups = bloomKindsForCard(cardId);
     if (groups.length === 1) {
       beginBloomKind(groups[0]!.kind, cardId);
-      // Drop on a specific start hex wins over the natural default.
+      // Drag-drop onto a legal start is the player's first tile (not an auto-plant).
       const combo = comboFor(session.view, session.legal, session.sel);
-      if (combo && key && drawStarts(combo, false).has(key)) {
-        draw = { ...DRAW0, shape: paintEnter(combo, [], key, false) };
+      const reverse = draw.reverse;
+      if (combo && key && drawStarts(combo, reverse).has(key)) {
+        draw = { ...DRAW0, reverse, shape: paintEnter(combo, [], key, reverse) };
       }
     } else {
       session.sel = { card: cardId, hex: null, kind: null, option: 0 };

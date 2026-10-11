@@ -14,7 +14,7 @@ describe('DEFAULT_CONFIG', () => {
       knockGivesFinalTurn: true,
       rotThreshold: 20,
       rotStep: 8,
-      forbidRedundantDiscard: true,
+      forbidRedundantDiscard: false,
       bloomMustTouchNetwork: true, // v0.7
       rootsScore: false,
       maxRank: 9,

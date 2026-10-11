@@ -80,8 +80,20 @@ describe('bot levels: adversarial', () => {
   const at = (pred: (s: State) => boolean): State => positions(3000).find(pred)!;
 
   it('ADVERSARIAL 1: when the only legal move is a discard, every level discards', () => {
-    const s = at((x) => x.phase === 'DISCARD' && legalActions(viewFor(x, x.actor)).length === 1);
-    for (const l of LEVELS) expect(chooseLevelAction(viewFor(s, s.actor), l, 7)).toEqual(legalActions(viewFor(s, s.actor))[0]);
+    // Build a one-card throw: with every card throwable, multi-card hands rarely have a
+    // single legal discard, so searching random games can miss / burn CI time.
+    const base = newGame(1);
+    const card = base.hands[0][0]!;
+    const s: State = {
+      ...base,
+      phase: 'DISCARD',
+      actor: 0,
+      turnPlayer: 0,
+      hands: [[card], base.hands[1]],
+    };
+    const only = legalActions(viewFor(s, 0));
+    expect(only).toEqual([{ t: 'Discard', card: card.id }]);
+    for (const l of LEVELS) expect(chooseLevelAction(viewFor(s, 0), l, 7)).toEqual(only[0]);
   });
 
   it('ADVERSARIAL 2: a bot with an empty hand ends its turn at every level', () => {

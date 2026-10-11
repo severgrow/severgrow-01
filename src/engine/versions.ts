@@ -11,10 +11,11 @@ export const CURRENT_RULES_VERSION = 'futasaku0.4-strength-draw';
 
 /** Accepted rules for deterministic replay and existing game tickets. */
 export const RULES_VERSIONS: Readonly<Record<string, Readonly<RulesConfig>>> = Object.freeze({
-  [PREVIOUS_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthenLimitPerGame: 2, deckFinalTurns:false, expandedBloom:false, strengthTiebreak:false }),
-  [PREVIOUS_03_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, deckFinalTurns:false, expandedBloom:false, strengthTiebreak:false }),
-  [PREVIOUS_MEGA_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, expandedBloom:false, strengthTiebreak:false }),
-  [PREVIOUS_BLOOM_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthTiebreak:false }),
+  // Archived versions keep the old throw-pile loophole block; 0.4 defaults allow any throw.
+  [PREVIOUS_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthenLimitPerGame: 2, deckFinalTurns:false, expandedBloom:false, strengthTiebreak:false, forbidRedundantDiscard:true }),
+  [PREVIOUS_03_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, deckFinalTurns:false, expandedBloom:false, strengthTiebreak:false, forbidRedundantDiscard:true }),
+  [PREVIOUS_MEGA_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, expandedBloom:false, strengthTiebreak:false, forbidRedundantDiscard:true }),
+  [PREVIOUS_BLOOM_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG, strengthTiebreak:false, forbidRedundantDiscard:true }),
   [CURRENT_RULES_VERSION]: Object.freeze({ ...DEFAULT_CONFIG }),
 });
 

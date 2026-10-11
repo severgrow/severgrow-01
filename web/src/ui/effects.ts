@@ -234,13 +234,14 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(a, c, ms + 60);
   };
 
-  /** After a cut wave: the removed hexes' edges linger faintly, then go (about 400ms). */
+  /** After a cut wave: the removed hexes' edges linger faintly, then go (about 400ms).
+   *  Futa04 skips this — cut tiles must leave no remnant outline. */
   const scar = (keys: readonly string[], f: number) => {
-    if (motion() === 0 || keys.length === 0) return;
+    if (IS_FUTA04 || motion() === 0 || keys.length === 0) return;
     const g = el('g', { class: 'fx-scar' }, board.fx);
     for (const key of keys) el('path', { d: board.hexPath(key, S - 1.6), class: 'fx-scar-edge' }, g);
-    const ms = (IS_FUTA04 ? 480 : 400) * Math.max(f, 0.5);
-    removeAfter(anim(g, [{ opacity: IS_FUTA04 ? 0.38 : 0.3 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), g, ms + 40);
+    const ms = 400 * Math.max(f, 0.5);
+    removeAfter(anim(g, [{ opacity: 0.3 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), g, ms + 40);
   };
   /** Fruit: spore puffs stream from each given-up tile to the target. */
   const stream = (from: readonly string[], to: string, f: number, n: number) => {

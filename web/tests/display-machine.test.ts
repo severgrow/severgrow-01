@@ -211,6 +211,26 @@ describe('match display state', () => {
     vi.advanceTimersByTime(1100);
     expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
   });
+
+  it('replaces a SKIP hint with THROW! after the 1s dwell — never leaves SKIP on throw', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 3, 1);
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    // Cockpit used to flash SKIP when the skip control appeared after a grow.
+    sign.hint('SKIP');
+    expect(frames.at(-1)?.text).toBe('SKIP');
+    // EndAct → throw while SKIP is still holding.
+    sign.phase('THROW!');
+    expect(frames.at(-1)?.text).toBe('SKIP'); // 1s dwell respected
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)?.text === 'THROW!' || frames.at(-1)?.text === 'THROW').toBe(true);
+    // Must not return to SKIP after THROW has landed.
+    const afterThrow = frames.findIndex(f => f.text === 'THROW!' || f.text === 'THROW');
+    expect(afterThrow).toBeGreaterThanOrEqual(0);
+    vi.advanceTimersByTime(5000);
+    expect(frames.slice(afterThrow).every(f => f.text !== 'SKIP' && f.text !== 'SKIP?')).toBe(true);
+  });
 });
 
 it('keeps compact readouts legible at full dot size', () => {

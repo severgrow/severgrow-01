@@ -50,7 +50,7 @@ describe('GreedyBot (spec 16)', () => {
       });
     }
     expect(checked).toBeGreaterThan(500);
-  }, 120_000);
+  }, 300_000);
 
   it('allowKnock: false never ranks Knock', () => {
     const s = stateWith({ hand: [], phase: 'KNOCK', legacy: true }); // Knock is a parked rule

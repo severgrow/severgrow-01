@@ -261,7 +261,7 @@ const lessons: TutorialLesson[][] = [
     L('free-recap', 'REMEMBER', 'Hold 8s and 9s. Bloom sets or suit runs on Grow.', 'explainer', 'Next', {
       delayNextMs: 1800, cta: 'NEXT',
     }),
-    L('free', 'FREE PLAY', 'Your turn. The bulb shows what to do.', 'none', 'FreeTurn'),
+    L('free', 'PLAY', 'Your turn. The bulb shows what to do.', 'none', 'FreeTurn'),
   ],
 ];
 
@@ -289,6 +289,17 @@ const bloomRunSpec: ChapterSpec = {
 };
 
 export const TUTORIAL_CHAPTER_COUNT = baseSpecs.length;
+
+/**
+ * Tutorial-only map: one ring smaller than the product board (radius 2 → 19 hexes;
+ * normal Play stays at DEFAULT_CONFIG.boardRadius 3 → 37 hexes). Same hex shape.
+ */
+export const TUTORIAL_BOARD_RADIUS = 2;
+const TUTORIAL_OPENING = Object.freeze({
+  boardRadius: TUTORIAL_BOARD_RADIUS,
+  rockCount: 0,
+  richCount: 1,
+});
 
 export const tutorialLessons = (chapter: number): readonly TutorialLesson[] => lessons[chapter] ?? [];
 export const tutorialLesson = (chapter: number, step: number): TutorialLesson | null => lessons[chapter]?.[step] ?? null;
@@ -387,7 +398,7 @@ export const tutorialChapter = (chapter: number, variant?: string): State => {
   let spec = baseSpecs[chapter];
   if (!spec) throw new RangeError(`Unknown tutorial chapter ${chapter}`);
   if (variant === 'bloom-run' || (chapter === 2 && variant === 'bloom-run')) spec = bloomRunSpec;
-  const opening = newGame(spec.seed, { rockCount: 0, richCount: 1 });
+  const opening = newGame(spec.seed, TUTORIAL_OPENING);
   const pool = createCards(opening.config);
   const take = ([suit, rank]: CardSpec): Card => {
     const index = pool.findIndex(card => card.suit === suit && card.rank === rank);

@@ -122,8 +122,9 @@ try {
   const bloomAction = legalActions(viewFor(beforeBloom,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === cards.join(',') && hexDistance(action.hexes[0]!,action.hexes.at(-1)!)>1);
   check(!!bloomAction && bloomAction.t === 'Bloom','Bloom: selected set has a legal board route');
   if (bloomAction?.t === 'Bloom') {
-    // Recipe pick plants a natural first tile — clear it so the classic endpoint pair is tested.
-    await page.locator('#moves .draw-clear').evaluate(el=>(el as HTMLButtonElement).click()).catch(()=>{});
+    // Recipe pick leaves an empty shape + lit starts; player plants the first tile, then endpoint.
+    check(await page.locator('#board .target.kind-bloom').count()>=1,'Bloom: recipe pick lights legal starts without pre-planting');
+    check(await page.locator('#board .l-draw .ghost-tile').count()===0,'Bloom: no ghost tile until the player places one');
     for (const coord of [bloomAction.hexes[0]!,bloomAction.hexes.at(-1)!]) {
       const point = await hexCenter(page,`${coord.q},${coord.r}`);
       await page.touchscreen.tap(point.x,point.y);
@@ -236,11 +237,14 @@ try {
   const kind=await painted.locator('#moves [data-kind^="bloom-"]').first().getAttribute('data-kind');
   check(!!kind,'Bloom: a Bloom recipe is offered while painting');
   await painted.evaluate(k=>(window as any).__severgrow.pickKind(k),kind);
-  // Recipe pick plants the natural first tile — that ghost is the painted hex under test.
-  await painted.waitForFunction(()=>document.querySelector('#board .l-draw .ghost-tile'));
+  // Recipe pick lights starts only — player places the first painted hex.
   await painted.locator('#board .target.kind-bloom').first().waitFor();
-  const startKey=await painted.locator('#board .l-draw .ghost').first().getAttribute('data-key');
-  check(!!startKey,'Bloom: recipe pick plants the first tile');
+  check(await painted.locator('#board .l-draw .ghost-tile').count()===0,'Bloom: recipe pick does not pre-plant a ghost');
+  const startKey=await painted.locator('#board .target.kind-bloom').first().getAttribute('data-key');
+  check(!!startKey,'Bloom: recipe pick lights a legal start');
+  const startPt=await hexCenter(painted,startKey!);
+  await painted.touchscreen.tap(startPt.x,startPt.y);
+  await painted.waitForFunction(()=>document.querySelector('#board .l-draw .ghost-tile'));
   await painted.locator('#board .l-draw .ghost').first().evaluate(el=>el.setAttribute('data-probe','first'));
   const drawn=await painted.locator('#board .l-draw .ghost-tile').first().getAttribute('d');
   // After the first tile is planted, wells are the *next* hexes — compare flat geometry + ink family.

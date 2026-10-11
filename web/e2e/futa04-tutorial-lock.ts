@@ -118,6 +118,38 @@ try {
     assert.equal(await hashState(page), beforeFuzz, 'fuzz taps must not change state');
     assert.equal(errors.length, 0, `console errors: ${errors.join('; ')}`);
 
+    // Focus dim must punch real pixel holes (userSpaceOnUse), keep a cream ring, and
+    // keep #hud-menu above the glass sheet — not crushed under a foreignObject filter.
+    const focusOk = await page.evaluate(() => {
+      const focus = document.getElementById('tutorial-focus');
+      const glass = document.getElementById('futasaku-glass');
+      const menu = document.getElementById('hud-menu');
+      const mask = focus?.querySelector('mask');
+      const hole = focus?.querySelector('.focus-hole');
+      const glow = focus?.querySelector('.focus-glow');
+      if (!focus || !glass || !menu || !mask || !hole || !glow) return { ok: false, why: 'missing' };
+      const hw = parseFloat(hole.getAttribute('width') || '0');
+      const hh = parseFloat(hole.getAttribute('height') || '0');
+      const mz = Number.parseInt(getComputedStyle(menu).zIndex, 10) || 0;
+      const hz = Number.parseInt(getComputedStyle(document.querySelector('.game > .hud')!).zIndex, 10) || 0;
+      const gz = Number.parseInt(getComputedStyle(glass).zIndex, 10) || 0;
+      const stroke = getComputedStyle(glow).stroke;
+      return {
+        ok: true,
+        maskUnits: mask.getAttribute('maskUnits'),
+        hasForeign: !!focus.querySelector('foreignObject'),
+        holeSize: hw * hh,
+        menuAboveGlass: Math.max(mz, hz) > gz,
+        creamRing: stroke !== 'none' && stroke !== 'rgba(0, 0, 0, 0)',
+      };
+    });
+    assert.equal(focusOk.ok, true, 'tutorial focus scene present');
+    assert.equal(focusOk.maskUnits, 'userSpaceOnUse', 'cutout mask uses screen pixels');
+    assert.equal(focusOk.hasForeign, false, 'no foreignObject backdrop crush');
+    assert.ok((focusOk.holeSize as number) > 2000, `focus hole must be sized, got ${focusOk.holeSize}`);
+    assert.equal(focusOk.menuAboveGlass, true, '#hud-menu / hud must sit above #futasaku-glass');
+    assert.equal(focusOk.creamRing, true, 'focus glow keeps a cream ring stroke');
+
     // Shot of the draw step with dim + glow + pointer, then prove the real target works.
     await page.screenshot({ path: path.join(SHOT_DIR, 'chapter-02-draw.png') });
     await page.locator('#deck').click({ force: true });

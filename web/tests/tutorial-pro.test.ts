@@ -1,11 +1,12 @@
 // Pro tutorial overhaul: behaviour locked by tests first (they fail until each phase lands).
 import { describe, expect, it } from 'vitest';
-import { apply, createCards, homeCoord, legalActions, viewFor } from '../../src/engine/index.js';
+import { apply, boardCoords, createCards, homeCoord, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import {
   BLAST, BLOOM, FRUIT, GAME_TITLE, HOME, TUTORIAL, WELCOME,
 } from '../../src/strings.js';
 import {
+  TUTORIAL_BOARD_RADIUS,
   TUTORIAL_CHAPTER_COUNT,
   TUTORIAL_CHAPTER_IDS,
   migrateTutorialProgress,
@@ -35,6 +36,15 @@ describe('tutorial pro: chapter shape', () => {
       'goal', 'turn', 'bloom', 'strengthen', 'cut', 'skip', 'buttons',
       'bomb', 'blast', 'throw-pile', 'win', 'final', 'free',
     ]);
+  });
+
+  it('uses a one-ring-smaller board than normal Play (radius 2 → 19 hexes)', () => {
+    expect(TUTORIAL_BOARD_RADIUS).toBe(2);
+    for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT; chapter++) {
+      const state = tutorialChapter(chapter);
+      expect(state.config.boardRadius, `chapter ${chapter}`).toBe(2);
+      expect(boardCoords(state.config)).toHaveLength(19);
+    }
   });
 
   it('every lesson has exactly one resolvable target; a named card finds exactly one card', () => {

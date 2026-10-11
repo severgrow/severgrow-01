@@ -152,27 +152,30 @@ const CSS = `
   opacity:0; transition: opacity 240ms ease; }
 #tutorial-focus[data-on='1'] { opacity:1; }
 #tutorial-focus[data-fade='out'] { opacity:0; transition: opacity 160ms ease; }
-/* Menu stays crisp and above the focus dim for the whole tutorial (incl. free play). */
-html.futa04-tutorial .game > .hud {
-  position: relative;
-  z-index: 50;
+/* HUD (esp. #hud-menu) must sit above focus dim (34) AND the glass sheet (40).
+   Branding keeps .hud position:fixed at z-index 7 — raise the whole bar so the
+   menu icon is never covered by the tutorial card. Logo is pointer-events:none.
+   Pause scrim/sheets climb above the menu so the sheet still owns the modal layer. */
+html.futa04-tutorial .game > .hud,
+html.futa04-tutorial.futa04-branding.slim-hud .game > .hud {
+  z-index: 45;
 }
 html.futa04-tutorial #hud-menu {
   position: relative;
-  z-index: 51;
+  z-index: 46;
   opacity: 1 !important;
   filter: none !important;
   pointer-events: auto !important;
   visibility: visible !important;
 }
-#tutorial-focus .focus-dim { fill:rgba(0,0,0,.70); }
-#tutorial-focus .focus-dim-html { width:100%; height:100%; margin:0; background:rgba(0,0,0,.28);
-  backdrop-filter:grayscale(0.9) brightness(0.45); -webkit-backdrop-filter:grayscale(0.9) brightness(0.45); }
-@supports ((backdrop-filter:grayscale(0.9) brightness(0.45)) or (-webkit-backdrop-filter:grayscale(0.9) brightness(0.45))) {
-  #tutorial-focus .focus-dim { fill:rgba(0,0,0,.42); }
-}
-#tutorial-focus .focus-glow { fill:none; stroke:none; }
-#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.18); stroke:none; filter:drop-shadow(0 0 14px rgba(233,216,173,.5)); }
+html.futa04-tutorial #scrim { z-index: 50; }
+html.futa04-tutorial .sheet { z-index: 51; }
+/* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
+   and the grayscale+brightness crush leaves the board nearly black). */
+#tutorial-focus .focus-dim { fill:rgba(0,0,0,.38); }
+#tutorial-focus .focus-glow { fill:none; stroke:#e9d8ad; stroke-width:2.2;
+  filter:drop-shadow(0 0 10px rgba(233,216,173,.75)); }
+#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.16); stroke:none; filter:drop-shadow(0 0 14px rgba(233,216,173,.45)); }
 #tutorial-focus .focus-lift { transform-box:fill-box; transform-origin:center; }
 #tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.8s ease-in-out infinite; }
 /* Satisfying settle after the highlight target changes (one-shot; pauses idle pulse). */
@@ -590,18 +593,44 @@ export const mountGlassSurface = (onClose: () => void) => {
     el.setAttribute('rx', rx.toFixed(1));
   };
 
+  /** Pixel cutouts need userSpaceOnUse — default objectBoundingBox ignores screen coords
+   *  so the hole never punches and the whole board stays crushed. */
+  const cutoutMask = (holes: string) =>
+    `<defs><mask id="tutorial-cutouts" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">`
+    + `<rect x="0" y="0" width="100%" height="100%" fill="white"/>`
+    + holes
+    + `</mask></defs>`
+    + `<rect class="focus-dim" width="100%" height="100%" mask="url(#tutorial-cutouts)"/>`;
+
   const ensureTrackedScene = () => {
     if (focusScene === 'tracked') return;
-    focus.innerHTML = `<defs><mask id="tutorial-cutouts">`
-      + `<rect width="100%" height="100%" fill="white"/>`
-      + `<rect class="focus-hole" fill="black"/>`
-      + `<rect class="focus-menu-hole" fill="black"/>`
-      + `</mask></defs>`
-      + `<foreignObject width="100%" height="100%" mask="url(#tutorial-cutouts)"><div xmlns="http://www.w3.org/1999/xhtml" class="focus-dim-html"></div></foreignObject>`
-      + `<rect class="focus-dim" width="100%" height="100%" mask="url(#tutorial-cutouts)"/>`
+    focus.innerHTML = cutoutMask(
+      `<rect class="focus-hole" fill="black"/>`
+      + `<rect class="focus-menu-hole" fill="black"/>`,
+    )
       + `<g class="focus-lift"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
       + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
     focusScene = 'tracked';
+  };
+
+  const syncMenuHole = () => {
+    const menuEl = focus.querySelector('.focus-menu-hole');
+    const menu = document.getElementById('hud-menu');
+    const menuRect = menu ? rectOf(menu) : null;
+    if (menuEl && menuRect && menuRect.width > 0 && menuRect.height > 0) {
+      const padM = 6;
+      const w = menuRect.width + padM * 2;
+      const h = menuRect.height + padM * 2;
+      menuEl.setAttribute('x', (menuRect.left - padM).toFixed(1));
+      menuEl.setAttribute('y', (menuRect.top - padM).toFixed(1));
+      menuEl.setAttribute('width', w.toFixed(1));
+      menuEl.setAttribute('height', h.toFixed(1));
+      menuEl.setAttribute('rx', Math.min(10, Math.min(w, h) * 0.22).toFixed(1));
+      menuEl.removeAttribute('hidden');
+    } else if (menuEl) {
+      menuEl.setAttribute('width', '0');
+      menuEl.setAttribute('height', '0');
+    }
   };
 
   const paintFocus = (tracked: Tracked | null) => {
@@ -623,26 +652,10 @@ export const mountGlassSurface = (onClose: () => void) => {
         return;
       }
       if (focusScene !== 'menu') {
-        focus.innerHTML = `<defs><mask id="tutorial-cutouts"><rect width="100%" height="100%" fill="white"/>`
-          + `<rect class="focus-menu-hole" fill="black"/></mask></defs>`
-          + `<foreignObject width="100%" height="100%" mask="url(#tutorial-cutouts)"><div xmlns="http://www.w3.org/1999/xhtml" class="focus-dim-html"></div></foreignObject>`
-          + `<rect class="focus-dim" width="100%" height="100%" mask="url(#tutorial-cutouts)"/>`;
+        focus.innerHTML = cutoutMask(`<rect class="focus-menu-hole" fill="black"/>`);
         focusScene = 'menu';
       }
-      const menuEl = focus.querySelector('.focus-menu-hole');
-      const menu = document.getElementById('hud-menu');
-      if (menuEl && menu) {
-        const r = rectOf(menu);
-        const padM = 6;
-        const w = r.width + padM * 2;
-        const h = r.height + padM * 2;
-        menuEl.setAttribute('x', (r.left - padM).toFixed(1));
-        menuEl.setAttribute('y', (r.top - padM).toFixed(1));
-        menuEl.setAttribute('width', w.toFixed(1));
-        menuEl.setAttribute('height', h.toFixed(1));
-        menuEl.setAttribute('rx', Math.min(10, Math.min(w, h) * 0.22).toFixed(1));
-        menuEl.removeAttribute('hidden');
-      }
+      syncMenuHole();
       focus.dataset.pointer = '0';
       return;
     }
@@ -650,22 +663,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
-    const menuEl = focus.querySelector('.focus-menu-hole');
-    const menu = document.getElementById('hud-menu');
-    const menuRect = menu ? rectOf(menu) : null;
-    if (menuEl && menuRect && menuRect.width > 0 && menuRect.height > 0) {
-      const padM = 6;
-      const w = menuRect.width + padM * 2;
-      const h = menuRect.height + padM * 2;
-      menuEl.setAttribute('x', (menuRect.left - padM).toFixed(1));
-      menuEl.setAttribute('y', (menuRect.top - padM).toFixed(1));
-      menuEl.setAttribute('width', w.toFixed(1));
-      menuEl.setAttribute('height', h.toFixed(1));
-      menuEl.setAttribute('rx', Math.min(10, Math.min(w, h) * 0.22).toFixed(1));
-    } else if (menuEl) {
-      menuEl.setAttribute('width', '0');
-      menuEl.setAttribute('height', '0');
-    }
+    syncMenuHole();
     const panelRect = panel.getBoundingClientRect();
     const pose = pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
@@ -790,7 +788,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     const actions = [
       b.previous ? `<button type="button" data-tut="previous">Previous</button>` : '',
       b.next ? `<button type="button" data-tut="next" class="${b.nextBlink ? 'glass-blink' : ''}">${safe(nextLabel)}</button>` : '',
-      b.playReal ? `<button type="button" data-tut="play">Play a real game</button>` : '',
+      b.playReal ? `<button type="button" data-tut="play">Play</button>` : '',
     ].filter(Boolean).join('');
     const shell = panel.querySelector('.glass-tutorial');
     const canPatch = !!opts.keepShell && !!shell && ledTitle === line

@@ -204,7 +204,7 @@ export const TUTORIAL = Object.freeze({
     'Keep joined, cut theirs.',
     'Surround their home to win',
   ]),
-  playReal: 'Play a real game',
+  playReal: 'Play',
   replayChapter: 'Replay a chapter',
   praise: Object.freeze(['Clean.', 'Nice.', 'There it is.', 'Easy.'] as const),
   wrong: Object.freeze([
@@ -262,9 +262,9 @@ export const TUTORIAL = Object.freeze({
     Object.freeze({ id: 'final', title: 'Final turn', lessons: Object.freeze([
       Object.freeze({ instruction: 'FINAL TURN', why: 'Last round: no cards left. This turn starts at Grow.' }),
     ]) }),
-    Object.freeze({ id: 'free', title: 'Your turn, free', lessons: Object.freeze([
+    Object.freeze({ id: 'free', title: 'Play', lessons: Object.freeze([
       Object.freeze({ instruction: 'REMEMBER', why: 'Hold 8s and 9s. Bloom sets or suit runs on Grow.' }),
-      Object.freeze({ instruction: 'FREE PLAY', why: 'Your turn. The bulb shows what to do.' }),
+      Object.freeze({ instruction: 'PLAY', why: 'Your turn. The bulb shows what to do.' }),
     ]) }),
   ]),
   winHow: Object.freeze({

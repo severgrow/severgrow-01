@@ -535,16 +535,11 @@ export class BoardView {
     }
   }
 
-  /** What cut-off tiles leave (empty hexes). */
+  /** What cut-off tiles leave (empty hexes). Futa04: none — cut tiles vanish completely. */
   protected drawScars(board: Record<string, Tile | null>, o: Overlay, scars: SVGGElement) {
+    if (IS_FUTA04) return;
     for (const s of o.scars) {
       if (board[s.key]) continue;
-      if (IS_FUTA04) {
-        const g = el('g', { class: 'last-round-art', 'data-key': s.key, opacity: .2 }, scars);
-        this.drawTile(g, s.key, s.tile ?? { owner: s.owner, strength: 1, root: false }, this.config.maxRank);
-        g.querySelectorAll('.seed-stone,.gold-frame,.tile-num,.num-plate').forEach(node => node.remove());
-        continue;
-      }
       // what a cut-off tile leaves: dried moss (mine) or burnt-out ash (the bot's), fading over two turns
       const g = el('g', { class: `scar-g age-${Math.min(2, s.age ?? 0)}` }, scars);
       drawMaterial(materialFor({ owner: s.owner }, 'normal'), 'scar', this.ctx(g, s.key));

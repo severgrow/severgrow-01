@@ -243,9 +243,18 @@ describe('legalActions (spec 5, 13, 14.13)', () => {
       { t: 'Discard', card: 50 },
       { t: 'Discard', card: 60 },
     ]);
-    // The forbidden redundant copy is skipped in favour of its twin.
+    // Futasaku 0.4: the card just taken stays throwable (dedupe still uses the lowest id).
     const r: State = { ...s, drawnFromDiscard: 50 };
     expect(legalActions(viewFor(r, 0))).toEqual([
+      { t: 'Discard', card: 50 },
+      { t: 'Discard', card: 60 },
+    ]);
+    // Classic loophole flag still skips the taken id in favour of its twin.
+    const classic: State = {
+      ...r,
+      config: { ...r.config, forbidRedundantDiscard: true },
+    };
+    expect(legalActions(viewFor(classic, 0))).toEqual([
       { t: 'Discard', card: 51 },
       { t: 'Discard', card: 60 },
     ]);

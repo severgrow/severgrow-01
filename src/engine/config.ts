@@ -15,7 +15,8 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   knockGivesFinalTurn: true,
   rotThreshold: 20,
   rotStep: 8,
-  forbidRedundantDiscard: true,
+  // Futasaku 0.4: any hand card may be thrown, including one just taken from the throw pile.
+  forbidRedundantDiscard: false,
   bloomMustTouchNetwork: true,
   rootsScore: false,
   maxRank: 9,

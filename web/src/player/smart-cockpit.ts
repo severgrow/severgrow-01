@@ -137,6 +137,47 @@ html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 
   60% { filter:brightness(1.4) contrast(1.06); }
   80% { filter:none; }
 }
+/* Display frame + neighbouring button frames pulse in the same beat/color as the LED. */
+html.futa04-information #smart-panel.led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  animation:smart-chrome-pulse 500ms ease-in-out 1;
+}
+html.futa04-information #smart-panel.led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  animation:smart-chrome-alarm 1200ms ease-in-out infinite;
+}
+html.futa04-information #smart-panel[data-led-mode='amber'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='score'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='ivory'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(255,195,104,.55); --chrome-hot:rgba(246,207,137,.32);
+}
+html.futa04-information #smart-panel[data-led-mode='red'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='red'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(234,68,48,.62); --chrome-hot:rgba(255,120,90,.38);
+}
+html.futa04-information #smart-panel[data-led-mode='green'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='green'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(143,210,111,.55); --chrome-hot:rgba(169,216,134,.34);
+}
+html.futa04-information #smart-panel[data-led-mode='amber'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='score'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='ivory'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel:not([data-led-mode]).led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(255,195,104,.58); --chrome-hot:rgba(246,207,137,.36);
+}
+@keyframes smart-chrome-pulse {
+  0%,100% { filter:none; }
+  50% { filter:brightness(1.18) drop-shadow(0 0 3px var(--chrome-glow,rgba(255,195,104,.55))); }
+}
+@keyframes smart-chrome-alarm {
+  0%,100% { filter:none; }
+  20% { filter:brightness(1.28) drop-shadow(0 0 4px var(--chrome-glow,rgba(255,195,104,.58))); }
+  40% { filter:none; }
+  60% { filter:brightness(1.22) drop-shadow(0 0 3px var(--chrome-hot,rgba(246,207,137,.36))); }
+  80% { filter:none; }
+}
+html.futa04-information.reduce-motion #smart-panel:is(.led-pulse,.led-alarm) :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before { animation:none; }
+@media (prefers-reduced-motion:reduce) {
+  html.futa04-information #smart-panel:is(.led-pulse,.led-alarm) :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before { animation:none; }
+}
 @keyframes idle-urgency-draw {
   0%,100% { box-shadow:0 0 0 1px rgba(239,234,220,.40),0 0 4px 1px rgba(242,237,224,.12) !important; }
   50% { box-shadow:0 0 0 1px rgba(239,234,220,.88),0 0 12px 2px rgba(242,237,224,.42) !important; }
@@ -145,9 +186,17 @@ html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 
   0%,100% { filter:brightness(1); opacity:1; }
   50% { filter:brightness(1.22); opacity:.88; }
 }
+/* Keep the throw hand's scale breathe (futa04-card-breathe) while the LED alarms —
+   idle must not replace body pulse with a glow-only cue. */
 @keyframes idle-urgency-throw {
-  0%,100% { box-shadow:0 0 0 1px rgba(222,110,83,.35),0 0 4px 1px rgba(190,68,47,.28),0 5px 12px rgba(20,11,10,.28); }
-  50% { box-shadow:0 0 0 1px rgba(255,120,90,.85),0 0 12px 2px rgba(220,70,45,.62),0 5px 14px rgba(20,11,10,.40); }
+  0%,100% {
+    scale:1;
+    box-shadow:0 0 0 1px rgba(222,110,83,.35),0 0 4px 1px rgba(190,68,47,.28),0 5px 12px rgba(20,11,10,.28);
+  }
+  50% {
+    scale:1.055;
+    box-shadow:0 0 0 1px rgba(255,120,90,.85),0 0 12px 2px rgba(220,70,45,.62),0 5px 14px rgba(20,11,10,.40);
+  }
 }
 /* Matching board cues while the LED holds the sticky idle re-prompt. */
 html.futa04-information.idle-urgency[data-step='draw'] :is(#deck,#discard).ready .pile-card {
@@ -160,7 +209,7 @@ html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]
 html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]) #smart-bloom-button .futa04-combination {
   animation:idle-urgency-grow 1200ms ease-in-out infinite;
 }
-html.futa04-information.idle-urgency[data-step='throw'] #hand:not(.waiting) .card {
+html.futa04-information.idle-urgency[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   animation:idle-urgency-throw 1200ms ease-in-out infinite;
 }
 html.futa04-information.reduce-motion.idle-urgency :is(#deck,#discard).ready .pile-card,
@@ -185,22 +234,71 @@ html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm
 @media (prefers-reduced-motion:reduce) {
   html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
 }
-/* A faint optical spill from the actual LED pixels reaches the two keys below it. */
+/* Optical spill under the LED readout. Kept as a panel sibling (z above the keys)
+   so it can wash the two buttons below; geometry stays mostly under the display. */
 html.futa04-information #smart-led-spill {
-  position:absolute; left:-38px; top:calc(var(--control-size) - 17px);
-  width:calc(2 * var(--control-size) + var(--control-gap) + 76px);
-  height:calc(var(--control-size) + var(--control-gap) + 42px);
-  overflow:visible; pointer-events:none; z-index:7;
-  opacity:.31; mix-blend-mode:screen;
-  -webkit-mask-image:radial-gradient(ellipse 69% 66% at 50% 19%,#000 8%,rgba(0,0,0,.55) 57%,transparent 100%);
-  mask-image:radial-gradient(ellipse 69% 66% at 50% 19%,#000 8%,rgba(0,0,0,.55) 57%,transparent 100%);
+  --spill-opacity:.34;
+  position:absolute;
+  /* Tiny bleed past the display's left; most light stays under columns 1–2. */
+  left:-5px; top:calc(var(--control-size) - 15px);
+  width:calc(2 * var(--control-size) + var(--control-gap) + 18px);
+  height:calc(var(--control-size) + var(--control-gap) + 38px);
+  overflow:hidden; pointer-events:none; z-index:7;
+  opacity:var(--spill-opacity); mix-blend-mode:screen;
+  /* Soft falloff on every edge — left fades before the box rim (no hard cut). */
+  -webkit-mask-image:
+    linear-gradient(90deg,transparent 0%,#000 12%,#000 78%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 16%,#000 64%,transparent 100%);
+  -webkit-mask-composite:source-in;
+  mask-image:
+    linear-gradient(90deg,transparent 0%,#000 12%,#000 78%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 16%,#000 64%,transparent 100%);
+  mask-composite:intersect;
+}
+/* Ambient wash tracks LED ink even between canvas paints / step flips. */
+html.futa04-information #smart-led-spill::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(ellipse 62% 58% at 46% 20%,var(--spill-ink,rgba(255,195,104,.42)) 0%,transparent 74%);
 }
 html.futa04-information #smart-led-spill-cells {
-  display:block; position:absolute; left:46px; top:18px; height:26px;
-  filter:blur(13px) brightness(1.4); scale:1.2 2.1; transform-origin:top;
+  display:block; position:absolute; left:11px; top:16px; height:26px;
+  filter:blur(11px) brightness(1.32); scale:1.06 1.9; transform-origin:top center;
 }
 html.futa04-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
-html.futa04-information #smart-led[data-mode='red'] #smart-led-spill { opacity:.42; }
+/* Mode lives on #smart-panel (spill is not a child of #smart-led). */
+html.futa04-information #smart-panel[data-led-mode='amber'] #smart-led-spill,
+html.futa04-information #smart-panel[data-led-mode='score'] #smart-led-spill,
+html.futa04-information #smart-panel[data-led-mode='ivory'] #smart-led-spill {
+  --spill-opacity:.34; --spill-ink:rgba(255,195,104,.42);
+}
+html.futa04-information #smart-panel[data-led-mode='green'] #smart-led-spill {
+  --spill-opacity:.36; --spill-ink:rgba(143,210,111,.44);
+}
+html.futa04-information #smart-panel[data-led-mode='red'] #smart-led-spill {
+  --spill-opacity:.46; --spill-ink:rgba(234,68,48,.52);
+}
+/* Spill breathes with the LED — never drops out when idle urgency / step pulse starts. */
+html.futa04-information #smart-panel.led-pulse #smart-led-spill {
+  animation:smart-spill-pulse 500ms ease-in-out 1;
+}
+html.futa04-information #smart-panel.led-alarm #smart-led-spill {
+  animation:smart-spill-alarm 1200ms ease-in-out infinite;
+}
+@keyframes smart-spill-pulse {
+  0%,100% { opacity:var(--spill-opacity,.34); }
+  50% { opacity:calc(var(--spill-opacity,.34) * 1.55); }
+}
+@keyframes smart-spill-alarm {
+  0%,100% { opacity:var(--spill-opacity,.34); }
+  20% { opacity:calc(var(--spill-opacity,.34) * 1.7); }
+  40% { opacity:var(--spill-opacity,.34); }
+  60% { opacity:calc(var(--spill-opacity,.34) * 1.55); }
+  80% { opacity:var(--spill-opacity,.34); }
+}
+html.futa04-information.reduce-motion #smart-panel:is(.led-pulse,.led-alarm) #smart-led-spill { animation:none; }
+@media (prefers-reduced-motion:reduce) {
+  html.futa04-information #smart-panel:is(.led-pulse,.led-alarm) #smart-led-spill { animation:none; }
+}
 /* On a wide desktop the cockpit and its piles grow as one instrument. Phone
    controls retain their exact existing footprint. */
 @media (min-width:1500px) {
@@ -515,8 +613,14 @@ export function mountSmartCockpit() {
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-    windowEl.classList.toggle('led-pulse',!!frame.pulse && !frame.alarm && !reduceNow());
-    windowEl.classList.toggle('led-alarm',!!frame.alarm && !reduceNow());
+    const pulsing = !!frame.pulse && !frame.alarm && !reduceNow();
+    const alarming = !!frame.alarm && !reduceNow();
+    windowEl.classList.toggle('led-pulse', pulsing);
+    windowEl.classList.toggle('led-alarm', alarming);
+    // Frame + button metal edges share the LED beat and ink color.
+    panel.classList.toggle('led-pulse', pulsing);
+    panel.classList.toggle('led-alarm', alarming);
+    panel.dataset.ledMode = mode;
     // Same flag drives LED alarm + board cue blinks (piles / hand / bloom).
     document.documentElement.classList.toggle('idle-urgency', !!frame.alarm);
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
@@ -713,10 +817,11 @@ export function mountSmartCockpit() {
     current = next;
     if (key !== signature) { close(); signature = key; renderSelector(); }
     const first = current[0];
+    // Never hint SKIP — phaseMessage already owns SKIP?/THROW!/GROW!, and a SKIP hint
+    // was lingering into the throw step after EndAct.
     if (lastPhase === phase && lastAction && first?.key !== lastAction) {
       const hint = first?.icon === 'clear' ? 'CLEAR' : first?.icon === 'reverse' ? 'FLIP'
-        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM'
-        : first?.source.id === 'tool-skip' ? 'SKIP' : '';
+        : first?.icon === 'cancel' ? 'CANCEL' : first?.icon === 'bloom' ? 'BLOOM' : '';
       if (hint) machine.hint(hint);
     }
     if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});

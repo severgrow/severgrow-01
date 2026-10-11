@@ -254,12 +254,11 @@ describe('DISCARD and the redundant-discard loophole (14.11)', () => {
     illegal(makeState({ phase: 'DISCARD' }), { t: 'Discard', card: 99999 }, 'CARD_NOT_IN_HAND');
   });
 
-  it('discarding the card just taken from the discard pile is illegal', () => {
+  it('discarding the card just taken from the discard pile is allowed (Futasaku 0.4)', () => {
     const s = act(makeState({}), { t: 'Draw', from: 'discard' });
     const taken = s.drawnFromDiscard!;
     const d = act(s, { t: 'EndAct' });
-    illegal(d, { t: 'Discard', card: taken }, 'REDUNDANT_DISCARD');
-    expect(act(d, { t: 'Discard', card: d.hands[0][0]!.id }).phase).toBe('KNOCK');
+    expect(act(d, { t: 'Discard', card: taken }).phase).toBe('KNOCK');
   });
 
   it('allowed when the card was drawn from the deck', () => {
@@ -267,10 +266,10 @@ describe('DISCARD and the redundant-discard loophole (14.11)', () => {
     expect(act(s, { t: 'Discard', card: s.hands[0].at(-1)!.id }).phase).toBe('KNOCK');
   });
 
-  it('allowed when forbidRedundantDiscard is off', () => {
-    const s = act(makeState({ config: { forbidRedundantDiscard: false } }), { t: 'Draw', from: 'discard' });
+  it('still blocked when forbidRedundantDiscard is on', () => {
+    const s = act(makeState({ config: { forbidRedundantDiscard: true } }), { t: 'Draw', from: 'discard' });
     const d = act(s, { t: 'EndAct' });
-    expect(act(d, { t: 'Discard', card: s.drawnFromDiscard! }).phase).toBe('KNOCK');
+    illegal(d, { t: 'Discard', card: s.drawnFromDiscard! }, 'REDUNDANT_DISCARD');
   });
 
   it('melding the taken card away then discarding another is fine', () => {

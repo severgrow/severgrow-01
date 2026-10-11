@@ -18,6 +18,15 @@ export const DISPLAY_MIN_DWELL_MS = 1000;
 
 const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
 
+/** Step / skip cues that must never linger after the turn moves on (incl. hint "SKIP"). */
+const STEP_CUE = /^(DRAW|GROW|THROW|BLOOM|SKIP)\??!?$/;
+
+const normStep = (text: string) => text.replace(/[!?]+$/, '');
+
+/** True when `shown` is an old step cue that `next` should replace. */
+const isObsoleteStepCue = (shown: string, next: string) =>
+  STEP_CUE.test(shown) && STEP_CUE.test(next) && normStep(shown) !== normStep(next);
+
 /** Identity for dwell: same text/motif may keep blinking; a different key must wait. */
 const messageKey = (frame: DisplayFrame) => (frame.motif ? `\0motif:${frame.motif}` : frame.text);
 
@@ -141,10 +150,42 @@ export class DisplayMachine {
     if (!this.active && !this.urgency && !this.frame.pulse && !this.frame.alarm) this.rest();
   }
   phase(text: string) {
-    if (text === this.instruction) return;
+    if (text === this.instruction && !isObsoleteStepCue(this.frame.text, text)
+      && !(this.active && isObsoleteStepCue(this.active.message, text))) {
+      return;
+    }
     this.instruction = text;
-    if (STEP_WORDS.has(text) && text !== 'WAIT') this.announceStep(text);
+    if (STEP_WORDS.has(text) && text !== 'WAIT') this.supersedeStep(text);
     else this.interact();
+  }
+
+  /**
+   * Move to a new step word. Respect the 1s dwell on whatever is showing, but drop
+   * obsolete SKIP/GROW/DRAW cues from the queue/active slot so THROW! (etc.) is next.
+   */
+  private supersedeStep(text: string) {
+    if (this.held) return;
+    this.queue = this.queue.filter((frame) => !isObsoleteStepCue(frame.text, text));
+    this.pendingStep = null;
+    this.urgency = false;
+    this.clearUrgencyPaint();
+    // Stale step/skip hint or announcement: cancel its hold timer and queue the new word.
+    if (this.active && isObsoleteStepCue(this.active.message, text)) {
+      this.clearTimers();
+      this.active = null;
+      this.announceStep(text);
+      return;
+    }
+    if (this.active) {
+      this.pendingStep = text;
+      return;
+    }
+    // Idle urgency / leftover face still showing an old step word.
+    if (isObsoleteStepCue(this.frame.text, text)) {
+      this.announceStep(text);
+      return;
+    }
+    this.announceStep(text);
   }
   private clearTimers() {
     window.clearTimeout(this.timer);
@@ -271,7 +312,8 @@ export class DisplayMachine {
     if (this.pendingStep) {
       const next = this.pendingStep;
       this.pendingStep = null;
-      this.rest();
+      // Play-fact → step: brief score beat. Step/skip → step: queue the new cue directly.
+      if (!STEP_CUE.test(this.frame.text)) this.rest();
       this.announceStep(next);
       return;
     }

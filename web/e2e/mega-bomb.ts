@@ -59,13 +59,10 @@ try {
     await page.mouse.click(centre.x,centre.y);
     await page.waitForFunction(() => (window as any).__severgrow.state().board['-1,2'] === null);
     const after=await page.evaluate(() => (window as any).__severgrow.state() as State);
-    await page.waitForFunction(() => document.querySelectorAll('#board .last-round-art').length >= 6);
-    const faded = await page.locator('#board .last-round-art').evaluateAll(nodes=>nodes.every(node=>
-      node.getAttribute('opacity')==='0.2' &&
-      !node.querySelector('.seed-stone') &&
-      !(window as any).__severgrow.state().board[node.getAttribute('data-key')||'']));
-    assert(faded,'removed enemy tiles show their former artwork faintly only on empty hexes');
-    if (width<600) await page.screenshot({path:'/tmp/futasaku-default-last-round.png'});
+    // Futa04: cut/blast tiles leave no scar / last-round remnant — empty hexes only.
+    await page.waitForFunction(() => document.querySelectorAll('#board .last-round-art, #board .scar-g, #board .fx-scar').length === 0);
+    assert.equal(await page.locator('#board .last-round-art').count(), 0, 'removed enemy tiles leave no remnant art');
+    if (width<600) await page.screenshot({path:'/tmp/futasaku-default-no-scar.png'});
     assert.deepEqual(after.hands[0].map(c=>c.id),game.hands[0].filter(c=>c.id!==1000&&c.id!==1001).map(c=>c.id));
     assert.deepEqual(after.lastResolution?.megaBomb?.cards,[1000,1001]);
     assert.equal(errors.length,0,errors.join(' | '));

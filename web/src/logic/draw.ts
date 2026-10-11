@@ -283,8 +283,9 @@ export const paintEnter = (c: Combo, shape: readonly string[], key: string, reve
 
 /**
  * Where a paint drag begins: a legal start hex always becomes the sole first tile (replacing
- * any auto-planted natural start), so dragging across that planted hex cannot backtrack the
- * path away. A non-start down-hex still extends the existing shape when legal.
+ * any prior first hex — including a classic auto-planted natural start), so dragging across
+ * that hex cannot backtrack the path away. Empty Futa04 entry + a start under the finger
+ * plants tile one here. A non-start down-hex still extends the existing shape when legal.
  */
 export const paintDragBegin = (
   c: Combo,

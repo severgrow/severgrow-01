@@ -320,9 +320,10 @@ describe('edge cases (v0.4)', () => {
     const d = act(m, { t: 'EndAct' });
     expect(legalActions(viewFor(d, 0))).toEqual([{ t: 'Discard', card: taken.id }]);
     expect(act(d, { t: 'Discard', card: taken.id }).turnPlayer).toBe(1);
-    // With another card still in hand, the old rule applies.
+    // Futasaku 0.4: with another card still in hand, the taken card remains throwable.
     const two = makeState({ phase: 'DISCARD', hands: [[taken, c(1, 2)], junk(7)], patch: { drawnFromDiscard: taken.id } });
-    illegal(two, { t: 'Discard', card: taken.id }, 'REDUNDANT_DISCARD');
+    expect(legalActions(viewFor(two, 0)).some((a) => a.t === 'Discard' && a.card === taken.id)).toBe(true);
+    expect(act(two, { t: 'Discard', card: taken.id }).turnPlayer).toBe(1);
   });
 
   it('(c) the game ends right after the turn whose refill came up short; equal score and strength is a draw', () => {
