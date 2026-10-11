@@ -22,7 +22,6 @@ export type TutorialWindowHandlers = {
   onReplayChapter?: () => void;
 };
 export type TutorialFocusOptions = {
-  gentle?: boolean;
   arrow?: boolean;
   why?: string;
   shape?: FocusShape;
@@ -101,7 +100,11 @@ const CSS = `
 #tutorial-focus[data-on='1'] { opacity:1; }
 #tutorial-focus[data-fade='out'] { opacity:0; transition: opacity 120ms ease; }
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.70); }
-#tutorial-focus .focus-dim-filter { backdrop-filter:grayscale(0.9) brightness(0.45); -webkit-backdrop-filter:grayscale(0.9) brightness(0.45); }
+#tutorial-focus .focus-dim-html { width:100%; height:100%; margin:0; background:rgba(0,0,0,.28);
+  backdrop-filter:grayscale(0.9) brightness(0.45); -webkit-backdrop-filter:grayscale(0.9) brightness(0.45); }
+@supports ((backdrop-filter:grayscale(0.9) brightness(0.45)) or (-webkit-backdrop-filter:grayscale(0.9) brightness(0.45))) {
+  #tutorial-focus .focus-dim { fill:rgba(0,0,0,.42); }
+}
 #tutorial-focus .focus-glow { fill:none; stroke:#e9d8ad; stroke-width:2; filter:drop-shadow(0 0 10px rgba(233,216,173,.75)); transform-box:fill-box; transform-origin:center; }
 #tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.12); stroke:none; }
 #tutorial-focus[data-pulse='1'] .focus-glow { animation:tutorial-glow-pulse 1.4s ease-in-out infinite; }
@@ -327,6 +330,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     }
     focus.dataset.pointer = pose ? '1' : '0';
     focus.innerHTML = `<defs><mask id="tutorial-cutouts"><rect width="100%" height="100%" fill="white"/>${tracked.hole}</mask></defs>`
+      + `<foreignObject width="100%" height="100%" mask="url(#tutorial-cutouts)"><div xmlns="http://www.w3.org/1999/xhtml" class="focus-dim-html"></div></foreignObject>`
       + `<rect class="focus-dim" width="100%" height="100%" mask="url(#tutorial-cutouts)"/>`
       + `<g class="focus-lift">${tracked.soft}${tracked.ring}</g>${ripples}${hand}`;
   };
