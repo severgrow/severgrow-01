@@ -148,7 +148,7 @@ try {
     assert(new Set(reduced.m.tileDelays).size <= 1, `Reduce motion: no stagger (${JSON.stringify(reduced.m.tileDelays)})`);
   } finally { await reduced.p.close(); }
 
-  // ---- Mega Bomb: its own disappearance, not a cut, and under 700ms ----
+  // ---- Blast: its own disappearance, not a cut, and under 700ms ----
   {
     const bombBase = newGame(3107);
     const target = { q: -1, r: 2 };
@@ -157,7 +157,7 @@ try {
     const bombState: State = { ...bombBase, phase: 'ACT', actor: 0, turnPlayer: 0, board: blastBoard,
       hands: [[{ id: 1000, suit: null, rank: 0 }, { id: 1001, suit: null, rank: 0 }, ...bombBase.hands[0].slice(0, 5)] as Card[], bombBase.hands[1]] };
     const action = legalActions(viewFor(bombState, 0)).find((a): a is Extract<Action, { t: 'MegaBomb' }> => a.t === 'MegaBomb' && coordKey(a.target) === coordKey(target));
-    assert(action, 'a Mega Bomb is legal on the fixture');
+    assert(action, 'a Blast is legal on the fixture');
     const p = await openSaved(390, 844, positionSave({ state: bombState }), { sound: false, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false });
     try {
       await p.evaluate(() => { delete document.documentElement.dataset.cutTier; });
@@ -169,10 +169,10 @@ try {
       const ms = Date.now() - t0;
       const tier = await p.evaluate(() => document.documentElement.dataset.cutTier ?? null);
       const m = (await readMotion(p)) as Recorded;
-      assert.equal(tier, null, 'a Mega Bomb never runs the cut plan');
-      assert(ms < 700, `a Mega Bomb disappears in under 700ms (${ms}ms)`);
-      assert(m.darks >= 1, 'the Mega Bomb has one dark pulse');
-      assert(m.sparks === 0, 'the Mega Bomb adds no sparks');
+      assert.equal(tier, null, 'a Blast never runs the cut plan');
+      assert(ms < 700, `a Blast disappears in under 700ms (${ms}ms)`);
+      assert(m.darks >= 1, 'the Blast has one dark pulse');
+      assert(m.sparks === 0, 'the Blast adds no sparks');
       assert(m.motes >= 1, 'each destroyed tile leaves one ash mote');
     } finally { await p.close(); }
   }
@@ -189,7 +189,7 @@ try {
   assert.equal(await menu.locator('#level-grid button svg,#level-grid button .lt-note').count(),0,'difficulty choices are names only');
   await menu.screenshot({path:'/tmp/futasaku-03-difficulty.png'});
   await menuCtx.close();
-  console.log('Futasaku 0.4 motion checks passed: Draw/Throw, Bloom, Small/Huge cut, Reduce motion and the Mega Bomb');
+  console.log('Futasaku 0.4 motion checks passed: Draw/Throw, Bloom, Small/Huge cut, Reduce motion and the Blast');
 } finally {
   await page.close(); await browser.close(); await server.close();
 }

@@ -876,24 +876,23 @@ function checkOverlap(v: View) {
   }
 }
 
-function startGame(seed: number, level: Level = settings.level) {
+/** `draw`: show the "Who starts?" draw (off for a ?seed= link, which tests and debugging use). */
+function startGame(seed: number, level: Level = settings.level, draw = true) {
   drawPileAnchorKey = '';
   thumbOverlap = 0;
   overlapFor = null;
 
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  // the Lab's active experiment (none: the classic game)
-  const opening = newGame(seed, {});
   // The engine draws who starts from the seed (SPEC 5); the seed alone replays it.
-  const state: State = opening;
+  const state: State = newGame(seed);
   const opponentStarts = state.startingPlayer === BOT;
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
-  beginSession(state, null, [], null, true);
+  beginSession(state, null, [], null, draw);
   dealIn();
   save();
   const my = epoch;
-  void showStarterDraw(opponentStarts ? 'opponent' : 'you', timeScale(), settings.reduceMotion).then(() => {
+  void showStarterDraw(opponentStarts ? 'opponent' : 'you', draw ? timeScale() : 0, settings.reduceMotion).then(() => {
     if (my !== epoch) return;
     starterDrawPending = false;
     firstToolTips();
@@ -4267,7 +4266,7 @@ const params = BOOT_PARAMS;
 }
 const urlSeed = Number(params.get('seed'));
 if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
-else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
+else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed, settings.level, false);
 // a tap on New game while optional UI mounts already opened the difficulty screen: stay there
 else if ($('levels').hidden) showScreen('menu');
 

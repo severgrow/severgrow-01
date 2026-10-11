@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { legalActions, viewFor, newGame } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { tutorialAccepts, tutorialLesson, tutorialLessons } from '../src/logic/tutorial-script.js';
 
@@ -119,9 +119,11 @@ try {
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Sprout')!),true);
   assert.match(await page.locator('#tool-undo').getAttribute('aria-label')??'',/Undo/,'Undo takes its slot after a player move');
 
-  await page.goto(base+'?seed=219682081');
-  await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===219682081);
-  assert.equal((await state()).startingPlayer,1,'odd seed starts with opponent');
+  // a seed whose engine draw (SPEC 5) gives the opponent the first move
+  let oppSeed=219682081; while (newGame(oppSeed).startingPlayer!==1) oppSeed++;
+  await page.goto(base+'?seed='+oppSeed);
+  await page.waitForFunction(seed=>(window as any).__severgrow?.state()?.seed===seed,oppSeed);
+  assert.equal((await state()).startingPlayer,1,'the drawn starter is the opponent');
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.turnPlayer===0,undefined,{timeout:20000});
   await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:20000});
   assert.match(await page.locator('#tool-undo').getAttribute('aria-label')??'',/Replay/);

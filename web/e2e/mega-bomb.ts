@@ -47,7 +47,7 @@ try {
     await page.click('#smart-bloom-button');
     if (width >= 600) {
       assert((await page.locator('#smart-bloom-selector button').count())>=2);
-      await page.locator('#smart-bloom-selector button[aria-label^="Mega Bomb"]').click();
+      await page.locator('#smart-bloom-selector button[aria-label^="Blast"]').click();
     }
     assert.equal(await page.evaluate(() => (window as any).__severgrow.pending()),null);
     const centre=await hexCenter(page,coordKey(target));
@@ -71,5 +71,5 @@ try {
     assert.equal(errors.length,0,errors.join(' | '));
     await page.close();
   }
-  process.stdout.write('Mega Bomb cockpit targeting works on mobile and desktop.\n');
+  process.stdout.write('Blast cockpit targeting works on mobile and desktop.\n');
 } finally { await browser.close(); await server.httpServer.close(); }

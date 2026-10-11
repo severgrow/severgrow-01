@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4201, strictPort: true }, logLevel: 'silent' });
@@ -47,7 +47,8 @@ try {
   // New Futasaku matches can give the opening turn to the opponent. A restart
   // may already be animating that turn when this check runs.
   assert.notEqual(restarted.seed, grown.seed);
-  assert.equal(restarted.startingPlayer, (restarted.seed & 1) === 1 ? 1 : 0);
+  // who starts is the engine's draw for that seed (SPEC 5), not the seed's parity
+  assert.equal(restarted.startingPlayer, newGame(restarted.seed).startingPlayer);
   assert.notEqual(restarted.phase, 'GAME_OVER');
   assert.equal(await page.locator('#score-you').textContent(), '0', 'old score animation cannot overwrite new game');
   assert.deepEqual(errors, []);

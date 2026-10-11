@@ -80,6 +80,7 @@ async function evidence(page: Page, name: string) {
   console.log(`FUTA04_SCREENSHOT_END ${name}.jpg`);
 }
 
+const playerFirst = (seed: number): State => ({ ...newGame(seed), startingPlayer: 0, turnPlayer: 0, actor: 0 });
 async function open(width: number, height: number, seed: number, humanFirst = false) {
   const touch = width <= 600;
   const page = await browser.newPage({ viewport: { width, height }, hasTouch: touch, isMobile: touch, ignoreHTTPSErrors: Boolean(external) });
@@ -97,10 +98,10 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
     }
   });
   if (humanFirst) {
-    // Futa04 hands the opening to the bot on odd seeds (main.ts startGame). Seed the authored
-    // human-first position directly so a check written for a specific odd-seed line still tests
-    // that position instead of silently running on a bot-opened board.
-    await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: newGame(seed) }));
+    // The engine may draw the opponent as starter for this seed (SPEC 5). Seed the authored
+    // player-first position directly so a check written for this line still tests that position
+    // instead of silently running on an opponent-opened board.
+    await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: playerFirst(seed) }));
     await page.goto(base);
     await page.locator('#menu-continue').click();
   } else {
@@ -112,7 +113,7 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
   await page.locator('#splash').waitFor({state:'hidden'});
   await page.waitForFunction(() => document.fonts.status === 'loaded');
   await page.waitForTimeout(180);
-  equal(await state(page), newGame(seed), `${width}x${height}: seeded Classic setup`);
+  equal(await state(page), humanFirst ? playerFirst(seed) : newGame(seed), `${width}x${height}: seeded Classic setup`);
   return { page, touch, errors };
 }
 
@@ -915,7 +916,7 @@ async function drawGlow() {
 }
 
 async function bloomMenuFit() {
-  const game = newGame(5);
+  const game = { ...newGame(5), startingPlayer: 0, turnPlayer: 0, actor: 0 } as State;
   const board = fixture({ tiles: { '0,1': [1,7] } });
   const pool = [...game.hands[0], ...game.hands[1], ...game.deck];
   const faces = [[0,6],[1,6],[2,6],[3,6],[0,3],[0,4],[0,5]] as const;
@@ -953,7 +954,8 @@ async function bloomMenuFit() {
 }
 
 async function goldFrameVisuals() {
-  const game = newGame(5);
+  // the player's turn to draw (the engine's starter draw is not what this checks)
+  const game = { ...newGame(5), startingPlayer: 0, turnPlayer: 0, actor: 0 } as State;
   const rich = Object.entries(game.terrain).filter(([,terrain]) => terrain === 'rich').map(([key]) => key);
   assert(rich.includes('0,0'),'gold fixture keeps its centre bonus hex');
   game.board['0,0'] = {owner:0,strength:6};
