@@ -41,7 +41,7 @@ describe('Bloom and home wording', () => {
     expect(HOME.theirs).toBe("Opponent's volcano");
     expect(HOME.tapTheirs(3)).toBe('Surround all 6 sides to win at once. 3 of 6 sides blocked.');
     expect(BLOOM.howto).toContain('may also <b>bloom</b>');
-    expect(BLOOM.hint).toBe('You can bloom with cards that match or follow on.');
+    expect(BLOOM.hint).toBe('Bloom on Grow: a set or a run of 3 to 6 cards.');
   });
   it('the strings file and the tips', () => {
     const all = [...strings(STRINGS), ...strings(TIPS)];
