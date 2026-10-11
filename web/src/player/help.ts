@@ -25,6 +25,22 @@ export const mountHelp = (hooks: HelpHooks) => {
     #futa04-actions > .hand-slot[hidden] { display: grid; visibility: hidden; pointer-events: none; }
     #futa04-help-button { touch-action: manipulation; }
     #futa04-help-button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 3px; }
+    /* Free-play idle nudge: Match Intel bulb only — never the LED / board turn cues. */
+    @keyframes free-play-bulb-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.38; }
+    }
+    #futa04-help-button.free-play-bulb-blink {
+      animation: free-play-bulb-blink 0.7s ease-in-out infinite;
+    }
+    .reduce-motion #futa04-help-button.free-play-bulb-blink {
+      animation: free-play-bulb-blink 1.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #futa04-help-button.free-play-bulb-blink {
+        animation: free-play-bulb-blink 1.4s ease-in-out infinite;
+      }
+    }
     html[data-thumb] #futa04-actions {
       position: absolute; left: var(--t-moves-x);
       top: calc(var(--t-moves-y) + var(--t-moves-h) - 44px);

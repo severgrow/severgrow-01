@@ -159,7 +159,9 @@ for (const [w, h, touch] of [[390, 844, true], [1440, 900, false]] as const) {
   const key = coordKey(sprout.coord);
   const card = await visiblePoint(page, sprout.card);
   const hex = await hexCenter(page, key);
-  await drag(page, card, hex, 12);
+  // Grow ghost aims from the raised card/chevron above the finger — release below the
+  // hex centre so the visual aim lands on the tile (finger-fallback covers gaps only).
+  await drag(page, card, { x: hex.x, y: hex.y + 52 }, 12);
   await idle(page);
   const grown = await state(page);
   check(grown.board[key]?.owner === 0 && grown.board[key]?.strength === act.hands[0].find((c) => c.id === sprout.card)?.rank, `${w}: a drag onto a legal hex grows my tile`);

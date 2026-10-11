@@ -1,4 +1,4 @@
-// Test copy: typography v2 (Besley + Commissioner) audit. Every primary screen at 360x640,
+// Test copy: typography v2 (Besley + Fragment Mono) audit. Every primary screen at 360x640,
 // 390x844, 430x932, 768x1024 (touch), 1280x800, 1600x980, 1920x1080: screenshots in
 // docs/screens/typography/, plus automatic checks: text clipped or off screen, unwanted wrapping
 // of key words, the fonts in use, the tile numbers' optical centre (digits 1-9), no console errors.
@@ -94,7 +94,7 @@ for (const kind of ['touch', 'desk'] as const) {
   await page.goto('http://localhost:4194/');
   await page.waitForTimeout(900);
   const f = await fontsInUse(page);
-  check(`${kind}: Besley + Commissioner in use`, f.cls && f.body === 'Commissioner' && f.title === 'Besley' && f.btn === 'Commissioner' && f.num === 'Futasaku Numerals' && ['Besley', 'Commissioner', 'Futasaku Numerals'].every((x) => f.loaded.includes(x)), JSON.stringify(f));
+  check(`${kind}: Besley + Fragment Mono in use`, f.cls && f.body === 'Fragment Mono' && f.title === 'Besley' && f.btn === 'Fragment Mono' && f.num === 'Futasaku Numerals' && ['Besley', 'Fragment Mono', 'Futasaku Numerals'].every((x) => f.loaded.includes(x)), JSON.stringify(f));
   const each = async (name: string, prep?: () => Promise<void>) => {
     for (const [w, h] of sizes) {
       await page.setViewportSize({ width: w, height: h });

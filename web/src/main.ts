@@ -36,6 +36,7 @@ import {
   hexesAlong,
   keyStep,
   onlyPlacement,
+  paintDragBegin,
   paintEnter,
   paintGhost,
   paintMatch,
@@ -67,19 +68,27 @@ import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
-import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficultyById } from './logic/difficulty.js';
+import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { opponentStartsFromSeed } from './logic/starter.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import {
   migrateTutorialProgress, tutorialAccepts, tutorialChapter, tutorialFeedback,
-  tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS,
+  tutorialLesson, tutorialLessons, tutorialOpponentAction, tutorialStateAt,
+  TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS,
 } from './logic/tutorial-script.js';
-import { allowedSelectorsForLesson, mountTutorialGate } from './logic/tutorial-gate.js';
+import {
+  GATE_MENU_SELECTORS, GATE_SHEET_SELECTORS, GATE_WINDOW_SELECTORS,
+  allowedSelectorsForLesson, mountTutorialGate,
+} from './logic/tutorial-gate.js';
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
+import {
+  TUTORIAL_EASTER_SELECTORS, mountTutorialEaster,
+} from './player/tutorial-easter.js';
+import type { TutorialEaster } from './player/tutorial-easter.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -212,11 +221,12 @@ let replaying = false;
 let reopenGameOver = false;
 /** Replay speed: 0.75 for the opponent's turn, 0.5 for the biggest cut (Part 2) */
 let replaySpeed = REPLAY_SPEED;
-const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.75 : 1) * (replaying ? 1 / replaySpeed : 1);
+// Reduce-motion kills movement via motion(); do not also stretch wait timers.
+const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpeed : 1);
 /** How much things move (0 when reduce motion is on). */
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
-/** Sequential grow: one tile lands, then the next — readable on opponent turns. */
-const BLOOM_STAGGER_MS = 110;
+/** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
+const BLOOM_STAGGER_MS = 80;
 
 // ---------- game state ----------
 
@@ -227,16 +237,32 @@ let session: Session | null = null;
 let coach: CoachProgress = freshCoach();
 let glassSurface: GlassSurface | null = null;
 let tutorialGate: TutorialGate | null = null;
+let tutorialEaster: TutorialEaster | null = null;
+let tutorialAdvanceCount = 0;
+let tutorialEasterDone = false;
 let intelState: State | null = null;
 let tutorialDisplayKey = '';
 let tutorialTransitionPending = false;
 let tutorialFreeTimer = 0;
+let tutorialFreeIntroDone = false;
+/** Free-play Match Intel bulb: idle 6s → blink 3s (separate from LED turn cues). */
+let freePlayBulbIdleTimer = 0;
+let freePlayBulbBlinkTimer = 0;
+let freePlayBulbArmed = false;
+let freePlayBulbBlinking = false;
 let tutorialIdleTimer = 0;
 let tutorialPraiseTimer = 0;
 let tutorialStatus: string | null = null;
 let tutorialTargetSelector = '';
 let tutorialLookTapCleanup: (() => void) | null = null;
-let tutorialCompleted = new Set<number>();
+let tutorialCtaReady = false;
+let tutorialCtaTimer = 0;
+/** Praise only on a few milestones — not every guided step. */
+const TUTORIAL_PRAISE_IDS = new Set([
+  'grow', 'bloom-set', 'cut', 'bomb', 'win-place', 'discard-bloom',
+]);
+/** Chapter:step last armed for delayed Next — prevents re-arm flash loops. */
+let tutorialArmedStep = '';
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
@@ -425,17 +451,10 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
     const canContinue = !!saved && saved.state.phase !== 'GAME_OVER';
     $('menu-continue').hidden = !canContinue;
-    // where I left off: the version, the level and the turn
-    if (canContinue) {
-      const s = saved!.state;
-      const turnNo = Math.ceil(s.turnNumber / 2);
-      const remembered = difficultyById(store.get('severgrow.difficulty') ?? '');
-      const tier = remembered?.levels.some(level => level === saved!.level) ? remembered.label : difficultyById(defaultDifficultyForLevel(saved!.level))!.label;
-      $('menu-continue').innerHTML = saved!.coach?.tutorial
-        ? `<span class="vb-name">Continue tutorial</span><span class="vb-sub">Part ${saved!.coach.tutorial.chapter+1} · right where you left off</span>`
-        : `<span class="vb-name">Continue</span><span class="vb-sub">${tier} · level ${saved!.level} · turn ${turnNo}</span>`;
-      $('menu-continue').classList.add('version-btn');
-    } else $('menu-continue').textContent = 'Continue';
+    $('menu-continue').classList.remove('version-btn');
+    const continueLabel = canContinue && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
+    $('menu-continue').textContent = continueLabel;
+    $('menu-continue').setAttribute('aria-label', continueLabel);
     {
       $('menu-new').classList.toggle('primary', !canContinue);
       $('menu-new').classList.toggle('ghost', canContinue);
@@ -445,6 +464,26 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   }
   $('gameover').hidden = true;
   render();
+}
+
+function syncTutorialMenuExit() {
+  const exitBtn = document.getElementById('gm-exit-tutorial') as HTMLButtonElement | null;
+  const resumeBtn = document.getElementById('gm-resume') as HTMLButtonElement | null;
+  if (!exitBtn) return;
+  const inTutorial = !!coach.tutorial;
+  exitBtn.hidden = !inTutorial;
+  exitBtn.textContent = TUTORIAL.exit;
+  if (resumeBtn) {
+    resumeBtn.classList.toggle('primary', !inTutorial);
+    resumeBtn.classList.toggle('ghost', inTutorial);
+  }
+}
+
+/** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
+function syncTutorialChrome() {
+  const on = !!coach.tutorial;
+  document.documentElement.classList.toggle('futa04-tutorial', on);
+  syncTutorialMenuExit();
 }
 
 function sheet(id: string | null) {
@@ -457,6 +496,7 @@ function sheet(id: string | null) {
   // the in-game menu pauses the game; How to play and Settings opened from it keep it paused
   if (id === 'sheet-menu') {
     setPaused(true);
+    syncTutorialMenuExit();
     if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
@@ -466,11 +506,19 @@ function sheet(id: string | null) {
     if (id === 'sheet-settings') syncSettingsForm();
     if (id === 'sheet-history') renderHistory();
     if (id === 'sheet-howto') renderHowTo();
-    openSheet.querySelector<HTMLElement>('[data-close], button')?.focus();
+    openSheet.querySelector<HTMLElement>('[data-close], button:not([hidden])')?.focus();
   }
   if (IS_FUTA04) {
     document.documentElement.classList.toggle('futa04-information-blocked', !!openSheet);
     updateFuta04Help();
+  }
+  if (coach.tutorial) {
+    syncTutorialGate();
+    // Opening a sheet hides the glass; closing restores the current lesson window.
+    if (!openSheet) {
+      tutorialDisplayKey = '';
+      render();
+    }
   }
 }
 
@@ -528,9 +576,11 @@ function renderLevelGrid() {
       const b = document.createElement('button');
       b.type = 'button';
       const selected = store.get('severgrow.difficulty') ?? defaultDifficultyForLevel(settings.level);
-      b.className = `level-tile difficulty-tile${selected === tier.id ? ' on' : ''}`;
+      b.className = `btn big level-tile difficulty-tile${selected === tier.id ? ' primary on' : ' ghost'}`;
       b.dataset.difficulty = tier.id;
-      b.setAttribute('aria-label', `${tier.label}. Start a new game at this difficulty.`);
+      // Visible label is CAPS via CSS; keep the spoken name title-case.
+      const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
+      b.setAttribute('aria-label', `${spoken}. Start a new game at this difficulty.`);
       b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();
@@ -804,6 +854,10 @@ let camera: ReturnType<typeof import('./player/camera.js').installCamera> | null
 declare const __CHANNEL__: string;
 async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
+  // Card art: start decode before fonts/thumb/camera finish so the crossfade can land early.
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
+    void import('./player/cards.js').then((m) => m.preloadCardArt());
+  }
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
     loads.push(import('./player/player-css.js').then((m) => {
@@ -867,6 +921,7 @@ async function mountPlayerEnhancements() {
       onBlocked: onTutorialBlocked,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
+    tutorialEaster = mountTutorialEaster();
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
@@ -1043,57 +1098,107 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
   announceTurn(state.turnPlayer);
 }
 
+function clearFreePlayBulbNudge() {
+  clearTimeout(freePlayBulbIdleTimer);
+  clearTimeout(freePlayBulbBlinkTimer);
+  freePlayBulbIdleTimer = 0;
+  freePlayBulbBlinkTimer = 0;
+  freePlayBulbArmed = false;
+  freePlayBulbBlinking = false;
+  document.getElementById('futa04-help-button')?.classList.remove('free-play-bulb-blink');
+}
+
+/** FreeTurn only: after 6s idle, blink the Match Intel bulb for 3s; repeat until a move starts. */
+function syncFreePlayBulbNudge() {
+  if (!tutorialFreePlayActive() || !session || $('game').hidden) {
+    clearFreePlayBulbNudge();
+    return;
+  }
+  const moveActive = document.documentElement.classList.contains('futa04-move-active');
+  const waiting = myTurn() && !busy() && !moveActive && session.state.phase !== 'GAME_OVER';
+  if (!waiting) {
+    clearFreePlayBulbNudge();
+    return;
+  }
+  if (freePlayBulbArmed || freePlayBulbBlinking) return;
+  freePlayBulbArmed = true;
+  freePlayBulbIdleTimer = window.setTimeout(() => {
+    freePlayBulbArmed = false;
+    if (!tutorialFreePlayActive() || !session || !myTurn() || busy()) return;
+    if (document.documentElement.classList.contains('futa04-move-active')) return;
+    const btn = document.getElementById('futa04-help-button');
+    if (!btn || btn.hidden) {
+      syncFreePlayBulbNudge();
+      return;
+    }
+    freePlayBulbBlinking = true;
+    btn.classList.add('free-play-bulb-blink');
+    freePlayBulbBlinkTimer = window.setTimeout(() => {
+      btn.classList.remove('free-play-bulb-blink');
+      freePlayBulbBlinking = false;
+      syncFreePlayBulbNudge();
+    }, 3000);
+  }, 6000);
+}
+
+/** Bulb tap during free play: stop blink and restart the 6s idle wait (do not open tutorial glass). */
+function noteFreePlayBulbInteraction() {
+  if (!tutorialFreePlayActive()) return;
+  clearFreePlayBulbNudge();
+  syncFreePlayBulbNudge();
+}
+
 function clearTutorialTimers() {
   clearTimeout(tutorialFreeTimer);
   clearTimeout(tutorialIdleTimer);
   clearTimeout(tutorialPraiseTimer);
+  clearTimeout(tutorialCtaTimer);
+  clearFreePlayBulbNudge();
   tutorialStatus = null;
   tutorialTargetSelector = '';
+  tutorialCtaReady = false;
+  tutorialArmedStep = '';
+  tutorialFreeIntroDone = false;
   tutorialLookTapCleanup?.();
   tutorialLookTapCleanup = null;
   glassSurface?.setIdleHard?.(false);
 }
 
-/** Look-and-tap Next steps: the glowing control advances the lesson without a real move. */
-function armTutorialLookTap(selector: string) {
-  tutorialLookTapCleanup?.();
-  tutorialLookTapCleanup = null;
-  if (!selector) return;
-  const onTap = (event: Event) => {
-    const el = event.target as Element | null;
-    if (!el || typeof el.closest !== 'function' || !el.closest(selector)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    tutorialLookTapCleanup?.();
-    tutorialLookTapCleanup = null;
-    tutorialNext();
-  };
-  for (const name of ['pointerdown', 'click', 'touchstart'] as const) {
-    document.addEventListener(name, onTap, { capture: true });
-  }
-  tutorialLookTapCleanup = () => {
-    for (const name of ['pointerdown', 'click', 'touchstart'] as const) {
-      document.removeEventListener(name, onTap, { capture: true } as EventListenerOptions);
-    }
-  };
-}
-
 function releaseTutorialLock() {
   clearTutorialTimers();
+  tutorialEaster?.dismiss();
   tutorialGate?.clear();
   glassSurface?.hide();
   tutorialDisplayKey = '';
   tutorialTransitionPending = false;
+  tutorialAdvanceCount = 0;
+  tutorialEasterDone = false;
+  document.documentElement.classList.remove('futa04-tutorial');
 }
 
-function onTutorialBlocked() {
-  if (!coach.tutorial) return;
-  if (settings.sound) { sound.unlock(); sound.tick(); }
-  glassSurface?.nudge();
-  tutorialStatus = tutorialFeedback('locked');
+/** After the easter modal closes — full normal tutorial resume (no skipped step). */
+function resumeTutorialAfterEaster() {
+  if (!coach.tutorial || !session) return;
   tutorialDisplayKey = '';
+  tutorialTransitionPending = false;
+  syncTutorialGate();
   render();
+}
+
+function maybeShowTutorialEaster() {
+  if (!tutorialEaster || tutorialEasterDone || tutorialAdvanceCount < 4) return;
+  if (tutorialEaster.isOpen()) return;
+  tutorialEasterDone = true;
+  tutorialGate?.set({
+    selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
+  }, 'step');
+  glassSurface?.hideFocus?.();
+  tutorialEaster.show(resumeTutorialAfterEaster);
+}
+
+/** Dead taps stay silent — the gate already swallows them; never flash a "locked" toast. */
+function onTutorialBlocked() {
+  /* no-op */
 }
 
 function syncTutorialGate() {
@@ -1104,11 +1209,31 @@ function syncTutorialGate() {
     return;
   }
   const lesson = tutorialLesson(progress.chapter, progress.step);
+  // Free play: no input lock — bulb and board stay fully usable.
+  if (lesson?.action === 'FreeTurn') {
+    tutorialGate.clear();
+    return;
+  }
+  // Easter modal: only its buttons (+ menu) — resume restores the real step gate.
+  if (tutorialEaster?.isOpen()) {
+    tutorialGate.set({
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
+    }, 'step');
+    glassSurface?.hideFocus?.();
+    return;
+  }
+  // Pause menu / sheets stay fully usable; menu button stays reachable.
+  if (openSheet) {
+    tutorialGate.set({
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...GATE_SHEET_SELECTORS],
+    }, 'step');
+    return;
+  }
   const lockedBusy = busy() || tutorialTransitionPending
     || lesson?.action === 'Opponent'
-    || (!!lesson && lesson.action !== 'FreeTurn' && !myTurn());
+    || (!!lesson && !myTurn());
   if (lockedBusy) {
-    tutorialGate.set(allowedSelectorsForLesson(lesson, '', 'busy'), 'busy');
+    tutorialGate.set(allowedSelectorsForLesson(lesson ?? null, '', 'busy'), 'busy');
     glassSurface?.hideFocus?.();
     return;
   }
@@ -1139,6 +1264,9 @@ function exitTutorial() {
 
 function startTutorial(chapter = 0) {
   clearTutorialTimers();
+  tutorialEaster?.dismiss();
+  tutorialAdvanceCount = 0;
+  tutorialEasterDone = false;
   const state = tutorialChapter(chapter);
   log = ['A small match, played to learn.'];
   gameLevel = 7;
@@ -1172,7 +1300,6 @@ function completeTutorial() {
 
 function advanceTutorialChapter(chapter: number) {
   if (chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial();
-  if (coach.tutorial) tutorialCompleted.add(coach.tutorial.chapter);
   clearTutorialTimers();
   tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
   const state = tutorialChapter(chapter);
@@ -1183,22 +1310,47 @@ function advanceTutorialChapter(chapter: number) {
   syncTutorialGate();
 }
 
+/** If the next lesson is Throw but Grow is still open, skip Grow silently. */
+function ensureTutorialThrowPhase() {
+  if (!session || session.state.actor !== HUMAN) return;
+  const progress = coach.tutorial;
+  if (!progress) return;
+  const lesson = tutorialLesson(progress.chapter, progress.step);
+  if (lesson?.action !== 'Discard') return;
+  const run = () => {
+    if (!session || !coach.tutorial || session.state.phase !== 'ACT' || session.state.actor !== HUMAN) return;
+    const end = session.legal.find(a => a.t === 'EndAct');
+    if (!end) return;
+    const played = session.play(end, HUMAN);
+    if (played) afterPlay(played, HUMAN, null);
+  };
+  if (busy()) void idle().then(run);
+  else run();
+}
+
 function tutorialAdvanceStep() {
   const progress = coach.tutorial;
   if (!progress) return;
   progress.step++;
+  tutorialAdvanceCount++;
   tutorialDisplayKey = '';
   tutorialStatus = null;
+  tutorialArmedStep = '';
+  tutorialCtaReady = false;
+  clearTimeout(tutorialCtaTimer);
   const next = tutorialLesson(progress.chapter, progress.step);
   if (next?.reseat) {
     const state = tutorialChapter(progress.chapter, next.reseat);
     beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
     save();
     announceTurn(HUMAN);
+    maybeShowTutorialEaster();
     return;
   }
   if (next) {
+    ensureTutorialThrowPhase();
     armTutorialIdle();
+    maybeShowTutorialEaster();
     return;
   }
   tutorialStatus = tutorialFeedback('chapter-done');
@@ -1220,47 +1372,109 @@ function tutorialNext() {
   render();
 }
 
-function tutorialSkip() {
-  const progress = coach.tutorial;
-  if (!progress) return;
-  tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
-  advanceTutorialChapter(progress.chapter + 1);
-}
-
-function tutorialShowMe() {
-  const progress = coach.tutorial;
-  if (!progress) return;
-  const lesson = tutorialLesson(progress.chapter, progress.step);
-  if (!lesson) return;
-  glassSurface?.nudge();
-  tutorialStatus = tutorialFeedback('idle', lesson);
+/** Jump to an authored tutorial beat — always rebuilds engine state so Previous can't desync. */
+function tutorialSeek(chapter: number, step: number) {
+  clearTutorialTimers();
   tutorialDisplayKey = '';
-  render();
+  tutorialStatus = null;
+  tutorialTransitionPending = false;
+  const state = tutorialStateAt(chapter, step);
+  beginSession(state, { ...freshCoach(), tutorial: { chapter, step } }, [], state);
+  save();
+  announceTurn(HUMAN);
+  ensureTutorialThrowPhase();
+  syncTutorialGate();
 }
 
-function openTutorialChapters() {
-  const existing = document.getElementById('tutorial-chapter-menu');
-  existing?.remove();
-  const rows = TUTORIAL_CHAPTER_IDS.map((id, i) => {
-    const title = TUTORIAL.chapters[i]?.title ?? id;
-    const done = tutorialCompleted.has(i) ? ' ✓' : '';
-    return `<button type="button" class="menu-btn ghost" data-tutorial-chapter="${i}"><span class="vb-name">${title}${done}</span></button>`;
-  }).join('');
-  const box = document.createElement('div');
-  box.id = 'tutorial-chapter-menu';
-  box.setAttribute('role', 'dialog');
-  box.setAttribute('aria-label', TUTORIAL.menuChapters);
-  box.innerHTML = `<h2>${TUTORIAL.menuChapters}</h2>${rows}<button type="button" class="menu-btn ghost" id="tutorial-chapter-close">Close</button>`;
-  box.querySelectorAll<HTMLButtonElement>('[data-tutorial-chapter]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const chapter = Number(btn.dataset.tutorialChapter);
-      box.remove();
-      tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
-      startTutorial(chapter);
-    });
-  });
-  box.querySelector('#tutorial-chapter-close')?.addEventListener('click', () => box.remove());
-  document.body.append(box);
+function tutorialPrevious() {
+  const progress = coach.tutorial;
+  if (!progress) return;
+  if (progress.step > 0) {
+    tutorialSeek(progress.chapter, progress.step - 1);
+    return;
+  }
+  if (progress.chapter > 0) {
+    const prev = progress.chapter - 1;
+    const last = Math.max(0, tutorialLessons(prev).length - 1);
+    tutorialSeek(prev, last);
+  }
+}
+
+function armTutorialCta(lesson: { delayNextMs?: number; action: string }, stepKey: string) {
+  // Same step re-render (CTA ready, praise clear, etc.) must not reset the delay.
+  if (tutorialArmedStep === stepKey) return;
+  tutorialArmedStep = stepKey;
+  clearTimeout(tutorialCtaTimer);
+  if (lesson.action !== 'Next' || !lesson.delayNextMs) {
+    tutorialCtaReady = true;
+    return;
+  }
+  tutorialCtaReady = false;
+  tutorialCtaTimer = window.setTimeout(() => {
+    tutorialCtaReady = true;
+    tutorialDisplayKey = '';
+    render();
+  }, lesson.delayNextMs);
+}
+
+/** Start the first legal Bloom / Blast recipe (tutorial bypasses the multi-recipe menu). */
+function tutorialAssistBloom(action: 'Bloom' | 'MegaBomb'): boolean {
+  if (!session) return false;
+  if (action === 'Bloom' && session.sel.kind?.startsWith('bloom-') && !session.sel.kind.startsWith('bloom-mega-')) {
+    glassSurface?.nudge();
+    return true;
+  }
+  const kinds = moveButtons(session.view, session.legal, EMPTY_SEL, true);
+  if (action === 'MegaBomb') {
+    const mega = kinds.find(k => k.kind.startsWith('bloom-mega-'));
+    if (!mega) return false;
+    bloomMenu = false;
+    session.tapKind(mega.kind);
+    smartCockpit?.hint('BLAST');
+    render();
+    return true;
+  }
+  const bloom = kinds.find(k => k.kind.startsWith('bloom-') && !k.kind.startsWith('bloom-mega-'));
+  if (!bloom) return false;
+  beginBloomKind(bloom.kind);
+  smartCockpit?.hint('BLOOM');
+  render();
+  return true;
+}
+
+/** Look-and-tap: Next advances; Bloom/Blast on the glow starts the recipe. */
+function armTutorialLookTap(lesson: { action: string }, selector: string) {
+  tutorialLookTapCleanup?.();
+  tutorialLookTapCleanup = null;
+  if (!selector) return;
+  if (lesson.action === 'Next') {
+    if (!tutorialCtaReady) return;
+    const onTap = (event: Event) => {
+      const el = event.target as Element | null;
+      if (!el || typeof el.closest !== 'function') return;
+      if (!el.closest(selector)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      tutorialNext();
+    };
+    document.addEventListener('click', onTap, true);
+    tutorialLookTapCleanup = () => document.removeEventListener('click', onTap, true);
+    return;
+  }
+  if (lesson.action === 'Bloom' || lesson.action === 'MegaBomb') {
+    const onTap = (event: Event) => {
+      const el = event.target as Element | null;
+      if (!el || typeof el.closest !== 'function') return;
+      // Glow is the bloom control — don't steal taps once painting has started.
+      if (session?.sel.kind?.startsWith('bloom-')) return;
+      if (!el.closest('#smart-bloom-button, #smart-bloom, #moves button[data-kind], #moves .bloom-toggle')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      tutorialAssistBloom(lesson.action as 'Bloom' | 'MegaBomb');
+    };
+    document.addEventListener('click', onTap, true);
+    tutorialLookTapCleanup = () => document.removeEventListener('click', onTap, true);
+  }
 }
 
 function armTutorialIdle() {
@@ -1294,14 +1508,17 @@ function tutorialAfterPlay(p: Played, by: Player) {
     if (by !== BOT || (p.after.actor !== HUMAN && p.after.phase !== 'GAME_OVER')) return;
   } else if (by !== HUMAN || !tutorialAccepts(lesson, p.action, p.before)) return;
   clearTimeout(tutorialIdleTimer);
-  tutorialStatus = tutorialFeedback('praise', lesson);
+  const doPraise = TUTORIAL_PRAISE_IDS.has(lesson.id);
+  tutorialStatus = doPraise ? tutorialFeedback('praise', lesson) : null;
   tutorialDisplayKey = '';
   clearTimeout(tutorialPraiseTimer);
-  tutorialPraiseTimer = window.setTimeout(() => {
+  const advance = () => {
     tutorialStatus = null;
     tutorialAdvanceStep();
     render();
-  }, 600);
+  };
+  if (doPraise) tutorialPraiseTimer = window.setTimeout(advance, 600);
+  else advance();
 }
 
 function continueGame() {
@@ -1829,7 +2046,6 @@ async function playStep(step: Step, my: number) {
         if (my !== epoch) return;
         queue.take();
         settleStep(step, true);
-        if (bloom) sound.bloom();
         let anchor: string | null = null;
         let anchorDist = Infinity;
         const home = parseKey(board.rootKey(by));
@@ -1838,6 +2054,7 @@ async function playStep(step: Step, my: number) {
           const t = step.tiles[i]!;
           queue.placeGrowTile(by, t);
           render();
+          if (bloom) sound.bloomTile(i);
           const d = hexDistance(home, parseKey(t.key));
           if (d < anchorDist) { anchorDist = d; anchor = t.key; }
           const tileEl = board.tile(t.key);
@@ -1866,7 +2083,8 @@ async function playStep(step: Step, my: number) {
           if (session?.state.terrain[t.key] === 'rich') sound.chime(0.08);
           const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
           if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
-          await wait(MOTION.move * f + BLOOM_STAGGER_MS * f, my);
+          // Land beat only — stagger was double-counting with the animation duration.
+          await wait(MOTION.move * f + (i + 1 < step.tiles.length ? BLOOM_STAGGER_MS * 0.35 * f : 0), my);
         }
         if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
         if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
@@ -2330,6 +2548,8 @@ function updateFuta04MoveActive() {
   if (!IS_FUTA04) return;
   const active = !!session && !$('game').hidden && (busy() || session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null || !!session.pending || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr);
   document.documentElement.classList.toggle('futa04-move-active', active);
+  // Free-play bulb nudge stops the moment a real move starts.
+  if (active) clearFreePlayBulbNudge();
   document.documentElement.dataset.futa04Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
   const grew = !!session && myTurn() && !!grewThisTurn();
   const bloomReady = !!session && myTurn() && session.view.phase === 'ACT'
@@ -2414,10 +2634,16 @@ function render() {
   renderFirstTip(v);
   updateFuta04Help();
   smartCockpit?.sync();
+  syncTutorialChrome();
   renderTutorial();
-  if (glassSurface?.isOpen() && intelState!==session.state) {
-    intelState=session.state;
-    glassSurface.intel(matchIntel(v,session.state.history ?? [],openingPublicDiscard(session.state,session.base)));
+  syncFreePlayBulbNudge();
+  if (glassSurface?.isOpen()) {
+    if (tutorialFreePlayActive() && glassSurface.mode?.() === 'guidance') {
+      glassSurface.guidance(freePlayGuidanceLine());
+    } else if (intelState !== session.state && glassSurface.mode?.() === 'intel') {
+      intelState = session.state;
+      glassSurface.intel(matchIntel(v, session.state.history ?? [], openingPublicDiscard(session.state, session.base)));
+    }
   }
   if (!IS_FUTA04 && placeTeachingPanel && thumbLayout) {
     const keys = targetHexes(v, session.legal, session.sel);
@@ -2436,14 +2662,45 @@ function render() {
 }
 let autoQueued = false;
 /** Optional teaching yields to the player's move and to other sheets. */
+function tutorialFreePlayActive(): boolean {
+  const progress = coach.tutorial;
+  if (!progress) return false;
+  return tutorialLesson(progress.chapter, progress.step)?.action === 'FreeTurn';
+}
+
+function freePlayGuidanceLine(): string {
+  if (!session) return 'YOUR TURN';
+  const st = session.state;
+  if (st.phase === 'GAME_OVER') return 'DONE';
+  if (st.actor !== HUMAN) return 'THEIR TURN';
+  if (st.phase === 'DRAW') return 'DRAW';
+  if (st.phase === 'DISCARD') return 'THROW';
+  return 'GROW OR SKIP';
+}
+
 function updateFuta04Help() {
-  const unavailable=!session || !!coach.tutorial || !!openSheet || session.state.phase==='GAME_OVER';
+  const free = tutorialFreePlayActive();
+  const unavailable=!session || (!!coach.tutorial && !free) || !!openSheet || session.state.phase==='GAME_OVER';
   futa04Help?.update({ blocked: IS_FUTA04 ? unavailable : unavailable || busy() || !!session?.pending || !!draw.shape.length || cardPinned });
 }
 
 function toggleMatchIntel() {
-  if (!glassSurface || !session || coach.tutorial) return;
-  if (glassSurface.isOpen()) { glassSurface.close(); intelState=null; return; }
+  if (!glassSurface || !session) return;
+  if (coach.tutorial && !tutorialFreePlayActive()) return;
+  if (glassSurface.isOpen()) {
+    glassSurface.close();
+    intelState=null;
+    noteFreePlayBulbInteraction();
+    return;
+  }
+  if (tutorialFreePlayActive()) {
+    noteFreePlayBulbInteraction();
+    glassSurface.guidance(freePlayGuidanceLine());
+    intelState = null;
+    $('futa04-help-button').setAttribute('aria-expanded','true');
+    document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
+    return;
+  }
   const model = matchIntel(session.view,session.state.history ?? [],openingPublicDiscard(session.state,session.base));
   glassSurface.intel(model);
   intelState=session.state;
@@ -2617,7 +2874,7 @@ function renderHud() {
   const turn = $('turn');
   turn.className = `turn ${over ? 'over' : st.turnPlayer === HUMAN ? 'you' : 'bot'}${thinking ? ' thinking' : ''}`;
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
-  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280, easing: 'ease-out' });
+  if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280 * Math.max(timeScale(), 0.35), easing: 'ease-out' });
   lastTurnKey = turnKey;
   turn.innerHTML = over
     ? '<b>Game over</b>'
@@ -3222,8 +3479,11 @@ function renderControls(v: View, advice: Advice | null) {
       // two or more share the row: short words, so they fit beside the piles on a phone
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
         if (IS_FUTA04 && k.kind.startsWith('bloom-') && !k.kind.startsWith('bloom-mega-')) {
-          // Menu / smart-bloom pick: enter the recipe and plant the first tile when we can.
-          beginBloomKind(k.kind, session!.sel.card);
+          // Menu / smart-bloom pick: enter the recipe; optional mini-card pick is first tile.
+          const picked = Number(b.dataset.bloomCard);
+          const cardId = Number.isFinite(picked) ? picked : session!.sel.card;
+          delete b.dataset.bloomCard;
+          beginBloomKind(k.kind, cardId);
           smartCockpit?.hint('BLOOM');
           render();
           return;
@@ -3267,9 +3527,12 @@ function renderControls(v: View, advice: Advice | null) {
     const skipLabel = v.hand.length > 0
       ? IS_FUTA04 && grow.throwButton && bloomStill ? 'skip?' : IS_FUTA04 ? 'Skip' : 'Throw a card'
       : 'End turn';
-    if (end && !pending && grow.throwButton) moves.append(button(skipLabel, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${skipLabel}: skip bloom and throw a card`));
+    // Tutorial: hide Skip during Grow teaching — show it again on EndAct steps (STAY JOINED, etc.).
+    const tutLesson = coach.tutorial ? tutorialLesson(coach.tutorial.chapter, coach.tutorial.step) : null;
+    const hideTutSkip = !!tutLesson && tutLesson.action !== 'EndAct';
+    if (end && !pending && grow.throwButton && !hideTutSkip) moves.append(button(skipLabel, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${skipLabel}: skip bloom and throw a card`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
-    if (end && !pending && grow.skipLink && !anySel) moves.append(button(IS_FUTA04 ? 'Skip' : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
+    if (end && !pending && grow.skipLink && !anySel && !hideTutSkip) moves.append(button(IS_FUTA04 ? 'Skip' : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' || tutLesson?.action === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
     // (the hint line says "Tap a card to throw it")
   } else {
@@ -3278,7 +3541,7 @@ function renderControls(v: View, advice: Advice | null) {
       moves.append(button(a.t === 'Continue' ? 'End turn' : a.t === 'Knock' ? 'Knock' : a.t, 'primary', () => humanPlay(a)));
     }
   }
-  if (IS_FUTA04 && sel.kind?.startsWith('bloom-')) {
+  if (IS_FUTA04 && sel.kind?.startsWith('bloom-') && !coach.tutorial) {
     const end = legal.find(a => a.t === 'EndAct');
     if (end && !moves.querySelector('.end')) moves.append(button(grewThisTurn() ? 'skip?' : 'Skip', 'end futa04-skip', () => humanPlay(end), 'Skip bloom and throw a card'));
   }
@@ -3360,7 +3623,7 @@ function renderBloomIcons(button: HTMLButtonElement, kind: string, v: View, comp
   const icons = document.createElement('span');
   icons.className = 'futa04-combination';
   icons.setAttribute('aria-hidden', 'true');
-  icons.innerHTML = cards.map(c => `<span class="futa04-mini-card ${suitClass(c!)}">${cardFace(c!)}</span>`).join('');
+  icons.innerHTML = cards.map(c => `<span class="futa04-mini-card ${suitClass(c!)}" data-card="${c!.id}">${cardFace(c!)}</span>`).join('');
   button.replaceChildren(icons);
   // Show the actual combination in the cockpit, including the selected Bloom.
   if (compact) button.classList.add('futa04-compact-control');
@@ -3415,120 +3678,191 @@ function renderTutorial() {
   if (!lesson) return;
   const selected=session.sel.card;
   const selectingBloom=!!session.sel.kind?.startsWith('bloom-');
-  const instruction=lesson.instruction
-    ?? (lesson.action==='MegaBomb' && session.pending?.t==='MegaBomb' ? 'Tap again.'
-      : selectingBloom && lesson.action==='MegaBomb' ? 'Choose the Blast.'
-      : selectingBloom && lesson.action==='Bloom' ? 'Paint the tiles.'
-      : selected!==null && lesson.action==='PlayFruit' ? 'Choose their tile.'
-      : selected!==null && lesson.action==='Sprout' ? 'Tap the lit tile.' : lesson.text);
-  // One target only. Card-then-tile lessons light the card first, then the tile.
+  const title = lesson.instruction;
+  const body = lesson.why;
+  // Rounded-rect highlight targets. Card→tile lessons: whole hand first, then the tile.
   let selector='';
-  let shape: 'hex' | 'card' | 'pill' | 'none' = 'none';
   if (lesson.focus==='explainer') {
-    selector='#futasaku-glass [data-tut="next"]'; shape='pill';
-  } else if (lesson.focus==='deck') { selector='#deck'; shape='pill'; }
-  else if (lesson.focus==='discard') { selector='#discard'; shape='pill'; }
-  else if (lesson.focus==='context') { selector='#smart-context'; shape='pill'; }
+    selector = tutorialCtaReady ? '#futasaku-glass [data-tut="next"]' : '';
+  } else if (lesson.focus==='hand' || lesson.action === 'Discard') {
+    // Throw: union hand + discard pile. Grow-from-hand: hand first, then the tile.
+    if (lesson.action === 'Discard') selector = '#hand .card, #discard';
+    else if (selected!==null && lesson.tile) {
+      selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`;
+    } else selector='#hand .card';
+  } else if (lesson.focus==='deck') { selector='#deck'; }
+  else if (lesson.focus==='discard') { selector='#discard'; }
+  else if (lesson.focus==='context') { selector='#smart-context'; }
   else if (lesson.focus==='card') {
     const card = lesson.cardId != null
       ? session.view.hand.find(c=>c.id===lesson.cardId)
       : lesson.card
         ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
         : session.view.hand[0];
-    if (card) { selector=`#hand .card[data-card="${card.id}"]`; shape='card'; }
+    if (card) selector=`#hand .card[data-card="${card.id}"]`;
   } else if (lesson.focus==='bloom') {
     if (selectingBloom) {
-      // Point at the named hex (or the first legal paint hex), never the board centre.
-      selector = lesson.tile
-        ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`
-        : '#board .hex-cell.target';
-      shape='hex';
-    } else { selector='#smart-bloom-button'; shape='pill'; }
+      // Union planted bloom hexes + next legal tip/endpoint hexes so the glow
+      // never “loses” the tile the player already painted.
+      const planted = draw.shape.length
+        ? [...draw.shape]
+        : draw.desk.phase === 'live' && draw.desk.start
+          ? [draw.desk.start]
+          : [];
+      const tipKeys = [...document.querySelectorAll<SVGElement>('#board .target[data-key]')]
+        .map(el => el.getAttribute('data-key'))
+        .filter((k): k is string => !!k);
+      const keys = [...new Set([
+        ...planted,
+        ...tipKeys,
+        ...(lesson.tile ? [coordKey(lesson.tile)] : []),
+      ])];
+      selector = keys.length
+        ? keys.map(k => `#board .hex-cell[data-key="${k}"]`).join(', ')
+        : '#board .target, #board .ghost.draw-ghost';
+    } else { selector='#smart-bloom-button'; }
   } else if (lesson.focus==='home' && lesson.tile) {
-    selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`; shape='hex';
+    selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`;
   } else if (lesson.focus==='button') {
     const map: Record<string,string> = {
       deck:'#deck', discard:'#discard', sort:'#hand-sort', undo:'#tool-undo',
-      turns:'#turn-pill', score:'#race', menu:'#hud-menu', history:'#hud-history', word:'#turn',
+      score:'#race', intel:'#futa04-help-button', display:'#smart-led',
     };
     const id = lesson.button ?? lesson.id;
     selector = map[id] ?? `[data-tutorial-btn="${id}"]`;
-    shape = 'pill';
   } else if (lesson.focus==='tile' && lesson.tile) {
     const wanted=lesson.cardId != null
       ? session.view.hand.find(c=>c.id===lesson.cardId)
       : lesson.card
         ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
         : session.view.hand.find(c=>c.suit===null);
-    if (selected!==wanted?.id && wanted) { selector=`#hand .card[data-card="${wanted.id}"]`; shape='card'; }
-    else { selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`; shape='hex'; }
+    if (selected!==wanted?.id && wanted) selector=`#hand .card[data-card="${wanted.id}"]`;
+    else selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`;
   }
   tutorialTargetSelector = selector;
   const lockedBusy = busy() || tutorialTransitionPending
     || lesson.action === 'Opponent'
     || (lesson.action !== 'FreeTurn' && !myTurn());
-  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}:${selector}:${lockedBusy?'1':'0'}:${tutorialStatus ?? ''}`;
-  if (tutorialDisplayKey!==key) {
-    tutorialDisplayKey=key;
-    const showIdle = document.getElementById('tutorial-focus')?.dataset.bob === 'hard';
+  let cta = lesson.cta ?? (lesson.action === 'Next' ? 'NEXT' : undefined);
+  if (lesson.action === 'Discard' && session.pending?.t === 'Discard') {
+    cta = 'TAP IT AGAIN';
+  } else if (lesson.action === 'MegaBomb' && session.pending?.t === 'MegaBomb') {
+    cta = 'TAP AGAIN';
+  } else if (lesson.action === 'MegaBomb' && (selectingBloom || selected !== null)) {
+    cta = 'TAP TILE';
+  } else if ((lesson.focus === 'hand' || lesson.focus === 'tile') && selected !== null && lesson.tile) {
+    cta = 'TAP TILE';
+  } else if (lesson.focus === 'hand' && selected === null && lesson.action !== 'EndAct') {
+    cta = lesson.cta || 'TAP A CARD';
+  } else if (lesson.focus === 'bloom' && selectingBloom && lesson.action !== 'MegaBomb') {
+    cta = 'TAP TILE';
+  } else if (lesson.action === 'PlayFruit' && selected !== null) {
+    cta = 'TAP TILE';
+  }
+  const stepKey = `${progress.chapter}:${progress.step}`;
+  // Free play: show the top glass once, then keep it hidden (bulb handles guidance).
+  if (lesson.action === 'FreeTurn') {
+    syncTutorialGate();
     if (lockedBusy) {
-      glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, [], {
+      glassSurface.hideFocus?.();
+      return;
+    }
+    if (!tutorialFreeIntroDone) {
+      tutorialFreeIntroDone = true;
+      tutorialDisplayKey = `free-intro:${stepKey}`;
+      glassSurface.tutorial(title, progress.chapter, [], {
         shape: 'none',
+        stepKey: 'free-intro',
+        ...(body ? { why: body } : {}),
         chapterCount: TUTORIAL_CHAPTER_COUNT,
         reduceMotion: settings.reduceMotion,
-        ...(tutorialStatus || lesson.action === 'Opponent'
-          ? { status: tutorialStatus ?? instruction }
-          : {}),
-        buttons: { skip: true, chapters: true, exit: true, next: false, showMe: false },
+        buttons: {
+          previous: progress.chapter > 0 || progress.step > 0,
+          next: false,
+          playReal: false,
+        },
         handlers: {
-          onSkip: tutorialSkip,
-          onChapters: openTutorialChapters,
-          onExit: exitTutorial,
+          onPrevious: tutorialPrevious,
         },
       });
       glassSurface.hideFocus?.();
+      clearTimeout(tutorialFreeTimer);
+      tutorialFreeTimer = window.setTimeout(() => glassSurface?.hide(), 1400);
+    } else if (glassSurface.mode?.() === 'tutorial') {
+      glassSurface.hide();
+    }
+    return;
+  }
+  const key=`${stepKey}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${selector}:${lockedBusy?'1':'0'}:${tutorialStatus ?? ''}:${tutorialCtaReady?'1':'0'}:${cta ?? ''}`;
+  if (tutorialDisplayKey!==key) {
+    armTutorialCta(lesson, stepKey);
+    tutorialDisplayKey=key;
+    const showIdle = document.getElementById('tutorial-focus')?.dataset.bob === 'hard';
+    const showNext = lesson.action === 'Next'
+      ? tutorialCtaReady
+      : !!cta;
+    const nextLabel = lesson.action === 'Next' || lesson.action === 'EndAct'
+      ? (lesson.cta || 'NEXT')
+      : (cta || 'NEXT');
+    const nextBlink = lesson.action === 'Next' && tutorialCtaReady;
+    const bloomDemo = lesson.id === 'bloom-explain';
+    if (lockedBusy) {
+      glassSurface.tutorial(tutorialStatus ?? title, progress.chapter, [], {
+        shape: 'none',
+        stepKey,
+        chapterCount: TUTORIAL_CHAPTER_COUNT,
+        reduceMotion: settings.reduceMotion,
+        bloomDemo,
+        ...(tutorialStatus || lesson.action === 'Opponent'
+          ? { status: tutorialStatus ?? title }
+          : {}),
+        buttons: {
+          previous: progress.chapter > 0 || progress.step > 0,
+          next: false,
+        },
+        handlers: {
+          onPrevious: tutorialPrevious,
+        },
+      });
+      glassSurface.hideFocus?.();
+      tutorialLookTapCleanup?.();
+      tutorialLookTapCleanup = null;
     } else {
-      glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, selector ? [selector] : [], {
-        shape,
-        ...(lesson.why != null && !tutorialStatus ? { why: lesson.why } : {}),
+      glassSurface.tutorial(tutorialStatus ?? title, progress.chapter, selector ? [selector] : [], {
+        shape: 'pill',
+        stepKey,
+        ...(body != null && !tutorialStatus ? { why: body } : {}),
         chapterCount: TUTORIAL_CHAPTER_COUNT,
         reduceMotion: settings.reduceMotion,
         arrow: true,
-        turnIcons: lesson.id === 'draw',
+        bloomDemo,
         ...(tutorialStatus && /Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { praise: tutorialStatus } : {}),
         ...(tutorialStatus && !/Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { status: tutorialStatus } : {}),
         idleHard: showIdle,
         buttons: {
-          showMe: showIdle || tutorialStatus === TUTORIAL.showMe,
-          skip: true,
-          chapters: true,
-          exit: true,
-          next: lesson.action === 'Next',
-          playReal: lesson.action === 'FreeTurn' && progress.step > 0,
-          replayChapter: lesson.action === 'FreeTurn' && progress.step > 0,
+          previous: progress.chapter > 0 || progress.step > 0,
+          next: showNext,
+          nextLabel,
+          nextBlink,
+          playReal: false,
         },
         handlers: {
-          onShowMe: tutorialShowMe,
-          onSkip: tutorialSkip,
-          onChapters: openTutorialChapters,
-          onNext: tutorialNext,
-          onExit: exitTutorial,
+          onPrevious: tutorialPrevious,
+          onNext: () => {
+            if (lesson.action === 'Next') tutorialNext();
+            else if (lesson.action === 'EndAct') {
+              const endBtn = document.querySelector<HTMLButtonElement>('#moves .end, #moves .futa04-skip, #smart-context:not(:disabled)');
+              if (endBtn && !endBtn.disabled) endBtn.click();
+              else glassSurface?.nudge();
+            } else if (lesson.action === 'Bloom' || lesson.action === 'MegaBomb') {
+              if (!tutorialAssistBloom(lesson.action)) glassSurface?.nudge();
+            } else glassSurface?.nudge();
+          },
           onPlayReal: () => { releaseTutorialLock(); store.remove(SAVE_KEY); coach = freshCoach(); showScreen('menu'); },
-          onReplayChapter: openTutorialChapters,
         },
       });
       armTutorialIdle();
-      // Homes / buttons tour: glow the control; tap it to advance (not a real move).
-      if (lesson.action === 'Next' && selector && lesson.focus !== 'explainer') {
-        armTutorialLookTap(selector);
-      } else {
-        tutorialLookTapCleanup?.();
-        tutorialLookTapCleanup = null;
-      }
-    }
-    if (lesson.action==='FreeTurn' && !lockedBusy) {
-      clearTimeout(tutorialFreeTimer);
-      tutorialFreeTimer=window.setTimeout(()=>glassSurface?.hide(),1400);
+      armTutorialLookTap(lesson, selector);
     }
   } else glassSurface.refresh();
   syncTutorialGate();
@@ -3683,10 +4017,11 @@ function renderPiles(v: View, advice: Advice | null) {
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
+    const df = Math.max(timeScale(), 0.35);
     if (dm === 'last') {
-      anim($('deck'), [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-3deg)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 600, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+      anim($('deck'), [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-3deg)', offset: 0.4 }, { transform: 'scale(1)' }], { duration: 600 * df, easing: 'cubic-bezier(.3,1.5,.5,1)' });
       if (settings.sound) sound.chime();
-    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: 700, easing: 'ease-out' });
+    } else anim($('deck'), [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0.4, transform: 'scale(0.9) translateY(4px)' }], { duration: 700 * df, easing: 'ease-out' });
   }
   lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
@@ -3817,6 +4152,13 @@ function renderHistory() {
 
 // ---------- input ----------
 
+/** Drop bloom paint / menu chrome without touching session selection or undo history. */
+function clearBloomPaintUi() {
+  bloomMenu = false;
+  draw = { ...DRAW0 };
+  board.ghost(null);
+}
+
 /** Takes back the player's last move of this turn (nothing hidden was revealed by it). */
 function undoMove() {
   if (!session) return;
@@ -3850,6 +4192,8 @@ function undoMove() {
   const v = session.view;
   shownScores = [v.score, v.opponentScore];
   scars = [];
+  // Same paint/menu chrome cancelSel clears — render's !many path alone leaves bloomMenu open.
+  clearBloomPaintUi();
   inspectKey = null;
   guideGoal = null;
   log.unshift('You took back a move.');
@@ -3859,9 +4203,7 @@ function undoMove() {
 }
 
 function cancelSel() {
-  bloomMenu = false;
-  draw = { ...DRAW0 };
-  board.ghost(null);
+  clearBloomPaintUi();
   session?.cancel();
   inspectKey = null;
   cardPinned = false;
@@ -3908,19 +4250,10 @@ function onCardTap(id: number) {
         }
       }
     }
-    // Bloom intent: Grow already used, card can't sprout/bomb, or a Bloom is already selected.
-    // (Before Grow, the same card may still be a one-tile Grow — keep that path.)
-    const tapped = session.view.hand.find((c) => c.id === id);
-    const cardCanGrow = !!tapped && session.legal.some((a) => {
-      if (a.t === 'PlayFruit') return a.card === id;
-      if (a.t !== 'Sprout') return false;
-      if (a.card === id) return true;
-      const other = session!.view.hand.find((c) => c.id === a.card);
-      return !!other && other.suit === tapped.suit && other.rank === tapped.rank;
-    });
-    const wantBloom =
-      matchingBlooms.length > 0 &&
-      (!!grewThisTurn() || !cardCanGrow || !!session.sel.kind?.startsWith('bloom-'));
+    // Bloom available: tapping a bloom card (before or after the first grow) opens the map
+    // like the bloom icon — that card is the first painted tile when it is the high end.
+    // One-tile grow of the same card stays available via drag onto a hex.
+    const wantBloom = matchingBlooms.length > 0 || !!session.sel.kind?.startsWith('bloom-');
     if (wantBloom && matchingBlooms.length === 1) {
       if (sameAgain && session.sel.kind === matchingBlooms[0]!.kind) {
         session.cancel();
@@ -3976,7 +4309,12 @@ function onCardTap(id: number) {
 // ---------- painting a Bloom (v0.7) ----------
 
 type Ptr = { id: number; last: Pt; start: Pt; moved: boolean; downKey: string | null; type: string; cur: string | null; viewport: string };
-type DrawUi = { shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null; mouseLast?: Pt | null; redraw?: boolean; suggested?: boolean };
+type DrawUi = {
+  shape: string[]; reverse: boolean; desk: Desk; ptr: Ptr | null; msg: string | null;
+  mouseLast?: Pt | null; redraw?: boolean; suggested?: boolean;
+  /** Natural first tile from beginBloomKind — first tap must not undo it. */
+  autoStart?: boolean;
+};
 const DRAW0: DrawUi = { shape: [], reverse: false, desk: DESK_IDLE, ptr: null, msg: null };
 let draw: DrawUi = { ...DRAW0 };
 let drawFrame = 0;
@@ -3991,9 +4329,21 @@ function drawCombo(): Combo | null {
   return comboMemo.combo;
 }
 
+/** Reverse so a tapped high-end card becomes the first painted bloom tile. */
+function bloomReverseForCard(combo: Combo, cardId: number | null): boolean {
+  if (!combo.run || cardId == null || !session) return false;
+  const card = session.view.hand.find((c) => c.id === cardId);
+  if (!card) return false;
+  const low = combo.ranks[0]!;
+  const high = combo.ranks[combo.n - 1]!;
+  return card.rank === high && card.rank !== low;
+}
+
 /**
- * Enter a Bloom recipe and plant the first tile when we can: always if there is only one
- * legal start, otherwise the natural start (closest to home) so the next tap continues.
+ * Enter a Bloom recipe. In normal play, plant the natural first tile (unique start, or
+ * closest to home) so the next tap continues. Tutorial Pro guided bloom leaves the shape
+ * empty — the player must tap the first hex themselves (then draw / endpoint / 1-by-1).
+ * When `cardId` is the high end of a run, paint highest-first so that card is tile one.
  */
 function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   if (!session || !kind.startsWith('bloom-') || kind.startsWith('bloom-mega-')) return false;
@@ -4003,12 +4353,16 @@ function beginBloomKind(kind: string, cardId: number | null = null): boolean {
   session.sel = { card, hex: null, kind, option: 0 };
   comboMemo = null;
   const combo = comboFor(session.view, session.legal, session.sel);
-  draw = { ...DRAW0 };
+  const reverse = combo ? bloomReverseForCard(combo, card) : false;
+  draw = { ...DRAW0, reverse };
   board.ghost(null);
   if (!combo) return true;
-  const start = naturalBloomStart(combo, board.rootKey(HUMAN), false);
+  // Guided tutorial: no convenience auto-plant — first hex is player-initiated.
+  if (coach.tutorial && !tutorialFreePlayActive()) return true;
+  const start = naturalBloomStart(combo, board.rootKey(HUMAN), reverse);
   if (start) {
-    draw = { ...DRAW0, shape: paintEnter(combo, [], start, false) };
+    const planted = paintEnter(combo, [], start, reverse);
+    draw = { ...DRAW0, reverse, shape: planted, autoStart: planted.length === 1 };
   }
   return true;
 }
@@ -4053,6 +4407,8 @@ function paintDraw() {
       cursor: focusKey && document.activeElement === $('board') ? focusKey : null,
     } : null);
     renderDrawInfo(c, g);
+    // Keep next-hex wells in sync with the painted path (ghost layer alone used to lag).
+    refreshBoardDrag();
   });
 }
 
@@ -4153,10 +4509,21 @@ function drawTap(c: Combo, key: string, type: string) {
     return;
   }
   if (draw.suggested) session!.preset(null);
+  // Auto-planted natural start: tapping that sole hex must place/continue, not undo.
+  if (draw.autoStart && draw.shape.length === 1 && key === draw.shape[0]) {
+    paintDraw();
+    return;
+  }
   const next = paintTap(c, draw.shape, key, draw.reverse);
   if (next.length > draw.shape.length) drawTick(next.length - 1);
   else if (next.length === draw.shape.length && !draw.shape.includes(key)) draw = { ...draw, msg: unavailable(v, c, draw.shape, draw.reverse).get(key) ?? null };
-  draw = { ...draw, shape: next, suggested: false, msg: next.length !== draw.shape.length ? null : draw.msg };
+  draw = {
+    ...draw,
+    shape: next,
+    suggested: false,
+    autoStart: next.length > 1 ? false : !!draw.autoStart,
+    msg: next.length !== draw.shape.length ? null : draw.msg,
+  };
   const m = paintMatch(c, next, draw.reverse);
   if (m) return finishDraw(m);
   // the one-tap suggestion: a first tap shows the best Bloom through this hex, ready to confirm
@@ -4226,11 +4593,11 @@ const drawHandlers = {
         session!.preset(null);
         draw = { ...draw, suggested: false, shape: ptr.downKey && draw.shape[0] === ptr.downKey ? [ptr.downKey] : [] };
       }
-      if (ptr.downKey && !draw.shape.includes(ptr.downKey)) {
-        const next = paintEnter(c, draw.shape, ptr.downKey, draw.reverse);
-        if (next.length > draw.shape.length) drawTick(next.length - 1);
-        draw = { ...draw, shape: next, msg: null };
-      }
+      // Legal start under the finger replaces any auto-planted natural start so the drag path
+      // is not backtracked when it crosses that planted hex (board touch-drag Bloom commit).
+      const next = paintDragBegin(c, draw.shape, ptr.downKey, draw.reverse);
+      if (next.length && next.join('|') !== draw.shape.join('|')) drawTick(next.length - 1);
+      draw = { ...draw, shape: next, msg: null };
     }
     // only hexes the finger moves INTO count (fast swipes are sampled so none is skipped)
     const entered: string[] = [];
@@ -4614,6 +4981,10 @@ bind('lab-surprise', () => {
 });
 bind('hud-menu', () => sheet('sheet-menu'));
 bind('hud-history', () => sheet('sheet-history'));
+bind('gm-exit-tutorial', () => {
+  sheet(null);
+  exitTutorial();
+});
 bind('gm-resume', () => sheet(null));
 bind('gm-new', () => {
   if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
@@ -4691,22 +5062,29 @@ const dragLayer = mountDragLayer({
     return { x: p.x, y: p.y };
   },
   overDiscardPile: (x, y) => {
-    // Throw drop: discard pile + most of the cockpit chrome, but not the action buttons /
-    // bloom menu / context controls, and not the hand (hand stays "pick another card").
+    // Throw drop: discard pile (+ grab radius / band above it) and cockpit chrome, but not
+    // the action buttons / bloom menu / context controls, and not the hand.
     const discard = $('discard');
     const r = discard.getBoundingClientRect();
     const dx = Math.max(r.left - x, 0, x - r.right);
     const dy = Math.max(r.top - y, 0, y - r.bottom);
     if (Math.hypot(dx, dy) <= PILE_GRAB_PX) return true;
+    // Common aim: drag up into the column above the pile.
+    if (x >= r.left - PILE_GRAB_PX && x <= r.right + PILE_GRAB_PX && y < r.top && y >= r.top - 140) return true;
     if (!IS_FUTA04 || !session || session.view.phase !== 'DISCARD') return false;
     const box = document.getElementById('futa04-box');
     if (!box) return false;
     const br = box.getBoundingClientRect();
     if (x < br.left || x > br.right || y < br.top || y > br.bottom) return false;
-    const el = document.elementFromPoint(x, y);
-    if (!el) return false;
-    if (el.closest('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
-    return !!el.closest('#futa04-box');
+    const stack = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(x, y)
+      : [document.elementFromPoint(x, y)].filter((el): el is Element => !!el);
+    for (const el of stack) {
+      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-spill, #smart-spill')) continue;
+      if (el.closest?.('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
+      if (el.closest?.('#discard, #futa04-box')) return true;
+    }
+    return false;
   },
   upperBoard: (y) => {
     // Flick throw: almost the full screen above the action / hand button row.
@@ -4715,14 +5093,18 @@ const dragLayer = mountDragLayer({
     const floor = Math.min(hand.top, actions?.top ?? hand.top) - 8;
     return y < floor;
   },
+  bloomReverse: () => draw.reverse,
   setThrowZone: (on) => {
     document.getElementById('futa04-box')?.classList.toggle('drag-throw-zone', on);
   },
   commit: (a) => {
-    // Match the tap path exactly. A pile tap draws at once (no Confirm); a hand action
-    // respects the "Confirm moves" setting, so a drag never fires something a tap would not.
+    // A pile tap / drag draws at once. Drag/flick throw commits on release (the gesture is
+    // the confirmation); card taps still use tap-again / Confirm.
     if (a.t === 'Draw') {
-      // A draw's own haptic is subtle (Effects High only): give the commit one clear tick.
+      vibrate(settings.vibration, 12);
+      return humanPlay(a);
+    }
+    if (IS_FUTA04 && a.t === 'Discard') {
       vibrate(settings.vibration, 12);
       return humanPlay(a);
     }
@@ -4872,8 +5254,19 @@ bind('tool-replay', () => replayBotTurn());
   };
 }
 bind('tool-undo', () => {
-  if (session?.canUndo) undoMove();
-  else if (session?.canReplayOpponent) replayBotTurn();
+  if (!session) return;
+  // One tap: clear a waiting throw / bloom paint, else take back the last move. No confirm.
+  if (session.pending || session.presetMove) {
+    cancelSel();
+    smartCockpit?.hint('UNDONE');
+    return;
+  }
+  if (draw.shape.length || draw.desk.phase === 'live' || draw.ptr) {
+    cancelDraw();
+    return;
+  }
+  if (session.canUndo) undoMove();
+  else if (session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => startGame(randomSeed(), gameLevel));
 bind('go-board', () => {

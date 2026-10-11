@@ -200,18 +200,17 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = to.left + to.width / 2 - (from.left + from.width / 2);
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const sc = to.height / Math.max(from.height, 1);
-    // Draw/Throw keeps its ~396ms beat; the last stretch sets the card down: it settles to 92% and
-    // fades, so the pile reads as "received", not deleted.
+    // Futa04 fly-to-pile: snappy land, fade begins once the card is seated.
     const land = sc * 0.92;
     const frames: Keyframe[] = motion() === 0
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
         ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx * .52}px, ${dy * .52 - 24}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
-          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .758 },
+          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.48 },
+          { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .68 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 396 : 440) * f;
+    const duration = (IS_FUTA04 ? 320 : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 

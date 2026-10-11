@@ -7,7 +7,32 @@ import emberArt from '../assets/cards/ember.webp?url';
 import bombArt from '../assets/cards/bomb.webp?url';
 import backArt from '../assets/cards/back.webp?url';
 
-const CARD_ART_URLS = [mossArt, ashArt, dewArt, emberArt, bombArt, backArt];
+export const CARD_ART_URLS = [mossArt, ashArt, dewArt, emberArt, bombArt, backArt];
+
+let cardArtReady: Promise<void> | null = null;
+
+/** Start fetch/decode as soon as the module loads (menu still visible). Safe to call twice. */
+export function preloadCardArt(): Promise<void> {
+  if (cardArtReady) return cardArtReady;
+  if (typeof Image === 'undefined' || typeof document === 'undefined') {
+    cardArtReady = Promise.resolve();
+    return cardArtReady;
+  }
+  cardArtReady = Promise.all(CARD_ART_URLS.map(async url => {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = url;
+    await image.decode();
+  })).then(() => {
+    document.documentElement.classList.add('futa04-card-art-ready');
+  }).catch(() => {
+    // A failed art request leaves readable cards and the current game fully playable.
+  });
+  return cardArtReady;
+}
+
+// Kick off while fonts/thumb/camera still load — do not wait for mountCards().
+void preloadCardArt();
 
 export const CARDS_CSS = `
 /* Card-local ink: never change terrain, ownership or interface colour tokens. */
@@ -62,8 +87,9 @@ export const CARDS_CSS = `
 .futa04-cards .card .futa04-card-art {
   position:absolute; inset:1px; z-index:0; display:block; border-radius:inherit;
   background-size:300% 300%; background-repeat:no-repeat; pointer-events:none;
-  opacity:0;
+  opacity:0; transition:opacity .28s ease;
 }
+.futa04-cards .card :is(.c-num,.c-suit) { transition:opacity .22s ease; }
 .futa04-cards .dock .pile-top.card { border-radius:6px; }
 .futa04-cards .card.s0 .futa04-card-art { background-image:url('${mossArt}'); }
 .futa04-cards .card.s1 .futa04-card-art { background-image:url('${ashArt}'); }
@@ -72,6 +98,12 @@ export const CARDS_CSS = `
 .futa04-cards .card.fruit .futa04-card-art { background-image:url('${bombArt}'); background-size:cover; background-position:center; }
 .futa04-cards.futa04-card-art-ready .card .futa04-card-art { opacity:1; }
 .futa04-cards.futa04-card-art-ready .card :is(.c-num,.c-suit) { opacity:0; }
+@media (prefers-reduced-motion:reduce) {
+  .futa04-cards .card .futa04-card-art,
+  .futa04-cards .card :is(.c-num,.c-suit) { transition:none; }
+}
+.futa04-cards.reduce-motion .card .futa04-card-art,
+.futa04-cards.reduce-motion .card :is(.c-num,.c-suit) { transition:none; }
 .futa04-cards.futa04-card-art-ready .card::after { display:none; }
 .futa04-cards.futa04-card-art-ready .card:has(>.futa04-card-art) { border-color:transparent; }
 .futa04-cards.futa04-card-art-ready .card:has(>.futa04-card-art).playable,
@@ -98,14 +130,8 @@ export function mountCards() {
   document.documentElement.classList.add('futa04-cards');
   const style = document.createElement('style');
   style.id = 'futa04-cards-style'; style.textContent = CARDS_CSS; document.head.append(style);
-  // Fetch and decode once in the background while the menu is visible. Until all six
-  // textures are ready, the existing code-drawn face remains an instant fallback.
-  void Promise.all(CARD_ART_URLS.map(async url => {
-    const image = new Image(); image.decoding = 'async'; image.src = url;
-    await image.decode();
-  })).then(() => document.documentElement.classList.add('futa04-card-art-ready')).catch(() => {
-    // A failed art request leaves readable cards and the current game fully playable.
-  });
+  // Decode may already be in flight from preloadCardArt(); class flips when ready.
+  void preloadCardArt();
   const attributes = ['aria-label', 'aria-description', 'title', 'alt'];
   // The board's SVG contains no Fruit wording. Its tiles are rebuilt during
   // play, so walking that entire subtree for text translation wastes work.

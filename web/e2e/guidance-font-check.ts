@@ -56,7 +56,7 @@ for (const [w, h, large] of [[390, 844, false], [360, 640, false], [360, 640, tr
   await waitMine(page);
   await page.waitForTimeout(400);
   const font = await page.evaluate(() => ({ cls: document.documentElement.classList.contains('test-typography-v2'), body: getComputedStyle(document.body).fontFamily, loaded: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family) }));
-  check(`${tag}: new font in use`, font.cls && font.body.includes('Commissioner') && font.loaded.some((f) => f.includes('Commissioner')) && font.loaded.some((f) => f.includes('Besley')), `${font.body.split(',')[0]}; loaded ${[...new Set(font.loaded)].join(', ')}`);
+  check(`${tag}: new font in use`, font.cls && font.body.includes('Fragment Mono') && font.loaded.some((f) => f.includes('Fragment Mono')) && font.loaded.some((f) => f.includes('Besley')), `${font.body.split(',')[0]}; loaded ${[...new Set(font.loaded)].join(', ')}`);
   const steps: string[] = [];
   let step = 0;
   for (let i = 0; i < 12 && steps.length < 4; i++) {

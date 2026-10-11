@@ -321,9 +321,12 @@ async function pulseCheck(page: Page, label: string) {
     return { pulse: node?.getAnimations().some(a => (a as CSSAnimation).animationName === 'futa04-card-breathe') ?? false,
       edge: node ? getComputedStyle(node).boxShadow : '', blob: getComputedStyle(document.querySelector('#hand')!, '::before').content };
   });
-  // The LED re-shows the step word for one pulse after six quiet seconds (display-machine.ts);
+  // The LED re-shows the step word after a short quiet beat (display-machine.ts);
   // motion must stay enabled while that frame is emitted or the one-shot class is skipped.
-  await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'GROW', undefined, { timeout: 12000 });
+  await page.waitForFunction(() => {
+    const t = document.getElementById('smart-led-text')?.textContent?.trim();
+    return t === 'GROW' || t === 'GROW!';
+  }, undefined, { timeout: 12000 });
   const led = await page.evaluate(() => {
     const win = document.querySelector<HTMLElement>('#smart-led-window')!;
     const motion = win.classList.contains('led-pulse');
@@ -342,21 +345,21 @@ async function pulseCheck(page: Page, label: string) {
 }
 
 // The retired plate never shows. Futa04's live idle reminder is the LED re-showing the step word
-// after four quiet seconds (display-machine.ts scheduleIdle(4000)), usually with a bang (DRAW!).
+// after ~2.5 quiet seconds (display-machine.ts scheduleIdle), usually with a bang (DRAW!).
 async function idleTiming(page: Page, label: string) {
   const before = await state(page);
   await page.keyboard.press('Shift');
   const start = Date.now();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(1400);
   check(await page.locator('#step-cue').evaluate(el => getComputedStyle(el).display === 'none'),
-    `${label}: the retired plate stays hidden during the first 2.2 idle seconds`);
+    `${label}: the retired plate stays hidden during the first 1.4 idle seconds`);
   const early = (await page.locator('#smart-led-text').innerText()).trim();
-  check(early !== 'DRAW' && early !== 'DRAW!', `${label}: the LED shows no step hint during the first 2.2 idle seconds`);
+  check(early !== 'DRAW' && early !== 'DRAW!', `${label}: the LED shows no step hint during the first 1.4 idle seconds`);
   await page.waitForFunction(() => {
     const t = document.getElementById('smart-led-text')?.textContent?.trim();
     return t === 'DRAW' || t === 'DRAW!';
   }, undefined, { timeout: 12000 });
-  check(Date.now()-start >= 3900, `${label}: the LED reminder waits four seconds after interaction`);
+  check(Date.now()-start >= 2300, `${label}: the LED reminder waits about 2.5 seconds after interaction`);
   await page.keyboard.press('Shift');
   await page.waitForTimeout(160);
   const after = (await page.locator('#smart-led-text').innerText()).trim();

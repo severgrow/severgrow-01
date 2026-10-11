@@ -8,7 +8,7 @@ assert(!existsSync(`${dir}/design-v3`), 'archived V3 art leaked');
 for (const n of names) assert(!/fontbake|bakeoff|designBoard|panel-|lab-|fraunces|jakarta|bricolage|figtree/i.test(n), n);
 const js = names.filter(n => n.endsWith('.js')).map(n => readFileSync(`${dir}/assets/${n}`, 'utf8')).join('\n');
 for (const marker of ['menu-lab', 'menu-design', 'Apply and play', 'font bake-off', 'forest_strength_', 'lab-presets']) assert(!js.includes(marker), `development code leaked: ${marker}`);
-if (channel === 'live') for (const n of names) assert(!/besley|commissioner|guide-|thumb-|camera-|player-css|fonts-/i.test(n), n);
+if (channel === 'live') for (const n of names) assert(!/besley|commissioner|fragment-mono|guide-|thumb-|camera-|player-css|fonts-/i.test(n), n);
 const product = channel === 'futa04' || channel === 'futa-test';
 if (!product) for (const n of names) assert(!/^(information|help|atmosphere)-/.test(n), `Futa04 presentation leaked: ${n}`);
 if (!product) for (const n of names) assert(!/^(branding|futasaku-white)-/.test(n), `Futa04 brand leaked: ${n}`);
@@ -21,5 +21,5 @@ if (channel === 'futa-test') {
   assert.equal(manifest.name, 'Futasaku', 'channel app name');
   assert(html.includes('<title>Futasaku</title>'), 'channel browser title');
 }
-if (product) for (const prefix of ['besley-', 'commissioner-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-', 'atmosphere-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
+if (product) for (const prefix of ['besley-', 'fragment-mono-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-', 'atmosphere-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
 console.log(`${channel}: asset isolation passed (${names.length} files)`);

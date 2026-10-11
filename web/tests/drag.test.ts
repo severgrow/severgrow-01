@@ -17,7 +17,9 @@ type Opts = {
   overDiscardPile?: boolean;
   shape?: readonly string[];
   upSpeed?: number;
+  upTravel?: number;
   upperBoard?: boolean;
+  reverse?: boolean;
   sel?: Sel;
 };
 
@@ -32,7 +34,9 @@ const run = (state: State, source: DragSource, o: Opts = {}) =>
     overDiscardPile: !!o.overDiscardPile,
     shape: o.shape ?? [],
     upSpeed: o.upSpeed ?? 0,
+    upTravel: o.upTravel ?? 0,
     upperBoard: !!o.upperBoard,
+    ...(o.reverse !== undefined ? { reverse: o.reverse } : {}),
   });
 
 const legalOf = (state: State, t: Action['t']) => legalActions(viewFor(state, 0)).filter((a) => a.t === t);
@@ -141,7 +145,11 @@ describe('place and throw', () => {
     expect(flick.led).toBe('THROW');
     expect(flick.commit?.t).toBe('Discard');
 
-    const slow = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.2, upperBoard: true });
+    const travel = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.2, upTravel: 80, upperBoard: false });
+    expect(travel.mode).toBe('flick');
+    expect(travel.commit?.t).toBe('Discard');
+
+    const slow = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.1, upTravel: 20, upperBoard: true });
     expect(slow.mode).toBe('discard');
     expect(slow.commit).toBeNull();
   });
@@ -244,6 +252,7 @@ describe('a drag can only ever commit a move that is legal right now', () => {
                 overDiscardPile: next() < 0.3,
                 shape: next() < 0.3 ? [pick(keys), pick(keys)] : [],
                 upSpeed: next() < 0.3 ? 0.9 : 0,
+                upTravel: next() < 0.3 ? 80 : 0,
                 upperBoard: next() < 0.5,
               });
               if (res.commit) {

@@ -286,6 +286,15 @@ export class Sound {
     }
   }
 
+  /** One bloom tick for a sequential tile reveal (index steps the pitch). */
+  bloomTile(index = 0) {
+    const { detune } = this.pick('bloom', 2);
+    const b = this.base * detune;
+    const i = ((index % 3) + 3) % 3;
+    this.noise(0.011, 0.045, 0, 4200);
+    this.tone(b * 2.4 * (1 + i * 0.14), 0.03, { wave: 'square', gain: 0.028, attack: 0.002, lowpass: 3200 });
+  }
+
   /** fruit: a short hollow pop. */
   fruit() {
     const { detune } = this.pick('fruit', 2);

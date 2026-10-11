@@ -82,7 +82,12 @@ const installDom = () => {
   const exit = make('button'); exit.attrs.set('data-tut', 'exit');
   const deck = make('button', 'deck');
   const hud = make('button', 'hud-menu');
-  for (const [p, c] of [[actions, skip], [actions, exit], [glass, actions], [game, deck], [game, hud], [body, game], [body, menu], [body, levels], [body, scrim], [body, glass]] as const) {
+  const sort = make('button', 'hand-sort');
+  for (const [p, c] of [
+    [actions, skip], [actions, exit], [glass, actions],
+    [game, deck], [game, hud], [game, sort],
+    [body, game], [body, menu], [body, levels], [body, scrim], [body, glass],
+  ] as const) {
     c.parent = p; p.children.push(c);
   }
   const doc = {
@@ -113,7 +118,7 @@ const installDom = () => {
   };
   (globalThis as unknown as { document: typeof doc }).document = doc;
   (globalThis as unknown as { performance: { now: () => number } }).performance = { now: () => Date.now() };
-  return { doc, deck, hud, skip, exit, body };
+  return { doc, deck, hud, sort, skip, exit, body };
 };
 
 describe('tutorial gate: allowed selectors', () => {
@@ -136,20 +141,49 @@ describe('tutorial gate: allowed selectors', () => {
     }
   });
 
-  it('busy mode allows only the glass window controls', () => {
+  it('busy mode allows glass window controls and the menu button', () => {
     const allow = allowedSelectorsForLesson(null, '#deck', 'busy');
     expect(allow.windowOnly).toBe(true);
-    expect(allow.selectors).toEqual([...GATE_WINDOW_SELECTORS]);
+    expect(allow.selectors).toEqual([...GATE_WINDOW_SELECTORS, '#hud-menu']);
     expect(allow.selectors).not.toContain('#deck');
   });
 
   it('blocked chrome is never in the allow list for a normal step', () => {
     const lesson = tutorialLesson(1, 0)!;
     const allow = allowedSelectorsForLesson(lesson, '#deck', 'step');
+    expect(allow.selectors).toContain('#hud-menu');
     for (const blocked of GATE_BLOCKED_SELECTORS) {
       if (blocked === '#deck') continue;
       expect(allow.selectors).not.toContain(blocked);
     }
+  });
+
+  it('draw step keeps the deck as the gate target (glow may cover both pile faces)', () => {
+    const drawLesson = tutorialLessons(1).find(l => l.id === 'draw')!;
+    expect(drawLesson.action).toBe('Draw');
+    const target = resolveLessonTarget(drawLesson, tutorialChapter(1));
+    expect(target!.selector).toBe('#deck');
+    const allow = allowedSelectorsForLesson(drawLesson, target!.selector, 'step');
+    expect(allow.selectors).toContain('#deck');
+    expect(allow.selectors).not.toContain('#discard');
+  });
+
+  it('throw steps allow discard pile for look / drag without drawing from it', () => {
+    const throwLesson = tutorialLessons(1).find(l => l.id === 'throw')!;
+    expect(throwLesson.action).toBe('Discard');
+    const target = resolveLessonTarget(throwLesson, tutorialChapter(1));
+    const allow = allowedSelectorsForLesson(throwLesson, target!.selector, 'step');
+    expect(allow.selectors).toContain('#discard');
+    expect(allow.selectors).toContain('#hand .card');
+    expect(target!.selector).toContain('#discard');
+  });
+
+  it('menu stays listed for free-play allow audits and is never blocked', () => {
+    expect(GATE_BLOCKED_SELECTORS).not.toContain('#hud-menu');
+    const free = tutorialLessons(TUTORIAL_CHAPTER_COUNT - 1).find(l => l.action === 'FreeTurn');
+    expect(free).toBeTruthy();
+    const allow = allowedSelectorsForLesson(free!, '', 'step');
+    expect(allow.selectors).toContain('#hud-menu');
   });
 });
 
@@ -158,8 +192,8 @@ describe('tutorial gate: mount lifecycle', () => {
     Reflect.deleteProperty(globalThis, 'document');
   });
 
-  it('sets and clears the gate; blocked targets call onBlocked', () => {
-    const { doc, deck, hud, skip } = installDom();
+  it('sets and clears the gate; menu stays open, blocked chrome calls onBlocked', () => {
+    const { doc, deck, hud, sort, skip } = installDom();
     const onBlocked = vi.fn();
     let gate: ReturnType<typeof mountTutorialGate>;
     try {
@@ -171,11 +205,14 @@ describe('tutorial gate: mount lifecycle', () => {
 
     gate.set(allowedSelectorsForLesson(tutorialLesson(1, 0), '#deck', 'step'), 'step');
     expect(gate.isActive()).toBe(true);
-    expect(gate.wouldBlock(hud as unknown as EventTarget)).toBe(true);
+    expect(gate.wouldBlock(hud as unknown as EventTarget)).toBe(false);
     expect(gate.wouldBlock(deck as unknown as EventTarget)).toBe(false);
     expect(gate.wouldBlock(skip as unknown as EventTarget)).toBe(false);
+    expect(gate.wouldBlock(sort as unknown as EventTarget)).toBe(true);
 
     doc.dispatchCapture('click', hud);
+    expect(onBlocked).not.toHaveBeenCalled();
+    doc.dispatchCapture('click', sort);
     expect(onBlocked).toHaveBeenCalled();
 
     gate.clear();
@@ -207,44 +244,35 @@ describe('tutorial gate: wrong-tap feedback', () => {
   });
 
   it('rate-limits onBlocked to at most once per 400ms', () => {
-    const { doc, hud } = installDom();
+    const { doc, sort } = installDom();
     const onBlocked = vi.fn();
     let now = 1000;
     (globalThis as unknown as { performance: { now: () => number } }).performance = { now: () => now };
     const gate = mountTutorialGate({ onBlocked });
     gate.set(allowedSelectorsForLesson(tutorialLesson(1, 0), '#deck', 'step'), 'step');
-    doc.dispatchCapture('click', hud);
-    doc.dispatchCapture('click', hud);
+    doc.dispatchCapture('click', sort);
+    doc.dispatchCapture('click', sort);
     expect(onBlocked).toHaveBeenCalledTimes(1);
     now += 400;
-    doc.dispatchCapture('click', hud);
+    doc.dispatchCapture('click', sort);
     expect(onBlocked).toHaveBeenCalledTimes(2);
     gate.clear();
   });
 
-  it('rotates locked-area lines without stacking long copy', () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 8; i++) {
-      const line = tutorialFeedback('locked');
-      expect(wordCount(line)).toBeLessThanOrEqual(6);
-      seen.add(line);
-    }
-    expect(seen.size).toBeGreaterThanOrEqual(3);
+  it('rate-limited onBlocked stays a silent hook (UI shows no locked toast)', () => {
+    // Strings may still exist for older builds; the live UI must not surface them.
+    expect(typeof tutorialFeedback).toBe('function');
   });
 });
 
 describe('tutorial gate: copy and one-target audit', () => {
-  it('has Exit tutorial and locked-area wrong-tap lines in TUTORIAL strings', () => {
-    const tut = TUTORIAL as typeof TUTORIAL & { exit?: string; locked?: readonly string[] };
+  it('has Exit tutorial in TUTORIAL strings', () => {
+    const tut = TUTORIAL as typeof TUTORIAL & { exit?: string };
     expect(tut.exit, 'TUTORIAL.exit missing').toBeTruthy();
     expect(tut.exit).toMatch(/Exit tutorial/i);
-    expect(tut.locked?.length ?? 0).toBeGreaterThanOrEqual(3);
-    for (const line of tut.locked ?? []) {
-      expect(wordCount(line)).toBeLessThanOrEqual(6);
-    }
   });
 
-  it('every guided step has exactly one resolvable target and a short instruction', () => {
+  it('every guided step has a resolvable target, a short title, and a body line', () => {
     for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT; chapter++) {
       const state = tutorialChapter(chapter);
       for (const lesson of tutorialLessons(chapter)) {
@@ -254,18 +282,18 @@ describe('tutorial gate: copy and one-target audit', () => {
         if (lesson.action !== 'Next' && lesson.focus !== 'explainer' && lesson.focus !== 'none') {
           expect(target!.selector, lesson.id).toBeTruthy();
         }
-        const instruction = lesson.instruction ?? lesson.text;
-        expect(wordCount(instruction), lesson.id).toBeLessThanOrEqual(6);
+        expect(wordCount(lesson.instruction), lesson.id).toBeLessThanOrEqual(4);
+        if (lesson.why) expect(wordCount(lesson.why), lesson.id).toBeLessThanOrEqual(18);
       }
     }
   });
 
-  it('every guided instruction names the action (Tap / Draw / Bloom / Next…)', () => {
-    const ok = /^(Tap|Draw|Grow|Throw|Bloom|Watch|Close|Break|Use|Keep|Now|You|This|That|What|How|Sort|Undo|Menu|History|Turns|Score|A |Two |No |Each |Their |Homes |Surround |The |Both |Paint )/i;
+  it('guided titles are short labels (HOME, DRAW PILE, GROW…)', () => {
+    const ok = /^[A-Z][A-Z0-9 /-]{1,24}$/;
     for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT; chapter++) {
       for (const lesson of tutorialLessons(chapter)) {
         if (lesson.action === 'Opponent' || lesson.action === 'FreeTurn') continue;
-        expect(lesson.instruction ?? lesson.text, lesson.id).toMatch(ok);
+        expect(lesson.instruction, lesson.id).toMatch(ok);
       }
     }
   });

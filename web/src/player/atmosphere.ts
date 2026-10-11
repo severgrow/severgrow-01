@@ -2,8 +2,9 @@
 // animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
+/* Above every chrome layer (glass, sheets, easter, bloom demo). Never captures taps. */
 #futa04-film-grain {
-  position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
+  position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
   opacity: .14; background-repeat: repeat; background-size: 128px 128px;
   mix-blend-mode: soft-light; user-select: none;
 }
@@ -55,12 +56,18 @@ export function mountAtmosphere(): OutcomeLight {
     document.body.append(grain);
   }
   // Keep the grain as the last body child so it stays above later fixed UI layers.
+  // Debounce: body childList fires often during board/hand rebuilds.
+  let pinGrainTimer = 0;
   const pinGrain = () => {
     if (!grain.isConnected || document.body.lastElementChild === grain) return;
     document.body.append(grain);
   };
+  const schedulePinGrain = () => {
+    if (pinGrainTimer) return;
+    pinGrainTimer = window.setTimeout(() => { pinGrainTimer = 0; pinGrain(); }, 48);
+  };
   pinGrain();
-  new MutationObserver(pinGrain).observe(document.body, { childList: true });
+  new MutationObserver(schedulePinGrain).observe(document.body, { childList: true });
   const backdrop = document.createElement('div');
   backdrop.id = 'futa04-board-backdrop';
   backdrop.setAttribute('aria-hidden', 'true');

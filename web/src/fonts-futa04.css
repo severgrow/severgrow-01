@@ -8,9 +8,9 @@
   font-display: block;
 }
 @font-face {
-  font-family: 'Commissioner';
-  src: url('./fonts/v2/commissioner-wght.woff2') format('woff2');
-  font-weight: 400 700;
+  font-family: 'Fragment Mono';
+  src: url('./fonts/v2/fragment-mono-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: block;
 }
@@ -24,14 +24,16 @@
 }
 html.test-typography-v2 body {
   --font-display: 'Besley', Georgia, serif;
-  --font-ui: 'Commissioner', system-ui, sans-serif;
-  --font-num: 'Futasaku Numerals', 'Commissioner', system-ui, sans-serif;
+  --font-ui: 'Fragment Mono', ui-monospace, monospace;
+  --font-num: 'Futasaku Numerals', 'Fragment Mono', ui-monospace, monospace;
   --font: var(--font-ui);
-  --w-text: 460;
+  --w-text: 400;
   --w-num: 700;
   font-family: var(--font-ui);
-  font-size: 1rem;
-  line-height: 1.42;
+  font-size: 0.95rem;
+  line-height: 1.48;
+  font-synthesis: none;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 html.test-typography-v2 #menu .title {
   font-family: var(--font-display);
@@ -40,4 +42,13 @@ html.test-typography-v2 #menu .title {
   letter-spacing: -.03em;
   line-height: .92;
   font-size: clamp(2.5rem, 7.5vw + .9rem, 4.25rem);
+}
+html.test-typography-v2 #menu .tagline {
+  line-height: 1.5;
+  letter-spacing: .012em;
+}
+html.test-typography-v2 #menu .menu-buttons .btn,
+html.test-typography-v2 #levels .level-grid .difficulty-tile {
+  letter-spacing: .03em;
+  line-height: 1.2;
 }

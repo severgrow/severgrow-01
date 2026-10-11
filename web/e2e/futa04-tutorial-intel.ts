@@ -29,22 +29,23 @@ try {
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-tutorial').click();
   assert.equal((await state()).seed,51000);
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'Tap your home.');
-  // Look-and-tap: the glowing home advances without a real move; Next still works too.
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'HOME');
+  await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
   await page.locator('#futasaku-glass [data-tut="next"]').click();
-  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='Tap their home.');
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='THEIR HOME');
+  await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
   await page.locator('#futasaku-glass [data-tut="next"]').click();
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'Tap the draw pile.');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW PILE');
   const opening=await state();
   await page.locator('#discard').evaluate(element=>(element as HTMLElement).click());
   assert.deepEqual(await state(),opening,'an irrelevant early tap leaves the lesson unchanged');
   await page.locator('#deck').evaluate(element=>(element as HTMLElement).click());
   await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
   assert.equal((await state()).phase,'ACT');
-  assert.match(await page.locator('#futasaku-glass .glass-copy').textContent()??'',/Tap the glowing card|Clean|Nice|There it is|Easy/);
+  assert.match(await page.locator('#futasaku-glass .glass-copy').textContent()??'',/GROW|Clean|Nice|There it is|Easy/);
   // Wait out praise, then resume mid-chapter after reload.
-  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='Tap the glowing card.',undefined,{timeout:5000}).catch(()=>{});
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='GROW',undefined,{timeout:5000}).catch(()=>{});
   const beforeRefresh=await state();
   await page.reload();
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));

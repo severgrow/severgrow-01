@@ -58,10 +58,16 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./futasaku-icon-180.png" />
     <link rel="preload" href="./src/fonts/v2/besley-wght.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="./src/fonts/v2/commissioner-wght.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./src/fonts/v2/fragment-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./hardware/display-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/button-frame-supplied.webp" as="image" type="image/webp" />
     <link rel="preload" href="./hardware/counter-frame-supplied.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/moss.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/ash.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/dew.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/ember.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/bomb.webp" as="image" type="image/webp" />
+    <link rel="preload" href="./src/assets/cards/back.webp" as="image" type="image/webp" />
     <link rel="stylesheet" href="./src/fonts-futa04.css" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -83,12 +89,12 @@
         <h1 class="title">Futasaku</h1>
         <p class="tagline">Grow your network. Keep it joined to your home. Cut your opponent's links.</p>
         <div class="menu-buttons">
-          <button id="menu-continue" class="btn primary big" type="button" hidden>Continue</button>
-          <button id="menu-new" class="btn primary big" type="button">New game</button>
-          <button id="menu-tutorial" class="btn ghost" type="button">Tutorial</button>
-          <button id="menu-settings" class="btn ghost" type="button"><span class="i" data-icon="gear"></span>Settings</button>
+          <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
+          <button id="menu-new" class="btn primary big" type="button" aria-label="New game">New game</button>
+          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
+          <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           <!-- install button: label and behaviour are set by src/logic/install.ts -->
-          <button id="menu-install" class="btn ghost" type="button" hidden>Add to Home Screen</button>
+          <button id="menu-install" class="btn ghost" type="button" aria-label="Add to Home Screen" hidden>Add to Home Screen</button>
           <p id="menu-install-hint" class="menu-install-hint" role="status" hidden></p>
         </div>
       </div>
@@ -102,7 +108,6 @@
           <h2>Choose difficulty</h2>
         </header>
         <div id="level-grid" class="level-grid"></div>
-        <p class="muted small levels-note">Change it anytime from New game.</p>
       </div>
     </section>
 
@@ -282,11 +287,12 @@
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
       <header class="sheet-head"><h2 id="gm-title">Paused</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body stack">
-        <button id="gm-resume" class="btn primary" type="button">Back to the game</button>
-        <button id="gm-new" class="btn ghost" type="button">New game</button>
-        <button id="gm-howto" class="btn ghost" type="button">How to play</button>
-        <button id="gm-settings" class="btn ghost" type="button">Settings</button>
-        <button id="gm-main" class="btn link" type="button">Main menu</button>
+        <button id="gm-exit-tutorial" class="btn primary" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
+        <button id="gm-resume" class="btn primary" type="button" aria-label="Back to the game">Back to the game</button>
+        <button id="gm-new" class="btn ghost" type="button" aria-label="New game">New game</button>
+        <button id="gm-howto" class="btn ghost" type="button" aria-label="How to play">How to play</button>
+        <button id="gm-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+        <button id="gm-main" class="btn link" type="button" aria-label="Main menu">Main menu</button>
       </div>
     </section>
 

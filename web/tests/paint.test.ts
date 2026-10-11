@@ -24,6 +24,7 @@ import {
   hexAtPoint,
   hexesAlong,
   keyStep,
+  paintDragBegin,
   paintEnter,
   paintGhost,
   paintMatch,
@@ -124,6 +125,16 @@ describe('painting a set (one number)', () => {
     expect(paint(combo, ['-1,1', '0,0', '-1,1'])).toEqual(['-1,1']);
     const full = paint(combo, ['-1,1', '0,0', '0,1', '1,0']);
     expect(full).toEqual(['-1,1', '0,0', '0,1']);
+  });
+  it('paintDragBegin on a legal start replaces an auto-planted natural start so a path through it completes', () => {
+    const planted = paintEnter(combo, [], '-1,1');
+    expect(planted).toEqual(['-1,1']);
+    // Extending the planted middle hex then crossing it backtracks (the old touch-drag bug).
+    expect(paint(combo, [...planted, '-2,1', '-1,1', '0,1'])).toEqual(['-1,1', '0,1']);
+    const begun = paintDragBegin(combo, planted, '-2,1');
+    expect(begun).toEqual(['-2,1']);
+    expect(paint(combo, [...begun, '-1,1', '0,1'])).toEqual(['-2,1', '-1,1', '0,1']);
+    expect(paintMatch(combo, paint(combo, [...begun, '-1,1', '0,1']))).not.toBeNull();
   });
   it('tapping: tap to add, tap the last one to remove', () => {
     let shape = paintTap(combo, [], '-1,1');

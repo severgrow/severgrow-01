@@ -13,10 +13,12 @@ import { comboFor, drawNext, paintEnter, paintMatch } from './draw.js';
 
 /** A move under this many pixels stays a tap: the drag never starts. */
 export const DRAG_THRESHOLD_PX = 10;
-/** Upward speed (px/ms) that turns a throw drag into a flick. */
-export const FLICK_SPEED_PX_PER_MS = 0.45;
+/** Peak upward speed (px/ms) that turns a throw drag into a flick. */
+export const FLICK_SPEED_PX_PER_MS = 0.28;
+/** Upward travel (px) that, with enough peak speed, also counts as a flick. */
+export const FLICK_TRAVEL_PX = 64;
 /** How close (px) the pointer must come to the throw pile / cockpit throw zone. */
-export const PILE_GRAB_PX = 72;
+export const PILE_GRAB_PX = 96;
 
 /** The words the cockpit sign may show while a drag is over a matching target. Never FAST. */
 export type DragLedWord = 'DRAW' | 'PLACE' | 'THROW' | 'BLOOM' | 'MEGA';
@@ -52,13 +54,17 @@ export type DragInput = {
   overDiscardPile: boolean;
   /** The Bloom shape painted so far (the caller keeps it between moves). */
   shape: readonly string[];
-  /** The pointer's upward speed (px/ms, 0 when it is not moving up). */
+  /** Peak upward speed so far this gesture (px/ms, 0 when it never moved up). */
   upSpeed: number;
+  /** How far upward the pointer has travelled from the press (px, 0 when below start). */
+  upTravel: number;
   /**
    * True when a fast upward swipe may commit a flick throw (most of the screen
    * above the action buttons).
    */
   upperBoard: boolean;
+  /** Bloom paint order (matches the board's Reverse toggle). */
+  reverse?: boolean;
 };
 
 export type DragResolution = {
@@ -115,7 +121,10 @@ function resolveThrow(input: DragInput, card: Card): DragResolution {
   const discard = input.legal.find((a) => a.t === 'Discard' && a.card === card.id)
     ?? input.legal.find((a) => a.t === 'Discard' && sameCard(input.view, a.card, card));
   if (!discard) return cancel(input);
-  const flick = input.upSpeed >= FLICK_SPEED_PX_PER_MS && input.upperBoard;
+  // Peak speed + upper board, or a clear upward swipe (travel) with a softer peak — release
+  // often decelerates, so the last frame alone used to miss flicks.
+  const flick = (input.upSpeed >= FLICK_SPEED_PX_PER_MS && input.upperBoard)
+    || (input.upSpeed >= FLICK_SPEED_PX_PER_MS * 0.55 && input.upTravel >= FLICK_TRAVEL_PX);
   if (flick) return { active: true, mode: 'flick', commit: discard, hoverKey: null, hover: 'flick', shape: [], openOptions: false, led: 'THROW' };
   if (input.overDiscardPile) return { active: true, mode: 'discard', commit: discard, hoverKey: null, hover: 'pile', shape: [], openOptions: false, led: 'THROW' };
   // A slow drag over a legal hex is never a throw: with no pile highlight nothing is committed.
@@ -141,10 +150,11 @@ function resolveAct(input: DragInput, card: Card): DragResolution {
   if (input.sel.kind?.startsWith('bloom-') && kindCards(input.sel.kind).some((id) => sameCard(input.view, id, card))) {
     const combo = comboFor(input.view, input.legal, input.sel);
     if (combo) {
+      const reverse = !!input.reverse;
       const key = input.boardKey;
-      const next = key ? drawNext(combo, input.shape, false) : null;
-      const shape = key ? paintEnter(combo, input.shape, key, false) : [...input.shape];
-      const action = paintMatch(combo, shape, false);
+      const next = key ? drawNext(combo, input.shape, reverse) : null;
+      const shape = key ? paintEnter(combo, input.shape, key, reverse) : [...input.shape];
+      const action = paintMatch(combo, shape, reverse);
       const overLegal = !!key && (!!action || !!next?.has(key) || shape.length > input.shape.length || input.shape.at(-2) === key);
       return {
         active: true, mode: 'bloom', commit: key ? action : null, hoverKey: key,

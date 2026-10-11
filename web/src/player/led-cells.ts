@@ -150,18 +150,31 @@ export function ledToken(message: string): string | null {
   return null;
 }
 
-/** Full-size square LED cells. Longer copy repeats as one seamless marquee strip. */
-export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat = false, mode: LedTone = 'amber') {
+/** Full-size square LED cells. Longer copy repeats as one seamless marquee strip.
+ *  `scale` grows the dots (tutorial titles use ~1.15 so they match the old 20px heading). */
+export function drawLedCells(
+  canvas: HTMLCanvasElement,
+  message: string,
+  repeat = false,
+  mode: LedTone = 'amber',
+  scale = 1,
+) {
+  const s = Math.max(0.5, scale);
+  const advance = ADVANCE * s;
+  const dotX = DOT_X * s;
+  const rowStep = 3.1 * s;
+  const originY = 3.15 * s;
+  const cellH = 26 * s;
   const shown = repeat ? `${message}${SEPARATOR}${message}${SEPARATOR}${message}` : message;
-  const width = ledMessageWidth(shown);
+  const width = Math.max(1, shown.length * advance - s);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   canvas.width = Math.ceil(width * dpr);
-  canvas.height = Math.ceil(26 * dpr);
+  canvas.height = Math.ceil(cellH * dpr);
   canvas.style.width = `${width}px`;
-  canvas.style.height = '26px';
+  canvas.style.height = `${cellH}px`;
   const ctx = canvas.getContext('2d');
   if (!ctx) return width;
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colon = mode === 'score' ? shown.indexOf(':') : -1;
   for (let i = 0; i < shown.length; i++) {
     const rows = GLYPHS[shown[i]!] ?? (shown[i] === ' ' ? '' : GLYPHS['?']!);
@@ -169,15 +182,15 @@ export function drawLedCells(canvas: HTMLCanvasElement, message: string, repeat 
     const glyph = rows.split('/');
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
       const lit = glyph[y]?.[x] === '1';
-      const px = i * ADVANCE + x * DOT_X + 1.1;
-      const py = y * 3.1 + 3.15;
-      const radius = shown[i] === '•' ? 1.33 : 1;
+      const px = i * advance + x * dotX + 1.1 * s;
+      const py = y * rowStep + originY;
+      const radius = (shown[i] === '•' ? 1.33 : 1) * s;
       ctx.beginPath();
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       if (lit) {
         const tone = mode === 'score' ? (i < colon ? 'green' : i > colon ? 'red' : 'amber') : mode;
         ctx.fillStyle = INK[tone].fill;
-        ctx.shadowColor = INK[tone].glow; ctx.shadowBlur = tone === 'red' ? 4 : 3.4;
+        ctx.shadowColor = INK[tone].glow; ctx.shadowBlur = (tone === 'red' ? 4 : 3.4) * s;
         ctx.fill();
       }
       ctx.shadowBlur = 0;

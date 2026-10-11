@@ -11,10 +11,12 @@ import {
   migrateTutorialProgress,
   resolveLessonTarget,
   tutorialAccepts,
+  tutorialApplyLesson,
   tutorialChapter,
   tutorialFeedback,
   tutorialLesson,
   tutorialLessons,
+  tutorialStateAt,
   wordCount,
 } from '../src/logic/tutorial-script.js';
 import { bloomHintGroups } from '../src/logic/tips.js';
@@ -61,10 +63,18 @@ describe('tutorial pro: chapter shape', () => {
       expect(cards).toHaveLength(createCards(state.config).length);
       expect(new Set(cards.map(c => c.id)).size).toBe(cards.length);
       for (const [step, lesson] of tutorialLessons(chapter).entries()) {
-        if (lesson.action === 'Opponent' || lesson.action === 'FreeTurn' || lesson.action === 'Next') continue;
+        if (lesson.action === 'FreeTurn') continue;
         if (lesson.reseat === 'bloom-run') state = tutorialChapter(chapter, 'bloom-run');
-        const action = intended(state, chapter, step);
-        state = apply(state, action);
+        if (lesson.action === 'Opponent' || lesson.action === 'Next') {
+          state = tutorialApplyLesson(state, lesson);
+          continue;
+        }
+        // Confirm a legal intended move exists (Discard closes Grow first when needed).
+        const ready = lesson.action === 'Discard'
+          ? tutorialStateAt(chapter, step)
+          : state;
+        intended(ready, chapter, step);
+        state = tutorialApplyLesson(state, lesson);
       }
     }
   });
@@ -78,6 +88,54 @@ describe('tutorial pro: gating and feedback', () => {
     expect(tutorialAccepts(draw, { t: 'Draw', from: 'discard' }, state)).toBe(false);
     expect(tutorialFeedback('wrong', draw).length).toBeGreaterThan(0);
     expect(tutorialFeedback('wrong', draw)).toMatch(/glowing|Not that|Other side|Close/i);
+  });
+
+  it('throw lessons accept any Discard card and highlight hand + discard', () => {
+    const throwStep = tutorialLessons(1).findIndex(l => l.id === 'throw');
+    expect(throwStep).toBeGreaterThanOrEqual(0);
+    const lesson = tutorialLesson(1, throwStep)!;
+    expect(lesson.card).toBeUndefined();
+    expect(lesson.focus).toBe('hand');
+    const state = tutorialStateAt(1, throwStep);
+    expect(state.phase).toBe('DISCARD');
+    const discards = legalActions(viewFor(state, 0)).filter(a => a.t === 'Discard');
+    expect(discards.length).toBeGreaterThan(1);
+    for (const action of discards) {
+      expect(tutorialAccepts(lesson, action, state), `card ${action.card}`).toBe(true);
+    }
+    const target = resolveLessonTarget(lesson, state);
+    expect(target?.selector).toBe('#hand .card, #discard');
+    expect(target?.kind).toBe('hand');
+  });
+
+  it('after-grow goes straight to throw without Skip / EndAct', () => {
+    const ch = TUTORIAL_CHAPTER_IDS.indexOf('strengthen');
+    const doneStep = tutorialLessons(ch).findIndex(l => l.id === 'strength-done');
+    const lesson = tutorialLesson(ch, doneStep)!;
+    expect(lesson.action).toBe('Discard');
+    expect(lesson.action).not.toBe('EndAct');
+    const state = tutorialStateAt(ch, doneStep);
+    expect(state.phase).toBe('DISCARD');
+    const discards = legalActions(viewFor(state, 0)).filter(a => a.t === 'Discard');
+    expect(discards.length).toBeGreaterThan(0);
+    expect(tutorialAccepts(lesson, discards[0]!, state)).toBe(true);
+  });
+
+  it('connection closes Grow via Next (no Skip beat) before throw', () => {
+    const connection = tutorialLessons(1).find(l => l.id === 'connection')!;
+    expect(connection.action).toBe('Next');
+    expect(connection.closesGrow).toBe(true);
+    const throwStep = tutorialLessons(1).findIndex(l => l.id === 'throw');
+    expect(tutorialStateAt(1, throwStep).phase).toBe('DISCARD');
+  });
+
+  it('inserts short opponent beats after major chapters', () => {
+    for (const id of ['bloom', 'strengthen', 'cut', 'bomb', 'blast', 'throw-pile'] as const) {
+      const ch = TUTORIAL_CHAPTER_IDS.indexOf(id);
+      const opp = tutorialLessons(ch).filter(l => l.action === 'Opponent');
+      expect(opp.length, id).toBeGreaterThanOrEqual(1);
+      expect(opp[0]!.instruction).toMatch(/THEIR/i);
+    }
   });
 });
 
@@ -137,15 +195,85 @@ describe('tutorial pro: strings', () => {
     expect(WELCOME.tutorial).toMatch(/about 4 minutes|4 minutes/);
   });
 
-  it('every instruction is at most 6 words and every why line at most 12', () => {
+  it('every title is a short label and every body line stays brief', () => {
     for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT; chapter++) {
       for (const lesson of tutorialLessons(chapter)) {
         const instruction = lesson.instruction ?? lesson.text;
         expect(instruction, `${lesson.id} needs instruction`).toBeTruthy();
-        expect(wordCount(instruction), lesson.id).toBeLessThanOrEqual(6);
-        if (lesson.why) expect(wordCount(lesson.why), `${lesson.id} why`).toBeLessThanOrEqual(12);
+        expect(wordCount(instruction), lesson.id).toBeLessThanOrEqual(4);
+        if (lesson.why) expect(wordCount(lesson.why), `${lesson.id} why`).toBeLessThanOrEqual(18);
       }
     }
+  });
+});
+
+describe('tutorial pro: seek / Previous rebuild', () => {
+  it('rebuilds every step from authored openings without inventing or duplicating cards', () => {
+    for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT; chapter++) {
+      const lessons = tutorialLessons(chapter);
+      for (let step = 0; step < lessons.length; step++) {
+        const state = tutorialStateAt(chapter, step);
+        const cards = [...state.hands[0], ...state.hands[1], ...state.deck, ...state.discard];
+        expect(new Set(cards.map(c => c.id)).size, `${chapter}:${step}`).toBe(cards.length);
+        // Spent Grow/Bloom cards leave the pools; never invent extras.
+        expect(cards.length, `${chapter}:${step}`).toBeLessThanOrEqual(createCards(state.config).length);
+      }
+    }
+  });
+
+  it('after Grow, Previous lands on a board that still needs the Grow', () => {
+    const afterGrow = tutorialStateAt(1, 2); // STAY JOINED — sprout already applied
+    expect(afterGrow.board['-1,1']?.owner).toBe(0);
+    const backToGrow = tutorialStateAt(1, 1);
+    expect(backToGrow.phase).toBe('ACT');
+    expect(backToGrow.board['-1,1']).toBeFalsy();
+    const action = legalActions(viewFor(backToGrow, 0)).find(a =>
+      tutorialAccepts(tutorialLesson(1, 1)!, a, backToGrow));
+    expect(action?.t).toBe('Sprout');
+  });
+
+  it('Previous across the new bloom strategy / free recap lessons stays in range', () => {
+    const bloom = TUTORIAL_CHAPTER_IDS.indexOf('bloom');
+    const free = TUTORIAL_CHAPTER_IDS.indexOf('free');
+    expect(tutorialLessons(bloom).some(l => l.id === 'bloom-strategy')).toBe(true);
+    expect(tutorialLessons(free).some(l => l.id === 'free-recap')).toBe(true);
+    const strategyStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-strategy');
+    const setStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-set');
+    expect(tutorialStateAt(bloom, strategyStep).phase).toBe('ACT');
+    expect(tutorialStateAt(bloom, setStep).phase).toBe('ACT');
+    // Seek to free-recap then Previous into the prior chapter's last lesson.
+    const freeRecap = tutorialLessons(free).findIndex(l => l.id === 'free-recap');
+    expect(() => tutorialStateAt(free, freeRecap)).not.toThrow();
+    const prevChapter = free - 1;
+    const last = tutorialLessons(prevChapter).length - 1;
+    expect(() => tutorialStateAt(prevChapter, last)).not.toThrow();
+  });
+});
+
+describe('tutorial pro: card strategy copy', () => {
+  it('teaches bloom rules, 8/9 strength, and sets vs runs near bloom and before free play', () => {
+    const bloom = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('bloom'));
+    const free = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('free'));
+    const explain = bloom.find(l => l.id === 'bloom-explain')!;
+    const strategy = bloom.find(l => l.id === 'bloom-strategy')!;
+    const set = bloom.find(l => l.id === 'bloom-set')!;
+    const recap = free.find(l => l.id === 'free-recap')!;
+    expect(explain.instruction).toMatch(/^BLOOM$/i);
+    expect(explain.why).toMatch(/Grow/i);
+    expect(explain.why).toMatch(/same number|different suits/i);
+    expect(explain.why).toMatch(/consecutive|run/i);
+    expect(explain.why).toMatch(/3 to 6|3–6/i);
+    expect(explain.why).not.toMatch(/meld/i);
+    expect(strategy.instruction).toMatch(/LOOK FOR/i);
+    expect(strategy.why).toMatch(/8|9/);
+    expect(strategy.why).toMatch(/set/i);
+    expect(strategy.why).toMatch(/run/i);
+    expect(set.why).toMatch(/same number|different suits/i);
+    expect(recap.instruction).toMatch(/REMEMBER/i);
+    expect(recap.why).toMatch(/8|9/);
+    expect(wordCount(explain.why!)).toBeLessThanOrEqual(18);
+    expect(wordCount(strategy.why!)).toBeLessThanOrEqual(18);
+    expect(wordCount(recap.why!)).toBeLessThanOrEqual(18);
   });
 });
 

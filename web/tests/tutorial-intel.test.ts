@@ -4,8 +4,9 @@ import type { Action, State } from '../../src/engine/index.js';
 import { matchIntel, openingPublicDiscard, publicDiscardHistory } from '../src/logic/match-intel.js';
 import { Session } from '../src/logic/session.js';
 import {
-  TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS, tutorialAccepts, tutorialChapter,
-  tutorialChapterById, tutorialLesson, tutorialLessons, tutorialOpponentAction,
+  TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS, tutorialAccepts, tutorialApplyLesson,
+  tutorialChapter, tutorialChapterById, tutorialLesson, tutorialLessons,
+  tutorialOpponentAction, tutorialStateAt,
 } from '../src/logic/tutorial-script.js';
 
 const intended = (state: State, chapter: number, step: number): Action => {
@@ -24,10 +25,15 @@ describe('authored tutorial uses the current engine', () => {
       expect(cards).toHaveLength(createCards(state.config).length);
       expect(new Set(cards.map(card => card.id)).size).toBe(cards.length);
       for (const [step, lesson] of tutorialLessons(chapter).entries()) {
-        if (lesson.action === 'Opponent' || lesson.action === 'Next' || lesson.action === 'FreeTurn') continue;
+        if (lesson.action === 'FreeTurn') continue;
         if (lesson.reseat) state = tutorialChapter(chapter, lesson.reseat);
-        const action = intended(state, chapter, step);
-        state = apply(state, action);
+        if (lesson.action === 'Opponent' || lesson.action === 'Next') {
+          state = tutorialApplyLesson(state, lesson);
+          continue;
+        }
+        const ready = lesson.action === 'Discard' ? tutorialStateAt(chapter, step) : state;
+        intended(ready, chapter, step);
+        state = tutorialApplyLesson(state, lesson);
       }
     }
   });

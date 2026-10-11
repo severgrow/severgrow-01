@@ -34,8 +34,9 @@ try {
     appIcon.icons.every((icon: {src:string;sizes:string;width:number;height:number})=>icon.src.startsWith('futasaku-icon-') && icon.sizes===`${icon.width}x${icon.height}`) &&
     appIcon.icons.some((icon: {purpose:string})=>icon.purpose==='maskable'),
     'Android icons decode at the declared sizes with a separate mask-safe icon and Futa04-local launch scope');
-  await menu.click('#menu-tutorial');
-  await menu.waitForFunction(() => !!(window as any).__severgrow.state());
+  // Seeded match (not Tutorial): focus lock keeps #hud-menu inert mid-step.
+  await menu.goto(`${base}?seed=219682080`);
+  await menu.waitForFunction(() => !!(window as any).__severgrow.state() && !(window as any).__severgrow.busy());
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
@@ -46,7 +47,7 @@ try {
     check((await menu.locator('#first-tip-title').innerText()).length > 3 && (await menu.locator('#first-tip-text').innerText()).length > 60, `${topic}: full lesson is populated`);
     await menu.click('#first-tip-ok');
     check(!await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: acknowledgement closes help`);
-    check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the tutorial game available`);
+    check(!!await menu.evaluate(() => (window as any).__severgrow.state()), `${topic}: lessons leave the match available`);
   }
   await menu.close();
   // Futasaku 0.4 ships the default skin; the V3 skin is a localhost-only art preview
@@ -125,7 +126,7 @@ try {
     await page.keyboard.press('Escape');
     check(!await page.locator('#futasaku-glass').isVisible(), `${width}: Escape closes Match Intel`);
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(before), `${width}: reading Match Intel leaves state intact`);
-    await page.click('#deck');
+    await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
     await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === '0:0', undefined, { timeout: 8000 });

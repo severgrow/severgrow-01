@@ -1,6 +1,8 @@
 // Authored teaching positions. The rules still come entirely from apply/legalActions;
 // these positions only arrange public terrain, territory, and the card order.
-import { coordKey, createCards, homeCoord, neighbors, newGame, rootCoord } from '../../../src/engine/index.js';
+import {
+  apply, coordKey, createCards, homeCoord, legalActions, neighbors, newGame, viewFor,
+} from '../../../src/engine/index.js';
 import type { Action, Card, Coord, State, Suit, Tile } from '../../../src/engine/index.js';
 import { TUTORIAL } from '../../../src/strings.js';
 
@@ -12,15 +14,26 @@ type ChapterSpec = {
   final?: boolean; variant?: string;
 };
 
-export type TutorialFocus = 'deck' | 'discard' | 'card' | 'tile' | 'context' | 'bloom' | 'none' | 'home' | 'button' | 'explainer';
+export type TutorialFocus = 'deck' | 'discard' | 'card' | 'tile' | 'hand' | 'context' | 'bloom' | 'none' | 'home' | 'button' | 'explainer';
 export type TutorialChapterId =
   | 'goal' | 'turn' | 'bloom' | 'strengthen' | 'cut' | 'skip' | 'buttons'
   | 'bomb' | 'blast' | 'throw-pile' | 'win' | 'final' | 'free';
 export type TutorialLesson = {
   id: string;
   text: string;
+  /** Short title shown large in the glass (e.g. HOME). */
   instruction: string;
+  /** Simple body line under the title. */
   why?: string;
+  /** Primary glass button label. Empty = no primary CTA yet (delayed Next). */
+  cta?: string;
+  /** Ms before Next appears and blinks (Next-style steps). */
+  delayNextMs?: number;
+  /**
+   * Next beat after Grow: silently EndAct when seeking / replaying so the
+   * following Throw lesson lands in DISCARD (no Skip button on this beat).
+   */
+  closesGrow?: boolean;
   focus: TutorialFocus;
   card?: CardSpec;
   cardId?: number;
@@ -70,121 +83,201 @@ const L = (
 });
 
 const lessons: TutorialLesson[][] = [
-  // 1 GOAL — glow the home; tap it to advance (no real action).
+  // 1 GOAL
   [
-    L('goal-mine', 'Tap your home.', 'Everything you own must stay joined to it.', 'home', 'Next', { tile: { q: -2, r: 2 } }),
-    L('goal-theirs', 'Tap their home.', 'Surround it to win.', 'home', 'Next', { tile: { q: 2, r: -2 } }),
+    L('goal-mine', 'HOME', 'Every tile you grow must stay joined to it.', 'home', 'Next', {
+      tile: { q: -2, r: 2 }, delayNextMs: 2200, cta: 'NEXT',
+    }),
+    L('goal-theirs', 'THEIR HOME', 'Surround its tiles for a KO win.', 'home', 'Next', {
+      tile: { q: 2, r: -2 }, delayNextMs: 2200, cta: 'NEXT',
+    }),
   ],
   // 2 YOUR TURN
   [
-    L('draw', 'Tap the draw pile.', 'Your hand needs cards to grow.', 'deck', 'Draw'),
-    L('grow', 'Tap the glowing card.', 'Then the lit tile by your home.', 'tile', 'Sprout', { card: [0, 4], tile: { q: -1, r: 1 } }),
-    L('connection', 'Tap End Grow.', 'Cut-off tiles wither and score nothing.', 'context', 'EndAct'),
-    L('throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard', { card: [1, 2] }),
-    L('opponent', 'Watch their turn.', 'They grow the same way you do.', 'none', 'Opponent'),
+    L('draw', 'DRAW PILE', 'You start every turn by drawing 1 card from draw or discard pile.', 'deck', 'Draw', {
+      cta: 'TAP DRAW PILE',
+    }),
+    L('grow', 'GROW', 'Tap a card and a tile to grow.', 'hand', 'Sprout', {
+      tile: { q: -1, r: 1 }, cta: 'TAP A CARD',
+    }),
+    L('connection', 'STAY JOINED', 'Tiles cut off from your home wither and score nothing.', 'explainer', 'Next', {
+      delayNextMs: 1600, cta: 'NEXT', closesGrow: true,
+    }),
+    L('throw', 'THROW', 'Double-tap a card, or drag it to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('opponent', 'THEIR TURN', 'They grow the same way you do.', 'none', 'Opponent'),
   ],
   // 3 BLOOM
   [
-    L('bloom-explain', 'Tap Next.', 'A set or a run of three to six.', 'explainer', 'Next'),
-    L('bloom-set', 'Tap Bloom.', 'Three same numbers, different suits.', 'bloom', 'Bloom'),
-    L('bloom-set-after', 'Tap End Grow.', 'Stronger cards make stronger tiles.', 'context', 'EndAct'),
-    L('bloom-set-throw', 'Tap the glowing card.', 'Clear a card you do not need.', 'card', 'Discard'),
-    L('bloom-run', 'Tap Bloom.', 'Numbers in a row, one suit.', 'bloom', 'Bloom', { reseat: 'bloom-run' }),
-    L('bloom-run-after', 'Tap End Grow.', 'The tiles match the cards you spent.', 'context', 'EndAct'),
-    L('bloom-run-throw', 'Tap the glowing card.', 'Then their turn begins.', 'card', 'Discard'),
+    L('bloom-explain', 'BLOOM', 'Extra step on Grow. Same number different suits, or consecutive same suit — 3 to 6 cards.', 'explainer', 'Next', {
+      delayNextMs: 2400, cta: 'NEXT',
+    }),
+    L('bloom-strategy', 'LOOK FOR', '8 and 9 are strong. Sets: same number, different suits. Runs: consecutive, one suit.', 'explainer', 'Next', {
+      delayNextMs: 2200, cta: 'NEXT',
+    }),
+    L('bloom-set', 'BLOOM SET', 'Same number, different suits — three to six cards.', 'bloom', 'Bloom', {
+      cta: 'TAP BLOOM',
+    }),
+    L('bloom-set-after', 'CARD POWER', 'Each card keeps its number on the tile.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('bloom-set-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('bloom-run', 'BLOOM RUN', 'Consecutive numbers, one suit — three to six cards.', 'bloom', 'Bloom', {
+      reseat: 'bloom-run', cta: 'TAP BLOOM',
+    }),
+    L('bloom-run-after', 'MATCHED TILES', 'The tiles match the cards you spent.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('bloom-run-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('bloom-opponent', 'THEIR TURN', 'A quick look at their grow.', 'none', 'Opponent'),
   ],
   // 4 STRENGTHEN
   [
-    L('strength', 'Tap the glowing card.', 'A higher card makes it stronger.', 'tile', 'Sprout', { card: [0, 8], tile: { q: -1, r: 1 } }),
-    L('strength-done', 'Tap End Grow.', 'You already used your one Grow.', 'context', 'EndAct'),
-    L('strength-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('strength', 'STRENGTHEN', 'Play a higher card on your tile to make it stronger.', 'tile', 'Sprout', {
+      card: [0, 8], tile: { q: -1, r: 1 }, cta: 'TAP DECK',
+    }),
+    L('strength-done', 'AFTER GROW', 'After Growing, go straight to throw — pick a card.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('strength-opponent', 'THEIR TURN', 'They place a few tiles too.', 'none', 'Opponent'),
   ],
   // 5 CUT
   [
-    L('cut', 'Tap the glowing card.', 'Break this link. Cut tiles wither.', 'tile', 'Sprout', { card: [0, 8], tile: { q: 1, r: -1 } }),
-    L('cut-after', 'Tap End Grow.', 'Their score drops when tiles fall.', 'context', 'EndAct'),
-    L('cut-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('cut', 'CUT', 'Break their link. Cut-off tiles wither.', 'tile', 'Sprout', {
+      card: [0, 8], tile: { q: 1, r: -1 }, cta: 'TAP DECK',
+    }),
+    L('cut-after', 'WITHER', 'Their score drops when tiles fall.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('cut-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('cut-opponent', 'THEIR TURN', 'Their turn — same draw, grow, throw.', 'none', 'Opponent'),
   ],
   // 6 SKIP GROW
   [
-    L('skip', 'Tap End Grow.', 'You can skip Grow this turn.', 'context', 'EndAct'),
-    L('skip-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('skip', 'SKIP GROW', 'You can end Grow without placing a tile.', 'context', 'EndAct', {
+      cta: 'NEXT',
+    }),
+    L('skip-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
   ],
-  // 7 BUTTONS — glow the named control; tap it to advance (no real action).
+  // 7 BUTTONS
   [
-    L('btn-explain', 'Tap Next.', 'Meet each control one by one.', 'explainer', 'Next'),
-    L('btn-deck', 'Tap the draw pile.', 'You draw from here.', 'button', 'Next', { button: 'deck' }),
-    L('btn-discard', 'Tap the throw pile.', 'You may take its top card.', 'button', 'Next', { button: 'discard' }),
-    L('btn-sort', 'Tap Sort.', 'Same numbers and suits line up.', 'button', 'Next', { button: 'sort' }),
-    L('btn-undo', 'Tap Undo.', 'Takes back your last move.', 'button', 'Next', { button: 'undo' }),
-    L('btn-turns', 'Tap Turns.', 'Thirty turns each, then score.', 'button', 'Next', { button: 'turns' }),
-    L('btn-score', 'Tap Score.', 'Most tiles wins if time runs out.', 'button', 'Next', { button: 'score' }),
-    L('btn-menu', 'Tap Menu.', 'Settings and How to play live here.', 'button', 'Next', { button: 'menu' }),
-    L('btn-history', 'Tap History.', 'Public cards only — nothing hidden.', 'button', 'Next', { button: 'history' }),
-    L('btn-word', 'Tap the step word.', 'Draw, Grow, or Throw.', 'button', 'Next', { button: 'word' }),
+    L('btn-explain', 'CONTROLS', 'A quick look at the buttons around the board.', 'explainer', 'Next', {
+      delayNextMs: 1800, cta: 'NEXT',
+    }),
+    L('btn-deck', 'DRAW PILE', 'Tap here on your Draw step.', 'button', 'Next', {
+      button: 'deck', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-discard', 'THROW PILE', 'You may take its top card on Draw.', 'button', 'Next', {
+      button: 'discard', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-sort', 'SORT', 'Tidies your hand by number and suit.', 'button', 'Next', {
+      button: 'sort', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-undo', 'UNDO', 'Takes back your last move on your turn.', 'button', 'Next', {
+      button: 'undo', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-score', 'SCORE', 'Most tiles wins if the deck runs out.', 'button', 'Next', {
+      button: 'score', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-history', 'HISTORY', 'Match Intel — past moves, public cards.', 'button', 'Next', {
+      button: 'intel', delayNextMs: 1600, cta: 'NEXT',
+    }),
+    L('btn-display', 'DISPLAY', 'Shows important info — respect it.', 'button', 'Next', {
+      button: 'display', delayNextMs: 1600, cta: 'NEXT',
+    }),
   ],
   // 8 BOMB
   [
-    L('bomb', 'Tap the Bomb card.', 'Removes any enemy tile. Uses Grow.', 'tile', 'PlayFruit', { tile: { q: 0, r: 0 } }),
-    L('bomb-after', 'Tap End Grow.', 'Your home stays safe.', 'context', 'EndAct'),
-    L('bomb-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('bomb', 'BOMB', 'Destroy an enemy tile; cut-off tiles wither. Uses your Grow turn.', 'tile', 'PlayFruit', {
+      tile: { q: 0, r: 0 }, cta: 'TAP BOMB',
+    }),
+    L('bomb-after', 'SAFE HOME', 'Homes cannot be destroyed.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('bomb-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('bomb-opponent', 'THEIR TURN', 'They answer on their side.', 'none', 'Opponent'),
   ],
   // 9 BLAST
   [
-    L('mega', 'Tap Blast.', 'Clears the tile and its neighbours.', 'bloom', 'MegaBomb', { tile: { q: 1, r: -1 } }),
-    L('mega-after', 'Tap End Grow.', 'Homes are safe. Not your Grow.', 'context', 'EndAct'),
-    L('mega-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('mega', 'BLAST', 'Two Bombs clear a tile and its neighbours.', 'bloom', 'MegaBomb', {
+      tile: { q: 1, r: -1 }, cta: 'TAP BLAST',
+    }),
+    L('mega-after', 'AFTER BLAST', 'Blast does not use your Grow turn.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('mega-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('mega-opponent', 'THEIR TURN', 'Watch them grow once.', 'none', 'Opponent'),
   ],
   // 10 THROW PILE
   [
-    L('discard-draw', 'Tap the throw pile.', 'It can finish blooms.', 'discard', 'Draw'),
-    L('discard-bloom', 'Tap Bloom.', 'Use the card you took.', 'bloom', 'Bloom'),
-    L('discard-after', 'Tap End Grow.', 'Watch what they throw.', 'context', 'EndAct'),
-    L('discard-throw', 'Tap the glowing card.', 'Throwing ends your turn.', 'card', 'Discard'),
+    L('discard-draw', 'THROW PILE', 'Glows when a card there can finish a bloom.', 'discard', 'Draw', {
+      cta: 'TAP THROW PILE',
+    }),
+    L('discard-bloom', 'USE IT', 'Bloom with the card you took.', 'bloom', 'Bloom', {
+      cta: 'TAP BLOOM',
+    }),
+    L('discard-after', 'WATCH THEM', 'What they throw often completes a set or run.', 'explainer', 'Next', {
+      delayNextMs: 1400, cta: 'NEXT', closesGrow: true,
+    }),
+    L('discard-throw', 'THROW', 'Double-tap or drag to the discard pile.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('discard-opponent', 'THEIR TURN', 'Their turn — short and clear.', 'none', 'Opponent'),
   ],
   // 11 HOW YOU WIN
   [
-    L('win-explain', 'Tap Next.', 'Surround their home, or most tiles.', 'explainer', 'Next'),
-    L('win-place', 'Tap the glowing card.', 'Close the ring to win.', 'tile', 'Sprout', { card: [0, 5], tile: { q: 2, r: -1 } }),
+    L('win-explain', 'HOW YOU WIN', 'Surround their home for a KO, or hold most tiles.', 'explainer', 'Next', {
+      delayNextMs: 2200, cta: 'NEXT',
+    }),
+    L('win-place', 'CLOSE THE RING', 'The last neighbour ends it at once.', 'tile', 'Sprout', {
+      card: [0, 5], tile: { q: 2, r: -1 }, cta: 'TAP DECK',
+    }),
   ],
   // 12 FINAL TURN
   [
-    L('final', 'Tap End Grow.', 'No card left. Grow comes first.', 'context', 'EndAct'),
-    L('final-throw', 'Tap the glowing card.', 'Both get a fair last turn.', 'card', 'Discard'),
-    L('final-opponent', 'Watch their turn.', 'Same fair Grow-first turn.', 'none', 'Opponent'),
+    L('final', 'FINAL TURN', 'Last round: no cards left. This turn starts at Grow.', 'context', 'EndAct', {
+      cta: 'NEXT',
+    }),
+    L('final-throw', 'LAST THROW', 'Both get a fair last turn. Then score wins.', 'hand', 'Discard', {
+      cta: 'TAP A CARD',
+    }),
+    L('final-opponent', 'THEIR LAST', 'Same fair Grow-first turn for them.', 'none', 'Opponent'),
   ],
   // 13 FREE
   [
-    L('free', 'Your turn. No guide.', undefined, 'none', 'FreeTurn'),
+    L('free-recap', 'REMEMBER', 'Hold 8s and 9s. Bloom sets or suit runs on Grow.', 'explainer', 'Next', {
+      delayNextMs: 1800, cta: 'NEXT',
+    }),
+    L('free', 'FREE PLAY', 'Your turn. The bulb shows what to do.', 'none', 'FreeTurn'),
   ],
 ];
 
 const baseSpecs: ChapterSpec[] = [
-  // goal — no cards played; any legal opening is fine
   { seed: 51000, phase: 'DRAW', hand: [[0, 4], [1, 2], [2, 3], [3, 4], [0, 7], [1, 6], [2, 8]], opponent: [[1, 3], [2, 4], [3, 5]], draw: [3, 2], discard: [2, 2] },
-  // turn (old 0)
   { seed: 51001, phase: 'DRAW', hand: [[0, 4], [1, 2], [2, 3], [3, 4], [0, 7], [1, 6], [2, 8]], opponent: [[1, 3], [2, 4], [3, 5]], draw: [3, 2], discard: [2, 2] },
-  // bloom set
   { seed: 51005, phase: 'ACT', hand: [[0, 3], [1, 3], [2, 3], [1, 2], [2, 6], [3, 7], [1, 8]], tiles: [['-1,1', 0, 3]], variant: 'bloom-set' },
-  // strengthen (old 1)
   { seed: 51002, phase: 'ACT', hand: [[0, 8], [1, 2], [2, 3], [3, 4], [0, 5], [1, 6], [2, 7]], tiles: [['-1,1', 0, 2]] },
-  // cut (old 3)
   { seed: 51004, phase: 'ACT', hand: [[0, 8], [1, 2], [2, 3], [3, 4], [0, 5], [1, 6], [2, 7]], tiles: [['-1,1', 0, 4], ['0,0', 0, 3], ['1,-1', 1, 2], ['0,-1', 1, 5]] },
-  // skip (old 2)
   { seed: 51003, phase: 'ACT', hand: [[0, 2], [1, 3], [2, 4], [3, 5], [0, 6], [1, 7], [2, 8]], tiles: [['-1,1', 0, 3]] },
-  // buttons
   { seed: 51011, phase: 'DRAW', hand: [[0, 4], [1, 2], [2, 3], [3, 4], [0, 7], [1, 6], [2, 8]], draw: [3, 2], discard: [2, 2] },
-  // bomb (old 5)
   { seed: 51006, phase: 'ACT', hand: [[null, 0], [0, 3], [1, 4], [2, 5], [3, 6], [0, 7], [1, 8]], tiles: [['-1,1', 0, 3], ['1,-1', 1, 2], ['0,0', 1, 4]] },
-  // blast (old 6)
   { seed: 51007, phase: 'ACT', hand: [[null, 0], [null, 0], [0, 3], [1, 4], [2, 5], [3, 6], [0, 7]], tiles: [['-1,1', 0, 4], ['0,0', 0, 5], ['1,-1', 1, 2], ['0,-1', 1, 3], ['1,0', 1, 4], ['2,-1', 1, 4], ['1,-2', 1, 3]] },
-  // throw pile (old 7)
   { seed: 51008, phase: 'DRAW', hand: [[0, 3], [0, 4], [1, 2], [2, 5], [3, 6], [1, 7], [2, 8]], discard: [0, 5], draw: [3, 2], tiles: [['-1,1', 0, 4]] },
-  // win — built dynamically below
   { seed: 51012, phase: 'ACT', hand: [[0, 5], [1, 2], [2, 3], [3, 4], [0, 7], [1, 6], [2, 8]], tiles: [] },
-  // final (old 8)
   { seed: 51009, phase: 'ACT', hand: [[0, 3], [1, 4], [2, 5], [3, 6], [0, 7]], opponent: [[1, 3], [2, 4], [3, 5]], tiles: [['-1,1', 0, 4], ['1,-1', 1, 3]], final: true },
-  // free (old 9)
   { seed: 51010, phase: 'DRAW', hand: [[0, 4], [0, 5], [1, 3], [2, 4], [3, 5], [1, 7], [2, 8]], draw: [3, 2], tiles: [['-1,1', 0, 3], ['1,-1', 1, 3]] },
 ];
 
@@ -205,19 +298,23 @@ export const resolveLessonTarget = (lesson: TutorialLesson, state: State): Lesso
   if (lesson.focus === 'none' || lesson.action === 'FreeTurn' || lesson.action === 'Opponent') {
     return { kind: 'none', selector: '', shape: 'none' };
   }
-  // Pure explainers: only the Next button.
   if (lesson.focus === 'explainer') {
     return { kind: 'explainer', selector: '#futasaku-glass [data-tut="next"]', shape: 'pill' };
+  }
+  // Throw: union hand + discard pile (soft rounded rect via measureTarget).
+  if (lesson.focus === 'hand' || lesson.action === 'Discard') {
+    return { kind: 'hand', selector: '#hand .card, #discard', shape: 'pill' };
   }
   if (lesson.focus === 'deck') return { kind: 'deck', selector: '#deck', shape: 'pill' };
   if (lesson.focus === 'discard') return { kind: 'discard', selector: '#discard', shape: 'pill' };
   if (lesson.focus === 'context') return { kind: 'context', selector: '#smart-context', shape: 'pill' };
+  // Before paint: Bloom button. While painting, main.ts unions planted hexes + tip hexes.
   if (lesson.focus === 'bloom') return { kind: 'bloom', selector: '#smart-bloom-button', shape: 'pill' };
   if (lesson.focus === 'button') {
     const id = lesson.button ?? lesson.id;
     const map: Record<string, string> = {
       deck: '#deck', discard: '#discard', sort: '#hand-sort', undo: '#tool-undo',
-      turns: '#turn-pill', score: '#race', menu: '#hud-menu', history: '#hud-history', word: '#turn',
+      score: '#race', intel: '#futa04-help-button', display: '#smart-led',
     };
     return { kind: 'button', selector: map[id] ?? `[data-tutorial-btn="${id}"]`, shape: 'pill' };
   }
@@ -228,10 +325,10 @@ export const resolveLessonTarget = (lesson: TutorialLesson, state: State): Lesso
         ? state.hands[0].find(c => c.suit === lesson.card![0] && c.rank === lesson.card![1])
         : state.hands[0][0];
     if (!card) return null;
-    return { kind: 'card', selector: `#hand .card[data-card="${card.id}"]`, shape: 'card' };
+    return { kind: 'card', selector: `#hand .card[data-card="${card.id}"]`, shape: 'pill' };
   }
   if ((lesson.focus === 'tile' || lesson.focus === 'home') && lesson.tile) {
-    return { kind: lesson.focus, selector: `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`, shape: 'hex' };
+    return { kind: lesson.focus, selector: `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`, shape: 'pill' };
   }
   return null;
 };
@@ -241,7 +338,6 @@ const PRAISE = TUTORIAL.praise;
 let wrongCursor = 0;
 let praiseCursor = 0;
 let lastPraise = -1;
-
 let lockedCursor = 0;
 
 export const tutorialFeedback = (
@@ -275,15 +371,13 @@ const winTiles = (state: State): TileSpec[] => {
   const enemy = homeCoord(1, state.config);
   const mine = homeCoord(0, state.config);
   const around = neighbors(enemy, state.config.boardRadius);
-  // Leave the last neighbour empty for the scripted Grow; fill the rest with my tiles.
   const open = around[around.length - 1]!;
   const filled = around.slice(0, -1);
   const path: TileSpec[] = [
-    [coordKey({ q: mine.q + 1, r: mine.r - 1 }), 0, 3], // -1,1 from -2,2
+    [coordKey({ q: mine.q + 1, r: mine.r - 1 }), 0, 3],
     ['0,0', 0, 3],
   ];
   for (const c of filled) path.push([coordKey(c), 0, 4]);
-  // Ensure open hex is reachable: last filled should touch it (neighbours are adjacent ring).
   void open;
   return path;
 };
@@ -310,7 +404,6 @@ export const tutorialChapter = (chapter: number, variant?: string): State => {
     : (spec.tiles ?? []);
   for (const [key, owner, strength] of tileList) board[key] = { owner, strength } satisfies Tile;
 
-  // Goal / win lessons use live home coords.
   if (chapter === 0) {
     const mine = homeCoord(0, opening.config);
     const theirs = homeCoord(1, opening.config);
@@ -353,12 +446,15 @@ export const tutorialAccepts = (lesson: TutorialLesson, action: Action, state: S
       && coordKey(action.coord) === coordKey(tile);
   }
   if (action.t === 'PlayFruit' || action.t === 'MegaBomb') return coordKey(action.target) === coordKey(lesson.tile!);
-  if (action.t === 'Bloom') return true;
-  if (action.t === 'Discard' && lesson.card) {
-    const card = state.hands[0].find(c => c.id === action.card);
-    return !!card && card.suit === lesson.card[0] && card.rank === lesson.card[1];
-  }
+  if (action.t === 'Bloom' || action.t === 'Discard') return true;
   return true;
+};
+
+/** After Blast (and similar), still in Grow — advance silently to Throw for the next lesson. */
+const endActIfNeeded = (state: State): State => {
+  if (state.phase !== 'ACT' || state.actor !== 0) return state;
+  const end = legalActions(viewFor(state, 0)).find(a => a.t === 'EndAct');
+  return end ? apply(state, end) : state;
 };
 
 /** The tutorial opponent visibly grows once where possible, using legal engine moves. */
@@ -369,11 +465,58 @@ export const tutorialOpponentAction = (legal: readonly Action[]): Action | null 
   ?? legal.find(action => action.t === 'Discard')
   ?? legal[0] ?? null;
 
-/** Drag tests and old call sites: map by familiar seed / role. */
-export const tutorialChapterById = (id: TutorialChapterId, variant?: string): State => {
-  const chapter = TUTORIAL_CHAPTER_IDS.indexOf(id);
-  if (chapter < 0) throw new RangeError(`Unknown tutorial id ${id}`);
-  return tutorialChapter(chapter, variant);
+/** Apply one guided lesson's move (or a full opponent turn) without UI. */
+export const tutorialApplyLesson = (state: State, lesson: TutorialLesson): State => {
+  if (lesson.action === 'FreeTurn') return state;
+  // Next after Grow: close ACT silently so Throw / seek lands in DISCARD.
+  if (lesson.action === 'Next') return lesson.closesGrow ? endActIfNeeded(state) : state;
+  if (lesson.action === 'Opponent') {
+    let next = state;
+    // Prefer a short authored turn that still places tiles when legal.
+    for (let guard = 0; guard < 12; guard++) {
+      if (next.phase === 'GAME_OVER' || next.actor === 0) break;
+      const action = tutorialOpponentAction(legalActions(viewFor(next, next.actor)));
+      if (!action) break;
+      next = apply(next, action);
+    }
+    return next;
+  }
+  // Throw lessons expect DISCARD — EndAct first when Grow is still open.
+  let from = lesson.action === 'Discard' ? endActIfNeeded(state) : state;
+  const legal = legalActions(viewFor(from, 0));
+  const action = legal.find(candidate => tutorialAccepts(lesson, candidate, from));
+  if (!action) return from;
+  const next = apply(from, action);
+  // Blast does not spend Grow; tutorial throw lessons expect DISCARD.
+  if (lesson.action === 'MegaBomb') return endActIfNeeded(next);
+  return next;
 };
 
-void rootCoord;
+/**
+ * Authored board at the start of (chapter, step). Rebuilds from the chapter opening
+ * (and any reseat), then silently applies every earlier lesson — safe for Previous.
+ */
+export const tutorialStateAt = (chapter: number, step: number): State => {
+  const lessons = tutorialLessons(chapter);
+  if (!lessons.length || step < 0 || step >= lessons.length) {
+    throw new RangeError(`Tutorial seek out of range: ${chapter}:${step}`);
+  }
+  let reseatAt = -1;
+  let variant: string | undefined;
+  for (let i = 0; i <= step; i++) {
+    const reseat = lessons[i]?.reseat;
+    if (reseat) { reseatAt = i; variant = reseat; }
+  }
+  let state = tutorialChapter(chapter, variant);
+  const from = reseatAt >= 0 ? reseatAt : 0;
+  for (let i = from; i < step; i++) state = tutorialApplyLesson(state, lessons[i]!);
+  // Throw beat: silent EndAct so the authored position matches live ensureTutorialThrowPhase.
+  if (lessons[step]?.action === 'Discard') state = endActIfNeeded(state);
+  return state;
+};
+
+export const tutorialChapterById = (id: TutorialChapterId, variant?: string): State => {
+  const chapter = TUTORIAL_CHAPTER_IDS.indexOf(id);
+  if (chapter < 0) throw new RangeError(`Unknown tutorial chapter id ${id}`);
+  return tutorialChapter(chapter, variant);
+};

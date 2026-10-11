@@ -1,4 +1,4 @@
-// Tutorial focus lock: dead chrome stays dead; target still works; Exit releases.
+// Tutorial focus lock: dead chrome stays dead; target still works; menu Exit releases.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
@@ -31,9 +31,12 @@ const hashState = async (page: import('playwright-core').Page) => {
 
 const openTutorial = async (page: import('playwright-core').Page, chapter = 1) => {
   await page.addInitScript(() => {
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({
+    const settings = JSON.stringify({
       speed: 'fast', reduceMotion: true, sound: false, music: false, coach: false, eyeCandy: false,
-    }));
+    });
+    for (const k of ['severgrow.settings.v1', 'futa04:severgrow.settings.v1', 'main2:severgrow.settings.v1']) {
+      localStorage.setItem(k, settings);
+    }
   });
   await page.goto(`http://localhost:4198/?tutorial=1&chapter=${chapter}`);
   await page.waitForFunction(() => !!(window as any).__severgrow?.tutorialGate?.()?.active, undefined, { timeout: 20000 });
@@ -46,9 +49,11 @@ try {
     const page = await browser.newPage({ viewport: VIEWPORTS[1], hasTouch: true, isMobile: true });
     page.on('pageerror', e => errors.push(e.message));
     await openTutorial(page, 2);
-    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /draw pile/i);
+    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /DRAW PILE/i);
+    // Glass Exit is gone — leave via the pause menu.
+    assert.equal(await page.locator('#futasaku-glass [data-tut="exit"]').count(), 0, 'glass Exit must be removed');
     const before = await hashState(page);
-    const dead = ['#hud-menu', '#hud-history', '#menu-settings', '#hand-sort', '#tool-undo', '#discard'];
+    const dead = ['#hud-history', '#menu-settings', '#hand-sort', '#tool-undo', '#discard'];
     for (const sel of dead) {
       const el = page.locator(sel).first();
       if (await el.count()) await el.click({ force: true }).catch(() => undefined);
@@ -59,8 +64,10 @@ try {
     // Wheel zoom + keyboard
     await page.mouse.wheel(0, 400);
     await page.keyboard.press('Tab');
+    // Enter/Space can open the pause sheet via a focused control — Escape closes it again.
     await page.keyboard.press('Enter');
     await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     // Pinch-ish drag on board
     const board = page.locator('#board-wrap');
@@ -72,15 +79,26 @@ try {
       await page.mouse.up();
     }
     assert.equal(await hashState(page), before, 'dead taps must not change game state');
-    assert.equal(await page.locator('#menu:not([hidden])').count(), 0, 'menu must stay closed');
-    // Wrong-tap message appears
+    assert.equal(await page.locator('#menu:not([hidden])').count(), 0, 'main menu must stay closed');
+    // Wrong taps stay silent — glass copy must not flip to a "locked" toast.
     await page.mouse.click(12, 12);
     await page.waitForTimeout(80);
     const copy = await page.locator('#futasaku-glass .glass-copy').textContent() ?? '';
-    assert.match(copy, /glowing|Not there|Almost|locked/i);
+    assert.match(copy, /DRAW PILE/i);
+    assert.doesNotMatch(copy, /locked|Not there|Almost|glowing/i);
     await page.screenshot({ path: path.join(SHOT_DIR, 'lock-wrong-tap.png') });
 
-    // Fuzz 100 random points that the gate would block (outside target + window).
+    // Fuzz against the step gate (not the pause-sheet allow list).
+    const sheetOpen = await page.evaluate(() => !document.getElementById('scrim')?.hidden);
+    if (sheetOpen) {
+      await page.locator('#gm-resume, #sheet-menu [data-close]').first().click({ force: true });
+      await page.waitForFunction(() => !!document.getElementById('scrim')?.hidden, undefined, { timeout: 5000 });
+    }
+    await page.waitForFunction(() => {
+      const gate = (window as any).__severgrow?.tutorialGate?.();
+      const allow = gate?.allow?.selectors ?? [];
+      return !!gate?.active && allow.includes('#deck') && !allow.includes('#scrim');
+    }, undefined, { timeout: 5000 });
     const beforeFuzz = await hashState(page);
     let fuzzed = 0;
     for (let i = 0; i < 200 && fuzzed < 100; i++) {
@@ -105,8 +123,16 @@ try {
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'ACT', undefined, { timeout: 15000 });
 
-    // Exit releases lock
-    await page.locator('#futasaku-glass [data-tut="exit"]').click({ force: true });
+    // Menu opens; Exit tutorial is first and releases the lock.
+    await page.locator('#hud-menu').click();
+    await page.waitForSelector('#sheet-menu:not([hidden])');
+    const firstVisible = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll<HTMLButtonElement>('#sheet-menu .sheet-body > button')]
+        .filter(b => !b.hidden && getComputedStyle(b).display !== 'none');
+      return buttons[0]?.id ?? '';
+    });
+    assert.equal(firstVisible, 'gm-exit-tutorial', 'Exit tutorial must be the first menu option');
+    await page.locator('#gm-exit-tutorial').click();
     await page.waitForFunction(() => !(window as any).__severgrow?.tutorialGate?.()?.active, undefined, { timeout: 10000 });
     const leftover = await page.evaluate(() =>
       ['#game', '#menu', '#levels', '#scrim']
@@ -133,11 +159,18 @@ try {
     await page.waitForTimeout(700);
     await page.screenshot({ path: path.join(SHOT_DIR, 'chapter-02-grow.png') });
 
-    // Lock proof: menu tap does nothing
-    const before = await hashState(page);
-    await page.locator('#hud-menu').click({ force: true });
-    assert.equal(await hashState(page), before);
+    // Menu stays reachable and looks usable (not inert / not blocked by the gate).
+    const menuBlocked = await page.evaluate(() => {
+      const menu = document.getElementById('hud-menu');
+      const gate = (window as any).__severgrow?.tutorialGate?.();
+      return !menu || !!gate?.wouldBlock(menu);
+    });
+    assert.equal(menuBlocked, false, '#hud-menu must stay reachable during tutorial');
+    await page.locator('#hud-menu').click();
+    await page.waitForSelector('#sheet-menu:not([hidden]) #gm-exit-tutorial:not([hidden])');
     await page.screenshot({ path: path.join(SHOT_DIR, 'lock-menu-blocked.png') });
+    await page.locator('#sheet-menu [data-close], #gm-resume').first().click({ force: true });
+    await page.waitForFunction(() => !!document.getElementById('sheet-menu')?.hidden, undefined, { timeout: 5000 });
 
     // Back / exit path via API
     await page.evaluate(() => (window as any).__severgrow.exitTutorial());
@@ -152,9 +185,12 @@ try {
   {
     const page = await browser.newPage({ viewport: VIEWPORTS[1] });
     await page.addInitScript(() => {
-      localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({
+      const settings = JSON.stringify({
         speed: 'fast', reduceMotion: true, sound: false, music: false, coach: false,
-      }));
+      });
+      for (const k of ['severgrow.settings.v1', 'futa04:severgrow.settings.v1', 'main2:severgrow.settings.v1']) {
+        localStorage.setItem(k, settings);
+      }
     });
     await page.goto('http://localhost:4198/');
     await page.waitForSelector('#menu-new, #menu-play, #menu-tutorial');

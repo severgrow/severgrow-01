@@ -20,6 +20,8 @@ export type DragLayerHooks = {
   pointOf: (key: string) => { x: number; y: number } | null;
   overDiscardPile: (clientX: number, clientY: number) => boolean;
   upperBoard: (clientY: number) => boolean;
+  /** Bloom paint Reverse (kept in sync with the board's toggle). */
+  bloomReverse?: () => boolean;
   /** Optional: mark the cockpit shell while a throw drop would commit. */
   setThrowZone?: (on: boolean) => void;
   /** Plays a legal action the same way the tap path would. */
@@ -72,14 +74,21 @@ const DRAG_CSS = `
 .drag-ghost.drag-illegal { opacity: .6; }
 .drag-ghost.drag-pile { opacity: 1; box-shadow: 0 12px 26px rgba(0,0,0,.48); }
 .drag-ghost.drag-flick { opacity: .94; box-shadow: 0 14px 28px rgba(0,0,0,.5); }
-/* Chevron sits just above the finger / touch area so a thumb does not cover it. */
+/* Aim chevron: only on the grow mini-card (after morph). Hidden on full-size
+   hand ghosts, discard/throw/flick, and draw-from-pile. */
 .drag-ghost .drag-chevron {
+  display: none;
   position: absolute; left: 50%; top: -14px; width: 12px; height: 10px;
   transform: translateX(-50%); opacity: .55; pointer-events: none;
   background: currentColor; clip-path: polygon(50% 0,100% 100%,0 100%);
 }
-.drag-ghost.drag-flick .drag-chevron { opacity: .85; }
-.drag-ghost.drag-legal .drag-chevron, .drag-ghost.drag-pile .drag-chevron { opacity: .9; }
+.drag-ghost.drag-mini .drag-chevron {
+  display: block;
+}
+.drag-ghost.drag-mini.drag-legal .drag-chevron { opacity: .9; }
+/* Grow/Bloom ghost: bloom-menu mini look (number + suit, no deck art). */
+.drag-ghost.futa04-mini-card .futa04-card-art { display: none !important; }
+.drag-ghost.futa04-mini-card :is(.c-num,.c-suit) { opacity: 1 !important; }
 /* Soft amber wash on the aimed pile — never a white outline rectangle. */
 #deck.drag-target .pile-card, #discard.drag-target .pile-card {
   filter: brightness(1.08);
@@ -103,6 +112,8 @@ type Active = {
   lastX: number;
   lastY: number;
   lastTime: number;
+  /** Peak upward speed (px/ms) seen after the drag started. */
+  peakUpSpeed: number;
   shape: string[];
   started: boolean; // past the threshold
   resolution: DragResolution;
@@ -161,11 +172,21 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     return el.querySelector<HTMLElement>('.pile-top') ?? el.querySelector<HTMLElement>('.pile-card') ?? el;
   };
 
+  /** How far above the finger the ghost sits (card height multiples). Mini sits higher so the thumb clears it. */
+  const ghostLift = (mini: boolean) => (mini ? 1.4 : 1.15);
+  /** Logical mini size — prefer over getBoundingClientRect during the morph transition. */
+  const MINI_H = 44;
+  const MINI_W = 28;
+  /** Chevron sits this many px above the mini card; aim uses the tip cluster. */
+  const CHEVRON_H = 12;
+
   const buildGhost = (a: Active) => {
     const g = document.createElement('div');
     const cls = a.faceEl.classList.contains('card') ? a.faceEl.className : 'card';
     g.className = `drag-ghost ${cls}`;
     g.innerHTML = a.faceEl.innerHTML;
+    const fromPile = a.source.kind === 'deck' || a.source.kind === 'discard';
+    g.classList.toggle('drag-from-pile', fromPile);
     const r = a.faceEl.getBoundingClientRect();
     const w = Math.max(8, r.width);
     const h = Math.max(8, r.height);
@@ -173,33 +194,55 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     g.style.height = `${h}px`;
     g.dataset.fullW = String(w);
     g.dataset.fullH = String(h);
-    const chev = document.createElement('span');
-    chev.className = 'drag-chevron';
-    g.append(chev);
+    // Chevron element exists for hand grow morph; CSS keeps it hidden until drag-mini.
+    if (!fromPile) {
+      const chev = document.createElement('span');
+      chev.className = 'drag-chevron';
+      g.append(chev);
+    }
     document.body.append(g);
     ghost = g;
-    // Sit just above the finger so the thumb does not bury the card or chevron.
+    // Sit above the finger so the thumb does not bury the card (or mini chevron).
     gx = tx = a.x - w / 2;
-    gy = ty = a.y - h * 0.92;
+    gy = ty = a.y - h * ghostLift(false);
     a.sourceEl.classList.add('drag-source-dim');
     a.sourceEl.setAttribute('data-drag-dim', '');
   };
 
-  /** Mid-drag: shrink toward a bloom-menu mini-card so it stays visible past the thumb. */
+  /** Mid-drag: bloom-menu mini look (number/suit, no deck art) so the card stays readable above the thumb.
+   *  The white aim chevron appears only in this mini grow state (CSS: .drag-mini .drag-chevron). */
   const morphGhost = (a: Active, overBoard: boolean) => {
     if (!ghost || a.source.kind !== 'hand') return;
     const fullW = Number(ghost.dataset.fullW) || 48;
     const fullH = Number(ghost.dataset.fullH) || 72;
-    const mini = overBoard || a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
+    // Grow toward the board only — never mini (or chevron) for discard / throw / flick.
+    const grow = a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
       || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega';
+    const mini = overBoard || grow;
     ghost.classList.toggle('drag-mini', mini);
+    ghost.classList.toggle('futa04-mini-card', mini);
     if (mini) {
-      ghost.style.width = '22px';
-      ghost.style.height = '36px';
+      // Match the smart-bloom mini-card proportions.
+      ghost.style.width = `${MINI_W}px`;
+      ghost.style.height = `${MINI_H}px`;
     } else {
       ghost.style.width = `${fullW}px`;
       ghost.style.height = `${fullH}px`;
     }
+  };
+
+  /** Aim point for board hit-testing: tiles under the raised mini + chevron tip, not the thumb. */
+  const aimPoint = (a: Active): { x: number; y: number } => {
+    const g = ghost;
+    const mini = !!g?.classList.contains('drag-mini');
+    // Stable mini height so a mid-morph bounding box does not shove aim off the board.
+    const h = mini ? MINI_H : (g ? g.getBoundingClientRect().height : 72);
+    // Full card: a little below the top edge. Mini: card-top / chevron-base tip cluster
+    // (tiles under the raised bloom icon + arrow — thumb stays lower and uses finger fallback).
+    const lift = mini
+      ? h * ghostLift(true) + CHEVRON_H * 0.35
+      : h * ghostLift(false) - h * 0.15;
+    return { x: a.x, y: a.y - lift };
   };
 
   const applyHover = (hover: DragHover) => {
@@ -247,19 +290,36 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     }
     if (!a.started || !ghost) return;
     const dt = Math.max(1, a.time - a.lastTime);
-    const upSpeed = Math.max(0, (a.lastY - a.y) / dt);
-    const res = resolveDrag({
+    const frameUp = Math.max(0, (a.lastY - a.y) / dt);
+    a.peakUpSpeed = Math.max(a.peakUpSpeed, frameUp);
+    morphGhost(a, a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
+      || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega' || !!a.resolution.hoverKey);
+    // Visual aim (raised mini + chevron tip) wins when legal; finger tip is the fallback
+    // when aim is over a gap or an illegal hex (thumb still on the tile under the card).
+    const aim = aimPoint(a);
+    const aimKey = hooks.keyAt(aim.x, aim.y);
+    const fingerKey = hooks.keyAt(a.x, a.y);
+    const base = {
       view,
       legal: hooks.legal(),
       sel: hooks.sel(),
       source: a.source,
       distance: d,
-      boardKey: hooks.keyAt(a.x, a.y),
       overDiscardPile: hooks.overDiscardPile(a.x, a.y),
-      shape: a.shape,
-      upSpeed,
+      shape: a.shape as readonly string[],
+      upSpeed: a.peakUpSpeed,
+      upTravel: Math.max(0, a.startY - a.y),
       upperBoard: hooks.upperBoard(a.y),
-    });
+      reverse: hooks.bloomReverse?.() ?? false,
+    };
+    const usable = (r: DragResolution) =>
+      r.hover === 'legal' || r.hover === 'pile' || r.hover === 'flick' || !!r.commit || r.openOptions;
+    const aimed = resolveDrag({ ...base, boardKey: aimKey ?? fingerKey });
+    let res = aimed;
+    if (!usable(aimed) && fingerKey && fingerKey !== aimKey) {
+      const alt = resolveDrag({ ...base, boardKey: fingerKey, shape: a.shape });
+      if (usable(alt)) res = alt;
+    }
     a.shape = res.shape;
     const wasLegal = a.resolution.hover !== 'none' && a.resolution.hover !== 'illegal';
     const isLegal = res.hover !== 'none' && res.hover !== 'illegal';
@@ -277,8 +337,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       a.pileEl = pileEl;
     }
     hooks.setThrowZone?.(res.hover === 'pile' || res.hover === 'flick');
-    // The board's selected cue follows the legal hex under the finger (not the tap selection).
-    const hoverKey = res.hover === 'legal' && res.mode !== 'bloom' ? res.hoverKey : null;
+    // Board cue follows the aimed hex (raised card / chevron), including Bloom paint.
+    const hoverKey = res.hover === 'legal' ? res.hoverKey : null;
     if (hoverKey !== a.hoverKey) {
       a.hoverKey = hoverKey;
       hooks.onHoverKey?.(hoverKey);
@@ -289,7 +349,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       hooks.onShape?.(res.mode === 'bloom' ? res.shape : []);
     }
     if (isLegal && !wasLegal) hooks.onEnterTarget();
-    // The ghost follows just above the finger, with a small snap toward a legal hex centre.
+    // The ghost follows above the finger, with a small snap toward a legal hex centre.
     let targetX = a.x;
     let targetY = a.y;
     if (res.hover === 'legal' && res.hoverKey) {
@@ -303,8 +363,9 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       }
     }
     const r = ghost.getBoundingClientRect();
+    const mini = ghost.classList.contains('drag-mini');
     tx = targetX - r.width / 2;
-    ty = targetY - r.height * 0.92;
+    ty = targetY - r.height * ghostLift(mini);
     if (reduced()) {
       gx = tx;
       gy = ty;
@@ -406,6 +467,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       lastX: event.clientX,
       lastY: event.clientY,
       lastTime: event.timeStamp || performance.now(),
+      peakUpSpeed: 0,
       shape: [],
       started: false,
       resolution: INACTIVE,

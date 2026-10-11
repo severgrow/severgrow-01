@@ -20,7 +20,7 @@ export default defineConfig({
       .replace('./futasaku-icon-192.png', './icon-192.png')
       .replace('./futasaku-icon-180.png', './icon-180.png')
       .replace('    <link rel="stylesheet" href="./src/fonts-futa04.css" />\n', '')
-      .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner)[^"]*"[^>]*>/g, '');
+      .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner|fragment-mono)[^"]*"[^>]*>/g, '');
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
     const channel = process.env.CHANNEL ?? 'futa04';
     if (channel === 'futa04' || channel === 'futa-test') {
@@ -45,7 +45,7 @@ export default defineConfig({
     mkdirSync(resolve(output, 'licenses'), { recursive: true });
     cpSync(fileURLToPath(new URL('./src/fonts/LICENSE-alegreya-sans.txt', import.meta.url)), resolve(output, 'licenses/LICENSE-alegreya-sans.txt'));
     if (channel === 'test' || channel === 'futa04' || channel === 'futa-test') {
-      for (const name of ['besley', 'commissioner']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
+      for (const name of ['besley', 'fragment-mono']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
     }
   } }],
   build: { outDir: 'dist', emptyOutDir: true },

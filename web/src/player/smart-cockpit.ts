@@ -127,7 +127,8 @@ html.futa04-information #smart-led-cells.scrolling { position:absolute; left:0; 
 html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 /* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion. */
 html.futa04-information #smart-led-window.led-pulse { animation:smart-led-pulse 500ms ease-in-out 1; }
-html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 1200ms ease-in-out 1; }
+/* Idle re-prompt: keep blinking with the board cues until the player starts the next move. */
+html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 1200ms ease-in-out infinite; }
 @keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.22); } }
 @keyframes smart-led-alarm {
   0%,100% { filter:none; }
@@ -135,6 +136,46 @@ html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 
   40% { filter:none; }
   60% { filter:brightness(1.4) contrast(1.06); }
   80% { filter:none; }
+}
+@keyframes idle-urgency-draw {
+  0%,100% { box-shadow:0 0 0 1px rgba(239,234,220,.40),0 0 4px 1px rgba(242,237,224,.12) !important; }
+  50% { box-shadow:0 0 0 1px rgba(239,234,220,.88),0 0 12px 2px rgba(242,237,224,.42) !important; }
+}
+@keyframes idle-urgency-grow {
+  0%,100% { filter:brightness(1); opacity:1; }
+  50% { filter:brightness(1.22); opacity:.88; }
+}
+@keyframes idle-urgency-throw {
+  0%,100% { box-shadow:0 0 0 1px rgba(222,110,83,.35),0 0 4px 1px rgba(190,68,47,.28),0 5px 12px rgba(20,11,10,.28); }
+  50% { box-shadow:0 0 0 1px rgba(255,120,90,.85),0 0 12px 2px rgba(220,70,45,.62),0 5px 14px rgba(20,11,10,.40); }
+}
+/* Matching board cues while the LED holds the sticky idle re-prompt. */
+html.futa04-information.idle-urgency[data-step='draw'] :is(#deck,#discard).ready .pile-card {
+  animation:idle-urgency-draw 1200ms ease-in-out infinite;
+}
+html.futa04-information.idle-urgency[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) {
+  animation:idle-urgency-grow 1200ms ease-in-out infinite;
+}
+html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]) #smart-bloom-button,
+html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]) #smart-bloom-button .futa04-combination {
+  animation:idle-urgency-grow 1200ms ease-in-out infinite;
+}
+html.futa04-information.idle-urgency[data-step='throw'] #hand:not(.waiting) .card {
+  animation:idle-urgency-throw 1200ms ease-in-out infinite;
+}
+html.futa04-information.reduce-motion.idle-urgency :is(#deck,#discard).ready .pile-card,
+html.futa04-information.reduce-motion.idle-urgency #hand .card,
+html.futa04-information.reduce-motion.idle-urgency #smart-bloom-button,
+html.futa04-information.reduce-motion.idle-urgency #smart-bloom-button .futa04-combination {
+  animation:none !important;
+}
+@media (prefers-reduced-motion:reduce) {
+  html.futa04-information.idle-urgency :is(#deck,#discard).ready .pile-card,
+  html.futa04-information.idle-urgency #hand .card,
+  html.futa04-information.idle-urgency #smart-bloom-button,
+  html.futa04-information.idle-urgency #smart-bloom-button .futa04-combination {
+    animation:none !important;
+  }
 }
 html.futa04-information #smart-led-window.led-flash-cut { animation:smart-led-flash-cut 380ms ease-out; }
 @keyframes smart-led-flash-cut { 0% { filter:brightness(1.9) contrast(1.06); } 100% { filter:none; } }
@@ -476,6 +517,8 @@ export function mountSmartCockpit() {
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
     windowEl.classList.toggle('led-pulse',!!frame.pulse && !frame.alarm && !reduceNow());
     windowEl.classList.toggle('led-alarm',!!frame.alarm && !reduceNow());
+    // Same flag drives LED alarm + board cue blinks (piles / hand / bloom).
+    document.documentElement.classList.toggle('idle-urgency', !!frame.alarm);
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
     const animated = !reduceNow();
@@ -527,7 +570,9 @@ export function mountSmartCockpit() {
       if (frame.flash && !reduced) {
         void windowEl.offsetWidth; // restart the one-shot accent
         windowEl.classList.add(frame.flash === 'bloom' ? 'led-flash-bloom' : 'led-flash-cut');
-        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'),420);
+        // Match CSS: bloom 320ms, cut 380ms.
+        const flashMs = frame.flash === 'bloom' ? 320 : 380;
+        flashTimer = window.setTimeout(() => windowEl.classList.remove('led-flash-cut','led-flash-bloom'), flashMs);
       }
       if (scrolling) {
         const travel = ledMarqueeTravel(shown);
@@ -543,14 +588,19 @@ export function mountSmartCockpit() {
           reel = [tick]; tick.onfinish = () => old?.remove();
         } else {
           const duration = 190;
-          const outgoing = old.animate([{translate:'0 0',opacity:1},{translate:'0 26px',opacity:0}],{duration,easing:'linear'});
-          const incoming = cells.animate([{translate:'0 -26px',opacity:0},{translate:'0 0',opacity:1}],{duration,easing:'linear'});
+          const ease = 'cubic-bezier(.2,.7,.2,1)';
+          const outgoing = old.animate([{translate:'0 0',opacity:1},{translate:'0 26px',opacity:0}],{duration,easing:ease});
+          const incoming = cells.animate([{translate:'0 -26px',opacity:0},{translate:'0 0',opacity:1}],{duration,easing:ease});
           reel = [outgoing,incoming]; outgoing.onfinish = () => old?.remove();
         }
       }
     });
   };
-  const machine = new DisplayMachine(setText);
+  // Hold times follow Speed (--anim); skip/0 floors inside DisplayMachine.
+  const machine = new DisplayMachine(setText, () => {
+    const raw = Number.parseFloat(document.documentElement.style.getPropertyValue('--anim'));
+    return Number.isFinite(raw) ? raw : 1;
+  });
   const phaseMessage = () => {
     const root = document.documentElement;
     if (root.dataset.step === 'opp') return 'WAIT';
@@ -606,13 +656,36 @@ export function mountSmartCockpit() {
     if (opening) { selector.hidden = false; context.setAttribute('aria-expanded','true'); selector.querySelector<HTMLButtonElement>('button')?.focus(); }
     else close();
   });
-  bloomButton.addEventListener('click', () => {
-    if (bloomSources.length === 1) { bloomSources[0]?.click(); return; }
+  const activateBloom = (source: HTMLButtonElement | undefined, cardId?: number) => {
+    if (!source) return;
+    if (cardId != null && Number.isFinite(cardId)) source.dataset.bloomCard = String(cardId);
+    else delete source.dataset.bloomCard;
+    source.click();
+  };
+  bloomButton.addEventListener('click', (event) => {
+    const mini = (event.target as Element | null)?.closest?.('.futa04-mini-card') as HTMLElement | null;
+    const cardId = mini ? Number(mini.dataset.card) : NaN;
+    const picked = Number.isFinite(cardId) ? cardId : undefined;
+    // One recipe: tap the face (or a mini-card) to start; mini-card sets tile one.
+    if (bloomSources.length === 1) { activateBloom(bloomSources[0], picked); return; }
     if (bloomSources.length < 2) return;
+    // Several recipes: any face tap opens the drawer. Mini-card → tile-one lives on the menu items.
     const opening = bloomSelector.hidden;
     if (opening) { bloomSelector.hidden = false; bloomButton.setAttribute('aria-expanded','true'); bloomSelector.querySelector<HTMLButtonElement>('button')?.focus(); }
     else closeBloom();
   });
+  bloomSelector.addEventListener('click', (event) => {
+    const mini = (event.target as Element | null)?.closest?.('.futa04-mini-card') as HTMLElement | null;
+    if (!mini) return;
+    const choice = mini.closest('button');
+    if (!choice || !bloomSelector.contains(choice)) return;
+    const index = [...bloomSelector.querySelectorAll(':scope > button')].indexOf(choice);
+    const cardId = Number(mini.dataset.card);
+    event.preventDefault();
+    event.stopPropagation();
+    closeBloom();
+    activateBloom(bloomSources[index], Number.isFinite(cardId) ? cardId : undefined);
+  }, true);
   document.addEventListener('pointerdown', event => {
     machine.interact();
     if (!panel.contains(event.target as Node)) close();

@@ -281,6 +281,23 @@ export const paintEnter = (c: Combo, shape: readonly string[], key: string, reve
   return drawNext(c, shape, reverse).has(key) ? [...shape, key] : [...shape];
 };
 
+/**
+ * Where a paint drag begins: a legal start hex always becomes the sole first tile (replacing
+ * any auto-planted natural start), so dragging across that planted hex cannot backtrack the
+ * path away. A non-start down-hex still extends the existing shape when legal.
+ */
+export const paintDragBegin = (
+  c: Combo,
+  shape: readonly string[],
+  downKey: string | null,
+  reverse = false,
+): string[] => {
+  if (!downKey) return [...shape];
+  if (drawStarts(c, reverse).has(downKey)) return paintEnter(c, [], downKey, reverse);
+  if (!shape.includes(downKey)) return paintEnter(c, shape, downKey, reverse);
+  return [...shape];
+};
+
 /** Tapping: tap to add (same rules), tap the last one to remove it. */
 export const paintTap = (c: Combo, shape: readonly string[], key: string, reverse = false): string[] => {
   if (shape.at(-1) === key) return shape.slice(0, -1);

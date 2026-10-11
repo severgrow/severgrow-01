@@ -8,28 +8,47 @@ export type GateMode = 'step' | 'busy' | 'off';
 export type GateAllow = {
   /** CSS selectors that may receive input. */
   selectors: readonly string[];
-  /** When true, only glass window controls are allowed (Skip / Chapters / Exit). */
+  /** When true, only glass window controls are allowed (Previous / Next / Exit). */
   windowOnly?: boolean;
 };
 
-/** Regions that become inert while a step runs (everything except the glass). */
+/** Regions that become inert while a step runs (everything except the glass).
+ *  #scrim stays live so the pause menu can open/close during tutorial. */
 export const GATE_INERT_ROOTS = Object.freeze([
-  '#game', '#menu', '#levels', '#scrim',
+  '#game', '#menu', '#levels',
 ] as const);
 
 /** Controls that always stay reachable inside the glass window. */
 export const GATE_WINDOW_SELECTORS = Object.freeze([
   '#futasaku-glass .glass-actions button',
   '#futasaku-glass [data-tut]',
-  '#tutorial-chapter-menu',
-  '#tutorial-chapter-menu button',
 ] as const);
 
-/** Dead chrome the player must never reach mid-step. */
+/** Dead chrome the player must never reach mid-step. Never include #hud-menu. */
 export const GATE_BLOCKED_SELECTORS = Object.freeze([
-  '#hud-menu', '#hud-history', '#menu-settings', '#hint-btn',
+  '#hud-history', '#menu-settings', '#hint-btn',
   '#tool-undo', '#hand-sort', '#deck', '#discard',
   '#tool-weak', '#tool-targets', '#tool-replay', '#futa04-help-button',
+] as const);
+
+/** Always reachable while tutorial is gated (exit lives in the pause menu). */
+export const GATE_MENU_SELECTORS = Object.freeze([
+  '#hud-menu',
+] as const);
+
+/** Guard: menu must never appear in the blocked list. */
+if ((GATE_BLOCKED_SELECTORS as readonly string[]).includes('#hud-menu')) {
+  throw new Error('#hud-menu must stay reachable during tutorial');
+}
+
+/** Pause sheets opened from the menu during tutorial. */
+export const GATE_SHEET_SELECTORS = Object.freeze([
+  '#scrim',
+  '#sheet-menu', '#sheet-menu button', '#sheet-menu [data-close]',
+  '#sheet-howto', '#sheet-howto button', '#sheet-howto [data-close]', '#sheet-howto .link',
+  '#sheet-settings', '#sheet-settings button', '#sheet-settings [data-close]',
+  '#sheet-settings input', '#sheet-settings label', '#sheet-settings select',
+  '#sheet-history', '#sheet-history button', '#sheet-history [data-close]',
 ] as const);
 
 export const allowedSelectorsForLesson = (
@@ -39,32 +58,64 @@ export const allowedSelectorsForLesson = (
 ): GateAllow => {
   if (mode === 'off') return { selectors: [] as string[] };
   if (mode === 'busy' || !lesson) {
-    return { selectors: [...GATE_WINDOW_SELECTORS] as string[], windowOnly: true };
+    return {
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS] as string[],
+      windowOnly: true,
+    };
   }
   if (lesson.focus === 'explainer') {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
     };
   }
   // Look-and-tap Next steps (homes, buttons): glow the named target; tapping it advances.
   if (lesson.action === 'Next' && targetSelector) {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, targetSelector, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, targetSelector, '#futasaku-glass [data-tut="next"]'] as string[],
     };
   }
   if (lesson.action === 'Next') {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
     };
   }
-  if (lesson.action === 'FreeTurn' || lesson.focus === 'none') {
-    return { selectors: [...GATE_WINDOW_SELECTORS] as string[], windowOnly: true };
+  // Free play clears the gate in main (everything open). Keep menu listed for audits.
+  if (lesson.action === 'FreeTurn') {
+    return { selectors: [...GATE_MENU_SELECTORS] as string[] };
   }
-  const selectors: string[] = [...GATE_WINDOW_SELECTORS];
+  if (lesson.focus === 'none') {
+    return {
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS] as string[],
+      windowOnly: true,
+    };
+  }
+  const selectors: string[] = [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS];
+  // Keep the target as one selector — never split on commas (hex keys use "q,r").
   if (targetSelector) selectors.push(targetSelector);
-  // Bloom paint: allow the bloom button and every receptive hex while painting.
+  // Whole-hand grow step: any card in the fan.
+  if (lesson.focus === 'hand') selectors.push('#hand .card', '#hand');
+  // Card→tile grow: allow the named card while the tile is the glow target.
+  if (lesson.focus === 'tile' && lesson.card) selectors.push('#hand .card');
+  // End Grow / Skip: smart-context mirrors #moves .end — allow both.
+  if (lesson.action === 'EndAct') {
+    selectors.push('#smart-context', '#moves .end', '#moves .futa04-skip', '#moves .skip');
+  }
+  // Bloom / Blast: button, recipe menu, paint hexes, and paint helpers.
   if (lesson.action === 'Bloom' || lesson.action === 'MegaBomb') {
-    selectors.push('#smart-bloom-button', '#board .hex-cell.target', '#board .target', '#board .ghost');
+    selectors.push(
+      '#smart-bloom', '#smart-bloom-button', '#smart-bloom-selector', '#smart-bloom-selector button',
+      '#moves button[data-kind]', '#moves .bloom-toggle', '#moves .bloom-options', '#moves .bloom-options button',
+      '#moves .draw-clear', '#moves .draw-reverse',
+      '#board', '#board-wrap', '#board .hex-cell', '#board .hex-cell.target', '#board .target', '#board .ghost',
+    );
+  }
+  // Throw: any hand card + discard pile (look / drag target only — no Draw from it).
+  if (lesson.action === 'Discard') {
+    selectors.push('#hand .card', '#hand', '#discard');
+  }
+  // Bomb / strengthen / cut: card then tile.
+  if (lesson.action === 'PlayFruit' || (lesson.action === 'Sprout' && lesson.focus === 'tile')) {
+    selectors.push('#hand .card', '#hand', '#board .hex-cell');
   }
   return { selectors: [...new Set(selectors)] };
 };
@@ -144,7 +195,7 @@ export const mountTutorialGate = (hooks: {
     if (hooks.isPaintDragging?.() && (event.type === 'pointermove' || event.type === 'touchmove' || event.type === 'pointerup')) {
       return;
     }
-    // Allow Escape to still reach the window for Exit.
+    // Allow Escape to close pause sheets / cancel as usual.
     const keyEvent = event as { key?: string };
     if (typeof keyEvent.key === 'string' && keyEvent.key === 'Escape') return;
     const target = event.target;
