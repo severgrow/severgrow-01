@@ -16,20 +16,31 @@ export const knockResult = (knocker: Player, scores: [number, number], deadwood:
 };
 
 /**
- * Spec 11: higher score wins. With the parked leftover-card rules on, a tie goes to
- * lower kept-hand deadwood, then P2. In the core game (no deadwood given) a tie goes
- * straight to P2 (v0.4).
+ * Spec 11: higher score wins.
+ * Core game (no deadwood): equal score → higher total tile strength; still equal → draw.
+ * Parked leftover-card rules (deadwood given): lower deadwood, then P2 (archived path).
  */
 export const deckExhaustionResult = (
   scores: [number, number],
   deadwood: [number, number] | null,
   reason: 'deck_exhaustion' | 'turn_limit' = 'deck_exhaustion',
+  tileStrengths: [number, number] | null = null,
 ): GameResult => {
-  let winner: Player;
+  let winner: Player | null;
   if (scores[0] !== scores[1]) winner = scores[0] > scores[1] ? 0 : 1;
-  else if (deadwood && deadwood[0] !== deadwood[1]) winner = deadwood[0] < deadwood[1] ? 0 : 1;
-  else winner = 1;
-  return deadwood ? { winner, reason, scores, deadwood } : { winner, reason, scores };
+  else if (deadwood) {
+    if (deadwood[0] !== deadwood[1]) winner = deadwood[0] < deadwood[1] ? 0 : 1;
+    else winner = 1;
+  } else if (tileStrengths && tileStrengths[0] !== tileStrengths[1]) {
+    winner = tileStrengths[0] > tileStrengths[1] ? 0 : 1;
+  } else if (tileStrengths) {
+    winner = null;
+  } else {
+    // Archived core path without strength totals (pre-0.4 fixtures): P2 wins ties.
+    winner = 1;
+  }
+  const base = deadwood ? { winner, reason, scores, deadwood } : { winner, reason, scores };
+  return tileStrengths && !deadwood ? { ...base, strengths: tileStrengths } : base;
 };
 
 /** Spec 8.6: the strangled player loses; both strangled is a draw. */

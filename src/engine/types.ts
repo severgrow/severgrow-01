@@ -55,6 +55,8 @@ export type RulesConfig = {
   fruitCardCount: number;
   /** v0.6: a Fruit target may be touched by my root, not only by my other tiles. */
   fruitRootCountsAsTouch: boolean;
+  /** Futasaku 0.4: after equal scores, compare total tile strengths; equal → draw. */
+  strengthTiebreak: boolean;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;
@@ -78,13 +80,15 @@ export type Phase = 'DRAW' | 'ACT' | 'DISCARD' | 'KNOCK' | 'ROT_PICK' | 'GAME_OV
 export type EndReason = 'knock' | 'deck_exhaustion' | 'turn_limit' | 'strangle' | 'double_strangle';
 
 export type GameResult = {
-  /** null only for double_strangle */
+  /** null for double_strangle or a true score+strength draw (Futasaku 0.4) */
   winner: Player | null;
   reason: EndReason;
   undercut?: boolean;
   scores: [number, number];
   /** kept-hand deadwood at the end, when defined */
   deadwood?: [number, number];
+  /** non-root tile strength totals used for Futasaku 0.4 tie-break */
+  strengths?: [number, number];
 };
 
 export type ResolutionSummary = {

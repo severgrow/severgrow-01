@@ -64,13 +64,24 @@ describe('deckExhaustionResult (spec 11)', () => {
     expect(deckExhaustionResult([5, 7], [0, 30]).winner).toBe(1);
   });
 
-  it('tie on score: lower deadwood wins', () => {
+  it('tie on score: lower deadwood wins (parked leftover path)', () => {
     expect(deckExhaustionResult([6, 6], [4, 9]).winner).toBe(0);
     expect(deckExhaustionResult([6, 6], [9, 4]).winner).toBe(1);
   });
 
-  it('tie on score and deadwood: P2 wins', () => {
+  it('tie on score and deadwood: P2 wins (parked leftover path)', () => {
     expect(deckExhaustionResult([6, 6], [5, 5]).winner).toBe(1);
+  });
+
+  it('core tie: higher tile strength wins; equal strengths draw', () => {
+    expect(deckExhaustionResult([6, 6], null, 'deck_exhaustion', [9, 4])).toMatchObject({
+      winner: 0,
+      strengths: [9, 4],
+    });
+    expect(deckExhaustionResult([6, 6], null, 'deck_exhaustion', [4, 4])).toMatchObject({
+      winner: null,
+      strengths: [4, 4],
+    });
   });
 });
 

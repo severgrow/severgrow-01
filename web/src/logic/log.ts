@@ -12,7 +12,12 @@ export const resultTitle = (r: GameResult, me: Player): string =>
 
 export const resultReason = (r: GameResult, me: Player): string => {
   const won = r.winner === me;
-  const tie = r.scores[0] === r.scores[1] ? ` A tie goes to ${OPP.the}.` : '';
+  const strengthNote =
+    r.winner === null && r.scores[0] === r.scores[1]
+      ? ' Scores and tile strengths matched — a true draw.'
+      : r.strengths && r.scores[0] === r.scores[1] && r.winner !== null
+        ? ' Scores were level; higher total tile strength decided it.'
+        : '';
   switch (r.reason) {
     case 'double_strangle':
       return 'Both homes were surrounded at once.';
@@ -22,9 +27,9 @@ export const resultReason = (r: GameResult, me: Player): string => {
       if (!r.undercut) return won ? 'You knocked and stayed ahead.' : `${OPP.The} knocked and stayed ahead.`;
       return other(r.winner!) === me ? 'You knocked but did not finish ahead.' : `${OPP.The} knocked and you held on.`;
     case 'turn_limit':
-      return `Time's up: 30 turns each. The higher score wins.${tie}`;
+      return `Time's up: 30 turns each. The higher score wins.${strengthNote}`;
     case 'deck_exhaustion':
-      return `The deck ran out. The higher score wins.${tie}`;
+      return `The deck ran out. The higher score wins.${strengthNote}`;
   }
 };
 
