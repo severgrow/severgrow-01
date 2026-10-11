@@ -1,10 +1,11 @@
-// Futasaku 0.4 uses the Futa04 presentation. Historical channels remain for
-// compatibility checks; each channel keeps its established storage namespace.
+// Futasaku 0.4 is the product channel. `futa-test` is the quick experiment copy.
 declare const __CHANNEL__: string;
-export type Channel = 'live' | 'test' | 'futa04';
-export const CHANNEL: Channel = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04') ? __CHANNEL__ : 'live';
-export const IS_TEST = CHANNEL === 'test';
-export const IS_FUTA04 = CHANNEL === 'futa04';
+export type Channel = 'live' | 'test' | 'futa04' | 'futa-test';
+const raw = typeof __CHANNEL__ !== 'undefined' ? __CHANNEL__ : 'futa04';
+export const CHANNEL: Channel =
+  raw === 'test' || raw === 'futa04' || raw === 'futa-test' || raw === 'live' ? raw : 'futa04';
+export const IS_TEST = CHANNEL === 'test' || CHANNEL === 'futa-test';
+export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test';
 const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
@@ -18,14 +19,21 @@ export const FEATURES = Object.freeze({
   replay: !modern,
   weakTools: !modern,
   ownershipMarks: !modern,
-  lab: IS_TEST,
-  design: IS_TEST,
-  /** the V3 look (skinned renderer, V3 art): an option in the menu of both test channels */
-  v3: modern,
-  watch: IS_TEST,
+  lab: CHANNEL === 'test',
+  design: CHANNEL === 'test',
+  /** V3 art archived; skins come later */
+  v3: false,
+  watch: CHANNEL === 'test',
 });
-const isPreviewHost = typeof location !== 'undefined' && (location.hostname.endsWith('.chatgpt.site') || location.pathname.includes('/futa0.4/'));
-export const STORAGE_PREFIX = IS_TEST ? 'test:' : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:') : '';
+const isPreviewHost = typeof location !== 'undefined' && (
+  location.hostname.endsWith('.chatgpt.site') ||
+  location.pathname.includes('/futa0.4/') ||
+  location.pathname.includes('/futa-test/')
+);
+export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
+  : CHANNEL === 'test' ? 'test:'
+  : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
+  : '';
 if (STORAGE_PREFIX && typeof Storage !== 'undefined') {
   const proto = Storage.prototype;
   const get = proto.getItem, set = proto.setItem, remove = proto.removeItem;

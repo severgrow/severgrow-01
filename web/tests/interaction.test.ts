@@ -81,7 +81,7 @@ describe('tap a card, then a hex', () => {
     expect(kindLabel('bloom-3-1.2.3')).toBe('Bloom 3 tiles');
     expect(kindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
     expect(shortKindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
-    expect(kindLabel('sprout')).toBe('Sprout one tile');
+    expect(kindLabel('sprout')).toBe('Grow one tile');
   });
 
   it('choosing a kind highlights only its hexes', () => {
@@ -180,7 +180,7 @@ describe('undo (take back a move in your own turn)', () => {
   });
 });
 
-describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one tile" button)', () => {
+describe('Grow step: a card tap picks Grow by default (one tap, no "Grow one tile" button)', () => {
   const s = actState(3);
   const v = viewFor(s, 0);
   const legal = legalActions(v);
@@ -212,7 +212,7 @@ describe('Grow step: a card tap picks Sprout by default (one tap, no "Sprout one
     expect(sel).toMatchObject({ card: null, kind: null });
   });
 
-  it('the move buttons no longer offer "Sprout one tile" (Blooms stay)', () => {
+  it('the move buttons no longer offer "Grow one tile" (Blooms stay)', () => {
     expect(kindsAvailable(v, legal, EMPTY_SEL).some((k) => k.kind === 'sprout')).toBe(true); // still a kind of move
     const shown = moveButtons(v, legal, EMPTY_SEL).map((k) => k.kind);
     expect(shown).not.toContain('sprout');

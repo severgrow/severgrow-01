@@ -9,10 +9,11 @@ let output = fileURLToPath(new URL('./dist', import.meta.url));
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: './',
-  // Futasaku 0.4 builds with CHANNEL=futa04; historical channels remain available for checks.
-  define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'live') },
+  // Default product build is Futasaku 0.4. `futa-test` is the experiment copy.
+  define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04', 'futa-test'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'futa04') },
   plugins: [{ name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
-    return process.env.CHANNEL === 'futa04' ? html
+    const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test' || !process.env.CHANNEL;
+    return modern ? html
       .replace('<html lang="en"', '<html lang="en" class="test-typography-v2"')
       .replace('    <div id="splash" class="splash" hidden aria-hidden="true"></div>\n', '')
       .replace('Eye candy (opening splash, home heartbeat, terrarium menu, drifting spores)', 'Eye candy (home heartbeat, terrarium menu, drifting spores)') : html
@@ -21,7 +22,8 @@ export default defineConfig({
       .replace('    <link rel="stylesheet" href="./src/fonts-futa04.css" />\n', '')
       .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner)[^"]*"[^>]*>/g, '');
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
-    if (process.env.CHANNEL === 'futa04') {
+    const channel = process.env.CHANNEL ?? 'futa04';
+    if (channel === 'futa04' || channel === 'futa-test') {
       const path = resolve(output, 'manifest.webmanifest');
       const manifest = JSON.parse(readFileSync(path, 'utf8'));
       manifest.icons = [
@@ -29,14 +31,20 @@ export default defineConfig({
         { src: 'futasaku-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         { src: 'futasaku-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
       ];
+      if (channel === 'futa-test') {
+        manifest.name = 'Futasaku TEST';
+        manifest.short_name = 'Futa TEST';
+      }
       for (const icon of ['futasaku-icon-180.png', ...manifest.icons.map((entry: { src: string }) => entry.src)])
         cpSync(fileURLToPath(new URL(`./src/assets/futa04-icons/${icon}`, import.meta.url)), resolve(output, icon));
       writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
     }
-    if (process.env.CHANNEL !== 'test') rmSync(resolve(output, 'design-v2'), { recursive: true, force: true });
+    // V3 art archived; never ship design-v2/v3 from product builds.
+    rmSync(resolve(output, 'design-v2'), { recursive: true, force: true });
+    rmSync(resolve(output, 'design-v3'), { recursive: true, force: true });
     mkdirSync(resolve(output, 'licenses'), { recursive: true });
     cpSync(fileURLToPath(new URL('./src/fonts/LICENSE-alegreya-sans.txt', import.meta.url)), resolve(output, 'licenses/LICENSE-alegreya-sans.txt'));
-    if (process.env.CHANNEL === 'test' || process.env.CHANNEL === 'futa04') {
+    if (channel === 'test' || channel === 'futa04' || channel === 'futa-test') {
       for (const name of ['besley', 'commissioner']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
     }
   } }],

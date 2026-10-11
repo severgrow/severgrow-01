@@ -25,6 +25,7 @@ describe('DEFAULT_CONFIG', () => {
       fruitCardCount: 4, // v0.6: 4 Fruit cards in the deck
       fruitRootCountsAsTouch: true, // v0.6: my root counts as touching a Fruit target
       fruitUsesSprout: true, // v0.8: a Fruit card uses the turn's Sprout
+      strengthTiebreak: true, // Futasaku 0.4: equal score → strengths → draw
       rotEnabled: false,
       knockEnabled: false,
       board: null,

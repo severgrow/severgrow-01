@@ -1730,6 +1730,84 @@ svg.usable .hex-cell {
   border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
 }
 
+/* ---------- who-starts lottery ---------- */
+.starter-lottery {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--c-bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  animation: fade-in 0.35s ease-out;
+}
+.starter-lottery[hidden] { display: none; }
+.lottery-card {
+  width: min(360px, 100%);
+  text-align: center;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  border: 1px solid var(--fu-cream-22);
+  border-radius: 18px;
+  padding: 22px 18px 18px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.lottery-kicker {
+  margin: 0 0 6px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font: 650 0.72rem/1 monospace;
+  color: var(--fu-cream-70);
+}
+.lottery-title {
+  margin: 0 0 16px;
+  color: var(--fu-cream);
+  font-size: clamp(1.6rem, 7vw, 2.1rem);
+  line-height: 1.05;
+}
+.lottery-lanes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.lottery-lane {
+  border-radius: 12px;
+  padding: 18px 10px;
+  border: 1px solid transparent;
+  opacity: 0.55;
+  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+}
+.lottery-lane span {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font: 700 0.85rem/1 monospace;
+}
+.lottery-lane.you { background: color-mix(in srgb, #3d7a4a 35%, transparent); color: #b7e0c0; }
+.lottery-lane.bot { background: color-mix(in srgb, #b86a2c 30%, transparent); color: #f0c49a; }
+.starter-lottery[data-winner='you'] .lottery-lane.you,
+.starter-lottery[data-winner='bot'] .lottery-lane.bot {
+  opacity: 1;
+  transform: scale(1.04);
+  border-color: currentColor;
+}
+.starter-lottery[data-spinning='1'] .lottery-lane {
+  animation: lottery-pulse 0.45s ease-in-out infinite alternate;
+}
+.starter-lottery[data-spinning='1'] .lottery-lane.bot { animation-delay: 0.22s; }
+@keyframes lottery-pulse {
+  from { opacity: 0.35; transform: scale(0.98); }
+  to { opacity: 0.95; transform: scale(1.02); }
+}
+.lottery-result {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--fu-cream);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+.reduce-motion .starter-lottery[data-spinning='1'] .lottery-lane { animation: none; }
+
 /* ---------- game over ---------- */
 .gameover {
   position: fixed;

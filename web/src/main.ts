@@ -68,6 +68,7 @@ import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
 import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel, difficultyById } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
+import { opponentStartsFromSeed } from './logic/starter.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { tutorialAccepts, tutorialChapter, tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT } from './logic/tutorial-script.js';
@@ -99,7 +100,7 @@ import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
 let DesignView: typeof BoardView = BoardView;
-const branding = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04'
+const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')
   ? await import('./player/branding.js') : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
@@ -110,13 +111,8 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
   await import('./ui/design-v2.css');
   DesignView = (await import('./ui/designBoard.js')).DesignBoardView;
 }
-// Skins are not a public choice yet. Keep the V3 renderer available for local
-// art checks; old saved V3 preferences and URLs now open the default board.
-const V3_MODE = FEATURES.v3 && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
-  && new URLSearchParams(location.search).get('skin-preview') === 'v3';
-const v3 = V3_MODE ? await Promise.all([import('./ui/skin/SkinBoardView.js'), import('./skins/forestVolcanoV3.js')]) : null;
-const defaultArt = IS_FUTA04 && !V3_MODE ? await import('./ui/defaultArtBoard.js') : null;
-if (V3_MODE) document.documentElement.classList.add('design-v3');
+// V3 art is archived on this branch; always use the default painted board for Futa04.
+const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
 import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
@@ -248,8 +244,7 @@ let cardRects = new Map<number, DOMRect>();
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
 const boardSvg = $('board') as unknown as SVGSVGElement;
-const board = v3 ? new v3[0].SkinBoardView(boardSvg, boardHandlers, v3[1].FOREST_VOLCANO_V3)
-  : defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
+const board = defaultArt ? new defaultArt.DefaultArtBoardView(boardSvg, boardHandlers)
   : DESIGN_MODE ? new DesignView(boardSvg, boardHandlers) : new BoardView(boardSvg, boardHandlers);
 /** Material pass 2: the "Your turn" / "Bot's turn" pill and its faint edge wash. */
 const pill = new TurnPill($('turn-pill'), $('edge-wash'));
@@ -781,7 +776,7 @@ let camera: ReturnType<typeof import('./player/camera.js').installCamera> | null
 declare const __CHANNEL__: string;
 async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04')) {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
     loads.push(import('./player/player-css.js').then((m) => {
       const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
@@ -827,12 +822,12 @@ async function mountPlayerEnhancements() {
     }));
   }
 
-  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04') {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
   }
 
   await Promise.all(loads);
-  if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04') {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
     outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
     (await import('./player/information.js')).mountInformation();
     (await import('./player/cards.js')).mountCards();
@@ -966,7 +961,28 @@ function checkOverlap(v: View) {
   }
 }
 
-function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+async function runStarterLottery(opponentStarts: boolean): Promise<void> {
+  const panel = $('starter-lottery');
+  const title = $('lottery-title');
+  const result = $('lottery-result');
+  title.textContent = 'Drawing lots…';
+  result.textContent = '';
+  panel.hidden = false;
+  panel.dataset.spinning = settings.reduceMotion ? '0' : '1';
+  delete panel.dataset.winner;
+  const spinMs = settings.reduceMotion || timeScale() === 0 ? 0 : 900;
+  if (spinMs) await new Promise((r) => setTimeout(r, spinMs));
+  panel.dataset.spinning = '0';
+  panel.dataset.winner = opponentStarts ? 'bot' : 'you';
+  title.textContent = opponentStarts ? `${OPP.Label} starts` : 'You start';
+  result.textContent = opponentStarts ? 'Opponent won the draw.' : 'You won the draw.';
+  const holdMs = settings.reduceMotion || timeScale() === 0 ? 200 : 700;
+  await new Promise((r) => setTimeout(r, holdMs));
+  panel.hidden = true;
+  delete panel.dataset.winner;
+}
+
+async function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
@@ -979,10 +995,13 @@ function startGame(seed: number, level: Level = settings.level, watch: { level: 
   gameLevel = level;
   // the test copy: the Lab's active experiment (none: the classic game)
   const opening = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
-  // New Futasaku matches choose a side from their seed. Keep the authored base
-  // in the save only when the opponent starts, so older seed-only saves retain
-  // their original first player and deterministic replay.
-  const opponentStarts = IS_FUTA04 && (seed & 1) === 1;
+  // Seeded lottery, independent of difficulty. Authored base is kept when the
+  // opponent starts so saves replay the same seat order.
+  const opponentStarts = IS_FUTA04 ? opponentStartsFromSeed(seed) : false;
+  if (IS_FUTA04) {
+    showScreen('game');
+    await runStarterLottery(opponentStarts);
+  }
   const state: State = opponentStarts ? { ...opening, startingPlayer: BOT, turnPlayer: BOT, actor: BOT } : opening;
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
   beginSession(state, null, [], opponentStarts ? state : null);
@@ -3340,7 +3359,9 @@ function renderGameOver() {
   const won = r.winner === HUMAN;
   $('go-title').textContent = won ? `You beat Level ${gameLevel}!` : resultTitle(r, HUMAN);
   // No world map yet: every game is practice.
-  $('go-sub').textContent = won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+  $('go-sub').textContent = r.winner === null
+    ? `Draw · Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`
+    : won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
   other.hidden = false;

@@ -50,7 +50,7 @@ export const moveSentence = (v: View, a: Action): string => {
     }
     case 'MegaBomb': {
       const sim = simulate(v,a)!;
-      return `Mega Bomb at ${hn(a.target)}, removing ${plural(sim.taken, `${OPP.noun} tile`)}${pointsText(sim)}`;
+      return `Blast at ${hn(a.target)}, removing ${plural(sim.taken, `${OPP.noun} tile`)}${pointsText(sim)}`;
     }
     case 'EndAct':
       return "I'm done playing cards";

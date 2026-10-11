@@ -30,14 +30,14 @@ const strings = (v: unknown, out: string[] = []): string[] => {
 describe('the words "seed" and "plant" never reach the player', () => {
   it('the pattern matches whole words only', () => {
     for (const bad of ['seed', 'Seeds', 'SEEDED', 'plant', 'Planted', 'Plant a seed']) expect(clean(bad), bad).toBe(false);
-    for (const ok of ['seedling', 'plants', 'planting', 'Sprout', 'implanted']) expect(clean(ok), ok).toBe(true);
+    for (const ok of ['seedling', 'plants', 'planting', 'Grow', 'implanted']) expect(clean(ok), ok).toBe(true);
   });
 
-  it('one name for the one-card move: "Sprout", in one constant', () => {
-    expect(SPROUT.Name).toBe('Sprout');
-    expect(SPROUT.pick).toBe('Pick a card to sprout');
-    expect(SPROUT.skip).toBe('Skip sprout');
-    expect(SPROUT.suggest('D4', 'a 9')).toMatch(/^Sprout one tile/);
+  it('one name for the one-card move: "Grow", in one constant', () => {
+    expect(SPROUT.Name).toBe('Grow');
+    expect(SPROUT.pick).toBe('Pick a card to Grow');
+    expect(SPROUT.skip).toBe('Skip Grow');
+    expect(SPROUT.suggest('D4', 'a 9')).toMatch(/^Grow one tile/);
   });
 
   it('the strings file', () => {

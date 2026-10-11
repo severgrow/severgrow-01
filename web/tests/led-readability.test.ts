@@ -25,8 +25,8 @@ describe('long game copy is shortened for the physical window', () => {
     expect(ledToken('Your opponent grew 2 tiles, taking 2 of yours')).toBe('-2');
     expect(ledToken('Your opponent grew 3 tiles')).toBe('OPP+3');
     expect(ledToken('Strengthened 5 → 9')).toBe('UP9');
-    expect(ledToken('Mega Bomb cleared 5 tiles')).toBe('BOOM5');
-    expect(ledToken('Fruited! Their 9 is gone')).toBe('FRUIT');
+    expect(ledToken('Blast cleared 5 tiles')).toBe('BOOM5');
+    expect(ledToken('Boom! Their 9 is gone')).toBe('BOMB');
     expect(ledToken('Your tree is surrounded!')).toBe('CAUGHT');
     expect(ledToken('Home in danger')).toBe('WARN');
     expect(ledToken('Last turn')).toBe('LAST');

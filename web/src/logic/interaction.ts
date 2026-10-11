@@ -35,7 +35,7 @@ export const kindOf = (a: Action): string | null => {
 
 export const kindLabel = (kind: string): string => {
   const [k, n] = kind.split('-');
-  if (k === 'bloom') return n === 'mega' ? 'Mega Bomb' : BLOOM.button(Number(n));
+  if (k === 'bloom') return n === 'mega' ? 'Blast' : BLOOM.button(Number(n));
   if (k === 'sprout') return `${SPROUT.Name} one tile`;
   if (k === 'fruit') return `Use a ${FRUIT.card}`;
   return 'Pick a tile to rot';
@@ -71,7 +71,7 @@ export const TARGET_LABEL: Record<TargetKind, string> = {
   grow: 'Grow on an empty hex',
   replace: 'Replace an enemy tile',
   strengthen: 'Strengthen my tile',
-  fruit: 'Remove with a Fruit card',
+  fruit: 'Remove with a Bomb',
 };
 
 /** What a Sprout does to its hex: grow on empty, replace an enemy tile, or strengthen mine. */
@@ -140,7 +140,7 @@ export const moveButtons = (v: View, legal: readonly Action[], sel: Sel, showEve
     const cards = kindCards(k.kind).map((id) => byId.get(id)!).filter(Boolean);
     if (cards.length !== kindCards(k.kind).length) continue;
     if (k.kind.startsWith('bloom-mega-')) {
-      fam.set('mega', { kind:k.kind,label:'Mega Bomb',count:k.count,score:Infinity,kinds:[k.kind] });
+      fam.set('mega', { kind:k.kind,label:'Blast',count:k.count,score:Infinity,kinds:[k.kind] });
       continue;
     }
     const family = familyOf(cards);

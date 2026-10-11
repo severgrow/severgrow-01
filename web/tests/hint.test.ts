@@ -76,9 +76,9 @@ describe('the hint line', () => {
     expect(hintFor({ ...base, canSprout: false }).text).toMatch(/Bloom/);
   });
 
-  it('the single-tile move is always called Sprout', () => {
+  it('the single-tile move is always called Grow', () => {
     expect(hintFor(base).text).toBe(SPROUT.tapHint);
-    expect(SPROUT.tapHint).toMatch(/sprout/i);
+    expect(SPROUT.tapHint).toMatch(/grow/i);
   });
 });
 
@@ -97,17 +97,17 @@ describe('v0.7: a Bloom held but blocked by the board', () => {
 // v0.8 UI pass: with the step bar gone, the hint line carries the turn: what I can do after the
 // draw (sprout, a Fruit card, a Bloom), what used the turn's sprout, and that Throw is next
 describe('v0.8: the hint line carries the turn (no step bar)', () => {
-  it('after the draw, a playable Fruit card is offered next to the sprout', () => {
+  it('after the draw, a playable Bomb is offered next to Grow', () => {
     const t = hintFor({ ...base, fruitReady: true }).text;
-    expect(t).toMatch(/sprout/i);
-    expect(t).toMatch(/Fruit/);
+    expect(t).toMatch(/grow/i);
+    expect(t).toMatch(/Bomb/);
     expect(t.length).toBeLessThanOrEqual(HINT_MAX);
   });
-  it('once a Fruit card or a sprout used the turn, it says so, and points at the throw', () => {
+  it('once a Bomb or Grow used the turn, it says so, and points at the throw', () => {
     for (const grew of ['fruit', 'sprout'] as const) {
       for (const canCombo of [true, false]) {
         const t = hintFor({ ...base, canSprout: false, canCombo, grew }).text;
-        expect(t).toMatch(grew === 'fruit' ? /Fruit used/ : /Sprouted/);
+        expect(t).toMatch(grew === 'fruit' ? /Bomb used/ : /Grew/);
         expect(t).toMatch(/Throw/);
         if (canCombo) expect(t).toMatch(/Bloom/);
         expect(t).not.toMatch(/Nothing can grow/);
@@ -128,7 +128,7 @@ describe('the hint weight', () => {
     expect(hintWeight({ myTurns: 4, idleMs: 6500, routine: true })).toBe('full');
     expect(hintWeight({ myTurns: 9, idleMs: 0, routine: false })).toBe('full');
   });
-  it('the routine hints are the everyday ones: draw, sprout, throw', async () => {
+  it('the routine hints are the everyday ones: draw, grow, throw', async () => {
     const { isRoutineHint } = await import('../src/logic/hint.js');
     expect(isRoutineHint(hintFor({ ...base, phase: 'DRAW' }).text)).toBe(true);
     expect(isRoutineHint(hintFor(base).text)).toBe(true);

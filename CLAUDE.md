@@ -1,5 +1,12 @@
-# Futasaku 0.4 development notes
+# CLAUDE.md
 
-Read `AGENTS.md` and `docs/SPEC.md`. Work on `Futasaku0.3` only. The game rules are pure and deterministic; keep the engine free of clocks, I/O and unseeded randomness. Do not change gameplay or bot decisions during visual or cleanup tasks. Do not weaken tests or regenerate golden results to mask a regression.
-
-Build the current game with `CHANNEL=futa04 npm run web:build`, run `npm run check`, and run the relevant browser checks before a green commit. Preserve the existing save keys, boot event and action identifiers. Main, Dev and the frozen Main2.0 branch are outside this branch's development scope.
+- Read `docs/SPEC.md` before any work; it is the source of truth for **Futasaku 0.4**.
+- Future product work lands on branch **`futa0.4`** (not `Futasaku0.3` / `main`).
+- TypeScript strict, Vitest, Node 20+ (20.19+, required by Vite). Run `npm run check` before finishing any task.
+- `src/engine/` must stay pure and deterministic: no `Math.random`, no I/O, no timers.
+- Player names: Grow / Bomb / Blast / FUTASAKU. Engine ids `Sprout` / `PlayFruit` / `MegaBomb` stay for compatibility.
+- Write tests first. Never change a rule or weaken a test to make it pass.
+- If the spec is ambiguous, stop and ask the user.
+- Commit after each green milestone with a clear message.
+- Product build: `CHANNEL=futa04 npm run web:build` (also the default). Experiment copy: `CHANNEL=futa-test`.
+- Pre-cleanup archive: `archive/futa0.4-before-cleanup`.

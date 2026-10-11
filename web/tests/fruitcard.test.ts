@@ -60,8 +60,8 @@ describe('the tile card shortcut: "Use Fruit card"', () => {
     const l = legalActions(v);
     expect(fruitOffer(v, l, '1,-1')).toEqual({ label: FRUIT.use, note: FRUIT.topRank, action: { t: 'PlayFruit', card: 72, target: { q: 1, r: -1 } } });
     expect(fruitOffer(v, l, '1,0')).toEqual({ label: FRUIT.use, note: null, action: { t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } } });
-    expect(FRUIT.use).toBe('Use Fruit card');
-    expect(FRUIT.topRank).toBe('No combo can replace this. A Fruit card can.');
+    expect(FRUIT.use).toBe('Use Bomb');
+    expect(FRUIT.topRank).toBe('No combo can replace this. A Bomb can.');
   });
 
   it('not on a tile it cannot reach, my own tile, a root, or without a Fruit card', () => {
@@ -102,7 +102,7 @@ describe("a Fruit card's targets on the board", () => {
     const l = legalActions(v);
     const kinds = targetKinds(v, l, tapCard(v, l, EMPTY_SEL, 72));
     expect([...kinds.values()]).toEqual(['fruit', 'fruit']);
-    expect(TARGET_LABEL.fruit).toBe('Remove with a Fruit card');
+    expect(TARGET_LABEL.fruit).toBe('Remove with a Bomb');
   });
 });
 
@@ -115,11 +115,11 @@ describe('the opponent and Fruit cards: calm captions', () => {
     const s: State = { ...g, board: f.board, terrain: f.terrain, hands: [g.hands[0], [fruitCard(72), num(1, 0, 3)]], phase: 'ACT', turnPlayer: 1, actor: 1, history: [] };
     const a = { t: 'PlayFruit' as const, card: 72, target: { q: -1, r: 1 } };
     const steps = buildSteps(s, a, apply(s, a), 0);
-    expect(captionFor(steps[0]!, 0)).toBe('Opponent used a Fruit card on your 9');
-    // they take a Fruit card from the throw pile
+    expect(captionFor(steps[0]!, 0)).toBe('Opponent used a Bomb on your 9');
+    // they take a Bomb from the throw pile
     const t: State = { ...g, discard: [fruitCard(73)], phase: 'DRAW', turnPlayer: 1, actor: 1, history: [] };
     const d = { t: 'Draw' as const, from: 'discard' as const };
-    expect(captionFor(buildSteps(t, d, apply(t, d), 0)[0]!, 0)).toBe('Opponent took the Fruit card');
+    expect(captionFor(buildSteps(t, d, apply(t, d), 0)[0]!, 0)).toBe('Opponent took the Bomb');
   });
 });
 

@@ -6,7 +6,7 @@ import type { BoardView } from './board.js';
 import { S, centerOf, el, star } from './board.js';
 import { BOMB_INDEX_SVG, BOMB_SVG, FRUIT_SVG, SUIT_SVG } from './icons.js';
 declare const __CHANNEL__: string;
-const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04';
+const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test');
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
 import { EASE, MOTION } from '../logic/motion.js';

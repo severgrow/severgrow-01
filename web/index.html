@@ -300,6 +300,18 @@
       <div class="sheet-body"><ol id="history" class="history"></ol></div>
     </section>
 
+    <section id="starter-lottery" class="starter-lottery" role="dialog" aria-modal="true" aria-labelledby="lottery-title" hidden>
+      <div class="lottery-card">
+        <p class="lottery-kicker">Who starts?</p>
+        <h2 id="lottery-title" class="lottery-title">Drawing lots…</h2>
+        <div class="lottery-lanes" aria-hidden="true">
+          <div class="lottery-lane you"><span>You</span></div>
+          <div class="lottery-lane bot"><span>Opponent</span></div>
+        </div>
+        <p id="lottery-result" class="lottery-result"></p>
+      </div>
+    </section>
+
     <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
       <div class="go-card">
         <h2 id="go-title" class="go-title"></h2>

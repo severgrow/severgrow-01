@@ -16,7 +16,7 @@ const boot = (channel: string) => {
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
-  it.each(['live', 'test', 'futa04'])('%s isolates local and session storage', (channel) => {
+  it.each(['live', 'test', 'futa04', 'futa-test'])('%s isolates local and session storage', (channel) => {
     const { policy, Storage } = boot(channel);
     for (const store of [new Storage(), new Storage()]) {
       store.data.set('sentinel', 'Main'); store.data.set('test:sentinel', 'Dev');
@@ -31,7 +31,15 @@ describe('release channel policy', () => {
   it('Futa04 has approved player features without owner icons or experiments', () => {
     const f = boot('futa04').policy.FEATURES;
     for (const k of ['typography', 'phoneLayout', 'guidance', 'desktopCoach', 'slimHeader', 'tapAgain', 'smartCamera', 'mapBehindCards']) expect(f[k]).toBe(true);
-    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks']) expect(f[k]).toBe(false);
+    for (const k of ['lab', 'design', 'watch', 'replay', 'weakTools', 'ownershipMarks', 'v3']) expect(f[k]).toBe(false);
+  });
+  it('futa-test shares Futa04 presentation with its own storage prefix', () => {
+    const policy = boot('futa-test').policy;
+    expect(policy.IS_FUTA04).toBe(true);
+    expect(policy.IS_TEST).toBe(true);
+    expect(policy.STORAGE_PREFIX).toBe('futa-test:');
+    expect(policy.FEATURES.v3).toBe(false);
+    expect(policy.FEATURES.lab).toBe(false);
   });
   it('Main retains legacy player behavior and Dev retains tools', () => {
     expect(boot('live').policy.FEATURES.tapAgain).toBe(false);

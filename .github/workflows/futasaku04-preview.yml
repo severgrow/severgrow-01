@@ -61,6 +61,11 @@ jobs:
           npm run check
           CHANNEL=futa04 npm run web:build
           CHANNEL=futa04 node scripts/check-channel-assets.mjs
+          mv web/dist web/dist-futa04
+          CHANNEL=futa-test npm run web:build
+          CHANNEL=futa-test node scripts/check-channel-assets.mjs
+          mv web/dist web/dist-futa-test
+          mv web/dist-futa04 web/dist
       - name: Rebuild current published versions at their exact SHAs
         run: |
           cd live
@@ -80,7 +85,7 @@ jobs:
         run: |
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
-          node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)"
+          node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

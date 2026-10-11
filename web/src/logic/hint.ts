@@ -74,9 +74,9 @@ export const hintFor = (c: HintCtx): Hint => {
       if (c.kindPicked) return h('Tap a glowing hex', 'up');
       if (c.hexWithNoMove) return h('Nothing grows there now');
       if (c.handEmpty) return h('No cards: tap “End turn”', 'down');
-      // v0.8: the sprout (or a Fruit card) is used: say so, and point at the throw
+      // the Grow (or a Bomb) is used: say so, and point at the throw
       if (c.grew && !c.canSprout) {
-        const done = c.grew === 'fruit' ? 'Fruit used' : 'Sprouted';
+        const done = c.grew === 'fruit' ? 'Bomb used' : 'Grew';
         return h(c.canCombo ? `${done} · Bloom or Throw` : `${done} · Throw a card`, 'down');
       }
       if (!c.canCombo && c.bloomBlocked) return h(BLOOM.tooFew(c.bloomBlocked));
@@ -97,7 +97,7 @@ export const hintFor = (c: HintCtx): Hint => {
 };
 
 /** Positioning pass: the everyday hints (the draw, the sprout, the throw), quiet once learned. */
-const ROUTINE = [/^Draw/, /^Tap a card to sprout it$/, /^Throw 1 card/, /^Sprout, or play Fruit$/];
+const ROUTINE = [/^Draw/, /^Tap a card to Grow it$/, /^Throw 1 card/, /^Grow, or play a Bomb$/];
 export const isRoutineHint = (text: string) => ROUTINE.some((r) => r.test(text));
 
 /** Full weight for the first 3 turns; then quiet, unless the player seems stuck or it's unusual. */

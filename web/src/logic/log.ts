@@ -3,7 +3,7 @@
 import { coordKey, viewFor } from '../../../src/engine/index.js';
 import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { BLOOM, FRUIT, OPP, SPROUT } from '../../../src/strings.js';
+import { BLAST, BLOOM, FRUIT, OPP, SPROUT } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
@@ -61,7 +61,7 @@ export const describe = (before: State, a: Action, after: State, me: Player): st
     case 'Bloom':
       return `${BLOOM.oppDid(a.cards.length)} (${a.cards.map(name).join(', ')})${tail}`;
     case 'MegaBomb':
-      return `${OPP.The} launched a Mega Bomb at ${hn(a.target)}${tail}`;
+      return `${BLAST.oppDid(hn(a.target))}${tail}`;
     case 'Sprout':
       return `${SPROUT.oppDid(name(a.card), hn(a.coord))}${tail}`;
     case 'EndAct':

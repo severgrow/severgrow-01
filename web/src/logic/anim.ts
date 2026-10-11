@@ -194,7 +194,7 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
     case 'fruit':
       return s.player === viewer ? `${FRUIT.banner} Their ${s.strength} is gone` : FRUIT.oppDid(s.strength);
     case 'megaBomb':
-      return `Mega Bomb cleared ${s.destroyed.length} tiles`;
+      return `Blast cleared ${s.destroyed.length} tiles`;
     case 'discard':
       return s.player === viewer ? null : `${OPP.The} threw away ${cardName(s.card)}`;
     case 'draw':

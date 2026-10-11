@@ -506,7 +506,7 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   await page.click('#confirm-play');
   await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
   const gone = (await st(page)).board[top.target] === null;
-  check('Fruit card from the tile card: the note, "Use Fruit card", Confirm, the 9 is gone', /No combo can replace this\. A Fruit card can\./.test(card) && asks && gone && errors.length === 0, card.slice(0, 80));
+  check('Bomb from the tile card: the note, "Use Bomb", Confirm, the 9 is gone', /No combo can replace this\. A Bomb can\./.test(card) && asks && gone && errors.length === 0, card.slice(0, 80));
   await page.close();
 }
 {

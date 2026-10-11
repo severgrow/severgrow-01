@@ -129,11 +129,11 @@ export function ledToken(message: string): string | null {
   if (m === 'YOUR TREE IS SURROUNDED!' || m === "OPPONENT'S VOLCANO IS SURROUNDED!") return 'CAUGHT';
   if ((n = num(/^STRENGTHENED (\d+) . (\d+)$/, 2))) return `UP${n}`;
   if ((n = num(/^YOUR OPPONENT STRENGTHENED A (\d+) TO A (\d+)$/, 2))) return `UP${n}`;
-  if (m.startsWith('FRUITED!')) return 'FRUIT';
-  if ((n = num(/^OPPONENT USED A FRUIT CARD ON YOUR (\d+)$/))) return `-${n}`;
-  if ((n = num(/^MEGA BOMB CLEARED (\d+) TILES$/))) return `BOOM${n}`;
+  if (m.startsWith('FRUITED!') || m.startsWith('BOOM!')) return 'BOMB';
+  if ((n = num(/^OPPONENT USED A (?:FRUIT CARD|BOMB) ON YOUR (\d+)$/))) return `-${n}`;
+  if ((n = num(/^(?:MEGA BOMB|BLAST) CLEARED (\d+) TILES$/))) return `BOOM${n}`;
   if (m === 'PLAY IT IN YOUR GROW STEP.') return 'GROW';
-  if (m === 'FRUIT IS BACK NEXT TURN') return 'NEXT';
+  if (m === 'FRUIT IS BACK NEXT TURN' || m === 'BOMB IS BACK NEXT TURN') return 'NEXT';
   if (m === 'NO OPPONENT TILE BY YOURS') return 'NONE';
   if (m === 'HOME IN DANGER') return 'WARN';
   if (m === 'STRANGLED!') return 'ENDED';

@@ -336,7 +336,7 @@ describe('edge cases (v0.4)', () => {
   it('(c) a refill that leaves the deck exactly empty also ends the game; higher score wins', () => {
     const s = makeState({ phase: 'DISCARD', hands: [junk(8), junk(7)], deck: [], tiles: { '-1,1': [0, 2] } });
     const n = act(s, { t: 'Discard', card: s.hands[0][0]!.id });
-    expect(n.result).toEqual({ winner: 0, reason: 'deck_exhaustion', scores: [1, 0] });
+    expect(n.result).toEqual({ winner: 0, reason: 'deck_exhaustion', scores: [1, 0], strengths: [2, 0] });
   });
 });
 
