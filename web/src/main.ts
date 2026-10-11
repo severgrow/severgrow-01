@@ -31,6 +31,7 @@ import {
   bloomEndpoints,
   drawStarts,
   endpointBloom,
+  naturalBloomStart,
   hexAtPoint,
   hexesAlong,
   keyStep,
@@ -45,7 +46,7 @@ import {
   unavailable,
 } from './logic/draw.js';
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
-import { TIPS, TIPS_KEY, markTip, parseTips } from './logic/tips.js';
+import { TIPS, TIPS_KEY, bloomHintGroups, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
 import { finalTurns, scoreBreakdown, turnsLeft } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
@@ -71,7 +72,10 @@ import type { DifficultyId } from './logic/difficulty.js';
 import { opponentStartsFromSeed } from './logic/starter.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
-import { tutorialAccepts, tutorialChapter, tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT } from './logic/tutorial-script.js';
+import {
+  migrateTutorialProgress, tutorialAccepts, tutorialChapter, tutorialFeedback,
+  tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS,
+} from './logic/tutorial-script.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
 import { previewMove } from './logic/preview.js';
@@ -115,7 +119,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test') {
 const defaultArt = IS_FUTA04 ? await import('./ui/defaultArtBoard.js') : null;
 import type { Overlay } from './ui/board.js';
 import { askBot } from './ui/botClient.js';
-import { anim, cardFace, createEffects, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
+import { anim, cardFace, createEffects, heavyShakeFrames, removeAfter, shakeFrames, suitClass } from './ui/effects.js';
 import { mountDragLayer } from './ui/drag-layer.js';
 import { PILE_GRAB_PX } from './logic/drag.js';
 import { fillIcons, ICONS } from './ui/icons.js';
@@ -125,7 +129,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -206,11 +210,11 @@ let replaying = false;
 let reopenGameOver = false;
 /** Replay speed: 0.75 for the opponent's turn, 0.5 for the biggest cut (Part 2) */
 let replaySpeed = REPLAY_SPEED;
-const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.6 : 1) * (replaying ? 1 / replaySpeed : 1);
+const timeScale = () => speedFactor(settings.speed) * (settings.reduceMotion ? 0.75 : 1) * (replaying ? 1 / replaySpeed : 1);
 /** How much things move (0 when reduce motion is on). */
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
-/** Bloom's wave: one tile per 45ms, capped so the whole bloom ends inside a moment (600ms). */
-const BLOOM_STAGGER_MS = 45;
+/** Sequential grow: one tile lands, then the next — readable on opponent turns. */
+const BLOOM_STAGGER_MS = 110;
 
 // ---------- game state ----------
 
@@ -224,6 +228,10 @@ let intelState: State | null = null;
 let tutorialDisplayKey = '';
 let tutorialTransitionPending = false;
 let tutorialFreeTimer = 0;
+let tutorialIdleTimer = 0;
+let tutorialPraiseTimer = 0;
+let tutorialStatus: string | null = null;
+let tutorialCompleted = new Set<number>();
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
@@ -480,12 +488,27 @@ function renderHowTo() {
       : []),
     '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
     `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
-    `<p><b>The end:</b> when the deck runs out, both players finish with equal turns${limit}. Higher score wins; a tie goes to ${OPP.the}.</p>`,
+    `<p><b>The end:</b> when the deck runs out, both players finish with equal turns${limit}. Higher score wins; equal scores go to the stronger tiles, then a real draw.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
     '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
+    `<p><button type="button" class="link" id="howto-replay-tutorial">${TUTORIAL.replayTutorial}</button> · <button type="button" class="link" data-tut-explainer="bloom">${TUTORIAL.bloomHow.title}</button> · <button type="button" class="link" data-tut-explainer="win">${TUTORIAL.winHow.title}</button> · <button type="button" class="link" data-tut-explainer="buttons">What are these buttons?</button></p>`,
     '<p class="muted"><b>Keyboard:</b> D draws from the deck, T takes the throw pile, 1-9 pick cards, Tab to the board then arrows and Enter to paint, Backspace removes the last hex, U undoes, Esc cancels.</p>',
   ].join('');
+  $('howto-replay-tutorial')?.addEventListener('click', () => {
+    sheet(null);
+    if ($('menu-continue') && !$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
+    startTutorial(0);
+  }, { once: true });
+  document.querySelectorAll<HTMLButtonElement>('[data-tut-explainer]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.tutExplainer;
+      if (kind === 'bloom') startTutorial(TUTORIAL_CHAPTER_IDS.indexOf('bloom'));
+      else if (kind === 'win') startTutorial(TUTORIAL_CHAPTER_IDS.indexOf('win'));
+      else if (kind === 'buttons') startTutorial(TUTORIAL_CHAPTER_IDS.indexOf('buttons'));
+      sheet(null);
+    }, { once: true });
+  });
 }
 
 /** New matches choose one of five named tiers; the exact engine level is saved with the match. */
@@ -1011,75 +1034,186 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
   announceTurn(state.turnPlayer);
 }
 
-function startTutorial() {
-  const state=tutorialChapter(0);
-  log=['A small match, played to learn.'];
-  gameLevel=7;
-  tipOpen=null;
-  beginSession(state,{...freshCoach(),tutorial:{chapter:0,step:0}},[],state);
+function clearTutorialTimers() {
+  clearTimeout(tutorialFreeTimer);
+  clearTimeout(tutorialIdleTimer);
+  clearTimeout(tutorialPraiseTimer);
+  tutorialStatus = null;
+  glassSurface?.setIdleHard?.(false);
+}
+
+function startTutorial(chapter = 0) {
+  clearTutorialTimers();
+  const state = tutorialChapter(chapter);
+  log = ['A small match, played to learn.'];
+  gameLevel = 7;
+  tipOpen = null;
+  beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0 } }, [], state);
   save();
   announceTurn(HUMAN);
 }
 
 function completeTutorial() {
-  const my=epoch;
+  const my = epoch;
+  clearTutorialTimers();
   glassSurface?.hide();
-  smartCockpit?.event({message:'NICE.',priority:97,duration:850,mode:'green'});
-  window.setTimeout(() => { if (my===epoch && coach.tutorial) smartCockpit?.event({message:'点',priority:98,duration:650,mode:'amber'}); },900);
+  smartCockpit?.event({ message: 'NICE.', priority: 97, duration: 850, mode: 'green' });
+  window.setTimeout(() => { if (my === epoch && coach.tutorial) smartCockpit?.event({ message: '点', priority: 98, duration: 650, mode: 'amber' }); }, 900);
   window.setTimeout(() => {
-    if (my!==epoch || !coach.tutorial) return;
+    if (my !== epoch || !coach.tutorial) return;
     store.remove(SAVE_KEY);
-    coach=freshCoach();
+    coach = freshCoach();
     glassSurface?.hide();
     showScreen('menu');
-  },1750);
+  }, 1750);
 }
 
 function advanceTutorialChapter(chapter: number) {
-  if (chapter>=TUTORIAL_CHAPTER_COUNT) return completeTutorial();
-  const state=tutorialChapter(chapter);
-  log=[`Tutorial chapter ${chapter+1}.`];
-  beginSession(state,{...freshCoach(),tutorial:{chapter,step:0}},[],state);
+  if (chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial();
+  if (coach.tutorial) tutorialCompleted.add(coach.tutorial.chapter);
+  clearTutorialTimers();
+  const state = tutorialChapter(chapter);
+  log = [`Tutorial chapter ${chapter + 1}.`];
+  beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0 } }, [], state);
   save();
   announceTurn(HUMAN);
 }
 
-function tutorialAfterPlay(p: Played, by: Player) {
-  const progress=coach.tutorial;
+function tutorialAdvanceStep() {
+  const progress = coach.tutorial;
   if (!progress) return;
-  const lesson=tutorialLesson(progress.chapter,progress.step);
+  progress.step++;
+  tutorialDisplayKey = '';
+  tutorialStatus = null;
+  const next = tutorialLesson(progress.chapter, progress.step);
+  if (next?.reseat) {
+    const state = tutorialChapter(progress.chapter, next.reseat);
+    beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
+    save();
+    announceTurn(HUMAN);
+    return;
+  }
+  if (next) {
+    armTutorialIdle();
+    return;
+  }
+  tutorialStatus = tutorialFeedback('chapter-done');
+  tutorialTransitionPending = true;
+  const my = epoch;
+  window.setTimeout(() => {
+    if (my !== epoch) return;
+    tutorialStatus = null;
+    void idle().then(() => { if (my === epoch) advanceTutorialChapter(progress.chapter + 1); });
+  }, 900);
+}
+
+function tutorialNext() {
+  const progress = coach.tutorial;
+  if (!progress) return;
+  const lesson = tutorialLesson(progress.chapter, progress.step);
+  if (!lesson || lesson.action !== 'Next') return;
+  tutorialAdvanceStep();
+  render();
+}
+
+function tutorialSkip() {
+  const progress = coach.tutorial;
+  if (!progress) return;
+  advanceTutorialChapter(progress.chapter + 1);
+}
+
+function tutorialShowMe() {
+  const progress = coach.tutorial;
+  if (!progress) return;
+  const lesson = tutorialLesson(progress.chapter, progress.step);
   if (!lesson) return;
-  if (lesson.action==='FreeTurn') {
-    if (by===HUMAN && (p.after.turnPlayer!==HUMAN || p.after.phase==='GAME_OVER')) {
+  glassSurface?.nudge();
+  tutorialStatus = tutorialFeedback('idle', lesson);
+  tutorialDisplayKey = '';
+  render();
+}
+
+function openTutorialChapters() {
+  const existing = document.getElementById('tutorial-chapter-menu');
+  existing?.remove();
+  const rows = TUTORIAL_CHAPTER_IDS.map((id, i) => {
+    const title = TUTORIAL.chapters[i]?.title ?? id;
+    const done = tutorialCompleted.has(i) ? ' ✓' : '';
+    return `<button type="button" class="menu-btn ghost" data-tutorial-chapter="${i}"><span class="vb-name">${title}${done}</span></button>`;
+  }).join('');
+  const host = document.getElementById('menu') ?? document.body;
+  const box = document.createElement('div');
+  box.id = 'tutorial-chapter-menu';
+  box.innerHTML = `<h2>${TUTORIAL.menuChapters}</h2>${rows}<button type="button" class="menu-btn ghost" id="tutorial-chapter-close">Close</button>`;
+  box.querySelectorAll<HTMLButtonElement>('[data-tutorial-chapter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chapter = Number(btn.dataset.tutorialChapter);
+      box.remove();
+      startTutorial(chapter);
+    });
+  });
+  box.querySelector('#tutorial-chapter-close')?.addEventListener('click', () => box.remove());
+  host.append(box);
+}
+
+function armTutorialIdle() {
+  clearTimeout(tutorialIdleTimer);
+  glassSurface?.setIdleHard?.(false);
+  if (!coach.tutorial) return;
+  tutorialIdleTimer = window.setTimeout(() => {
+    if (!coach.tutorial) return;
+    glassSurface?.setIdleHard?.(true);
+    tutorialDisplayKey = '';
+    render();
+  }, 6000);
+}
+
+function tutorialAfterPlay(p: Played, by: Player) {
+  const progress = coach.tutorial;
+  if (!progress) return;
+  const lesson = tutorialLesson(progress.chapter, progress.step);
+  if (!lesson) return;
+  if (lesson.action === 'FreeTurn') {
+    if (by === HUMAN && (p.after.turnPlayer !== HUMAN || p.after.phase === 'GAME_OVER')) {
       progress.step++;
-      tutorialTransitionPending=true;
-      const my=epoch;
-      void idle().then(()=>{if(my===epoch) advanceTutorialChapter(TUTORIAL_CHAPTER_COUNT);});
+      tutorialTransitionPending = true;
+      const my = epoch;
+      void idle().then(() => { if (my === epoch) advanceTutorialChapter(TUTORIAL_CHAPTER_COUNT); });
     }
     return;
   }
-  if (lesson.action==='Opponent') {
-    if (by!==BOT || (p.after.actor!==HUMAN && p.after.phase!=='GAME_OVER')) return;
-  } else if (by!==HUMAN || !tutorialAccepts(lesson,p.action,p.before)) return;
-  progress.step++;
-  tutorialDisplayKey='';
-  if (tutorialLesson(progress.chapter,progress.step)) return;
-  tutorialTransitionPending=true;
-  const my=epoch;
-  void idle().then(()=>{if(my===epoch) advanceTutorialChapter(progress.chapter+1);});
+  if (lesson.action === 'Next') return;
+  if (lesson.action === 'Opponent') {
+    if (by !== BOT || (p.after.actor !== HUMAN && p.after.phase !== 'GAME_OVER')) return;
+  } else if (by !== HUMAN || !tutorialAccepts(lesson, p.action, p.before)) return;
+  clearTimeout(tutorialIdleTimer);
+  tutorialStatus = tutorialFeedback('praise', lesson);
+  tutorialDisplayKey = '';
+  clearTimeout(tutorialPraiseTimer);
+  tutorialPraiseTimer = window.setTimeout(() => {
+    tutorialStatus = null;
+    tutorialAdvanceStep();
+    render();
+  }, 600);
 }
 
 function continueGame() {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
-  const lesson=saved.coach?.tutorial;
-  if (lesson && !tutorialLesson(lesson.chapter,lesson.step)) {
-    // The completed action is saved before its closing animation finishes. If
-    // the page closes in that gap, resume at the next authored chapter.
-    if (lesson.chapter+1<TUTORIAL_CHAPTER_COUNT) return advanceTutorialChapter(lesson.chapter+1);
-    store.remove(SAVE_KEY);
-    showScreen('menu');
-    return;
+  const lesson = saved.coach?.tutorial;
+  if (lesson) {
+    const migrated = migrateTutorialProgress(lesson);
+    // Old 10-chapter saves land on the matching new chapter by lesson id.
+    if (lesson.chapter < 10 && (migrated.chapter !== lesson.chapter || !tutorialLesson(lesson.chapter, lesson.step)?.instruction)) {
+      if (tutorialLesson(migrated.chapter, 0)) return advanceTutorialChapter(migrated.chapter);
+      return startTutorial(0);
+    }
+    if (!tutorialLesson(lesson.chapter, lesson.step)) {
+      if (lesson.chapter + 1 < TUTORIAL_CHAPTER_COUNT) return advanceTutorialChapter(lesson.chapter + 1);
+      store.remove(SAVE_KEY);
+      showScreen('menu');
+      return;
+    }
   }
   log = ['Welcome back.'];
   watching = null;
@@ -1163,8 +1297,11 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
 function humanPlay(a: Action) {
   if (!session || (coach.tutorial && tutorialTransitionPending)) return;
   const lesson=coach.tutorial && tutorialLesson(coach.tutorial.chapter,coach.tutorial.step);
-  if (lesson && !tutorialAccepts(lesson,a,session.state)) {
-    glassSurface?.nudge();
+  if (lesson && lesson.action !== 'Next' && !tutorialAccepts(lesson,a,session.state)) {
+    if (!settings.reduceMotion) glassSurface?.nudge();
+    tutorialStatus = tutorialFeedback('wrong', lesson);
+    tutorialDisplayKey = '';
+    render();
     return;
   }
   fastForward();
@@ -1562,10 +1699,10 @@ async function playStep(step: Step, my: number) {
                  { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
                  { translate: '0 0', scale: '1', opacity: 1 }]
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_FUTA04 ? 330 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_FUTA04 ? 396 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.draw();
-        await wait((IS_FUTA04 ? 330 : 240) * f, my);
+        await wait((IS_FUTA04 ? 396 : 240) * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
         await wait(quickShow ? quickShow.show.draw : 120 * f, my);
@@ -1577,15 +1714,68 @@ async function playStep(step: Step, my: number) {
       const mo = momentOf(step);
       const b = mo.budget;
       await anticipate(mo, f, my);
-      if (!show()) return;
-      // Bloom arrives in a slow wave, 45ms outward from its anchor; the stagger is capped so the
-      // last tile and its draw-on vein finish inside one "moment" (600ms). A Sprout just lands.
       const bloom = step.style === 'bloom';
+      const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1;
+      // Futa04: reveal multi-tile grows one hex at a time so opponent blooms (and cuts after)
+      // stay readable — graceful, not hypnotic-fast.
+      const sequential = IS_FUTA04 && step.tiles.length > 1 && m > 0 && !b.fadeOnly;
+      if (sequential) {
+        if (my !== epoch) return;
+        queue.take();
+        settleStep(step, true);
+        if (bloom) sound.bloom();
+        let anchor: string | null = null;
+        let anchorDist = Infinity;
+        const home = parseKey(board.rootKey(by));
+        for (let i = 0; i < step.tiles.length; i++) {
+          if (my !== epoch) return;
+          const t = step.tiles[i]!;
+          queue.placeGrowTile(by, t);
+          render();
+          const d = hexDistance(home, parseKey(t.key));
+          if (d < anchorDist) { anchorDist = d; anchor = t.key; }
+          const tileEl = board.tile(t.key);
+          const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
+          const frames: Keyframe[] = [
+            { transform: 'scale(0.86)', opacity: 0 },
+            { transform: 'scale(1.02)', opacity: 1, offset: 0.72 },
+            { transform: 'translateY(1px) scale(1)', offset: 0.9 },
+            { transform: 'translateY(0) scale(1)' },
+          ];
+          anim(tileEl, frames, { duration: MOTION.move * f, easing: EASE.spring, transformOrigin: 'center' } as KeyframeAnimationOptions);
+          if (tileEl) {
+            tileEl.classList.add('spring');
+            setTimeout(() => tileEl.classList.remove('spring'), 900 * f);
+          }
+          if (t.replaced && m > 0) {
+            sparks(t.key, by === HUMAN ? 'bot' : 'you', 0, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
+            sound.sparks();
+          } else if (m > 0 && !b.fadeOnly) {
+            ring(t.key, f, st.heavy);
+          }
+          const str = t.strength ?? 1;
+          const maxRank = session?.state.config.maxRank ?? 9;
+          if (st.heavy) sound.placeTop(str, maxRank, 0);
+          else sound.place(str, maxRank, 0);
+          if (session?.state.terrain[t.key] === 'rich') sound.chime(0.08);
+          const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
+          if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
+          await wait(MOTION.move * f + BLOOM_STAGGER_MS * f, my);
+        }
+        if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
+        if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
+        const cap = captionFor(step, HUMAN);
+        if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
+        if (mo.tier === 'big') await impact(mo, f, my);
+        await wait(180 * f, my);
+        return;
+      }
+      if (!show()) return;
+      // Legacy / single-tile path: stagger wave for non-Futa04 blooms.
       const home = parseKey(board.rootKey(by));
       const firstDistance = Math.min(...step.tiles.map(tile => hexDistance(home,parseKey(tile.key))));
       const stagger = bloom ? BLOOM_STAGGER_MS * f : 0;
       const staggerCap = (MOTION.moment - MOTION.move) * f;
-      const pop = mo.tier === 'big' ? 1.6 : mo.tier === 'medium' ? 1.25 : 1; // stronger ripple for bigger moments
       let last = 0;
       let anchor: string | null = null;
       let anchorDist = Infinity;
@@ -1596,7 +1786,6 @@ async function playStep(step: Step, my: number) {
         const delay = bloom ? Math.min((d - firstDistance) * stagger, staggerCap) : 0;
         last = Math.max(last, delay);
         const st = settleFor(t.strength ?? 1, session?.state.config.maxRank ?? 9);
-        // The sprout settle: scale up from 0.86 at the centre with a spring, then press 1px in.
         const frames: Keyframe[] =
           m === 0 || b.fadeOnly
             ? [{ opacity: 0 }, { opacity: 1 }]
@@ -1606,7 +1795,6 @@ async function playStep(step: Step, my: number) {
                 ? [{ transform: 'scale(0)' }, { transform: `scale(${1 + 0.32 * m}, ${1 + 0.18 * m})`, offset: 0.55 }, { transform: `scale(${1 - 0.06 * m}, ${1 + 0.04 * m})`, offset: 0.8 }, { transform: 'scale(1)' }]
                 : [{ transform: `translateY(${-st.drop * m}px) scale(0.15)`, opacity: 0 }, { transform: `translateY(0) scale(${1 + (0.05 + st.squash) * m * pop}, ${1 - st.squash * 0.5 * m})`, opacity: 1, offset: 0.62 }, { transform: `scale(${1 - 0.04 * m}, ${1 + 0.03 * m})`, offset: 0.84 }, { transform: 'scale(1)' }];
         anim(tileEl, frames, { duration: IS_FUTA04 ? MOTION.move * f : (step.style === 'sprout' ? 460 : st.ms) * f, delay, easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.2,.8,.3,1.1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
-        // overhaul item 17: blades spring up as the tile lands; a heavier tap for the top rank
         if (m > 0 && !b.fadeOnly) {
           tileEl?.classList.add('spring');
           setTimeout(() => tileEl?.classList.remove('spring'), delay + 900 * f);
@@ -1615,20 +1803,16 @@ async function playStep(step: Step, my: number) {
         const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
         if (hp && by === HUMAN && (st.heavy || i === 0)) setTimeout(() => vibrate(true, hp as number | number[]), delay + st.ms * 0.6 * f);
         if (t.replaced) {
-          // The bot's tile dissolves into sparks as mine takes its place (a newcomer should not
-          // land on an old tile in silence), then the new one gets its quiet ring.
           if (m > 0) {
             sparks(t.key, by === HUMAN ? 'bot' : 'you', delay, f, Math.max(4, Math.round(b.particles / Math.max(step.tiles.length, 1))));
             setTimeout(() => sound.sparks(), delay);
           }
           if (m > 0 && !b.fadeOnly && !bloom) ring(t.key, f, st.heavy);
         } else if (IS_FUTA04 && !bloom) {
-          // A normal Sprout: one quiet ring on the new tile, no sparks.
           if (m > 0 && !b.fadeOnly) ring(t.key, f, st.heavy);
         } else if (!IS_FUTA04 && mo.tier === 'big' && b.particles > 0) {
           sparks(t.key, by === HUMAN ? 'you' : 'bot', delay, f, Math.round(b.particles / step.tiles.length));
         }
-        // the wood tick that lands: one per tile, lower and heavier for a higher rank
         if (!bloom) {
           const str = t.strength ?? 1;
           const maxRank = session?.state.config.maxRank ?? 9;
@@ -1637,19 +1821,17 @@ async function playStep(step: Step, my: number) {
         }
         if (session?.state.terrain[t.key] === 'rich') sound.chime(delay / 1000 + 0.08);
       });
-      // Bloom: one soft flash on the anchor, never one per tile.
       if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
       if (bloom) sound.bloom();
-      // Part 3 D: a few spores drift home to my root from what I just grew (Eye candy)
       if (settings.eyeCandy && by === HUMAN && m > 0 && b.particles > 0) {
-        const home = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
-        if (home.length) setTimeout(() => stream(home.map((s) => s.from), board.rootKey(HUMAN), f, Math.min(6, home.length + 2)), last + 380 * f);
+        const homeKeys = sporesHome(step.tiles.map((t) => t.key), board.rootKey(HUMAN));
+        if (homeKeys.length) setTimeout(() => stream(homeKeys.map((s) => s.from), board.rootKey(HUMAN), f, Math.min(6, homeKeys.length + 2)), last + 380 * f);
       }
       if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
       if (mo.tier === 'big') await impact(mo, f, my);
-      await wait(last + (IS_FUTA04 ? 560 : 420) * f, my);
+      await wait(last + (IS_FUTA04 ? 672 : 420) * f, my);
       return;
     }
     case 'sever': {
@@ -1676,23 +1858,29 @@ async function playStep(step: Step, my: number) {
       // one dark pulse from the target, sized to the destroyed set (opacity ≤0.4, duration quick)
       let lastRing = 0;
       for (const key of step.destroyed) lastRing = Math.max(lastRing, hexDistance(parseKey(key), center));
-      flash(step.target, f, false, { dark: true, ms: MOTION.quick * f, radius: Math.min(4, lastRing + 1) });
+      flash(step.target, f, false, { dark: true, ms: MOTION.quick * 1.25 * f, radius: Math.min(4.4, lastRing + 1.15) });
       if (settings.sound) sound.megaBomb();
-      if (mine) vibrate(settings.vibration, 18);
-      // a heavy drop only when the bomb actually lands on a large set
-      if (m > 0 && step.destroyed.length >= 4) anim($('board-wrap'), shakeFrames(3), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
-      // destroyed tiles punch inward at their own centre, staggered by ring: 30ms per ring, <700ms
+      if (mine) vibrate(settings.vibration, 22);
+      // Blast: lowkey but heavy — the board thuds like something solid landed.
+      if (m > 0 && step.destroyed.length >= 1) {
+        const amp = IS_FUTA04 ? Math.min(6.5, 3.5 + step.destroyed.length * 0.35) : 3;
+        anim($('board-wrap'), IS_FUTA04 ? heavyShakeFrames(amp) : shakeFrames(3), {
+          duration: (IS_FUTA04 ? MOTION.moment : MOTION.move) * Math.max(f, 0.5),
+          easing: EASE.out,
+        });
+      }
+      // destroyed tiles punch inward at their own centre, staggered by ring
       for (const key of step.destroyed) {
-        const ring = hexDistance(parseKey(key), center);
-        const delay = Math.min(ring * 30, 400) * f;
+        const ringN = hexDistance(parseKey(key), center);
+        const delay = Math.min(ringN * 36, 480) * f;
         anim(board.tile(key), [
           { transform: 'scale(1)', opacity: 1 },
-          { transform: 'scale(0.72)', opacity: 1, offset: 0.5 },
-          { transform: 'scale(0)', opacity: 0.5 },
-        ], { duration: MOTION.move * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
-        drift(key, delay + MOTION.move * 0.4 * f, f, 1); // one ash mote each
+          { transform: 'scale(0.68)', opacity: 1, offset: 0.5 },
+          { transform: 'scale(0)', opacity: 0.45 },
+        ], { duration: MOTION.move * 1.1 * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
+        drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 2 : 1);
       }
-      await wait(Math.min(700, lastRing * 30 + MOTION.move) * f, my);
+      await wait(Math.min(840, lastRing * 36 + MOTION.move * 1.15) * f, my);
       quietAmbient(false);
       show();
       return;
@@ -1783,7 +1971,7 @@ async function playStep(step: Step, my: number) {
       }
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 330 * f : 320 * f, my);
+      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 396 * f : 320 * f, my);
       show();
       return;
     }
@@ -2037,6 +2225,11 @@ function updateFuta04MoveActive() {
   const active = !!session && !$('game').hidden && (busy() || session.sel.card !== null || session.sel.hex !== null || session.sel.kind !== null || !!session.pending || !!draw.shape.length || draw.desk.phase === 'live' || !!draw.ptr);
   document.documentElement.classList.toggle('futa04-move-active', active);
   document.documentElement.dataset.futa04Bloom = String(!!session?.sel.kind?.startsWith('bloom-'));
+  const grew = !!session && myTurn() && !!grewThisTurn();
+  const bloomReady = !!session && myTurn() && session.view.phase === 'ACT'
+    && session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
+  document.documentElement.dataset.futa04Grew = String(grew);
+  document.documentElement.dataset.futa04BloomReady = String(bloomReady);
   document.documentElement.dataset.futa04Waiting = String(myTurn() && !busy() && !watching);
   document.documentElement.dataset.futa04Turn = String(session?.state.turnNumber ?? '');
 }
@@ -2922,14 +3115,15 @@ function renderControls(v: View, advice: Advice | null) {
       const on = sel.kind === k.kind;
       // two or more share the row: short words, so they fit beside the piles on a phone
       const b = button(k.label, `kind${on ? ' on' : ''}${coachKind === k.kind && !anySel ? ' coach-glow' : ''}`, () => {
+        if (IS_FUTA04 && k.kind.startsWith('bloom-') && !k.kind.startsWith('bloom-mega-')) {
+          // Menu / smart-bloom pick: enter the recipe and plant the first tile when we can.
+          beginBloomKind(k.kind, session!.sel.card);
+          smartCockpit?.hint('BLOOM');
+          render();
+          return;
+        }
         bloomMenu = false;
         session!.tapKind(k.kind);
-        if (IS_FUTA04) {
-          // A Bloom starts a fresh shape, including when a board hex was picked first.
-          session!.sel = { ...session!.sel, hex: null };
-          draw = { ...DRAW0 };
-          board.ghost(null);
-        }
         render();
       });
       b.dataset.kind = k.kind;
@@ -2963,8 +3157,11 @@ function renderControls(v: View, advice: Advice | null) {
     }
     // Done growing: the next step is throwing a card (or, with an empty hand, the turn just ends).
     const end = legal.find((a) => a.t === 'EndAct');
-    const label = v.hand.length > 0 ? IS_FUTA04 ? 'Skip' : 'Throw a card' : 'End turn';
-    if (end && !pending && grow.throwButton) moves.append(button(label, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${label}: stop growing tiles`));
+    const bloomStill = IS_FUTA04 && legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
+    const skipLabel = v.hand.length > 0
+      ? IS_FUTA04 && grow.throwButton && bloomStill ? 'skip?' : IS_FUTA04 ? 'Skip' : 'Throw a card'
+      : 'End turn';
+    if (end && !pending && grow.throwButton) moves.append(button(skipLabel, `end ${anySel ? 'ghost' : 'primary'}${IS_FUTA04 && v.hand.length > 0 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), `${skipLabel}: skip bloom and throw a card`));
     // Sprouting stays optional in the rules: a small link skips it and goes on to Throw.
     if (end && !pending && grow.skipLink && !anySel) moves.append(button(IS_FUTA04 ? 'Skip' : SPROUT.skip, `link end skip${IS_FUTA04 ? ' futa04-skip' : ''}${advice?.action.t === 'EndAct' ? ' coach-glow' : ''}`, () => humanPlay(end), SPROUT.skipTitle));
   } else if (v.phase === 'DISCARD') {
@@ -2977,7 +3174,7 @@ function renderControls(v: View, advice: Advice | null) {
   }
   if (IS_FUTA04 && sel.kind?.startsWith('bloom-')) {
     const end = legal.find(a => a.t === 'EndAct');
-    if (end && !moves.querySelector('.end')) moves.append(button('Skip', 'end futa04-skip', () => humanPlay(end), SPROUT.skipTitle));
+    if (end && !moves.querySelector('.end')) moves.append(button(grewThisTurn() ? 'skip?' : 'Skip', 'end futa04-skip', () => humanPlay(end), 'Skip bloom and throw a card'));
   }
   const dc = drawCombo();
   if (dc && !pending) {
@@ -3108,31 +3305,84 @@ function renderTutorial() {
   const lesson=tutorialLesson(progress.chapter,progress.step);
   if (!lesson) return;
   const selected=session.sel.card;
-  const selectors:string[]=[];
   const selectingBloom=!!session.sel.kind?.startsWith('bloom-');
-  const text=lesson.action==='MegaBomb' && session.pending?.t==='MegaBomb' ? 'TAP AGAIN TO LAUNCH.'
-    : selectingBloom && lesson.action==='MegaBomb' ? 'CHOOSE THE BLAST.'
-    : selectingBloom && lesson.action==='Bloom' ? 'PLACE THREE CONNECTED TILES.'
-    : selected!==null && lesson.action==='PlayFruit' ? 'CHOOSE AN ENEMY TILE.'
-    : selected!==null && lesson.action==='Sprout' ? 'TAP THE LIT TILE.' : lesson.text;
-  if (lesson.focus==='deck') selectors.push('#deck');
-  else if (lesson.focus==='discard') selectors.push('#discard');
-  else if (lesson.focus==='context') selectors.push('#smart-context');
-  else if (lesson.focus==='card') selectors.push('#hand .card');
-  else if (lesson.focus==='bloom') {
-    if (selectingBloom) selectors.push(lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board-wrap');
-    else selectors.push('#smart-bloom-button');
+  const instruction=lesson.instruction
+    ?? (lesson.action==='MegaBomb' && session.pending?.t==='MegaBomb' ? 'Tap again.'
+      : selectingBloom && lesson.action==='MegaBomb' ? 'Choose the Blast.'
+      : selectingBloom && lesson.action==='Bloom' ? 'Paint the tiles.'
+      : selected!==null && lesson.action==='PlayFruit' ? 'Choose their tile.'
+      : selected!==null && lesson.action==='Sprout' ? 'Tap the lit tile.' : lesson.text);
+  // One target only. Card-then-tile lessons light the card first, then the tile.
+  let selector='';
+  let shape: 'hex' | 'card' | 'pill' | 'none' = 'none';
+  if (lesson.focus==='deck') { selector='#deck'; shape='pill'; }
+  else if (lesson.focus==='discard') { selector='#discard'; shape='pill'; }
+  else if (lesson.focus==='context') { selector='#smart-context'; shape='pill'; }
+  else if (lesson.focus==='card') {
+    const card = lesson.cardId != null
+      ? session.view.hand.find(c=>c.id===lesson.cardId)
+      : lesson.card
+        ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
+        : session.view.hand[0];
+    if (card) { selector=`#hand .card[data-card="${card.id}"]`; shape='card'; }
+  } else if (lesson.focus==='bloom') {
+    if (selectingBloom) {
+      selector=lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board-wrap';
+      shape='hex';
+    } else { selector='#smart-bloom-button'; shape='pill'; }
+  } else if (lesson.focus==='home' && lesson.tile) {
+    selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`; shape='hex';
+  } else if (lesson.focus==='button') {
+    const map: Record<string,string> = {
+      deck:'#deck', discard:'#discard', sort:'#hand-sort', undo:'#tool-undo',
+      turns:'#turn-pill', score:'#race', menu:'#hud-menu', history:'#hud-history', word:'#turn',
+    };
+    const id = lesson.button ?? lesson.id;
+    selector = map[id] ?? `[data-tutorial-btn="${id}"]`;
+    shape = 'pill';
   } else if (lesson.focus==='tile' && lesson.tile) {
-    const wanted=lesson.card
-      ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
-      : session.view.hand.find(c=>c.suit===null);
-    if (selected!==wanted?.id && wanted) selectors.push(`#hand .card[data-card="${wanted.id}"]`);
-    selectors.push(`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`);
+    const wanted=lesson.cardId != null
+      ? session.view.hand.find(c=>c.id===lesson.cardId)
+      : lesson.card
+        ? session.view.hand.find(c=>c.suit===lesson.card![0]&&c.rank===lesson.card![1])
+        : session.view.hand.find(c=>c.suit===null);
+    if (selected!==wanted?.id && wanted) { selector=`#hand .card[data-card="${wanted.id}"]`; shape='card'; }
+    else { selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`; shape='hex'; }
   }
-  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}`;
+  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}:${selector}`;
   if (tutorialDisplayKey!==key) {
     tutorialDisplayKey=key;
-    glassSurface.tutorial(text,progress.chapter,selectors,{gentle:progress.chapter>=4,arrow:progress.chapter<8});
+    const idleHard = glassSurface && (glassSurface as { setIdleHard?: (h: boolean) => void });
+    void idleHard;
+    const showIdle = !!document.getElementById('tutorial-focus')?.dataset.bob && document.getElementById('tutorial-focus')!.dataset.bob === 'hard';
+    glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, selector ? [selector] : [], {
+      shape,
+      ...(lesson.why != null && !tutorialStatus ? { why: lesson.why } : {}),
+      chapterCount: TUTORIAL_CHAPTER_COUNT,
+      reduceMotion: settings.reduceMotion,
+      arrow: true,
+      turnIcons: lesson.id === 'draw',
+      ...(tutorialStatus && /Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { praise: tutorialStatus } : {}),
+      ...(tutorialStatus && !/Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { status: tutorialStatus } : {}),
+      idleHard: showIdle,
+      buttons: {
+        showMe: showIdle || tutorialStatus === TUTORIAL.showMe,
+        skip: true,
+        chapters: true,
+        next: lesson.action === 'Next',
+        playReal: lesson.action === 'FreeTurn' && progress.step > 0,
+        replayChapter: lesson.action === 'FreeTurn' && progress.step > 0,
+      },
+      handlers: {
+        onShowMe: tutorialShowMe,
+        onSkip: tutorialSkip,
+        onChapters: openTutorialChapters,
+        onNext: tutorialNext,
+        onPlayReal: () => { store.remove(SAVE_KEY); coach = freshCoach(); showScreen('menu'); },
+        onReplayChapter: openTutorialChapters,
+      },
+    });
+    armTutorialIdle();
     if (lesson.action==='FreeTurn') {
       clearTimeout(tutorialFreeTimer);
       tutorialFreeTimer=window.setTimeout(()=>glassSurface?.hide(),1400);
@@ -3168,6 +3418,10 @@ function renderHand(v: View, advice: Advice | null) {
       ? legal.flatMap(a => a.t === 'Bloom' || a.t === 'MegaBomb' ? a.cards : []) : []) : new Set<number>();
   // overhaul item 3: cards of the same combo share a small bracket under them
   const combos = comboGroups(v.hand);
+  const showBloomHints = (settings.bloomHints || !!coach.tutorial || IS_TEST) && myTurn() && !busy();
+  const bloomHintIds = showBloomHints
+    ? new Set(bloomHintGroups(v, legal).flat())
+    : new Set<number>();
   // FLIP needs layout reads only when card membership or order changes. Selection,
   // phase updates and bot moves otherwise forced two full hand measurements.
   const flip = !settings.reduceMotion && settings.speed !== 'skip' &&
@@ -3224,6 +3478,7 @@ function renderHand(v: View, advice: Advice | null) {
     const g = combos.get(c.id);
     if (g === undefined) delete b.dataset.combo;
     else b.dataset.combo = String(g % 3);
+    b.classList.toggle('bloom-hint', bloomHintIds.has(c.id));
     if (hand.children[i] !== b) hand.insertBefore(b, hand.children[i] ?? null);
   });
   for (const b of existing.values()) b.remove();
@@ -3492,17 +3747,62 @@ function onCardTap(id: number) {
   if (busy()) fastForward();
   if (!myTurn()) return;
   if (IS_FUTA04 && session.view.phase === 'ACT') {
-    const hasCombo = session.legal.some(a=>a.t==='Bloom' || a.t==='MegaBomb');
+    const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
+    const matchingBlooms = bloomKindsForCard(id);
+    const inBloomCard = matchingBlooms.length > 0;
+    const sameAgain = session.sel.card === id;
     if (grewThisTurn() && hasCombo) {
-      // A hand-card tap after Grow is a direct path to Throw. The first tap
-      // selects that very card; a second tap confirms it in the normal flow.
-      const end = session.legal.find(a=>a.t==='EndAct');
-      if (end) {
-        humanPlay(end);
-        session.tapCard(id);
+      // Bloom-related card: first tap stays on Bloom; tapping the same card again
+      // (or any non-Bloom card) moves to Throw select → next tap confirms.
+      if (!inBloomCard || sameAgain) {
+        const end = session.legal.find(a => a.t === 'EndAct');
+        if (end) {
+          humanPlay(end);
+          session.tapCard(id);
+          render();
+          return;
+        }
+      }
+    }
+    // Bloom intent: Grow already used, card can't sprout/bomb, or a Bloom is already selected.
+    // (Before Grow, the same card may still be a one-tile Grow — keep that path.)
+    const tapped = session.view.hand.find((c) => c.id === id);
+    const cardCanGrow = !!tapped && session.legal.some((a) => {
+      if (a.t === 'PlayFruit') return a.card === id;
+      if (a.t !== 'Sprout') return false;
+      if (a.card === id) return true;
+      const other = session!.view.hand.find((c) => c.id === a.card);
+      return !!other && other.suit === tapped.suit && other.rank === tapped.rank;
+    });
+    const wantBloom =
+      matchingBlooms.length > 0 &&
+      (!!grewThisTurn() || !cardCanGrow || !!session.sel.kind?.startsWith('bloom-'));
+    if (wantBloom && matchingBlooms.length === 1) {
+      if (sameAgain && session.sel.kind === matchingBlooms[0]!.kind) {
+        session.cancel();
+        draw = { ...DRAW0 };
+        board.ghost(null);
         render();
         return;
       }
+      sound.click();
+      beginBloomKind(matchingBlooms[0]!.kind, id);
+      inspectKey = null;
+      smartCockpit?.hint('BLOOM');
+      render();
+      return;
+    }
+    // Several Blooms share this card under Bloom intent: open the recipe menu.
+    if (wantBloom && matchingBlooms.length > 1) {
+      sound.click();
+      pickFruit(id);
+      session.sel = { ...session.sel, kind: null, hex: null };
+      draw = { ...DRAW0 };
+      board.ghost(null);
+      bloomMenu = true;
+      inspectKey = null;
+      render();
+      return;
     }
     // The double-Bomb recipe is entered only through its cockpit control.
     // Picking a Bomb from the hand remains the existing single-card action.
@@ -3545,6 +3845,44 @@ function drawCombo(): Combo | null {
   // worked out once per position and selection, not on every pointer move
   if (comboMemo?.state !== session.state || comboMemo.sel !== session.sel) comboMemo = { state: session.state, sel: session.sel, combo: comboFor(session.view, session.legal, session.sel) };
   return comboMemo.combo;
+}
+
+/**
+ * Enter a Bloom recipe and plant the first tile when we can: always if there is only one
+ * legal start, otherwise the natural start (closest to home) so the next tap continues.
+ */
+function beginBloomKind(kind: string, cardId: number | null = null): boolean {
+  if (!session || !kind.startsWith('bloom-') || kind.startsWith('bloom-mega-')) return false;
+  bloomMenu = false;
+  session.preset(null);
+  const card = cardId ?? kindCards(kind)[0] ?? null;
+  session.sel = { card, hex: null, kind, option: 0 };
+  comboMemo = null;
+  const combo = comboFor(session.view, session.legal, session.sel);
+  draw = { ...DRAW0 };
+  board.ghost(null);
+  if (!combo) return true;
+  const start = naturalBloomStart(combo, board.rootKey(HUMAN), false);
+  if (start) {
+    draw = { ...DRAW0, shape: paintEnter(combo, [], start, false) };
+  }
+  return true;
+}
+
+/** Bloom recipes in the hand that use this card (by suit/rank copy). */
+function bloomKindsForCard(id: number) {
+  if (!session) return [];
+  const card = session.view.hand.find((c) => c.id === id);
+  if (!card || card.suit === null) return [];
+  return moveButtons(session.view, session.legal, EMPTY_SEL, true).filter(
+    (k) =>
+      k.kind.startsWith('bloom-') &&
+      !k.kind.startsWith('bloom-mega-') &&
+      kindCards(k.kind).some((cid) => {
+        const other = session!.view.hand.find((c) => c.id === cid);
+        return !!other && other.suit === card.suit && other.rank === card.rank;
+      }),
+  );
 }
 
 /** The ghost of the shape being painted right now (null when nothing is painted). */
@@ -3816,10 +4154,60 @@ const drawHandlers = {
   },
 };
 
+/** After the one Grow, a tap above the cockpit (board) skips optional Bloom → Throw. */
+function trySkipBloomToThrow(): boolean {
+  if (!IS_FUTA04 || !session || !myTurn() || busy()) return false;
+  if (session.view.phase !== 'ACT' || !grewThisTurn()) return false;
+  if (draw.shape.length || draw.ptr || session.sel.kind?.startsWith('bloom-')) return false;
+  if (!session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb')) return false;
+  const end = session.legal.find(a => a.t === 'EndAct');
+  if (!end) return false;
+  humanPlay(end);
+  return true;
+}
+
+/** Bloom paint: empty / off-shape tap steps back one hex; past the first fully unpicks. */
+function bloomStepBack(): boolean {
+  if (!IS_FUTA04 || !session || !drawCombo()) return false;
+  if (draw.shape.length > 0) {
+    const next = draw.shape.slice(0, -1);
+    if (!next.length) {
+      cancelDraw();
+      session.cancel();
+      render();
+      return true;
+    }
+    draw = { ...draw, shape: next, msg: null };
+    paintDraw();
+    render();
+    return true;
+  }
+  if (session.sel.card !== null || session.sel.kind !== null) {
+    session.cancel();
+    render();
+    return true;
+  }
+  return false;
+}
+
 function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   if (busy()) fastForward();
+  // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
+  // first→last endpoint shortcut used by Futa04 Bloom).
+  if (IS_FUTA04 && myTurn() && session.view.phase === 'ACT' && (session.sel.kind?.startsWith('bloom-') || draw.shape.length)) {
+    const combo = drawCombo();
+    const onShape = draw.shape.includes(key);
+    const nextOk = combo ? drawNext(combo, draw.shape, draw.reverse).has(key) : false;
+    const startOk = combo && !draw.shape.length ? drawStarts(combo, draw.reverse).has(key) : false;
+    const endOk = combo && draw.shape.length === 1
+      ? bloomEndpoints(combo, draw.shape[0]!, draw.reverse).has(key)
+      : false;
+    if (!onShape && !nextOk && !startOk && !endOk) {
+      if (bloomStepBack()) return;
+    }
+  }
   const idleGrowSpot = IS_FUTA04 && myTurn() && session.view.phase === 'ACT' &&
     session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
     session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);
@@ -3827,6 +4215,7 @@ function onHexTap(key: string) {
       (session.view.phase !== 'ACT' && session.view.phase !== 'ROT_PICK') ||
       (session.view.phase === 'ACT' && ((!idleGrowSpot && session.sel.card === null && session.sel.kind === null) ||
         hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard')))) {
+    if (trySkipBloomToThrow()) return;
     boinkTile(key);
     return;
   }
@@ -4158,14 +4547,32 @@ const dragLayer = mountDragLayer({
     return { x: p.x, y: p.y };
   },
   overDiscardPile: (x, y) => {
-    const r = $('discard').getBoundingClientRect();
+    // Throw drop: discard pile + most of the cockpit chrome, but not the action buttons /
+    // bloom menu / context controls, and not the hand (hand stays "pick another card").
+    const discard = $('discard');
+    const r = discard.getBoundingClientRect();
     const dx = Math.max(r.left - x, 0, x - r.right);
     const dy = Math.max(r.top - y, 0, y - r.bottom);
-    return Math.hypot(dx, dy) <= PILE_GRAB_PX;
+    if (Math.hypot(dx, dy) <= PILE_GRAB_PX) return true;
+    if (!IS_FUTA04 || !session || session.view.phase !== 'DISCARD') return false;
+    const box = document.getElementById('futa04-box');
+    if (!box) return false;
+    const br = box.getBoundingClientRect();
+    if (x < br.left || x > br.right || y < br.top || y > br.bottom) return false;
+    const el = document.elementFromPoint(x, y);
+    if (!el) return false;
+    if (el.closest('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
+    return !!el.closest('#futa04-box');
   },
   upperBoard: (y) => {
-    const r = board.svg.getBoundingClientRect();
-    return r.height > 0 && y < r.top + r.height / 2;
+    // Flick throw: almost the full screen above the action / hand button row.
+    const hand = $('hand').getBoundingClientRect();
+    const actions = document.getElementById('futa04-actions')?.getBoundingClientRect();
+    const floor = Math.min(hand.top, actions?.top ?? hand.top) - 8;
+    return y < floor;
+  },
+  setThrowZone: (on) => {
+    document.getElementById('futa04-box')?.classList.toggle('drag-throw-zone', on);
   },
   commit: (a) => {
     // Match the tap path exactly. A pile tap draws at once (no Confirm); a hand action
@@ -4182,11 +4589,23 @@ const dragLayer = mountDragLayer({
     }
     humanPlay(a);
   },
-  openBloom: (cardId) => {
+  openBloom: (cardId, key) => {
     if (!session) return;
     session.cancel();
-    session.sel = { card: cardId, hex: null, kind: null, option: 0 };
+    const groups = bloomKindsForCard(cardId);
+    if (groups.length === 1) {
+      beginBloomKind(groups[0]!.kind, cardId);
+      // Drop on a specific start hex wins over the natural default.
+      const combo = comboFor(session.view, session.legal, session.sel);
+      if (combo && key && drawStarts(combo, false).has(key)) {
+        draw = { ...DRAW0, shape: paintEnter(combo, [], key, false) };
+      }
+    } else {
+      session.sel = { card: cardId, hex: null, kind: null, option: 0 };
+      bloomMenu = groups.length > 1;
+    }
     render();
+    if (draw.shape.length) paintDraw();
   },
   led: (word) => smartCockpit?.led(word),
   onShape: (shape) => {
@@ -4240,6 +4659,18 @@ const dragLayer = mountDragLayer({
 dragLayer.attachHand($('hand'));
 dragLayer.attachDeck($('deck'));
 dragLayer.attachDiscard($('discard'));
+// Tap empty board chrome (gaps — not hexes/targets/ghosts) after Grow → skip Bloom to Throw,
+// or step back one Bloom paint hex. Capture is off so draw/paint handlers win on real hexes.
+$('board-wrap').addEventListener('pointerup', (event) => {
+  if (!IS_FUTA04 || event.button === 2) return;
+  const t = event.target as Element | null;
+  if (!t) return;
+  if (t.closest('.hex-cell, .target, .ghost, .ghost-tile, .receptive-well, .selected, button, a, .card, #hand, #moves, #futa04-actions')) return;
+  // A hit on the SVG grid that resolves to a hex is painting / placing — leave it alone.
+  if (t.closest('#board') && board.keyAtClient(event.clientX, event.clientY)) return;
+  if (trySkipBloomToThrow()) return;
+  if (bloomStepBack()) return;
+});
 if (FEATURES.weakTools) bind('tool-weak', () => {
   settings = { ...settings, weakSpots: !settings.weakSpots };
   saveSettings();
@@ -4529,12 +4960,12 @@ document.addEventListener('keydown', (e) => {
   /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
   pickKind: (kind: string) => {
     if (!session) return;
-    session.sel = { ...session.sel, kind, ...(IS_FUTA04 ? { hex: null } : {}) };
-    if (IS_FUTA04) {
-      session.preset(null);
-      draw = { ...DRAW0 };
-      board.ghost(null);
+    if (IS_FUTA04 && kind.startsWith('bloom-') && !kind.startsWith('bloom-mega-')) {
+      beginBloomKind(kind, session.sel.card);
+      render();
+      return;
     }
+    session.sel = { ...session.sel, kind, ...(IS_FUTA04 ? { hex: null } : {}) };
     render();
   },
   /** tests only (filmstrip): play this action for this player, as if chosen */

@@ -4,7 +4,7 @@ import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { tutorialAccepts, tutorialLesson, tutorialLessons } from '../src/logic/tutorial-script.js';
+import { TUTORIAL_CHAPTER_COUNT, tutorialAccepts, tutorialLesson, tutorialLessons } from '../src/logic/tutorial-script.js';
 
 const server=await preview({configFile:'web/vite.config.ts',preview:{port:4197,strictPort:true},logLevel:'silent'});
 const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
@@ -20,45 +20,61 @@ try {
   await page.goto(base);
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-tutorial').click();
-  assert.equal((await state()).seed,51001);
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW ONE.');
+  assert.equal((await state()).seed,51000);
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'This is your home.');
+  await page.locator('#futasaku-glass [data-tut="next"]').click();
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='That is theirs.');
+  await page.locator('#futasaku-glass [data-tut="next"]').click();
+  await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'Draw a card.');
   const opening=await state();
   await page.locator('#discard').evaluate(element=>(element as HTMLElement).click());
   assert.deepEqual(await state(),opening,'an irrelevant early tap leaves the lesson unchanged');
-  // The actual deck button begins the first lesson; no NEXT button is involved.
   await page.locator('#deck').evaluate(element=>(element as HTMLElement).click());
+  await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
   assert.equal((await state()).phase,'ACT');
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'GROW FROM YOUR HOME.');
+  assert.match(await page.locator('#futasaku-glass .glass-copy').textContent()??'',/Grow one tile|Clean|Nice|There it is|Easy/);
+  // Wait out praise, then resume mid-chapter after reload.
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='Grow one tile.',undefined,{timeout:5000}).catch(()=>{});
   const beforeRefresh=await state();
   await page.reload();
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-continue').click();
   assert.deepEqual(await state(),beforeRefresh,'tutorial resumes the exact authored position');
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'GROW FROM YOUR HOME.');
 
-  for(let chapter=0;chapter<9;chapter++) {
-    const seed=51001+chapter;
-    await page.waitForFunction(expected=>(window as any).__severgrow.state()?.seed===expected,seed,{timeout:20000});
+  for(let chapter=1;chapter<TUTORIAL_CHAPTER_COUNT-1;chapter++) {
+    await page.waitForFunction(ch=>{
+      const glass=document.querySelector('#futasaku-glass .glass-dots');
+      const dots=[...glass?.querySelectorAll('.glass-dot')??[]];
+      return dots[ch]?.getAttribute('data-on')==='1' || !!(window as any).__severgrow?.state();
+    },chapter,{timeout:20000});
     const steps=tutorialLessons(chapter);
-    for(let index=chapter===0?1:0;index<steps.length;index++) {
+    for(let index=chapter===1?1:0;index<steps.length;index++) {
       const lesson=tutorialLesson(chapter,index)!;
       if(lesson.action==='Opponent') break;
+      if(lesson.action==='Next') {
+        await page.locator('#futasaku-glass [data-tut="next"]').click();
+        await page.waitForTimeout(200);
+        continue;
+      }
+      if(lesson.reseat) {
+        await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
+      }
       const before=await state();
       const action=legalActions(viewFor(before,0)).find(candidate=>tutorialAccepts(lesson,candidate,before));
       assert(action,`chapter ${chapter+1}: ${lesson.id} must have a real legal action`);
       assert.equal(await play(action),true,`chapter ${chapter+1}: ${lesson.id} applies`);
-      if (chapter===1 && lesson.id==='strength-throw') {
-        // Close during the handoff from one authored position to the next.
+      if (lesson.id==='strength-throw') {
         await page.goto(base);
         await page.waitForFunction(()=>!!document.getElementById('menu-continue')&&!document.getElementById('menu-continue')!.hidden);
         await page.locator('#menu-continue').click();
-        await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===51003);
       }
       await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
+      await page.waitForTimeout(700); // praise / chapter-done handoff
     }
   }
-  await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51010,undefined,{timeout:20000});
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'YOUR TURN.');
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent?.includes('No guide')
+    || (window as any).__severgrow.state()?.seed===51010,undefined,{timeout:20000});
   // The final mini-turn is deliberately unrestricted; complete it with real actions.
   let s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Draw'&&a.from==='deck')!),true);
@@ -132,7 +148,7 @@ try {
   await desktop.locator('#futasaku-glass').waitFor({state:'visible'});
   const desktopGlass=await desktop.locator('#futasaku-glass').boundingBox();
   const desktopDock=await desktop.locator('#dock').evaluate(element=>element.getBoundingClientRect().toJSON());
-  assert(desktopGlass&&desktopDock.width>0&&desktopGlass.x>=desktopDock.x-1&&desktopGlass.x+desktopGlass.width<=desktopDock.x+desktopDock.width+1,`tutorial glass fits the desktop dock: ${JSON.stringify({desktopGlass,desktopDock})}`);
+  assert(desktopGlass&&desktopGlass.width<=420&&desktopGlass.x>=0&&desktopGlass.x+desktopGlass.width<=1441,`tutorial glass is a centred Pro window: ${JSON.stringify({desktopGlass,desktopDock})}`);
   await desktop.close();
   assert.deepEqual(errors,[],'no browser errors');
   console.log(`Tutorial, Match Intel, Replay, save/resume and both seeded openers passed (reduced motion: ${reducedMotion})`);

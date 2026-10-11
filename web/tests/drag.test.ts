@@ -8,7 +8,8 @@ import { DRAG_LED_WORDS, resolveDrag } from '../src/logic/drag.js';
 import type { DragSource } from '../src/logic/drag.js';
 import { EMPTY_SEL, kindOf } from '../src/logic/interaction.js';
 import type { Sel } from '../src/logic/interaction.js';
-import { tutorialChapter } from '../src/logic/tutorial-script.js';
+import { tutorialChapterById } from '../src/logic/tutorial-script.js';
+const tutorialChapter = (id: 'goal' | 'turn' | 'strengthen' | 'bloom' | 'bomb' | 'blast') => tutorialChapterById(id);
 
 type Opts = {
   distance?: number;
@@ -45,36 +46,36 @@ describe('drag thresholds and phase gates', () => {
   });
 
   it('a move under 10px stays a tap', () => {
-    const s = tutorialChapter(0); // DRAW
+    const s = tutorialChapter('turn'); // DRAW
     expect(run(s, { kind: 'deck' }, { distance: 9 }).active).toBe(false);
     expect(run(s, { kind: 'deck' }, { distance: 9 }).commit).toBeNull();
     expect(run(s, { kind: 'deck' }, { distance: 10 }).active).toBe(true);
   });
 
   it('draw-from-deck commits only in DRAW', () => {
-    const deck = run(tutorialChapter(0), { kind: 'deck' });
+    const deck = run(tutorialChapter('turn'), { kind: 'deck' });
     expect(deck.mode).toBe('draw-deck');
     expect(deck.commit).toEqual({ t: 'Draw', from: 'deck' });
     expect(deck.led).toBe('DRAW');
 
-    const outside = run(tutorialChapter(1), { kind: 'deck' });
+    const outside = run(tutorialChapter('strengthen'), { kind: 'deck' });
     expect(outside.active).toBe(true);
     expect(outside.mode).toBe('none');
     expect(outside.commit).toBeNull();
   });
 
   it('draw-from-discard commits only in DRAW and never shows THROW', () => {
-    const take = run(tutorialChapter(0), { kind: 'discard' });
+    const take = run(tutorialChapter('turn'), { kind: 'discard' });
     expect(take.mode).toBe('draw-discard');
     expect(take.commit).toEqual({ t: 'Draw', from: 'discard' });
     expect(take.led).toBe('DRAW');
     expect(take.led).not.toBe('THROW');
 
-    expect(run(tutorialChapter(1), { kind: 'discard' }).commit).toBeNull();
+    expect(run(tutorialChapter('strengthen'), { kind: 'discard' }).commit).toBeNull();
   });
 
   it('a discard-phase drag does not draw', () => {
-    const st = discardPhase(tutorialChapter(1));
+    const st = discardPhase(tutorialChapter('strengthen'));
     const res = run(st, { kind: 'hand', cardId: st.hands[0][0]!.id });
     expect(res.mode.startsWith('draw')).toBe(false);
     expect(res.mode).toBe('discard');
@@ -84,7 +85,7 @@ describe('drag thresholds and phase gates', () => {
 
 describe('place and throw', () => {
   it('release on a legal hex commits Sprout, Strengthen and Fruit', () => {
-    const st = tutorialChapter(1);
+    const st = tutorialChapter('strengthen');
     const view = viewFor(st, 0);
     const sprouts = legalOf(st, 'Sprout');
     const grow = sprouts.find((a) => a.t === 'Sprout' && !view.board[coordKey(a.coord)]);
@@ -100,7 +101,7 @@ describe('place and throw', () => {
     }
 
     // A Fruit card: chapter 5 holds one Bomb beside an enemy tile.
-    const fruitState = tutorialChapter(5);
+    const fruitState = tutorialChapter('bomb');
     const fruit = legalOf(fruitState, 'PlayFruit')[0]!;
     if (fruit.t === 'PlayFruit') {
       const res = run(fruitState, { kind: 'hand', cardId: fruit.card }, { boardKey: coordKey(fruit.target) });
@@ -110,7 +111,7 @@ describe('place and throw', () => {
   });
 
   it('release on empty space commits nothing', () => {
-    const st = tutorialChapter(1);
+    const st = tutorialChapter('strengthen');
     const sprout = legalOf(st, 'Sprout')[0]!;
     const cardId = sprout.t === 'Sprout' ? sprout.card : st.hands[0][0]!.id;
     const res = run(st, { kind: 'hand', cardId }, { boardKey: null });
@@ -119,7 +120,7 @@ describe('place and throw', () => {
   });
 
   it('drag onto the pile discards, a slow drag across the board does not', () => {
-    const st = discardPhase(tutorialChapter(1));
+    const st = discardPhase(tutorialChapter('strengthen'));
     const card = st.hands[0][0]!;
     const onPile = run(st, { kind: 'hand', cardId: card.id }, { overDiscardPile: true });
     expect(onPile.mode).toBe('discard');
@@ -133,7 +134,7 @@ describe('place and throw', () => {
   });
 
   it('a fast upward release in the upper board is a flick, a slow one is not', () => {
-    const st = discardPhase(tutorialChapter(1));
+    const st = discardPhase(tutorialChapter('strengthen'));
     const card = st.hands[0][0]!;
     const flick = run(st, { kind: 'hand', cardId: card.id }, { upSpeed: 0.9, upperBoard: true });
     expect(flick.mode).toBe('flick');
@@ -148,7 +149,7 @@ describe('place and throw', () => {
 
 describe('bloom and Mega Bomb', () => {
   it('bloom paint uses the already-selected group and rejects a disconnected hex', () => {
-    const st = tutorialChapter(4);
+    const st = tutorialChapter('bloom');
     const bloom = legalOf(st, 'Bloom')[0]!;
     if (bloom.t !== 'Bloom') throw new Error('no legal Bloom');
     const sel: Sel = { card: bloom.cards[0]!, hex: null, kind: kindOf(bloom), option: 0 };
@@ -183,7 +184,7 @@ describe('bloom and Mega Bomb', () => {
   });
 
   it('two Bombs commit Mega Bomb only on a legal target', () => {
-    const st = tutorialChapter(6);
+    const st = tutorialChapter('blast');
     const mega = legalOf(st, 'MegaBomb')[0]!;
     if (mega.t !== 'MegaBomb') throw new Error('no legal MegaBomb');
     const bomb = st.hands[0].find((c) => c.id === mega.cards[0])!;

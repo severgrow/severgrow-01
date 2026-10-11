@@ -87,7 +87,7 @@ export const WELCOME = Object.freeze({
     Object.freeze({ icon: 'throw', name: 'Throw', text: 'Throw one card to end your turn.' }),
   ]),
   goal: "Keep everything joined to your home, and cut your opponent's links.",
-  tutorial: 'New here? The <b>tutorial game</b> teaches you in 15 moves, with an arrow showing where to tap.',
+  tutorial: 'New here? The <b>tutorial</b> takes about 4 minutes, with a glow showing where to tap.',
 });
 
 export const HOME = Object.freeze({
@@ -119,7 +119,7 @@ export const BLOOM = Object.freeze({
   buttonKeep: (n: number, kept: number) => `Bloom ${n} tiles, keep the ${kept === 1 ? 'other' : `other ${kept}`}`,
   /** How to play (HTML) */
   howto:
-    " Three or four cards that go together (the same number in different suits, or numbers in a row in one suit) can <b>bloom</b>. They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card's number.",
+    ' Three to six cards that go together (the same number in different suits, or numbers in a row in one suit) can <b>bloom</b>. They grow that many tiles in any shape, as long as one touches your tiles. Each tile keeps its card\'s number. Bloom takes 3 to 6 cards (a set or a run).',
   /** the general hint */
   hint: 'You can bloom with cards that match or follow on.',
   /** why a held group cannot bloom right now */
@@ -189,11 +189,12 @@ export const STEP_CUE = Object.freeze({
   kickerOpp: 'Their turn',
 });
 
-/** Tutorial Pro window copy. Filled out in the Pro overhaul; stubs keep imports compiling. */
+/** Tutorial Pro window copy — one place for every player-facing tutorial line. */
 export const TUTORIAL = Object.freeze({
   showMe: 'Show me',
   skip: 'Skip',
-  chapters: [] as ReadonlyArray<{ id: string; title: string; lessons: ReadonlyArray<{ instruction: string; why?: string }> }>,
+  chaptersBtn: 'Chapters',
+  next: 'Next',
   chapterDone: 'Chapter done',
   free: 'Your turn. No guide.',
   recap: Object.freeze([
@@ -210,4 +211,64 @@ export const TUTORIAL = Object.freeze({
     'Other side.',
   ] as const),
   bloomHints: 'Show bloom hints',
+  menuChapters: 'Tutorial chapters',
+  replayTutorial: 'Replay tutorial',
+  chapters: Object.freeze([
+    Object.freeze({ id: 'goal', title: 'Your goal', lessons: Object.freeze([
+      Object.freeze({ instruction: 'This is your home.', why: 'Everything you own must stay joined to it.' }),
+      Object.freeze({ instruction: 'That is theirs.', why: 'Surround it to win.' }),
+    ]) }),
+    Object.freeze({ id: 'turn', title: 'Your turn', lessons: Object.freeze([
+      Object.freeze({ instruction: 'Draw a card.', why: 'Your hand needs cards to grow.' }),
+    ]) }),
+    Object.freeze({ id: 'bloom', title: 'Bloom', lessons: Object.freeze([
+      Object.freeze({ instruction: 'What can bloom?', why: 'A set or a run of three to six.' }),
+    ]) }),
+    Object.freeze({ id: 'strengthen', title: 'Strengthen', lessons: Object.freeze([
+      Object.freeze({ instruction: 'A higher card makes it stronger.', why: 'Same spot, bigger number.' }),
+    ]) }),
+    Object.freeze({ id: 'cut', title: 'Cut', lessons: Object.freeze([
+      Object.freeze({ instruction: 'Break this link.', why: 'Cut tiles wither.' }),
+    ]) }),
+    Object.freeze({ id: 'skip', title: 'Skip Grow', lessons: Object.freeze([
+      Object.freeze({ instruction: 'You can skip Grow.', why: 'Usually growing helps more.' }),
+    ]) }),
+    Object.freeze({ id: 'buttons', title: 'Buttons', lessons: Object.freeze([
+      Object.freeze({ instruction: 'What are these buttons?', why: 'Tap Next to meet each control.' }),
+    ]) }),
+    Object.freeze({ id: 'bomb', title: 'Bomb', lessons: Object.freeze([
+      Object.freeze({ instruction: 'A Bomb removes any enemy tile.', why: 'Even a 9. It uses your Grow.' }),
+    ]) }),
+    Object.freeze({ id: 'blast', title: 'Blast', lessons: Object.freeze([
+      Object.freeze({ instruction: 'Two Bombs make a Blast.', why: 'Clears the tile and its neighbours.' }),
+    ]) }),
+    Object.freeze({ id: 'throw-pile', title: 'Throw pile', lessons: Object.freeze([
+      Object.freeze({ instruction: 'Throw pile can finish blooms.', why: 'Watch what they throw.' }),
+    ]) }),
+    Object.freeze({ id: 'win', title: 'How you win', lessons: Object.freeze([
+      Object.freeze({ instruction: 'How do I win?', why: 'Surround their home, or most tiles.' }),
+    ]) }),
+    Object.freeze({ id: 'final', title: 'Final turn', lessons: Object.freeze([
+      Object.freeze({ instruction: 'No card left.', why: 'This turn begins at Grow.' }),
+    ]) }),
+    Object.freeze({ id: 'free', title: 'Your turn, free', lessons: Object.freeze([
+      Object.freeze({ instruction: 'Your turn. No guide.' }),
+    ]) }),
+  ]),
+  winHow: Object.freeze({
+    title: 'How do I win?',
+    lines: Object.freeze([
+      'Surround their home to win at once.',
+      'Or have the most tiles when it ends.',
+      'Thirty turns each; the deck end gives each side a fair last turn.',
+      'Ties go to the stronger tiles.',
+    ]),
+  }),
+  bloomHow: Object.freeze({
+    title: 'What can bloom?',
+    set: 'A set: three cards, same number, different suits.',
+    run: 'A run: three or more in a row, one suit, up to six.',
+    badSuit: 'Not a run: two suits mixed.',
+    badGap: 'Not a run: a gap in the numbers.',
+  }),
 });

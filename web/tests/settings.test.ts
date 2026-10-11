@@ -25,6 +25,7 @@ describe('settings (saved in the browser)', () => {
       autoSkip: true, // Fruit cards task, Step 2: "Auto-skip when nothing to play", on by default
       sfxVolume: 80, // v0.7 Step 7: effects volume slider
       musicVolume: 60, // v0.7 Step 7: music volume slider
+      bloomHints: true, // tutorial Pro: quiet legal-bloom brackets
     });
   });
 

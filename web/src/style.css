@@ -3556,6 +3556,13 @@ html[data-layout='side'] .dock-overlays {
     z-index: 3;
   }
 }
+/* Quiet bloom hint: only groups the engine says can bloom right now. */
+.dock .hand-row > .hand .card.bloom-hint {
+  box-shadow: inset 0 -1.5px 0 rgba(232, 221, 201, 0.45);
+  opacity: 1;
+  transition: box-shadow 200ms ease, opacity 200ms ease;
+}
+.reduce-motion .dock .hand-row > .hand .card.bloom-hint { transition: none; }
 /* cards of one combo share a small bracket: a thicker, coloured bottom edge */
 .dock .hand-row > .hand .card[data-combo] {
   border-bottom: 3.5px solid var(--combo-c, var(--c-accent));

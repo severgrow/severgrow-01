@@ -206,7 +206,6 @@ export const mountGlassSurface = (onClose: () => void) => {
   let reduceMotion = false;
   let idleHard = false;
   let raf = 0;
-  let lastSeen = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
   let panelSide: 'top' | 'bottom' = 'bottom';
@@ -297,7 +296,6 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (mode !== 'tutorial' || document.hidden) return;
     const measured = measureTarget(targetSelector, targetShape);
     if (measured) {
-      lastSeen = now;
       holdUntil = now + 200;
       if (!smooth) smooth = measured;
       else {

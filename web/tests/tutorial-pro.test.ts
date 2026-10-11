@@ -1,6 +1,6 @@
 // Pro tutorial overhaul: behaviour locked by tests first (they fail until each phase lands).
 import { describe, expect, it } from 'vitest';
-import { apply, createCards, legalActions, rootCoord, viewFor } from '../../src/engine/index.js';
+import { apply, createCards, homeCoord, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import {
   BLAST, BLOOM, FRUIT, GAME_TITLE, HOME, TUTORIAL, WELCOME,
@@ -62,6 +62,7 @@ describe('tutorial pro: chapter shape', () => {
       expect(new Set(cards.map(c => c.id)).size).toBe(cards.length);
       for (const [step, lesson] of tutorialLessons(chapter).entries()) {
         if (lesson.action === 'Opponent' || lesson.action === 'FreeTurn' || lesson.action === 'Next') continue;
+        if (lesson.reseat === 'bloom-run') state = tutorialChapter(chapter, 'bloom-run');
         const action = intended(state, chapter, step);
         state = apply(state, action);
       }
@@ -103,7 +104,7 @@ describe('tutorial pro: how you win', () => {
     const winChapter = TUTORIAL_CHAPTER_IDS.indexOf('win');
     expect(winChapter).toBeGreaterThanOrEqual(0);
     let state = tutorialChapter(winChapter);
-    const home = rootCoord(1);
+    const home = homeCoord(1, state.config);
     const lessons = tutorialLessons(winChapter);
     const playSteps = lessons.filter(l => l.action !== 'Next' && l.action !== 'Opponent' && l.action !== 'FreeTurn');
     for (const [i, lesson] of lessons.entries()) {
@@ -129,7 +130,7 @@ describe('tutorial pro: strings', () => {
       TUTORIAL.recap.join(' '),
       ...Object.values(TUTORIAL.praise),
       ...Object.values(TUTORIAL.wrong),
-      ...TUTORIAL.chapters.flatMap(c => c.lessons.flatMap(l => [l.instruction, l.why ?? ''])),
+      ...TUTORIAL.chapters.flatMap(c => c.lessons.flatMap(l => [l.instruction, 'why' in l ? (l.why ?? '') : ''])),
     ].join('\n');
     expect(blob).not.toMatch(/Severor|Severgrow|15 moves|three or four|Three or four/i);
     expect(BLOOM.howto).toMatch(/3 to 6|3–6/);
