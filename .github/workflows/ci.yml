@@ -38,8 +38,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
+      # Legacy suites target the classic live channel. Default npm run web:build is futa04.
       - if: matrix.suite != 'futa04-critical' && matrix.suite != 'futa04-information'
-        run: npm run web:build
+        run: CHANNEL=live npm run web:build
       - if: matrix.suite == 'futa04-critical' || matrix.suite == 'futa04-information'
         run: CHANNEL=futa04 npm run web:build
       - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}

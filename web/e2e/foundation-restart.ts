@@ -3,6 +3,7 @@ import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
+import { opponentStartsFromSeed } from '../src/logic/starter.js';
 
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4201, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM ?? '/usr/bin/chromium', args: ['--no-sandbox'] });
@@ -42,12 +43,18 @@ try {
   await click('#gm-new');
   await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
   await click('#level-grid [data-difficulty="beginner"]');
-  await page.waitForTimeout(850);
+  // Who-starts lottery runs before beginSession; wait until the new match seed lands.
+  await page.waitForFunction((prev: number) => {
+    const game = (window as any).__severgrow;
+    const lottery = document.getElementById('starter-lottery');
+    return !!game?.state() && game.state().seed !== prev && !!lottery?.hidden;
+  }, grown.seed, { timeout: 15000 });
   const restarted = await page.evaluate(() => (window as any).__severgrow.state() as State);
   // New Futasaku matches can give the opening turn to the opponent. A restart
   // may already be animating that turn when this check runs.
   assert.notEqual(restarted.seed, grown.seed);
-  assert.equal(restarted.startingPlayer, (restarted.seed & 1) === 1 ? 1 : 0);
+  // Who-starts is a seeded lottery stream, not seed&1 (see web/src/logic/starter.ts).
+  assert.equal(restarted.startingPlayer, opponentStartsFromSeed(restarted.seed) ? 1 : 0);
   assert.notEqual(restarted.phase, 'GAME_OVER');
   assert.equal(await page.locator('#score-you').textContent(), '0', 'old score animation cannot overwrite new game');
   assert.deepEqual(errors, []);

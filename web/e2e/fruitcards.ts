@@ -82,7 +82,7 @@ console.log(`[1] the card in the hand, the chip, picking `);
   const { page, errors } = await open(state, { tips: { fruit: false } });
   await shot(page, '01-hand-and-tip');
   const tip = (await page.locator('#first-tip:visible').textContent().catch(() => '')) ?? '';
-  check('the one-time tip: "Fruit cards: play one on an opponent tile that touches yours to remove it, even a 9."', tip.includes('play one on an opponent tile that touches yours to remove it, even a 9.'), tip.slice(0, 90));
+  check('the one-time tip: "Bombs: play one on an opponent tile that touches yours to remove it, even a 9."', tip.includes('play one on an opponent tile that touches yours to remove it, even a 9.'), tip.slice(0, 90));
   await page.click('#first-tip-ok').catch(() => {});
   const last = page.locator('#hand .card').last();
   check('Sort puts the Fruit card at the right, glowing (it has a target)', ((await last.getAttribute('class')) ?? '').includes('fruit') && ((await last.getAttribute('class')) ?? '').includes('fruit-ready'));
@@ -122,7 +122,7 @@ console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
   // the page goes straight to the throw: emptyturn.ts)
   const { page, errors } = await open(state, { settings: { confirmPolicy: 'never', autoSkip: false } });
   const hint0 = (await page.textContent('#hint')) ?? '';
-  check('after the draw the hint offers the Fruit card next to the sprout', hint0.includes('Sprout, or play Fruit'), hint0);
+  check('after the draw the hint offers Grow or Bomb', hint0.includes('Grow, or play a Bomb'), hint0);
   await tap(page, '1,-1');
   const card = (await page.textContent('#tooltip')) ?? '';
   check('the tile card on a 9: "No combo can replace this. A Bomb can." and "Use Bomb"', card.includes('No combo can replace this. A Bomb can.') && card.includes('Use Bomb'));
@@ -137,11 +137,11 @@ console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
   const cls = (await fruitCards.last().getAttribute('class')) ?? '';
   check('the second Fruit card is dimmed, not glowing', cls.includes('dim') && !cls.includes('fruit-ready'), cls);
   const hint1 = (await page.textContent('#hint')) ?? '';
-  check('the hint says the Fruit card used the turn and points at the throw', hint1.includes('Fruit used') && hint1.includes('Throw'), hint1);
+  check('the hint says the Bomb used the turn and points at the throw', hint1.includes('Bomb used') && hint1.includes('Throw'), hint1);
   await fruitCards.last().click();
   await page.waitForTimeout(250);
   const why = (await page.textContent('#hint')) ?? '';
-  check('tapping it explains: "Fruit is back next turn"', why.includes('Fruit is back next turn'), why);
+  check('tapping it explains: "Bomb is back next turn"', why.includes('Bomb is back next turn'), why);
   const sprouts = (await st(page)).sproutsThisTurn;
   check('the engine agrees: the sprout is used', sprouts === 1);
   await shot(page, '07-second-fruit-waits');
@@ -227,14 +227,14 @@ console.log(`[5] the opponent plays a Fruit card on my 9 `);
   const state: State = { ...base, deck, hands: [base.hands[0], [fruit, ...base.hands[1].slice(0, 6)]], turnPlayer: 1, actor: 1, phase: 'DRAW' };
   const { page, errors } = await open(state, { settings: { speed: 'normal' } });
   let caps: string[] = [];
-  for (let i = 0; i < 80 && !caps.some((c) => c.includes('Opponent used a Fruit card on your 9')); i++) {
+  for (let i = 0; i < 80 && !caps.some((c) => c.includes('Opponent used a Bomb on your 9')); i++) {
     await page.waitForTimeout(100);
     caps = (await page.evaluate('window.__caps')) as string[];
   }
   await shot(page, '11-opponent-fruit-caption');
   await idle(page);
   const after = await st(page);
-  check("the opponent's Fruit card on my 9: removed, with the caption \"Opponent used a Fruit card on your 9\"", after.board['0,0'] === null && caps.some((c) => c.includes('Opponent used a Fruit card on your 9')), caps.join(' | ').slice(0, 120));
+  check("the opponent's Bomb on my 9: removed, with the caption \"Opponent used a Bomb on your 9\"", after.board['0,0'] === null && caps.some((c) => c.includes('Opponent used a Bomb on your 9')), caps.join(' | ').slice(0, 120));
   words.push(...(await scanWords(page)).map((w) => `opponent · ${w}`));
   check('no page errors (5)', errors.length === 0, errors[0]);
   await page.close();
