@@ -4,7 +4,7 @@
 // Blooms, the one-tap suggestion, the desktop two-click machine, keyboard steps, and that every
 // legal Bloom can be made by tapping hexes one by one.
 import { describe, expect, it } from 'vitest';
-import { coordKey, legalActions, newGame, parseKey, viewFor } from '../../src/engine/index.js';
+import { coordKey, hexDistance, legalActions, newGame, parseKey, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Suit } from '../../src/engine/index.js';
 import { EMPTY_SEL, kindOf, tapKind } from '../src/logic/interaction.js';
 import {
@@ -19,6 +19,7 @@ import {
   drawNext,
   drawStarts,
   endpointBloom,
+  naturalBloomStart,
   growToward,
   hexAtPoint,
   hexesAlong,
@@ -49,6 +50,7 @@ it('two endpoint taps choose the shortest legal Bloom, including a branching sha
   expect(endpointBloom(combo,'0,0','1,0')).toBeNull(); // adjacent taps keep the manual path
   expect(endpointBloom(combo,'0,0','9,9')).toBeNull(); // no illegal placement can be committed
 });
+
 import { fixture } from '../../tests/helpers.js';
 
 const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number][], opts: { rock?: string[]; config?: Partial<RulesConfig> } = {}): State => {
@@ -77,7 +79,7 @@ const paint = (combo: NonNullable<ReturnType<typeof comboOf>['combo']>, hexes: s
 describe('geometry: hit testing and fast swipes', () => {
   const board = keys(stateWith({}, RUN));
   it('a point is in a hex only inside a slightly smaller hit area (so corners never slip into a neighbour)', () => {
-    expect(HIT).toBeGreaterThan(0.7);
+    expect(HIT).toBeGreaterThan(0.85);
     expect(HIT).toBeLessThan(1);
     const c = pixelOf('0,1');
     expect(hexAtPoint(c.x, c.y, board)).toBe('0,1');
@@ -100,6 +102,17 @@ describe('painting a set (one number)', () => {
   it('before painting, the lit hexes are every hex some legal bloom uses; no Reverse for a set', () => {
     expect(combo.run).toBe(false);
     expect(drawStarts(combo)).toEqual(combo.hexes);
+  });
+  it('naturalBloomStart is a legal start, and the closest to home when several exist', () => {
+    const starts = drawStarts(combo);
+    expect(starts.size).toBeGreaterThan(0);
+    const home = '0,0'; // default root for player 0
+    const picked = naturalBloomStart(combo, home);
+    expect(picked).not.toBeNull();
+    expect(starts.has(picked!)).toBe(true);
+    const homeCoord = parseKey(home);
+    const dist = (k: string) => hexDistance(homeCoord, parseKey(k));
+    for (const k of starts) expect(dist(picked!)).toBeLessThanOrEqual(dist(k));
   });
   it('each new hex must touch the shape (any of it: a triangle or a Y is fine); others are ignored', () => {
     expect(paint(combo, ['-1,1', '0,0'])).toEqual(['-1,1', '0,0']);

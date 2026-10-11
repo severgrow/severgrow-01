@@ -89,9 +89,12 @@ export function ledStaticMessage(message: string) {
     const both = `${score[1]}:${score[2]}`;
     return ledMessageWidth(both) < 76 ? both : `Y${score[1]}`;
   }
-  if (message === 'GROW OR SKIP') return 'GROW';
+  if (message === 'GROW OR SKIP' || message === 'GROW!') return 'GROW';
+  if (message === 'THROW!') return 'THROW';
+  if (message === 'DRAW!') return 'DRAW';
+  if (message === 'SKIP?') return 'SKIP?';
   if (message === 'OPPONENT TURN') return 'OPP';
-  if (message === 'BLOOM READY') return 'BLOOM';
+  if (message === 'BLOOM READY' || message === 'BLOOM!') return 'BLOOM';
   if (message.startsWith('BLOOM +')) return `B+${message.slice(7)}`;
   if (message.startsWith('YOU LEAD +')) return `Y+${message.slice(10)}`;
   if (message.startsWith('OPP LEADS +')) return `O+${message.slice(11)}`;

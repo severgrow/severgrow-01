@@ -126,15 +126,23 @@ html.futa04-information #smart-led-cells.scrolling { position:absolute; left:0; 
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 /* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion. */
-html.futa04-information #smart-led-window.led-pulse { animation:smart-led-pulse 1050ms ease-in-out; }
-@keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.16); } }
+html.futa04-information #smart-led-window.led-pulse { animation:smart-led-pulse 500ms ease-in-out 1; }
+html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 1200ms ease-in-out 1; }
+@keyframes smart-led-pulse { 0%,100% { filter:none; } 50% { filter:brightness(1.22); } }
+@keyframes smart-led-alarm {
+  0%,100% { filter:none; }
+  20% { filter:brightness(1.45) contrast(1.08); }
+  40% { filter:none; }
+  60% { filter:brightness(1.4) contrast(1.06); }
+  80% { filter:none; }
+}
 html.futa04-information #smart-led-window.led-flash-cut { animation:smart-led-flash-cut 380ms ease-out; }
 @keyframes smart-led-flash-cut { 0% { filter:brightness(1.9) contrast(1.06); } 100% { filter:none; } }
 html.futa04-information #smart-led-window.led-flash-bloom { animation:smart-led-flash-bloom 320ms ease-out; }
 @keyframes smart-led-flash-bloom { 0% { filter:brightness(1.5); } 100% { filter:none; } }
-html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
+html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
 @media (prefers-reduced-motion:reduce) {
-  html.futa04-information #smart-led-window:is(.led-pulse,.led-flash-cut,.led-flash-bloom) { animation:none; }
+  html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
 }
 /* A faint optical spill from the actual LED pixels reaches the two keys below it. */
 html.futa04-information #smart-led-spill {
@@ -197,30 +205,39 @@ html.futa04-information #smart-selector .futa04-mini-card .c-num { font-size:7px
 html.futa04-information #smart-selector .futa04-mini-card .c-suit svg { width:7px !important; height:7px !important; }
 html.futa04-information #smart-selector .smart-action-label { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
 html.futa04-information #futa04-box > #smart-bloom {
-  grid-column:2; grid-row:1 / 3; align-self:end; justify-self:center;
+  grid-column:2; grid-row:1 / 3; align-self:stretch; justify-self:center;
   display:grid; place-items:center; position:static; z-index:6;
   width:100%; min-width:0; height:calc(2 * var(--control-size) + var(--control-gap));
 }
 html.futa04-information #futa04-box > #smart-bloom[hidden] { display:none; }
 html.futa04-information #smart-bloom-button {
-  display:grid; place-items:center; position:relative; width:100%; min-width:44px; height:var(--control-size);
-  border:0; border-radius:0; padding:3px;
+  display:grid; place-items:center; position:relative; width:100%; min-width:44px; height:100%;
+  border:0; border-radius:0; padding:4px 2px 8px;
   background:none; color:var(--control-ivory); cursor:pointer; box-shadow:none;
   touch-action:manipulation;
 }
 html.futa04-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expanded='true']) {
-  filter:brightness(1.16);
+  filter:brightness(1.18);
 }
 html.futa04-information #smart-bloom-button:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
 html.futa04-information #smart-bloom-button:active { transform:translateY(1px) scale(.98); }
+/* Quiet TE-style corner ticks + soft brightness pulse on the recipe (button stays frameless). */
+html.futa04-information #smart-bloom-button::before,
+html.futa04-information #smart-bloom-button::after {
+  content:''; position:absolute; width:8px; height:8px; pointer-events:none;
+  border-color:rgba(255,225,167,.52); border-style:solid;
+  animation:futa04-bloom-corners 2.6s ease-in-out infinite;
+}
+html.futa04-information #smart-bloom-button::before { top:5px; left:6px; border-width:1px 0 0 1px; }
+html.futa04-information #smart-bloom-button::after { right:6px; bottom:7px; border-width:0 1px 1px 0; }
 /* A tiny film registration drift lives on the projected recipe alone. The control
    remains transparent; the coloured ink and card edges provide all its light. */
 html.futa04-information #smart-bloom-button .futa04-combination {
-  animation:futa04-recipe-projector 7.3s steps(1,end) infinite;
-  filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.32));
+  animation:futa04-recipe-projector 7.3s steps(1,end) infinite, futa04-bloom-ready 2.6s ease-in-out infinite;
+  filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.38));
 }
 html.futa04-information #smart-bloom-button .futa04-mini-card {
-  opacity:.88; text-shadow:0 0 2px currentColor;
+  opacity:.92; text-shadow:0 0 2px currentColor;
   box-shadow:0 0 1.5px currentColor,inset 0 0 1px currentColor;
 }
 @keyframes futa04-recipe-projector {
@@ -228,14 +245,28 @@ html.futa04-information #smart-bloom-button .futa04-mini-card {
   19%,52% { opacity:.82; translate:.28px -.2px; }
   84% { opacity:.94; translate:-.22px .16px; }
 }
+@keyframes futa04-bloom-ready {
+  0%,100% { filter:drop-shadow(.25px .2px 1.2px rgba(244,227,186,.28)); }
+  50% { filter:drop-shadow(.25px .2px 3px rgba(255,225,167,.55)); }
+}
+@keyframes futa04-bloom-corners {
+  0%,100% { opacity:.42; }
+  50% { opacity:.88; }
+}
+html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button::before,
+html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button::after,
 html.futa04-information:is(.futa04-move-active,.futa04-information-blocked,.reduce-motion) #smart-bloom-button .futa04-combination { animation:none !important; }
-@media (prefers-reduced-motion:reduce) { html.futa04-information #smart-bloom-button .futa04-combination { animation:none !important; } }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:2px; max-width:100%; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card { flex:0 0 clamp(21px,2vw,23px); width:clamp(21px,2vw,23px); min-width:clamp(21px,2vw,23px); height:clamp(33px,3.1vw,36px); padding:1px; border-radius:3px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(5)) .futa04-mini-card { flex-basis:17px; width:17px; min-width:17px; height:29px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(6)) .futa04-mini-card { flex-basis:16px; width:16px; min-width:16px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-num { font-size:12px; }
-html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-suit svg { width:12px; height:12px; }
+@media (prefers-reduced-motion:reduce) {
+  html.futa04-information #smart-bloom-button::before,
+  html.futa04-information #smart-bloom-button::after,
+  html.futa04-information #smart-bloom-button .futa04-combination { animation:none !important; }
+}
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination { display:flex; flex-wrap:nowrap; justify-content:center; gap:3px; max-width:100%; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card { flex:0 0 clamp(26px,2.5vw,30px); width:clamp(26px,2.5vw,30px); min-width:clamp(26px,2.5vw,30px); height:clamp(41px,3.9vw,47px); padding:1px; border-radius:3px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(5)) .futa04-mini-card { flex-basis:21px; width:21px; min-width:21px; height:35px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-combination:has(.futa04-mini-card:nth-child(6)) .futa04-mini-card { flex-basis:19px; width:19px; min-width:19px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-num { font-size:13px; }
+html.futa04-information #futa04-box #smart-bloom-button .futa04-mini-card .c-suit svg { width:13px; height:13px; }
 html.futa04-information #smart-bloom-count { position:absolute; right:2px; top:1px; font:600 9px/1 var(--font-mono,monospace); color:var(--control-ivory); }
 html.futa04-information #smart-bloom-count[hidden] { display:none; }
 html.futa04-information #smart-bloom-selector {
@@ -286,18 +317,18 @@ html.futa04-information #board .l-over .receptive-well {
   fill:rgba(225,216,190,.045); stroke:rgba(5,6,5,.66); stroke-width:2.5;
   pointer-events:none;
 }
-html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.055); }
-html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.055); }
+html.futa04-information #board .l-over .receptive-well:is(.kind-strengthen,.kind-bloom) { fill:rgba(99,171,96,.11); }
+html.futa04-information #board .l-over .receptive-well:is(.kind-replace,.kind-fruit) { fill:rgba(192,83,65,.11); }
 html.futa04-information #board .l-over .target.kind-grow {
-  fill:#ded6bd; fill-opacity:calc(.055 + var(--near,0) * .16);
-  stroke:#d8c8a5; stroke-width:1.15; stroke-opacity:calc(.30 + var(--near,0) * .35);
+  fill:#ded6bd; fill-opacity:calc(.10 + var(--near,0) * .22);
+  stroke:#d8c8a5; stroke-width:1.45; stroke-opacity:calc(.42 + var(--near,0) * .4);
   stroke-dasharray:none; animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
 html.futa04-information #board .l-over .target:is(.kind-strengthen,.kind-bloom,.kind-replace,.kind-fruit) {
-  stroke-dasharray:none; stroke-width:1.15;
-  fill-opacity:calc(.055 + var(--near,0) * .16);
-  stroke-opacity:calc(.31 + var(--near,0) * .35);
+  stroke-dasharray:none; stroke-width:1.45;
+  fill-opacity:calc(.10 + var(--near,0) * .22);
+  stroke-opacity:calc(.42 + var(--near,0) * .4);
   animation:target-in .2s ease-out both;
   transition:fill-opacity .14s ease,stroke-opacity .14s ease;
 }
@@ -333,7 +364,7 @@ html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
    it joins the shape (the group holds the ink and its stone, so both arrive together). */
 html.futa04-information #board .l-draw .ghost-tile {
   fill:#a6d49b; fill-opacity:.19;
-  stroke:#a5d294; stroke-width:1.15; stroke-opacity:.74;
+  stroke:#a5d294; stroke-width:1.45; stroke-opacity:.74;
   stroke-dasharray:none; animation:none;
   transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
 }
@@ -443,7 +474,8 @@ export function mountSmartCockpit() {
   const setText = (frame: DisplayFrame) => {
     const { text:value, mode } = frame;
     const reduceNow = () => document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-    windowEl.classList.toggle('led-pulse',!!frame.pulse && !reduceNow());
+    windowEl.classList.toggle('led-pulse',!!frame.pulse && !frame.alarm && !reduceNow());
+    windowEl.classList.toggle('led-alarm',!!frame.alarm && !reduceNow());
     if (value === lastText && mode === lastMode && !!frame.compact === lastCompact && frame.motif === lastMotif && frame.flash === lastFlash) return;
     const previous = lastText;
     const animated = !reduceNow();
@@ -522,10 +554,14 @@ export function mountSmartCockpit() {
   const phaseMessage = () => {
     const root = document.documentElement;
     if (root.dataset.step === 'opp') return 'WAIT';
-    if (root.dataset.step === 'draw') return 'DRAW';
-    if (root.dataset.step === 'throw') return 'THROW';
-    if (root.dataset.futa04Bloom === 'true') return 'BLOOM';
-    if (root.dataset.step === 'grow') return 'GROW';
+    if (root.dataset.step === 'draw') return 'DRAW!';
+    if (root.dataset.step === 'throw') return 'THROW!';
+    if (root.dataset.futa04Bloom === 'true') return 'BLOOM!';
+    if (root.dataset.step === 'grow') {
+      // After the one Grow, Bloom is optional — make Skip feel like an invitation.
+      if (root.dataset.futa04Grew === 'true' && root.dataset.futa04BloomReady === 'true') return 'SKIP?';
+      return 'GROW!';
+    }
     return 'FUTASAKU';
   };
   machine.reset(phaseMessage());

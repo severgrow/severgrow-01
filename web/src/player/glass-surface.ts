@@ -8,6 +8,7 @@ export type TutorialWindowButtons = {
   skip?: boolean;
   chapters?: boolean;
   next?: boolean;
+  exit?: boolean;
   playReal?: boolean;
   replayChapter?: boolean;
 };
@@ -16,6 +17,7 @@ export type TutorialWindowHandlers = {
   onSkip?: () => void;
   onChapters?: () => void;
   onNext?: () => void;
+  onExit?: () => void;
   onPlayReal?: () => void;
   onReplayChapter?: () => void;
 };
@@ -41,10 +43,11 @@ const CSS = `
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
   font:500 13px/1.35 Commissioner,system-ui,sans-serif; }
 #futasaku-glass[hidden], #tutorial-focus[hidden] { display:none; }
-#futasaku-glass[data-mode='tutorial'] { pointer-events:none; max-width:min(420px,calc(100vw - 24px)); width:min(420px,calc(100vw - 24px));
-  left:50%; transform:translateX(-50%); height:auto; background:rgba(8,10,10,.42);
+#futasaku-glass[data-mode='tutorial'] { pointer-events:none; z-index:40; max-width:min(420px,calc(100vw - 24px)); width:min(420px,calc(100vw - 24px));
+  left:50%; transform:translateX(-50%); height:auto; background:rgba(12,14,14,.88);
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
-  transition: top 220ms ease, bottom 220ms ease, opacity 120ms ease; }
+  transition: top 220ms ease, bottom 220ms ease, opacity 120ms ease; filter:none; }
+#futasaku-glass[data-mode='tutorial'] .glass-exit { margin-left:auto; opacity:.7; font-size:12px; border-style:dashed; }
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
 #futasaku-glass[data-mode='tutorial'] .glass-dots { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
@@ -93,25 +96,35 @@ const CSS = `
 #futasaku-glass .intel-card .c-suit { display:none; }
 #futasaku-glass .intel-card-count { position:absolute; right:-3px; bottom:-3px; min-width:13px; height:13px; padding:0 2px; border-radius:5px; background:#24221e; border:1px solid #a99c81; font:700 9px/12px monospace; text-align:center; }
 #futasaku-glass .intel-observation { margin:0; color:#d3c4a3; font-size:10px; letter-spacing:.09em; }
-#tutorial-focus { position:fixed; inset:0; z-index:34; pointer-events:none; width:100vw; height:100dvh; overflow:visible; }
-#tutorial-focus .focus-dim { fill:rgba(1,3,3,.40); }
-#tutorial-focus .focus-glow { fill:none; stroke:#e9d8ad; stroke-width:2; filter:drop-shadow(0 0 6px rgba(233,216,173,.55)); transform-box:fill-box; transform-origin:center; }
-#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.08); stroke:none; }
+#tutorial-focus { position:fixed; inset:0; z-index:34; pointer-events:none; width:100vw; height:100dvh; overflow:visible;
+  opacity:0; transition: opacity 180ms ease; }
+#tutorial-focus[data-on='1'] { opacity:1; }
+#tutorial-focus[data-fade='out'] { opacity:0; transition: opacity 120ms ease; }
+#tutorial-focus .focus-dim { fill:rgba(0,0,0,.70); }
+#tutorial-focus .focus-dim-filter { backdrop-filter:grayscale(0.9) brightness(0.45); -webkit-backdrop-filter:grayscale(0.9) brightness(0.45); }
+#tutorial-focus .focus-glow { fill:none; stroke:#e9d8ad; stroke-width:2; filter:drop-shadow(0 0 10px rgba(233,216,173,.75)); transform-box:fill-box; transform-origin:center; }
+#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.12); stroke:none; }
 #tutorial-focus[data-pulse='1'] .focus-glow { animation:tutorial-glow-pulse 1.4s ease-in-out infinite; }
+#tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.4s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
 @keyframes tutorial-glow-pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.04); } }
-#tutorial-focus .focus-pointer { filter:drop-shadow(0 3px 6px rgba(0,0,0,.45)); }
-#tutorial-focus .focus-pointer-body { fill:#e9d8ad; stroke:#1a1814; stroke-width:2.2; stroke-linejoin:round; }
-#tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-bob .7s ease-in-out infinite alternate; }
-#tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-bob-hard .55s ease-in-out infinite alternate; }
-@keyframes tutorial-pointer-bob { from { transform:translate(0,0); } to { transform:translate(var(--bob-x,0px),var(--bob-y,8px)); } }
-@keyframes tutorial-pointer-bob-hard { from { transform:translate(0,0); } to { transform:translate(var(--bob-x,0px),var(--bob-y,14px)); } }
+#tutorial-focus .focus-pointer { filter:drop-shadow(0 4px 8px rgba(0,0,0,.5)); transform-origin:12px 8px; }
+#tutorial-focus .focus-pointer-body { fill:#e9d8ad; stroke:#1a1814; stroke-width:2.4; stroke-linejoin:round; stroke-linecap:round; }
+#tutorial-focus .focus-ripple { fill:none; stroke:#e9d8ad; stroke-width:1.5; opacity:0; }
+#tutorial-focus[data-bob='1'] .focus-pointer { animation:tutorial-pointer-tap .9s ease-in-out infinite; }
+#tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .7s ease-in-out infinite; }
+#tutorial-focus[data-bob='1'] .focus-ripple { animation:tutorial-ripple .9s ease-out infinite; }
+@keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,10px)); } }
+@keyframes tutorial-pointer-tap-hard { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,14px)); } }
+@keyframes tutorial-ripple { 0% { opacity:.7; r:8; } 100% { opacity:0; r:28; } }
 #tutorial-focus.nudge .focus-glow { animation:tutorial-nudge .16s ease-out; }
 @keyframes tutorial-nudge { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
 .reduce-motion #tutorial-focus .focus-glow, .reduce-motion #tutorial-focus .focus-pointer,
+.reduce-motion #tutorial-focus .focus-ripple, .reduce-motion #tutorial-focus .focus-lift,
 .reduce-motion #tutorial-focus.nudge .focus-glow { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
   #futasaku-glass[data-mode='tutorial'] { transition: opacity 120ms ease; }
-  #tutorial-focus .focus-glow, #tutorial-focus .focus-pointer, #tutorial-focus.nudge .focus-glow { animation:none !important; }
+  #tutorial-focus { transition: opacity 120ms ease; }
+  #tutorial-focus .focus-glow, #tutorial-focus .focus-pointer, #tutorial-focus .focus-ripple, #tutorial-focus.nudge .focus-glow { animation:none !important; }
 }
 `;
 
@@ -187,7 +200,8 @@ const measureTarget = (selector: string, shape: FocusShape): Tracked | null => {
   };
 };
 
-const POINTER = `<g class="focus-pointer"><path class="focus-pointer-body" d="M18 6c1.2-2.4 4.8-1.6 5.2 1.2l2.2 16.4 4.6-3.4c1.6-1.2 3.8-.2 3.4 1.8l-3.2 14.2c-.6 2.6-3.2 4.2-5.8 3.6L8.2 36.2c-2.2-.6-3.2-3.2-2-5.2l6.4-10.2-5.8 2.2c-2 .8-4-.8-3.4-2.8L18 6z"/></g>`;
+/** Chunky pointing hand — fingertip at roughly (14, 4), 56px tall. */
+const POINTER_HAND = `<g class="focus-pointer"><path class="focus-pointer-body" d="M14 4c1.4-1.8 4.2-.6 4.2 1.6v14.2l2.4-2.1c1.4-1.2 3.6-.2 3.4 1.6l-1.1 9.6c-.4 3.2-3.1 5.6-6.3 5.6H9.2c-2.8 0-5.2-2-5.7-4.7L1.8 24.2c-.5-2.2 1.1-4.2 3.3-4.2h2.1V10.2c0-2.1 2.4-3.2 3.9-1.8L14 12.4V4z"/></g>`;
 
 export type GlassSurface = ReturnType<typeof mountGlassSurface>;
 export const mountGlassSurface = (onClose: () => void) => {
@@ -210,7 +224,19 @@ export const mountGlassSurface = (onClose: () => void) => {
   let smooth: Tracked | null = null;
   let panelSide: 'top' | 'bottom' = 'bottom';
   let handlers: TutorialWindowHandlers = {};
-  const showFocus = (show: boolean) => show ? focus.removeAttribute('hidden') : focus.setAttribute('hidden', '');
+  const showFocus = (show: boolean) => {
+    if (show) {
+      focus.removeAttribute('hidden');
+      focus.dataset.on = '1';
+      focus.dataset.fade = 'in';
+    } else {
+      focus.dataset.fade = 'out';
+      focus.dataset.on = '0';
+      window.setTimeout(() => {
+        if (focus.dataset.on === '0') focus.setAttribute('hidden', '');
+      }, 130);
+    }
+  };
 
   const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
   const placeIntel = () => {
@@ -247,48 +273,62 @@ export const mountGlassSurface = (onClose: () => void) => {
     }
   };
 
-  const pointerPose = (tracked: Tracked, panelRect: DOMRect) => {
-    const space = [
-      { side: 'left' as const, room: tracked.left - 16 },
-      { side: 'right' as const, room: innerWidth - tracked.right - 16 },
-      { side: 'top' as const, room: tracked.top - 16 },
-      { side: 'bottom' as const, room: innerHeight - tracked.bottom - 16 },
-    ].sort((a, b) => b.room - a.room);
-    const pick = space.find(s => {
-      if (s.side === 'top' && panelSide === 'top') return false;
-      if (s.side === 'bottom' && panelSide === 'bottom') return false;
-      return s.room >= 56;
-    }) ?? space[0]!;
-    let x = tracked.cx - 18; let y = tracked.cy - 18;
-    let bobX = 0; let bobY = 8;
-    if (pick.side === 'left') { x = Math.max(8, tracked.left - 54); y = tracked.cy - 24; bobX = 8; bobY = 0; }
-    if (pick.side === 'right') { x = Math.min(innerWidth - 56, tracked.right + 8); y = tracked.cy - 24; bobX = -8; bobY = 0; }
-    if (pick.side === 'top') { x = tracked.cx - 18; y = Math.max(8, tracked.top - 56); bobX = 0; bobY = 8; }
-    if (pick.side === 'bottom') { x = tracked.cx - 18; y = Math.min(innerHeight - 56, tracked.bottom + 8); bobX = 0; bobY = -8; }
-    if (x < panelRect.right && x + 48 > panelRect.left && y < panelRect.bottom && y + 48 > panelRect.top) {
-      y = panelSide === 'top' ? panelRect.bottom + 8 : panelRect.top - 56;
-    }
-    x = Math.min(innerWidth - 56, Math.max(8, x));
-    y = Math.min(innerHeight - 56, Math.max(8, y));
-    return { x, y, bobX, bobY };
+  /** Place the hand with a 10px gap; hide when both free sides are blocked. */
+  const pointerPose = (tracked: Tracked, panelRect: DOMRect): { x: number; y: number; bobX: number; bobY: number; rot: number } | null => {
+    const GAP = 10;
+    const HAND_W = 40;
+    const HAND_H = 56;
+    type Side = 'left' | 'right' | 'top' | 'bottom';
+    const candidates: { side: Side; room: number; x: number; y: number; bobX: number; bobY: number; rot: number }[] = [
+      { side: 'left', room: tracked.left - 16, x: tracked.left - GAP - HAND_W, y: tracked.cy - 12, bobX: 10, bobY: 0, rot: 90 },
+      { side: 'right', room: innerWidth - tracked.right - 16, x: tracked.right + GAP, y: tracked.cy - 12, bobX: -10, bobY: 0, rot: -90 },
+      { side: 'top', room: tracked.top - 16, x: tracked.cx - HAND_W / 2, y: tracked.top - GAP - HAND_H, bobX: 0, bobY: 10, rot: 180 },
+      { side: 'bottom', room: innerHeight - tracked.bottom - 16, x: tracked.cx - HAND_W / 2, y: tracked.bottom + GAP, bobX: 0, bobY: -10, rot: 0 },
+    ];
+    const overlapsPanel = (x: number, y: number) =>
+      x < panelRect.right && x + HAND_W > panelRect.left && y < panelRect.bottom && y + HAND_H > panelRect.top;
+    const onScreen = (x: number, y: number) =>
+      x >= 4 && y >= 4 && x + HAND_W <= innerWidth - 4 && y + HAND_H <= innerHeight - 4;
+    // Prefer the side with most free space; never sit on the glass window side.
+    const usable = candidates
+      .filter(c => {
+        if (c.side === 'top' && panelSide === 'top') return false;
+        if (c.side === 'bottom' && panelSide === 'bottom') return false;
+        if (c.room < HAND_H + GAP) return false;
+        if (!onScreen(c.x, c.y)) return false;
+        if (overlapsPanel(c.x, c.y)) return false;
+        return true;
+      })
+      .sort((a, b) => b.room - a.room);
+    const pick = usable[0];
+    if (!pick) return null; // both / all sides blocked — ring + window text only
+    return { x: pick.x, y: pick.y, bobX: pick.bobX, bobY: pick.bobY, rot: pick.rot };
   };
 
   const paintFocus = (tracked: Tracked | null) => {
     focus.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     focus.dataset.pulse = reduceMotion || !tracked ? '0' : '1';
     focus.dataset.bob = reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1';
+    focus.dataset.on = tracked || mode === 'tutorial' ? '1' : '0';
     if (!tracked) {
       focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
       return;
     }
     const panelRect = panel.getBoundingClientRect();
     const pose = pointerPose(tracked, panelRect);
-    focus.style.setProperty('--bob-x', `${pose.bobX}px`);
-    focus.style.setProperty('--bob-y', `${pose.bobY}px`);
+    const ripples = reduceMotion ? ''
+      : `<circle class="focus-ripple" cx="${tracked.cx.toFixed(1)}" cy="${tracked.cy.toFixed(1)}" r="8"/>`
+        + `<circle class="focus-ripple" cx="${tracked.cx.toFixed(1)}" cy="${tracked.cy.toFixed(1)}" r="8" style="animation-delay:.2s"/>`;
+    let hand = '';
+    if (pose) {
+      focus.style.setProperty('--bob-x', `${pose.bobX}px`);
+      focus.style.setProperty('--bob-y', `${pose.bobY}px`);
+      hand = `<g transform="translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) rotate(${pose.rot} 20 8) scale(1.15)">${POINTER_HAND}</g>`;
+    }
+    focus.dataset.pointer = pose ? '1' : '0';
     focus.innerHTML = `<defs><mask id="tutorial-cutouts"><rect width="100%" height="100%" fill="white"/>${tracked.hole}</mask></defs>`
       + `<rect class="focus-dim" width="100%" height="100%" mask="url(#tutorial-cutouts)"/>`
-      + tracked.soft + tracked.ring
-      + `<g transform="translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) scale(0.92)">${POINTER}</g>`;
+      + `<g class="focus-lift">${tracked.soft}${tracked.ring}</g>${ripples}${hand}`;
   };
 
   const tick = (now: number) => {
@@ -357,6 +397,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.querySelector<HTMLButtonElement>('[data-tut="skip"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onSkip?.(); });
     panel.querySelector<HTMLButtonElement>('[data-tut="chapters"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onChapters?.(); });
     panel.querySelector<HTMLButtonElement>('[data-tut="next"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onNext?.(); });
+    panel.querySelector<HTMLButtonElement>('[data-tut="exit"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onExit?.(); });
     panel.querySelector<HTMLButtonElement>('[data-tut="play"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onPlayReal?.(); });
     panel.querySelector<HTMLButtonElement>('[data-tut="replay"]')?.addEventListener('click', e => { e.preventDefault(); handlers.onReplayChapter?.(); });
   };
@@ -378,6 +419,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       b.next ? `<button type="button" data-tut="next">Next</button>` : '',
       b.skip ? `<button type="button" data-tut="skip">Skip</button>` : '',
       b.chapters ? `<button type="button" data-tut="chapters">Chapters</button>` : '',
+      b.exit !== false ? `<button type="button" data-tut="exit" class="glass-exit">Exit tutorial</button>` : '',
       b.playReal ? `<button type="button" data-tut="play">Play a real game</button>` : '',
       b.replayChapter ? `<button type="button" data-tut="replay">Replay a chapter</button>` : '',
     ].filter(Boolean).join('');
@@ -465,11 +507,16 @@ export const mountGlassSurface = (onClose: () => void) => {
       focus.classList.remove('nudge');
       void focus.getBoundingClientRect();
       focus.classList.add('nudge');
+      window.setTimeout(() => focus.classList.remove('nudge'), 180);
     },
     refresh: place,
     isOpen: () => mode === 'intel',
     /** Test hook: last smoothed glow centre. */
     focusCentre: () => smooth ? { x: smooth.cx, y: smooth.cy } : null,
+    /** Test hook: whether the hand pointer is currently drawn. */
+    pointerVisible: () => focus.dataset.pointer === '1',
     setIdleHard: (hard: boolean) => { idleHard = hard; },
+    /** Hide glow + pointer (busy / opponent / between steps) while keeping the window. */
+    hideFocus: () => { showFocus(false); stopLoop(); smooth = null; targetSelector = ''; },
   };
 };

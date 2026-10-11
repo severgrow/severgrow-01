@@ -195,6 +195,7 @@ export const TUTORIAL = Object.freeze({
   skip: 'Skip',
   chaptersBtn: 'Chapters',
   next: 'Next',
+  exit: 'Exit tutorial',
   chapterDone: 'Chapter done',
   free: 'Your turn. No guide.',
   recap: Object.freeze([
@@ -209,6 +210,13 @@ export const TUTORIAL = Object.freeze({
     'Not that one. This one.',
     'Close. Try the glowing one.',
     'Other side.',
+  ] as const),
+  /** Taps on dead / locked areas during a guided step. */
+  locked: Object.freeze([
+    'Tap the glowing one.',
+    'Not there. Here.',
+    'Almost. The glowing one.',
+    "That's locked for now.",
   ] as const),
   bloomHints: 'Show bloom hints',
   menuChapters: 'Tutorial chapters',

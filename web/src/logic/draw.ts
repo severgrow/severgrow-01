@@ -20,7 +20,8 @@ export type Pt = { x: number; y: number };
 // ---------- geometry (board units; the page maps the screen to these in either orientation) ----------
 
 /** The hit area is a little smaller than the hex, so a finger at a corner never slips into a neighbour. */
-export const HIT = 0.85;
+/** Thumb-friendly hex hit: larger than the old 0.85, still under 1 so corners stay clean. */
+export const HIT = 0.95;
 
 const SQ3 = Math.sqrt(3);
 const INRADIUS = (S * SQ3) / 2;
@@ -158,6 +159,22 @@ export const drawNext = (c: Combo, shape: readonly string[], reverse = false): S
 
 /** Where a painting may start. */
 export const drawStarts = (c: Combo, reverse = false): Set<string> => drawNext(c, [], reverse);
+
+/**
+ * The natural first hex for a Bloom: the only start when unique, otherwise the start
+ * closest to the player's home (stable tie-break on key). Null when nothing is legal.
+ */
+export const naturalBloomStart = (c: Combo, homeKey: string, reverse = false): string | null => {
+  const starts = [...drawStarts(c, reverse)];
+  if (!starts.length) return null;
+  if (starts.length === 1) return starts[0]!;
+  const home = parseKey(homeKey);
+  starts.sort((a, b) => {
+    const d = hexDistance(home, parseKey(a)) - hexDistance(home, parseKey(b));
+    return d || (a < b ? -1 : 1);
+  });
+  return starts[0]!;
+};
 
 /** Endpoints which finish an already-legal Bloom after its first tile. Immediate neighbours
  * stay reserved for the ordinary tap-by-tap path. */

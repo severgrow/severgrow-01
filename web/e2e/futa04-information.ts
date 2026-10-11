@@ -95,6 +95,7 @@ try {
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
     check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
     check(!await page.locator('#step-cue').isVisible(), `${width}: routine board prompt is gone`);
+    await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === '0:0', undefined, { timeout: 8000 });
     check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: live score rests in the LED`);
     check((await page.locator('#smart-led-cells').evaluate(el=>getComputedStyle(el).animationName)) === 'none', `${width}: short LED message stays still`);
     check(!await page.locator('#turn-pill').isVisible(), `${width}: no competing turn pill`);
@@ -127,6 +128,7 @@ try {
     await page.click('#deck');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
+    await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === '0:0', undefined, { timeout: 8000 });
     check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: score remains after Draw`);
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
     const cockpit = await page.evaluate(() => {

@@ -4,9 +4,11 @@ import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none;
-  opacity: .12; background-repeat: repeat; background-size: 128px 128px;
-  user-select: none;
+  opacity: .14; background-repeat: repeat; background-size: 128px 128px;
+  mix-blend-mode: soft-light; user-select: none;
 }
+/* In-match the grain rides above map + cockpit so the analog flecks stay readable. */
+body:has(#game:not([hidden])) #futa04-film-grain { opacity: .19; }
 #futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
 #futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
@@ -43,15 +45,22 @@ export function mountAtmosphere(): OutcomeLight {
     let seed = 0x46555441;
     const random = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
     for (let i = 0; i < pixels.data.length; i += 4) {
-      // Fine dark flecks avoid the grey veil that would brighten the dark backdrop.
-      const ink = Math.round((random() + random() + random()) * 255 / 3);
-      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = 0;
-      pixels.data[i + 3] = ink;
+      // Soft mid-grey flecks + soft-light blend read as analog film over dark UI.
+      const tone = Math.round((random() + random() + random()) * 255 / 3);
+      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = tone;
+      pixels.data[i + 3] = Math.round(48 + random() * 90);
     }
     ctx.putImageData(pixels, 0, 0);
     grain.style.backgroundImage = `url(${tile.toDataURL()})`;
     document.body.append(grain);
   }
+  // Keep the grain as the last body child so it stays above later fixed UI layers.
+  const pinGrain = () => {
+    if (!grain.isConnected || document.body.lastElementChild === grain) return;
+    document.body.append(grain);
+  };
+  pinGrain();
+  new MutationObserver(pinGrain).observe(document.body, { childList: true });
   const backdrop = document.createElement('div');
   backdrop.id = 'futa04-board-backdrop';
   backdrop.setAttribute('aria-hidden', 'true');

@@ -217,6 +217,13 @@ export class Sound {
     this.press();
   }
 
+  /** Soft dead-area tick for the tutorial lock (quieter than a normal click). */
+  tick() {
+    const b = this.base;
+    this.noise(0.01, 0.03, 0, 2800);
+    this.tone(b * 2.4, 0.025, { wave: 'triangle', gain: 0.018, attack: 0.001, lowpass: 1800 });
+  }
+
   /** draw: a soft double-tick, like a card leaving a shoe; three envelopes. */
   draw() {
     const { idx, detune } = this.pick('draw', 3);

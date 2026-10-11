@@ -76,6 +76,8 @@ import {
   migrateTutorialProgress, tutorialAccepts, tutorialChapter, tutorialFeedback,
   tutorialLesson, tutorialOpponentAction, TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS,
 } from './logic/tutorial-script.js';
+import { allowedSelectorsForLesson, mountTutorialGate } from './logic/tutorial-gate.js';
+import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
 import { previewMove } from './logic/preview.js';
@@ -224,6 +226,7 @@ const freshCoach = (): CoachProgress => ({ step: 0, taught: [], known: [], choic
 let session: Session | null = null;
 let coach: CoachProgress = freshCoach();
 let glassSurface: GlassSurface | null = null;
+let tutorialGate: TutorialGate | null = null;
 let intelState: State | null = null;
 let tutorialDisplayKey = '';
 let tutorialTransitionPending = false;
@@ -231,6 +234,7 @@ let tutorialFreeTimer = 0;
 let tutorialIdleTimer = 0;
 let tutorialPraiseTimer = 0;
 let tutorialStatus: string | null = null;
+let tutorialTargetSelector = '';
 let tutorialCompleted = new Set<number>();
 let log: string[] = [];
 let queue = new AnimQueue({});
@@ -1039,7 +1043,66 @@ function clearTutorialTimers() {
   clearTimeout(tutorialIdleTimer);
   clearTimeout(tutorialPraiseTimer);
   tutorialStatus = null;
+  tutorialTargetSelector = '';
   glassSurface?.setIdleHard?.(false);
+}
+
+function releaseTutorialLock() {
+  clearTutorialTimers();
+  tutorialGate?.clear();
+  glassSurface?.hide();
+  tutorialDisplayKey = '';
+  tutorialTransitionPending = false;
+}
+
+function onTutorialBlocked() {
+  if (!coach.tutorial) return;
+  if (settings.sound) { sound.unlock(); sound.tick(); }
+  glassSurface?.nudge();
+  tutorialStatus = tutorialFeedback('locked');
+  tutorialDisplayKey = '';
+  render();
+}
+
+function syncTutorialGate() {
+  if (!tutorialGate) return;
+  const progress = coach.tutorial;
+  if (!progress || !session) {
+    tutorialGate.clear();
+    return;
+  }
+  const lesson = tutorialLesson(progress.chapter, progress.step);
+  const lockedBusy = busy() || tutorialTransitionPending
+    || lesson?.action === 'Opponent'
+    || (!!lesson && lesson.action !== 'FreeTurn' && !myTurn());
+  if (lockedBusy) {
+    tutorialGate.set(allowedSelectorsForLesson(lesson, '', 'busy'), 'busy');
+    glassSurface?.hideFocus?.();
+    return;
+  }
+  if (!lesson) {
+    tutorialGate.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
+    return;
+  }
+  const allow = allowedSelectorsForLesson(lesson, tutorialTargetSelector, 'step');
+  tutorialGate.set(allow, 'step');
+}
+
+function exitTutorial() {
+  releaseTutorialLock();
+  store.remove(SAVE_KEY);
+  coach = freshCoach();
+  session = null;
+  showScreen('menu');
+  // Drop tutorial query so Back / reload does not re-enter the lock.
+  try {
+    const url = new URL(location.href);
+    if (url.searchParams.has('tutorial') || url.searchParams.has('chapter')) {
+      url.searchParams.delete('tutorial');
+      url.searchParams.delete('chapter');
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+  } catch { /* ignore */ }
 }
 
 function startTutorial(chapter = 0) {
@@ -1051,18 +1114,19 @@ function startTutorial(chapter = 0) {
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0 } }, [], state);
   save();
   announceTurn(HUMAN);
+  syncTutorialGate();
 }
 
 function completeTutorial() {
   const my = epoch;
-  clearTutorialTimers();
-  glassSurface?.hide();
+  releaseTutorialLock();
   smartCockpit?.event({ message: 'NICE.', priority: 97, duration: 850, mode: 'green' });
-  window.setTimeout(() => { if (my === epoch && coach.tutorial) smartCockpit?.event({ message: '点', priority: 98, duration: 650, mode: 'amber' }); }, 900);
+  window.setTimeout(() => { if (my === epoch) smartCockpit?.event({ message: '点', priority: 98, duration: 650, mode: 'amber' }); }, 900);
   window.setTimeout(() => {
-    if (my !== epoch || !coach.tutorial) return;
+    if (my !== epoch) return;
     store.remove(SAVE_KEY);
     coach = freshCoach();
+    tutorialGate?.clear();
     glassSurface?.hide();
     showScreen('menu');
   }, 1750);
@@ -1072,11 +1136,13 @@ function advanceTutorialChapter(chapter: number) {
   if (chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial();
   if (coach.tutorial) tutorialCompleted.add(coach.tutorial.chapter);
   clearTutorialTimers();
+  tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
   const state = tutorialChapter(chapter);
   log = [`Tutorial chapter ${chapter + 1}.`];
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0 } }, [], state);
   save();
   announceTurn(HUMAN);
+  syncTutorialGate();
 }
 
 function tutorialAdvanceStep() {
@@ -1119,6 +1185,7 @@ function tutorialNext() {
 function tutorialSkip() {
   const progress = coach.tutorial;
   if (!progress) return;
+  tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
   advanceTutorialChapter(progress.chapter + 1);
 }
 
@@ -1150,6 +1217,7 @@ function openTutorialChapters() {
     btn.addEventListener('click', () => {
       const chapter = Number(btn.dataset.tutorialChapter);
       box.remove();
+      tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
       startTutorial(chapter);
     });
   });
@@ -3302,7 +3370,10 @@ function renderFirstTip(v: View) {
 
 function renderTutorial() {
   const progress=coach.tutorial;
-  if (!progress || !session || !glassSurface) return;
+  if (!progress || !session || !glassSurface) {
+    tutorialGate?.clear();
+    return;
+  }
   const lesson=tutorialLesson(progress.chapter,progress.step);
   if (!lesson) return;
   const selected=session.sel.card;
@@ -3314,9 +3385,12 @@ function renderTutorial() {
       : selected!==null && lesson.action==='PlayFruit' ? 'Choose their tile.'
       : selected!==null && lesson.action==='Sprout' ? 'Tap the lit tile.' : lesson.text);
   // One target only. Card-then-tile lessons light the card first, then the tile.
+  // Next / explainer steps light only the Next button.
   let selector='';
   let shape: 'hex' | 'card' | 'pill' | 'none' = 'none';
-  if (lesson.focus==='deck') { selector='#deck'; shape='pill'; }
+  if (lesson.action==='Next' || lesson.focus==='explainer') {
+    selector='#futasaku-glass [data-tut="next"]'; shape='pill';
+  } else if (lesson.focus==='deck') { selector='#deck'; shape='pill'; }
   else if (lesson.focus==='discard') { selector='#discard'; shape='pill'; }
   else if (lesson.focus==='context') { selector='#smart-context'; shape='pill'; }
   else if (lesson.focus==='card') {
@@ -3328,7 +3402,7 @@ function renderTutorial() {
     if (card) { selector=`#hand .card[data-card="${card.id}"]`; shape='card'; }
   } else if (lesson.focus==='bloom') {
     if (selectingBloom) {
-      selector=lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board-wrap';
+      selector=lesson.tile ? `#board .hex-cell[data-key="${coordKey(lesson.tile)}"]` : '#board .hex-cell.target, #board .target';
       shape='hex';
     } else { selector='#smart-bloom-button'; shape='pill'; }
   } else if (lesson.focus==='home' && lesson.tile) {
@@ -3350,45 +3424,66 @@ function renderTutorial() {
     if (selected!==wanted?.id && wanted) { selector=`#hand .card[data-card="${wanted.id}"]`; shape='card'; }
     else { selector=`#board .hex-cell[data-key="${coordKey(lesson.tile)}"]`; shape='hex'; }
   }
-  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}:${selector}`;
+  tutorialTargetSelector = selector;
+  const lockedBusy = busy() || tutorialTransitionPending
+    || lesson.action === 'Opponent'
+    || (lesson.action !== 'FreeTurn' && !myTurn());
+  const key=`${progress.chapter}:${progress.step}:${selected}:${session.sel.kind}:${session.pending?.t ?? ''}:${session.sel.hex ?? ''}:${selector}:${lockedBusy?'1':'0'}:${tutorialStatus ?? ''}`;
   if (tutorialDisplayKey!==key) {
     tutorialDisplayKey=key;
-    const idleHard = glassSurface && (glassSurface as { setIdleHard?: (h: boolean) => void });
-    void idleHard;
-    const showIdle = !!document.getElementById('tutorial-focus')?.dataset.bob && document.getElementById('tutorial-focus')!.dataset.bob === 'hard';
-    glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, selector ? [selector] : [], {
-      shape,
-      ...(lesson.why != null && !tutorialStatus ? { why: lesson.why } : {}),
-      chapterCount: TUTORIAL_CHAPTER_COUNT,
-      reduceMotion: settings.reduceMotion,
-      arrow: true,
-      turnIcons: lesson.id === 'draw',
-      ...(tutorialStatus && /Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { praise: tutorialStatus } : {}),
-      ...(tutorialStatus && !/Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { status: tutorialStatus } : {}),
-      idleHard: showIdle,
-      buttons: {
-        showMe: showIdle || tutorialStatus === TUTORIAL.showMe,
-        skip: true,
-        chapters: true,
-        next: lesson.action === 'Next',
-        playReal: lesson.action === 'FreeTurn' && progress.step > 0,
-        replayChapter: lesson.action === 'FreeTurn' && progress.step > 0,
-      },
-      handlers: {
-        onShowMe: tutorialShowMe,
-        onSkip: tutorialSkip,
-        onChapters: openTutorialChapters,
-        onNext: tutorialNext,
-        onPlayReal: () => { store.remove(SAVE_KEY); coach = freshCoach(); showScreen('menu'); },
-        onReplayChapter: openTutorialChapters,
-      },
-    });
-    armTutorialIdle();
-    if (lesson.action==='FreeTurn') {
+    const showIdle = document.getElementById('tutorial-focus')?.dataset.bob === 'hard';
+    if (lockedBusy) {
+      glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, [], {
+        shape: 'none',
+        chapterCount: TUTORIAL_CHAPTER_COUNT,
+        reduceMotion: settings.reduceMotion,
+        status: tutorialStatus ?? (lesson.action === 'Opponent' ? instruction : undefined),
+        buttons: { skip: true, chapters: true, exit: true, next: false, showMe: false },
+        handlers: {
+          onSkip: tutorialSkip,
+          onChapters: openTutorialChapters,
+          onExit: exitTutorial,
+        },
+      });
+      glassSurface.hideFocus?.();
+    } else {
+      glassSurface.tutorial(tutorialStatus ?? instruction, progress.chapter, selector ? [selector] : [], {
+        shape,
+        ...(lesson.why != null && !tutorialStatus ? { why: lesson.why } : {}),
+        chapterCount: TUTORIAL_CHAPTER_COUNT,
+        reduceMotion: settings.reduceMotion,
+        arrow: true,
+        turnIcons: lesson.id === 'draw',
+        ...(tutorialStatus && /Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { praise: tutorialStatus } : {}),
+        ...(tutorialStatus && !/Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { status: tutorialStatus } : {}),
+        idleHard: showIdle,
+        buttons: {
+          showMe: showIdle || tutorialStatus === TUTORIAL.showMe,
+          skip: true,
+          chapters: true,
+          exit: true,
+          next: lesson.action === 'Next',
+          playReal: lesson.action === 'FreeTurn' && progress.step > 0,
+          replayChapter: lesson.action === 'FreeTurn' && progress.step > 0,
+        },
+        handlers: {
+          onShowMe: tutorialShowMe,
+          onSkip: tutorialSkip,
+          onChapters: openTutorialChapters,
+          onNext: tutorialNext,
+          onExit: exitTutorial,
+          onPlayReal: () => { releaseTutorialLock(); store.remove(SAVE_KEY); coach = freshCoach(); showScreen('menu'); },
+          onReplayChapter: openTutorialChapters,
+        },
+      });
+      armTutorialIdle();
+    }
+    if (lesson.action==='FreeTurn' && !lockedBusy) {
       clearTimeout(tutorialFreeTimer);
       tutorialFreeTimer=window.setTimeout(()=>glassSurface?.hide(),1400);
     }
   } else glassSurface.refresh();
+  syncTutorialGate();
 }
 
 function showTip(id: FirstTip) {
@@ -5009,6 +5104,7 @@ if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('
   for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
+else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') startTutorial();
 else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
 

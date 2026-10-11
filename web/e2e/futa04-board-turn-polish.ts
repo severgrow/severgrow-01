@@ -214,8 +214,8 @@ async function geometry(page: Page, width: number, height: number, label: string
     });
   });
   check(emptyLighting, `${label}: only empty normal hexes are 15% brighter; owned, rock and gold rendering stays unchanged`);
-  check(atmosphere.coverage && atmosphere.opacity === .12 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
-    `${label}: deterministic static 12% grain covers all UI without blocking input`);
+  check(atmosphere.coverage && atmosphere.opacity === .19 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
+    `${label}: deterministic static film grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
   check(atmosphere.restrained && atmosphere.cleanSeams, `${label}: faint rim emits light only outside the map, never along internal seams`);
@@ -342,21 +342,25 @@ async function pulseCheck(page: Page, label: string) {
 }
 
 // The retired plate never shows. Futa04's live idle reminder is the LED re-showing the step word
-// for one pulse after six quiet seconds (display-machine.ts scheduleIdle(6000)); this replaces the
-// old three-second futa04-idle-ready class on #step-cue.
+// after four quiet seconds (display-machine.ts scheduleIdle(4000)), usually with a bang (DRAW!).
 async function idleTiming(page: Page, label: string) {
   const before = await state(page);
   await page.keyboard.press('Shift');
   const start = Date.now();
-  await page.waitForTimeout(2700);
+  await page.waitForTimeout(2200);
   check(await page.locator('#step-cue').evaluate(el => getComputedStyle(el).display === 'none'),
-    `${label}: the retired plate stays hidden during the first 2.7 idle seconds`);
-  check(await page.locator('#smart-led-text').innerText() !== 'DRAW', `${label}: the LED shows no step hint during the first 2.7 idle seconds`);
-  await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'DRAW', undefined, { timeout: 12000 });
-  check(Date.now()-start >= 5900, `${label}: the LED reminder waits six seconds after interaction`);
+    `${label}: the retired plate stays hidden during the first 2.2 idle seconds`);
+  const early = (await page.locator('#smart-led-text').innerText()).trim();
+  check(early !== 'DRAW' && early !== 'DRAW!', `${label}: the LED shows no step hint during the first 2.2 idle seconds`);
+  await page.waitForFunction(() => {
+    const t = document.getElementById('smart-led-text')?.textContent?.trim();
+    return t === 'DRAW' || t === 'DRAW!';
+  }, undefined, { timeout: 12000 });
+  check(Date.now()-start >= 3900, `${label}: the LED reminder waits four seconds after interaction`);
   await page.keyboard.press('Shift');
   await page.waitForTimeout(160);
-  check(await page.locator('#smart-led-text').innerText() !== 'DRAW', `${label}: new input promptly hides idle guidance`);
+  const after = (await page.locator('#smart-led-text').innerText()).trim();
+  check(after !== 'DRAW' && after !== 'DRAW!', `${label}: new input promptly hides idle guidance`);
   equal(await state(page),before,`${label}: the idle timer changes no game state`);
 }
 
@@ -730,7 +734,7 @@ async function bloomFlow(width: number, height: number) {
         root.classList.toggle('reduce-motion', reduced);
         return name;
       });
-      check(bloomPulse === 'futa04-recipe-projector', `${label}: the cockpit Bloom recipe keeps its gentle drift animation`);
+      check(!!bloomPulse?.includes('futa04-recipe-projector'), `${label}: the cockpit Bloom recipe keeps its gentle drift animation`);
     }
     const kind = `bloom-3-${action.cards.join('.')}`;
     const pick = async () => {
@@ -761,9 +765,12 @@ async function bloomFlow(width: number, height: number) {
     equal(await page.locator('#hand .futa04-bloom-card').count(),action.cards.length,`${label}: selected Bloom highlights exactly its cards`);
     check(!/Bloom \d+ tiles|Skip sprout/.test(await page.locator('#moves').innerText()),`${label}: Bloom choices use combination icons rather than prose`);
     // The retired plate is gone; Futa04 shows the selected Bloom group on the LED after its
-    // six idle seconds ("BLOOM" is phaseMessage() when data-futa04-bloom is true).
-    await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === 'BLOOM', undefined, { timeout: 12000 });
-    equal((await page.locator('#smart-led-text').textContent())?.trim(),'BLOOM',`${label}: idle Bloom uses only its short LED prompt`);
+    // idle re-prompt ("BLOOM" / "BLOOM!" from phaseMessage when data-futa04-bloom is true).
+    await page.waitForFunction(() => {
+      const t = document.getElementById('smart-led-text')?.textContent?.trim();
+      return t === 'BLOOM' || t === 'BLOOM!';
+    }, undefined, { timeout: 12000 });
+    check(['BLOOM','BLOOM!'].includes((await page.locator('#smart-led-text').textContent())?.trim() ?? ''),`${label}: idle Bloom uses only its short LED prompt`);
     check(!await page.locator('#step-cue').isVisible(),`${label}: idle Bloom keeps the retired plate hidden`);
     await controls(page,label+' selected Bloom');
     await evidence(page,`${width}x${height}-bloom-ready`);

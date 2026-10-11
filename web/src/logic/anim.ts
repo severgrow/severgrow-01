@@ -163,6 +163,17 @@ export class AnimQueue {
     if (s) this.board = applyStep(this.board, s);
     return s;
   }
+  /**
+   * Take the next step without applying it (caller reveals progressively, e.g. one
+   * grow tile at a time). Returns undefined when the queue is empty.
+   */
+  take(): Step | undefined {
+    return this.queue.shift();
+  }
+  /** Reveal one grow tile onto the shown board (for sequential bloom / multi-tile grow). */
+  placeGrowTile(player: Player, tile: GrowTile): void {
+    this.board = { ...this.board, [tile.key]: { owner: player, strength: tile.strength } };
+  }
   /** Shows everything at once (animations off or skipped). */
   skipAll(): Step[] {
     const rest = this.queue.splice(0);

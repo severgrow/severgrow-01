@@ -239,14 +239,22 @@ let wrongCursor = 0;
 let praiseCursor = 0;
 let lastPraise = -1;
 
+let lockedCursor = 0;
+
 export const tutorialFeedback = (
-  kind: 'wrong' | 'praise' | 'chapter-done' | 'idle',
+  kind: 'wrong' | 'praise' | 'chapter-done' | 'idle' | 'locked',
   _lesson?: TutorialLesson,
 ): string => {
   void _lesson;
   if (kind === 'wrong') {
     const line = WRONG[wrongCursor % WRONG.length]!;
     wrongCursor++;
+    return line;
+  }
+  if (kind === 'locked') {
+    const lines = TUTORIAL.locked;
+    const line = lines[lockedCursor % lines.length]!;
+    lockedCursor++;
     return line;
   }
   if (kind === 'praise') {

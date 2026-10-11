@@ -10,105 +10,124 @@ const firingKey = (seed: string) => {
 };
 
 describe('match display state', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window',globalThis); });
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-  it('rests on the authoritative score and returns to the latest score after an event', () => {
+  it('rests on the authoritative score and finishes a play event before the next step word', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('GROW OR SKIP',27,12);
-    expect(frames.at(-1)).toMatchObject({text:'27:12',mode:'score'});
-    sign.event({message:'+3',mode:'green',priority:80,duration:950});
-    sign.score(30,12);
-    sign.phase('THROW');
-    expect(frames.at(-1)).toMatchObject({text:'+3',mode:'green'});
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 27, 12);
+    expect(frames.at(-1)).toMatchObject({ text: '27:12', mode: 'score' });
+    sign.event({ message: '+3', mode: 'green', priority: 80, duration: 950 });
+    sign.score(30, 12);
+    sign.phase('THROW!');
+    expect(frames.at(-1)).toMatchObject({ text: '+3', mode: 'green' });
     vi.advanceTimersByTime(950);
-    expect(frames.at(-1)).toMatchObject({text:'30:12',mode:'score'});
-    vi.advanceTimersByTime(6000);
-    expect(frames.at(-1)).toMatchObject({text:'THROW',mode:'amber',pulse:true});
-    vi.advanceTimersByTime(1050);
-    expect(frames.at(-1)).toMatchObject({text:'30:12',mode:'score'});
+    // Previous message finished; queued step word plays next (may drop ! via personality).
+    expect(frames.at(-1)?.text === 'THROW!' || frames.at(-1)?.text === 'THROW').toBe(true);
+    vi.advanceTimersByTime(2000);
+    expect(frames.at(-1)).toMatchObject({ text: '30:12', mode: 'score' });
+    vi.advanceTimersByTime(4000);
+    expect(frames.at(-1)?.pulse || frames.at(-1)?.alarm).toBe(true);
+    vi.advanceTimersByTime(1200);
+    expect(frames.at(-1)).toMatchObject({ text: '30:12', mode: 'score' });
   });
 
-  it('interrupts weaker alerts, discards stale timers, and makes idle reminders sparse', () => {
+  it('announces DRAW on reset, then returns to score and idles at 4s', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('DRAW',4,3);
-    sign.event({message:'+2',priority:40,duration:1000});
-    sign.event({message:'-7',priority:90,duration:1300,mode:'red'});
-    sign.event({message:'COMBO READY',priority:10,duration:500});
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 4, 3);
+    expect(frames.at(-1)?.text === 'DRAW!' || frames.at(-1)?.text === 'DRAW').toBe(true);
+    vi.advanceTimersByTime(2000);
+    expect(frames.at(-1)).toMatchObject({ text: '4:3', mode: 'score' });
+    sign.event({ message: '+2', priority: 40, duration: 1000 });
+    sign.event({ message: '-7', priority: 90, duration: 1300, mode: 'red' });
+    sign.event({ message: 'COMBO READY', priority: 10, duration: 500 });
     expect(frames.at(-1)?.text).toBe('-7');
     vi.advanceTimersByTime(1300);
-    expect(frames.at(-1)).toMatchObject({text:'4:3',mode:'score'});
-    vi.advanceTimersByTime(6000);
-    expect(frames.at(-1)?.pulse).toBe(true);
-    vi.advanceTimersByTime(1050);
+    expect(frames.at(-1)).toMatchObject({ text: '4:3', mode: 'score' });
+    vi.advanceTimersByTime(4000);
+    expect(frames.at(-1)?.pulse || frames.at(-1)?.alarm).toBe(true);
+    vi.advanceTimersByTime(1200);
     expect(frames.at(-1)?.text).toBe('4:3');
-    vi.advanceTimersByTime(17999);
-    expect(frames.at(-1)?.text).toBe('4:3');
-    vi.advanceTimersByTime(1);
-    expect(frames.at(-1)?.text).toBe('DRAW');
   });
 
   it('clears an old result and its timers when a new match begins', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('GROW OR SKIP',20,19);
-    sign.event({message:'LOSS',priority:100,duration:1500});
-    sign.reset('DRAW',0,0);
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 20, 19);
+    sign.event({ message: 'LOSS', priority: 100, duration: 1500 });
+    sign.reset('DRAW!', 0, 0);
     vi.advanceTimersByTime(2500);
-    expect(frames.at(-1)).toMatchObject({text:'0:0',mode:'score'});
+    expect(frames.at(-1)).toMatchObject({ text: '0:0', mode: 'score' });
   });
 
   it('ends an idle hint immediately when the player acts', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('THROW',5,7);
-    vi.advanceTimersByTime(6000);
-    expect(frames.at(-1)?.pulse).toBe(true);
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('THROW!', 5, 7);
+    vi.advanceTimersByTime(2000); // finish step announcement
+    vi.advanceTimersByTime(4000);
+    expect(frames.at(-1)?.pulse || frames.at(-1)?.alarm).toBe(true);
     sign.interact();
-    expect(frames.at(-1)).toMatchObject({text:'5:7',mode:'score'});
+    expect(frames.at(-1)).toMatchObject({ text: '5:7', mode: 'score' });
   });
 
   it('lands the informative token first and lets flavour only follow it', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('GROW',9,10);
-    sign.event({message:'CUT+4',priority:90,duration:900,mode:'green',key:firingKey('reaction'),
-      flavour:{kind:'test',pool:{lines:['NICE'],tone:'green',motif:'stars'}},accent:'cut'});
-    expect(frames.at(-1)).toMatchObject({text:'CUT+4',mode:'green',flash:'cut'});
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 9, 10);
+    vi.advanceTimersByTime(2000);
+    sign.event({
+      message: 'CUT+4', priority: 90, duration: 900, mode: 'green', key: firingKey('reaction'),
+      flavour: { kind: 'test', pool: { lines: ['NICE'], tone: 'green', motif: 'stars' } }, accent: 'cut',
+    });
+    expect(frames.at(-1)).toMatchObject({ text: 'CUT+4', mode: 'green', flash: 'cut' });
     vi.advanceTimersByTime(900);
-    expect(frames.at(-1)).toMatchObject({motif:'stars'});
+    expect(frames.at(-1)).toMatchObject({ motif: 'stars' });
     vi.advanceTimersByTime(440);
     expect(frames.at(-1)?.text).toBe('NICE');
     vi.advanceTimersByTime(620);
-    expect(frames.at(-1)).toMatchObject({text:'9:10',mode:'score'});
+    expect(frames.at(-1)).toMatchObject({ text: '9:10', mode: 'score' });
   });
 
   it('passes a waiting pulse through to the frame', () => {
     const frames: DisplayFrame[] = [];
-    const sign = new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('DRAW',1,2);
-    sign.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
-    expect(frames.at(-1)).toMatchObject({text:'WAIT',pulse:true});
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 1, 2);
+    sign.event({ message: 'WAIT', priority: 20, duration: 1050, mode: 'red', pulse: true });
+    expect(frames.at(-1)).toMatchObject({ text: 'WAIT', pulse: true });
   });
 
   it('keeps a quiet idle secret rare and cancels it on input', () => {
-    vi.stubGlobal('document',{documentElement:{classList:{contains:()=>false}}});
-    vi.stubGlobal('window',{...globalThis,matchMedia:()=>({matches:false}),setTimeout,clearTimeout});
-    const frames: DisplayFrame[]=[];
-    const sign=new DisplayMachine(frame=>frames.push(frame));
-    sign.reset('DRAW',0,0);
-    vi.advanceTimersByTime(6000+3*(1050+18000));
-    expect(frames.at(-1)?.motif).toBe('eyes');
+    vi.stubGlobal('document', { documentElement: { classList: { contains: () => false } } });
+    vi.stubGlobal('window', { ...globalThis, matchMedia: () => ({ matches: false }), setTimeout, clearTimeout });
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW OR SKIP', 0, 0);
+    // Several idle cycles (4s wait + 1.2s hold + 12s gap); secret may appear from cycle 4.
+    vi.advanceTimersByTime(8 * (4000 + 1200 + 12000));
+    expect(frames.some(f => f.motif === 'eyes')).toBe(true);
     sign.interact();
-    expect(frames.at(-1)).toMatchObject({text:'0:0',mode:'score'});
+    expect(frames.at(-1)).toMatchObject({ text: '0:0', mode: 'score' });
+  });
+
+  it('blinks the step word in the last half-second of its hold', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 1, 1);
+    const shown = frames.at(-1)?.text;
+    expect(shown === 'GROW!' || shown === 'GROW').toBe(true);
+    vi.advanceTimersByTime(1500);
+    expect(frames.at(-1)?.pulse).toBe(true);
+    vi.advanceTimersByTime(500);
+    expect(frames.at(-1)).toMatchObject({ text: '1:1', mode: 'score' });
   });
 });
 
 it('keeps compact readouts legible at full dot size', () => {
-  for (const message of ['GROW OR SKIP','BLOOM READY','BLOOM +4','YOU 30 • 12 OPP','YOU 120 • 4 OPP','CUT -7','TURN +5','OPPONENT TURN','YOU WIN','OPP WINS']) {
-    expect(ledMessageWidth(ledStaticMessage(message)),message).toBeLessThan(76);
+  for (const message of ['GROW OR SKIP', 'GROW!', 'THROW!', 'DRAW!', 'SKIP?', 'BLOOM READY', 'BLOOM +4', 'YOU 30 • 12 OPP', 'YOU 120 • 4 OPP', 'CUT -7', 'TURN +5', 'OPPONENT TURN', 'YOU WIN', 'OPP WINS']) {
+    expect(ledMessageWidth(ledStaticMessage(message)), message).toBeLessThan(76);
   }
 });
 

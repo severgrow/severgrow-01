@@ -26,7 +26,7 @@ try {
     return {pile:pile.toJSON(),card:card.getBoundingClientRect().toJSON(),
       frames:(anim?.effect as KeyframeEffect | undefined)?.getKeyframes(),duration:(anim?.effect as KeyframeEffect | undefined)?.getTiming().duration};
   });
-  assert.equal(draw.duration,330,'draw card travels for the intended short beat');
+  assert.equal(draw.duration,396,'draw card travels for the intended short beat');
   const first = String(draw.frames?.[0]?.translate ?? '');
   assert(first.includes('px') && first !== '0 0','draw starts at the actual pile, not already in hand');
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT' && !(window as any).__severgrow.busy());
@@ -45,7 +45,7 @@ try {
       frames:(anim?.effect as KeyframeEffect | undefined)?.getKeyframes(),duration:(anim?.effect as KeyframeEffect | undefined)?.getTiming().duration};
   },throwAction);
   assert(thrown.sourceGoneOrHidden,'the original card does not double while its copy flies');
-  assert.equal(thrown.duration,330,'throw reaches the pile before the state advances');
+  assert.equal(thrown.duration,396,'throw reaches the pile before the state advances');
   assert.equal((thrown.frames?.[1] as any)?.offset,.52,'throw follows a short arc');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});

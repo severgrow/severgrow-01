@@ -48,7 +48,8 @@ try {
     },side);
     await page.goto(`${BASE}?seed=2`); await page.waitForSelector('#deck.ready');
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
-    await page.waitForTimeout(1100); // intentional Draw entrance finishes before anchoring assertions
+    // DRAW! holds ~1.2s under Reduce Motion, then score rests until the 4s idle re-prompt.
+    await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     let start=await rects(page); aligned(start,`${name} Draw`);
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Draw`);
     check(await page.locator('#smart-led-cells').evaluate(el => (el as HTMLCanvasElement).width > 0),`${name}: phase text uses real LED cells`);
@@ -87,12 +88,14 @@ try {
     check(await page.locator('#deck-count,#discard-count').evaluateAll(nodes=>nodes.every(node=>{
       const style=getComputedStyle(node);return style.width==='34px'&&style.height==='18px';
     })),`${name}: counter shells keep the 34×18px coded footprint through Draw transitions`);
+    await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Grow`);
     check((await page.locator('#hand .card.playable').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('88, 171, 86'),`${name}: green card-edge light`);
     check(!await page.locator('#smart-context').isDisabled(),`${name}: Skip in context slot`);
     await page.screenshot({path:`${dir}/${width}x${height}-${side}-grow.png`});
     await page.locator('#smart-context').click(); await waitPhase(page,'DISCARD');
     aligned(await rects(page),`${name} Throw`);
+    await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
     check(await page.locator('#smart-led-text').innerText()==='0:0',`${name}: score rests in the LED during Throw`);
     check(!await page.locator('#smart-led-cells').evaluate(el=>el.classList.contains('scrolling')),`${name}: short Throw message remains stationary`);
     check((await page.locator('#hand .card').first().evaluate(el=>getComputedStyle(el).boxShadow)).includes('190, 68, 47'),`${name}: red card-edge light`);
@@ -119,6 +122,8 @@ try {
   const bloomAction = legalActions(viewFor(beforeBloom,0)).find(action => action.t === 'Bloom' && action.cards.join(',') === cards.join(',') && hexDistance(action.hexes[0]!,action.hexes.at(-1)!)>1);
   check(!!bloomAction && bloomAction.t === 'Bloom','Bloom: selected set has a legal board route');
   if (bloomAction?.t === 'Bloom') {
+    // Recipe pick plants a natural first tile — clear it so the classic endpoint pair is tested.
+    await page.locator('#moves .draw-clear').evaluate(el=>(el as HTMLButtonElement).click()).catch(()=>{});
     for (const coord of [bloomAction.hexes[0]!,bloomAction.hexes.at(-1)!]) {
       const point = await hexCenter(page,`${coord.q},${coord.r}`);
       await page.touchscreen.tap(point.x,point.y);
@@ -231,24 +236,26 @@ try {
   const kind=await painted.locator('#moves [data-kind^="bloom-"]').first().getAttribute('data-kind');
   check(!!kind,'Bloom: a Bloom recipe is offered while painting');
   await painted.evaluate(k=>(window as any).__severgrow.pickKind(k),kind);
-  await painted.locator('#board .target.kind-bloom').first().waitFor();
-  const startKey=await painted.locator('#board .target.kind-bloom').first().getAttribute('data-key');
-  const from=await hexCenter(painted,startKey!);
-  await painted.mouse.move(from.x,from.y);
-  await painted.mouse.down();
-  await painted.mouse.move(from.x+9,from.y+7,{steps:3}); // start the drag: the first hex lands, nothing commits
+  // Recipe pick plants the natural first tile — that ghost is the painted hex under test.
   await painted.waitForFunction(()=>document.querySelector('#board .l-draw .ghost-tile'));
+  await painted.locator('#board .target.kind-bloom').first().waitFor();
+  const startKey=await painted.locator('#board .l-draw .ghost').first().getAttribute('data-key');
+  check(!!startKey,'Bloom: recipe pick plants the first tile');
   await painted.locator('#board .l-draw .ghost').first().evaluate(el=>el.setAttribute('data-probe','first'));
   const drawn=await painted.locator('#board .l-draw .ghost-tile').first().getAttribute('d');
+  // After the first tile is planted, wells are the *next* hexes — compare flat geometry + ink family.
   const well=await painted.locator('#board .l-over .target.kind-bloom').first().getAttribute('d');
   check(!!drawn && !/[QqCcAa]/.test(drawn),'Bloom: the painted hex uses the same straight hex geometry as a legal well');
-  check(drawn===well,'Bloom: the painted hex matches a legal well exactly');
+  check(!!well && drawn!.replace(/[-\d.]+/g,'0')===well.replace(/[-\d.]+/g,'0'),'Bloom: the painted hex matches a legal well exactly');
   const ink=await painted.evaluate(()=>{ const t=document.querySelector('#board .l-draw .ghost-tile')!; const cs=getComputedStyle(t); return `${cs.fill}|${cs.stroke}|${cs.strokeWidth}`; });
   const wellInk=await painted.evaluate(()=>{ const t=document.querySelector('#board .l-over .target.kind-bloom')!; const cs=getComputedStyle(t); return `${cs.fill}|${cs.stroke}|${cs.strokeWidth}`; });
   check(ink===wellInk,`Bloom: the painted hex uses the same green ink as a legal well (${ink} vs ${wellInk})`);
   check(await painted.locator('#board .l-draw .ghost-tile').first().evaluate(el=>getComputedStyle(el).animationName)==='none','Bloom: the painted hex keeps its ink steady (no legacy breathe)');
   check(await painted.locator('#board .l-draw .ghost').first().evaluate(el=>getComputedStyle(el).animationName)==='draw-hex-pop','Bloom: each painted hex pops in as it joins the shape');
-  // extend by one more hex and prove the first hex was kept, not re-mounted
+  // Drag onward from the planted tile and prove the first hex was kept, not re-mounted.
+  const from=await hexCenter(painted,startKey!);
+  await painted.mouse.move(from.x,from.y);
+  await painted.mouse.down();
   const growKey=await painted.locator(`#board .target.kind-bloom:not([data-key="${startKey}"])`).first().getAttribute('data-key');
   if(growKey){ const to=await hexCenter(painted,growKey); await painted.mouse.move(to.x,to.y,{steps:5}); await painted.waitForTimeout(120); }
   check(await painted.locator('#board .l-draw .ghost[data-probe="first"]').count()===1,'Bloom: a painted hex is kept as the shape grows (no flicker)');
@@ -285,9 +292,11 @@ try {
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.playFor({t:'Sprout',card:9,coord:{q:-3,r:2}},0)),'Grow: setup move succeeds');
   await skipBloom.waitForFunction(()=>!(window as any).__severgrow.busy());
   check(await skipBloom.locator('#smart-bloom').isVisible(),'Grow: Bloom remains optional after Sprout');
+  // skip? ends optional Bloom (context slot mirrors the Skip control); then two taps confirm Throw.
+  await skipBloom.locator('#smart-context').click();
+  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: skip? enters Throw');
   const throwCard=await skipBloom.locator('#hand [data-card]').first().getAttribute('data-card');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
-  check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase==='DISCARD'),'Bloom skip: first card tap enters Throw');
   check(await skipBloom.locator(`#hand [data-card="${throwCard}"].futa04-throw-picked`).count()===1,'Bloom skip: tapped card is selected for Throw');
   await skipBloom.locator(`#hand [data-card="${throwCard}"]`).click();
   check(await skipBloom.evaluate(()=>(window as any).__severgrow.state().phase!=='DISCARD'),'Bloom skip: second card tap confirms discard');

@@ -14,9 +14,9 @@ import { comboFor, drawNext, paintEnter, paintMatch } from './draw.js';
 /** A move under this many pixels stays a tap: the drag never starts. */
 export const DRAG_THRESHOLD_PX = 10;
 /** Upward speed (px/ms) that turns a throw drag into a flick. */
-export const FLICK_SPEED_PX_PER_MS = 0.6;
-/** How close (px) the pointer must come to the throw pile to light it up. */
-export const PILE_GRAB_PX = 48;
+export const FLICK_SPEED_PX_PER_MS = 0.45;
+/** How close (px) the pointer must come to the throw pile / cockpit throw zone. */
+export const PILE_GRAB_PX = 72;
 
 /** The words the cockpit sign may show while a drag is over a matching target. Never FAST. */
 export type DragLedWord = 'DRAW' | 'PLACE' | 'THROW' | 'BLOOM' | 'MEGA';
@@ -54,7 +54,10 @@ export type DragInput = {
   shape: readonly string[];
   /** The pointer's upward speed (px/ms, 0 when it is not moving up). */
   upSpeed: number;
-  /** True when the pointer is in the upper half of the board. */
+  /**
+   * True when a fast upward swipe may commit a flick throw (most of the screen
+   * above the action buttons).
+   */
   upperBoard: boolean;
 };
 

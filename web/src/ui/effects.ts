@@ -47,8 +47,21 @@ export const shakeFrames = (a: number): Keyframe[] => [
   { transform: 'translate(0,0)' },
   { transform: `translate(${-a}px, ${a * 0.4}px)` },
   { transform: `translate(${a * 0.8}px, ${-a * 0.3}px)` },
-  { transform: `translate(${-a * 0.4}px, ${a * 0.2}px)` },
+  { transform: `translate(${-a * 0.55}px, ${a * 0.25}px)` },
+  { transform: `translate(${a * 0.35}px, ${-a * 0.15}px)` },
+  { transform: `translate(${-a * 0.2}px, ${a * 0.1}px)` },
   { transform: 'translate(0,0)' },
+];
+
+/** Heavier, slower board thud for Blast — lowkey but you feel the weight. */
+export const heavyShakeFrames = (a: number): Keyframe[] => [
+  { transform: 'translate(0,0) scale(1)' },
+  { transform: `translate(${-a * 0.9}px, ${a * 0.55}px) scale(1.012)`, offset: 0.12 },
+  { transform: `translate(${a * 0.7}px, ${-a * 0.35}px) scale(0.995)`, offset: 0.32 },
+  { transform: `translate(${-a * 0.45}px, ${a * 0.28}px) scale(1.008)`, offset: 0.52 },
+  { transform: `translate(${a * 0.25}px, ${-a * 0.12}px) scale(1)`, offset: 0.72 },
+  { transform: `translate(${-a * 0.1}px, ${a * 0.06}px)`, offset: 0.88 },
+  { transform: 'translate(0,0) scale(1)' },
 ];
 
 /** Effects bound to the board and the current animation speed / motion settings. */
@@ -73,22 +86,23 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const { x, y } = centerOf(key);
     const r0 = S * (opts.radius ?? 0.5);
     const c = el('circle', { cx: x, cy: y, r: r0, class: `fx-flash${big ? ' big' : ''}${opts.dark ? ' dark' : ''}` }, board.fx);
-    const ms = opts.ms ?? 520 * Math.max(f, 0.3);
-    const alpha = opts.dark ? 0.4 : 0.35;
-    const grow = big ? 3.2 : opts.radius ? Math.max(2.2, opts.radius * 1.7) : 2.2;
+    const ms = opts.ms ?? 624 * Math.max(f, 0.3);
+    const alpha = opts.dark ? 0.42 : 0.38;
+    const grow = big ? 3.4 : opts.radius ? Math.max(2.35, opts.radius * 1.75) : 2.35;
     removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: alpha }, { transform: `scale(${grow})`, opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 60);
   }
 
-  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤35%), `ms` long (≤60ms). */
+  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤38%), short. */
   function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string) {
     if (ms <= 0 || alpha <= 0) return;
     const { x, y } = centerOf(key);
     const other = linkTo ? centerOf(linkTo) : null;
+    const a = Math.min(0.38, alpha * (IS_FUTA04 ? 1.12 : 1));
     const c = IS_FUTA04 && other
       ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
-          fill:'none',stroke:'#fff2d2','stroke-width':2.8,'stroke-linecap':'round' }, board.fx)
-      : el('circle', { cx: x, cy: y, r: S * radius, class: 'fx-cutflash' }, board.fx);
-    removeAfter(anim(c, [{ opacity: alpha }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 40);
+          fill:'none',stroke:'#fff2d2','stroke-width':3.2,'stroke-linecap':'round' }, board.fx)
+      : el('circle', { cx: x, cy: y, r: S * radius * (IS_FUTA04 ? 1.08 : 1), class: 'fx-cutflash' }, board.fx);
+    removeAfter(anim(c, [{ opacity: a }, { opacity: 0 }], { duration: Math.max(ms, IS_FUTA04 ? ms * 1.15 : ms), easing: EASE.out, fill: 'forwards' }), c, ms + 50);
   }
 
   /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
@@ -100,7 +114,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       const a = (i / k) * Math.PI * 2 + i;
       const d = S * (0.7 + (i % 3) * 0.28);
       const p = el('path', { d: star(x, y, 3.4), class: `fx-spark ${who}` }, board.fx);
-      particle(p, anim(p, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }], { duration: 560 * f, delay, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' }), 800);
+      particle(p, anim(p, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) scale(.2)`, opacity: 0 }], { duration: 672 * f, delay, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'both' }), 960);
     }
   }
 
@@ -108,11 +122,12 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   function drift(key: string, delay: number, f: number, n = 1) {
     if (motion() === 0) return;
     const { x, y } = centerOf(key);
-    const k = particles.take(n);
+    const count = IS_FUTA04 ? Math.min(n + 1, 3) : n;
+    const k = particles.take(count);
     for (let i = 0; i < k; i++) {
       const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
-      const c = el('circle', { cx: x, cy: y, r: 1.6, class: 'fx-mote' }, board.fx);
-      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.8 }, { transform: `translate(${dx}px, ${-S * 0.55}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * 60, easing: EASE.out, fill: 'both' }), MOTION.move * f + 200);
+      const c = el('circle', { cx: x, cy: y, r: IS_FUTA04 ? 1.85 : 1.6, class: 'fx-mote' }, board.fx);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * 70, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
     }
   }
 
@@ -185,7 +200,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     const dx = to.left + to.width / 2 - (from.left + from.width / 2);
     const dy = to.top + to.height / 2 - (from.top + from.height / 2);
     const sc = to.height / Math.max(from.height, 1);
-    // Draw/Throw keeps its 330ms beat; the last 80ms sets the card down: it settles to 92% and
+    // Draw/Throw keeps its ~396ms beat; the last stretch sets the card down: it settles to 92% and
     // fades, so the pile reads as "received", not deleted.
     const land = sc * 0.92;
     const frames: Keyframe[] = motion() === 0
@@ -196,7 +211,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .758 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 330 : 440) * f;
+    const duration = (IS_FUTA04 ? 396 : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
@@ -225,8 +240,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     if (motion() === 0 || keys.length === 0) return;
     const g = el('g', { class: 'fx-scar' }, board.fx);
     for (const key of keys) el('path', { d: board.hexPath(key, S - 1.6), class: 'fx-scar-edge' }, g);
-    const ms = 400 * Math.max(f, 0.5);
-    removeAfter(anim(g, [{ opacity: 0.3 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), g, ms + 40);
+    const ms = (IS_FUTA04 ? 480 : 400) * Math.max(f, 0.5);
+    removeAfter(anim(g, [{ opacity: IS_FUTA04 ? 0.38 : 0.3 }, { opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), g, ms + 40);
   };
   /** Fruit: spore puffs stream from each given-up tile to the target. */
   const stream = (from: readonly string[], to: string, f: number, n: number) => {

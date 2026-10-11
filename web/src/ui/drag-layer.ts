@@ -20,6 +20,8 @@ export type DragLayerHooks = {
   pointOf: (key: string) => { x: number; y: number } | null;
   overDiscardPile: (clientX: number, clientY: number) => boolean;
   upperBoard: (clientY: number) => boolean;
+  /** Optional: mark the cockpit shell while a throw drop would commit. */
+  setThrowZone?: (on: boolean) => void;
   /** Plays a legal action the same way the tap path would. */
   commit: (action: Action) => void;
   /** No group chosen: open the existing Bloom choices for this card. */
@@ -50,27 +52,42 @@ const DRAG_CSS = `
 .drag-ghost {
   position: fixed; left: 0; top: 0; margin: 0; padding: 0; z-index: 90;
   pointer-events: none; touch-action: none; will-change: transform;
-  transform-origin: 50% 55%; opacity: .96;
+  transform-origin: 50% 80%; opacity: .96;
   box-shadow: 0 10px 22px rgba(0,0,0,.42);
+  transition: width 180ms cubic-bezier(.2,.8,.3,1), height 180ms cubic-bezier(.2,.8,.3,1),
+    border-radius 180ms cubic-bezier(.2,.8,.3,1), box-shadow 160ms ease-out;
 }
+.drag-ghost.drag-mini {
+  border-radius: 4px;
+  box-shadow: 0 8px 18px rgba(0,0,0,.4);
+}
+.drag-ghost.drag-mini .c-num { font-size: 13px !important; }
+.drag-ghost.drag-mini .c-suit svg { width: 13px !important; height: 13px !important; }
+.drag-ghost.drag-mini .futa04-card-art { border-radius: 3px; }
 .drag-source-dim { opacity: .45 !important; }
 /* The source keeps its dim through a re-render: the attribute is not touched by renderHand. */
 #hand .card[data-drag-dim], #deck[data-drag-dim], #discard[data-drag-dim] { opacity: .45 !important; }
-/* The four visible states: opacity, a 1px ring and the LED word. No new colours. */
-.drag-ghost.drag-legal { opacity: 1; box-shadow: 0 10px 22px rgba(0,0,0,.42), 0 0 0 1px currentColor; }
+/* Legal / pile / flick: soft lift, no white frame on the discard pile. */
+.drag-ghost.drag-legal { opacity: 1; box-shadow: 0 12px 24px rgba(0,0,0,.45); }
 .drag-ghost.drag-illegal { opacity: .6; }
-.drag-ghost.drag-pile { opacity: 1; box-shadow: 0 10px 22px rgba(0,0,0,.42), 0 0 0 1px currentColor; }
-.drag-ghost.drag-flick { opacity: .92; box-shadow: 0 10px 22px rgba(0,0,0,.42), 0 0 0 1px currentColor; }
-/* A faint downward chevron (draw/place/pile) or upward chevron (flick): direction only. */
+.drag-ghost.drag-pile { opacity: 1; box-shadow: 0 12px 26px rgba(0,0,0,.48); }
+.drag-ghost.drag-flick { opacity: .94; box-shadow: 0 14px 28px rgba(0,0,0,.5); }
+/* Chevron sits just above the finger / touch area so a thumb does not cover it. */
 .drag-ghost .drag-chevron {
-  position: absolute; left: 50%; bottom: -13px; width: 12px; height: 10px;
+  position: absolute; left: 50%; top: -14px; width: 12px; height: 10px;
   transform: translateX(-50%); opacity: .55; pointer-events: none;
-  background: currentColor; clip-path: polygon(0 0,100% 0,50% 100%);
+  background: currentColor; clip-path: polygon(50% 0,100% 100%,0 100%);
 }
-.drag-ghost.drag-flick .drag-chevron { top: -13px; bottom: auto; clip-path: polygon(50% 0,100% 100%,0 100%); opacity: .8; }
+.drag-ghost.drag-flick .drag-chevron { opacity: .85; }
 .drag-ghost.drag-legal .drag-chevron, .drag-ghost.drag-pile .drag-chevron { opacity: .9; }
-/* The pile a draw or throw is aimed at catches a 1px ring (existing currentColor only). */
-#deck.drag-target, #discard.drag-target { outline: 1px solid currentColor; outline-offset: 2px; }
+/* Soft amber wash on the aimed pile — never a white outline rectangle. */
+#deck.drag-target .pile-card, #discard.drag-target .pile-card {
+  filter: brightness(1.08);
+  box-shadow: 0 0 0 1px rgba(232,186,120,.55), 0 0 14px rgba(210,150,70,.28) !important;
+}
+#futa04-box.drag-throw-zone {
+  box-shadow: inset 0 0 0 1px rgba(232,186,120,.22);
+}
 `;
 
 type Active = {
@@ -154,15 +171,35 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     const h = Math.max(8, r.height);
     g.style.width = `${w}px`;
     g.style.height = `${h}px`;
+    g.dataset.fullW = String(w);
+    g.dataset.fullH = String(h);
     const chev = document.createElement('span');
     chev.className = 'drag-chevron';
     g.append(chev);
     document.body.append(g);
     ghost = g;
+    // Sit just above the finger so the thumb does not bury the card or chevron.
     gx = tx = a.x - w / 2;
-    gy = ty = a.y - h * 0.8;
+    gy = ty = a.y - h * 0.92;
     a.sourceEl.classList.add('drag-source-dim');
     a.sourceEl.setAttribute('data-drag-dim', '');
+  };
+
+  /** Mid-drag: shrink toward a bloom-menu mini-card so it stays visible past the thumb. */
+  const morphGhost = (a: Active, overBoard: boolean) => {
+    if (!ghost || a.source.kind !== 'hand') return;
+    const fullW = Number(ghost.dataset.fullW) || 48;
+    const fullH = Number(ghost.dataset.fullH) || 72;
+    const mini = overBoard || a.resolution.mode === 'place' || a.resolution.mode === 'bloom'
+      || a.resolution.mode === 'bloom-open' || a.resolution.mode === 'mega';
+    ghost.classList.toggle('drag-mini', mini);
+    if (mini) {
+      ghost.style.width = '22px';
+      ghost.style.height = '36px';
+    } else {
+      ghost.style.width = `${fullW}px`;
+      ghost.style.height = `${fullH}px`;
+    }
   };
 
   const applyHover = (hover: DragHover) => {
@@ -229,7 +266,8 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     a.resolution = res;
     applyHover(res.hover);
     setLed(a, res.led);
-    // The pile a draw or throw aims at catches a ring.
+    morphGhost(a, !!res.hoverKey || res.mode === 'place' || res.mode === 'bloom' || res.mode === 'bloom-open' || res.mode === 'mega');
+    // Soft pile cue (no white rectangle). Cockpit throw zone gets a quiet wash.
     const pileEl = res.mode === 'draw-deck' ? deckEl
       : res.mode === 'draw-discard' || res.mode === 'discard' || res.mode === 'flick' ? discardEl
       : null;
@@ -238,6 +276,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       pileEl?.classList.add('drag-target');
       a.pileEl = pileEl;
     }
+    hooks.setThrowZone?.(res.hover === 'pile' || res.hover === 'flick');
     // The board's selected cue follows the legal hex under the finger (not the tap selection).
     const hoverKey = res.hover === 'legal' && res.mode !== 'bloom' ? res.hoverKey : null;
     if (hoverKey !== a.hoverKey) {
@@ -250,7 +289,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
       hooks.onShape?.(res.mode === 'bloom' ? res.shape : []);
     }
     if (isLegal && !wasLegal) hooks.onEnterTarget();
-    // The ghost follows the finger, with a small snap toward a legal hex centre.
+    // The ghost follows just above the finger, with a small snap toward a legal hex centre.
     let targetX = a.x;
     let targetY = a.y;
     if (res.hover === 'legal' && res.hoverKey) {
@@ -259,13 +298,13 @@ export function mountDragLayer(hooks: DragLayerHooks) {
         const dx = p.x - a.x;
         const dy = p.y - a.y;
         const len = Math.hypot(dx, dy) || 1;
-        targetX += (dx / len) * 8;
-        targetY += (dy / len) * 8;
+        targetX += (dx / len) * 10;
+        targetY += (dy / len) * 10;
       }
     }
     const r = ghost.getBoundingClientRect();
     tx = targetX - r.width / 2;
-    ty = targetY - r.height * 0.8;
+    ty = targetY - r.height * 0.92;
     if (reduced()) {
       gx = tx;
       gy = ty;
@@ -286,6 +325,7 @@ export function mountDragLayer(hooks: DragLayerHooks) {
     setLed(a, null);
     a.pileEl?.classList.remove('drag-target');
     a.pileEl = null;
+    hooks.setThrowZone?.(false);
     if (a.hoverKey) hooks.onHoverKey?.(null);
     if (a.source.kind === 'hand' && a.started) hooks.onCardFocus?.(null);
     if (!a.started) {

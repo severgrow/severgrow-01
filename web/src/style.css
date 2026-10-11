@@ -2372,10 +2372,10 @@ svg.usable .hex-cell {
    ================================================================= */
 :root {
   /* Step 7: motion tokens (web/src/logic/motion.ts holds the same values) */
-  --dur-tap: 80ms;
-  --dur-quick: 160ms;
-  --dur-move: 280ms;
-  --dur-moment: 600ms;
+  --dur-tap: 96ms;
+  --dur-quick: 192ms;
+  --dur-move: 336ms;
+  --dur-moment: 720ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
   --ease-spring: cubic-bezier(0.2, 0.8, 0.3, 1.1);
   --pill: 999px;

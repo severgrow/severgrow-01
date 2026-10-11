@@ -3,13 +3,13 @@
 // Input is never locked by motion: a tap during an animation jumps it to its end.
 export const MOTION = Object.freeze({
   /** a press: buttons and cards answer at once */
-  tap: 80,
+  tap: 96,
   /** small state changes: a ring, a highlight, a chip */
-  quick: 160,
+  quick: 192,
   /** a tile, a card or a panel moving */
-  move: 280,
+  move: 336,
   /** an earned moment: a Bloom ripple, a big cut, the Strangle finish beats */
-  moment: 600,
+  moment: 720,
 });
 export const EASE = Object.freeze({
   out: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
