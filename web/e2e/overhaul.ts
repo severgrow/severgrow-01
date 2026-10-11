@@ -156,10 +156,20 @@ const clickHighlightedTarget = async (page: Page) => {
   await clickHighlightedTarget(page);
   await page.waitForTimeout(400);
   sizes.push(await rect(page, '#dock'), await rect(page, '#board'));
+  await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy());
   const moved = JSON.stringify(await hook<State>(page, 'state')) !== before;
   const undoOn = await page.locator('#tool-undo').isEnabled();
-  if (undoOn) await page.click('#tool-undo');
-  await page.waitForTimeout(400);
+  // Auto-skip of an empty remaining Grow step adds an EndAct that needs its own Undo.
+  if (undoOn) {
+    for (let u = 0; u < 3; u++) {
+      await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy());
+      if (JSON.stringify(await hook<State>(page, 'state')) === before) break;
+      if (!(await page.locator('#tool-undo').isEnabled())) break;
+      await page.locator('#tool-undo').evaluate((el: HTMLElement) => el.click());
+      await page.waitForTimeout(200);
+    }
+  }
+  await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy());
   const after = JSON.stringify(await hook<State>(page, 'state'));
   check('Undo: lit after a move; afterwards the state equals the state before, exactly', moved && undoOn && after === before, `moved ${moved}, undo lit ${undoOn}, same ${after === before}`);
   check('the dock and the board keep their size and place through a move', sizes.every((r, i) => r === (i % 2 === 0 ? dock0 : board0)), '');

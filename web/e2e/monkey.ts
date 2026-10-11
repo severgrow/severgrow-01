@@ -73,7 +73,8 @@ const run = async (name: string, touch: boolean, seed: number) => {
   });
   await page.goto(BASE);
   await page.click('#menu-new');
-  await page.click('#level-grid [data-level="3"]');
+  // Difficulty tiers replace per-level tiles (Easy covers bot levels 3–4).
+  await page.click('#level-grid [data-difficulty="easy"]');
   const cdp: CDPSession | null = touch ? await page.context().newCDPSession(page) : null;
   const touchAt = async (type: 'touchStart' | 'touchMove' | 'touchEnd', x = 0, y = 0) =>
     cdp!.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });

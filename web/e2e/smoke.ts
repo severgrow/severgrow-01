@@ -15,6 +15,8 @@ import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/i
 import { chooseBloom, clickKind, drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
+import { defaultDifficultyForLevel, difficultyById } from '../src/logic/difficulty.js';
+import type { Level } from '../../src/bots/levels.js';
 
 const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
 const SIZES = { phone: { width: 390, height: 844 }, desktop: { width: 1280, height: 800 } } as const;
@@ -70,10 +72,26 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   return { page, errors };
 };
 
-/** Play → level screen → the given level (default 7): starts a new game. */
-const newGame = async (page: Page, level = 7) => {
+/** On the difficulty screen, pick the tier that contains `level`, seeded so that exact level is chosen. */
+const pickDifficultyLevel = async (page: Page, level: Level) => {
+  const tier = defaultDifficultyForLevel(level);
+  const choices: readonly Level[] = difficultyById(tier)!.levels;
+  const index = choices.indexOf(level);
+  if (index < 0) throw new Error(`level ${level} is not in difficulty ${tier}`);
+  // chooseDifficultyLevel uses seed % choices.length; randomSeed is getRandomValues()[0] % 1e9.
+  await page.evaluate((idx) => {
+    crypto.getRandomValues = ((arr: Uint32Array) => {
+      arr[0] = idx;
+      return arr;
+    }) as typeof crypto.getRandomValues;
+  }, index);
+  await page.click(`#level-grid [data-difficulty="${tier}"]`);
+};
+
+/** Play → difficulty screen → the given bot level (default 7). */
+const newGame = async (page: Page, level: Level = 7) => {
   await page.click('#menu-new');
-  await page.click(`#level-grid [data-level="${level}"]`);
+  await pickDifficultyLevel(page, level);
 };
 
 /** Picks the demo move's card: a line or clump needs its button first (a card tap alone picks Sprout). */
@@ -170,12 +188,12 @@ const playTurn = async (page: Page) => {
     localStorage.removeItem('severgrow.seen');
   });
   await page.reload();
-  check('first visit: the menu suggests the tutorial', await page.locator('#menu-welcome').isVisible());
+  check('first visit: the menu offers Tutorial', await page.locator('#menu-tutorial').isVisible());
   await newGame(page, 3);
   await idle(page);
   const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: number } } }).__severgrow.settings().level);
   const hud = (await page.textContent('#turn')) ?? '';
-  check('the level screen starts a game at the picked level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
+  check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
   {
     // UI overhaul: the hint line is always in the dock; the ? opens How to play
     const hintText = ((await page.textContent('#hint')) ?? '').trim();
@@ -577,20 +595,21 @@ const oldWords = (page: Page) => bannedWords(page, '\\b(?:clumps?|hyphae?|grow a
   };
   const { page, errors } = await openPage('soil', 'phone', { speed: 'fast' });
   await scan(page, 'menu');
-  await page.click('#menu-howto');
-  await page.waitForTimeout(200);
-  await scan(page, 'how to play');
-  await page.keyboard.press('Escape');
-  await page.locator('#sheet-howto [data-close]').click().catch(() => {});
   await page.click('#menu-settings');
   await page.waitForTimeout(200);
   await scan(page, 'settings');
   await page.locator('#sheet-settings [data-close]').click().catch(() => {});
   await page.click('#menu-new');
   await page.waitForTimeout(200);
-  await scan(page, 'level picker');
-  await page.click('#level-grid [data-level="7"]');
+  await scan(page, 'difficulty picker');
+  await pickDifficultyLevel(page, 7);
   await idle(page);
+  await page.click('#hud-menu');
+  await page.click('#gm-howto');
+  await page.waitForTimeout(200);
+  await scan(page, 'how to play');
+  await page.locator('#sheet-howto [data-close]').click().catch(() => {});
+  await page.locator('#sheet-menu [data-close], #gm-resume').first().click().catch(() => {});
   await scan(page, 'draw step');
   await page.click('#deck');
   await idle(page);
