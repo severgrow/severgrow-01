@@ -17,18 +17,21 @@ try {
   });
   await page.goto('http://localhost:4201/?seed=219682080');
   const click = (selector: string) => page.locator(selector).evaluate((element: Element) => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-  const idle = () => page.waitForFunction(() => {
-    const game = (window as any).__severgrow;
-    return game?.state()?.actor === 0 && !game.busy();
-  });
   await click('#menu-new');
   await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
+  // The boot game (?seed=...) and the new game overlap: wait for the fresh match to become the
+  // current one (its seed differs) before touching it, or a stray click can land on the old one.
+  const beforeNew = await page.evaluate(() => (window as any).__severgrow.state()?.seed ?? null);
   await click('#level-grid [data-difficulty="beginner"]');
-  await idle();
+  await page.waitForFunction((prev: number | null) => {
+    const game = (window as any).__severgrow;
+    const lottery = document.getElementById('starter-lottery');
+    return !!game?.state() && game.state().seed !== prev && game.state().actor === 0 && !game.busy() && !!lottery?.hidden;
+  }, beforeNew, { timeout: 20000 });
   // DOM click exercises the real handler without Playwright waiting for the
   // deliberately pulsing deck/card to stop moving.
   await click('#deck');
-  await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'ACT' && !(window as any).__severgrow.busy());
+  await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'ACT' && !(window as any).__severgrow.busy(), undefined, { timeout: 15000 });
   const grown = await page.evaluate(() => (window as any).__severgrow.state() as State);
   const action = legalActions(viewFor(grown, 0)).find(a => a.t === 'Sprout');
   assert(action?.t === 'Sprout');
