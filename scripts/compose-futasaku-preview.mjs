@@ -23,10 +23,13 @@ if (testDist && existsSync(testDist)) addRoute('futa-test', testDist, 'Futasaku-
 const workerPath = join(site, 'sw.js');
 const worker = readFileSync(workerPath, 'utf8');
 const prior = '/\\/test2?(\\/|$)/';
-const already = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
+const already = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test)(\\/|$)/';
+const withTest = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
 const fromPreview = '/\\/(?:test2?|futa0[.]4)(\\/|$)/';
 if (worker.includes(already)) {
   // nothing to do
+} else if (worker.includes(withTest)) {
+  writeFileSync(workerPath, worker.replace(withTest, already));
 } else if (worker.includes(fromPreview)) {
   writeFileSync(workerPath, worker.replace(fromPreview, already));
 } else {

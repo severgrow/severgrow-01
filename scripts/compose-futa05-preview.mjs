@@ -13,11 +13,23 @@ cpSync(dist, join(site, route), { recursive: true });
 writeFileSync(join(site, route, 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit }, null, 2) + '\n');
 assert(readFileSync(join(site, route, 'index.html'), 'utf8').includes('./assets/'), `${route} must use relative asset paths`);
 
+// Main's root-scope worker must not cache /futa0.5/ as Main's offline index.
 const workerPath = join(site, 'sw.js');
 if (existsSync(workerPath)) {
   const worker = readFileSync(workerPath, 'utf8');
-  if (!worker.includes('futa0.5') && !worker.includes('futa0[.]5')) {
-    console.warn('Note: Main sw.js may need a /futa0.5/ path exclusion so Main does not cache the preview.');
+  const with05 = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test)(\\/|$)/';
+  const withTest = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
+  const fromPreview = '/\\/(?:test2?|futa0[.]4)(\\/|$)/';
+  const prior = '/\\/test2?(\\/|$)/';
+  if (worker.includes(with05) || worker.includes('futa0[.]5') || worker.includes('futa0.5')) {
+    // already excluded
+  } else if (worker.includes(withTest)) {
+    writeFileSync(workerPath, worker.replace(withTest, with05));
+  } else if (worker.includes(fromPreview)) {
+    writeFileSync(workerPath, worker.replace(fromPreview, with05));
+  } else {
+    assert(worker.includes(prior), 'Review changed Main worker before publication');
+    writeFileSync(workerPath, worker.replace(prior, with05));
   }
 }
 
