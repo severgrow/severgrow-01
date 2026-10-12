@@ -121,6 +121,13 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     const tW = fitTile(base);
     const cx = base.x + base.w / 2;
     const cy = base.y + base.h / 2;
+    // The desktop tutorial must show both homes and their focus halos at once.
+    // Ordinary matches keep the normal network-following camera.
+    if (document.documentElement.classList.contains('futa04-tutorial') &&
+      document.documentElement.dataset.layout === 'side') {
+      const tile = Math.min(tW * 0.96, maxT);
+      return { rect: viewAt(cx, cy, tile), tile, whole: true };
+    }
     if (wholeOn) return { rect: viewAt(cx, cy, Math.min(tW, maxT)), tile: Math.min(tW, maxT), whole: true };
     if (tW >= minT - 0.01) return { rect: viewAt(cx, cy, Math.min(tW, maxT)), tile: Math.min(tW, maxT), whole: true };
     const pts = input.tiles;

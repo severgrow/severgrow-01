@@ -37,6 +37,8 @@ try {
   await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
   // Glass CTAs must not be blocked by the full-width HUD strip above them.
   await page.locator('#futasaku-glass [data-tut="next"]').click({force:false});
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'EACH TURN');
+  await page.locator('#futasaku-glass [data-tut="next"]').click();
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW PILE');
   const opening=await state();
@@ -64,6 +66,14 @@ try {
     for(let index=1;index<steps.length;index++) {
       const lesson=tutorialLesson(1,index)!;
       if(lesson.action==='Opponent') break;
+      if(lesson.autoDiscard) {
+        await page.waitForFunction(expected=>(window as any).__severgrow.tutorial()?.step>expected,index,{timeout:15000});
+        continue;
+      }
+      if(lesson.action==='Next') {
+        await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
+        continue;
+      }
       await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
       const before=await state();
       const action=legalActions(viewFor(before,0)).find(candidate=>tutorialAccepts(lesson,candidate,before));
@@ -75,12 +85,16 @@ try {
   }
   for(let chapter=2;chapter<TUTORIAL_CHAPTER_COUNT-1;chapter++) {
     await page.goto(`${base}?tutorial=1&chapter=${chapter+1}`);
-    await page.waitForFunction(()=>!!(window as any).__severgrow.tutorialGate?.()?.active,undefined,{timeout:20000});
+    await page.waitForFunction(()=>!!(window as any).__severgrow?.tutorialGate?.()?.active,undefined,{timeout:20000});
     await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
     const steps=tutorialLessons(chapter);
     for(let index=0;index<steps.length;index++) {
       const lesson=tutorialLesson(chapter,index)!;
       if(lesson.action==='Opponent') break;
+      if(lesson.autoDiscard) {
+        await page.waitForFunction(expected=>(window as any).__severgrow.tutorial()?.step>expected,index,{timeout:15000});
+        continue;
+      }
       if(lesson.action==='Next') {
         await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
         await page.waitForTimeout(200);
@@ -99,11 +113,11 @@ try {
   }
   await page.goto(`${base}?tutorial=1&chapter=13`);
   // The free chapter opens with a recap explainer; step through it to the unguided turn.
-  await page.waitForFunction(()=>!!(window as any).__severgrow.tutorialGate?.()?.active,undefined,{timeout:20000});
+  await page.waitForFunction(()=>!!(window as any).__severgrow?.tutorialGate?.()?.active,undefined,{timeout:20000});
   await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51010,undefined,{timeout:10000});
   for(let guard=0;guard<5;guard++) {
-    // The recap explainer arms its NEXT after a short delay; wait for it, then step on.
+    // The recap explainer offers NEXT immediately; step into free play.
     const next = page.locator('#futasaku-glass [data-tut="next"]');
     const shown = await next.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false);
     if(!shown) break;

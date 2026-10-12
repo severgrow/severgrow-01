@@ -34,8 +34,6 @@ export type TutorialFocusOptions = {
   turnIcons?: boolean;
   /** Stable step id — skip fade/jump when only the CTA changes. */
   stepKey?: string;
-  /** Soft mid-screen set + run card examples (bloom explain). */
-  bloomDemo?: boolean;
 };
 
 const CSS = `
@@ -86,12 +84,11 @@ html.futa04-tutorial:not([data-layout='side']) .play {
 html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
-/* One head row: PREVIOUS | title | NEXT/TAP — three equal columns.
-   Side buttons match the LED title height exactly (not taller). */
+/* One head row: PREVIOUS | title | NEXT/TAP, with full-size touch targets. */
 #futasaku-glass[data-mode='tutorial'] {
-  --glass-head-h: 34px;
+  --glass-head-h: 44px;
 }
-.large-text #futasaku-glass[data-mode='tutorial'] { --glass-head-h: 38px; }
+.large-text #futasaku-glass[data-mode='tutorial'] { --glass-head-h: 48px; }
 #futasaku-glass[data-mode='tutorial'] .glass-head {
   display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr);
   align-items:stretch; gap:6px; width:100%; pointer-events:none;
@@ -254,82 +251,7 @@ html.futa04-tutorial .sheet { z-index: 51; }
   #tutorial-focus .focus-glow, #tutorial-focus .focus-pointer,
   #tutorial-focus .focus-lift, #tutorial-focus.nudge .focus-glow-soft { animation:none !important; }
 }
-/* Bloom explain: soft mid-screen set + run faces (no hard frame — float only). */
-#tutorial-bloom-demo {
-  position:fixed; inset:0; z-index:36; pointer-events:none; display:flex; align-items:center; justify-content:center;
-  padding:max(96px, 14vh) 16px 24px; box-sizing:border-box;
-  opacity:0; transition:opacity 280ms ease;
-}
-#tutorial-bloom-demo[hidden] { display:none; }
-#tutorial-bloom-demo[data-on='1'] { opacity:1; }
-#tutorial-bloom-demo .tutorial-bloom-stage {
-  display:flex; flex-direction:column; gap:22px; align-items:stretch;
-  width:min(340px, calc(100vw - 32px)); padding:8px 4px;
-  border:0; border-radius:0; background:transparent;
-  box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none;
-}
-#tutorial-bloom-demo .tutorial-bloom-group { display:flex; flex-direction:column; gap:8px; align-items:center; }
-/* Same face as tutorial glass why-copy (not a mismatched display face). */
-#tutorial-bloom-demo .tutorial-bloom-tag {
-  margin:0; font:400 13.5px/1.5 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  letter-spacing:.012em; text-transform:none; color:rgba(240,233,220,.78);
-  text-shadow:0 1px 5px rgba(0,0,0,.55);
-}
-#tutorial-bloom-demo .tutorial-bloom-row {
-  display:flex; align-items:flex-end; justify-content:center; gap:8px;
-}
-#tutorial-bloom-demo .tutorial-bloom-card {
-  --cw: clamp(44px, 12vw, 56px); --ch: calc(var(--cw) * 1.42);
-  width:var(--cw); height:var(--ch); flex:none;
-  transform:translateY(10px) scale(.94); opacity:0;
-  box-shadow:0 6px 16px rgba(0,0,0,.38);
-}
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card {
-  animation:tutorial-bloom-card-in 420ms cubic-bezier(.22,.72,.24,1) forwards;
-}
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(1) { animation-delay:40ms; }
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(2) { animation-delay:110ms; }
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(3) { animation-delay:180ms; }
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(1) { animation-delay:260ms; }
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(2) { animation-delay:330ms; }
-#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(3) { animation-delay:400ms; }
-@keyframes tutorial-bloom-card-in {
-  from { opacity:0; transform:translateY(18px) scale(.9); }
-  to { opacity:1; transform:translateY(0) scale(1); }
-}
-.reduce-motion #tutorial-bloom-demo,
-.reduce-motion #tutorial-bloom-demo .tutorial-bloom-card { transition:none; animation:none !important; }
-.reduce-motion #tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card { opacity:1; transform:none; }
-@media (prefers-reduced-motion:reduce) {
-  #tutorial-bloom-demo, #tutorial-bloom-demo .tutorial-bloom-card { transition:none; animation:none !important; }
-  #tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card { opacity:1; transform:none; }
-}
 `;
-
-/** Authored demo faces for bloom explain — set (3s) and run (4-5-6). Labels stay BLOOM. */
-const BLOOM_DEMO_SET: readonly Card[] = Object.freeze([
-  { id: -101, suit: 0, rank: 3 },
-  { id: -102, suit: 1, rank: 3 },
-  { id: -103, suit: 2, rank: 3 },
-]);
-const BLOOM_DEMO_RUN: readonly Card[] = Object.freeze([
-  { id: -111, suit: 0, rank: 4 },
-  { id: -112, suit: 0, rank: 5 },
-  { id: -113, suit: 0, rank: 6 },
-]);
-
-const bloomDemoRowHtml = (cards: readonly Card[]) =>
-  cards.map(card =>
-    `<span class="tutorial-bloom-card card ${suitClass(card)}" aria-hidden="true">${cardFace(card)}</span>`,
-  ).join('');
-
-const bloomDemoHtml = () =>
-  `<div class="tutorial-bloom-stage" aria-hidden="true">`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Set — same number, different suits</span>`
-  + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Run — consecutive, one suit</span>`
-  + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
-  + `</div>`;
 
 const rectOf = (element: Element) => element.getBoundingClientRect();
 const safe = (text: string) => text.replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
@@ -447,6 +369,9 @@ const menuCutoutHole = (): string => {
  */
 const focusMeasureEl = (el: Element): Element => {
   if (el.id === 'deck' || el.id === 'discard') return el.querySelector('.pile-card') ?? el;
+  // Terrain art may spill beyond the hex. Focus the gameplay footprint instead
+  // of letting a rock or plant enlarge the teaching cutout into its neighbours.
+  if (el.classList.contains('hex-cell')) return el.querySelector(':scope > path.hex') ?? el;
   return el;
 };
 
@@ -490,13 +415,9 @@ export const mountGlassSurface = (onClose: () => void) => {
   panel.setAttribute('aria-label', 'Match details');
   const focus = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); focus.id = 'tutorial-focus'; focus.setAttribute('hidden', '');
   focus.setAttribute('aria-hidden', 'true');
-  const bloomDemo = document.createElement('div');
-  bloomDemo.id = 'tutorial-bloom-demo';
-  bloomDemo.hidden = true;
-  bloomDemo.setAttribute('aria-hidden', 'true');
-  // Inside #game.screen so HUD z-index can sit above glass (body-level glass beat the whole screen).
+  // Inside #game.screen so HUD z-index can sit above glass.
   const host = document.getElementById('game') ?? document.body;
-  host.append(focus, bloomDemo, panel);
+  host.append(focus, panel);
   const dock = document.getElementById('dock')!;
   let targetSelector = '';
   let targetShape: FocusShape = 'pill';
@@ -538,22 +459,6 @@ export const mountGlassSurface = (onClose: () => void) => {
         if (focus.dataset.on === '0') focus.setAttribute('hidden', '');
       }, 130);
     }
-  };
-
-  const setBloomDemo = (show: boolean) => {
-    if (!show) {
-      bloomDemo.dataset.on = '0';
-      bloomDemo.hidden = true;
-      bloomDemo.replaceChildren();
-      return;
-    }
-    // Keep the pull-in when only the glass CTA refreshes on the same step.
-    if (!bloomDemo.hidden && bloomDemo.dataset.on === '1' && bloomDemo.firstChild) return;
-    bloomDemo.innerHTML = bloomDemoHtml();
-    bloomDemo.hidden = false;
-    bloomDemo.dataset.on = '0';
-    void bloomDemo.offsetWidth;
-    bloomDemo.dataset.on = '1';
   };
 
   const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
@@ -616,10 +521,15 @@ export const mountGlassSurface = (onClose: () => void) => {
         return;
       }
     }
-    // Phone / stack: flush under the notch (safe-area only), reserve map space below the card.
+    // Phone / stack: the menu and logo own the top chrome, including the
+    // Home Screen safe area. Measure their live bounds rather than guessing a
+    // device-specific notch offset.
     const sidePad = 16 + safe.left + safe.right;
     const width = Math.min(420, Math.max(200, innerWidth - sidePad));
-    const top = Math.max(0, Math.round(safe.top));
+    const menu = document.getElementById('hud-menu')?.getBoundingClientRect();
+    const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
+    const chromeBottom = Math.max(menu?.bottom ?? 0, logo?.bottom ?? 0);
+    const top = Math.max(Math.round(safe.top), Math.ceil(chromeBottom + 8));
     panel.style.width = `${width}px`;
     panel.style.maxWidth = `${width}px`;
     panel.style.left = '50%';
@@ -630,7 +540,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   /** Shared chrome→board margin on both ends of the leftover map band. */
-  const TUTORIAL_BAND_GAP = 8;
+  const TUTORIAL_BAND_GAP = 4;
   let lastBandKey = '';
 
   const clearTutorialPads = () => {
@@ -915,7 +825,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const close = () => {
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
     focusScene = null;
-    setBloomDemo(false); clearTutorialReserve();
+    clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
   };
 
@@ -1007,7 +917,6 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
     panel.hidden = false;
     showFocus(true);
-    setBloomDemo(!!options.bloomDemo);
     panel.setAttribute('aria-label', 'Tutorial guidance');
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
@@ -1103,7 +1012,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     hide: () => {
       mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
       focusScene = null;
-      setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
+      clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },
     nudge: () => {
       if (reduceMotion) return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apply, createCards, legalActions, viewFor } from '../../src/engine/index.js';
+import { apply, createCards, legalActions, score, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { matchIntel, openingPublicDiscard, publicDiscardHistory } from '../src/logic/match-intel.js';
 import { Session } from '../src/logic/session.js';
@@ -17,6 +17,26 @@ const intended = (state: State, chapter: number, step: number): Action => {
 };
 
 describe('authored tutorial uses the current engine', () => {
+  it('introduces turn rhythm, impassable rock and double-scoring gold after the first Grow', () => {
+    expect(tutorialLessons(0).map(lesson => lesson.id)).toEqual(['goal-mine', 'goal-theirs', 'goal-turn-rhythm']);
+    const turn = TUTORIAL_CHAPTER_IDS.indexOf('turn');
+    expect(tutorialLessons(turn).slice(0, 5).map(lesson => lesson.id)).toEqual(['draw', 'grow', 'rock', 'gold', 'connection']);
+    const state = tutorialChapter(turn);
+    expect(state.terrain['-2,0']).toBe('rock');
+    expect(state.terrain['0,0']).toBe('rich');
+    expect(legalActions(viewFor(apply(state, { t: 'Draw', from: 'deck' }), 0))
+      .some(action => action.t === 'Sprout' && action.coord.q === -2 && action.coord.r === 0)).toBe(false);
+    const withGold = { ...state, board: { ...state.board, '0,0': { owner: 0 as const, strength: 4 } } };
+    expect(score(withGold, 0) - score(state, 0)).toBe(2);
+  });
+
+  it('keeps only four Throw lessons requiring another player tap', () => {
+    const throws = Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, chapter) => tutorialLessons(chapter))
+      .flat().filter(lesson => lesson.action === 'Discard');
+    expect(throws).toHaveLength(10);
+    expect(throws.filter(lesson => !lesson.autoDiscard).map(lesson => lesson.id))
+      .toEqual(['throw', 'skip-throw', 'discard-throw', 'final-throw']);
+  });
   it('offers a legal action at every guided step without changing card identities', () => {
     expect(TUTORIAL_CHAPTER_COUNT).toBe(13);
     for (let chapter = 0; chapter < TUTORIAL_CHAPTER_COUNT - 1; chapter++) {
