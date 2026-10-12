@@ -29,7 +29,7 @@ try {
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await page.locator('#menu-tutorial').click();
   assert.equal((await state()).seed,51000);
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'HOME');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'YOUR HOME');
   // Dual advance: tapping the highlighted home must work (not only NEXT).
   await page.waitForSelector('#board .hex-cell[data-key="-2,2"]',{timeout:5000});
   await page.locator('#board .hex-cell[data-key="-2,2"]').click({force:true});
@@ -40,7 +40,7 @@ try {
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'EACH TURN');
   await page.locator('#futasaku-glass [data-tut="next"]').click();
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW PILE');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW');
   const opening=await state();
   await page.locator('#discard').evaluate(element=>(element as HTMLElement).click());
   assert.deepEqual(await state(),opening,'an irrelevant early tap leaves the lesson unchanged');
@@ -124,7 +124,7 @@ try {
     await next.click();
     await page.waitForTimeout(300);
   }
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'PLAY','the free chapter reaches its unguided turn');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW','the free chapter reaches its own turn, with a line for each step');
   // The unguided turn: real actions; the turn passing to the opponent completes the tutorial.
   let s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Draw'&&a.from==='deck')!),true);

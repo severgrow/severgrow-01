@@ -10,6 +10,7 @@ import {
   TUTORIAL_CHAPTER_COUNT,
   TUTORIAL_CHAPTER_IDS,
   migrateTutorialProgress,
+  previousTutorialChapter,
   resolveLessonTarget,
   tutorialAccepts,
   tutorialApplyLesson,
@@ -74,7 +75,7 @@ describe('tutorial pro: chapter shape', () => {
       expect(new Set(cards.map(c => c.id)).size).toBe(cards.length);
       for (const [step, lesson] of tutorialLessons(chapter).entries()) {
         if (lesson.action === 'FreeTurn') continue;
-        if (lesson.reseat === 'bloom-run') state = tutorialChapter(chapter, 'bloom-run');
+        if (lesson.reseat) state = tutorialChapter(chapter, lesson.reseat);
         if (lesson.action === 'Opponent' || lesson.action === 'Next') {
           state = tutorialApplyLesson(state, lesson);
           continue;
@@ -198,7 +199,7 @@ describe('tutorial pro: strings', () => {
       TUTORIAL.recap.join(' '),
       ...Object.values(TUTORIAL.praise),
       ...Object.values(TUTORIAL.wrong),
-      ...TUTORIAL.chapters.flatMap(c => c.lessons.flatMap(l => [l.instruction, 'why' in l ? (l.why ?? '') : ''])),
+      ...Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, c) => tutorialLessons(c)).flat().flatMap(l => [l.instruction, l.why ?? '']),
     ].join('\n');
     expect(blob).not.toMatch(/Severor|Severgrow|15 moves|three or four|Three or four/i);
     expect(BLOOM.howto).toMatch(/3 to 6|3–6/);
@@ -242,19 +243,18 @@ describe('tutorial pro: seek / Previous rebuild', () => {
     expect(action?.t).toBe('Sprout');
   });
 
-  it('Previous across the new bloom strategy / free recap lessons stays in range', () => {
+  it('Previous across the bloom lesson and the free recap stays in range', () => {
     const bloom = TUTORIAL_CHAPTER_IDS.indexOf('bloom');
     const free = TUTORIAL_CHAPTER_IDS.indexOf('free');
-    expect(tutorialLessons(bloom).some(l => l.id === 'bloom-strategy')).toBe(true);
     expect(tutorialLessons(free).some(l => l.id === 'free-recap')).toBe(true);
-    const strategyStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-strategy');
     const setStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-set');
-    expect(tutorialStateAt(bloom, strategyStep).phase).toBe('ACT');
+    expect(tutorialStateAt(bloom, 0).phase).toBe('ACT');
     expect(tutorialStateAt(bloom, setStep).phase).toBe('ACT');
-    // Seek to free-recap then Previous into the prior chapter's last lesson.
+    // Seek to free-recap then Previous into the core run's previous chapter (How you win).
     const freeRecap = tutorialLessons(free).findIndex(l => l.id === 'free-recap');
     expect(() => tutorialStateAt(free, freeRecap)).not.toThrow();
-    const prevChapter = free - 1;
+    const prevChapter = previousTutorialChapter(free, 'core')!;
+    expect(prevChapter).toBe(TUTORIAL_CHAPTER_IDS.indexOf('win'));
     const last = tutorialLessons(prevChapter).length - 1;
     expect(() => tutorialStateAt(prevChapter, last)).not.toThrow();
   });
@@ -265,7 +265,7 @@ describe('tutorial pro: card strategy copy', () => {
     const bloom = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('bloom'));
     const free = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('free'));
     const explain = bloom.find(l => l.id === 'bloom-explain')!;
-    const strategy = bloom.find(l => l.id === 'bloom-strategy')!;
+    const power = bloom.find(l => l.id === 'bloom-set-after')!;
     const set = bloom.find(l => l.id === 'bloom-set')!;
     const recap = free.find(l => l.id === 'free-recap')!;
     expect(explain.instruction).toMatch(/^BLOOM$/i);
@@ -274,15 +274,14 @@ describe('tutorial pro: card strategy copy', () => {
     expect(explain.why).toMatch(/consecutive|run/i);
     expect(explain.why).toMatch(/3 to 6|3–6/i);
     expect(explain.why).not.toMatch(/meld/i);
-    expect(strategy.instruction).toMatch(/LOOK FOR/i);
-    expect(strategy.why).toMatch(/8|9/);
-    expect(strategy.why).toMatch(/set/i);
-    expect(strategy.why).toMatch(/run/i);
+    expect(explain.why).toMatch(/run/i);
+    expect(power.why).toMatch(/8|9/);
+    expect(set.why).toMatch(/set/i);
     expect(set.why).toMatch(/same number|different suits/i);
     expect(recap.instruction).toMatch(/REMEMBER/i);
     expect(recap.why).toMatch(/8|9/);
     expect(wordCount(explain.why!)).toBeLessThanOrEqual(18);
-    expect(wordCount(strategy.why!)).toBeLessThanOrEqual(18);
+    expect(wordCount(power.why!)).toBeLessThanOrEqual(18);
     expect(wordCount(recap.why!)).toBeLessThanOrEqual(18);
   });
 });

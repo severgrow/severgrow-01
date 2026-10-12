@@ -1,5 +1,17 @@
 # FUTASAKU tutorial "Pro" overhaul — plan
 
+> **Current structure (tutorial v3, 2026-10).** The 13 chapters are now played in tracks
+> (`TUTORIAL_CORE`, `TUTORIAL_EXTRAS` in `web/src/logic/tutorial-script.ts`):
+> - **Tutorial** (core run, 18 steps): goal → your turn → one Bloom → take over / cut → how you win → a free turn
+>   whose glass keeps one line for each step (Draw → Grow → Throw).
+> - **More lessons**, each played on its own and back to the menu: Strengthen · Bomb & Blast · Throw pile ·
+>   Skip & last round · Buttons. Offered in the menu once the core run or a first game is done, after the first
+>   game, and in How to play.
+> - One word list in all tutorial copy: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
+> - Saves from tutorial v2 restart their chapter (steps were trimmed).
+>
+> The plan below is the earlier overhaul, kept for the record.
+
 Test channel only (`CHANNEL=futa-test`). Branch `futa0.4`. No engine or rule changes. The tutorial only arranges positions and card order; all rules still come from `apply` / `legalActions`.
 
 ## Files read before changing anything

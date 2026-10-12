@@ -326,7 +326,7 @@ const bloomDemoHtml = () =>
   `<div class="tutorial-bloom-stage" aria-hidden="true">`
   + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Set — same number, different suits</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Run — consecutive, one suit</span>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Run — numbers in a row, one suit</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
   + `</div>`;
 

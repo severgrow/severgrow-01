@@ -33,7 +33,8 @@ describe('authored tutorial uses the current engine', () => {
   it('keeps only four Throw lessons requiring another player tap', () => {
     const throws = Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, chapter) => tutorialLessons(chapter))
       .flat().filter(lesson => lesson.action === 'Discard');
-    expect(throws).toHaveLength(10);
+    // one Bloom in the core run now (the examples show the run), so one routine throw fewer
+    expect(throws).toHaveLength(9);
     expect(throws.filter(lesson => !lesson.autoDiscard).map(lesson => lesson.id))
       .toEqual(['throw', 'skip-throw', 'discard-throw', 'final-throw']);
   });

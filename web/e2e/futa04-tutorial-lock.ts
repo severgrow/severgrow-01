@@ -47,7 +47,7 @@ try {
     const page = await browser.newPage({ viewport: VIEWPORTS[1], hasTouch: true, isMobile: true });
     page.on('pageerror', e => errors.push(e.message));
     await openTutorial(page, 2);
-    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /DRAW PILE/i);
+    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /^DRAW$/);
     // Glass Exit is gone — leave via the pause menu.
     assert.equal(await page.locator('#futasaku-glass [data-tut="exit"]').count(), 0, 'glass Exit must be removed');
     const before = await hashState(page);
@@ -82,7 +82,7 @@ try {
     await page.mouse.click(12, 12);
     await page.waitForTimeout(80);
     const copy = await page.locator('#futasaku-glass .glass-copy').textContent() ?? '';
-    assert.match(copy, /DRAW PILE/i);
+    assert.match(copy, /^DRAW$/);
     assert.doesNotMatch(copy, /locked|Not there|Almost|glowing/i);
     await page.screenshot({ path: path.join(SHOT_DIR, 'lock-wrong-tap.png') });
 
