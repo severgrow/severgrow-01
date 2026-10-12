@@ -1,8 +1,9 @@
 # Futasaku 0.5 — backend foundation
 
-Status: **verified against the live Supabase database** (unit + real-HTTP + real-database
-integration). Not yet deployed, and not yet wired into the game UI. See
-[`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) for the evidence.
+Status: **Phase 2 live against Supabase** (deadlines, turn-gated views, batch submit, resign,
+match list, link codes, Postgres rate limits, sweeper). Edge API from Phase 1. Not yet wired into
+the game UI (Phase 3+). See [`ONLINE-PLAN.md`](ONLINE-PLAN.md) and
+[`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
 
 This document says exactly what works, what is unfinished, and what must happen before real
 players are invited. The design follows [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) (the wire
@@ -149,11 +150,15 @@ field appears in a payload, and if any card id the viewer may not know is presen
 ## Database and RLS
 
 `server/migrations/0001_init.sql` creates `players`, `player_tokens`, `matches`,
-`match_participants` and `match_moves`. `matches.state` is the authoritative state (server-only).
-Row Level Security is **enabled on every table with no anon/authenticated policies**, and all table
-privileges are revoked from those roles: only the API server's service role can read. `matches`
-stores the immutable `rules_version`, `seed`, `config` and `starting_player`, so a match is always
-replayed under the rules that created it.
+`match_participants` and `match_moves`. Migration `0002_deadlines_lists.sql` adds turn deadline /
+gated-view columns, `rate_limits`, and `device_link_codes`, plus
+`alter default privileges … revoke` for future tables (P-21). `matches.state` and
+`matches.turn_start_state` are authoritative (server-only). Row Level Security is **enabled on
+every table with no anon/authenticated policies**, and all table privileges are revoked from those
+roles: only the API server's service role can read. Do **not** add these tables to the
+`supabase_realtime` publication — live pings use broadcast channels, not table replication.
+`matches` stores the immutable `rules_version`, `seed`, `config` and `starting_player`, so a match
+is always replayed under the rules that created it.
 
 `revision` on `matches` is the head; each `match_moves` row records the revision it produced, which
 is why the moves table *is* the revision history and the idempotency record.
@@ -201,13 +206,14 @@ Unfinished / next:
    WebSocket on top of the same pipeline.
 3. **No client UI wiring.** `server/src/client.ts` is ready and tested, but the game screen does not
    yet create/join a duel. Solo play is untouched.
-4. **No rate limiting or abuse controls.** Nothing stops rapid guest creation or invite-code
-   guessing; add per-IP/per-token limits and rotate codes.
+4. **Rate limits are in Postgres** (guest/join/actions/link/sweep). Tune the caps in
+   `ServerConfig.rateLimits` before a public invite.
 5. **CORS is `*` by default** for local development. Production must set `CORS_ORIGIN`.
 6. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
 7. **No observability** beyond one line per request (method, path, status, duration). No metrics,
    tracing or alerting; logs never contain bodies or tokens.
-8. **No cleanup jobs** for abandoned guest accounts or waiting matches.
+8. **Sweeper exists** (`POST /v1/sweep` + keep-alive): timeouts, waiting expiry, stale guests.
+   Schedule it every ~5 minutes in production (pg_cron if available, else the keep-alive job).
 9. **Reconnect returns only the view + events**, not a replay of the opponent's last turn visuals.
 
 ## Before inviting real players

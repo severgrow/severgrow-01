@@ -14,15 +14,21 @@ export type ApiErrorCode =
   | 'MATCH_FULL'
   | 'MATCH_FINISHED'
   | 'MATCH_NOT_ACTIVE'
+  | 'MATCH_EXPIRED'
   | 'NOT_A_PARTICIPANT'
   | 'TOO_MANY_MATCHES'
   // concurrency / idempotency
   | 'STALE_REVISION'
   | 'REQUEST_ID_CONFLICT'
   | 'TOO_MANY_MOVES'
-  // rules
+  // rules / clock
   | 'NOT_YOUR_TURN'
   | 'ILLEGAL_ACTION'
+  | 'TIMED_OUT'
+  // abuse / version
+  | 'RATE_LIMITED'
+  | 'CLIENT_TOO_OLD'
+  | 'UNSUPPORTED_RULES'
   // everything else
   | 'INTERNAL';
 
@@ -35,6 +41,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   MATCH_FULL: 409,
   MATCH_FINISHED: 409,
   MATCH_NOT_ACTIVE: 409,
+  MATCH_EXPIRED: 409,
   NOT_A_PARTICIPANT: 403,
   TOO_MANY_MATCHES: 409,
   STALE_REVISION: 409,
@@ -42,6 +49,10 @@ const STATUS: Record<ApiErrorCode, number> = {
   TOO_MANY_MOVES: 409,
   NOT_YOUR_TURN: 409,
   ILLEGAL_ACTION: 422,
+  TIMED_OUT: 409,
+  RATE_LIMITED: 429,
+  CLIENT_TOO_OLD: 426,
+  UNSUPPORTED_RULES: 409,
   INTERNAL: 500,
 };
 

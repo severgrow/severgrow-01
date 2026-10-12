@@ -58,7 +58,7 @@ describe('identity', () => {
     const { service } = makeHarness();
     const { player, token } = await service.createGuest('Guest One');
     expect(player.kind).toBe('guest');
-    expect(player.displayName).toBe('Guest One');
+    expect(player.displayName).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
     expect(token.length).toBeGreaterThan(20);
     const resolved = await service.authenticate(token);
     expect(resolved.id).toBe(player.id);
@@ -287,15 +287,16 @@ describe('submitting actions', () => {
     );
   });
 
-  it('counts only events newer than the requested revision', async () => {
+  it('counts only events newer than the requested revision for the acting seat', async () => {
     const h = await twoPlayers();
+    const first = (await actor(h.service, h.pa, h.pb, h.matchId))!;
     await playOnce(h.service, h.pa, h.pb, h.matchId, 'a');
-    const afterOne = await h.service.viewPayload(h.pa, h.matchId);
+    const afterOne = await h.service.viewPayload(first.player, h.matchId);
     await playOnce(h.service, h.pa, h.pb, h.matchId, 'b');
-    const afterTwo = await h.service.viewPayload(h.pa, h.matchId);
+    const afterTwo = await h.service.viewPayload(first.player, h.matchId);
+    // Actor sees live mid-turn events; opponent stays gated at the last boundary.
     expect(afterTwo.events.length).toBeGreaterThan(afterOne.events.length);
-    // since=1 returns exactly the events of move 2 (moves with revision > 1).
-    const delta = await h.service.viewPayload(h.pa, h.matchId, 1);
+    const delta = await h.service.viewPayload(first.player, h.matchId, 1);
     expect(delta.events).toEqual(afterTwo.events.slice(afterOne.events.length));
     const match = (await h.storage.matchById(h.matchId))!;
     expect(delta.revision).toBe(match.revision);

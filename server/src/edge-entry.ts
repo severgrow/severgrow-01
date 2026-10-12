@@ -5,7 +5,7 @@
 /// <reference path="./edge-deno.d.ts" />
 import postgres from 'postgres';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
-import { PRODUCTION_CORS_ORIGIN } from './config.js';
+import { DEFAULT_SERVER_CONFIG, PRODUCTION_CORS_ORIGIN } from './config.js';
 import type { ServerConfig } from './config.js';
 import { createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
@@ -13,11 +13,8 @@ import { postgresStorage } from './storage/postgres.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 
 const edgeConfig: ServerConfig = {
+  ...DEFAULT_SERVER_CONFIG,
   rulesVersion: CURRENT_RULES_VERSION,
-  maxMovesPerMatch: 10_000,
-  inviteCodeLength: 8,
-  maxBodyBytes: 64 * 1024,
-  maxOpenMatchesPerPlayer: 10,
   corsOrigin: PRODUCTION_CORS_ORIGIN,
 };
 

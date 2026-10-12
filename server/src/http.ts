@@ -2,7 +2,7 @@
 // Logging records only the method, path, status and duration. Request bodies (which carry
 // bearer tokens and actions) are never logged.
 import { createServer } from 'node:http';
-import type { IncomingMessage, Server, ServerResponse } from 'node:http';
+import type { IncomingMessage, Server } from 'node:http';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import type { ServerConfig } from './config.js';
 import { createFetchApp } from './fetch-app.js';

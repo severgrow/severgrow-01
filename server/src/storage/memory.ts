@@ -3,20 +3,54 @@
 // checks and the writes), so in Node's single-threaded model it is atomic, exactly like the
 // row lock the Postgres adapter takes.
 import type { Player } from '../../../src/engine/index.js';
+import { scores } from '../../../src/engine/index.js';
+import type { OnlineGameResult } from '../protocol.js';
 import type {
+  CommitBatchInput,
   CommitInput,
   CommitResult,
+  DeviceLinkCode,
   Fail,
+  MatchListRow,
   MatchRecord,
   MoveRecord,
   Participant,
   PlayerRecord,
   Storage,
+  SweepResult,
   TokenRecord,
 } from './types.js';
 
 /** Every read and write crosses a copy boundary, so callers can never mutate stored state. */
 const copy = <T>(value: T): T => structuredClone(value);
+
+const timeoutResult = (match: MatchRecord): OnlineGameResult => {
+  const actor = match.state.actor;
+  const winner: Player = actor === 0 ? 1 : 0;
+  return { winner, reason: 'timeout', scores: scores(match.state) };
+};
+
+const finishTimeout = (match: MatchRecord, now: number): MatchRecord => ({
+  ...match,
+  status: 'finished',
+  result: timeoutResult(match),
+  turnDeadlineAt: null,
+  expiresAt: null,
+  turnStartState: copy(match.state),
+  turnStartRevision: match.revision,
+  updatedAt: now,
+  finishedAt: now,
+});
+
+const finishExpiredWaiting = (match: MatchRecord, now: number): MatchRecord => ({
+  ...match,
+  status: 'finished',
+  result: null,
+  turnDeadlineAt: null,
+  expiresAt: null,
+  updatedAt: now,
+  finishedAt: now,
+});
 
 export class MemoryStorage implements Storage {
   private readonly players = new Map<string, PlayerRecord>();
@@ -25,6 +59,8 @@ export class MemoryStorage implements Storage {
   private readonly inviteIndex = new Map<string, string>();
   private readonly participants = new Map<string, Participant[]>();
   private readonly moves = new Map<string, MoveRecord[]>();
+  private readonly rateLimits = new Map<string, { windowStart: number; count: number }>();
+  private readonly linkCodes = new Map<string, DeviceLinkCode>();
 
   // ---- players and tokens ----
 
@@ -84,6 +120,26 @@ export class MemoryStorage implements Storage {
     return out;
   }
 
+  async listMatchesForPlayer(playerId: string): Promise<MatchListRow[]> {
+    const out: MatchListRow[] = [];
+    for (const [matchId, list] of this.participants) {
+      const mine = list.find((p) => p.playerId === playerId);
+      if (!mine) continue;
+      const match = this.matches.get(matchId);
+      if (!match) continue;
+      const opp = list.find((p) => p.playerId !== playerId) ?? null;
+      const oppPlayer = opp ? this.players.get(opp.playerId) : null;
+      out.push({
+        match: copy(match),
+        mySeat: mine.seat,
+        lastSeenAt: mine.lastSeenAt,
+        opponentId: opp?.playerId ?? null,
+        opponentName: oppPlayer?.displayName ?? null,
+      });
+    }
+    return out;
+  }
+
   async addParticipant(participant: Participant): Promise<{ ok: true } | Fail> {
     const list = this.participants.get(participant.matchId) ?? [];
     if (list.some((p) => p.playerId === participant.playerId)) return { ok: false, code: 'ALREADY_JOINED', reason: 'Already in this match.' };
@@ -98,10 +154,20 @@ export class MemoryStorage implements Storage {
     return copy(this.participants.get(matchId) ?? []);
   }
 
-  async activateMatch(matchId: string, now: number): Promise<MatchRecord | null> {
+  async activateMatch(matchId: string, now: number, turnTimeoutMs: number): Promise<MatchRecord | null> {
     const match = this.matches.get(matchId);
     if (!match) return null;
-    const next: MatchRecord = match.status === 'waiting' ? { ...match, status: 'active', updatedAt: now } : match;
+    if (match.status !== 'waiting') return copy(match);
+    const next: MatchRecord = {
+      ...match,
+      status: 'active',
+      updatedAt: now,
+      turnTimeoutMs,
+      turnDeadlineAt: now + turnTimeoutMs,
+      turnStartRevision: match.revision,
+      turnStartState: copy(match.state),
+      expiresAt: null,
+    };
     this.matches.set(matchId, copy(next));
     return copy(next);
   }
@@ -109,6 +175,14 @@ export class MemoryStorage implements Storage {
   async participantOf(matchId: string, playerId: string): Promise<Participant | null> {
     const found = (this.participants.get(matchId) ?? []).find((p) => p.playerId === playerId);
     return found ? copy(found) : null;
+  }
+
+  async touchParticipant(matchId: string, playerId: string, now: number): Promise<void> {
+    const list = this.participants.get(matchId);
+    if (!list) return;
+    const idx = list.findIndex((p) => p.playerId === playerId);
+    if (idx < 0) return;
+    list[idx] = { ...list[idx]!, lastSeenAt: now };
   }
 
   async ping(): Promise<void> {
@@ -119,11 +193,142 @@ export class MemoryStorage implements Storage {
     return copy((this.moves.get(matchId) ?? []).filter((m) => m.revision > sinceRevision));
   }
 
+  async applyExpiry(matchId: string, now: number): Promise<MatchRecord | null> {
+    const match = this.matches.get(matchId);
+    if (!match) return null;
+    const next = this.expiryDecision(match, now);
+    if (next !== match) this.matches.set(matchId, copy(next));
+    return copy(next);
+  }
+
+  private expiryDecision(match: MatchRecord, now: number): MatchRecord {
+    if (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
+      return finishTimeout(match, now);
+    }
+    if (match.status === 'waiting' && match.expiresAt !== null && now > match.expiresAt) {
+      return finishExpiredWaiting(match, now);
+    }
+    return match;
+  }
+
+  async resignMatch(matchId: string, playerId: string, now: number, result: OnlineGameResult): Promise<MatchRecord | null> {
+    const match = this.matches.get(matchId);
+    if (!match) return null;
+    const participants = this.participants.get(matchId) ?? [];
+    if (!participants.some((p) => p.playerId === playerId)) return null;
+    if (match.status === 'finished') return copy(match);
+    const next: MatchRecord = {
+      ...match,
+      status: 'finished',
+      result,
+      turnDeadlineAt: null,
+      expiresAt: null,
+      turnStartState: copy(match.state),
+      turnStartRevision: match.revision,
+      updatedAt: now,
+      finishedAt: now,
+    };
+    this.matches.set(matchId, copy(next));
+    return copy(next);
+  }
+
+  async sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult> {
+    let timedOut = 0;
+    let expiredWaiting = 0;
+    for (const [id, match] of this.matches) {
+      const next = this.expiryDecision(match, now);
+      if (next === match) continue;
+      this.matches.set(id, copy(next));
+      if (match.status === 'active') timedOut += 1;
+      if (match.status === 'waiting') expiredWaiting += 1;
+    }
+    let deletedGuests = 0;
+    for (const [id, player] of [...this.players]) {
+      if (player.kind !== 'guest') continue;
+      if (now - player.createdAt < guestMaxAgeMs) continue;
+      const inMatch = [...this.participants.values()].some((list) => list.some((p) => p.playerId === id));
+      if (inMatch) continue;
+      this.players.delete(id);
+      for (const [hash, token] of [...this.tokensByHash]) {
+        if (token.playerId === id) this.tokensByHash.delete(hash);
+      }
+      deletedGuests += 1;
+    }
+    return { timedOut, expiredWaiting, deletedGuests };
+  }
+
+  async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {
+    const key = `${bucket}@${windowStart}`;
+    const cur = this.rateLimits.get(key) ?? { windowStart, count: 0 };
+    const count = cur.count + 1;
+    this.rateLimits.set(key, { windowStart, count });
+    return { ok: count <= max, count };
+  }
+
+  async createLinkCode(code: DeviceLinkCode): Promise<void> {
+    this.linkCodes.set(code.codeHash, copy(code));
+  }
+
+  async redeemLinkCode(codeHash: string, now: number): Promise<{ playerId: string } | null> {
+    const row = this.linkCodes.get(codeHash);
+    if (!row || row.usedAt !== null || now > row.expiresAt) return null;
+    this.linkCodes.set(codeHash, { ...row, usedAt: now });
+    return { playerId: row.playerId };
+  }
+
   // ---- the atomic commit pipeline (no awaits inside: one synchronous critical section) ----
 
   async commitMove(input: CommitInput): Promise<CommitResult> {
-    const stored = this.matches.get(input.matchId);
+    return this.runCommit({
+      matchId: input.matchId,
+      playerId: input.playerId,
+      expectedRevision: input.expectedRevision,
+      requestId: input.requestId,
+      now: input.now,
+      batch: false,
+      steps: 1,
+      decideAt: (match, seat) => input.decide({ match, seat }),
+    });
+  }
+
+  async commitBatch(input: CommitBatchInput): Promise<CommitResult> {
+    return this.runCommit({
+      matchId: input.matchId,
+      playerId: input.playerId,
+      expectedRevision: input.expectedRevision,
+      requestId: input.requestId,
+      now: input.now,
+      batch: true,
+      steps: input.actions.length,
+      decideAt: (match, seat, index) => input.decideOne({ match, seat, action: input.actions[index]! }),
+    });
+  }
+
+  private runCommit(input: {
+    matchId: string;
+    playerId: string;
+    expectedRevision: number;
+    requestId: string;
+    now: number;
+    batch: boolean;
+    steps: number;
+    decideAt: (match: MatchRecord, seat: Player, index: number) => import('./types.js').Decision;
+  }): CommitResult {
+    let stored = this.matches.get(input.matchId);
     if (!stored) return { ok: false, code: 'MATCH_NOT_FOUND', reason: 'Unknown match.' };
+
+    // ONE expiry decision point inside the lock.
+    stored = this.expiryDecision(stored, input.now);
+    this.matches.set(input.matchId, copy(stored));
+    if (stored.status === 'finished' && stored.result?.reason === 'timeout') {
+      return { ok: false, code: 'TIMED_OUT', reason: 'This turn timed out.' };
+    }
+    if (stored.status === 'finished') {
+      return { ok: false, code: 'MATCH_FINISHED', reason: 'This match is over.' };
+    }
+    if (stored.status === 'waiting') {
+      return { ok: false, code: 'MATCH_NOT_ACTIVE', reason: 'Waiting for an opponent to join.' };
+    }
 
     const participants = this.participants.get(input.matchId) ?? [];
     const participant = participants.find((p) => p.playerId === input.playerId);
@@ -131,43 +336,82 @@ export class MemoryStorage implements Storage {
     const seat: Player = participant.seat;
 
     const log = this.moves.get(input.matchId) ?? [];
-    const prior = log.find((m) => m.requestId === input.requestId);
+    const priorKey = input.batch ? `${input.requestId}#0` : input.requestId;
+    const prior = log.find((m) => m.requestId === priorKey);
     if (prior) {
-      // Idempotent replay: return the recorded outcome, never apply twice.
       if (prior.seat !== seat) return { ok: false, code: 'REQUEST_ID_CONFLICT', reason: 'That request id belongs to another move.' };
-      return { ok: true, replayed: true, match: copy(stored), move: copy(prior) };
+      const batchMoves = input.batch
+        ? log.filter((m) => m.requestId.startsWith(`${input.requestId}#`))
+        : [prior];
+      const last = batchMoves[batchMoves.length - 1]!;
+      return { ok: true, replayed: true, match: copy(stored), move: copy(last), moves: copy(batchMoves) };
+    }
+
+    for (const m of log) {
+      if (m.requestId === input.requestId || m.requestId.startsWith(`${input.requestId}#`)) {
+        if (m.seat !== seat) return { ok: false, code: 'REQUEST_ID_CONFLICT', reason: 'That request id belongs to another move.' };
+      }
     }
 
     if (stored.revision !== input.expectedRevision) {
       return { ok: false, code: 'STALE_REVISION', reason: `Expected revision ${input.expectedRevision}, current is ${stored.revision}.` };
     }
 
-    const decision = input.decide({ match: copy(stored), seat });
-    if (decision.kind === 'reject') return { ok: false, code: decision.code, reason: decision.reason };
+    const applied: MoveRecord[] = [];
+    let current = stored;
 
-    const revision = stored.revision + 1;
-    const move: MoveRecord = {
-      matchId: input.matchId,
-      revision,
-      seat,
-      playerId: input.playerId,
-      action: decision.action,
-      events: decision.events,
-      requestId: input.requestId,
-      createdAt: input.now,
-    };
-    const next: MatchRecord = {
-      ...stored,
-      revision,
-      state: decision.nextState,
-      status: decision.status,
-      result: decision.result,
-      updatedAt: input.now,
-      finishedAt: decision.status === 'finished' ? input.now : stored.finishedAt,
-    };
+    for (let i = 0; i < input.steps; i++) {
+      const decision = input.decideAt(copy(current), seat, i);
+      if (decision.kind === 'reject') return { ok: false, code: decision.code, reason: decision.reason };
 
-    this.matches.set(input.matchId, copy(next));
-    this.moves.set(input.matchId, [...log, copy(move)]);
-    return { ok: true, replayed: false, match: copy(next), move: copy(move) };
+      const revision = current.revision + 1;
+      const requestId = input.batch ? `${input.requestId}#${i}` : input.requestId;
+      const move: MoveRecord = {
+        matchId: input.matchId,
+        revision,
+        seat,
+        playerId: input.playerId,
+        action: decision.action,
+        events: decision.events,
+        requestId,
+        createdAt: input.now,
+      };
+      applied.push(move);
+
+      let turnDeadlineAt = current.turnDeadlineAt;
+      let turnStartRevision = current.turnStartRevision;
+      let turnStartState = current.turnStartState;
+      if (decision.status === 'finished') {
+        turnDeadlineAt = null;
+        turnStartRevision = revision;
+        turnStartState = copy(decision.nextState);
+      } else {
+        if (decision.advanceTurnBoundary) {
+          turnStartRevision = revision;
+          turnStartState = copy(decision.nextState);
+        }
+        if (decision.refreshDeadline) {
+          turnDeadlineAt = input.now + current.turnTimeoutMs;
+        }
+      }
+
+      current = {
+        ...current,
+        revision,
+        state: decision.nextState,
+        status: decision.status,
+        result: decision.result,
+        updatedAt: input.now,
+        finishedAt: decision.status === 'finished' ? input.now : current.finishedAt,
+        turnDeadlineAt,
+        turnStartRevision,
+        turnStartState,
+      };
+    }
+
+    this.matches.set(input.matchId, copy(current));
+    this.moves.set(input.matchId, [...log, ...applied.map(copy)]);
+    const last = applied[applied.length - 1]!;
+    return { ok: true, replayed: false, match: copy(current), move: copy(last), moves: copy(applied) };
   }
 }

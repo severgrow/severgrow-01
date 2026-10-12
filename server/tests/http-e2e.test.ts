@@ -105,21 +105,24 @@ describe('online duel vertical slice (real HTTP)', () => {
     expect(submitted.replayed).toBe(false);
     expect(submitted.player.revision).toBe(1);
 
-    // 6. Both players see the updated revision and the same public event.
+    // 6. Turn-gated: the actor sees the live revision; the opponent stays on the last boundary.
     const afterA = (await a.getState(guestA.token, matchId)).player;
     const afterB = (await b.getState(guestB.token, matchId)).player;
-    expect(afterA.revision).toBe(1);
-    expect(afterB.revision).toBe(1);
-    expect(afterA.events.length).toBeGreaterThan(0);
-    expect(afterB.events.length).toBeGreaterThan(0);
+    const actorSeat = submitted.player.seat;
+    const actorView = actorSeat === 0 ? afterA : afterB;
+    const waitingView = actorSeat === 0 ? afterB : afterA;
+    expect(actorView.revision).toBe(1);
+    expect(waitingView.revision).toBe(0);
+    expect(actorView.events.length).toBeGreaterThan(0);
+    expect(waitingView.events.length).toBe(0);
 
     // 7. Refresh: a brand-new client with the same stored session reconstructs the match.
     const refreshed = clientOn(baseUrl);
     const resumed = await refreshed.resume();
     expect(resumed).not.toBeNull();
     expect(resumed!.player.matchId).toBe(matchId);
-    expect(resumed!.player.revision).toBe(1);
     expect(resumed!.player.seat).toBe(0);
+    expect(resumed!.player.revision).toBe(afterA.revision);
     expect(resumed!.player.view.hand.map((c) => c.id)).toEqual(afterA.view.hand.map((c) => c.id));
 
     // A duplicate submission from the same client is idempotent.

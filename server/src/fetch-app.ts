@@ -44,11 +44,17 @@ const readJson = async (req: Request, maxBytes: number): Promise<unknown> => {
   }
 };
 
+const clientIpOf = (req: Request): string | null => {
+  const fwd = req.headers.get('x-forwarded-for');
+  if (fwd) return fwd.split(',')[0]!.trim();
+  return req.headers.get('x-real-ip');
+};
+
 const corsHeaders = (origin: string): Record<string, string> => {
   const headers: Record<string, string> = {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type',
+    'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
+    'access-control-allow-headers': 'authorization, content-type, x-futasaku-client-version, x-futasaku-rules-version',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   };
@@ -65,6 +71,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
   const handle = async (req: Request, path: string, url: URL): Promise<Outcome> => {
     const method = req.method;
+    service.assertClientVersion(req.headers.get('x-futasaku-client-version'));
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
@@ -82,52 +89,96 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
     }
 
     if (method === 'POST' && path === '/v1/guests') {
+      await readJson(req, config.maxBodyBytes);
+      const created = await service.createGuest(null, clientIpOf(req));
+      return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
+    }
+
+    if (method === 'GET' && path === '/v1/players/me') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return { status: 200, body: { ok: true, player: await service.getMe(player), serverNow: service.serverNow() } };
+    }
+
+    if (method === 'PATCH' && path === '/v1/players/me') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));
-      const displayName = typeof body.displayName === 'string' ? body.displayName : null;
-      const created = await service.createGuest(displayName);
-      return { status: 201, body: { ok: true, ...created } };
+      const renamed = await service.renameMe(player, requireString(body.displayName, 'displayName'));
+      return { status: 200, body: { ok: true, player: renamed, serverNow: service.serverNow() } };
+    }
+
+    if (method === 'GET' && path === '/v1/players/me/matches') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      return {
+        status: 200,
+        body: { ok: true, matches: await service.listMyMatches(player), serverNow: service.serverNow() },
+      };
     }
 
     if (method === 'POST' && path === '/v1/players/me/upgrade') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));
       const upgraded = await service.upgradePlayer(player, requireString(body.displayName, 'displayName'));
-      return { status: 200, body: { ok: true, player: upgraded } };
+      return { status: 200, body: { ok: true, player: upgraded, serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/me/link-code') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      await readJson(req, config.maxBodyBytes);
+      const link = await service.createLinkCode(player);
+      return { status: 201, body: { ok: true, ...link, serverNow: service.serverNow() } };
+    }
+
+    if (method === 'POST' && path === '/v1/players/link') {
+      const body = asRecord(await readJson(req, config.maxBodyBytes));
+      const linked = await service.redeemLinkCode(requireString(body.code, 'code'), clientIpOf(req));
+      return { status: 200, body: { ok: true, ...linked, serverNow: service.serverNow() } };
     }
 
     if (method === 'POST' && path === '/v1/matches') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       await readJson(req, config.maxBodyBytes);
       const created = await service.createMatch(player);
-      return { status: 201, body: { ok: true, ...created } };
+      return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 
     if (method === 'POST' && path === '/v1/matches/join') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       const body = asRecord(await readJson(req, config.maxBodyBytes));
-      const joined = await service.joinMatch(player, requireString(body.inviteCode, 'inviteCode'));
-      return { status: 200, body: { ok: true, ...joined } };
+      const joined = await service.joinMatch(player, requireString(body.inviteCode, 'inviteCode'), clientIpOf(req));
+      return { status: 200, body: { ok: true, ...joined, serverNow: service.serverNow() } };
     }
 
-    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions)?$/.exec(path);
+    if (method === 'POST' && path === '/v1/sweep') {
+      await readJson(req, config.maxBodyBytes);
+      const result = await service.sweep(clientIpOf(req));
+      return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
+    }
+
+    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign)?$/.exec(path);
     if (matchRoute) {
       const matchId = decodeURIComponent(matchRoute[1]!);
       const sub = matchRoute[2] ?? '';
 
       if (method === 'GET' && sub === '') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));
-        return { status: 200, body: { ok: true, match: await service.getMatch(player, matchId) } };
+        return { status: 200, body: { ok: true, match: await service.getMatch(player, matchId), serverNow: service.serverNow() } };
       }
       if (method === 'GET' && sub === '/view') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));
         const since = url.searchParams.has('since') ? requireInteger(url.searchParams.get('since'), 'since') : 0;
-        return { status: 200, body: { ok: true, player: await service.viewPayload(player, matchId, since) } };
+        return {
+          status: 200,
+          body: { ok: true, player: await service.viewPayload(player, matchId, since), serverNow: service.serverNow() },
+        };
       }
       if (method === 'POST' && sub === '/reconnect') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));
         const body = asRecord(await readJson(req, config.maxBodyBytes));
         const since = body.sinceRevision === undefined ? 0 : requireInteger(body.sinceRevision, 'sinceRevision');
-        return { status: 200, body: { ok: true, player: await service.viewPayload(player, matchId, since) } };
+        return {
+          status: 200,
+          body: { ok: true, player: await service.viewPayload(player, matchId, since), serverNow: service.serverNow() },
+        };
       }
       if (method === 'POST' && sub === '/actions') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));
@@ -135,9 +186,17 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
         const submitted = await service.submitAction(player, matchId, {
           expectedRevision: requireInteger(body.expectedRevision, 'expectedRevision'),
           requestId: requireString(body.requestId, 'requestId'),
-          action: body.action as never,
+          ...(Array.isArray(body.actions)
+            ? { actions: body.actions as never }
+            : { action: body.action as never }),
         });
         return { status: 200, body: submitted };
+      }
+      if (method === 'POST' && sub === '/resign') {
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        await readJson(req, config.maxBodyBytes);
+        const resigned = await service.resign(player, matchId);
+        return { status: 200, body: { ok: true, ...resigned, serverNow: service.serverNow() } };
       }
     }
 

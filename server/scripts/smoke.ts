@@ -73,10 +73,13 @@ const main = async (): Promise<void> => {
 
   const after = (await a.getState(guestA.token, matchId)).player;
   const afterB = (await b.getState(guestB.token, matchId)).player;
-  check('both seats see the new revision', after.revision === submitted.player.revision && afterB.revision === submitted.player.revision);
+  const actorAfter = submitted.player.seat === 0 ? after : afterB;
+  const waitingAfter = submitted.player.seat === 0 ? afterB : after;
+  check('the actor sees the new revision', actorAfter.revision === submitted.player.revision);
+  check('the opponent stays gated mid-turn', waitingAfter.revision === acting.payload.revision);
 
   const reconnect = await a.reconnect(guestA.token, matchId, 0);
-  check('reconnect returns the view and the public events', reconnect.player.revision === after.revision && reconnect.player.events.length > 0, `${reconnect.player.events.length} events`);
+  check('reconnect returns the seat-0 gated view', reconnect.player.revision === after.revision, `rev ${reconnect.player.revision}`);
 
   const outsider = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
   const outsiderGuest = await outsider.createGuest();

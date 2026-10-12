@@ -58,6 +58,11 @@ const matchRow = (overrides: PgRow = {}): PgRow => ({
   created_at: '1000',
   updated_at: '2000',
   finished_at: null,
+  turn_deadline_at: null,
+  turn_timeout_ms: '86400000',
+  turn_start_revision: 0,
+  turn_start_state: null,
+  expires_at: null,
   ...overrides,
 });
 
@@ -81,6 +86,8 @@ const applyDecision = (code = 'ok'): Decision =>
         action: { t: 'EndAct' } as Action,
         status: 'active',
         result: null,
+        refreshDeadline: false,
+        advanceTurnBoundary: false,
       }
     : { kind: 'reject', code, reason: `rejected: ${code}` };
 
@@ -125,7 +132,7 @@ describe('postgres storage: commitMove is atomic and idempotent', () => {
     expect(statements.some((s) => s.includes('from match_participants'))).toBe(true);
     expect(statements.some((s) => s.includes('from match_moves where match_id = $1 and request_id = $2'))).toBe(true);
     expect(statements.some((s) => s.startsWith('insert into match_moves'))).toBe(true);
-    expect(statements.some((s) => s.startsWith('update matches set state'))).toBe(true);
+    expect(statements.some((s) => s.includes('update matches set') && s.includes('turn_deadline_at'))).toBe(true);
     expect(statements.at(-1)).toBe('commit');
     expect(statements).not.toContain('rollback');
   });
@@ -226,21 +233,28 @@ describe('postgres storage: write paths', () => {
       createdAt: 1,
       updatedAt: 1,
       finishedAt: null,
+      turnDeadlineAt: null,
+      turnTimeoutMs: 86_400_000,
+      turnStartRevision: 0,
+      turnStartState: null,
+      expiresAt: null,
     };
     expect(await storage.createMatch(record)).toMatchObject({ ok: false, code: 'DUPLICATE_INVITE_CODE' });
   });
 
   it('returns the updated row from activateMatch and falls back to a read', async () => {
     const fake = fakePool();
-    fake.onQuery((text) => (text.startsWith('update matches set status') ? { rows: [matchRow({ status: 'active' })] } : undefined));
+    fake.onQuery((text) =>
+      text.includes("status = 'active'") && text.includes('turn_deadline_at') ? { rows: [matchRow({ status: 'active' })] } : undefined,
+    );
     const storage = postgresStorage(fake.pool);
-    const activated = await storage.activateMatch('m1', 123);
+    const activated = await storage.activateMatch('m1', 123, 60_000);
     expect(activated?.status).toBe('active');
 
     const fake2 = fakePool();
     fake2.script('select * from matches where id', [matchRow({ status: 'active' })]);
     const storage2 = postgresStorage(fake2.pool);
-    expect((await storage2.activateMatch('m1', 123))?.status).toBe('active');
+    expect((await storage2.activateMatch('m1', 123, 60_000))?.status).toBe('active');
   });
 
   it('maps move rows back into records', async () => {

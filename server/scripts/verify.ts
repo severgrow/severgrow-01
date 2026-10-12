@@ -8,7 +8,7 @@
 //
 // Requires DATABASE_URL in the environment or a git-ignored `.env`.
 import { spawn } from 'node:child_process';
-import { databaseUrlFromEnv, redactUrl } from '../src/storage/pg-pool.js';
+import { databaseUrlFromEnv, poolFromUrl, redactUrl } from '../src/storage/pg-pool.js';
 import { startServer } from '../src/index.js';
 import { DuelClient } from '../src/client.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
@@ -70,11 +70,16 @@ const smoke = async (baseUrl: string): Promise<void> => {
   const replay = await acting.client.submitAction(acting.token, matchId, { expectedRevision: acting.payload.revision, requestId: 'verify-move-1', action });
   check('a duplicate request is applied exactly once', replay.replayed && replay.player.revision === submitted.player.revision);
 
-  const after = (await a.getState(guestA.token, matchId)).player;
-  check('the move is persisted (read back from the database)', after.revision === submitted.player.revision);
+  // Turn-gated: the actor sees the live revision; the opponent stays on the last boundary.
+  const afterA = (await a.getState(guestA.token, matchId)).player;
+  const afterB = (await b.getState(guestB.token, matchId)).player;
+  const actorAfter = submitted.player.seat === 0 ? afterA : afterB;
+  const waitingAfter = submitted.player.seat === 0 ? afterB : afterA;
+  check('the actor sees the persisted revision', actorAfter.revision === submitted.player.revision);
+  check('the opponent stays gated mid-turn', waitingAfter.revision === acting.payload.revision);
 
   const resumed = await a.resume();
-  check('a refresh reconnects to the same revision', resumed?.player.revision === submitted.player.revision);
+  check('a refresh reconnects to the seat-0 gated revision', resumed?.player.revision === afterA.revision);
 
   const outsider = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
   const outsiderGuest = await outsider.createGuest();
@@ -105,6 +110,13 @@ const main = async (): Promise<void> => {
   ]);
 
   console.log('\n=== end-to-end smoke (in-process server) ===');
+  // Integration tests share the guest:ip:unknown rate-limit bucket on the real DB.
+  const cleanupPool = poolFromUrl(url, { max: 1 });
+  try {
+    await cleanupPool.query("delete from rate_limits where bucket like 'guest:%' or bucket like 'join:%' or bucket like 'actions:%'");
+  } finally {
+    await (cleanupPool as unknown as { end?: () => Promise<void> }).end?.();
+  }
   const started = await startServer({ port: 0 });
   try {
     await smoke(`http://127.0.0.1:${started.port}`);

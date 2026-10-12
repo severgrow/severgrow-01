@@ -45,8 +45,9 @@ export const shadowFrom = (state: State, actor: Player): State => {
   const oppHand = state.hands[opp].map((_, i) => placeholderCard(10_000 + i));
   const hands: [Card[], Card[]] = [state.hands[0].map((c) => ({ ...c })), state.hands[1].map((c) => ({ ...c }))];
   hands[opp] = oppHand;
+  const { history: _dropHistory, ...base } = state;
   return {
-    ...state,
+    ...base,
     // Fresh copies of public/actor-known fields; hidden zones replaced.
     board: structuredClone(state.board),
     terrain: structuredClone(state.terrain),
@@ -56,11 +57,10 @@ export const shadowFrom = (state: State, actor: Player): State => {
     fruitKnown: [...state.fruitKnown] as [number, number],
     strengthenUsed: [...(state.strengthenUsed ?? [0, 0])] as [number, number],
     finalTurn: state.finalTurn ? { ...state.finalTurn } : null,
-    deckFinal: state.deckFinal ? { ...state.deckFinal } : state.deckFinal,
+    deckFinal: state.deckFinal ? { ...state.deckFinal } : null,
     rotPick: state.rotPick ? structuredClone(state.rotPick) : null,
     lastResolution: state.lastResolution ? structuredClone(state.lastResolution) : null,
     result: state.result ? structuredClone(state.result) : null,
-    history: undefined,
   };
 };
 

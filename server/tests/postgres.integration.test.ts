@@ -75,10 +75,24 @@ const rowCount = async (sql: string, values: readonly unknown[] = []): Promise<n
 
 // File-scope hooks: the connection is opened once and every suite below shares it. Guarded so
 // nothing happens when DATABASE_URL is absent (the suites are skipped in that case).
+const INTEGRATION_CONFIG = {
+  ...DEFAULT_SERVER_CONFIG,
+  // Real DB rate-limit rows persist across runs; keep the suite above the hourly cap.
+  rateLimits: {
+    guestPerIpPerHour: 100_000,
+    joinPerPlayerPerHour: 100_000,
+    joinPerIpPerHour: 100_000,
+    linkCodePerPlayerPerHour: 100_000,
+    linkRedeemPerIpPerHour: 100_000,
+    actionsPerPlayerPerMinute: 100_000,
+    sweepPerIpPerHour: 100_000,
+  },
+};
+
 beforeAll(() => {
   if (!enabled) return;
   pool = poolFromUrl(DATABASE_URL, { max: 8 });
-  service = new MatchService({ storage: postgresStorage(pool), config: DEFAULT_SERVER_CONFIG });
+  service = new MatchService({ storage: postgresStorage(pool), config: INTEGRATION_CONFIG });
 });
 
 afterAll(async () => {
@@ -110,8 +124,17 @@ suite('real database: schema and migration process', () => {
     expect(result.pending).toEqual([]);
   });
 
-  it('created the five tables', async () => {
-    for (const table of ['players', 'player_tokens', 'matches', 'match_participants', 'match_moves', 'schema_migrations']) {
+  it('created the Phase 1 and Phase 2 tables', async () => {
+    for (const table of [
+      'players',
+      'player_tokens',
+      'matches',
+      'match_participants',
+      'match_moves',
+      'rate_limits',
+      'device_link_codes',
+      'schema_migrations',
+    ]) {
       expect(await rowCount('select count(*)::int as n from information_schema.tables where table_schema = $1 and table_name = $2', ['public', table])).toBe(1);
     }
   });
@@ -125,8 +148,28 @@ suite('real database: schema and migration process', () => {
       return rows.map((r) => String(r.column_name)).sort();
     };
     expect(await cols('matches')).toEqual(
-      expect.arrayContaining(['id', 'invite_code', 'rules_version', 'seed', 'config', 'starting_player', 'status', 'revision', 'state', 'result', 'created_at', 'updated_at', 'finished_at']),
+      expect.arrayContaining([
+        'id',
+        'invite_code',
+        'rules_version',
+        'seed',
+        'config',
+        'starting_player',
+        'status',
+        'revision',
+        'state',
+        'result',
+        'created_at',
+        'updated_at',
+        'finished_at',
+        'turn_deadline_at',
+        'turn_timeout_ms',
+        'turn_start_revision',
+        'turn_start_state',
+        'expires_at',
+      ]),
     );
+    expect(await cols('match_participants')).toEqual(expect.arrayContaining(['last_seen_at']));
     expect(await cols('match_moves')).toEqual(
       expect.arrayContaining(['match_id', 'revision', 'seat', 'player_id', 'action', 'events', 'request_id', 'created_at']),
     );
@@ -138,12 +181,22 @@ suite('real database: schema and migration process', () => {
   });
 
   it('has Row Level Security enabled on every table', async () => {
+    const tables = [
+      'players',
+      'player_tokens',
+      'matches',
+      'match_participants',
+      'match_moves',
+      'rate_limits',
+      'device_link_codes',
+      'schema_migrations',
+    ];
     const { rows } = await pool.query(
       `select relname, relrowsecurity from pg_class
        where relname = any($1::text[]) and relnamespace = 'public'::regnamespace`,
-      [['players', 'player_tokens', 'matches', 'match_participants', 'match_moves', 'schema_migrations']],
+      [tables],
     );
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(tables.length);
     for (const row of rows) expect(row.relrowsecurity, `${String(row.relname)} must have RLS enabled`).toBe(true);
   });
 
@@ -156,8 +209,9 @@ suite('real database: schema and migration process', () => {
       console.log('    no anon/authenticated roles on this database — skipping the role check');
       return;
     }
+    const tables = ['matches', 'players', 'player_tokens', 'match_participants', 'match_moves', 'rate_limits', 'device_link_codes'];
     for (const role of roles) {
-      for (const table of ['matches', 'players', 'player_tokens', 'match_participants', 'match_moves']) {
+      for (const table of tables) {
         const { rows: priv } = await pool.query('select has_table_privilege($1, $2, $3) as ok', [role, table, 'select']);
         expect(priv[0]?.ok, `${role} must not be able to select ${table}`).toBe(false);
       }
@@ -167,10 +221,25 @@ suite('real database: schema and migration process', () => {
     try {
       await client.query(`set role ${roles[0]}`);
       await expect(client.query('select * from matches limit 1')).rejects.toMatchObject({ code: '42501' });
+      await expect(client.query('select * from rate_limits limit 1')).rejects.toMatchObject({ code: '42501' });
+      await expect(client.query('select * from device_link_codes limit 1')).rejects.toMatchObject({ code: '42501' });
     } finally {
       await client.query('reset role').catch(() => undefined);
       client.release?.();
     }
+  });
+
+  it('keeps authoritative tables out of the supabase_realtime publication', async () => {
+    const { rows: pubs } = await pool.query(`select 1 from pg_publication where pubname = 'supabase_realtime'`);
+    if (pubs.length === 0) {
+      console.log('    no supabase_realtime publication — skipping');
+      return;
+    }
+    const { rows } = await pool.query(
+      `select tablename from pg_publication_tables where pubname = 'supabase_realtime' and tablename = any($1::text[])`,
+      [['matches', 'match_participants', 'match_moves', 'players', 'player_tokens', 'rate_limits', 'device_link_codes']],
+    );
+    expect(rows).toEqual([]);
   });
 });
 
@@ -180,7 +249,7 @@ suite('real database: storage round-trips', () => {
     const created = await guest('Round Trip');
     const player = (await storage.playerById(created.player.id)) as PlayerRecord;
     expect(player.kind).toBe('guest');
-    expect(player.displayName).toBe('Round Trip');
+    expect(player.displayName).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
 
     const tokenHash = hashToken(created.token);
     expect((await storage.playerByTokenHash(tokenHash))?.id).toBe(created.player.id);
@@ -217,7 +286,7 @@ suite('real database: storage round-trips', () => {
     } finally {
       await (freshPool as unknown as { end?: () => Promise<void> }).end?.();
       pool = poolFromUrl(DATABASE_URL, { max: 8 }); // restore for the remaining tests
-      service = new MatchService({ storage: postgresStorage(pool), config: DEFAULT_SERVER_CONFIG });
+      service = new MatchService({ storage: postgresStorage(pool), config: INTEGRATION_CONFIG });
     }
   });
 });
@@ -247,11 +316,13 @@ suite('real database: a persisted two-guest match', () => {
     expect(stored.state.turnNumber).toBeGreaterThanOrEqual(1);
     expect(stored.state.deck.length).toBeGreaterThan(0);
 
-    // Both seats see revision 1, and neither payload leaks hidden state.
+    // Turn-gated: the actor sees revision 1; the opponent stays on the boundary.
     const va = await service.viewPayload(pa, matchId);
     const vb = await service.viewPayload(pb, matchId);
-    expect(va.revision).toBe(1);
-    expect(vb.revision).toBe(1);
+    const actorView = next.player.id === pa.id ? va : vb;
+    const waitingView = next.player.id === pa.id ? vb : va;
+    expect(actorView.revision).toBe(1);
+    expect(waitingView.revision).toBe(0);
     for (const payload of [va, vb]) {
       for (const key of ['seed', 'deck', 'hands', 'history', 'fruitKnown', 'reshuffles']) {
         expect(Object.keys(payload.view)).not.toContain(key);
@@ -292,6 +363,8 @@ suite('real database: concurrency and atomicity', () => {
           action: next.legal[0]! as Action,
           status: 'active',
           result: null,
+          refreshDeadline: false,
+          advanceTurnBoundary: false,
         }),
       });
 
@@ -327,6 +400,8 @@ suite('real database: concurrency and atomicity', () => {
           action: next.legal[0]! as Action,
           status: 'active',
           result: null,
+          refreshDeadline: false,
+          advanceTurnBoundary: false,
         }),
       });
     const results = await Promise.all(Array.from({ length: 10 }, same));
