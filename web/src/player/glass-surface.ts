@@ -263,9 +263,14 @@ html.futa04-tutorial .sheet { z-index: 51; }
 #tutorial-bloom-demo[data-on='1'] { opacity:1; }
 #tutorial-bloom-demo .tutorial-bloom-stage {
   display:flex; flex-direction:column; gap:22px; align-items:stretch;
-  width:min(340px, calc(100vw - 32px)); padding:8px 4px;
-  border:0; border-radius:0; background:transparent;
-  box-shadow:none; backdrop-filter:none; -webkit-backdrop-filter:none;
+  width:min(340px, calc(100vw - 32px)); padding:18px 14px 20px; box-sizing:border-box;
+  /* the same dark glass as the tutorial panel, a little denser so the cards read over the board */
+  border:1px solid rgba(214,204,177,.16); border-radius:15px; background:rgba(8,10,10,.72);
+  box-shadow:inset 0 1px rgba(243,232,202,.07),0 14px 34px rgba(0,0,0,.38);
+  backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
+}
+#tutorial-bloom-demo .tutorial-bloom-group + .tutorial-bloom-group {
+  padding-top:18px; border-top:1px solid rgba(214,204,177,.1);
 }
 #tutorial-bloom-demo .tutorial-bloom-group { display:flex; flex-direction:column; gap:8px; align-items:center; }
 /* Same face as tutorial glass why-copy (not a mismatched display face). */

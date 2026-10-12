@@ -456,7 +456,7 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     }
     $('menu-tutorial').classList.remove('primary');
     $('menu-tutorial').classList.add('ghost');
-    showMoreLessons(false);
+    syncTutorialMenu(false);
   }
   $('gameover').hidden = true;
   render();
@@ -1290,33 +1290,43 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   } catch { /* ignore */ }
 }
 
-/** One extra lesson (TUTORIAL_EXTRAS), played on its own and back to the menu. */
+/** The full tutorial ('core') or one extra lesson (TUTORIAL_EXTRAS), played on its own and back to the menu. */
 function startExtraLesson(id: string) {
-  const extra = TUTORIAL_EXTRAS.find(e => e.id === id);
-  if (!extra) return;
   if (!$('menu-continue').hidden && !window.confirm('Start this lesson? Your saved game will be replaced.')) return;
-  startTutorial(TUTORIAL_CHAPTER_IDS.indexOf(extra.chapters[0]!), extra.id);
+  if (id === 'core') return startTutorial(0, 'core');
+  const extra = TUTORIAL_EXTRAS.find(e => e.id === id);
+  if (extra) startTutorial(TUTORIAL_CHAPTER_IDS.indexOf(extra.chapters[0]!), extra.id);
 }
 
-/** The menu's "More lessons": offered once the core run or a first game is done; `open` unfolds the list. */
-function showMoreLessons(open = false) {
-  const btn = $('menu-lessons');
+/** Once the core run is done, the menu's Tutorial button becomes "More tips". */
+const tipsUnlocked = () => !!store.get(LESSONS_KEY);
+
+/**
+ * The menu's tutorial button: "Tutorial" (starts the core run) until the core run is done, then
+ * "More tips", which unfolds the full tutorial and the extra lessons. `open` unfolds the list
+ * (also from the first game's game-over link).
+ */
+function syncTutorialMenu(open = false) {
+  const btn = $('menu-tutorial');
   const list = $('menu-lessons-list');
-  btn.hidden = !store.get(LESSONS_KEY) && stats.played === 0;
+  const label = tipsUnlocked() ? 'More tips' : 'Tutorial';
+  btn.textContent = label;
+  btn.setAttribute('aria-label', label);
   if (!list.childElementCount) {
-    list.replaceChildren(...TUTORIAL_EXTRAS.map(e => {
+    const items = [{ id: 'core', title: 'Full tutorial' }, ...TUTORIAL_EXTRAS];
+    list.replaceChildren(...items.map((e, i) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'btn ghost';
+      // the full tutorial gets its own row; so does a last lesson left alone in its row
+      b.className = `btn ghost${i === 0 || (i === items.length - 1 && TUTORIAL_EXTRAS.length % 2 === 1) ? ' wide' : ''}`;
       b.dataset.lesson = e.id;
       b.textContent = e.title;
       b.addEventListener('click', () => startExtraLesson(e.id));
       return b;
     }));
   }
-  const show = open && !btn.hidden;
-  list.hidden = !show;
-  btn.setAttribute('aria-expanded', String(show));
+  list.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
 }
 
 function completeTutorial(track = 'core') {
@@ -1333,8 +1343,38 @@ function completeTutorial(track = 'core') {
     glassSurface?.hide();
     showScreen('menu');
     // The first run is done: offer the short extra lessons right away.
-    if (track === 'core') showMoreLessons(true);
+    if (track === 'core') syncTutorialMenu(true);
   }, 1750);
+}
+
+/** The fade through black while the tutorial swaps the board: in, hold, out (ms). */
+const CURTAIN_IN = 220;
+const CURTAIN_OUT = 360;
+
+/**
+ * Runs `swap` (a new chapter or position on the board) behind a short fade through black, so
+ * the hand and board never jump. Skipped with Speed off or when the game is not on screen; if
+ * the tutorial is left during the fade, nothing is swapped in.
+ */
+function tutorialCurtain(swap: () => void) {
+  if (timeScale() <= 0 || $('game').hidden) return swap();
+  let el = document.getElementById('tutorial-curtain');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tutorial-curtain';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.setProperty('--curtain-in', `${CURTAIN_IN}ms`);
+    el.style.setProperty('--curtain-out', `${CURTAIN_OUT}ms`);
+    document.body.append(el);
+  }
+  const curtain = el;
+  const owner = coach.tutorial;
+  curtain.classList.add('on');
+  window.setTimeout(() => {
+    if (coach.tutorial === owner) swap();
+    // two frames: the new board is painted before the curtain starts to lift
+    requestAnimationFrame(() => requestAnimationFrame(() => curtain.classList.remove('on')));
+  }, CURTAIN_IN);
 }
 
 /** Next chapter of the track, or the end of the track (null). */
@@ -1342,12 +1382,14 @@ function advanceTutorialChapter(chapter: number | null, track = 'core') {
   if (chapter === null || chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial(track);
   clearTutorialTimers();
   tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
-  const state = tutorialChapter(chapter);
-  log = [`Tutorial chapter ${chapter + 1}.`];
-  beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
-  save();
-  announceTurn(HUMAN);
-  syncTutorialGate();
+  tutorialCurtain(() => {
+    const state = tutorialChapter(chapter);
+    log = [`Tutorial chapter ${chapter + 1}.`];
+    beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
+    save();
+    announceTurn(HUMAN);
+    syncTutorialGate();
+  });
 }
 
 /** If the next lesson is Throw but Grow is still open, skip Grow silently. */
@@ -1377,11 +1419,13 @@ function tutorialAdvanceStep() {
   tutorialStatus = null;
   const next = tutorialLesson(progress.chapter, progress.step);
   if (next?.reseat) {
-    const state = tutorialChapter(progress.chapter, next.reseat);
-    beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
-    save();
-    announceTurn(HUMAN);
-    maybeShowTutorialEaster();
+    tutorialCurtain(() => {
+      const state = tutorialChapter(progress.chapter, next.reseat);
+      beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
+      save();
+      announceTurn(HUMAN);
+      maybeShowTutorialEaster();
+    });
     return;
   }
   if (next) {
@@ -1416,12 +1460,14 @@ function tutorialSeek(chapter: number, step: number) {
   tutorialStatus = null;
   tutorialTransitionPending = false;
   const track = coach.tutorial?.track;
-  const state = tutorialStateAt(chapter, step);
-  beginSession(state, { ...freshCoach(), tutorial: { chapter, step, version: TUTORIAL_VERSION, ...(track ? { track } : {}) } }, [], state);
-  save();
-  announceTurn(HUMAN);
-  ensureTutorialThrowPhase();
-  syncTutorialGate();
+  tutorialCurtain(() => {
+    const state = tutorialStateAt(chapter, step);
+    beginSession(state, { ...freshCoach(), tutorial: { chapter, step, version: TUTORIAL_VERSION, ...(track ? { track } : {}) } }, [], state);
+    save();
+    announceTurn(HUMAN);
+    ensureTutorialThrowPhase();
+    syncTutorialGate();
+  });
 }
 
 function tutorialPrevious() {
@@ -5039,12 +5085,13 @@ bind('menu-tutorial', () => {
     startGame(TUTORIAL_SEED,7);
     return;
   }
+  // after the core run the button is "More tips": it unfolds the lessons instead
+  if (tipsUnlocked()) return syncTutorialMenu($('menu-lessons-list').hidden !== false);
   if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
   startTutorial();
 });
 bind('menu-settings', () => sheet('sheet-settings'));
-bind('menu-lessons', () => showMoreLessons($('menu-lessons-list').hidden !== false));
-bind('go-lessons', () => { showScreen('menu'); showMoreLessons(true); });
+bind('go-lessons', () => { showScreen('menu'); syncTutorialMenu(true); });
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
   renderSettingsLab();
   const section = $('settings-lab') as HTMLDetailsElement;
