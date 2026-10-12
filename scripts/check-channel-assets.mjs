@@ -9,7 +9,7 @@ for (const n of names) assert(!/fontbake|bakeoff|designBoard|panel-|lab-|fraunce
 const js = names.filter(n => n.endsWith('.js')).map(n => readFileSync(`${dir}/assets/${n}`, 'utf8')).join('\n');
 for (const marker of ['menu-lab', 'menu-design', 'Apply and play', 'font bake-off', 'forest_strength_', 'lab-presets']) assert(!js.includes(marker), `development code leaked: ${marker}`);
 if (channel === 'live') for (const n of names) assert(!/besley|commissioner|fragment-mono|guide-|thumb-|camera-|player-css|fonts-/i.test(n), n);
-const product = channel === 'futa04' || channel === 'futa-test';
+const product = channel === 'futa04' || channel === 'futa-test' || channel === 'futa05';
 if (!product) for (const n of names) assert(!/^(information|help|atmosphere)-/.test(n), `Futa04 presentation leaked: ${n}`);
 if (!product) for (const n of names) assert(!/^(branding|futasaku-white)-/.test(n), `Futa04 brand leaked: ${n}`);
 const html = readFileSync(`${dir}/index.html`, 'utf8');

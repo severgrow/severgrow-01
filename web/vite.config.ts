@@ -12,7 +12,8 @@ export default defineConfig({
   // Default product build is Futasaku 0.4. `futa-test` is the experiment copy.
   define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04', 'futa-test', 'futa05'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'futa04') },
   plugins: [{ name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
-    const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test' || !process.env.CHANNEL;
+    const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test'
+      || process.env.CHANNEL === 'futa05' || !process.env.CHANNEL;
     return modern ? html
       .replace('<html lang="en"', '<html lang="en" class="test-typography-v2"')
       .replace('    <div id="splash" class="splash" hidden aria-hidden="true"></div>\n', '')
@@ -44,7 +45,7 @@ export default defineConfig({
     rmSync(resolve(output, 'design-v3'), { recursive: true, force: true });
     mkdirSync(resolve(output, 'licenses'), { recursive: true });
     cpSync(fileURLToPath(new URL('./src/fonts/LICENSE-alegreya-sans.txt', import.meta.url)), resolve(output, 'licenses/LICENSE-alegreya-sans.txt'));
-    if (channel === 'test' || channel === 'futa04' || channel === 'futa-test') {
+    if (channel === 'test' || channel === 'futa04' || channel === 'futa-test' || channel === 'futa05') {
       for (const name of ['besley', 'fragment-mono']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
     }
   } }],

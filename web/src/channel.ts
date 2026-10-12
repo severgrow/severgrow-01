@@ -1,11 +1,12 @@
 // Futasaku 0.4 is the product channel. `futa-test` is the quick experiment copy.
+// `futa05` is the online-duels preview: same product UI, own storage + Find Opponent.
 declare const __CHANNEL__: string;
-export type Channel = 'live' | 'test' | 'futa04' | 'futa-test';
+export type Channel = 'live' | 'test' | 'futa04' | 'futa-test' | 'futa05';
 const raw = typeof __CHANNEL__ !== 'undefined' ? __CHANNEL__ : 'futa04';
 export const CHANNEL: Channel =
-  raw === 'test' || raw === 'futa04' || raw === 'futa-test' || raw === 'live' ? raw : 'futa04';
+  raw === 'test' || raw === 'futa04' || raw === 'futa-test' || raw === 'futa05' || raw === 'live' ? raw : 'futa04';
 export const IS_TEST = CHANNEL === 'test' || CHANNEL === 'futa-test';
-export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test';
+export const IS_FUTA04 = CHANNEL === 'futa04' || CHANNEL === 'futa-test' || CHANNEL === 'futa05';
 const modern = IS_TEST || IS_FUTA04;
 export const FEATURES = Object.freeze({
   typography: modern,
@@ -28,9 +29,11 @@ export const FEATURES = Object.freeze({
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||
   location.pathname.includes('/futa0.4/') ||
+  location.pathname.includes('/futa0.5/') ||
   location.pathname.includes('/futa-test/')
 );
 export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
+  : CHANNEL === 'futa05' ? 'futa05:'
   : CHANNEL === 'test' ? 'test:'
   : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
   : '';

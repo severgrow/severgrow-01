@@ -7,10 +7,12 @@
 // - everything else (the art manifest, icons, any unversioned file): network first, falling
 //   back to the cache only when offline. A stale copy is never preferred to a fresh one.
 // Each new version of this worker drops the older Futa04 caches (only its own, by prefix).
-const PREFIX = scopeIsPreview() ? 'futa04-' : 'severor-main2-';
-function scopeIsPreview() {
+const PREFIX = cachePrefix();
+function cachePrefix() {
   const url = new URL(self.registration.scope);
-  return url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/');
+  if (url.pathname.includes('/futa0.5/')) return 'futa05-';
+  if (url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/')) return 'futa04-';
+  return 'severor-main2-';
 }
 const CACHE = `${PREFIX}v2`;
 const scope = new URL(self.registration.scope);

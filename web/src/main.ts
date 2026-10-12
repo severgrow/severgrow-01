@@ -116,7 +116,7 @@ import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
 let DesignView: typeof BoardView = BoardView;
-const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')
+const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
   ? await import('./player/branding.js') : null;
 if (branding && (window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true)) {
@@ -862,10 +862,10 @@ declare const __CHANNEL__: string;
 async function mountPlayerEnhancements() {
   const loads: Promise<unknown>[] = [];
   // Card art: start decode before fonts/thumb/camera finish so the crossfade can land early.
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     void import('./player/cards.js').then((m) => m.preloadCardArt());
   }
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
     loads.push(import('./player/player-css.js').then(async (m) => {
       const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
@@ -918,12 +918,12 @@ async function mountPlayerEnhancements() {
     }));
   }
 
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     loads.push(import('./player/fonts.js').then((f) => f.applyFont('new')));
   }
 
   await Promise.all(loads);
-  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
+  if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')) {
     outcomeLight = (await import('./player/atmosphere.js')).mountAtmosphere();
     (await import('./player/information.js')).mountInformation();
     (await import('./player/cards.js')).mountCards();
@@ -5748,7 +5748,7 @@ document.addEventListener('visibilitychange', () => {
 if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {
   const registerOffline = () => {
     navigator.serviceWorker
-      .register(typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'futa04' ? './futa04-sw.js' : './sw.js')
+      .register(typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa05') ? './futa04-sw.js' : './sw.js')
       // ask for a newer worker on every launch (browsers may otherwise keep an old one for a day);
       // a moment after registering, when the browser is free to run the check
       .then((r) => setTimeout(() => void r.update().catch(() => undefined), 1500))

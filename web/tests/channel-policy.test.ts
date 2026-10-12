@@ -16,7 +16,7 @@ const boot = (channel: string) => {
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
-  it.each(['live', 'test', 'futa04', 'futa-test'])('%s isolates local and session storage', (channel) => {
+  it.each(['live', 'test', 'futa04', 'futa-test', 'futa05'])('%s isolates local and session storage', (channel) => {
     const { policy, Storage } = boot(channel);
     for (const store of [new Storage(), new Storage()]) {
       store.data.set('sentinel', 'Main'); store.data.set('test:sentinel', 'Dev');
@@ -40,6 +40,15 @@ describe('release channel policy', () => {
     expect(policy.STORAGE_PREFIX).toBe('futa-test:');
     expect(policy.FEATURES.v3).toBe(false);
     expect(policy.FEATURES.lab).toBe(false);
+  });
+  it('futa05 shares Futa04 presentation with its own storage prefix', () => {
+    const policy = boot('futa05').policy;
+    expect(policy.IS_FUTA04).toBe(true);
+    expect(policy.IS_TEST).toBe(false);
+    expect(policy.STORAGE_PREFIX).toBe('futa05:');
+    expect(policy.FEATURES.typography).toBe(true);
+    expect(policy.FEATURES.lab).toBe(false);
+    expect(policy.FEATURES.v3).toBe(false);
   });
   it('Main retains legacy player behavior and Dev retains tools', () => {
     expect(boot('live').policy.FEATURES.tapAgain).toBe(false);
