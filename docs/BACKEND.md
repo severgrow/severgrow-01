@@ -1,7 +1,8 @@
 # Futasaku 0.5 — backend foundation
 
-Status: **implemented and tested** (unit + real-HTTP integration). Not yet deployed, not yet wired
-into the game UI, and not yet run against a live database.
+Status: **verified against the live Supabase database** (unit + real-HTTP + real-database
+integration). Not yet deployed, and not yet wired into the game UI. See
+[`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) for the evidence.
 
 This document says exactly what works, what is unfinished, and what must happen before real
 players are invited. The design follows [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) (the wire
@@ -157,20 +158,33 @@ replayed under the rules that created it.
 `revision` on `matches` is the head; each `match_moves` row records the revision it produced, which
 is why the moves table *is* the revision history and the idempotency record.
 
-## Test results (this pass)
+> **Security note (load-bearing).** Supabase's default privileges grant `anon` and `authenticated`
+> full read/write on every new table in `public`. The `revoke all … from anon, authenticated` block
+> in the migration is therefore **not cosmetic**: without it, `matches.state` (the whole deck and
+> both hands) would be readable through Supabase's public API. The server's role owns the tables and
+> has `bypassrls = true`, so it is unaffected. The integration suite proves the denial with a real
+> `set role anon; select * from matches` that must fail with `42501`. Expect an informational
+> `rls_enabled_no_policy` advisor lint — that is intentional.
+
+## Test results
 
 | Suite | Result |
 | --- | --- |
 | `server/tests/service.test.ts` | 20 tests: identity, joining, views, actions, idempotency, stale revisions, racing submissions, a full game to a finished result |
 | `server/tests/http-e2e.test.ts` | 4 tests: the whole vertical slice over real HTTP with two clients + refresh/reconnect, auth failures, error codes, card-reconstruction |
 | `server/tests/http.test.ts` | 8 tests: preflight/CORS, security headers, malformed and oversized bodies, missing bodies, 404s without internals, auth required on every match route, precise field validation, and that logs never contain tokens or bodies |
-| `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code |
+| `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code (recording fake pool) |
+| `server/tests/postgres.integration.test.ts` | **17 tests against the real database** (skipped unless `DATABASE_URL` is set): schema/constraints, migration idempotency+checksums, RLS everywhere, `anon`/`authenticated` denial, token-hash-only storage, persistence across a brand-new pool, a two-guest create/join/play slice, DB-level idempotency, racing transactions, ten-way retry storm, rollback, leak checks |
+| `server/tests/migrate.test.ts` | migration runner: order, one transaction per migration, idempotency, checksum refusal, rollback, dry-run |
+| `server/tests/pg-pool.test.ts` | TLS decisions, env handling, password redaction |
 | `server/tests/client.test.ts` | 6 tests: request shape, bearer header, `since` handling, error mapping, session persistence/resume |
 | `server/tests/engine-events.test.ts` | 3 tests: `hidePrivateEvents` ≡ `eventsFor` across real games |
 | `server/tests/migration.test.ts` | 6 tests: tables, RLS everywhere, hashed tokens, immutable fields, idempotency key |
 
-59 server tests in total. A manual smoke script (`npm run server:smoke`) exercises a live deployment
-(14 checks) and reuses the same client the browser will use.
+`vitest.config.ts` loads `.env` when it exists, so the real-database suite **runs** locally; in CI
+there is no `.env`, so it skips and is pinned separately by `npm run server:db-test`. A manual smoke
+script (`npm run server:smoke`, 14 checks) exercises a live deployment and reuses the same client
+the browser will use.
 
 The rest of the project's suite is unchanged and must stay green (see the final report).
 
