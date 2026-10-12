@@ -3,18 +3,27 @@
 // test, or in another service. It carries no game logic: it sends semantic actions and renders
 // whatever the server returns.
 import type { Player } from '../../src/engine/index.js';
+import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type {
   CreateGuestResponse,
   CreateMatchResponse,
   GetViewResponse,
   JoinMatchResponse,
+  LinkCodeResponse,
+  LinkRedeemResponse,
+  MatchListResponse,
   MatchSummaryResponse,
   MatchViewPayload,
+  MeResponse,
   ReconnectResponse,
+  ResignResponse,
   SubmitActionRequest,
   SubmitActionResponse,
   UpgradeResponse,
 } from './protocol.js';
+
+/** Protocol version the browser/build reports (P-5 handshake). */
+export const DUEL_CLIENT_VERSION = '0.5.0';
 
 /** The minimal transport shape this client needs (window.fetch, undici, or a test double). */
 export type FetchLike = (
@@ -34,6 +43,13 @@ export const browserStorage = (): KeyValue | null => {
     localStorage?: { getItem(k: string): string | null; setItem(k: string, v: string): void; removeItem(k: string): void };
   }).localStorage;
   if (!ls) return null;
+  try {
+    const probe = '__severgrow_probe__';
+    ls.setItem(probe, '1');
+    ls.removeItem(probe);
+  } catch {
+    return null;
+  }
   return { get: (k) => ls.getItem(k), set: (k, v) => ls.setItem(k, v), remove: (k) => ls.removeItem(k) };
 };
 
@@ -56,6 +72,10 @@ export type DuelClientOptions = {
   fetch?: FetchLike;
   storage?: KeyValue | null;
   sessionKey?: string;
+  /** Override the handshake version (tests). Default: DUEL_CLIENT_VERSION. */
+  clientVersion?: string;
+  /** Override the rules version header (tests). Default: CURRENT_RULES_VERSION. */
+  rulesVersion?: string;
 };
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
@@ -65,6 +85,8 @@ export class DuelClient {
   private readonly fetchImpl: FetchLike;
   private readonly storage: KeyValue | null;
   private readonly sessionKey: string;
+  private readonly clientVersion: string;
+  private readonly rulesVersion: string;
 
   constructor(options: DuelClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -78,6 +100,8 @@ export class DuelClient {
       });
     this.storage = options.storage ?? browserStorage();
     this.sessionKey = options.sessionKey ?? DEFAULT_SESSION_KEY;
+    this.clientVersion = options.clientVersion ?? DUEL_CLIENT_VERSION;
+    this.rulesVersion = options.rulesVersion ?? CURRENT_RULES_VERSION;
   }
 
   // ---- identity ----
@@ -88,8 +112,24 @@ export class DuelClient {
     });
   }
 
+  getMe(token: string): Promise<MeResponse> {
+    return this.request<MeResponse>('GET', '/v1/players/me', { token });
+  }
+
   upgrade(token: string, displayName: string): Promise<UpgradeResponse> {
     return this.request<UpgradeResponse>('POST', '/v1/players/me/upgrade', { token, body: { displayName } });
+  }
+
+  createLinkCode(token: string): Promise<LinkCodeResponse> {
+    return this.request<LinkCodeResponse>('POST', '/v1/players/me/link-code', { token, body: {} });
+  }
+
+  redeemLinkCode(code: string): Promise<LinkRedeemResponse> {
+    return this.request<LinkRedeemResponse>('POST', '/v1/players/link', { body: { code } });
+  }
+
+  listMatches(token: string): Promise<MatchListResponse> {
+    return this.request<MatchListResponse>('GET', '/v1/players/me/matches', { token });
   }
 
   // ---- match lifecycle ----
@@ -124,6 +164,13 @@ export class DuelClient {
     return this.request<SubmitActionResponse>('POST', `/v1/matches/${encodeURIComponent(matchId)}/actions`, {
       token,
       body: request,
+    });
+  }
+
+  resign(token: string, matchId: string): Promise<ResignResponse> {
+    return this.request<ResignResponse>('POST', `/v1/matches/${encodeURIComponent(matchId)}/resign`, {
+      token,
+      body: {},
     });
   }
 
@@ -162,7 +209,11 @@ export class DuelClient {
   // ---- transport ----
 
   private async request<T>(method: string, path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
-    const headers: Record<string, string> = { accept: 'application/json' };
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      'x-futasaku-client-version': this.clientVersion,
+      'x-futasaku-rules-version': this.rulesVersion,
+    };
     if (options.token !== undefined) headers.authorization = `Bearer ${options.token}`;
     const init: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
     if (options.body !== undefined) {

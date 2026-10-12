@@ -31,8 +31,18 @@ const networkFirst = (req, key) =>
       return res;
     })
     .catch(() => caches.open(CACHE).then((c) => c.match(key, { ignoreSearch: true })));
+// P-5: never cache the duel API. Cross-origin calls already bypass this worker; when the API
+// is same-origin under the app path (or proxied), still skip caching match GETs.
+const isDuelApi = (url) =>
+  url.pathname.includes('/functions/v1/duel') ||
+  url.pathname.includes('/v1/matches') ||
+  url.pathname.includes('/v1/guests') ||
+  url.pathname.includes('/v1/players') ||
+  url.pathname.includes('/v1/health') ||
+  url.pathname.includes('/v1/sweep');
 self.addEventListener('fetch', (e) => {
   const req = e.request, url = new URL(req.url);
+  if (isDuelApi(url)) return; // network only — never touch the cache
   if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
   if (req.mode === 'navigate') {
     e.waitUntil(purge());

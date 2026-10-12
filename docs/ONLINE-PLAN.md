@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12): migration 0002, deadlines, turn-gated views, batch, resign, lists, link codes, rate limits, live ping, security tests. Hosting: **Supabase Edge Functions**. Next: Phase 3.  
+**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12): `web/src/online/` identity, sync/poll, retries, presence, clock, draft+shadow, OnlineDriver seam, SW API bypass, version handshake; unit tests with fake server/channel. Hosting: **Supabase Edge Functions**. Next: Phase 3b.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.

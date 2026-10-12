@@ -1,9 +1,9 @@
 # Futasaku 0.5 — backend foundation
 
-Status: **Phase 2 live against Supabase** (deadlines, turn-gated views, batch submit, resign,
-match list, link codes, Postgres rate limits, sweeper). Edge API from Phase 1. Not yet wired into
-the game UI (Phase 3+). See [`ONLINE-PLAN.md`](ONLINE-PLAN.md) and
-[`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
+Status: **Phase 3 client layer ready** (`web/src/online/`: identity, sync, draft, OnlineDriver).
+Phase 2 live against Supabase (deadlines, turn-gated views, batch submit, resign, match list,
+link codes, Postgres rate limits, sweeper). Edge API from Phase 1. No duel screens yet (Phase 4+).
+See [`ONLINE-PLAN.md`](ONLINE-PLAN.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
 
 This document says exactly what works, what is unfinished, and what must happen before real
 players are invited. The design follows [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) (the wire
