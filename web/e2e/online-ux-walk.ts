@@ -51,38 +51,91 @@ const hudTurn = (page: Page) => page.locator('[data-duel-turn]').textContent().c
 
 /** Best-effort UI turn: Draw → end the Grow step → pick a card and confirm the Discard. */
 const playTurnViaUi = async (page: Page): Promise<boolean> => {
+  const log = (...a: unknown[]) => {
+    if (process.env.UX_DEBUG) console.log('   [ui]', ...a);
+  };
+  const dump = async (tag: string) => {
+    if (!process.env.UX_DEBUG) return;
+    const moves = ((await page.locator('#moves').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 160);
+    const movesHtml = await page.locator('#moves').evaluate((el) => el.innerHTML.length).catch(() => 0);
+    const smart = ((await page.locator('#smart-context').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 80);
+    const smartDisabled = await page.locator('#smart-context').isDisabled().catch(() => true);
+    const playable = await page.locator('#hand .card.playable').count().catch(() => 0);
+    const confirmHidden = await page.locator('#confirm').evaluate((el) => (el as HTMLElement).hidden).catch(() => true);
+    log(
+      tag,
+      'turn=', await hudTurn(page),
+      'deckEnabled=', await page.locator('#deck').isEnabled().catch(() => false),
+      'hand=', await page.locator('#hand .card').count(),
+      'playable=', playable,
+      'movesHtmlLen=', movesHtml,
+      'movesHtml=', JSON.stringify(((await page.locator('#moves').evaluate((el) => el.innerHTML).catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 320)),
+      'moves=', JSON.stringify(moves),
+      'smartCtx=', JSON.stringify(smart),
+      'smartDisabled=', smartDisabled,
+      'confirmHidden=', confirmHidden,
+    );
+  };
   const before = ((await hudTurn(page)) ?? '').trim();
   if (before !== 'Your turn') return false;
-  // Draw
+  const waitFor = async (fn: () => Promise<boolean>, ms = 8000) => {
+    for (let t = 0; t < ms / 200; t++) {
+      if (await fn().catch(() => false)) return true;
+      await page.waitForTimeout(200);
+    }
+    return false;
+  };
+  await dump('start');
+  // Draw — call the handler directly so an overlay can never swallow the click.
   const deck = page.locator('#deck');
   if (await deck.isEnabled().catch(() => false)) {
-    await deck.click().catch(() => undefined);
+    await page.evaluate(() => (document.getElementById('deck') as HTMLButtonElement).click());
+    await waitFor(async () => !(await page.locator('#deck').isEnabled().catch(() => true)));
+    await dump('after-draw');
+  }
+  // The Grow step: play one suggested move if the UI offers one, then end the step (Throw).
+  const endSel = '#moves .futa04-skip, #moves .end';
+  const hasEnd = async () => (await page.locator(endSel).count()) > 0;
+  if (!(await hasEnd())) {
+    const smart = page.locator('#smart-context');
+    if (await smart.isEnabled().catch(() => false)) {
+      await smart.evaluate((el) => (el as HTMLButtonElement).click()).catch(() => undefined);
+      await page.waitForTimeout(900);
+      await dump('after-smart');
+    }
+  }
+  if (await waitFor(hasEnd, 6000)) {
+    await page.locator(endSel).first().evaluate((el) => (el as HTMLButtonElement).click());
+    await page.waitForTimeout(900);
+    await dump('after-end');
+  } else {
+    log('no end button in the moves row');
+  }
+  // Discard: Futa04 keeps the Confirm box hidden (tap-again or drag to the Throw pile).
+  const card = page.locator('#hand .card.playable, #hand .card').first();
+  if ((await card.count().catch(() => 0)) > 0) {
+    await card.evaluate((el) => (el as HTMLButtonElement).click());
     await page.waitForTimeout(400);
-  }
-  // End the Grow step (throw) — the Skip/end control in the moves row.
-  const end = page.locator('#moves .futa04-skip, #moves .end').first();
-  if (await end.isVisible().catch(() => false)) {
-    await end.click().catch(() => undefined);
-    await page.waitForTimeout(500);
-  }
-  // Discard: pick a card, then confirm if the confirm box appears.
-  const card = page.locator('#hand .card').first();
-  if (await card.isVisible().catch(() => false)) {
-    await card.click().catch(() => undefined);
-    await page.waitForTimeout(250);
-    const confirm = page.locator('#confirm:not([hidden]) #confirm-play, #confirm-play');
+    await card.evaluate((el) => (el as HTMLButtonElement).click());
+    await page.waitForTimeout(900);
+    await dump('after-card');
+    if (((await hudTurn(page)) ?? '').trim() === 'Your turn') {
+      // Fall back to a drag onto the Throw pile (the other supported gesture).
+      await card.dragTo(page.locator('#discard')).catch(() => undefined);
+      await page.waitForTimeout(900);
+      await dump('after-drag');
+    }
+    const confirm = page.locator('#confirm-play');
     if (await confirm.isVisible().catch(() => false)) {
-      await confirm.click().catch(() => undefined);
-      await page.waitForTimeout(600);
+      await confirm.evaluate((el) => (el as HTMLButtonElement).click());
+      await page.waitForTimeout(900);
+      await dump('after-confirm');
     }
   }
   // Wait for the turn to leave this page.
-  for (let i = 0; i < 20; i++) {
-    const now = ((await hudTurn(page)) ?? '').trim();
-    if (now !== 'Your turn') return true;
-    await page.waitForTimeout(300);
-  }
-  return false;
+  const gone = await waitFor(async () => ((await hudTurn(page)) ?? '').trim() !== 'Your turn', 8000);
+  if (!gone) await dump('gave-up');
+  return gone;
 };
 
 const browser: Browser = await chromium.launch({ executablePath: CHROME });
@@ -139,18 +192,25 @@ try {
   await B.waitForSelector('#game:not([hidden])', { timeout: 30_000 });
   await A.waitForSelector('#game:not([hidden])', { timeout: 30_000 });
 
-  // catch the starter lottery on whichever page shows it first
-  for (const [page, tag] of [
-    [A, 'desktop'] as const,
-    [B, 'phone'] as const,
-  ]) {
-    const lottery = page.locator('#starter-lottery:not([hidden])');
-    if (await lottery.isVisible().catch(() => false)) {
-      const title = ((await page.locator('#lottery-title').textContent()) ?? '').trim();
+  // catch the starter lottery on both pages (it resolves to "You start"/"Opponent starts")
+  const pages: [Page, string][] = [
+    [A, 'desktop'],
+    [B, 'phone'],
+  ];
+  await Promise.all(
+    pages.map(([page]) =>
+      page
+        .waitForFunction(() => /start/i.test(document.getElementById('lottery-title')?.textContent ?? ''), { timeout: 6000 })
+        .catch(() => undefined),
+    ),
+  );
+  for (const [page, tag] of pages) {
+    const title = ((await page.locator('#lottery-title').textContent().catch(() => '')) ?? '').trim();
+    if (await page.locator('#starter-lottery:not([hidden])').isVisible().catch(() => false)) {
       await shoot(page, `08-starter-lottery-${tag}`);
-      check(`starter: banner shows You/Opponent start (${tag})`, /start/i.test(title), title);
-      finding('INFO', `starter banner (${tag}): "${title}"`);
     }
+    check(`starter: banner shows You/Opponent start (${tag})`, /start/i.test(title), title);
+    finding('INFO', `starter banner (${tag}): "${title}"`);
   }
   await A.waitForTimeout(2500);
 
@@ -158,6 +218,13 @@ try {
   await shoot(B, '10-duel-phone');
   check('duel: A HUD visible', await A.locator('#duel-hud:not([hidden])').isVisible());
   check('duel: B HUD visible', await B.locator('#duel-hud:not([hidden])').isVisible());
+  const oppName = ((await A.locator('[data-duel-opponent]').textContent().catch(() => '')) ?? '').trim();
+  const presenceWord = ((await A.locator('[data-duel-presence]').textContent().catch(() => '')) ?? '').trim();
+  const deadline = ((await A.locator('[data-duel-deadline]').textContent().catch(() => '')) ?? '').trim();
+  check('duel: opponent name shown', oppName.length > 0, oppName);
+  check('duel: presence status shown', /online|away|unknown/i.test(presenceWord), presenceWord);
+  // The 24h turn clock is shown as a duration (never a wall-clock time — P-19).
+  check('duel: turn deadline shown as a duration', /\d+\s*(d|h|m)/i.test(deadline) && !/\d:\d\d/.test(deadline), deadline);
   const hudClip = await clipped(A, '#duel-hud [data-duel-opponent], #duel-hud [data-duel-turn], #duel-hud [data-duel-deadline]');
   if (hudClip.length) finding('FIX', `duel HUD text clipped: ${hudClip.join(' | ')}`);
 
@@ -172,9 +239,17 @@ try {
     const moved = await playTurnViaUi(actor);
     check('turn completes in the UI (turn passes to the opponent)', moved, `before="${actor === A ? turnTextA : turnTextB}"`);
     await shoot(actor, '11-after-turn-actor');
-    const waiterNow = ((await hudTurn(waiter)) ?? '').trim();
-    check('opponent sees the turn arrive (catch-up)', waiterNow === 'Your turn', waiterNow);
+    // The non-acting tab polls (Realtime is a hint); make it visible so it refreshes promptly.
+    await waiter.bringToFront().catch(() => undefined);
+    await waiter.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))).catch(() => undefined);
+    let arrived = false;
+    for (let i = 0; i < 70 && !arrived; i++) {
+      arrived = ((await hudTurn(waiter)) ?? '').trim() === 'Your turn';
+      if (!arrived) await waiter.waitForTimeout(500);
+    }
+    check('opponent sees the turn arrive (catch-up)', arrived, ((await hudTurn(waiter)) ?? '').trim());
     await shoot(waiter, '12-opponent-turn');
+    await actor.bringToFront().catch(() => undefined);
   }
 
   // --- resign -> finished ---

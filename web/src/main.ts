@@ -1076,7 +1076,7 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   if (spinMs) await new Promise((r) => setTimeout(r, spinMs));
   panel.dataset.spinning = '0';
   panel.dataset.winner = opponentStarts ? 'bot' : 'you';
-  title.textContent = opponentStarts ? `${OPP.Label} starts` : 'You start';
+  title.textContent = opponentStarts ? `${OPP.label} starts` : 'You start';
   result.textContent = opponentStarts ? 'Opponent won the draw.' : 'You won the draw.';
   const holdMs = settings.reduceMotion || timeScale() === 0 ? 200 : 700;
   await new Promise((r) => setTimeout(r, holdMs));
@@ -1106,7 +1106,7 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
     await runStarterLottery(opponentStarts);
   }
   const state: State = opening;
-  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
+  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`];
   beginSession(state, null, [], opponentStarts ? state : null);
   dealIn();
   firstToolTips();
