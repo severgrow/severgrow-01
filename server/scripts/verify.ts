@@ -46,8 +46,11 @@ const smoke = async (baseUrl: string): Promise<void> => {
 
   const created = await a.createMatch(guestA.token);
   check('guest A creates a waiting match', created.match.status === 'waiting', created.match.inviteCode);
+  // Same as the real UI: persist the session so a page refresh can resume via `resume()`.
+  a.saveSession({ token: guestA.token, matchId: created.match.matchId, seat: created.player.seat });
   const joined = await b.joinMatch(guestB.token, created.match.inviteCode);
   check('guest B joins by invite code', joined.match.status === 'active' && joined.player.seat === 1);
+  b.saveSession({ token: guestB.token, matchId: joined.match.matchId, seat: joined.player.seat });
 
   const matchId = created.match.matchId;
   const viewA = (await a.getState(guestA.token, matchId)).player;

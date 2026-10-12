@@ -27,6 +27,16 @@ const enabled = DATABASE_URL.length > 0;
 const PLAYERS: string[] = [];
 const MATCHES: string[] = [];
 
+// Never skip silently: CI without DATABASE_URL stays green, but the console must shout.
+if (!enabled) {
+  console.warn('\n*** DATABASE TESTS SKIPPED — DATABASE_URL is not set ***\n');
+  console.warn('Pinned check: npm run server:db-test (requires DATABASE_URL in .env or the environment).\n');
+}
+// Explicit pin (`npm run server:db-test`) must not look green when nothing ran.
+if (!enabled && process.env.REQUIRE_DATABASE === '1') {
+  throw new Error('DATABASE TESTS SKIPPED — DATABASE_URL is not set (REQUIRE_DATABASE=1).');
+}
+
 /** The suite is skipped (not failed) when there is no database to talk to. */
 const suite = describe.skipIf(!enabled);
 

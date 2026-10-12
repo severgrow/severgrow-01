@@ -29,7 +29,7 @@
     "server:dev": "node --env-file-if-exists=.env --import tsx server/src/index.ts",
     "server:smoke": "node --env-file-if-exists=.env --import tsx server/scripts/smoke.ts",
     "server:migrate": "node --env-file-if-exists=.env --import tsx server/scripts/migrate.ts",
-    "server:db-test": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run server/tests/postgres.integration.test.ts",
+    "server:db-test": "REQUIRE_DATABASE=1 node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run server/tests/postgres.integration.test.ts",
     "server:verify": "node --env-file-if-exists=.env --import tsx server/scripts/verify.ts",
     "skin:manifest": "tsx web/skin-manifest.ts"
   },
