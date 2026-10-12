@@ -49,6 +49,30 @@ export type {
   PersonalSetting,
 } from './perspective.js';
 
+export { duelApiUrl, onlineBuildEnabled, publicAppOrigin } from './config.js';
+
+export {
+  FIRST_ONLINE_CARD_KEY,
+  WARN_LAST_MS,
+  parseJoinHash,
+  inviteLink,
+  shareInviteText,
+  lobbyBucket,
+  sortLobbyEntries,
+  toLobbyRow,
+  trimLobbyList,
+  yourTurnCount,
+  pageTitleForLobby,
+  friendlyJoinError,
+  matchStatusLabel,
+} from './lobby.js';
+export type { LobbyBucket, LobbyRow } from './lobby.js';
+
+export { installOnlineLobby } from './lobby-ui.js';
+export type { LobbyUiHooks, OnlineLobbyController } from './lobby-ui.js';
+
+export { ONLINE_CSS } from './online-css.js';
+
 export type {
   ConnectionStatus,
   PresenceStatus,

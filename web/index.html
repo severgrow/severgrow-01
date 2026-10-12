@@ -86,17 +86,76 @@
       <div class="menu-inner">
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
-        <h1 class="title">Futasaku</h1>
-        <p class="tagline">Grow your network. Keep it joined to your home. Cut your opponent's links.</p>
+        <h1 class="title">FUTASAKU</h1>
+        <p class="tagline" id="menu-tagline">GROW · CONNECT · CONQUER</p>
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
-          <button id="menu-new" class="btn primary big" type="button" aria-label="New game">New game</button>
+          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
+          <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           <!-- install button: label and behaviour are set by src/logic/install.ts -->
           <button id="menu-install" class="btn ghost" type="button" aria-label="Add to Home Screen" hidden>Add to Home Screen</button>
           <p id="menu-install-hint" class="menu-install-hint" role="status" hidden></p>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== Online hub (Phase 4) ===== -->
+    <section id="online-hub" class="screen online-hub" aria-label="Play online" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-hub-title">Play online</h2>
+        </header>
+        <div id="online-first-card" class="online-card" hidden>
+          <h3 id="online-first-title"></h3>
+          <ul id="online-first-list"></ul>
+          <button id="online-first-ok" class="btn primary" type="button">Got it</button>
+        </div>
+        <div class="online-actions">
+          <button id="online-create" class="btn primary big" type="button">Create a duel</button>
+          <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
+        </div>
+        <h3 class="online-section" id="online-matches-title">Your online matches</h3>
+        <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
+        <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
+        <p id="online-hub-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-waiting" class="screen online-waiting" aria-label="Waiting for a friend" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-waiting-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-waiting-title">Waiting for a friend</h2>
+        </header>
+        <p id="online-waiting-body" class="muted"></p>
+        <p id="online-invite-code" class="online-code" aria-label="Invite code"></p>
+        <div class="online-actions">
+          <button id="online-share" class="btn primary big" type="button">Share invite</button>
+          <button id="online-copy" class="btn ghost" type="button">Copy link</button>
+          <button id="online-cancel-match" class="btn ghost" type="button">Cancel match</button>
+        </div>
+        <p id="online-waiting-expiry" class="muted small"></p>
+        <p id="online-waiting-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-join" class="screen online-join" aria-label="Join a duel" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-join-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-join-title">Join a duel</h2>
+        </header>
+        <label class="online-field" for="online-join-code"><span id="online-join-prompt">Enter the invite code</span>
+          <input id="online-join-code" type="text" inputmode="text" autocomplete="off" maxlength="16" spellcheck="false" />
+        </label>
+        <p id="online-join-confirm" class="online-confirm" hidden></p>
+        <div class="online-actions">
+          <button id="online-join-submit" class="btn primary big" type="button">Join</button>
+        </div>
+        <p id="online-join-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
 
@@ -271,6 +330,17 @@
         <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
         <label class="row"><span>Coach</span><input type="checkbox" data-setting="coach" /></label>
         <button id="restart-tutorial" class="btn ghost small" type="button">Restart the coach with a new game</button>
+        <h3>Online</h3>
+        <p id="online-storage-note" class="muted small">Your online matches live on this device until accounts exist.</p>
+        <div id="online-link-block" class="online-link-block" hidden>
+          <p class="muted small" id="online-link-help">Creates a one-time code (10 minutes). It never moves your existing token.</p>
+          <button id="online-link-make" class="btn ghost small" type="button">Make a link code</button>
+          <label class="row" for="online-link-redeem-input"><span>Enter a link code</span>
+            <input id="online-link-redeem-input" type="text" maxlength="16" autocomplete="off" spellcheck="false" />
+          </label>
+          <button id="online-link-redeem" class="btn ghost small" type="button">Use code</button>
+          <p id="online-link-status" class="muted small" role="status"></p>
+        </div>
         <details id="settings-lab" class="settings-lab">
           <summary><span class="lab-sigil" aria-hidden="true"></span><span><strong>Lab</strong><small>20 ways to tune the same game</small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">

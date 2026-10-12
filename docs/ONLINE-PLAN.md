@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12). Phase 3b green (2026-10-12): perspective layer (seat 0 identity, seat 1 rotate 180°, Me=moss/Opponent=lava, coach/hidden-deck hints off online); unit tests + `docs/screens/online/` seat0/seat1 shots. Hosting: **Supabase Edge Functions**. Next: Phase 4.  
+**Status:** Phase 0–3b green (2026-10-12). Phase 4 green (2026-10-12): menu tagline GROW · CONNECT · CONQUER, Play online hub (create/join/list/waiting, first-time card, settings storage + link code), lobby unit tests + menu smoke. Hosting: **Supabase Edge Functions**. Next: Phase 5 (duel screen). **Push note:** local branch may be ahead — GitHub OAuth lacks `workflow` scope for `.github/workflows/futa05-keepalive.yml`; owner push needed.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.

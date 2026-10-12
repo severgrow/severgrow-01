@@ -433,6 +433,10 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('game').hidden = name !== 'game';
+  for (const id of ['online-hub', 'online-waiting', 'online-join']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
   if (name === 'levels') {
     renderLevelGrid();
   }
@@ -849,8 +853,15 @@ async function mountPlayerEnhancements() {
   }
   if (typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'test' || __CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test')) {
     placeTeachingPanel = (await import('./player/overlay-placement.js')).placeTeachingPanel;
-    loads.push(import('./player/player-css.js').then((m) => {
+    loads.push(import('./player/player-css.js').then(async (m) => {
       const style = document.createElement('style'); style.id = 'player-styles'; style.textContent = m.PLAYER_CSS; document.head.append(style);
+      const onlineCss = await import('./online/online-css.js');
+      if (!document.getElementById('online-styles')) {
+        const os = document.createElement('style');
+        os.id = 'online-styles';
+        os.textContent = onlineCss.ONLINE_CSS;
+        document.head.append(os);
+      }
       layoutKey = ''; applyLayout(); if (session) render();
     }));
     loads.push(import('./player/thumb.js').then((t) => {
@@ -5541,6 +5552,26 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   startTutorial(chapter);
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+
+// Phase 4: online lobby (hidden unless VITE_DUEL_API_URL is set at build time).
+void import('./online/lobby-ui.js').then((m) => {
+  let reopenHub: (() => void) | null = null;
+  const lobby = m.installOnlineLobby({
+    showMenu: () => showScreen('menu'),
+    openDuel: () => {
+      // Phase 5 wires the duel screen; keep a quiet placeholder for now.
+      const n = document.getElementById('online-hub-notice');
+      if (n) {
+        void import('../../src/strings.js').then((s) => {
+          n.textContent = s.ONLINE.openDuelSoon;
+        });
+      }
+      reopenHub?.();
+    },
+  });
+  reopenHub = () => void lobby.openHub();
+  void lobby.handleBootHash();
+});
 
 window.addEventListener('popstate', () => {
   if (coach.tutorial) exitTutorial();
