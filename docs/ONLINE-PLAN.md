@@ -1,9 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
-> **RESUME (owner pause):** WIP Phase 3b on `futa0.5-online`. Done: `web/src/online/perspective.ts` + driver/types/index wire-up; `web/tests/perspective.test.ts` (28 tests green with online-layer). Missing: run `web/e2e/online-perspective-shots.ts` → `docs/screens/online/` (needs `PW_CHROMIUM`); then mark 3b green and start Phase 4. Do not touch engine/tutorial/futa0.4/main.
-
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12). Phase 3b **WIP** (2026-10-12): perspective layer + unit tests green; seat0/seat1 screenshots not captured yet. Hosting: **Supabase Edge Functions**. Next: finish 3b screenshots, then Phase 4.  
+**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12). Phase 3b green (2026-10-12): perspective layer (seat 0 identity, seat 1 rotate 180°, Me=moss/Opponent=lava, coach/hidden-deck hints off online); unit tests + `docs/screens/online/` seat0/seat1 shots. Hosting: **Supabase Edge Functions**. Next: Phase 4.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.
