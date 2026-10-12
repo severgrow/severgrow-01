@@ -1,30 +1,23 @@
 // Server entry point.
 //
-//   DATABASE_URL=postgres://... npm run server:dev
+//   npm run server:dev                          # in-memory storage (dev only)
+//   DATABASE_URL=postgres://… npm run server:dev # Postgres/Supabase
 //
-// With DATABASE_URL set it uses the Postgres/Supabase adapter (requires the `pg` package); without
-// it, it uses the in-memory adapter — fine for local development and tests, but nothing survives a
-// restart. The rules version is pinned in server/src/config.ts.
+// A `.env` file (git-ignored) is read automatically by the npm scripts. The rules version is
+// pinned in server/src/config.ts.
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { createHttpServer } from './http.js';
 import { MatchService } from './service.js';
 import { MemoryStorage } from './storage/memory.js';
+import { databaseUrlFromEnv, poolFromUrl, redactUrl } from './storage/pg-pool.js';
 import { postgresStorage } from './storage/postgres.js';
-import type { PgPool } from './storage/postgres.js';
 import type { Storage } from './storage/types.js';
 
-type PgPoolFactory = new (options: { connectionString: string }) => PgPool;
-
-const buildStorage = async (): Promise<{ storage: Storage; description: string }> => {
-  const url = process.env.DATABASE_URL;
+const buildStorage = (): { storage: Storage; description: string } => {
+  const url = databaseUrlFromEnv();
   if (!url) return { storage: new MemoryStorage(), description: 'in-memory (dev only: nothing is persisted)' };
-  // The specifier is computed so the project type-checks without `pg` installed.
-  const moduleName = process.env.PG_MODULE ?? 'pg';
-  const imported = (await import(moduleName)) as { default?: { Pool?: PgPoolFactory }; Pool?: PgPoolFactory };
-  const Pool = imported.default?.Pool ?? imported.Pool;
-  if (!Pool) throw new Error(`Could not find Pool in module "${moduleName}". Run: npm install pg`);
-  return { storage: postgresStorage(new Pool({ connectionString: url })), description: 'postgres' };
+  return { storage: postgresStorage(poolFromUrl(url)), description: `postgres (${redactUrl(url)})` };
 };
 
 export const startServer = async (): Promise<void> => {
@@ -32,7 +25,7 @@ export const startServer = async (): Promise<void> => {
     ...DEFAULT_SERVER_CONFIG,
     ...(process.env.CORS_ORIGIN ? { corsOrigin: process.env.CORS_ORIGIN } : {}),
   };
-  const { storage, description } = await buildStorage();
+  const { storage, description } = buildStorage();
   const service = new MatchService({ storage, config });
   const server = createHttpServer({ service, config, logger: (line) => console.log(line) });
 

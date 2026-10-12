@@ -26,16 +26,22 @@
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",
     "bot-timing": "tsx src/sim/bot-timing.ts",
-    "server:dev": "node --import tsx server/src/index.ts",
-    "server:smoke": "node --import tsx server/scripts/smoke.ts",
+    "server:dev": "node --env-file-if-exists=.env --import tsx server/src/index.ts",
+    "server:smoke": "node --env-file-if-exists=.env --import tsx server/scripts/smoke.ts",
+    "server:migrate": "node --env-file-if-exists=.env --import tsx server/scripts/migrate.ts",
+    "server:db-test": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run server/tests/postgres.integration.test.ts",
     "skin:manifest": "tsx web/skin-manifest.ts"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
+    "@types/pg": "^8.23.1",
     "playwright-core": "^1.56.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   }
 }

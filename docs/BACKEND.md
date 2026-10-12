@@ -33,21 +33,51 @@ server/src/client.ts             typed isomorphic client + local session (refres
 server/src/storage/types.ts      the Storage port and its atomicity contract
 server/src/storage/memory.ts     in-memory adapter (dev/tests)
 server/src/storage/postgres.ts   Postgres/Supabase adapter (transactional)
+server/src/storage/pg-pool.ts    one place that builds the pool + TLS from DATABASE_URL
 server/src/index.ts              entry point (DATABASE_URL → postgres, else memory)
 server/migrations/0001_init.sql  the schema, with Row Level Security
+server/scripts/migrate.ts         versioned, checksummed migration runner
 server/scripts/smoke.ts          manual end-to-end smoke against a running server
 server/tests/                    the test suite for all of the above
 ```
 
 ## Running it
 
+Secrets live in a git-ignored `.env` (start from `.env.example`). The npm scripts load it via
+Node's `--env-file-if-exists`, so no extra dependency is needed.
+
 ```sh
-npm run server:dev                                   # in-memory storage, port 8787
-DATABASE_URL=postgres://… npm run server:dev          # Postgres (requires: npm install pg)
-psql "$DATABASE_URL" -f server/migrations/0001_init.sql
+cp .env.example .env          # then paste your Supabase connection string into DATABASE_URL
+npm run server:migrate        # apply server/migrations/*.sql (idempotent, checksummed)
+npm run server:dev            # in-memory storage
+npm run server:dev            # with DATABASE_URL set → Postgres/Supabase
+npm run server:db-test        # real-database integration tests (skipped without DATABASE_URL)
+npm run server:smoke          # end-to-end smoke against a running server
 ```
 
 Because the engine is shared, the server needs no build step to run under `tsx`.
+
+## Supabase setup
+
+1. **Create the project** (Supabase dashboard). Note its region.
+2. **Get the connection string:** *Project Settings → Database → Connection string*.
+   - **Session pooler** (port `5432`) or **Direct connection** — use this for migrations and tests.
+   - The **Transaction pooler** (port `6543`) is fine at runtime but not for DDL.
+   - Use the **database password** (not the `anon`/`service_role` API keys). This is a real secret.
+3. **Put it in `.env`** (git-ignored) as `DATABASE_URL=…?sslmode=require`. Never commit it, never
+   paste it into a chat or an issue.
+4. **Apply the schema:** `npm run server:migrate`. `--status` shows what is applied/pending;
+   `--dry-run` lists without changing anything.
+5. **Verify:** `npm run server:db-test` (integration) and `npm run server:smoke` (end-to-end).
+
+TLS is automatic: any non-localhost host gets TLS; `sslmode=require` means "encrypt, do not verify
+the chain" (the pragmatic managed-host default). For `verify-full`, install the provider's CA and
+set `PGSSL=verify-full`.
+
+**RLS note:** the API server must connect as the database owner/superuser (what the password above
+gives you). The migration enables RLS and revokes `anon`/`authenticated`, and the integration suite
+asserts those roles are denied. Do **not** point the server at a role that only has the `anon` or
+`authenticated` privileges.
 
 ## Endpoints
 
@@ -149,9 +179,8 @@ world-map functionality, ranked play, and any game-mechanic change.
 
 Unfinished / next:
 
-1. **Live database run.** The Postgres adapter is verified against a recording fake (statement
-   order, rollback paths) but **not yet against a real Postgres/Supabase instance**. Installing
-   `pg`, applying the migration and running the integration test is the first next step.
+1. **Live database run.** See the "Supabase setup" section and `docs/DATABASE-VERIFICATION.md`
+   for exactly what has been verified against the real project.
 2. **No push transport.** Clients poll (`/view?since=`). The contract's realtime step needs SSE or
    WebSocket on top of the same pipeline.
 3. **No client UI wiring.** `server/src/client.ts` is ready and tested, but the game screen does not

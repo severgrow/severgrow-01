@@ -13,3 +13,7 @@ ladder-v05b/
 ladder-v05b.log
 scratch/
 web/e2e/out-design/
+# Secrets: never commit connection strings or keys.
+.env
+.env.*
+!.env.example
