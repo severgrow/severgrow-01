@@ -30,11 +30,13 @@ try {
   await page.locator('#menu-tutorial').click();
   assert.equal((await state()).seed,51000);
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'HOME');
+  // Dual advance: tapping the highlighted home must work (not only NEXT).
+  await page.waitForSelector('#board .hex-cell[data-key="-2,2"]',{timeout:5000});
+  await page.locator('#board .hex-cell[data-key="-2,2"]').click({force:true});
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='THEIR HOME',undefined,{timeout:8000});
   await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
-  await page.locator('#futasaku-glass [data-tut="next"]').click();
-  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='THEIR HOME');
-  await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
-  await page.locator('#futasaku-glass [data-tut="next"]').click();
+  // Glass CTAs must not be blocked by the full-width HUD strip above them.
+  await page.locator('#futasaku-glass [data-tut="next"]').click({force:false});
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW PILE');
   const opening=await state();

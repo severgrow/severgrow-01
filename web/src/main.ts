@@ -1442,13 +1442,14 @@ function tutorialAssistBloom(action: 'Bloom' | 'MegaBomb'): boolean {
   return true;
 }
 
-/** Look-and-tap: Next advances; Bloom/Blast on the glow starts the recipe. */
+/** Look-and-tap: target tap AND Next both advance; Bloom/Blast on the glow starts the recipe. */
 function armTutorialLookTap(lesson: { action: string }, selector: string) {
   tutorialLookTapCleanup?.();
   tutorialLookTapCleanup = null;
   if (!selector) return;
   if (lesson.action === 'Next') {
-    if (!tutorialCtaReady) return;
+    // Arm immediately — do not wait for the delayed NEXT button. Home / look steps
+    // must advance from either tapping the glow target or pressing NEXT.
     const onTap = (event: Event) => {
       const el = event.target as Element | null;
       if (!el || typeof el.closest !== 'function') return;

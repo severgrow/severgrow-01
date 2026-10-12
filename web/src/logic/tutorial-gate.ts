@@ -20,6 +20,7 @@ export const GATE_INERT_ROOTS = Object.freeze([
 
 /** Controls that always stay reachable inside the glass window. */
 export const GATE_WINDOW_SELECTORS = Object.freeze([
+  '#futasaku-glass .glass-head button',
   '#futasaku-glass .glass-actions button',
   '#futasaku-glass [data-tut]',
 ] as const);

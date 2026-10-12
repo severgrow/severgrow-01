@@ -55,7 +55,9 @@ const installDom = () => {
   };
   const match = (n: NodeLike, sel: string): boolean => {
     if (sel.startsWith('#') && !sel.includes(' ') && !sel.includes('.')) return n.id === sel.slice(1);
-    if (sel === '#futasaku-glass .glass-actions button' || sel === '#futasaku-glass [data-tut]') {
+    if (sel === '#futasaku-glass .glass-head button'
+      || sel === '#futasaku-glass .glass-actions button'
+      || sel === '#futasaku-glass [data-tut]') {
       return n.tag === 'button' && !!n.closest('#futasaku-glass');
     }
     if (sel.startsWith('#') && sel.includes(' ')) {

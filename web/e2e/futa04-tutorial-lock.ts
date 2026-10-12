@@ -116,12 +116,13 @@ try {
     assert.equal(await hashState(page), beforeFuzz, 'fuzz taps must not change state');
     assert.equal(errors.length, 0, `console errors: ${errors.join('; ')}`);
 
-    // Focus dim must punch real pixel holes (userSpaceOnUse), keep a cream ring, and
-    // keep #hud-menu above the glass sheet — not crushed under a foreignObject filter.
+    // Focus dim must punch real pixel holes (userSpaceOnUse), stay contour-free, and
+    // keep #hud-menu above the glass sheet (glass hosted inside #game with HUD).
     const focusOk = await page.evaluate(() => {
       const focus = document.getElementById('tutorial-focus');
       const glass = document.getElementById('futasaku-glass');
       const menu = document.getElementById('hud-menu');
+      const game = document.getElementById('game');
       const mask = focus?.querySelector('mask');
       const hole = focus?.querySelector('.focus-hole');
       const glow = focus?.querySelector('.focus-glow');
@@ -132,21 +133,35 @@ try {
       const hz = Number.parseInt(getComputedStyle(document.querySelector('.game > .hud')!).zIndex, 10) || 0;
       const gz = Number.parseInt(getComputedStyle(glass).zIndex, 10) || 0;
       const stroke = getComputedStyle(glow).stroke;
+      const strokeWidth = getComputedStyle(glow).strokeWidth;
+      const menuBox = menu.getBoundingClientRect();
+      const glassBox = glass.getBoundingClientRect();
+      const sampleX = Math.min(menuBox.left + menuBox.width / 2, Math.max(4, menuBox.left + 8));
+      const sampleY = Math.min(menuBox.top + menuBox.height / 2, Math.max(4, menuBox.top + 8));
+      const topEl = document.elementFromPoint(sampleX, sampleY);
       return {
         ok: true,
         maskUnits: mask.getAttribute('maskUnits'),
         hasForeign: !!focus.querySelector('foreignObject'),
         holeSize: hw * hh,
         menuAboveGlass: Math.max(mz, hz) > gz,
-        creamRing: stroke !== 'none' && stroke !== 'rgba(0, 0, 0, 0)',
+        glassInsideGame: !!game && game.contains(glass) && game.contains(focus),
+        noContour: (stroke === 'none' || stroke === 'rgba(0, 0, 0, 0)') && (strokeWidth === '0px' || strokeWidth === '0'),
+        menuHit: !!(topEl && (topEl === menu || menu.contains(topEl))),
+        glassCoversMenuY: glassBox.top < menuBox.bottom && glassBox.bottom > menuBox.top
+          && glassBox.left < menuBox.right && glassBox.right > menuBox.left,
       };
     });
     assert.equal(focusOk.ok, true, 'tutorial focus scene present');
     assert.equal(focusOk.maskUnits, 'userSpaceOnUse', 'cutout mask uses screen pixels');
     assert.equal(focusOk.hasForeign, false, 'no foreignObject backdrop crush');
     assert.ok((focusOk.holeSize as number) > 2000, `focus hole must be sized, got ${focusOk.holeSize}`);
+    assert.equal(focusOk.glassInsideGame, true, 'glass/focus must live inside #game for HUD stacking');
     assert.equal(focusOk.menuAboveGlass, true, '#hud-menu / hud must sit above #futasaku-glass');
-    assert.equal(focusOk.creamRing, true, 'focus glow keeps a cream ring stroke');
+    assert.equal(focusOk.noContour, true, 'focus glow must have no outline stroke/contour');
+    if (focusOk.glassCoversMenuY) {
+      assert.equal(focusOk.menuHit, true, 'menu button must win hit-testing when glass overlaps it');
+    }
 
     // Shot of the draw step with dim + glow + pointer, then prove the real target works.
     await page.screenshot({ path: path.join(SHOT_DIR, 'chapter-02-draw.png') });

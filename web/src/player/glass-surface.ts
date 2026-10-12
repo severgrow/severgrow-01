@@ -45,34 +45,70 @@ const CSS = `
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
   font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 #futasaku-glass[hidden], #tutorial-focus[hidden] { display:none; }
-#futasaku-glass[data-mode='tutorial'] { pointer-events:none; z-index:40; max-width:min(420px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px))); width:min(420px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
-  left:50%; top:max(12px, calc(env(safe-area-inset-top, 0px) + 8px)); bottom:auto; transform:translateX(-50%); height:auto;
+/* Hosted inside #game.screen so z-order compares with #hud-menu (body-level glass sat above the whole screen). */
+#futasaku-glass[data-mode='tutorial'] { pointer-events:none; z-index:40; max-width:min(420px,calc(100vw - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px))); width:min(420px,calc(100vw - 16px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+  left:50%; top:max(0px, env(safe-area-inset-top, 0px)); bottom:auto; transform:translateX(-50%); height:auto;
   background:rgba(12,14,14,.88);
-  border:none !important; outline:none !important; box-shadow:0 16px 40px rgba(0,0,0,.38);
+  border:none !important; outline:none !important; box-shadow:0 12px 32px rgba(0,0,0,.36);
   backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
   transition: opacity 220ms ease; filter:none; }
 /* Phone tutorial: reserve space so the map fits below the card (SVG meet scales down). */
+html.futa04-tutorial #game.screen { overflow: visible; }
 html.futa04-tutorial:not([data-layout='side']) .board-wrap {
   padding-top: var(--tutorial-glass-h, 0px);
   box-sizing: border-box;
+  min-height: 0;
 }
 html.futa04-tutorial:not([data-layout='side']) .board-wrap > .board {
   transform-origin: center bottom;
+  max-width: 100%;
+  max-height: 100%;
 }
-#futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; margin:0; max-width:none;
+html.futa04-tutorial:not([data-layout='side']) .play {
+  min-height: 0;
+  overflow: visible;
+}
+#futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
-#futasaku-glass[data-mode='tutorial'] .glass-dots { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
-#futasaku-glass[data-mode='tutorial'] .glass-dot { width:6px; height:6px; border-radius:50%; background:rgba(232,221,201,.28); }
-#futasaku-glass[data-mode='tutorial'] .glass-dot[data-on='1'] { background:#e8ddc9; }
+/* One head row: PREVIOUS | title | NEXT/TAP — three equal columns. */
+#futasaku-glass[data-mode='tutorial'] .glass-head {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr);
+  align-items:center; gap:6px; width:100%; pointer-events:none;
+}
+#futasaku-glass[data-mode='tutorial'] .glass-head-slot {
+  display:flex; align-items:center; min-width:0; min-height:44px;
+}
+#futasaku-glass[data-mode='tutorial'] .glass-head-prev { justify-content:stretch; }
+#futasaku-glass[data-mode='tutorial'] .glass-head-title { justify-content:center; }
+#futasaku-glass[data-mode='tutorial'] .glass-head-next { justify-content:stretch; }
+#futasaku-glass[data-mode='tutorial'] .glass-head-slot > button {
+  width:100%; min-height:44px; min-width:0; padding:0 8px; box-sizing:border-box;
+  border:1px solid rgba(214,204,177,.22); border-radius:10px;
+  background:rgba(255,255,255,.05); color:#f0e9dc;
+  font:400 11.5px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing:.04em; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  pointer-events:auto;
+}
+#futasaku-glass[data-mode='tutorial'] .glass-head-slot > button:focus-visible { outline:2px solid #e8ddc9; outline-offset:1px; }
+#futasaku-glass[data-mode='tutorial'] .glass-head-slot > button[data-tut="next"] {
+  background:rgba(233,216,173,.14); border-color:rgba(233,216,173,.45); letter-spacing:.05em;
+}
+#futasaku-glass[data-mode='tutorial'] .glass-head-slot > button[data-tut="next"].glass-blink {
+  animation: tutorial-next-blink 1.15s ease-in-out infinite;
+}
+@keyframes tutorial-next-blink {
+  0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(233,216,173,0); }
+  50% { opacity:1; box-shadow:0 0 0 3px rgba(233,216,173,.32); }
+}
 #futasaku-glass[data-mode='tutorial'] .glass-instruction,
-#futasaku-glass[data-mode='guidance'] .glass-instruction { margin:0; display:flex; justify-content:center; }
+#futasaku-glass[data-mode='guidance'] .glass-instruction { margin:0; display:flex; justify-content:center; width:100%; max-width:100%; }
 #futasaku-glass[data-mode='tutorial'] .glass-led-sr,
 #futasaku-glass[data-mode='guidance'] .glass-led-sr {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 #futasaku-glass[data-mode='tutorial'] .glass-led-window,
 #futasaku-glass[data-mode='guidance'] .glass-led-window {
   position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden;
-  min-height:34px; max-width:100%; padding:4px 10px; box-sizing:border-box;
+  min-height:34px; width:100%; max-width:100%; padding:4px 6px; box-sizing:border-box;
   border-radius:8px; background:#090c0b;
   box-shadow:inset 0 0 0 1px rgba(166,128,78,.18), inset 0 0 18px rgba(255,195,104,.06);
 }
@@ -87,36 +123,20 @@ html.futa04-tutorial:not([data-layout='side']) .board-wrap > .board {
   display:block; position:relative; z-index:1; height:30px; width:auto; max-width:100%;
 }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-window,
-.large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 12px; }
+.large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 8px; }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-cells,
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
-#futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13.5px/1.5 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; }
-#futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13.5px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; }
+#futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
+#futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-icons { display:flex; gap:10px; justify-content:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-icons span { font:400 11px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#cbbfa0; letter-spacing:.05em; }
-#futasaku-glass[data-mode='tutorial'] .glass-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; pointer-events:auto; }
-#futasaku-glass[data-mode='tutorial'] .glass-actions button { min-height:44px; min-width:44px; padding:0 12px; border:1px solid rgba(214,204,177,.22);
-  border-radius:10px; background:rgba(255,255,255,.05); color:#f0e9dc; font:400 12.5px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.03em; cursor:pointer; white-space:nowrap; }
-#futasaku-glass[data-mode='tutorial'] .glass-actions button:focus-visible { outline:2px solid #e8ddc9; outline-offset:1px; }
-#futasaku-glass[data-mode='tutorial'] .glass-actions [data-tut="next"] { background:rgba(233,216,173,.14); border-color:rgba(233,216,173,.45); letter-spacing:.05em; }
-/* Arm with a soft settle pulse, then keep a gentle halo blink. */
-#futasaku-glass[data-mode='tutorial'] .glass-actions [data-tut="next"].glass-blink {
-  animation: tutorial-next-arm 420ms cubic-bezier(.22,.8,.28,1),
-             tutorial-next-blink 1.15s ease-in-out 420ms infinite;
-}
-@keyframes tutorial-next-arm {
-  0% { transform:scale(.96); box-shadow:0 0 0 0 rgba(233,216,173,0); }
-  55% { transform:scale(1.04); box-shadow:0 0 0 4px rgba(233,216,173,.28); }
-  100% { transform:scale(1); box-shadow:0 0 0 0 rgba(233,216,173,0); }
-}
-@keyframes tutorial-next-blink { 0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(233,216,173,0); } 50% { opacity:1; box-shadow:0 0 0 3px rgba(233,216,173,.32); } }
 /* Soft settle on the inner column when the lesson step changes (panel transform stays JS-owned). */
 #futasaku-glass[data-mode='tutorial'][data-step-settle='1'] .glass-tutorial {
-  animation: tutorial-glass-settle 300ms cubic-bezier(.22,.72,.24,1);
+  animation: tutorial-glass-settle 280ms cubic-bezier(.22,.72,.24,1);
 }
 @keyframes tutorial-glass-settle {
-  0% { opacity:.82; transform:translateY(-5px) scale(.985); }
-  100% { opacity:1; transform:translateY(0) scale(1); }
+  0% { opacity:.88; }
+  100% { opacity:1; }
 }
 #futasaku-glass[data-mode='tutorial'][data-fade='out'] { opacity:.94; }
 #futasaku-glass[data-mode='tutorial'][data-fade='in'] { opacity:1; }
@@ -160,13 +180,13 @@ html.futa04-tutorial:not([data-layout='side']) .board-wrap > .board {
   opacity:0; transition: opacity 240ms ease; }
 #tutorial-focus[data-on='1'] { opacity:1; }
 #tutorial-focus[data-fade='out'] { opacity:0; transition: opacity 160ms ease; }
-/* HUD (esp. #hud-menu) must sit above focus dim (34) AND the glass sheet (40).
-   Branding keeps .hud position:fixed at z-index 7 — raise the whole bar so the
-   menu icon is never covered by the tutorial card. Logo is pointer-events:none.
-   Pause scrim/sheets climb above the menu so the sheet still owns the modal layer. */
+/* Glass + focus live inside #game.screen; raise HUD above both so the menu is never covered.
+   The slim HUD is a full-width top strip — keep it pointer-transparent except #hud-menu so
+   PREVIOUS/NEXT on the glass stay clickable underneath the empty chrome. */
 html.futa04-tutorial .game > .hud,
 html.futa04-tutorial.futa04-branding.slim-hud .game > .hud {
   z-index: 45;
+  pointer-events: none;
 }
 html.futa04-tutorial #hud-menu {
   position: relative;
@@ -181,21 +201,16 @@ html.futa04-tutorial .sheet { z-index: 51; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.38); }
-#tutorial-focus .focus-glow { fill:none; stroke:#e9d8ad; stroke-width:2.2;
-  filter:drop-shadow(0 0 10px rgba(233,216,173,.75)); }
-#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.16); stroke:none; filter:drop-shadow(0 0 14px rgba(233,216,173,.45)); }
+/* Contour-free highlight: soft cream fill only — no stroke/ring outline. */
+#tutorial-focus .focus-glow { fill:rgba(233,216,173,.10); stroke:none; stroke-width:0;
+  filter:drop-shadow(0 0 12px rgba(233,216,173,.55)); }
+#tutorial-focus .focus-glow-soft { fill:rgba(233,216,173,.18); stroke:none; filter:drop-shadow(0 0 16px rgba(233,216,173,.42)); }
 #tutorial-focus .focus-lift { transform-box:fill-box; transform-origin:center; }
-#tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.8s ease-in-out infinite; }
-/* Satisfying settle after the highlight target changes (one-shot; pauses idle pulse). */
-#tutorial-focus.focus-settle .focus-lift {
-  animation: tutorial-focus-settle 360ms cubic-bezier(.22,.82,.28,1);
-}
-@keyframes tutorial-glow-pulse { 0%,100% { transform:scale(1); opacity:1; } 50% { transform:scale(1.025); opacity:.92; } }
-@keyframes tutorial-focus-settle {
-  0% { transform:scale(1); }
-  32% { transform:scale(1.055); }
-  62% { transform:scale(.975); }
-  100% { transform:scale(1); }
+/* Steady opacity pulse only — never scale (scale + live target breathe looked broken). */
+#tutorial-focus[data-pulse='1'] .focus-lift { animation:tutorial-glow-pulse 1.6s ease-in-out infinite; }
+@keyframes tutorial-glow-pulse {
+  0%,100% { opacity:1; }
+  50% { opacity:.72; }
 }
 #tutorial-focus .focus-pointer { filter:drop-shadow(0 1px 3px rgba(0,0,0,.4)); transform-origin:10px 4px; }
 #tutorial-focus .focus-pointer-body { fill:#fff; stroke:none; }
@@ -203,20 +218,20 @@ html.futa04-tutorial .sheet { z-index: 51; }
 #tutorial-focus[data-bob='hard'] .focus-pointer { animation:tutorial-pointer-tap-hard .85s ease-in-out infinite; }
 @keyframes tutorial-pointer-tap { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,7px)); } }
 @keyframes tutorial-pointer-tap-hard { 0%,100% { transform:translate(0,0); } 45% { transform:translate(var(--bob-x,0px),var(--bob-y,10px)); } }
-#tutorial-focus.nudge .focus-glow { animation:tutorial-nudge .16s ease-out; }
+#tutorial-focus.nudge .focus-glow-soft { animation:tutorial-nudge .16s ease-out; }
 @keyframes tutorial-nudge { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
 .reduce-motion #tutorial-focus .focus-glow, .reduce-motion #tutorial-focus .focus-pointer,
 .reduce-motion #tutorial-focus .focus-lift,
-.reduce-motion #tutorial-focus.nudge .focus-glow,
-.reduce-motion #futasaku-glass[data-mode='tutorial'] .glass-actions [data-tut="next"].glass-blink,
+.reduce-motion #tutorial-focus.nudge .focus-glow-soft,
+.reduce-motion #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button[data-tut="next"].glass-blink,
 .reduce-motion #futasaku-glass[data-mode='tutorial'][data-step-settle='1'] .glass-tutorial { animation:none !important; }
 @media (prefers-reduced-motion:reduce) {
   #futasaku-glass[data-mode='tutorial'] { transition: opacity 120ms ease; }
-  #futasaku-glass[data-mode='tutorial'] .glass-actions [data-tut="next"].glass-blink,
+  #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button[data-tut="next"].glass-blink,
   #futasaku-glass[data-mode='tutorial'][data-step-settle='1'] .glass-tutorial { animation:none !important; }
   #tutorial-focus { transition: opacity 120ms ease; }
   #tutorial-focus .focus-glow, #tutorial-focus .focus-pointer,
-  #tutorial-focus .focus-lift, #tutorial-focus.nudge .focus-glow { animation:none !important; }
+  #tutorial-focus .focus-lift, #tutorial-focus.nudge .focus-glow-soft { animation:none !important; }
 }
 /* Bloom explain: soft mid-screen set + run faces (no hard frame — float only). */
 #tutorial-bloom-demo {
@@ -305,12 +320,66 @@ type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: strin
 const FOCUS_RX = 10;
 const FOCUS_PAD_X = 8;
 const FOCUS_PAD_Y = 8;
+const FOCUS_VIEW_MARGIN = 6;
 /** Square icon buttons (Skip, Undo, …) stretch into a soft horizontal pill — never a circle. */
 const MIN_PILL_ASPECT = 1.4;
+
+/**
+ * Layout box with CSS scale / transform scale undone so target breathe/pulse
+ * does not make the highlight chase and wobble.
+ */
+const layoutBounds = (el: Element): { left: number; top: number; right: number; bottom: number } | null => {
+  const r = rectOf(el);
+  if (r.width <= 0 || r.height <= 0) return null;
+  let sx = 1;
+  let sy = 1;
+  try {
+    const cs = getComputedStyle(el);
+    const scaleProp = (cs as CSSStyleDeclaration & { scale?: string }).scale;
+    if (scaleProp && scaleProp !== 'none') {
+      const parts = scaleProp.trim().split(/\s+/).map(parseFloat);
+      sx = parts[0] || 1;
+      sy = Number.isFinite(parts[1]!) ? parts[1]! : sx;
+    } else if (cs.transform && cs.transform !== 'none') {
+      const m = new DOMMatrixReadOnly(cs.transform);
+      sx = Math.hypot(m.a, m.b) || 1;
+      sy = Math.hypot(m.c, m.d) || 1;
+    }
+  } catch { /* ignore */ }
+  const ax = Math.abs(sx) || 1;
+  const ay = Math.abs(sy) || 1;
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  const w = r.width / ax;
+  const h = r.height / ay;
+  return { left: cx - w / 2, top: cy - h / 2, right: cx + w / 2, bottom: cy + h / 2 };
+};
+
+/** Keep the padded highlight fully on-screen (hand glow must not clip off the bottom). */
+const clampBoundsToViewport = (left: number, top: number, right: number, bottom: number) => {
+  const margin = FOCUS_VIEW_MARGIN;
+  const maxR = Math.max(margin + 8, innerWidth - margin);
+  const maxB = Math.max(margin + 8, innerHeight - margin);
+  let l = left;
+  let t = top;
+  let r = right;
+  let b = bottom;
+  const shift = (dx: number, dy: number) => { l += dx; r += dx; t += dy; b += dy; };
+  if (l < margin) shift(margin - l, 0);
+  if (t < margin) shift(0, margin - t);
+  if (r > maxR) shift(maxR - r, 0);
+  if (b > maxB) shift(0, maxB - b);
+  if (l < margin) l = margin;
+  if (t < margin) t = margin;
+  if (r > maxR) r = maxR;
+  if (b > maxB) b = maxB;
+  return { left: l, top: t, right: r, bottom: b };
+};
 
 /** Soft rounded-rect / pill geometry. Contour-free; never a circular ring. */
 const geometryFromBounds = (left: number, top: number, right: number, bottom: number): Tracked => {
   let l = left; let t = top; let r = right; let b = bottom;
+  ({ left: l, top: t, right: r, bottom: b } = clampBoundsToViewport(l, t, r, b));
   let bw = r - l; let bh = b - t;
   // Nearly-square targets would read as circles with large rx — widen into a pill.
   if (bw > 0 && bh > 0) {
@@ -319,6 +388,8 @@ const geometryFromBounds = (left: number, top: number, right: number, bottom: nu
       const targetW = bh * MIN_PILL_ASPECT;
       const grow = (targetW - bw) / 2;
       l -= grow; r += grow; bw = targetW;
+      ({ left: l, top: t, right: r, bottom: b } = clampBoundsToViewport(l, t, r, b));
+      bw = r - l; bh = b - t;
     }
   }
   const x = l - FOCUS_PAD_X; const y = t - FOCUS_PAD_Y;
@@ -375,12 +446,12 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
   if (!nodes.length) return null;
   let left = Infinity; let top = Infinity; let right = -Infinity; let bottom = -Infinity;
   for (const raw of nodes) {
-    const r = rectOf(focusMeasureEl(raw));
-    if (r.width <= 0 || r.height <= 0) continue;
-    left = Math.min(left, r.left);
-    top = Math.min(top, r.top);
-    right = Math.max(right, r.right);
-    bottom = Math.max(bottom, r.bottom);
+    const box = layoutBounds(focusMeasureEl(raw));
+    if (!box) continue;
+    left = Math.min(left, box.left);
+    top = Math.min(top, box.top);
+    right = Math.max(right, box.right);
+    bottom = Math.max(bottom, box.bottom);
   }
   if (!Number.isFinite(left)) return null;
   return geometryFromBounds(left, top, right, bottom);
@@ -402,7 +473,9 @@ export const mountGlassSurface = (onClose: () => void) => {
   bloomDemo.id = 'tutorial-bloom-demo';
   bloomDemo.hidden = true;
   bloomDemo.setAttribute('aria-hidden', 'true');
-  document.body.append(focus, bloomDemo, panel);
+  // Inside #game.screen so HUD z-index can sit above glass (body-level glass beat the whole screen).
+  const host = document.getElementById('game') ?? document.body;
+  host.append(focus, bloomDemo, panel);
   const dock = document.getElementById('dock')!;
   let targetSelector = '';
   let targetShape: FocusShape = 'pill';
@@ -418,18 +491,16 @@ export const mountGlassSurface = (onClose: () => void) => {
   let handlers: TutorialWindowHandlers = {};
   let lastStepKey = '';
   let ledTitle = '';
-  /** Selector we last armed a focus-settle for (avoid re-jiggle while tracking). */
-  let settleArmedFor = '';
-  let pendingFocusSettle = false;
-  let settleClearTimer = 0;
   let focusScene: 'tracked' | 'menu' | 'empty' | null = null;
   const paintTutorialLed = () => {
     const canvas = panel.querySelector<HTMLCanvasElement>('.glass-led-cells');
     if (!canvas || !ledTitle) return;
     const text = ledTitle.toUpperCase();
     const large = document.documentElement.classList.contains('large-text');
-    const maxW = Math.max(120, Math.min(panel.clientWidth - 36, innerWidth - 56));
-    let scale = large ? 1.25 : 1.15;
+    const titleSlot = panel.querySelector('.glass-head-title') as HTMLElement | null;
+    const slotW = titleSlot?.clientWidth || 0;
+    const maxW = Math.max(72, Math.min(slotW > 0 ? slotW - 8 : panel.clientWidth - 36, innerWidth - 56));
+    let scale = large ? 1.2 : 1.1;
     const natural = ledMessageWidth(text) * scale;
     if (natural > maxW) scale *= maxW / natural;
     drawLedCells(canvas, text, false, 'amber', scale);
@@ -524,11 +595,10 @@ export const mountGlassSurface = (onClose: () => void) => {
         return;
       }
     }
-    // Phone / stack: centred under the notch, reserve map space below the card.
-    // Match stylesheet: 24px horizontal chrome + safe-area insets.
-    const sidePad = 24 + safe.left + safe.right;
+    // Phone / stack: flush under the notch (safe-area only), reserve map space below the card.
+    const sidePad = 16 + safe.left + safe.right;
     const width = Math.min(420, Math.max(200, innerWidth - sidePad));
-    const top = Math.max(12, Math.round(safe.top + 8));
+    const top = Math.max(0, Math.round(safe.top));
     panel.style.width = `${width}px`;
     panel.style.maxWidth = `${width}px`;
     panel.style.left = '50%';
@@ -540,7 +610,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       const wrap = document.getElementById('board-wrap')?.getBoundingClientRect();
       const glass = panel.getBoundingClientRect();
       if (!wrap) return;
-      const reserve = Math.max(0, Math.ceil(glass.bottom - wrap.top + 8));
+      const reserve = Math.max(0, Math.ceil(glass.bottom - wrap.top + 6));
       document.documentElement.style.setProperty('--tutorial-glass-h', `${reserve}px`);
     });
   };
@@ -624,25 +694,6 @@ export const mountGlassSurface = (onClose: () => void) => {
     return { x: pick.x, y: pick.y, bobX: pick.bobX, bobY: pick.bobY, rot: pick.rot };
   };
 
-  const clearFocusSettle = () => {
-    if (settleClearTimer) window.clearTimeout(settleClearTimer);
-    settleClearTimer = 0;
-    focus.classList.remove('focus-settle');
-  };
-
-  /** One-shot bump after the highlight lands on a new target. */
-  const triggerFocusSettle = () => {
-    if (reduceMotion) return;
-    clearFocusSettle();
-    // Restart CSS animation even if the class was still present.
-    void focus.getBoundingClientRect();
-    focus.classList.add('focus-settle');
-    settleClearTimer = window.setTimeout(() => {
-      focus.classList.remove('focus-settle');
-      settleClearTimer = 0;
-    }, 380);
-  };
-
   const applyRectAttrs = (el: Element | null, tracked: Tracked, soft: boolean) => {
     if (!el) return;
     const padX = soft ? FOCUS_PAD_X : 0;
@@ -701,14 +752,12 @@ export const mountGlassSurface = (onClose: () => void) => {
 
   const paintFocus = (tracked: Tracked | null) => {
     focus.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
-    // Idle pulse pauses while the settle bump plays.
-    const settling = focus.classList.contains('focus-settle');
-    focus.dataset.pulse = reduceMotion || !tracked || settling ? '0' : '1';
+    // Steady pulse always while a target is live — never pauses for settle/jiggle.
+    focus.dataset.pulse = reduceMotion || !tracked ? '0' : '1';
     focus.dataset.bob = reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1';
     focus.dataset.on = tracked || mode === 'tutorial' ? '1' : '0';
     const menuHole = menuCutoutHole();
     if (!tracked) {
-      clearFocusSettle();
       if (!menuHole) {
         if (focusScene !== 'empty') {
           focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
@@ -752,22 +801,15 @@ export const mountGlassSurface = (onClose: () => void) => {
       holdUntil = now + 280;
       if (!smooth) smooth = measured;
       else {
-        // Soft ease toward the new target so the pill glides instead of snapping.
-        const t = reduceMotion ? 1 : 0.18;
+        // Soft ease toward a new target; unscaled measure already ignores breathe jitter.
+        const drift = Math.hypot(smooth.cx - measured.cx, smooth.cy - measured.cy)
+          + Math.abs(smooth.w - measured.w) + Math.abs(smooth.h - measured.h);
+        const t = reduceMotion ? 1 : drift < 2.5 ? 0.08 : 0.22;
         const left = lerp(smooth.left, measured.left, t);
         const top = lerp(smooth.top, measured.top, t);
         const right = lerp(smooth.right, measured.right, t);
         const bottom = lerp(smooth.bottom, measured.bottom, t);
         smooth = geometryFromBounds(left, top, right, bottom);
-      }
-      // Settle once the glide has mostly arrived on a newly armed target.
-      if (pendingFocusSettle && targetSelector && targetSelector === settleArmedFor) {
-        const drift = Math.hypot(smooth.cx - measured.cx, smooth.cy - measured.cy)
-          + Math.abs(smooth.w - measured.w) + Math.abs(smooth.h - measured.h);
-        if (reduceMotion || drift < 8) {
-          pendingFocusSettle = false;
-          triggerFocusSettle();
-        }
       }
       placeTutorialPanel(smooth);
       paintFocus(smooth);
@@ -776,7 +818,6 @@ export const mountGlassSurface = (onClose: () => void) => {
       paintFocus(smooth);
     } else {
       smooth = null;
-      pendingFocusSettle = false;
       placeTutorialPanel(null);
       paintFocus(null);
     }
@@ -809,15 +850,9 @@ export const mountGlassSurface = (onClose: () => void) => {
 
   const close = () => {
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
-    pendingFocusSettle = false; settleArmedFor = ''; clearFocusSettle(); focusScene = null;
+    focusScene = null;
     setBloomDemo(false); clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
-  };
-
-  const armFocusSettleFor = (selector: string) => {
-    if (!selector || selector === settleArmedFor) return;
-    settleArmedFor = selector;
-    pendingFocusSettle = true;
   };
 
   const playGlassStepSettle = () => {
@@ -855,34 +890,42 @@ export const mountGlassSurface = (onClose: () => void) => {
     const b = options.buttons ?? {};
     const nextLabel = b.nextLabel || 'NEXT';
     // Exit tutorial lives in the pause menu (#hud-menu), not on the glass.
-    const actions = [
-      b.previous ? `<button type="button" data-tut="previous">Previous</button>` : '',
-      b.next ? `<button type="button" data-tut="next" class="${b.nextBlink ? 'glass-blink' : ''}">${safe(nextLabel)}</button>` : '',
-      b.playReal ? `<button type="button" data-tut="play">Play</button>` : '',
-    ].filter(Boolean).join('');
+    // Head row always has 3 equal slots so the title stays centred.
+    const prevBtn = b.previous
+      ? `<button type="button" data-tut="previous">PREVIOUS</button>` : '';
+    const nextBtn = b.next
+      ? `<button type="button" data-tut="next" class="${b.nextBlink ? 'glass-blink' : ''}">${safe(nextLabel)}</button>`
+      : (b.playReal ? `<button type="button" data-tut="play">Play</button>` : '');
+    const titleHtml = `<p class="glass-instruction glass-copy" data-led-title="1">`
+      + `<span class="glass-led-sr">${safe(line)}</span>`
+      + `<span class="glass-led-window" aria-hidden="true"><canvas class="glass-led-cells"></canvas></span>`
+      + `</p>`;
+    const headHtml = `<div class="glass-head" role="group" aria-label="Tutorial step">`
+      + `<div class="glass-head-slot glass-head-prev">${prevBtn}</div>`
+      + `<div class="glass-head-slot glass-head-title">${titleHtml}</div>`
+      + `<div class="glass-head-slot glass-head-next">${nextBtn}</div>`
+      + `</div>`;
     const shell = panel.querySelector('.glass-tutorial');
     const canPatch = !!opts.keepShell && !!shell && ledTitle === line
-      && !!panel.querySelector('.glass-led-cells');
+      && !!panel.querySelector('.glass-led-cells') && !!panel.querySelector('.glass-head');
     if (canPatch && shell) {
-      // Same lesson shell: only swap why/icons/actions so the LED does not flash when NEXT arms.
+      // Same lesson shell: only swap side buttons / why / icons so the LED does not flash.
       const sr = shell.querySelector('.glass-led-sr');
       if (sr) sr.textContent = line;
-      for (const node of [...shell.querySelectorAll('.glass-why, .glass-icons, .glass-actions')]) node.remove();
-      const lead = shell.querySelector('.glass-instruction');
-      if (lead) lead.insertAdjacentHTML('afterend', `${whyHtml}${icons}${actions ? `<div class="glass-actions">${actions}</div>` : ''}`);
-      else shell.insertAdjacentHTML('beforeend', `${whyHtml}${icons}${actions ? `<div class="glass-actions">${actions}</div>` : ''}`);
+      const prevSlot = shell.querySelector('.glass-head-prev');
+      const nextSlot = shell.querySelector('.glass-head-next');
+      if (prevSlot) prevSlot.innerHTML = prevBtn;
+      if (nextSlot) nextSlot.innerHTML = nextBtn;
+      for (const node of [...shell.querySelectorAll('.glass-why, .glass-status, .glass-icons')]) node.remove();
+      const head = shell.querySelector('.glass-head');
+      if (head) head.insertAdjacentHTML('afterend', `${whyHtml}${icons}`);
+      else shell.insertAdjacentHTML('beforeend', `${whyHtml}${icons}`);
       handlers = options.handlers ?? handlers;
       bindTutorialButtons();
       return;
     }
     ledTitle = line;
-    panel.innerHTML = `<div class="glass-tutorial">`
-      + `<p class="glass-instruction glass-copy" data-led-title="1">`
-      + `<span class="glass-led-sr">${safe(line)}</span>`
-      + `<span class="glass-led-window" aria-hidden="true"><canvas class="glass-led-cells"></canvas></span>`
-      + `</p>${whyHtml}${icons}`
-      + (actions ? `<div class="glass-actions">${actions}</div>` : '')
-      + `</div>`;
+    panel.innerHTML = `<div class="glass-tutorial">${headHtml}${whyHtml}${icons}</div>`;
     bindTutorialButtons();
     paintTutorialLed();
   };
@@ -893,18 +936,9 @@ export const mountGlassSurface = (onClose: () => void) => {
     reduceMotion = !!options.reduceMotion || document.documentElement.classList.contains('reduce-motion');
     idleHard = !!options.idleHard;
     const nextSelector = selectors.join(', ');
-    const selectorChanged = nextSelector !== targetSelector;
     targetSelector = nextSelector;
     // Tutorial focus is always a soft pill/rounded-rect — never hex or circle contour.
     targetShape = !targetSelector || options.shape === 'none' ? 'none' : 'pill';
-    if (selectorChanged) {
-      if (targetSelector) armFocusSettleFor(targetSelector);
-      else {
-        settleArmedFor = '';
-        pendingFocusSettle = false;
-        clearFocusSettle();
-      }
-    }
     panel.dataset.mode = 'tutorial';
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
     panel.hidden = false;
@@ -1004,7 +1038,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     close,
     hide: () => {
       mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
-      pendingFocusSettle = false; settleArmedFor = ''; clearFocusSettle(); focusScene = null;
+      focusScene = null;
       setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },
     nudge: () => {
@@ -1025,7 +1059,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     /** Hide glow + pointer (busy / opponent / between steps) while keeping the window. */
     hideFocus: () => {
       showFocus(false); stopLoop(); smooth = null; targetSelector = '';
-      pendingFocusSettle = false; settleArmedFor = ''; clearFocusSettle(); focusScene = null;
+      focusScene = null;
     },
   };
 };
