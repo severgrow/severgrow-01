@@ -64,15 +64,17 @@ Because the engine is shared, the server needs no build step to run under `tsx`.
    - **Session pooler** (port `5432`) or **Direct connection** — use this for migrations and tests.
    - The **Transaction pooler** (port `6543`) is fine at runtime but not for DDL.
    - Use the **database password** (not the `anon`/`service_role` API keys). This is a real secret.
-3. **Put it in `.env`** (git-ignored) as `DATABASE_URL=…?sslmode=require`. Never commit it, never
-   paste it into a chat or an issue.
+3. **Put it in `.env`** (git-ignored) as `DATABASE_URL=…`, with **no `?sslmode=…` query flag**.
+   Never commit it, never paste it into a chat or an issue.
 4. **Apply the schema:** `npm run server:migrate`. `--status` shows what is applied/pending;
    `--dry-run` lists without changing anything.
-5. **Verify:** `npm run server:db-test` (integration) and `npm run server:smoke` (end-to-end).
+5. **Verify:** `npm run server:db-test` (integration), `npm run server:smoke` (end-to-end), or both
+   at once with `npm run server:verify`.
 
-TLS is automatic: any non-localhost host gets TLS; `sslmode=require` means "encrypt, do not verify
-the chain" (the pragmatic managed-host default). For `verify-full`, install the provider's CA and
-set `PGSSL=verify-full`.
+TLS is automatic: any non-localhost host gets TLS with `rejectUnauthorized: false` (the pragmatic
+managed-host default). Do **not** append `?sslmode=require`: current node-postgres treats that flag
+as an alias for `verify-full`, which demands a full certificate chain and will fail on the pooler.
+For genuine chain verification, install the provider's CA and set `PGSSL=verify-full`.
 
 **RLS note:** the API server must connect as the database owner/superuser (what the password above
 gives you). The migration enables RLS and revokes `anon`/`authenticated`, and the integration suite

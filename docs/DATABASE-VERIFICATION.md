@@ -1,42 +1,84 @@
 # Database verification against Supabase
 
-**Status: BLOCKED — the Direct-connection hostname does not exist in DNS.** No migration has been
-applied and nothing has been written to the project. `.env` is present and confirmed git-ignored;
-the blocker is purely the hostname. See "Blocker" below for the evidence and the one-line fix.
+**Status: BLOCKED on the database password.** The connection method is now confirmed correct and
+our client reaches the project, but no usable credential exists: Supabase's MCP cannot set the
+`postgres` password (not a superuser), and the project's current password is unknown. Nothing has
+been applied — the project still has **0 migrations and an empty `public` schema**. See "Blocker"
+below for the exact tool output and the one action needed.
 
 This document is the checklist and the record of what was verified against the real Supabase
 (FUTASAKU) development project, and what it means. Unit-level proofs live in `server/tests/`;
 the adapter itself is documented in [`BACKEND.md`](BACKEND.md).
 
-## Blocker (2026-10-12)
+## Project facts (confirmed)
 
-The configured host `db.wfrbeedlvjercrukngn.supabase.co` (Direct connection, port 5432) returns
-**NXDOMAIN** — the name has no A, AAAA or CNAME record at all:
-
-| Check | Result |
+| Fact | Value |
 | --- | --- |
-| `nslookup supabase.co` (control: DNS works at all) | resolves → `76.76.21.21` |
-| `nslookup -type=A db.wfrbeedlvjercrukngn.supabase.co` | **NXDOMAIN** |
-| `nslookup -type=AAAA db.wfrbeedlvjercrukngn.supabase.co` | **NXDOMAIN** |
-| Cloudflare DoH (A / AAAA / CNAME) | **NXDOMAIN** for all three |
-| `aws-0-*.pooler.supabase.com` (control: pooler DNS) | resolves in every region |
+| Project ref | `wbfrbeedlvjercrukngn` |
+| Region | `eu-west-1` |
+| Postgres | `17.11` (from `select version()`) |
+| Connection method | **Session pooler** — `aws-0-eu-west-1.pooler.supabase.com:5432` |
+| User | `postgres.wbfrbeedlvjercrukngn` |
+| Database | `postgres` |
+| Applied migrations | **none** (`list_migrations` → `[]`) |
+| `public` tables | **none** (`list_tables` → `[]`) |
 
-This is **not** the IPv6-only Direct-connection case: IPv6-only would show AAAA records and no A.
-Here there are no records of any kind, from two independent resolvers, so the hostname itself does
-not exist for this project ref. Likely causes: a mistyped project ref, or a project whose direct
-endpoint is not published under that name.
+## Blocker (2026-10-12) — the database password
 
-**Fix:** copy the exact **Session pooler** URI from *Supabase → Connect → Session pooler*
-(host `aws-0-<region>.pooler.supabase.com`, port `5432`), paste it into `.env` as `DATABASE_URL`,
-and re-run `npm run server:verify`. Do not guess the region.
+**Resolved first:** the earlier `ENOTFOUND` was **not** an IPv6 problem. The project ref I was
+given initially was misspelled — `wfrbeedlvjercrukngn` instead of `wbfrbeedlvjercrukngn` (a missing
+`b`) — so that hostname genuinely did not exist. With the corrected ref, DNS resolves and our
+client connects to the pooler and reaches authentication.
+
+**Current blocker:** every connection stops at
+`error: password authentication failed for user "postgres"`.
+
+Attempting to set the password through the Supabase MCP was **refused by PostgreSQL**:
+
+```
+execute_sql(project_id=wbfrbeedlvjercrukngn, query="alter role postgres with password '<generated>'")
+→ ERROR: 42501: permission denied to alter role
+  DETAIL: Only superusers can alter privileged roles.
+```
+
+Diagnosis (read-only): the MCP connects as `postgres`, but with `is_superuser = off`:
+
+```
+select current_user, session_user, current_setting('is_superuser')
+→ postgres | postgres | off
+```
+
+PostgreSQL therefore refuses to alter a privileged role such as `postgres`. The Supabase namespace
+exposes **no** password or project-configuration tool (its 30 tools are migration/branch/log/advisor
+/keys/docs related; none sets a database password). No further attempt was made, per instruction.
+
+**The one action needed (dashboard, ~30 seconds):**
+
+1. Open <https://supabase.com/dashboard/project/wbfrbeedlvjercrukngn/settings/database>.
+2. Find **Database password** → **Reset database password**.
+3. Copy the value it produces and paste it into `/Users/patryk/severgrow-01/.env` as the password in
+   `DATABASE_URL` (the file currently holds a generated password that was never applied, so it will
+   fail until this is done).
+
+Then `npm run server:verify` runs the whole verification (migrate → integration suite → smoke).
+
+> Alternative, if the dashboard offers a **custom** password field: it already exists in `.env`
+> (the part between `postgres.wbfrbeedlvjercrukngn:` and `@aws-0-eu-west-1...`); paste that value
+> there and `.env` needs no change. No secret needs to pass through chat either way.
+
+> Forward note: setting the password via SQL would desynchronise the value the dashboard displays.
+> That route is unavailable here anyway (the role is not a superuser).
 
 ## Setup (once)
 
 1. Copy `.env.example` to `.env` (git-ignored) and set `DATABASE_URL` from
    *Supabase → Project Settings → Database → Connection string* (**Session pooler**, port 5432).
+   **Do not append `?sslmode=require`** — `server/src/storage/pg-pool.ts` already applies TLS for
+   managed hosts, and that query flag flips node-postgres into full certificate-chain verification.
 2. `npm run server:migrate` — applies the versioned schema.
 3. `npm run server:db-test` — real-database integration tests.
 4. `npm run server:smoke` — end-to-end flow against a running server.
+5. `npm run server:verify` — all three in one command.
 
 ## What "verified" means here
 
@@ -60,8 +102,48 @@ and re-run `npm run server:verify`. Do not guess the region.
 
 ## Results
 
-_To be filled in after the run._
+**Not run — blocked at step 1 (credentials).** No row in the table above has been exercised against
+the real project; the project remains empty. The same behaviours are proven against the in-memory
+adapter and a recording fake pool in `server/tests/` (see [`BACKEND.md`](BACKEND.md)), and the
+real-database suite (`server/tests/postgres.integration.test.ts`, 17 tests) is written, type-checks,
+and **skips cleanly** when `DATABASE_URL` is absent.
+
+| # | Claim | Real-database result |
+| --- | --- | --- |
+| 1–15 | see the table above | **BLOCKED** — waiting on the database password |
+
+What *was* verified about the connection itself:
+
+| Check | Result |
+| --- | --- |
+| Project reachable at the Session pooler host | ✅ connection reaches authentication |
+| TLS negotiated without `?sslmode=require` | ✅ (no certificate error before auth) |
+| Migration runner refuses to guess | ✅ exits 2 with a clear message when `DATABASE_URL` is unset |
+| Nothing written to the project | ✅ `list_migrations` → `[]`, `list_tables` → `[]` |
 
 ## Outstanding after this step (before the game UI)
 
-_To be filled in after the run._
+Blocking the whole list:
+
+1. **The database password** (see "Blocker"). Everything below depends on it.
+
+Once a credential works, still to do inside this verification step:
+
+2. Apply `0001_init.sql` and confirm the five tables + RLS + the `anon`/`authenticated` denial on
+   the real database.
+3. Run the 17 real-database integration tests (concurrency, idempotency, rollback, persistence,
+   hidden-information).
+4. Run the end-to-end smoke against a server backed by the real database.
+
+Then, before wiring online duels into the game interface (unchanged from the earlier plan):
+
+5. **A transport for live updates.** Clients currently poll (`GET …/view?since=N`). Choose SSE or
+   WebSocket over the same pipeline; define reconnect/backoff behaviour.
+6. **Wire `DuelClient` into the game screen** behind a feature flag — create/join by code, submit
+   actions, render the returned player view — leaving solo play untouched.
+7. **Abuse controls:** rate limits on guest creation, join attempts and action submissions; rotate
+   invite codes on a schedule.
+8. **Deployment hardening:** TLS termination, a locked `CORS_ORIGIN`, the service-role key handled
+   as a secret, and a decision on where the server runs (the pooler is designed for this).
+9. **Monitoring:** error rate, revision conflicts, and a cleanup job for abandoned guests and
+   waiting matches.
