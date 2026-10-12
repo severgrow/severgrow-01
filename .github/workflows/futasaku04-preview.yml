@@ -1,11 +1,12 @@
 name: Futasaku 0.4 Pages preview
 
-# Runs from the futa0.4 deployment ref, which points to a validated Futasaku0.4
-# commit. The existing Main/Dev/Test2 workflow and refs stay untouched; their
+# Runs from the futa0.4 deployment ref (and futa0.5-online so /futa0.5/ stays composed).
+# The existing Main/Dev/Test2 workflow and refs stay untouched; their
 # currently published SHAs are rebuilt and checked for parity.
+# pages.yml Main deploy logic is not modified.
 on:
   push:
-    branches: [futa0.4]
+    branches: [futa0.4, futa0.5-online]
   workflow_dispatch:
 
 permissions:
@@ -22,9 +23,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out Futasaku 0.4 (+ futa-test) source
+        uses: actions/checkout@v4
         with:
           path: preview
+          ref: ${{ github.ref_name == 'futa0.4' && github.sha || 'futa0.4' }}
+      - name: Check out Futasaku 0.5 online source
+        uses: actions/checkout@v4
+        with:
+          path: futa05
+          ref: ${{ github.ref_name == 'futa0.5-online' && github.sha || 'futa0.5-online' }}
       - name: Read exact published source commits
         id: published
         run: |
@@ -53,7 +61,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: preview/package-lock.json
+          cache-dependency-path: |
+            preview/package-lock.json
+            futa05/package-lock.json
       - name: Install and validate Futasaku 0.4
         working-directory: preview
         run: |
@@ -66,6 +76,20 @@ jobs:
           CHANNEL=futa-test node scripts/check-channel-assets.mjs
           mv web/dist web/dist-futa-test
           mv web/dist-futa04 web/dist
+      - name: Build /futa0.5/ preview channel
+        working-directory: futa05
+        env:
+          CHANNEL: futa05
+          VITE_FIND_OPPONENT: '1'
+          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_DUEL_API_URL" || { echo "Set Actions Variable VITE_DUEL_API_URL or FUTA05_API_URL"; exit 1; }
+          npm ci
+          npm run web:build
+          node scripts/check-channel-assets.mjs || true
+          echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
       - name: Rebuild current published versions at their exact SHAs
         run: |
           cd live
@@ -77,7 +101,7 @@ jobs:
           cd ../candidate
           if cmp -s package-lock.json ../live/package-lock.json; then ln -s ../live/node_modules node_modules; else npm ci; fi
           CHANNEL=test2 npm run web:build
-      - name: Compose four routes and verify existing public bytes
+      - name: Compose routes and verify existing public bytes
         env:
           MAIN_SHA: ${{ steps.published.outputs.main }}
           DEV_SHA: ${{ steps.published.outputs.test }}
@@ -86,6 +110,7 @@ jobs:
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
+          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)"
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
