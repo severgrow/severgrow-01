@@ -10,6 +10,8 @@ import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
 import type { DraftEngine } from './draft.js';
 import { createNoopChannel } from './channel.js';
+import { onlinePerspective } from './perspective.js';
+import type { Perspective } from './perspective.js';
 import { newRequestId, submitWithRetries } from './retries.js';
 import { createSyncEngine } from './sync.js';
 import type { SyncEngine } from './sync.js';
@@ -54,6 +56,10 @@ export type OnlineDriver = {
   skipCatchUp(): void;
   /** Pending opponent events for the animation pipeline (catch-up at 2x in Phase 5). */
   pendingEvents(): readonly Event[];
+  /** Map screen taps / draft hexes back to engine coords before send. */
+  toEngineAction(screenAction: Action): Action;
+  /** Perspective for this seat (Me=moss, Opponent=lava). */
+  perspective(): Perspective;
   draft(): DraftEngine;
   sync(): SyncEngine;
 };
@@ -69,8 +75,14 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   let notice: string | null = null;
   let pendingEvents: Event[] = [];
   let submitting = false;
+  let perspective: Perspective = onlinePerspective(options.initial?.seat ?? 0);
 
   const emit = () => options.onChange?.(snapshot());
+
+  const refreshPerspective = () => {
+    if (player) perspective = onlinePerspective(player.seat);
+  };
+  refreshPerspective();
 
   const applyView = (next: MatchViewPayload, _serverNow: number) => {
     if (player && next.revision > player.revision && next.events.length > 0) {
@@ -78,6 +90,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       pendingEvents = [...pendingEvents, ...next.events];
     }
     player = next;
+    refreshPerspective();
     draft.syncFromServer(next.view, next.revision);
     draft.persist();
     emit();
@@ -116,6 +129,9 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     const clock: ClockState = sync.clock();
     const view: View = draft.hasDraft() ? draft.view() : player.view;
     const legal: Action[] = draft.hasDraft() || player.actor === player.seat ? draft.legal() : [];
+    const screenView = perspective.toScreenView(view);
+    const screenLegal = legal.map((a) => perspective.mapActionToScreen(a));
+    const screenEvents = player.events.map((e) => perspective.mapEventToScreen(e));
     return {
       kind: 'online',
       matchId: player.matchId,
@@ -124,8 +140,11 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       revision: player.revision,
       turnStartRevision: player.turnStartRevision,
       view,
+      screenView,
       legal,
+      screenLegal,
       events: player.events,
+      screenEvents,
       turnDeadlineAt: player.turnDeadlineAt,
       result: player.result,
       opponentName: player.opponent?.displayName ?? null,
@@ -134,6 +153,15 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       remainingMs: remainingMs(clock, player.turnDeadlineAt, now()),
       hasDraft: draft.hasDraft(),
       notice,
+      perspective: {
+        me: perspective.me,
+        opp: perspective.opp,
+        rotated: perspective.rotated,
+        coachEnabled: perspective.coachEnabled,
+        hiddenDeckHintsEnabled: perspective.hiddenDeckHintsEnabled,
+        scoreMeLabel: perspective.labels.scoreMe,
+        scoreOpponentLabel: perspective.labels.scoreOpponent,
+      },
     };
   };
 
@@ -188,6 +216,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     },
 
     draftPlay(action) {
+      // Engine coords only — UI maps taps with toEngineAction first.
       const ok = draft.play(action);
       if (ok) {
         draft.persist();
@@ -260,6 +289,10 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     },
 
     pendingEvents: () => pendingEvents,
+
+    toEngineAction: (screenAction) => perspective.mapActionToEngine(screenAction),
+
+    perspective: () => perspective,
 
     draft: () => draft,
 

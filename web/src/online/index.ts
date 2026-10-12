@@ -1,4 +1,5 @@
-// FUTASAKU online client layer (Phase 3). No screens — identity, sync, draft, driver seam.
+// FUTASAKU online client layer (Phase 3 + 3b). No duel screens yet —
+// identity, sync, draft, driver seam, and seat perspective mapping.
 
 export { DUEL_CLIENT_VERSION, DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
 export type { DuelSession, FetchLike, KeyValue } from '../../../server/src/client.js';
@@ -27,6 +28,26 @@ export { createOnlineDriver } from './driver.js';
 export type { OnlineDriver, OnlineDriverOptions, LocalDriverMarker } from './driver.js';
 
 export { presenceLabel, presenceFromPeers } from './presence.js';
+
+export {
+  createPerspective,
+  offlinePerspective,
+  onlinePerspective,
+  homesOnScreen,
+  previewCameraFrame,
+  classicHexKeys,
+  SHARED_FIELDS,
+  PRIVATE_FIELDS,
+  PERSONAL_SETTINGS,
+} from './perspective.js';
+export type {
+  Perspective,
+  PerspectiveLabels,
+  PerspectiveOptions,
+  SharedField,
+  PrivateField,
+  PersonalSetting,
+} from './perspective.js';
 
 export type {
   ConnectionStatus,

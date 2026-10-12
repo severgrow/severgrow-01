@@ -35,8 +35,14 @@ export type MatchDriverSnapshot = {
   revision: number;
   turnStartRevision: number;
   view: View;
+  /** View with board/terrain hexes mapped for this seat's screen (Phase 3b). */
+  screenView: View;
   legal: Action[];
+  /** Legal actions with hexes in screen coords (map taps back before send). */
+  screenLegal: Action[];
   events: Event[];
+  /** Opponent / own events with hexes in screen coords for AnimQueue. */
+  screenEvents: Event[];
   turnDeadlineAt: number | null;
   result: OnlineGameResult | null;
   opponentName: string | null;
@@ -48,6 +54,16 @@ export type MatchDriverSnapshot = {
   hasDraft: boolean;
   /** Quiet line for the UI ("Reconnecting", "Reload to update FUTASAKU", …). */
   notice: string | null;
+  /** Seat perspective: Me=moss bottom, Opponent=lava top. */
+  perspective: {
+    me: Player;
+    opp: Player;
+    rotated: boolean;
+    coachEnabled: boolean;
+    hiddenDeckHintsEnabled: boolean;
+    scoreMeLabel: 'Me';
+    scoreOpponentLabel: 'Opponent';
+  };
 };
 
 export type OnlineIdentityRecord = {

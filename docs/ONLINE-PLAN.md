@@ -1,7 +1,9 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
+> **RESUME (owner pause):** WIP Phase 3b on `futa0.5-online`. Done: `web/src/online/perspective.ts` + driver/types/index wire-up; `web/tests/perspective.test.ts` (28 tests green with online-layer). Missing: run `web/e2e/online-perspective-shots.ts` → `docs/screens/online/` (needs `PW_CHROMIUM`); then mark 3b green and start Phase 4. Do not touch engine/tutorial/futa0.4/main.
+
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12): `web/src/online/` identity, sync/poll, retries, presence, clock, draft+shadow, OnlineDriver seam, SW API bypass, version handshake; unit tests with fake server/channel. Hosting: **Supabase Edge Functions**. Next: Phase 3b.  
+**Status:** Phase 0 done. Phase 1 green (2026-10-12). Phase 2 green (2026-10-12). Phase 3 green (2026-10-12). Phase 3b **WIP** (2026-10-12): perspective layer + unit tests green; seat0/seat1 screenshots not captured yet. Hosting: **Supabase Edge Functions**. Next: finish 3b screenshots, then Phase 4.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.
@@ -97,8 +99,8 @@ Today’s UI is a local PvE shell: `HUMAN = 0`, `BOT = 1`, full `State` in `Sess
 
 **Smallest clean seam (Phases 3 / 3b — not coded in Phase 0):**
 
-- **`Perspective`:** `me` / `opp`; mine → moss/tree/bottom; theirs → lava/volcano/top. Offline keeps `me = 0` (identity mapping). Online seat 1 rotates board coords 180° `(q,r) → (-q,-r)` for paint/taps; text never rotates.
-- **`MatchDriver`:** `LocalDriver` (today’s Session + bot) vs `OnlineDriver` (Views + filtered events only; never full State). Shared: board, hand, `AnimQueue`, sounds.
+- **`Perspective`:** implemented in `web/src/online/perspective.ts` — `me` / `opp`; mine → moss/tree/bottom; theirs → lava/volcano/top. Offline keeps `me = 0` (identity mapping). Online seat 1 rotates board coords 180° `(q,r) → (-q,-r)` for paint/taps; text never rotates. Scores read Me:Opponent; captions You/Opponent.
+- **`MatchDriver`:** `LocalDriver` (today’s Session + bot) vs `OnlineDriver` (Views + filtered events only; never full State). Shared: board, hand, `AnimQueue`, sounds. OnlineDriver snapshot exposes `screenView` / `screenLegal` / `screenEvents` plus perspective flags (coach off online).
 - Service worker `web/public/futa04-sw.js`: cross-origin API is already not cached; if the API is ever same-origin under the app path, add an explicit bypass so match GETs are never cached.
 
 Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial work there).
