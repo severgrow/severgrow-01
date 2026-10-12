@@ -14,7 +14,7 @@ The game site stays on GitHub Pages. The API runs as a **Supabase Edge Function*
 | CORS | Locked to `https://severgrow.github.io` (no path on the origin) |
 | JWT gate | **Off** — guests use our own bearer tokens, not Supabase Auth |
 
-Until the full MatchService bundle is deployed, health may answer with `"stub": true`. That means the function is up, but create/join/play still need the full deploy below.
+**Current status:** the Edge Function name `duel` exists (`verify_jwt` off, CORS locked). Loading the full MatchService needs (1) the `DATABASE_URL` secret and (2) a CLI deploy of `index.ts` + `bundle.ts` from this repo. A GitHub-URL import was tried and failed on the Edge runtime (`WORKER_ERROR`); use the CLI path below.
 
 ## One-time: put the database secret on the Edge Function
 
