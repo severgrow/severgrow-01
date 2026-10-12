@@ -9,6 +9,7 @@ import {
   nextTutorialChapter,
   previousTutorialChapter,
   tutorialLessons,
+  tutorialStateAt,
   tutorialTrackChapters,
   tutorialTrackFor,
   wordCount,
@@ -42,10 +43,33 @@ describe('the tutorial', () => {
     expect(steps.slice(free + 1).every(l => l.focus === 'button')).toBe(true);
   });
 
+  it('after the Bloom, the move is rewound and Skip is shown: Bloom is optional', () => {
+    const ch = at('throw-pile');
+    const ids = tutorialLessons(ch).map(l => l.id);
+    const skip = ids.indexOf('bloom-skip');
+    expect(skip).toBe(ids.indexOf('discard-bloom') + 1);
+    expect(lesson('bloom-skip').rewind).toBe(true);
+    expect(lesson('bloom-skip').action).toBe('EndAct');
+    expect(lesson('bloom-skip').focus).toBe('context');
+    // the rewound position is the one before the Bloom: same board, the cards back in hand
+    const before = tutorialStateAt(ch, skip - 1);
+    const rewound = tutorialStateAt(ch, skip);
+    expect(rewound.board).toEqual(before.board);
+    expect(rewound.hands[0]).toEqual(before.hands[0]);
+    expect(rewound.phase).toBe('ACT');
+  });
+
+  it('no turn of theirs in the tutorial: it stays on your moves', () => {
+    const beats = TUTORIAL_CORE.flatMap(id => [...tutorialLessons(at(id))]).filter(l => l.action === 'Opponent');
+    expect(beats).toEqual([]);
+  });
+
   it('throw pile is taught on a Draw, and Bloom is taught with it', () => {
     const ids = tutorialLessons(at('throw-pile')).map(l => l.id);
     expect(ids.indexOf('discard-draw')).toBeLessThan(ids.indexOf('discard-bloom'));
     expect(lesson('discard-draw').action).toBe('Draw');
+    expect(lesson('discard-draw').why).toMatch(/glows gold/i);
+    expect(lesson('discard-draw').why).not.toMatch(/instead of drawing/i);
     expect(tutorialLessons(at('throw-pile')).some(l => l.bloomDemo)).toBe(true);
   });
 
@@ -102,6 +126,16 @@ describe('tutorial words', () => {
     expect(text()).not.toMatch(/most tiles/i);
   });
 
+  it('Bloom is just Bloom: no "set" or "run"', () => {
+    expect(text()).not.toMatch(/\b(sets?|runs?)\b(?! out)/i);
+  });
+
+  it('the win is a KO: surround their home on every side', () => {
+    expect(lesson('win-place').instruction).toBe('KO');
+    expect(lesson('win-place').why).toMatch(/every side/i);
+    expect(lesson('win-place').why).toMatch(/instant win/i);
+  });
+
   it('never names tile colours', () => {
     expect(text()).not.toMatch(/\b(green|red|colou?rs?)\b/i);
   });
@@ -130,9 +164,10 @@ describe('tutorial words', () => {
 
   it('names the real buttons', () => {
     expect(lesson('skip').why).toContain('»');
-    expect(lesson('grow-done').why).toContain('»');
-    expect(lesson('grow-done').why).toMatch(/skip/i);
-    expect(lesson('btn-display').why).toMatch(/GROW|THROW|DRAW/);
+    expect(lesson('bloom-skip').why).toContain('»');
+    expect(lesson('bloom-skip').why).toMatch(/skip Bloom/i);
+    expect(lesson('btn-display').why).toMatch(/important info/i);
+    expect(lesson('btn-display').why).not.toMatch(/[A-Z]{3,}/);
     expect(lesson('btn-history').instruction).toMatch(/BULB/);
   });
 

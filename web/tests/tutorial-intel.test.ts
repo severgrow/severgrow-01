@@ -20,7 +20,7 @@ describe('authored tutorial uses the current engine', () => {
   it('introduces turn rhythm, impassable rock and double-scoring gold after the first Grow', () => {
     expect(tutorialLessons(0).map(lesson => lesson.id)).toEqual(['goal-mine', 'goal-turn-rhythm']);
     const turn = TUTORIAL_CHAPTER_IDS.indexOf('turn');
-    expect(tutorialLessons(turn).slice(0, 5).map(lesson => lesson.id)).toEqual(['draw', 'grow', 'rock-gold', 'grow-done', 'throw']);
+    expect(tutorialLessons(turn).map(lesson => lesson.id)).toEqual(['draw', 'grow', 'rock-gold', 'throw']);
     const state = tutorialChapter(turn);
     expect(state.terrain['-2,0']).toBe('rock');
     expect(state.terrain['0,0']).toBe('rich');
@@ -136,10 +136,16 @@ describe('Match Intel and replay boundaries', () => {
     const base = tutorialChapter(turn);
     const live = new Session(base, 0, [], base);
     let state = base;
-    // draw, grow, » to Throw, throw (the Next explainers between them play nothing)
+    // draw, grow, throw (the Next explainer between them closes Grow)
     const upToThrow = tutorialLessons(turn).findIndex(lesson => lesson.id === 'throw');
     for (let step = 0; step <= upToThrow; step++) {
-      if (tutorialLessons(turn)[step]!.action === 'Next') continue;
+      const lesson = tutorialLessons(turn)[step]!;
+      if (lesson.action === 'Next') {
+        // the explainer after the Grow closes it, as the live tutorial does
+        const end = lesson.closesGrow ? legalActions(viewFor(state, 0)).find(a => a.t === 'EndAct') : undefined;
+        if (end) { expect(live.play(end)).not.toBeNull(); state = live.state; }
+        continue;
+      }
       const action = intended(state, turn, step);
       expect(live.play(action)).not.toBeNull();
       state = live.state;

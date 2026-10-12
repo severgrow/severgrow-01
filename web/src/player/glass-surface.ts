@@ -329,9 +329,9 @@ const bloomDemoRowHtml = (cards: readonly Card[]) =>
 
 const bloomDemoHtml = () =>
   `<div class="tutorial-bloom-stage" aria-hidden="true">`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Set — same number, different suits</span>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, different suits</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
-  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Run — numbers in a row, one suit</span>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Numbers in a row, one suit</span>`
   + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
   + `</div>`;
 
@@ -434,19 +434,6 @@ const geometryFromBounds = (left: number, top: number, right: number, bottom: nu
   };
 };
 
-/** Menu hole so #hud-menu stays undimmed and readable during tutorial. */
-const menuCutoutHole = (): string => {
-  const el = typeof document !== 'undefined' ? document.getElementById('hud-menu') : null;
-  if (!el) return '';
-  const r = rectOf(el);
-  if (r.width <= 0 || r.height <= 0) return '';
-  const pad = 6;
-  const x = r.left - pad; const y = r.top - pad;
-  const w = r.width + pad * 2; const h = r.height + pad * 2;
-  const rx = Math.min(10, Math.min(w, h) * 0.22);
-  return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${rx.toFixed(1)}" fill="black"/>`;
-};
-
 /**
  * Prefer the pile face (`.pile-card`) over the tall `#deck` / `#discard` button.
  * The button box includes the meter/label chrome and reads as a wrong-sized, offset glow.
@@ -522,7 +509,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   let handlers: TutorialWindowHandlers = {};
   let lastStepKey = '';
   let ledTitle = '';
-  let focusScene: 'tracked' | 'menu' | 'empty' | null = null;
+  let focusScene: 'tracked' | 'empty' | null = null;
   const paintTutorialLed = () => {
     const canvas = panel.querySelector<HTMLCanvasElement>('.glass-led-cells');
     if (!canvas || !ledTitle) return;
@@ -802,32 +789,11 @@ export const mountGlassSurface = (onClose: () => void) => {
   const ensureTrackedScene = () => {
     if (focusScene === 'tracked') return;
     focus.innerHTML = cutoutMask(
-      `<rect class="focus-hole" fill="black"/>`
-      + `<rect class="focus-menu-hole" fill="black"/>`,
+      `<rect class="focus-hole" fill="black"/>`,
     )
       + `<g class="focus-lift"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
       + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
     focusScene = 'tracked';
-  };
-
-  const syncMenuHole = () => {
-    const menuEl = focus.querySelector('.focus-menu-hole');
-    const menu = document.getElementById('hud-menu');
-    const menuRect = menu ? rectOf(menu) : null;
-    if (menuEl && menuRect && menuRect.width > 0 && menuRect.height > 0) {
-      const padM = 6;
-      const w = menuRect.width + padM * 2;
-      const h = menuRect.height + padM * 2;
-      menuEl.setAttribute('x', (menuRect.left - padM).toFixed(1));
-      menuEl.setAttribute('y', (menuRect.top - padM).toFixed(1));
-      menuEl.setAttribute('width', w.toFixed(1));
-      menuEl.setAttribute('height', h.toFixed(1));
-      menuEl.setAttribute('rx', Math.min(10, Math.min(w, h) * 0.22).toFixed(1));
-      menuEl.removeAttribute('hidden');
-    } else if (menuEl) {
-      menuEl.setAttribute('width', '0');
-      menuEl.setAttribute('height', '0');
-    }
   };
 
   const paintFocus = (tracked: Tracked | null) => {
@@ -836,21 +802,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     focus.dataset.pulse = reduceMotion || !tracked ? '0' : '1';
     focus.dataset.bob = reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1';
     focus.dataset.on = tracked || mode === 'tutorial' ? '1' : '0';
-    const menuHole = menuCutoutHole();
+    // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
     if (!tracked) {
-      if (!menuHole) {
-        if (focusScene !== 'empty') {
-          focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
-          focusScene = 'empty';
-        }
-        focus.dataset.pointer = '0';
-        return;
+      if (focusScene !== 'empty') {
+        focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
+        focusScene = 'empty';
       }
-      if (focusScene !== 'menu') {
-        focus.innerHTML = cutoutMask(`<rect class="focus-menu-hole" fill="black"/>`);
-        focusScene = 'menu';
-      }
-      syncMenuHole();
       focus.dataset.pointer = '0';
       return;
     }
@@ -858,7 +815,6 @@ export const mountGlassSurface = (onClose: () => void) => {
     applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
-    syncMenuHole();
     const panelRect = panel.getBoundingClientRect();
     const pose = pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');

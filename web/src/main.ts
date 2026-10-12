@@ -920,6 +920,7 @@ async function mountPlayerEnhancements() {
     });
     tutorialGate = mountTutorialGate({
       onBlocked: onTutorialBlocked,
+      onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
     tutorialEaster = mountTutorialEaster();
@@ -1199,6 +1200,18 @@ function onTutorialBlocked() {
   /* no-op */
 }
 
+let lastTapAnywhere = 0;
+/** On an explanation (Next) step, a tap anywhere the step does not use moves on. */
+function tutorialTapAnywhere() {
+  const progress = coach.tutorial;
+  if (!progress || openSheet || busy() || tutorialTransitionPending || tutorialEaster?.isOpen()) return;
+  if (tutorialLesson(progress.chapter, progress.step)?.action !== 'Next') return;
+  const now = performance.now();
+  if (now - lastTapAnywhere < 350) return;
+  lastTapAnywhere = now;
+  tutorialNext();
+}
+
 function syncTutorialGate() {
   if (!tutorialGate) return;
   const progress = coach.tutorial;
@@ -1417,6 +1430,7 @@ function tutorialAdvanceStep() {
     return;
   }
   if (next) {
+    if (next.rewind) tutorialRewind(progress.step);
     ensureTutorialThrowPhase();
     armTutorialIdle();
     maybeShowTutorialEaster();
@@ -1430,6 +1444,23 @@ function tutorialAdvanceStep() {
     tutorialStatus = null;
     void idle().then(() => { if (my === epoch) advanceTutorialChapter(nextTutorialChapter(progress.chapter, progress.track), progress.track); });
   }, 900);
+}
+
+/**
+ * A rewind step: once the last move has finished playing, take it back with Undo (its tiles sink
+ * back into the hand). The step stays locked until the rewind is done.
+ */
+function tutorialRewind(step: number) {
+  const owner = coach.tutorial;
+  tutorialTransitionPending = true;
+  const my = epoch;
+  void idle().then(() => window.setTimeout(() => {
+    if (coach.tutorial !== owner || owner?.step !== step) return;
+    if (my === epoch && session?.canUndo) undoMove();
+    tutorialTransitionPending = false;
+    tutorialDisplayKey = '';
+    render();
+  }, 500));
 }
 
 function tutorialNext() {
@@ -3614,6 +3645,9 @@ function renderControls(v: View, advice: Advice | null) {
     const end = legal.find(a => a.t === 'EndAct');
     if (end && !moves.querySelector('.end')) moves.append(button(grewThisTurn() ? 'skip?' : 'Skip', 'end futa04-skip', () => humanPlay(end), 'Skip bloom and throw a card'));
   }
+  // Tutorial explanation steps: the cockpit's » doubles as Next (the cockpit mirrors #moves)
+  const nextLesson = coach.tutorial ? tutorialLesson(coach.tutorial.chapter, coach.tutorial.step) : null;
+  if (nextLesson?.action === 'Next') moves.append(button('Next', 'end futa04-skip tutorial-next', () => tutorialNext(), 'Next'));
   const dc = drawCombo();
   if (dc && !pending) {
     if (draw.shape.length > 0 || draw.suggested) moves.append(button('Clear', 'ghost draw-clear', () => cancelDraw(), 'Clear the shape'));

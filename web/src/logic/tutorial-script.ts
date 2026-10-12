@@ -40,8 +40,10 @@ export type TutorialLesson = {
   tile?: Coord;
   button?: string;
   reseat?: string;
-  /** Show the Bloom examples (a set and a run) mid-screen on this step. */
+  /** Show the Bloom examples mid-screen on this step. */
   bloomDemo?: boolean;
+  /** Take back the previous step's move first (shown as a rewind: its tiles sink back into the hand). */
+  rewind?: boolean;
   action: Action['t'] | 'Opponent' | 'FreeTurn' | 'Next';
 };
 export type LessonTarget = { kind: TutorialFocus | 'none'; selector: string; shape: 'hex' | 'card' | 'pill' | 'none' };
@@ -103,22 +105,18 @@ const lessons: TutorialLesson[][] = [
       tile: { q: -1, r: 1 }, cta: 'TAP A CARD',
     }),
     L('rock-gold', 'ROCK AND GOLD', 'Nothing grows on rock. A gold tile scores 2 points, others 1. Most points wins.', 'explainer', 'Next', {
-      cta: 'NEXT',
-    }),
-    L('grow-done', 'ON TO THROW', 'Tap » to go on to Throw. Nothing worth growing? » skips Grow too.', 'context', 'EndAct', {
-      cta: 'TAP »',
+      cta: 'NEXT', closesGrow: true,
     }),
     L('throw', 'THROW', 'End your turn: tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
       cta: 'TAP A CARD',
     }),
-    L('opponent', 'THEIR TURN', 'They draw, grow and throw, just like you.', 'none', 'Opponent'),
   ],
   // 3 BLOOM (How to play: "What can bloom?")
   [
-    L('bloom-explain', 'BLOOM', 'Extra move on Grow: 3 to 6 cards at once. Same number, or a run in one suit.', 'explainer', 'Next', {
+    L('bloom-explain', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row in one suit.', 'explainer', 'Next', {
       cta: 'NEXT', bloomDemo: true,
     }),
-    L('bloom-set', 'BLOOM SET', 'Three 3s: same number, different suits — a set. Tap Bloom, then the lit tiles.', 'bloom', 'Bloom', {
+    L('bloom-set', 'BLOOM', 'Three 3s, the same number. Tap Bloom, then tap or draw the tiles.', 'bloom', 'Bloom', {
       cta: 'TAP BLOOM',
     }),
     L('bloom-set-after', 'CARD POWER', 'Each tile keeps its card number. Save 8s and 9s for strong tiles.', 'explainer', 'Next', {
@@ -158,7 +156,7 @@ const lessons: TutorialLesson[][] = [
     L('btn-history', 'BULB', 'Past moves and the cards they threw.', 'button', 'Next', {
       button: 'intel', cta: 'NEXT',
     }),
-    L('btn-display', 'DISPLAY', 'Says what to do now (DRAW!, GROW!, THROW!) and shows the score.', 'button', 'Next', {
+    L('btn-display', 'DISPLAY', 'Shows important info. Respect it.', 'button', 'Next', {
       button: 'display', cta: 'NEXT',
     }),
   ],
@@ -176,19 +174,22 @@ const lessons: TutorialLesson[][] = [
   ],
   // 10 BLOOM WITH THE THROW PILE (on a Draw)
   [
-    L('bloom-intro', 'BLOOM', 'Extra move on Grow: 3 to 6 cards at once. Same number, or a run in one suit.', 'explainer', 'Next', {
+    L('bloom-intro', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row in one suit.', 'explainer', 'Next', {
       cta: 'NEXT', bloomDemo: true,
     }),
-    L('discard-draw', 'THROW PILE', 'Its top card finishes a run in your hand. Take it instead of drawing.', 'discard', 'Draw', {
+    L('discard-draw', 'THROW PILE', 'If the Throw pile glows gold, its top card completes your Bloom.', 'discard', 'Draw', {
       cta: 'TAKE IT',
     }),
-    L('discard-bloom', 'BLOOM RUN', '3, 4, 5 in one suit. Tap Bloom, then the lit tiles.', 'bloom', 'Bloom', {
+    L('discard-bloom', 'BLOOM', 'Tap Bloom, then tap or draw the tiles.', 'bloom', 'Bloom', {
       cta: 'TAP BLOOM',
+    }),
+    L('bloom-skip', 'SKIP BLOOM', 'You can also skip Bloom and save the cards for later. Tap ».', 'context', 'EndAct', {
+      cta: 'TAP »', rewind: true,
     }),
   ],
   // 11 HOW YOU WIN
   [
-    L('win-place', 'CLOSE THE RING', 'That is their home. Surround it on every side to win at once: grow here.', 'tile', 'Sprout', {
+    L('win-place', 'KO', "Surround your opponent's home on every side for an instant win.", 'tile', 'Sprout', {
       card: [0, 5], tile: { q: 2, r: -1 }, cta: 'TAP THE 5',
     }),
   ],
@@ -520,7 +521,11 @@ export const tutorialStateAt = (chapter: number, step: number): State => {
   }
   let state = tutorialChapter(chapter, variant);
   const from = reseatAt >= 0 ? reseatAt : 0;
-  for (let i = from; i < step; i++) state = tutorialApplyLesson(state, lessons[i]!);
+  for (let i = from; i < step; i++) {
+    // a rewind step takes back the move just before it, so that move is never applied
+    if (lessons[i + 1]?.rewind) continue;
+    state = tutorialApplyLesson(state, lessons[i]!);
+  }
   // Throw beat: silent EndAct so the authored position matches live ensureTutorialThrowPhase.
   if (lessons[step]?.action === 'Discard') state = endActIfNeeded(state);
   return state;
