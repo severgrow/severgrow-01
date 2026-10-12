@@ -52,6 +52,11 @@ export const GATE_SHEET_SELECTORS = Object.freeze([
   '#sheet-history', '#sheet-history button', '#sheet-history [data-close]',
 ] as const);
 
+/** What moves a Next step on: the glass NEXT and the cockpit's » (its #moves source). */
+export const GATE_NEXT_SELECTORS = Object.freeze([
+  '#futasaku-glass [data-tut="next"]', '#smart-context', '#moves .tutorial-next',
+] as const);
+
 export const allowedSelectorsForLesson = (
   lesson: TutorialLesson | null,
   targetSelector: string,
@@ -64,20 +69,22 @@ export const allowedSelectorsForLesson = (
       windowOnly: true,
     };
   }
+  // Next steps: the glass NEXT, and the cockpit's » (it mirrors #moves .tutorial-next). A tap
+  // anywhere else is blocked here and still counts as Next (main.ts onBlockedTap).
   if (lesson.focus === 'explainer') {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...GATE_NEXT_SELECTORS] as string[],
     };
   }
   // Look-and-tap Next steps (homes, buttons): glow the named target; tapping it advances.
   if (lesson.action === 'Next' && targetSelector) {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, targetSelector, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, targetSelector, ...GATE_NEXT_SELECTORS] as string[],
     };
   }
   if (lesson.action === 'Next') {
     return {
-      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, '#futasaku-glass [data-tut="next"]'] as string[],
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...GATE_NEXT_SELECTORS] as string[],
     };
   }
   // Free play clears the gate in main (everything open). Keep menu listed for audits.
@@ -164,6 +171,8 @@ const CAPTURE_EVENTS = [
 
 export const mountTutorialGate = (hooks: {
   onBlocked: () => void;
+  /** Every blocked tap (pointerup), unthrottled: explanation steps treat a tap anywhere as Next. */
+  onBlockedTap?: () => void;
   /** Return false while a bloom paint drag is active so pointermove stays free. */
   isPaintDragging?: () => boolean;
 }): TutorialGate => {
@@ -204,6 +213,7 @@ export const mountTutorialGate = (hooks: {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
+    if (event.type === 'pointerup') hooks.onBlockedTap?.();
     const now = performance.now();
     if (now - lastBlockAt >= 400) {
       lastBlockAt = now;

@@ -10,6 +10,7 @@ import {
   TUTORIAL_CHAPTER_COUNT,
   TUTORIAL_CHAPTER_IDS,
   migrateTutorialProgress,
+  previousTutorialChapter,
   resolveLessonTarget,
   tutorialAccepts,
   tutorialApplyLesson,
@@ -74,7 +75,7 @@ describe('tutorial pro: chapter shape', () => {
       expect(new Set(cards.map(c => c.id)).size).toBe(cards.length);
       for (const [step, lesson] of tutorialLessons(chapter).entries()) {
         if (lesson.action === 'FreeTurn') continue;
-        if (lesson.reseat === 'bloom-run') state = tutorialChapter(chapter, 'bloom-run');
+        if (lesson.reseat) state = tutorialChapter(chapter, lesson.reseat);
         if (lesson.action === 'Opponent' || lesson.action === 'Next') {
           state = tutorialApplyLesson(state, lesson);
           continue;
@@ -118,33 +119,20 @@ describe('tutorial pro: gating and feedback', () => {
     expect(target?.kind).toBe('hand');
   });
 
-  it('after-grow goes straight to throw without Skip / EndAct', () => {
-    const ch = TUTORIAL_CHAPTER_IDS.indexOf('strengthen');
-    const doneStep = tutorialLessons(ch).findIndex(l => l.id === 'strength-done');
-    const lesson = tutorialLesson(ch, doneStep)!;
-    expect(lesson.action).toBe('Discard');
-    expect(lesson.action).not.toBe('EndAct');
-    const state = tutorialStateAt(ch, doneStep);
-    expect(state.phase).toBe('DISCARD');
-    const discards = legalActions(viewFor(state, 0)).filter(a => a.t === 'Discard');
-    expect(discards.length).toBeGreaterThan(0);
-    expect(tutorialAccepts(lesson, discards[0]!, state)).toBe(true);
+  it('after the first Grow, the explainer closes Grow so Throw lands in DISCARD', () => {
+    const turn = TUTORIAL_CHAPTER_IDS.indexOf('turn');
+    const rockGold = tutorialLessons(turn).find(l => l.id === 'rock-gold')!;
+    expect(rockGold.action).toBe('Next');
+    expect(rockGold.closesGrow).toBe(true);
+    const throwStep = tutorialLessons(turn).findIndex(l => l.id === 'throw');
+    expect(tutorialStateAt(turn, throwStep).phase).toBe('DISCARD');
   });
 
-  it('connection closes Grow via Next (no Skip beat) before throw', () => {
-    const connection = tutorialLessons(1).find(l => l.id === 'connection')!;
-    expect(connection.action).toBe('Next');
-    expect(connection.closesGrow).toBe(true);
-    const throwStep = tutorialLessons(1).findIndex(l => l.id === 'throw');
-    expect(tutorialStateAt(1, throwStep).phase).toBe('DISCARD');
-  });
-
-  it('inserts short opponent beats after major chapters', () => {
-    for (const id of ['bloom', 'strengthen', 'cut', 'bomb', 'blast', 'throw-pile'] as const) {
+  it('Strengthen, take over, Bomb and Blast are one move each; the next chapter starts fresh', () => {
+    for (const id of ['strengthen', 'cut', 'bomb', 'blast'] as const) {
       const ch = TUTORIAL_CHAPTER_IDS.indexOf(id);
-      const opp = tutorialLessons(ch).filter(l => l.action === 'Opponent');
-      expect(opp.length, id).toBeGreaterThanOrEqual(1);
-      expect(opp[0]!.instruction).toMatch(/THEIR/i);
+      expect(tutorialLessons(ch), id).toHaveLength(1);
+      expect(tutorialLessons(ch)[0]!.action, id).not.toBe('Next');
     }
   });
 });
@@ -198,7 +186,7 @@ describe('tutorial pro: strings', () => {
       TUTORIAL.recap.join(' '),
       ...Object.values(TUTORIAL.praise),
       ...Object.values(TUTORIAL.wrong),
-      ...TUTORIAL.chapters.flatMap(c => c.lessons.flatMap(l => [l.instruction, 'why' in l ? (l.why ?? '') : ''])),
+      ...Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, c) => tutorialLessons(c)).flat().flatMap(l => [l.instruction, l.why ?? '']),
     ].join('\n');
     expect(blob).not.toMatch(/Severor|Severgrow|15 moves|three or four|Three or four/i);
     expect(BLOOM.howto).toMatch(/3 to 6|3–6/);
@@ -242,47 +230,42 @@ describe('tutorial pro: seek / Previous rebuild', () => {
     expect(action?.t).toBe('Sprout');
   });
 
-  it('Previous across the new bloom strategy / free recap lessons stays in range', () => {
+  it('Previous across the bloom lesson and into the free turn stays in range', () => {
     const bloom = TUTORIAL_CHAPTER_IDS.indexOf('bloom');
     const free = TUTORIAL_CHAPTER_IDS.indexOf('free');
-    expect(tutorialLessons(bloom).some(l => l.id === 'bloom-strategy')).toBe(true);
-    expect(tutorialLessons(free).some(l => l.id === 'free-recap')).toBe(true);
-    const strategyStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-strategy');
     const setStep = tutorialLessons(bloom).findIndex(l => l.id === 'bloom-set');
-    expect(tutorialStateAt(bloom, strategyStep).phase).toBe('ACT');
+    expect(tutorialStateAt(bloom, 0).phase).toBe('ACT');
     expect(tutorialStateAt(bloom, setStep).phase).toBe('ACT');
-    // Seek to free-recap then Previous into the prior chapter's last lesson.
-    const freeRecap = tutorialLessons(free).findIndex(l => l.id === 'free-recap');
-    expect(() => tutorialStateAt(free, freeRecap)).not.toThrow();
-    const prevChapter = free - 1;
+    // Seek to the free turn, then Previous into the tutorial's previous chapter (How you win).
+    expect(() => tutorialStateAt(free, 0)).not.toThrow();
+    const prevChapter = previousTutorialChapter(free, 'core')!;
+    expect(prevChapter).toBe(TUTORIAL_CHAPTER_IDS.indexOf('win'));
     const last = tutorialLessons(prevChapter).length - 1;
     expect(() => tutorialStateAt(prevChapter, last)).not.toThrow();
   });
 });
 
 describe('tutorial pro: card strategy copy', () => {
-  it('teaches bloom rules, 8/9 strength, and sets vs runs near bloom and before free play', () => {
+  it('teaches bloom rules (same number, or in a row in one suit) and 8/9 strength before free play', () => {
     const bloom = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('bloom'));
     const free = tutorialLessons(TUTORIAL_CHAPTER_IDS.indexOf('free'));
     const explain = bloom.find(l => l.id === 'bloom-explain')!;
-    const strategy = bloom.find(l => l.id === 'bloom-strategy')!;
+    const power = bloom.find(l => l.id === 'bloom-set-after')!;
     const set = bloom.find(l => l.id === 'bloom-set')!;
-    const recap = free.find(l => l.id === 'free-recap')!;
+    const recap = free.find(l => l.id === 'free')!;
     expect(explain.instruction).toMatch(/^BLOOM$/i);
     expect(explain.why).toMatch(/Grow/i);
     expect(explain.why).toMatch(/same number|different suits/i);
-    expect(explain.why).toMatch(/consecutive|run/i);
+    expect(explain.why).toMatch(/in a row/i);
     expect(explain.why).toMatch(/3 to 6|3–6/i);
     expect(explain.why).not.toMatch(/meld/i);
-    expect(strategy.instruction).toMatch(/LOOK FOR/i);
-    expect(strategy.why).toMatch(/8|9/);
-    expect(strategy.why).toMatch(/set/i);
-    expect(strategy.why).toMatch(/run/i);
-    expect(set.why).toMatch(/same number|different suits/i);
-    expect(recap.instruction).toMatch(/REMEMBER/i);
+    expect(power.why).toMatch(/8|9/);
+    expect(set.why).toMatch(/same number/i);
+    expect(`${explain.why} ${set.why}`).not.toMatch(/\b(sets?|runs?)\b/i);
+    expect(recap.action).toBe('FreeTurn');
     expect(recap.why).toMatch(/8|9/);
     expect(wordCount(explain.why!)).toBeLessThanOrEqual(18);
-    expect(wordCount(strategy.why!)).toBeLessThanOrEqual(18);
+    expect(wordCount(power.why!)).toBeLessThanOrEqual(18);
     expect(wordCount(recap.why!)).toBeLessThanOrEqual(18);
   });
 });

@@ -1,5 +1,22 @@
 # FUTASAKU tutorial "Pro" overhaul — plan
 
+> **Current structure (tutorial v3, 2026-10).** `TUTORIAL_CORE` and `TUTORIAL_EXTRAS` in
+> `web/src/logic/tutorial-script.ts`:
+> - **Full tutorial** (16 steps to the free turn, then a 3-button tour): your home, each turn, Draw, Grow
+>   (the card number is the tile strength), rock and gold (points), Throw; then the other uses of Grow:
+>   Strengthen, take over, Bomb; then Bloom (examples on a glass panel; never called "set" or "run") with a
+>   Throw pile Draw (it glows gold when its top card completes your Bloom), the Bloom rewound with Undo and
+>   "skip Bloom" on the » button, Blast as Bloom's twin; then KO, a free turn with one line per step, and
+>   the Undo, Bulb and Display buttons. No turn of theirs is shown.
+> - On explanation steps a tap anywhere, the glass NEXT, or the cockpit » moves on.
+> - **Menu:** New game, How to, Settings (Continue when there is a saved game). How to unfolds Full tutorial
+>   and the separate lessons: Strengthen, Bomb & Blast, Bloom, Skip & last round, Buttons.
+> - Board changes in the tutorial fade through black (160ms in, 240ms out).
+> - One word list in all tutorial copy: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points. No tile colours.
+> - Saves from tutorial v2 restart their chapter.
+>
+> The plan below is the earlier overhaul, kept for the record.
+
 Test channel only (`CHANNEL=futa-test`). Branch `futa0.4`. No engine or rule changes. The tutorial only arranges positions and card order; all rules still come from `apply` / `legalActions`.
 
 ## Files read before changing anything

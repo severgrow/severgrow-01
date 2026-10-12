@@ -344,6 +344,14 @@ button {
 #levels .level-grid .difficulty-tile:active { transform: translateY(1px); }
 #menu .menu-buttons .btn:focus-visible,
 #levels .level-grid .difficulty-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
+.menu-lessons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.menu-lessons[hidden] { display: none; }
+#menu .menu-lessons .btn { min-height: 44px; padding: 1px 10px 0; font-size: 0.8rem; }
+#menu .menu-lessons .btn.wide { grid-column: 1 / -1; }
 .menu-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5575,4 +5583,21 @@ html.align-overlay::before {
   line-height: 1.3;
   text-align: center;
   text-wrap: balance;
+}
+
+/* The tutorial's fade through black while the board changes (main.ts tutorialCurtain). */
+#tutorial-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: #050606;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--curtain-out, 240ms) cubic-bezier(.33, 0, .2, 1);
+  will-change: opacity;
+}
+#tutorial-curtain.on {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity var(--curtain-in, 160ms) cubic-bezier(.4, 0, .67, 1);
 }

@@ -27,20 +27,20 @@ try {
   });
   await page.reload();
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
+  // the menu's How to unfolds Full tutorial and the separate lessons
   await page.locator('#menu-tutorial').click();
-  assert.equal((await state()).seed,51000);
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'HOME');
+  await page.locator('#menu-lessons-list [data-lesson="core"]').click();
+  await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===51000,undefined,{timeout:10000});
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'YOUR HOME');
   // Dual advance: tapping the highlighted home must work (not only NEXT).
   await page.waitForSelector('#board .hex-cell[data-key="-2,2"]',{timeout:5000});
   await page.locator('#board .hex-cell[data-key="-2,2"]').click({force:true});
-  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='THEIR HOME',undefined,{timeout:8000});
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='EACH TURN',undefined,{timeout:8000});
   await page.waitForSelector('#futasaku-glass [data-tut="next"]',{timeout:5000});
   // Glass CTAs must not be blocked by the full-width HUD strip above them.
   await page.locator('#futasaku-glass [data-tut="next"]').click({force:false});
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'EACH TURN');
-  await page.locator('#futasaku-glass [data-tut="next"]').click();
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51001,{timeout:20000});
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW PILE');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW');
   const opening=await state();
   await page.locator('#discard').evaluate(element=>(element as HTMLElement).click());
   assert.deepEqual(await state(),opening,'an irrelevant early tap leaves the lesson unchanged');
@@ -112,8 +112,8 @@ try {
     }
   }
   await page.goto(`${base}?tutorial=1&chapter=13`);
-  // The free chapter opens with a recap explainer; step through it to the unguided turn.
-  await page.waitForFunction(()=>!!(window as any).__severgrow?.tutorialGate?.()?.active,undefined,{timeout:20000});
+  // The free chapter is the player's own turn (no step lock); any explainer before it is stepped through.
+  await page.waitForFunction(()=>!!(window as any).__severgrow?.tutorial(),undefined,{timeout:20000});
   await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
   await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51010,undefined,{timeout:10000});
   for(let guard=0;guard<5;guard++) {
@@ -124,7 +124,7 @@ try {
     await next.click();
     await page.waitForTimeout(300);
   }
-  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'PLAY','the free chapter reaches its unguided turn');
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'DRAW','the free chapter reaches its own turn, with a line for each step');
   // The unguided turn: real actions; the turn passing to the opponent completes the tutorial.
   let s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Draw'&&a.from==='deck')!),true);
@@ -132,6 +132,13 @@ try {
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='EndAct')!),true);
   s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Discard')!),true);
+  // after the free turn: the short button tour, then the menu
+  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='UNDO',undefined,{timeout:15000});
+  for(let i=0;i<3;i++) {
+    await page.waitForFunction(()=>!!(window as any).__severgrow.tutorial(),undefined,{timeout:8000}).catch(()=>{});
+    await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
+    await page.waitForTimeout(250);
+  }
   await page.waitForFunction(()=>!document.getElementById('menu')!.hidden,undefined,{timeout:15000});
   assert.equal(await page.locator('#menu-continue').isVisible(),false,'finished tutorial is not retained as a live match');
 
@@ -194,6 +201,7 @@ try {
   const desktop=await browser.newPage({viewport:{width:1440,height:900}});
   await desktop.goto(base);
   await desktop.locator('#menu-tutorial').click();
+  await desktop.locator('#menu-lessons-list [data-lesson="core"]').click();
   await desktop.locator('#game').waitFor({state:'visible'});
   await desktop.locator('#futasaku-glass').waitFor({state:'visible'});
   const desktopGlass=await desktop.locator('#futasaku-glass').boundingBox();

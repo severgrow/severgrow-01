@@ -34,6 +34,8 @@ export type TutorialFocusOptions = {
   turnIcons?: boolean;
   /** Stable step id — skip fade/jump when only the CTA changes. */
   stepKey?: string;
+  /** Soft mid-screen set + run card examples (bloom explain). */
+  bloomDemo?: boolean;
 };
 
 const CSS = `
@@ -251,14 +253,95 @@ html.futa04-tutorial .sheet { z-index: 51; }
   #tutorial-focus .focus-glow, #tutorial-focus .focus-pointer,
   #tutorial-focus .focus-lift, #tutorial-focus.nudge .focus-glow-soft { animation:none !important; }
 }
+/* Bloom explain: soft mid-screen set + run faces (no hard frame — float only). */
+#tutorial-bloom-demo {
+  position:fixed; inset:0; z-index:36; pointer-events:none; display:flex; align-items:center; justify-content:center;
+  padding:max(96px, 14vh) 16px 24px; box-sizing:border-box;
+  opacity:0; transition:opacity 280ms ease;
+}
+#tutorial-bloom-demo[hidden] { display:none; }
+#tutorial-bloom-demo[data-on='1'] { opacity:1; }
+#tutorial-bloom-demo .tutorial-bloom-stage {
+  display:flex; flex-direction:column; gap:22px; align-items:stretch;
+  width:min(340px, calc(100vw - 32px)); padding:18px 14px 20px; box-sizing:border-box;
+  /* the same dark glass as the tutorial panel, a little denser so the cards read over the board */
+  border:1px solid rgba(214,204,177,.16); border-radius:15px; background:rgba(8,10,10,.72);
+  box-shadow:inset 0 1px rgba(243,232,202,.07),0 14px 34px rgba(0,0,0,.38);
+  backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
+}
+#tutorial-bloom-demo .tutorial-bloom-group + .tutorial-bloom-group {
+  padding-top:18px; border-top:1px solid rgba(214,204,177,.1);
+}
+#tutorial-bloom-demo .tutorial-bloom-group { display:flex; flex-direction:column; gap:8px; align-items:center; }
+/* Same face as tutorial glass why-copy (not a mismatched display face). */
+#tutorial-bloom-demo .tutorial-bloom-tag {
+  margin:0; font:400 13.5px/1.5 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing:.012em; text-transform:none; color:rgba(240,233,220,.78);
+  text-shadow:0 1px 5px rgba(0,0,0,.55);
+}
+#tutorial-bloom-demo .tutorial-bloom-row {
+  display:flex; align-items:flex-end; justify-content:center; gap:8px;
+}
+#tutorial-bloom-demo .tutorial-bloom-card {
+  --cw: clamp(44px, 12vw, 56px); --ch: calc(var(--cw) * 1.42);
+  width:var(--cw); height:var(--ch); flex:none;
+  transform:translateY(10px) scale(.94); opacity:0;
+  box-shadow:0 6px 16px rgba(0,0,0,.38);
+}
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card {
+  animation:tutorial-bloom-card-in 420ms cubic-bezier(.22,.72,.24,1) forwards;
+}
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(1) { animation-delay:40ms; }
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(2) { animation-delay:110ms; }
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(1) .tutorial-bloom-card:nth-child(3) { animation-delay:180ms; }
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(1) { animation-delay:260ms; }
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(2) { animation-delay:330ms; }
+#tutorial-bloom-demo[data-on='1'] .tutorial-bloom-group:nth-child(2) .tutorial-bloom-card:nth-child(3) { animation-delay:400ms; }
+@keyframes tutorial-bloom-card-in {
+  from { opacity:0; transform:translateY(18px) scale(.9); }
+  to { opacity:1; transform:translateY(0) scale(1); }
+}
+.reduce-motion #tutorial-bloom-demo,
+.reduce-motion #tutorial-bloom-demo .tutorial-bloom-card { transition:none; animation:none !important; }
+.reduce-motion #tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card { opacity:1; transform:none; }
+@media (prefers-reduced-motion:reduce) {
+  #tutorial-bloom-demo, #tutorial-bloom-demo .tutorial-bloom-card { transition:none; animation:none !important; }
+  #tutorial-bloom-demo[data-on='1'] .tutorial-bloom-card { opacity:1; transform:none; }
+}
 `;
+
+/** Authored demo faces for bloom explain — set (3s) and run (4-5-6). Labels stay BLOOM. */
+const BLOOM_DEMO_SET: readonly Card[] = Object.freeze([
+  { id: -101, suit: 0, rank: 3 },
+  { id: -102, suit: 1, rank: 3 },
+  { id: -103, suit: 2, rank: 3 },
+]);
+const BLOOM_DEMO_RUN: readonly Card[] = Object.freeze([
+  { id: -111, suit: 0, rank: 4 },
+  { id: -112, suit: 0, rank: 5 },
+  { id: -113, suit: 0, rank: 6 },
+]);
+
+const bloomDemoRowHtml = (cards: readonly Card[]) =>
+  cards.map(card =>
+    `<span class="tutorial-bloom-card card ${suitClass(card)}" aria-hidden="true">${cardFace(card)}</span>`,
+  ).join('');
+
+const bloomDemoHtml = () =>
+  `<div class="tutorial-bloom-stage" aria-hidden="true">`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Same number, different suits</span>`
+  + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_SET)}</div></div>`
+  + `<div class="tutorial-bloom-group"><span class="tutorial-bloom-tag">Numbers in a row, one suit</span>`
+  + `<div class="tutorial-bloom-row">${bloomDemoRowHtml(BLOOM_DEMO_RUN)}</div></div>`
+  + `</div>`;
+
 
 const rectOf = (element: Element) => element.getBoundingClientRect();
 const safe = (text: string) => text.replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number };
+type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number; exact?: boolean };
 
 const FOCUS_RX = 10;
 const FOCUS_PAD_X = 8;
@@ -320,12 +403,13 @@ const clampBoundsToViewport = (left: number, top: number, right: number, bottom:
 };
 
 /** Soft rounded-rect / pill geometry. Contour-free; never a circular ring. */
-const geometryFromBounds = (left: number, top: number, right: number, bottom: number): Tracked => {
+const geometryFromBounds = (left: number, top: number, right: number, bottom: number, exact = false): Tracked => {
   let l = left; let t = top; let r = right; let b = bottom;
   ({ left: l, top: t, right: r, bottom: b } = clampBoundsToViewport(l, t, r, b));
   let bw = r - l; let bh = b - t;
   // Nearly-square targets would read as circles with large rx — widen into a pill.
-  if (bw > 0 && bh > 0) {
+  // A single card keeps its own outline: widening would spill onto its neighbours in the fan.
+  if (!exact && bw > 0 && bh > 0) {
     const aspect = bw / bh;
     if (aspect < MIN_PILL_ASPECT && bh / bw < MIN_PILL_ASPECT) {
       const targetW = bh * MIN_PILL_ASPECT;
@@ -346,21 +430,8 @@ const geometryFromBounds = (left: number, top: number, right: number, bottom: nu
     hole: `<rect ${rect} fill="black"/>`,
     ring: `<rect class="focus-glow" ${rect}/>`,
     soft: `<rect class="focus-glow-soft" ${rect}/>`,
-    w: bw, h: bh, left: l, top: t, right: r, bottom: b,
+    w: bw, h: bh, left: l, top: t, right: r, bottom: b, exact,
   };
-};
-
-/** Menu hole so #hud-menu stays undimmed and readable during tutorial. */
-const menuCutoutHole = (): string => {
-  const el = typeof document !== 'undefined' ? document.getElementById('hud-menu') : null;
-  if (!el) return '';
-  const r = rectOf(el);
-  if (r.width <= 0 || r.height <= 0) return '';
-  const pad = 6;
-  const x = r.left - pad; const y = r.top - pad;
-  const w = r.width + pad * 2; const h = r.height + pad * 2;
-  const rx = Math.min(10, Math.min(w, h) * 0.22);
-  return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${rx.toFixed(1)}" fill="black"/>`;
 };
 
 /**
@@ -400,7 +471,8 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
     bottom = Math.max(bottom, box.bottom);
   }
   if (!Number.isFinite(left)) return null;
-  return geometryFromBounds(left, top, right, bottom);
+  const singleCard = nodes.length === 1 && nodes[0]!.matches('#hand .card');
+  return geometryFromBounds(left, top, right, bottom, singleCard);
 };
 
 /** Simple white triangle arrow (tip toward the target). */
@@ -415,9 +487,13 @@ export const mountGlassSurface = (onClose: () => void) => {
   panel.setAttribute('aria-label', 'Match details');
   const focus = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); focus.id = 'tutorial-focus'; focus.setAttribute('hidden', '');
   focus.setAttribute('aria-hidden', 'true');
+  const bloomDemo = document.createElement('div');
+  bloomDemo.id = 'tutorial-bloom-demo';
+  bloomDemo.hidden = true;
+  bloomDemo.setAttribute('aria-hidden', 'true');
   // Inside #game.screen so HUD z-index can sit above glass.
   const host = document.getElementById('game') ?? document.body;
-  host.append(focus, panel);
+  host.append(focus, bloomDemo, panel);
   const dock = document.getElementById('dock')!;
   let targetSelector = '';
   let targetShape: FocusShape = 'pill';
@@ -433,7 +509,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   let handlers: TutorialWindowHandlers = {};
   let lastStepKey = '';
   let ledTitle = '';
-  let focusScene: 'tracked' | 'menu' | 'empty' | null = null;
+  let focusScene: 'tracked' | 'empty' | null = null;
   const paintTutorialLed = () => {
     const canvas = panel.querySelector<HTMLCanvasElement>('.glass-led-cells');
     if (!canvas || !ledTitle) return;
@@ -460,6 +536,23 @@ export const mountGlassSurface = (onClose: () => void) => {
       }, 130);
     }
   };
+
+  const setBloomDemo = (show: boolean) => {
+    if (!show) {
+      bloomDemo.dataset.on = '0';
+      bloomDemo.hidden = true;
+      bloomDemo.replaceChildren();
+      return;
+    }
+    // Keep the pull-in when only the glass CTA refreshes on the same step.
+    if (!bloomDemo.hidden && bloomDemo.dataset.on === '1' && bloomDemo.firstChild) return;
+    bloomDemo.innerHTML = bloomDemoHtml();
+    bloomDemo.hidden = false;
+    bloomDemo.dataset.on = '0';
+    void bloomDemo.offsetWidth;
+    bloomDemo.dataset.on = '1';
+  };
+
 
   const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
   const placeIntel = () => {
@@ -696,32 +789,11 @@ export const mountGlassSurface = (onClose: () => void) => {
   const ensureTrackedScene = () => {
     if (focusScene === 'tracked') return;
     focus.innerHTML = cutoutMask(
-      `<rect class="focus-hole" fill="black"/>`
-      + `<rect class="focus-menu-hole" fill="black"/>`,
+      `<rect class="focus-hole" fill="black"/>`,
     )
       + `<g class="focus-lift"><rect class="focus-glow-soft"/><rect class="focus-glow"/></g>`
       + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
     focusScene = 'tracked';
-  };
-
-  const syncMenuHole = () => {
-    const menuEl = focus.querySelector('.focus-menu-hole');
-    const menu = document.getElementById('hud-menu');
-    const menuRect = menu ? rectOf(menu) : null;
-    if (menuEl && menuRect && menuRect.width > 0 && menuRect.height > 0) {
-      const padM = 6;
-      const w = menuRect.width + padM * 2;
-      const h = menuRect.height + padM * 2;
-      menuEl.setAttribute('x', (menuRect.left - padM).toFixed(1));
-      menuEl.setAttribute('y', (menuRect.top - padM).toFixed(1));
-      menuEl.setAttribute('width', w.toFixed(1));
-      menuEl.setAttribute('height', h.toFixed(1));
-      menuEl.setAttribute('rx', Math.min(10, Math.min(w, h) * 0.22).toFixed(1));
-      menuEl.removeAttribute('hidden');
-    } else if (menuEl) {
-      menuEl.setAttribute('width', '0');
-      menuEl.setAttribute('height', '0');
-    }
   };
 
   const paintFocus = (tracked: Tracked | null) => {
@@ -730,21 +802,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     focus.dataset.pulse = reduceMotion || !tracked ? '0' : '1';
     focus.dataset.bob = reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1';
     focus.dataset.on = tracked || mode === 'tutorial' ? '1' : '0';
-    const menuHole = menuCutoutHole();
+    // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
     if (!tracked) {
-      if (!menuHole) {
-        if (focusScene !== 'empty') {
-          focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
-          focusScene = 'empty';
-        }
-        focus.dataset.pointer = '0';
-        return;
+      if (focusScene !== 'empty') {
+        focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
+        focusScene = 'empty';
       }
-      if (focusScene !== 'menu') {
-        focus.innerHTML = cutoutMask(`<rect class="focus-menu-hole" fill="black"/>`);
-        focusScene = 'menu';
-      }
-      syncMenuHole();
       focus.dataset.pointer = '0';
       return;
     }
@@ -752,7 +815,6 @@ export const mountGlassSurface = (onClose: () => void) => {
     applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
     applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
-    syncMenuHole();
     const panelRect = panel.getBoundingClientRect();
     const pose = pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
@@ -783,7 +845,7 @@ export const mountGlassSurface = (onClose: () => void) => {
         const top = lerp(smooth.top, measured.top, t);
         const right = lerp(smooth.right, measured.right, t);
         const bottom = lerp(smooth.bottom, measured.bottom, t);
-        smooth = geometryFromBounds(left, top, right, bottom);
+        smooth = geometryFromBounds(left, top, right, bottom, measured.exact);
       }
       placeTutorialPanel(smooth);
       paintFocus(smooth);
@@ -825,7 +887,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const close = () => {
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
     focusScene = null;
-    clearTutorialReserve();
+    setBloomDemo(false); clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
   };
 
@@ -917,6 +979,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
     panel.hidden = false;
     showFocus(true);
+    setBloomDemo(!!options.bloomDemo);
     panel.setAttribute('aria-label', 'Tutorial guidance');
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
@@ -1012,7 +1075,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     hide: () => {
       mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
       focusScene = null;
-      clearTutorialReserve(); panel.hidden = true; showFocus(false);
+      setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },
     nudge: () => {
       if (reduceMotion) return;

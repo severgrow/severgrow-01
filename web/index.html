@@ -92,7 +92,8 @@
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
-          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
+          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="How to play" aria-expanded="false" aria-controls="menu-lessons-list">How to play</button>
+          <div id="menu-lessons-list" class="menu-lessons" hidden></div>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           <!-- install button: label and behaviour are set by src/logic/install.ts -->
           <button id="menu-install" class="btn ghost" type="button" aria-label="Add to Home Screen" hidden>Add to Home Screen</button>
@@ -404,6 +405,7 @@
         <p id="go-reason" class="muted"></p>
         <p id="go-break" class="muted small"></p>
         <p id="go-moves" class="muted small" hidden></p>
+        <button id="go-lessons" class="btn link" type="button" hidden>New here? See How to</button>
         <ul id="go-highlights" class="highlights"></ul>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>

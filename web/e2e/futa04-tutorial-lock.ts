@@ -37,7 +37,11 @@ const openTutorial = async (page: import('playwright-core').Page, chapter = 1) =
     }
   });
   await page.goto(`http://localhost:4198/?tutorial=1&chapter=${chapter}`);
-  await page.waitForFunction(() => !!(window as any).__severgrow?.tutorialGate?.()?.active, undefined, { timeout: 20000 });
+  // the free turn has no step lock; every other chapter opens locked
+  await page.waitForFunction(() => {
+    const h = (window as any).__severgrow;
+    return !!h?.tutorial() && (!!h.tutorialGate?.()?.active || !!document.querySelector('#futasaku-glass:not([hidden])'));
+  }, undefined, { timeout: 20000 });
   await page.waitForSelector('#futasaku-glass:not([hidden])');
 };
 
@@ -47,7 +51,7 @@ try {
     const page = await browser.newPage({ viewport: VIEWPORTS[1], hasTouch: true, isMobile: true });
     page.on('pageerror', e => errors.push(e.message));
     await openTutorial(page, 2);
-    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /DRAW PILE/i);
+    assert.match(await page.locator('#futasaku-glass .glass-copy').textContent() ?? '', /^DRAW$/);
     // Glass Exit is gone — leave via the pause menu.
     assert.equal(await page.locator('#futasaku-glass [data-tut="exit"]').count(), 0, 'glass Exit must be removed');
     const before = await hashState(page);
@@ -82,7 +86,7 @@ try {
     await page.mouse.click(12, 12);
     await page.waitForTimeout(80);
     const copy = await page.locator('#futasaku-glass .glass-copy').textContent() ?? '';
-    assert.match(copy, /DRAW PILE/i);
+    assert.match(copy, /^DRAW$/);
     assert.doesNotMatch(copy, /locked|Not there|Almost|glowing/i);
     await page.screenshot({ path: path.join(SHOT_DIR, 'lock-wrong-tap.png') });
 
