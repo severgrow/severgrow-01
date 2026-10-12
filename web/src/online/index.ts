@@ -1,5 +1,5 @@
-// FUTASAKU online client layer (Phase 3 + 3b). No duel screens yet —
-// identity, sync, draft, driver seam, and seat perspective mapping.
+// FUTASAKU online client layer (Phases 3–5): identity, sync, draft, driver,
+// seat perspective, lobby, and OnlineSession on the shared board.
 
 export { DUEL_CLIENT_VERSION, DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
 export type { DuelSession, FetchLike, KeyValue } from '../../../server/src/client.js';
@@ -78,6 +78,13 @@ export type { DuelHudModel } from './duel-hud.js';
 
 export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-bridge.js';
 export type { DuelUiModel } from './duel-bridge.js';
+
+export { OnlineSession, onlineSessionFromPayload, catchUpStepsFromDriver } from './duel-session.js';
+export type { OnlinePlayResult } from './duel-session.js';
+
+export { stepsFromEvent, stepsFromEvents, syncStep } from './steps-from-events.js';
+
+export { isOnlineDuel, getOnlineSession, setOnlineSession, onlinePathsActive } from './duel-runtime.js';
 
 export type {
   ConnectionStatus,

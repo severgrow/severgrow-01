@@ -1,5 +1,6 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
+import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -300,6 +301,7 @@ function beatHome(p: Player, my: number) {
 }
 
 const save = () => {
+  if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
   if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
 };
 
@@ -1507,6 +1509,7 @@ function continueGame() {
 
 let adviceMemo: { key: string; state: State; advice: Advice | null } | null = null;
 function currentAdvice(): Advice | null {
+  if (isOnlineDuel()) return null; // tutorial coach / hidden-deck hints off online
   if (!session || coach.tutorial || session.state.actor !== HUMAN || session.state.phase === 'GAME_OVER') return null;
   const key = `${coach.choice}|${settings.coach}|${coach.step}`;
   if (adviceMemo && adviceMemo.state === session.state && adviceMemo.key === key) return adviceMemo.advice;
@@ -1573,6 +1576,10 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
 
 /** The player plays `a` (from Confirm, a single tap, or the coach). */
 function humanPlay(a: Action) {
+  if (isOnlineDuel()) {
+    void humanPlayOnline(a);
+    return;
+  }
   if (!session || (coach.tutorial && tutorialTransitionPending)) return;
   const lesson=coach.tutorial && tutorialLesson(coach.tutorial.chapter,coach.tutorial.step);
   if (lesson && lesson.action !== 'Next' && !tutorialAccepts(lesson,a,session.state)) {
@@ -1598,6 +1605,71 @@ function humanPlay(a: Action) {
       render();
     }
   }
+}
+
+/** Online: Draw commits, Grow drafts locally, Throw sends the batch. */
+async function humanPlayOnline(a: Action) {
+  const os = getOnlineSession();
+  if (!os || !session) return;
+  if (os.finished) return;
+  fastForward();
+  rememberCardRects();
+  inspectKey = null;
+  guideGoal = null;
+  const result = await os.play(a);
+  if (!result.ok) {
+    caption(result.message, null, 'info');
+    os.refresh();
+    syncSessionFromOnline();
+    paintOnlineHudFromSession();
+    render();
+    return;
+  }
+  syncSessionFromOnline();
+  if (result.played) {
+    // Mid-turn / Draw: animate locally; do not run the bot scheduler.
+    let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN) : null;
+    log.unshift(describe(result.played.before, result.played.action, result.played.after, HUMAN));
+    markMoment(result.played.steps, result.played.before);
+    queue.push(result.played.steps);
+    if (displayEvent) smartCockpit?.event(displayEvent);
+  }
+  if (result.catchUp.length) {
+    replaying = true;
+    replaySpeed = 2;
+    queue.push(result.catchUp);
+  }
+  if (result.finished) gameOverDismissed = false;
+  paintOnlineHudFromSession();
+  render();
+  void pump().then(() => {
+    if (replaying) {
+      replaying = false;
+      replaySpeed = REPLAY_SPEED;
+    }
+  });
+  if (a.t === 'PlayFruit' && session.state.phase === 'ACT') {
+    const next = session.legal.find((x) => x.t === 'PlayFruit');
+    if (next) {
+      session.tapCard(next.card);
+      getOnlineSession()?.tapCard(next.card);
+      render();
+    }
+  }
+}
+
+function paintOnlineHudFromSession() {
+  const os = getOnlineSession();
+  if (!os) return;
+  void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
+    const hud = document.getElementById('duel-hud');
+    const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo);
+    renderDuelHud(hud, ui);
+    const you = document.getElementById('score-you-label');
+    const bot = document.getElementById('score-bot-label');
+    if (you) you.textContent = 'Me';
+    if (bot) bot.textContent = 'Opponent';
+  });
 }
 
 /**
@@ -1633,6 +1705,7 @@ async function planBotTurn(from: State): Promise<BotPlan> {
 }
 
 function scheduleBot() {
+  if (isOnlineDuel()) return; // online: no computer opponent
   if (!session || botBusy || tutorialTransitionPending) return;
   const st = session.state;
   if (st.phase === 'GAME_OVER') return;
@@ -2501,7 +2574,18 @@ function countScores(to: [number, number]) {
 // ---------- rendering ----------
 
 const busy = () => queue.pending > 0 || pumping;
-const myTurn = () => !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
+const myTurn = () => {
+  if (isOnlineDuel()) return !!getOnlineSession()?.myTurn && !getOnlineSession()?.finished;
+  return !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
+};
+
+/** Keep the shared Session board in sync with the online display state (Me = moss). */
+const syncSessionFromOnline = () => {
+  const os = getOnlineSession();
+  if (!os) return;
+  session = new Session(os.state, HUMAN, [...os.log], os.base);
+  session.sel = { ...os.sel };
+};
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
 function updateFuta04MoveActive() {
@@ -3228,8 +3312,8 @@ function renderBoard(v: View, advice: Advice | null) {
   $('tool-replay').setAttribute('aria-disabled', String(noReplay));
   $('tool-replay').dataset.tip = noReplay ? REPLAY_NONE : REPLAY_TIP;
   // Undo (overhaul item 9): always in the same place; lit with a dot while a move can be taken back
-  const undoOk = session.canUndo && !busy();
-  const replayOk = !undoOk && !busy() && session.canReplayOpponent;
+  const undoOk = (isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo) && !busy();
+  const replayOk = !isOnlineDuel() && !undoOk && !busy() && session.canReplayOpponent;
   // Positioning pass: Undo always holds its slot (opposite Sort), dimmed and disabled until a move
   // can be taken back, so it appearing never moves anything and Sort is never alone
   $('tool-undo').hidden = false;
@@ -4073,6 +4157,30 @@ function renderCoach(advice: Advice | null) {
 
 function renderGameOver() {
   const go = $('gameover');
+  if (isOnlineDuel()) {
+    const os = getOnlineSession();
+    const info = os?.finishInfo() ?? null;
+    const show = !!info && !busy() && !gameOverDismissed && !$('game').hidden;
+    if (go.hidden === !show) {
+      /* continue to fill when newly shown */
+    }
+    go.hidden = !show;
+    if (!show || !info) return;
+    const won = info.title === 'You won';
+    const draw = info.title === 'Draw';
+    $('go-title').textContent = info.title;
+    $('go-sub').textContent = info.reason || 'Online duel';
+    $('go-rematch').textContent = 'Back to matches';
+    const other = $('go-other');
+    other.hidden = false;
+    other.textContent = 'Menu';
+    go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
+    $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
+    $('go-cut').hidden = true;
+    $('go-reason').textContent = info.reason;
+    $('go-moves').hidden = true;
+    return;
+  }
   const st = session?.state;
   const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
   if (go.hidden === !show) return;
@@ -4154,7 +4262,12 @@ function undoMove() {
   note({ t: 'undo', at: Date.now() });
   fastForward();
   const before = session.state.board;
-  if (!session.undo()) return;
+  if (isOnlineDuel()) {
+    const os = getOnlineSession();
+    if (!os || !os.undo()) return;
+    syncSessionFromOnline();
+    paintOnlineHudFromSession();
+  } else if (!session.undo()) return;
   // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
   // with a falling sound and a light double tap. The state itself is restored exactly.
   const after = session.state.board;
@@ -4941,6 +5054,16 @@ $('hand').addEventListener('pointerout', (e) => {
 });
 bind('go-other', () => {
   $('gameover').hidden = true;
+  if (isOnlineDuel()) {
+    getOnlineSession()?.driver.stop();
+    setOnlineSession(null);
+    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
+    if (resignBtn) resignBtn.hidden = true;
+    const hud = document.getElementById('duel-hud');
+    if (hud) hud.hidden = true;
+    showScreen('menu');
+    return;
+  }
   showScreen('levels');
 });
 bind('menu-continue', () => continueGame());
@@ -5257,7 +5380,20 @@ bind('tool-undo', () => {
   if (session.canUndo) undoMove();
   else if (session.canReplayOpponent) replayBotTurn();
 });
-bind('go-rematch', () => startGame(randomSeed(), gameLevel));
+bind('go-rematch', () => {
+  if (isOnlineDuel()) {
+    getOnlineSession()?.driver.stop();
+    setOnlineSession(null);
+    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
+    if (resignBtn) resignBtn.hidden = true;
+    const hud = document.getElementById('duel-hud');
+    if (hud) hud.hidden = true;
+    $('gameover').hidden = true;
+    void onlineLobbyCtl?.openHub();
+    return;
+  }
+  startGame(randomSeed(), gameLevel);
+});
 bind('go-board', () => {
   gameOverDismissed = true;
   render();
@@ -5553,55 +5689,94 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
 
-// Phase 4–5: online lobby + duel HUD shell (full board wiring continues in Phase 5).
+// Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
+type OnlineLobbyCtl = { openHub(): Promise<void> };
+let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 void import('./online/lobby-ui.js').then(async (m) => {
-  const { createOnlineDriver, duelUiFromSnapshot, renderDuelHud } = await import('./online/index.js');
+  const { createOnlineDriver, OnlineSession } = await import('./online/index.js');
   const { DuelClient, browserStorage } = await import('../../server/src/client.js');
   const { duelApiUrl } = await import('./online/config.js');
-  let onlineDriver: ReturnType<typeof createOnlineDriver> | null = null;
 
-  const paintOnlineHud = () => {
-    if (!onlineDriver) return;
+  const leaveOnline = () => {
+    getOnlineSession()?.driver.stop();
+    setOnlineSession(null);
     const hud = document.getElementById('duel-hud');
-    const ui = duelUiFromSnapshot(onlineDriver.snapshot(), onlineDriver.draft().canUndo());
-    renderDuelHud(hud, ui);
-    const you = document.getElementById('score-you-label');
-    const bot = document.getElementById('score-bot-label');
-    if (you) you.textContent = 'Me';
-    if (bot) bot.textContent = 'Opponent';
-    const sy = document.getElementById('score-you');
-    const sb = document.getElementById('score-bot');
-    if (sy) sy.textContent = String(ui.scoreMe);
-    if (sb) sb.textContent = String(ui.scoreOpp);
+    if (hud) hud.hidden = true;
+    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
+    if (resignBtn) resignBtn.hidden = true;
   };
 
   const lobby = m.installOnlineLobby({
     showMenu: () => {
-      onlineDriver?.stop();
-      onlineDriver = null;
-      const hud = document.getElementById('duel-hud');
-      if (hud) hud.hidden = true;
+      leaveOnline();
       showScreen('menu');
     },
     openDuel: ({ matchId, token, view: player }) => {
       const api = duelApiUrl();
       if (!api) return;
-      onlineDriver?.stop();
+      leaveOnline();
       const client = new DuelClient({ baseUrl: api, storage: browserStorage() });
-      // `view` from the lobby is the full MatchViewPayload (create/join/getState).
-      onlineDriver = createOnlineDriver({
+      const driver = createOnlineDriver({
         client,
         token,
         matchId,
         initial: player,
-        onChange: () => paintOnlineHud(),
+        onChange: () => {
+          const os = getOnlineSession();
+          if (!os) return;
+          os.refresh();
+          syncSessionFromOnline();
+          const catchUp = os.consumeCatchUp();
+          if (catchUp.length) {
+            replaying = true;
+            replaySpeed = 2;
+            queue.push(catchUp);
+            void pump().then(() => {
+              replaying = false;
+              replaySpeed = REPLAY_SPEED;
+            });
+          }
+          paintOnlineHudFromSession();
+          if (os.finished) gameOverDismissed = false;
+          render();
+        },
       });
-      void onlineDriver.start();
+      const os = new OnlineSession(driver);
+      setOnlineSession(os);
+      syncSessionFromOnline();
+      if (session) {
+        board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
+        queue = new AnimQueue(session.state.board);
+        shownScores = [session.view.score, session.view.opponentScore];
+      }
+      void driver.start();
       client.saveSession({ token, matchId, seat: player.seat });
+      const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
+      if (resignBtn) {
+        resignBtn.hidden = false;
+        resignBtn.onclick = () => {
+          if (!window.confirm('Resign this duel?')) return;
+          void (async () => {
+            const cur = getOnlineSession();
+            if (!cur) return;
+            const res = await cur.resign();
+            if (!res.ok) {
+              caption(res.message, null, 'info');
+              return;
+            }
+            syncSessionFromOnline();
+            paintOnlineHudFromSession();
+            gameOverDismissed = false;
+            render();
+          })();
+        };
+      }
       showScreen('game');
-      paintOnlineHud();
+      paintOnlineHudFromSession();
+      render();
     },
   });
+  onlineLobbyCtl = lobby;
   void lobby.handleBootHash();
 });
 

@@ -75,6 +75,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   let notice: string | null = null;
   let pendingEvents: Event[] = [];
   let submitting = false;
+  /** When set, applyView does not buffer events (own Draw) or only buffers aftermath (own Throw). */
+  let catchUpMode: 'all' | 'none' | 'aftermath' = 'all';
   let perspective: Perspective = onlinePerspective(options.initial?.seat ?? 0);
 
   const emit = () => options.onChange?.(snapshot());
@@ -84,10 +86,19 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   };
   refreshPerspective();
 
+  const isAftermath = (e: Event): boolean =>
+    e.t === 'Sever' || e.t === 'Rot' || e.t === 'Strangle' || e.t === 'GameEnd' || e.t === 'Discard';
+
   const applyView = (next: MatchViewPayload, _serverNow: number) => {
     if (player && next.revision > player.revision && next.events.length > 0) {
-      // Opponent turn (or our own committed turn) arrives as filtered events for AnimQueue.
-      pendingEvents = [...pendingEvents, ...next.events];
+      // Opponent turns: buffer all public events for catch-up replay.
+      // Own Draw: skip (local buildSteps already animates).
+      // Own Throw: only sever/rot/end aftermath — draft grows were already shown.
+      if (catchUpMode === 'all') {
+        pendingEvents = [...pendingEvents, ...next.events];
+      } else if (catchUpMode === 'aftermath') {
+        pendingEvents = [...pendingEvents, ...next.events.filter(isAftermath)];
+      }
     }
     player = next;
     refreshPerspective();
@@ -208,7 +219,12 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
           emit();
           return { ok: false, message: outcome.message };
         }
-        applyView(outcome.response.player, outcome.response.serverNow);
+        catchUpMode = 'none';
+        try {
+          applyView(outcome.response.player, outcome.response.serverNow);
+        } finally {
+          catchUpMode = 'all';
+        }
         return { ok: true };
       } finally {
         submitting = false;
@@ -263,7 +279,12 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
           return { ok: false, message: notice ?? outcome.message };
         }
         draft.clear();
-        applyView(outcome.response.player, outcome.response.serverNow);
+        catchUpMode = 'aftermath';
+        try {
+          applyView(outcome.response.player, outcome.response.serverNow);
+        } finally {
+          catchUpMode = 'all';
+        }
         notice = null;
         emit();
         return { ok: true };
@@ -275,7 +296,12 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     async resign() {
       try {
         const res = await options.client.resign(options.token, options.matchId);
-        applyView(res.player, res.serverNow);
+        catchUpMode = 'none';
+        try {
+          applyView(res.player, res.serverNow);
+        } finally {
+          catchUpMode = 'all';
+        }
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Resign failed.';
