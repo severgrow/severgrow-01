@@ -6,7 +6,13 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const CHROME = process.env.PW_CHROMIUM || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const server = await preview({
+  configFile: 'web/vite.config.ts',
+  preview: { port: 4198, strictPort: true },
+  logLevel: 'silent',
+});
+const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
+const errors: string[] = [];
 const VIEWPORTS = [
   { width: 360, height: 780 },
   { width: 390, height: 844 },
@@ -15,14 +21,6 @@ const VIEWPORTS = [
 ] as const;
 const SHOT_DIR = path.resolve('docs/screens/tutorial');
 mkdirSync(SHOT_DIR, { recursive: true });
-
-const server = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { port: 4198, strictPort: true },
-  logLevel: 'silent',
-});
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
-const errors: string[] = [];
 
 const hashState = async (page: import('playwright-core').Page) => {
   const raw = await page.evaluate(() => JSON.stringify((window as any).__severgrow.state()));

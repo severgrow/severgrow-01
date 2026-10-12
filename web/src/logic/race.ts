@@ -2,6 +2,7 @@
 // breakdown shown when a score is tapped. Pure.
 
 import type { Player, View } from '../../../src/engine/index.js';
+import { score } from '../../../src/engine/index.js';
 import { scoreBreakdown } from './endgame.js';
 
 /** How much of the bar is mine (0.5 = level). Never fully one colour: the other side keeps a sliver. */
@@ -18,11 +19,12 @@ export const raceWords = (me: number, opp: number, oppLabel: string): string =>
 
 export type Breakdown = { tiles: number; gold: number; root: number; total: number; lines: string[] };
 
-/** What a score is made of: 1 per tile, +1 more on gold, and the root when it counts. Adds up to the real score. */
+/** What a score is made of: 1 per tile, +1 more on gold, and the root when it counts. The total
+ *  is the engine's authoritative score, so the displayed breakdown can never drift from the rules. */
 export const breakdownOf = (v: Pick<View, 'board' | 'terrain' | 'config'>, p: Player): Breakdown => {
   const b = scoreBreakdown(v, p);
   const root = v.config.rootsScore && Object.values(v.board).some((t) => t?.owner === p && t.root) ? 1 : 0;
-  const total = b.tiles + b.gold + root;
+  const total = score(v, p);
   const lines = [`${b.tiles} tile${b.tiles === 1 ? '' : 's'}: ${b.tiles}`];
   if (b.gold) lines.push(`${b.gold} on gold: +${b.gold}`);
   if (root) lines.push('Root: +1');

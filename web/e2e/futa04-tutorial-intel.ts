@@ -96,16 +96,27 @@ try {
     }
   }
   await page.goto(`${base}?tutorial=1&chapter=13`);
-  await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent?.includes('No guide')
-    || (window as any).__severgrow.state()?.seed===51010,undefined,{timeout:20000});
-  // The final mini-turn is deliberately unrestricted; complete it with real actions.
+  // The free chapter opens with a recap explainer; step through it to the unguided turn.
+  await page.waitForFunction(()=>!!(window as any).__severgrow.tutorialGate?.()?.active,undefined,{timeout:20000});
+  await page.waitForFunction(()=>!(window as any).__severgrow.busy(),undefined,{timeout:15000});
+  await page.waitForFunction(()=>(window as any).__severgrow.state()?.seed===51010,undefined,{timeout:10000});
+  for(let guard=0;guard<5;guard++) {
+    // The recap explainer arms its NEXT after a short delay; wait for it, then step on.
+    const next = page.locator('#futasaku-glass [data-tut="next"]');
+    const shown = await next.waitFor({ state: 'visible', timeout: 3000 }).then(()=>true).catch(()=>false);
+    if(!shown) break;
+    await next.click();
+    await page.waitForTimeout(300);
+  }
+  assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'PLAY','the free chapter reaches its unguided turn');
+  // The unguided turn: real actions; the turn passing to the opponent completes the tutorial.
   let s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Draw'&&a.from==='deck')!),true);
   s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='EndAct')!),true);
   s=await state();
   assert.equal(await play(legalActions(viewFor(s,0)).find(a=>a.t==='Discard')!),true);
-  await page.waitForFunction(()=>!document.getElementById('menu')!.hidden,undefined,{timeout:10000});
+  await page.waitForFunction(()=>!document.getElementById('menu')!.hidden,undefined,{timeout:15000});
   assert.equal(await page.locator('#menu-continue').isVisible(),false,'finished tutorial is not retained as a live match');
 
   await page.goto(base+'?seed=219682080');
