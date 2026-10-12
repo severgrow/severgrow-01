@@ -163,6 +163,39 @@ try {
       assert.equal(focusOk.menuHit, true, 'menu button must win hit-testing when glass overlaps it');
     }
 
+    // Map sits in the leftover band with equal gaps glass→board and board→dock.
+    // Wait for camera tutorial-centering + pad reserve to settle.
+    await page.waitForFunction(() => {
+      const glass = document.getElementById('futasaku-glass')?.getBoundingClientRect();
+      const dock = document.getElementById('dock')?.getBoundingClientRect();
+      const cells = [...document.querySelectorAll('#board .hex-cell')];
+      if (!glass || !dock || !cells.length) return false;
+      let top = Infinity; let bottom = -Infinity;
+      for (const el of cells) {
+        const r = el.getBoundingClientRect();
+        if (r.height <= 0) continue;
+        top = Math.min(top, r.top);
+        bottom = Math.max(bottom, r.bottom);
+      }
+      if (!Number.isFinite(top)) return false;
+      const gapTop = top - glass.bottom;
+      const gapBottom = dock.top - bottom;
+      return gapTop > 4 && gapBottom > 4 && Math.abs(gapTop - gapBottom) <= 16;
+    }, undefined, { timeout: 8000 });
+    const headH = await page.evaluate(() => {
+      const title = document.querySelector('#futasaku-glass .glass-led-window')?.getBoundingClientRect();
+      const next = document.querySelector('#futasaku-glass [data-tut="next"]')?.getBoundingClientRect();
+      const prev = document.querySelector('#futasaku-glass [data-tut="previous"]')?.getBoundingClientRect();
+      return {
+        title: title ? Math.round(title.height) : 0,
+        next: next ? Math.round(next.height) : 0,
+        prev: prev ? Math.round(prev.height) : 0,
+      };
+    });
+    assert.ok(headH.title > 0, 'tutorial title LED should be sized');
+    if (headH.next) assert.equal(headH.next, headH.title, `NEXT height must match title: ${JSON.stringify(headH)}`);
+    if (headH.prev) assert.equal(headH.prev, headH.title, `PREVIOUS height must match title: ${JSON.stringify(headH)}`);
+
     // Shot of the draw step with dim + glow + pointer, then prove the real target works.
     await page.screenshot({ path: path.join(SHOT_DIR, 'chapter-02-draw.png') });
     await page.locator('#deck').click({ force: true });

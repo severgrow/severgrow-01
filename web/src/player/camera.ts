@@ -96,8 +96,14 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     if (base) {
       // never show past the map's edges when it is bigger than the window; centre it when smaller
       x = w >= base.w ? base.x + (base.w - w) / 2 : Math.min(base.x + base.w - w, Math.max(base.x, x));
-      // (a map shorter than the window sits at its bottom, just above the cards: the layout's equal gaps)
-      y = wh >= base.h ? base.y + base.h - wh : Math.min(base.y + base.h - wh, Math.max(base.y, y));
+      // Normal play: a short map sits on the bottom, just above the cards.
+      // Tutorial: centre it so glass→board and board→hand gaps stay equal.
+      if (wh >= base.h) {
+        const tutorial = document.documentElement.classList.contains('futa04-tutorial');
+        y = tutorial ? base.y + (base.h - wh) / 2 : base.y + base.h - wh;
+      } else {
+        y = Math.min(base.y + base.h - wh, Math.max(base.y, y));
+      }
     }
     return { x, y, w, h };
   };
@@ -412,7 +418,8 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     update(i: CamInput, cellCentres: Map<string, { x: number; y: number }>) {
       input = i;
       centres = cellCentres;
-      const key = i.tiles.map((t) => `${t.key}${t.owner}`).sort().join('|') + `@${i.defaultTile.toFixed(1)}:${box().width.toFixed(1)}:${box().height.toFixed(1)}:${under().toFixed(1)}`;
+      const tut = document.documentElement.classList.contains('futa04-tutorial') ? '1' : '0';
+      const key = i.tiles.map((t) => `${t.key}${t.owner}`).sort().join('|') + `@${i.defaultTile.toFixed(1)}:${box().width.toFixed(1)}:${box().height.toFixed(1)}:${under().toFixed(1)}:t${tut}`;
       if (i.turnKey !== lastTurn) {
         lastTurn = i.turnKey;
         auto = true; // a new turn: auto-framing again (and a manual zoom-out snaps back)

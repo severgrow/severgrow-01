@@ -3010,8 +3010,10 @@ function applyLayout() {
   const maxHand = (shapeCfg?.handSize ?? 7) + 1;
   const key = `${w}x${h}r${radius}d${window.devicePixelRatio || 1}b${shapeCfg?.board ? shapeCfg.board.cells.length + shapeCfg.board.homes.join() : ''}t${thumbSide ?? ''}${thumbSide ? `${maxHand}o${thumbOverlap}` : ''}`;
   // phones: the board sits just above the dock (board.setup resets this, so set it every time);
-  // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards)
-  const par = FEATURES.phoneLayout && thumbMod?.side(w, h) ? 'xMidYMax meet' : 'xMidYMid meet';
+  // the thumb layout puts it at the bottom of its zone (at most 24pt above the cards).
+  // Tutorial keeps mid alignment so glass↔map and map↔hand gaps stay equal.
+  const tutorialOnEarly = document.documentElement.classList.contains('futa04-tutorial');
+  const par = FEATURES.phoneLayout && thumbMod?.side(w, h) && !tutorialOnEarly ? 'xMidYMax meet' : 'xMidYMid meet';
   if (board.svg.getAttribute('preserveAspectRatio') !== par) board.svg.setAttribute('preserveAspectRatio', par);
   if (key === layoutKey) return;
   layoutKey = key;
@@ -3076,7 +3078,7 @@ function applyLayout() {
   root.setProperty('--cw', px(l.card.w));
   root.setProperty('--slice', px(l.card.slice));
   document.documentElement.dataset.layout = l.mode;
-  board.svg.setAttribute('preserveAspectRatio', l.thumb ? 'xMidYMax meet' : 'xMidYMid meet');
+  board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
 

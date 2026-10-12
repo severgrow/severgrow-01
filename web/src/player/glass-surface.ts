@@ -52,15 +52,30 @@ const CSS = `
   border:none !important; outline:none !important; box-shadow:0 12px 32px rgba(0,0,0,.36);
   backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
   transition: opacity 220ms ease; filter:none; }
-/* Phone tutorial: reserve space so the map fits below the card (SVG meet scales down). */
+/* Phone tutorial: pad the map band between glass and cockpit, then centre the board
+   so top gap (glass→board) matches bottom gap (board→hand/cockpit). */
 html.futa04-tutorial #game.screen { overflow: visible; }
 html.futa04-tutorial:not([data-layout='side']) .board-wrap {
-  padding-top: var(--tutorial-glass-h, 0px);
+  padding-top: var(--tutorial-pad-top, var(--tutorial-glass-h, 0px));
+  padding-bottom: var(--tutorial-pad-bottom, 0px);
   box-sizing: border-box;
   min-height: 0;
 }
+/* Cancel thumb “map under cards” so the leftover band is truly glass↔dock. */
+html.futa04-tutorial[data-thumb] .board-wrap,
+html.futa04-tutorial.futa04-information[data-thumb] .board-wrap {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  --cam-under: 0px;
+}
+@media (max-width:600px) and (min-aspect-ratio:53/100) {
+  html.futa04-tutorial.futa04-information[data-thumb] #game .board-wrap {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
 html.futa04-tutorial:not([data-layout='side']) .board-wrap > .board {
-  transform-origin: center bottom;
+  transform-origin: center center;
   max-width: 100%;
   max-height: 100%;
 }
@@ -68,24 +83,30 @@ html.futa04-tutorial:not([data-layout='side']) .play {
   min-height: 0;
   overflow: visible;
 }
+html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
-/* One head row: PREVIOUS | title | NEXT/TAP — three equal columns. */
+/* One head row: PREVIOUS | title | NEXT/TAP — three equal columns.
+   Side buttons match the LED title height exactly (not taller). */
+#futasaku-glass[data-mode='tutorial'] {
+  --glass-head-h: 34px;
+}
+.large-text #futasaku-glass[data-mode='tutorial'] { --glass-head-h: 38px; }
 #futasaku-glass[data-mode='tutorial'] .glass-head {
   display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr);
-  align-items:center; gap:6px; width:100%; pointer-events:none;
+  align-items:stretch; gap:6px; width:100%; pointer-events:none;
 }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot {
-  display:flex; align-items:center; min-width:0; min-height:44px;
+  display:flex; align-items:stretch; min-width:0; min-height:0; height: var(--glass-head-h);
 }
 #futasaku-glass[data-mode='tutorial'] .glass-head-prev { justify-content:stretch; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-title { justify-content:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-next { justify-content:stretch; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button {
-  width:100%; min-height:44px; min-width:0; padding:0 8px; box-sizing:border-box;
-  border:1px solid rgba(214,204,177,.22); border-radius:10px;
+  width:100%; height:100%; min-height:0; min-width:0; padding:0 8px; box-sizing:border-box;
+  border:1px solid rgba(214,204,177,.22); border-radius:8px;
   background:rgba(255,255,255,.05); color:#f0e9dc;
-  font:400 11.5px/1.1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  font:400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   letter-spacing:.04em; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   pointer-events:auto;
 }
@@ -101,14 +122,14 @@ html.futa04-tutorial:not([data-layout='side']) .play {
   50% { opacity:1; box-shadow:0 0 0 3px rgba(233,216,173,.32); }
 }
 #futasaku-glass[data-mode='tutorial'] .glass-instruction,
-#futasaku-glass[data-mode='guidance'] .glass-instruction { margin:0; display:flex; justify-content:center; width:100%; max-width:100%; }
+#futasaku-glass[data-mode='guidance'] .glass-instruction { margin:0; display:flex; justify-content:center; align-items:stretch; width:100%; max-width:100%; height:100%; }
 #futasaku-glass[data-mode='tutorial'] .glass-led-sr,
 #futasaku-glass[data-mode='guidance'] .glass-led-sr {
   position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 #futasaku-glass[data-mode='tutorial'] .glass-led-window,
 #futasaku-glass[data-mode='guidance'] .glass-led-window {
   position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden;
-  min-height:34px; width:100%; max-width:100%; padding:4px 6px; box-sizing:border-box;
+  height:100%; min-height:0; width:100%; max-width:100%; padding:3px 6px; box-sizing:border-box;
   border-radius:8px; background:#090c0b;
   box-shadow:inset 0 0 0 1px rgba(166,128,78,.18), inset 0 0 18px rgba(255,195,104,.06);
 }
@@ -122,7 +143,7 @@ html.futa04-tutorial:not([data-layout='side']) .play {
 #futasaku-glass[data-mode='guidance'] .glass-led-cells {
   display:block; position:relative; z-index:1; height:30px; width:auto; max-width:100%;
 }
-.large-text #futasaku-glass[data-mode='tutorial'] .glass-led-window,
+.large-text #futasaku-glass[data-mode='tutorial'] .glass-led-window { padding:4px 8px; }
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 8px; }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-cells,
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
@@ -591,7 +612,7 @@ export const mountGlassSurface = (onClose: () => void) => {
         panel.style.top = `${top}px`;
         // Override stylesheet `translateX(-50%)` (used for phone centering).
         panel.style.transform = 'none';
-        document.documentElement.style.setProperty('--tutorial-glass-h', '0px');
+        clearTutorialPads();
         return;
       }
     }
@@ -604,15 +625,58 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.style.left = '50%';
     panel.style.transform = 'translateX(-50%)';
     panel.style.top = `${top}px`;
-    // After layout, reserve from the board-wrap top down past the card bottom so the map clears it.
-    requestAnimationFrame(() => {
-      if (mode !== 'tutorial' || document.documentElement.dataset.layout === 'side') return;
-      const wrap = document.getElementById('board-wrap')?.getBoundingClientRect();
-      const glass = panel.getBoundingClientRect();
-      if (!wrap) return;
-      const reserve = Math.max(0, Math.ceil(glass.bottom - wrap.top + 6));
-      document.documentElement.style.setProperty('--tutorial-glass-h', `${reserve}px`);
-    });
+    // After layout: equal gaps glass→board and board→cockpit/hand (centre map in the band).
+    requestAnimationFrame(() => balanceTutorialBoardBand());
+  };
+
+  /** Shared chrome→board margin on both ends of the leftover map band. */
+  const TUTORIAL_BAND_GAP = 8;
+  let lastBandKey = '';
+
+  const clearTutorialPads = () => {
+    lastBandKey = '';
+    const root = document.documentElement.style;
+    root.removeProperty('--tutorial-glass-h');
+    root.removeProperty('--tutorial-pad-top');
+    root.removeProperty('--tutorial-pad-bottom');
+  };
+
+  /**
+   * Reserve equal chrome margins above/below the map band (glass↔dock).
+   * Camera centres a short map while `futa04-tutorial` is on so hex gaps match.
+   */
+  const balanceTutorialBoardBand = () => {
+    if (mode !== 'tutorial' || document.documentElement.dataset.layout === 'side') return;
+    const wrapEl = document.getElementById('board-wrap');
+    const dockEl = document.getElementById('dock');
+    const wrap = wrapEl?.getBoundingClientRect();
+    const glass = panel.getBoundingClientRect();
+    if (!wrap || !wrapEl) return;
+    const dockTop = dockEl?.getBoundingClientRect().top ?? wrap.bottom;
+    const bandKey = [
+      Math.round(glass.bottom), Math.round(dockTop), Math.round(wrap.height),
+      Math.round(innerWidth), Math.round(innerHeight),
+    ].join(':');
+    if (bandKey === lastBandKey) return;
+    lastBandKey = bandKey;
+    document.getElementById('board')?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    document.documentElement.classList.remove('cam-under');
+    const topClear = Math.max(0, glass.bottom - wrap.top);
+    const bottomClear = Math.max(0, wrap.bottom - dockTop);
+    let padTop = Math.ceil(topClear + TUTORIAL_BAND_GAP);
+    let padBottom = Math.ceil(bottomClear + TUTORIAL_BAND_GAP);
+    const maxPad = Math.max(0, Math.floor(wrap.height - 72));
+    if (padTop + padBottom > maxPad) {
+      const scale = maxPad / Math.max(1, padTop + padBottom);
+      padTop = Math.floor(padTop * scale);
+      padBottom = Math.max(0, maxPad - padTop);
+    }
+    const root = document.documentElement.style;
+    root.setProperty('--tutorial-pad-top', `${padTop}px`);
+    root.setProperty('--tutorial-pad-bottom', `${padBottom}px`);
+    root.setProperty('--tutorial-glass-h', `${padTop}px`);
+    // Nudge camera to re-frame with tutorial centering.
+    window.dispatchEvent(new Event('resize'));
   };
 
   /**
@@ -845,7 +909,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   });
 
   const clearTutorialReserve = () => {
-    document.documentElement.style.removeProperty('--tutorial-glass-h');
+    clearTutorialPads();
   };
 
   const close = () => {
