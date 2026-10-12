@@ -48,7 +48,7 @@ export type OnlineDriver = {
   /** Local draft mid-turn move (Grow / Bloom / …). */
   draftPlay(action: Action): boolean;
   draftUndo(): boolean;
-  /** Send draft + EndAct as one atomic batch. */
+  /** Send draft + the ending action (EndAct, or Discard during the DISCARD step) as one batch. */
   throwTurn(endAct: Action): Promise<{ ok: boolean; message?: string }>;
   /** Resign (not an engine action). */
   resign(): Promise<{ ok: boolean; message?: string }>;
@@ -150,6 +150,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       status: player.status,
       revision: player.revision,
       turnStartRevision: player.turnStartRevision,
+      startingPlayer: player.startingPlayer ?? player.view.turnPlayer,
       view,
       screenView,
       legal,
@@ -252,7 +253,11 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
 
     async throwTurn(endAct) {
       if (!player || submitting) return { ok: false, message: 'Busy' };
-      if (endAct.t !== 'EndAct') return { ok: false, message: 'Throw must be EndAct.' };
+      // A turn ends with EndAct (Grow step done, or empty hand) and, when there is a card
+      // left, the Discard that finishes it. Both are submitted as the same atomic batch.
+      if (endAct.t !== 'EndAct' && endAct.t !== 'Discard') {
+        return { ok: false, message: 'Throw must be EndAct or Discard.' };
+      }
       submitting = true;
       const requestId = newRequestId();
       const actions = [...draft.actions(), endAct];

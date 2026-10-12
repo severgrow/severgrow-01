@@ -291,6 +291,7 @@ describe('OnlineDriver exposes perspective', () => {
       status: 'active',
       revision: 1,
       turnStartRevision: 1,
+      startingPlayer: view.turnPlayer,
       view,
       legalActions: legalActions(view),
       events: [],

@@ -7,6 +7,7 @@ import postgres from 'postgres';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import { DEFAULT_SERVER_CONFIG, PRODUCTION_CORS_ORIGIN } from './config.js';
 import type { ServerConfig } from './config.js';
+import { corsHeaders } from './cors.js';
 import { createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
 import { postgresStorage } from './storage/postgres.js';
@@ -18,14 +19,10 @@ const edgeConfig: ServerConfig = {
   corsOrigin: PRODUCTION_CORS_ORIGIN,
 };
 
-const cors = {
-  'access-control-allow-origin': PRODUCTION_CORS_ORIGIN,
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type',
-  'cache-control': 'no-store',
-  'vary': 'origin',
-  'content-type': 'application/json; charset=utf-8',
-};
+// Preflight + early error/health responses must allow the client's custom
+// headers, or the browser blocks every request (guest creation included).
+const cors = corsHeaders(PRODUCTION_CORS_ORIGIN);
+const corsJson = { ...cors, 'content-type': 'application/json; charset=utf-8' };
 
 let appPromise: Promise<(req: Request) => Promise<Response>> | null = null;
 
@@ -81,7 +78,7 @@ Deno.serve(async (req) => {
         serverNow: Date.now(),
         dbConfigured: Boolean(Deno.env.get('DATABASE_URL')),
       }),
-      { status: 200, headers: cors },
+      { status: 200, headers: corsJson },
     );
   }
   try {
@@ -101,7 +98,7 @@ Deno.serve(async (req) => {
         rulesVersion: CURRENT_RULES_VERSION,
         serverNow: Date.now(),
       }),
-      { status: missingSecret ? 503 : 500, headers: cors },
+      { status: missingSecret ? 503 : 500, headers: corsJson },
     );
   }
 });

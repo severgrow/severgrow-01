@@ -5941,6 +5941,13 @@ void import('./online/lobby-ui.js').then(async (m) => {
         };
       }
       showScreen('game');
+      // Surface the shared-engine starting-player contract once, at the very first turn:
+      // the same "You start / Opponent starts" lottery the offline game already shows.
+      if (player.status === 'active' && player.view.turnNumber === 1 && player.view.phase !== 'GAME_OVER') {
+        const meFirst = (player.startingPlayer ?? player.view.turnPlayer) === player.seat;
+        announceTurn(meFirst ? HUMAN : BOT);
+        void runStarterLottery(!meFirst);
+      }
       paintOnlineHudFromSession();
       render();
     },

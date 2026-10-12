@@ -56,6 +56,12 @@ describe('HTTP surface', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(response.headers.get('access-control-allow-headers')).toContain('authorization');
     expect(response.headers.get('access-control-allow-methods')).toContain('POST');
+    // Regression (live guest creation was blocked): the browser sends the two
+    // x-futasaku-* headers, so the preflight MUST allow them or the real request
+    // never leaves the browser.
+    expect(response.headers.get('access-control-allow-headers')).toContain('x-futasaku-client-version');
+    expect(response.headers.get('access-control-allow-headers')).toContain('x-futasaku-rules-version');
+    expect(response.headers.get('access-control-allow-methods')).toContain('PATCH');
   });
 
   it('sets no-store and nosniff on API responses', async () => {

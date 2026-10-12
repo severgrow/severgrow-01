@@ -562,6 +562,7 @@ export class MatchService {
       revision,
       turnStartRevision: match.turnStartRevision,
       seat,
+      startingPlayer: source.startingPlayer ?? 0,
       turnPlayer: source.turnPlayer,
       actor: source.actor,
       view,

@@ -35,6 +35,8 @@ export type MatchViewPayload = {
   /** Public revision at the last completed turn boundary (for gated clients). */
   turnStartRevision: number;
   seat: Player;
+  /** The shared-engine starting-player contract: the seat that moves first (seeded lottery). */
+  startingPlayer: Player;
   /** Whose turn it is (public), so the client can show the correct waiting state. */
   turnPlayer: Player;
   /** Seat that must act right now (may differ during Rot). */

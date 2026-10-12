@@ -34,6 +34,8 @@ export type MatchDriverSnapshot = {
   status: MatchStatus;
   revision: number;
   turnStartRevision: number;
+  /** Seat that moves first this match (shared-engine seeded lottery). */
+  startingPlayer: Player;
   view: View;
   /** View with board/terrain hexes mapped for this seat's screen (Phase 3b). */
   screenView: View;

@@ -70,7 +70,7 @@ export const playScreenAction = async (
 ): Promise<{ ok: boolean; message?: string }> => {
   const engine = driver.toEngineAction(screenAction);
   if (engine.t === 'Draw') return driver.draw(engine);
-  if (engine.t === 'EndAct') return driver.throwTurn(engine);
+  if (engine.t === 'EndAct' || engine.t === 'Discard') return driver.throwTurn(engine);
   const ok = driver.draftPlay(engine);
   return ok ? { ok: true } : { ok: false, message: 'That move is not legal right now.' };
 };

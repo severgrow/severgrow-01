@@ -2,6 +2,7 @@
 // Same routes, same MatchService — no rules live here.
 import { PRODUCTION_CORS_ORIGIN, type ServerConfig } from './config.js';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
+import { corsHeaders } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
 
@@ -48,18 +49,6 @@ const clientIpOf = (req: Request): string | null => {
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0]!.trim();
   return req.headers.get('x-real-ip');
-};
-
-const corsHeaders = (origin: string): Record<string, string> => {
-  const headers: Record<string, string> = {
-    'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET, POST, PATCH, OPTIONS',
-    'access-control-allow-headers': 'authorization, content-type, x-futasaku-client-version, x-futasaku-rules-version',
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
-  };
-  if (origin !== '*') headers.vary = 'origin';
-  return headers;
 };
 
 /** Build a Fetch handler. Production hosts should pass corsOrigin = PRODUCTION_CORS_ORIGIN. */

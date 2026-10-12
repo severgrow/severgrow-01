@@ -38,6 +38,7 @@ describe('duelUiFromSnapshot', () => {
       status: 'active',
       revision: 1,
       turnStartRevision: 1,
+      startingPlayer: view.turnPlayer,
       view,
       legalActions: legalActions(view),
       events: [],

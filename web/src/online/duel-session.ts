@@ -139,7 +139,9 @@ export class OnlineSession {
       return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
     }
 
-    if (engine.t === 'EndAct') {
+    if (engine.t === 'EndAct' || engine.t === 'Discard') {
+      // EndAct leaves the ACT step; the Discard (when a card is left) finishes the turn.
+      // Both commit a batch to the server, so the turn boundary is real.
       const res = await this.driver.throwTurn(engine);
       if (!res.ok) {
         this.refresh();

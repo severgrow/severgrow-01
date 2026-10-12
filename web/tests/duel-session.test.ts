@@ -73,6 +73,7 @@ const payloadFor = (
     revision,
     turnStartRevision: revision,
     seat,
+    startingPlayer: view.turnPlayer,
     turnPlayer: view.turnPlayer,
     actor: view.actor,
     view,

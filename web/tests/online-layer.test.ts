@@ -87,6 +87,7 @@ const samplePayload = (overrides: Partial<MatchViewPayload> = {}): MatchViewPayl
     revision: 1,
     turnStartRevision: 0,
     seat,
+    startingPlayer: view.turnPlayer,
     turnPlayer: view.turnPlayer,
     actor: view.actor,
     view,
