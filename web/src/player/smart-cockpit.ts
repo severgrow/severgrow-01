@@ -146,32 +146,43 @@ html.futa04-information #smart-panel.led-alarm :is(#smart-led,#smart-context,#fu
 }
 html.futa04-information #smart-panel[data-led-mode='amber'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
 html.futa04-information #smart-panel[data-led-mode='score'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
-html.futa04-information #smart-panel[data-led-mode='ivory'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
-  --chrome-glow:rgba(255,195,104,.55); --chrome-hot:rgba(246,207,137,.32);
+html.futa04-information #smart-panel:not([data-led-mode]).led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(255,195,104,.34); --chrome-hot:rgba(246,207,137,.20);
+}
+html.futa04-information #smart-panel[data-led-mode='ivory'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='ivory'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(255,233,182,.32); --chrome-hot:rgba(245,234,209,.18);
 }
 html.futa04-information #smart-panel[data-led-mode='red'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
 html.futa04-information #smart-panel[data-led-mode='red'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
-  --chrome-glow:rgba(234,68,48,.62); --chrome-hot:rgba(255,120,90,.38);
+  --chrome-glow:rgba(234,68,48,.40); --chrome-hot:rgba(255,120,90,.24);
 }
 html.futa04-information #smart-panel[data-led-mode='green'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
 html.futa04-information #smart-panel[data-led-mode='green'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
-  --chrome-glow:rgba(143,210,111,.55); --chrome-hot:rgba(169,216,134,.34);
+  --chrome-glow:rgba(143,210,111,.34); --chrome-hot:rgba(169,216,134,.20);
+}
+html.futa04-information #smart-panel[data-led-mode='pink'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='pink'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(237,150,178,.34); --chrome-hot:rgba(237,171,192,.20);
+}
+html.futa04-information #smart-panel[data-led-mode='cyan'].led-pulse :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
+html.futa04-information #smart-panel[data-led-mode='cyan'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
+  --chrome-glow:rgba(132,209,206,.32); --chrome-hot:rgba(167,211,208,.18);
 }
 html.futa04-information #smart-panel[data-led-mode='amber'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
 html.futa04-information #smart-panel[data-led-mode='score'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
-html.futa04-information #smart-panel[data-led-mode='ivory'].led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before,
 html.futa04-information #smart-panel:not([data-led-mode]).led-alarm :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before {
-  --chrome-glow:rgba(255,195,104,.58); --chrome-hot:rgba(246,207,137,.36);
+  --chrome-glow:rgba(255,195,104,.36); --chrome-hot:rgba(246,207,137,.22);
 }
 @keyframes smart-chrome-pulse {
   0%,100% { filter:none; }
-  50% { filter:brightness(1.18) drop-shadow(0 0 3px var(--chrome-glow,rgba(255,195,104,.55))); }
+  50% { filter:brightness(1.10) drop-shadow(0 0 2px var(--chrome-glow,rgba(255,195,104,.34))); }
 }
 @keyframes smart-chrome-alarm {
   0%,100% { filter:none; }
-  20% { filter:brightness(1.28) drop-shadow(0 0 4px var(--chrome-glow,rgba(255,195,104,.58))); }
+  20% { filter:brightness(1.16) drop-shadow(0 0 2.5px var(--chrome-glow,rgba(255,195,104,.36))); }
   40% { filter:none; }
-  60% { filter:brightness(1.22) drop-shadow(0 0 3px var(--chrome-hot,rgba(246,207,137,.36))); }
+  60% { filter:brightness(1.12) drop-shadow(0 0 2px var(--chrome-hot,rgba(246,207,137,.22))); }
   80% { filter:none; }
 }
 html.futa04-information.reduce-motion #smart-panel:is(.led-pulse,.led-alarm) :is(#smart-led,#smart-context,#futa04-actions > .hand-slot)::before { animation:none; }
@@ -234,48 +245,55 @@ html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm
 @media (prefers-reduced-motion:reduce) {
   html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
 }
-/* Optical spill under the LED readout. Kept as a panel sibling (z above the keys)
-   so it can wash the two buttons below; geometry stays mostly under the display. */
+/* Optical spill under the LED readout. Kept as a panel sibling (z above the keys);
+   geometry is a tight wash mostly under the display, letter-coloured via spill canvas. */
 html.futa04-information #smart-led-spill {
-  --spill-opacity:.34;
+  --spill-opacity:.20;
   position:absolute;
-  /* Tiny bleed past the display's left; most light stays under columns 1–2. */
-  left:-5px; top:calc(var(--control-size) - 15px);
-  width:calc(2 * var(--control-size) + var(--control-gap) + 18px);
-  height:calc(var(--control-size) + var(--control-gap) + 38px);
+  left:2px; top:calc(var(--control-size) - 6px);
+  width:calc(2 * var(--control-size) + var(--control-gap) + 4px);
+  height:calc(var(--control-gap) + 26px);
   overflow:hidden; pointer-events:none; z-index:7;
   opacity:var(--spill-opacity); mix-blend-mode:screen;
-  /* Soft falloff on every edge — left fades before the box rim (no hard cut). */
   -webkit-mask-image:
-    linear-gradient(90deg,transparent 0%,#000 12%,#000 78%,transparent 100%),
-    linear-gradient(180deg,transparent 0%,#000 16%,#000 64%,transparent 100%);
+    linear-gradient(90deg,transparent 0%,#000 18%,#000 82%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 22%,#000 58%,transparent 100%);
   -webkit-mask-composite:source-in;
   mask-image:
-    linear-gradient(90deg,transparent 0%,#000 12%,#000 78%,transparent 100%),
-    linear-gradient(180deg,transparent 0%,#000 16%,#000 64%,transparent 100%);
+    linear-gradient(90deg,transparent 0%,#000 18%,#000 82%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,#000 22%,#000 58%,transparent 100%);
   mask-composite:intersect;
 }
 /* Ambient wash tracks LED ink even between canvas paints / step flips. */
 html.futa04-information #smart-led-spill::after {
   content:''; position:absolute; inset:0; pointer-events:none;
-  background:radial-gradient(ellipse 62% 58% at 46% 20%,var(--spill-ink,rgba(255,195,104,.42)) 0%,transparent 74%);
+  background:radial-gradient(ellipse 54% 48% at 50% 12%,var(--spill-ink,rgba(255,195,104,.28)) 0%,transparent 72%);
 }
 html.futa04-information #smart-led-spill-cells {
-  display:block; position:absolute; left:11px; top:16px; height:26px;
-  filter:blur(11px) brightness(1.32); scale:1.06 1.9; transform-origin:top center;
+  display:block; position:absolute; left:8px; top:4px; height:26px;
+  filter:blur(7px) brightness(1.12); scale:1.02 1.35; transform-origin:top center;
 }
 html.futa04-information #smart-led-spill-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
-/* Mode lives on #smart-panel (spill is not a child of #smart-led). */
+/* Mode lives on #smart-panel (spill is not a child of #smart-led). Ink matches led-cells INK. */
 html.futa04-information #smart-panel[data-led-mode='amber'] #smart-led-spill,
 html.futa04-information #smart-panel[data-led-mode='score'] #smart-led-spill,
+html.futa04-information #smart-panel:not([data-led-mode]) #smart-led-spill {
+  --spill-opacity:.20; --spill-ink:rgba(255,195,104,.28);
+}
 html.futa04-information #smart-panel[data-led-mode='ivory'] #smart-led-spill {
-  --spill-opacity:.34; --spill-ink:rgba(255,195,104,.42);
+  --spill-opacity:.18; --spill-ink:rgba(255,233,182,.26);
 }
 html.futa04-information #smart-panel[data-led-mode='green'] #smart-led-spill {
-  --spill-opacity:.36; --spill-ink:rgba(143,210,111,.44);
+  --spill-opacity:.22; --spill-ink:rgba(143,210,111,.30);
 }
 html.futa04-information #smart-panel[data-led-mode='red'] #smart-led-spill {
-  --spill-opacity:.46; --spill-ink:rgba(234,68,48,.52);
+  --spill-opacity:.26; --spill-ink:rgba(234,68,48,.34);
+}
+html.futa04-information #smart-panel[data-led-mode='pink'] #smart-led-spill {
+  --spill-opacity:.22; --spill-ink:rgba(237,150,178,.30);
+}
+html.futa04-information #smart-panel[data-led-mode='cyan'] #smart-led-spill {
+  --spill-opacity:.20; --spill-ink:rgba(132,209,206,.28);
 }
 /* Spill breathes with the LED — never drops out when idle urgency / step pulse starts. */
 html.futa04-information #smart-panel.led-pulse #smart-led-spill {
@@ -285,15 +303,15 @@ html.futa04-information #smart-panel.led-alarm #smart-led-spill {
   animation:smart-spill-alarm 1200ms ease-in-out infinite;
 }
 @keyframes smart-spill-pulse {
-  0%,100% { opacity:var(--spill-opacity,.34); }
-  50% { opacity:calc(var(--spill-opacity,.34) * 1.55); }
+  0%,100% { opacity:var(--spill-opacity,.20); }
+  50% { opacity:calc(var(--spill-opacity,.20) * 1.28); }
 }
 @keyframes smart-spill-alarm {
-  0%,100% { opacity:var(--spill-opacity,.34); }
-  20% { opacity:calc(var(--spill-opacity,.34) * 1.7); }
-  40% { opacity:var(--spill-opacity,.34); }
-  60% { opacity:calc(var(--spill-opacity,.34) * 1.55); }
-  80% { opacity:var(--spill-opacity,.34); }
+  0%,100% { opacity:var(--spill-opacity,.20); }
+  20% { opacity:calc(var(--spill-opacity,.20) * 1.38); }
+  40% { opacity:var(--spill-opacity,.20); }
+  60% { opacity:calc(var(--spill-opacity,.20) * 1.28); }
+  80% { opacity:var(--spill-opacity,.20); }
 }
 html.futa04-information.reduce-motion #smart-panel:is(.led-pulse,.led-alarm) #smart-led-spill { animation:none; }
 @media (prefers-reduced-motion:reduce) {

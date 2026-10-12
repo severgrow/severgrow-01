@@ -45,12 +45,20 @@ const CSS = `
   backdrop-filter:blur(9px) saturate(1.05); -webkit-backdrop-filter:blur(9px) saturate(1.05);
   font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
 #futasaku-glass[hidden], #tutorial-focus[hidden] { display:none; }
-#futasaku-glass[data-mode='tutorial'] { pointer-events:none; z-index:40; max-width:min(420px,calc(100vw - 24px)); width:min(420px,calc(100vw - 24px));
-  left:50%; top:12px; bottom:auto; transform:translateX(-50%); height:auto;
+#futasaku-glass[data-mode='tutorial'] { pointer-events:none; z-index:40; max-width:min(420px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px))); width:min(420px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+  left:50%; top:max(12px, calc(env(safe-area-inset-top, 0px) + 8px)); bottom:auto; transform:translateX(-50%); height:auto;
   background:rgba(12,14,14,.88);
   border:none !important; outline:none !important; box-shadow:0 16px 40px rgba(0,0,0,.38);
   backdrop-filter:blur(10px) saturate(1.05); -webkit-backdrop-filter:blur(10px) saturate(1.05);
   transition: opacity 220ms ease; filter:none; }
+/* Phone tutorial: reserve space so the map fits below the card (SVG meet scales down). */
+html.futa04-tutorial:not([data-layout='side']) .board-wrap {
+  padding-top: var(--tutorial-glass-h, 0px);
+  box-sizing: border-box;
+}
+html.futa04-tutorial:not([data-layout='side']) .board-wrap > .board {
+  transform-origin: center bottom;
+}
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
 #futasaku-glass[data-mode='tutorial'] .glass-dots { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
@@ -458,25 +466,83 @@ export const mountGlassSurface = (onClose: () => void) => {
 
   const stopLoop = () => { if (raf) cancelAnimationFrame(raf); raf = 0; };
   const placeIntel = () => {
+    clearTutorialReserve();
     const d = rectOf(dock);
     panel.style.left = `${Math.max(6, d.left + 6)}px`;
     panel.style.width = `${Math.max(0, Math.min(innerWidth - 12, d.width - 12))}px`;
+    panel.style.maxWidth = '';
     panel.style.top = `${Math.max(6, d.top + 4)}px`;
     panel.style.height = `${Math.max(140, Math.min(innerHeight - d.top - 8, d.height - 8))}px`;
     panel.style.bottom = '';
     panel.style.transform = '';
   };
 
+  const safeInsets = () => {
+    const probe = document.getElementById('safe-probe');
+    if (!probe) {
+      return { top: 0, right: 0, bottom: 0, left: 0 };
+    }
+    const cs = getComputedStyle(probe);
+    const px = (s: string) => parseFloat(s) || 0;
+    return {
+      top: px(cs.paddingTop),
+      right: px(cs.paddingRight),
+      bottom: px(cs.paddingBottom),
+      left: px(cs.paddingLeft),
+    };
+  };
+
   const placeTutorialPanel = (_tracked: Tracked | null) => {
-    // Always dock the glass at the top so it never jumps when the target moves.
+    // Keep the glass docked (never follows the moving highlight).
     void _tracked;
     panelSide = 'top';
-    panel.style.width = `${Math.min(420, innerWidth - 24)}px`;
     panel.style.height = 'auto';
+    panel.style.bottom = '';
+    const side = document.documentElement.dataset.layout === 'side';
+    const safe = safeInsets();
+    if (side) {
+      // Desktop: right column — sides with the cockpit; top near the map but clear of the logo.
+      const cockpit = document.getElementById('futa04-box')?.getBoundingClientRect();
+      const board = document.getElementById('board-wrap')?.getBoundingClientRect();
+      const dock = document.getElementById('dock')?.getBoundingClientRect();
+      const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
+      const col = cockpit ?? dock;
+      if (col && board) {
+        const width = Math.max(200, Math.round(col.width));
+        const left = Math.round(col.left);
+        // Prefer map-top alignment, but always sit a small gap under the Futa logo when it
+        // shares the right column (never cover chrome).
+        const logoClear = logo && logo.width > 0 ? Math.ceil(logo.bottom + 8) : 0;
+        const top = Math.max(Math.round(board.top), logoClear);
+        panel.style.width = `${width}px`;
+        panel.style.maxWidth = `${width}px`;
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+        // Override stylesheet `translateX(-50%)` (used for phone centering).
+        panel.style.transform = 'none';
+        document.documentElement.style.setProperty('--tutorial-glass-h', '0px');
+        return;
+      }
+    }
+    // Phone / stack: centred under the notch, reserve map space below the card.
+    // Match stylesheet: 24px horizontal chrome + safe-area insets.
+    const sidePad = 24 + safe.left + safe.right;
+    const width = Math.min(420, Math.max(200, innerWidth - sidePad));
+    const top = Math.max(12, Math.round(safe.top + 8));
+    panel.style.width = `${width}px`;
+    panel.style.maxWidth = `${width}px`;
     panel.style.left = '50%';
     panel.style.transform = 'translateX(-50%)';
-    panel.style.top = '12px';
-    panel.style.bottom = '';
+    panel.style.top = `${top}px`;
+    // After layout, reserve from the board-wrap top down past the card bottom so the map clears it.
+    requestAnimationFrame(() => {
+      if (mode !== 'tutorial' || document.documentElement.dataset.layout === 'side') return;
+      const wrap = document.getElementById('board-wrap')?.getBoundingClientRect();
+      const glass = panel.getBoundingClientRect();
+      if (!wrap) return;
+      const reserve = Math.max(0, Math.ceil(glass.bottom - wrap.top + 8));
+      document.documentElement.style.setProperty('--tutorial-glass-h', `${reserve}px`);
+    });
   };
 
   /**
@@ -737,10 +803,14 @@ export const mountGlassSurface = (onClose: () => void) => {
     else if (mode === 'tutorial') startLoop();
   });
 
+  const clearTutorialReserve = () => {
+    document.documentElement.style.removeProperty('--tutorial-glass-h');
+  };
+
   const close = () => {
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
     pendingFocusSettle = false; settleArmedFor = ''; clearFocusSettle(); focusScene = null;
-    setBloomDemo(false);
+    setBloomDemo(false); clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
   };
 
@@ -935,7 +1005,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     hide: () => {
       mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
       pendingFocusSettle = false; settleArmedFor = ''; clearFocusSettle(); focusScene = null;
-      setBloomDemo(false); panel.hidden = true; showFocus(false);
+      setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },
     nudge: () => {
       if (reduceMotion) return;

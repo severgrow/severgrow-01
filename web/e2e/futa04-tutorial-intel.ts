@@ -171,7 +171,16 @@ try {
   await desktop.locator('#futasaku-glass').waitFor({state:'visible'});
   const desktopGlass=await desktop.locator('#futasaku-glass').boundingBox();
   const desktopDock=await desktop.locator('#dock').evaluate(element=>element.getBoundingClientRect().toJSON());
-  assert(desktopGlass&&desktopGlass.width<=420&&desktopGlass.x>=0&&desktopGlass.x+desktopGlass.width<=1441,`tutorial glass is a centred Pro window: ${JSON.stringify({desktopGlass,desktopDock})}`);
+  const desktopCockpit=await desktop.locator('#futa04-box').boundingBox();
+  const desktopBoard=await desktop.locator('#board-wrap').boundingBox();
+  const desktopLogo=await desktop.locator('#hud-brand').boundingBox();
+  assert(desktopGlass&&desktopCockpit&&desktopBoard
+    && Math.abs(desktopGlass.x-desktopCockpit.x)<=4
+    && Math.abs(desktopGlass.width-desktopCockpit.width)<=8
+    && desktopGlass.y+2>=desktopBoard.y
+    && (!desktopLogo || desktopGlass.y>=desktopLogo.y+desktopLogo.height+4)
+    && desktopGlass.x+desktopGlass.width<=1441,
+    `tutorial glass sits in the cockpit column under the logo: ${JSON.stringify({desktopGlass,desktopCockpit,desktopBoard,desktopLogo,desktopDock})}`);
   await desktop.close();
   assert.deepEqual(errors,[],'no browser errors');
   console.log(`Tutorial, Match Intel, Replay, save/resume and both seeded openers passed (reduced motion: ${reducedMotion})`);
