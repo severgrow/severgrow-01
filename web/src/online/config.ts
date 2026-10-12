@@ -1,5 +1,7 @@
 // Public online config (no secrets). API base comes from the web build Variable.
 
+declare const __CHANNEL__: string;
+
 /** Deployed duel API base URL, or null when this build has no online endpoint. */
 export const duelApiUrl = (): string | null => {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
@@ -9,6 +11,17 @@ export const duelApiUrl = (): string | null => {
 };
 
 export const onlineBuildEnabled = (): boolean => duelApiUrl() !== null;
+
+/**
+ * Phase 7 Find Opponent — off by default; on when VITE_FIND_OPPONENT=1 or preview channel futa05.
+ * Product futa04 builds keep this hidden.
+ */
+export const findOpponentEnabled = (): boolean => {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  if (env?.VITE_FIND_OPPONENT?.trim() === '1') return true;
+  const channel = typeof __CHANNEL__ !== 'undefined' ? __CHANNEL__ : '';
+  return channel === 'futa05';
+};
 
 /** Public site base used in invite links (Pages). */
 export const publicAppOrigin = (): string => {

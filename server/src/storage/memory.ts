@@ -92,11 +92,23 @@ export class MemoryStorage implements Storage {
 
   async createMatch(match: MatchRecord): Promise<{ ok: true } | Fail> {
     if (this.inviteIndex.has(match.inviteCode)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
-    this.matches.set(match.id, copy(match));
+    this.matches.set(match.id, copy({ ...match, openQueue: !!match.openQueue }));
     this.inviteIndex.set(match.inviteCode, match.id);
     this.participants.set(match.id, []);
     this.moves.set(match.id, []);
     return { ok: true };
+  }
+
+  async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
+    const waiting = [...this.matches.values()]
+      .filter((m) => m.status === 'waiting' && m.openQueue)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    for (const match of waiting) {
+      const parts = this.participants.get(match.id) ?? [];
+      if (parts.some((p) => p.playerId === playerId)) continue;
+      if (parts.length === 1) return copy(match);
+    }
+    return null;
   }
 
   async matchById(id: string): Promise<MatchRecord | null> {

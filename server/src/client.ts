@@ -7,6 +7,7 @@ import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type {
   CreateGuestResponse,
   CreateMatchResponse,
+  FindOpponentResponse,
   GetViewResponse,
   JoinMatchResponse,
   LinkCodeResponse,
@@ -140,6 +141,11 @@ export class DuelClient {
 
   joinMatch(token: string, inviteCode: string): Promise<JoinMatchResponse> {
     return this.request<JoinMatchResponse>('POST', '/v1/matches/join', { token, body: { inviteCode } });
+  }
+
+  /** Phase 7 Find Opponent (server pairs or creates an open-queue waiting match). */
+  findOpponent(token: string): Promise<FindOpponentResponse> {
+    return this.request<FindOpponentResponse>('POST', '/v1/matchmaking/find', { token, body: {} });
   }
 
   getMatch(token: string, matchId: string): Promise<MatchSummaryResponse> {

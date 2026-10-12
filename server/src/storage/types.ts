@@ -50,6 +50,8 @@ export type MatchRecord = {
   turnStartState: State | null;
   /** When a waiting match expires unused. */
   expiresAt: number | null;
+  /** Phase 7: waiting match is in the Find Opponent pool (not invite-only). */
+  openQueue: boolean;
 };
 
 export type Participant = {
@@ -149,6 +151,11 @@ export interface Storage {
   playerByTokenHash(tokenHash: string): Promise<PlayerRecord | null>;
 
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
+  /**
+   * Oldest waiting open-queue match that `playerId` is not already in, or null.
+   * Caller then joins via addParticipant + activateMatch.
+   */
+  findOpenQueueMatch(playerId: string): Promise<MatchRecord | null>;
   matchById(id: string): Promise<MatchRecord | null>;
   matchByInviteCode(code: string): Promise<MatchRecord | null>;
   /** Every match the player is a participant of (any status). */

@@ -44,7 +44,7 @@ export const createHttpServer = (deps: HttpDeps): Server => {
       const method = req.method ?? 'GET';
       const url = `http://${host}${req.url ?? '/'}`;
       const init: RequestInit = { method, headers: toHeaders(req) };
-      if (method !== 'GET' && method !== 'HEAD') init.body = raw;
+      if (method !== 'GET' && method !== 'HEAD') init.body = new Uint8Array(raw);
       const response = await app(new Request(url, init));
       res.statusCode = response.status;
       response.headers.forEach((value, key) => {

@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0–6 green (2026-10-12). Phase 6: two-browser Playwright create/join/resign, leak audit, turn-gate, 409 recovery, in-process load, real-DB RLS (18), security advisors (intentional `rls_enabled_no_policy` INFO). Hosting: **Supabase Edge Functions**. Next: Phase 7 Find Opponent (flagged) → Phase 8 docs/preview.  
+**Status:** Phase 0–7 green (2026-10-12). Phase 7: Find Opponent behind flag (`VITE_FIND_OPPONENT=1` or `CHANNEL=futa05`); open-queue migration 0003; Edge redeployed. Default product builds keep Find Opponent hidden. Next: Phase 8 docs `/futa0.5/` preview + final report.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.

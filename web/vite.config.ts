@@ -10,7 +10,7 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: './',
   // Default product build is Futasaku 0.4. `futa-test` is the experiment copy.
-  define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04', 'futa-test'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'futa04') },
+  define: { __CHANNEL__: JSON.stringify(['live', 'test', 'futa04', 'futa-test', 'futa05'].includes(process.env.CHANNEL ?? '') ? process.env.CHANNEL : 'futa04') },
   plugins: [{ name: 'futasaku-preview-icons', transformIndexHtml: { order: 'pre', handler(html) {
     const modern = process.env.CHANNEL === 'futa04' || process.env.CHANNEL === 'futa-test' || !process.env.CHANNEL;
     return modern ? html
@@ -23,7 +23,7 @@ export default defineConfig({
       .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner|fragment-mono)[^"]*"[^>]*>/g, '');
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
     const channel = process.env.CHANNEL ?? 'futa04';
-    if (channel === 'futa04' || channel === 'futa-test') {
+    if (channel === 'futa04' || channel === 'futa-test' || channel === 'futa05') {
       const path = resolve(output, 'manifest.webmanifest');
       const manifest = JSON.parse(readFileSync(path, 'utf8'));
       manifest.icons = [

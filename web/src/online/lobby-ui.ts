@@ -5,7 +5,7 @@ import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../se
 import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, onlineBuildEnabled } from './config.js';
+import { duelApiUrl, findOpponentEnabled, onlineBuildEnabled } from './config.js';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
@@ -81,6 +81,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const fillCopy = () => {
     $('online-hub-title').textContent = ONLINE.hubTitle;
     $('online-create').textContent = ONLINE.create;
+    const findBtn = document.getElementById('online-find') as HTMLButtonElement | null;
+    if (findBtn) {
+      findBtn.textContent = ONLINE.findOpponent;
+      findBtn.hidden = !findOpponentEnabled();
+      findBtn.title = ONLINE.findOpponentHint;
+    }
     $('online-join-open').textContent = ONLINE.join;
     $('online-matches-title').textContent = ONLINE.yourMatches;
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
@@ -270,6 +276,25 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  const findOpponent = async () => {
+    if (!findOpponentEnabled()) return;
+    const id = await ensureIdentity();
+    if (!id) return;
+    notice('online-hub-notice', ONLINE.findOpponentLooking);
+    try {
+      const res = await client.findOpponent(id.token);
+      serverOffset = res.serverNow - now();
+      if (res.paired && res.player.status === 'active') {
+        launchDuel(id.token, res.player);
+        return;
+      }
+      openWaiting(res.match);
+      notice('online-waiting-notice', ONLINE.findOpponentLooking);
+    } catch (error) {
+      notice('online-hub-notice', errorMessage(error));
+    }
+  };
+
   const joinWithCode = async (code: string) => {
     const id = await ensureIdentity();
     if (!id) return;
@@ -334,6 +359,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   $('online-waiting-back').addEventListener('click', () => void openHub());
   $('online-join-back').addEventListener('click', () => void openHub());
   $('online-create').addEventListener('click', () => void createMatch());
+  document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {
     fillCopy();
     show('join');

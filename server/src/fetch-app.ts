@@ -148,6 +148,13 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...joined, serverNow: service.serverNow() } };
     }
 
+    if (method === 'POST' && path === '/v1/matchmaking/find') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      await readJson(req, config.maxBodyBytes);
+      const found = await service.findOpponent(player, clientIpOf(req));
+      return { status: 200, body: { ok: true, ...found, serverNow: service.serverNow() } };
+    }
+
     if (method === 'POST' && path === '/v1/sweep') {
       await readJson(req, config.maxBodyBytes);
       const result = await service.sweep(clientIpOf(req));

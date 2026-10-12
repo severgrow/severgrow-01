@@ -79,6 +79,7 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
   turnStartState:
     row.turn_start_state === null || row.turn_start_state === undefined ? null : asJson<State>(row.turn_start_state),
   expiresAt: asNullableNumber(row.expires_at),
+  openQueue: row.open_queue === true || row.open_queue === 't' || row.open_queue === 1,
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
@@ -403,8 +404,8 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query(
         `insert into matches
            (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
-            created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision, turn_start_state, expires_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+            created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision, turn_start_state, expires_at, open_queue)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
         [
           match.id,
           match.inviteCode,
@@ -424,6 +425,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
           match.turnStartRevision,
           match.turnStartState === null ? null : JSON.stringify(match.turnStartState),
           match.expiresAt,
+          !!match.openQueue,
         ],
       );
       return { ok: true };
@@ -431,6 +433,26 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       if (isUniqueViolation(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
       throw error;
     }
+  },
+
+  async findOpenQueueMatch(playerId: string): Promise<MatchRecord | null> {
+    const { rows } = await pool.query(
+      `select m.*
+         from matches m
+        where m.status = 'waiting'
+          and m.open_queue = true
+          and not exists (
+                select 1 from match_participants p
+                 where p.match_id = m.id and p.player_id = $1
+              )
+          and (
+                select count(*)::int from match_participants p2 where p2.match_id = m.id
+              ) = 1
+        order by m.created_at asc
+        limit 1`,
+      [playerId],
+    );
+    return rows[0] ? rowToMatch(rows[0]) : null;
   },
 
   async matchById(id: string): Promise<MatchRecord | null> {

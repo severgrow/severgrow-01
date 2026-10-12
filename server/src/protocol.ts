@@ -90,6 +90,15 @@ export type CreateMatchResponse = { ok: true; match: MatchSummary; player: Match
 export type JoinMatchRequest = { inviteCode: string };
 export type JoinMatchResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };
 
+/** Phase 7 Find Opponent — paired=true when joined an existing open-queue match. */
+export type FindOpponentResponse = {
+  ok: true;
+  match: MatchSummary;
+  player: MatchViewPayload;
+  paired: boolean;
+  serverNow: number;
+};
+
 export type SubmitActionRequest = {
   expectedRevision: number;
   requestId: string;

@@ -167,6 +167,7 @@ suite('real database: schema and migration process', () => {
         'turn_start_revision',
         'turn_start_state',
         'expires_at',
+        'open_queue',
       ]),
     );
     expect(await cols('match_participants')).toEqual(expect.arrayContaining(['last_seen_at']));

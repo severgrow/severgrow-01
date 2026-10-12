@@ -238,6 +238,7 @@ describe('postgres storage: write paths', () => {
       turnStartRevision: 0,
       turnStartState: null,
       expiresAt: null,
+      openQueue: false,
     };
     expect(await storage.createMatch(record)).toMatchObject({ ok: false, code: 'DUPLICATE_INVITE_CODE' });
   });

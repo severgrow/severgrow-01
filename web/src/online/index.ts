@@ -49,7 +49,7 @@ export type {
   PersonalSetting,
 } from './perspective.js';
 
-export { duelApiUrl, onlineBuildEnabled, publicAppOrigin } from './config.js';
+export { duelApiUrl, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin } from './config.js';
 
 export {
   FIRST_ONLINE_CARD_KEY,

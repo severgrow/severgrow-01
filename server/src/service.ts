@@ -197,7 +197,10 @@ export class MatchService {
 
   // ---- match lifecycle ----
 
-  async createMatch(player: PlayerRecord): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+  async createMatch(
+    player: PlayerRecord,
+    options: { openQueue?: boolean } = {},
+  ): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
     const existing = await this.storage.matchesOfPlayer(player.id);
     if (existing.filter((m) => m.status !== 'finished').length >= this.config.maxOpenMatchesPerPlayer) {
       throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
@@ -206,6 +209,7 @@ export class MatchService {
     const now = this.now();
     const setup = matchSetup(newSeed(), this.config.rulesVersion);
     const state = stateFromSetup(setup);
+    const openQueue = !!options.openQueue;
 
     let created: MatchRecord | null = null;
     for (let attempt = 0; attempt < 5 && created === null; attempt++) {
@@ -228,6 +232,7 @@ export class MatchService {
         turnStartRevision: 0,
         turnStartState: null,
         expiresAt: now + this.config.waitingExpireMs,
+        openQueue,
       };
       const result = await this.storage.createMatch(candidate);
       if (result.ok) created = candidate;
@@ -245,6 +250,25 @@ export class MatchService {
     if (!seated.ok) throw new ApiError('INTERNAL', 'Could not seat the match creator.');
 
     return { match: await this.summary(created), player: await this.payload(created, 0, []) };
+  }
+
+  /**
+   * Phase 7 Find Opponent: join the oldest waiting open-queue match, or create one and wait.
+   */
+  async findOpponent(
+    player: PlayerRecord,
+    clientIp: string | null = null,
+  ): Promise<{ match: MatchSummary; player: MatchViewPayload; paired: boolean }> {
+    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
+
+    const open = await this.storage.findOpenQueueMatch(player.id);
+    if (open) {
+      const joined = await this.joinMatch(player, open.inviteCode, clientIp);
+      return { ...joined, paired: true };
+    }
+    const created = await this.createMatch(player, { openQueue: true });
+    return { ...created, paired: false };
   }
 
   async joinMatch(
