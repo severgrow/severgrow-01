@@ -52,35 +52,45 @@ describe('online turn completion (real service)', () => {
     const created = await client.createMatch(a.token);
     const joined = await client.joinMatch(b.token, created.match.inviteCode);
 
-    // Drive the seat that actually starts (seat differences must not matter).
-    const starter = created.player.startingPlayer === created.player.seat ? created : joined;
-    const starterToken = starter === created ? a.token : b.token;
+    // Drive the seat that actually starts (seat differences must not matter). The create-time
+    // payload is still 'waiting', so pull the ACTIVE view after the join.
+    const starterIsCreator = created.player.startingPlayer === created.player.seat;
+    const starterToken = starterIsCreator ? a.token : b.token;
+    const starterSeat = starterIsCreator ? created.player.seat : joined.player.seat;
+    const starterView = (await client.getState(starterToken, created.match.matchId)).player;
+    expect(starterView.status).toBe('active');
     const driver = createOnlineDriver({
       client,
       token: starterToken,
       matchId: created.match.matchId,
-      initial: starter.player,
+      initial: starterView,
       ...noTimers,
     });
     const os = new OnlineSession(driver);
-    expect(os.myTurn).toBe(true);
+    expect(os.myTurn, `starter seat ${starterSeat} startingPlayer ${created.player.startingPlayer} status ${driver.snapshot().status} actor ${driver.snapshot().view.actor}`).toBe(true);
 
     const draw = os.legal.find((x) => x.t === 'Draw');
     expect(draw, 'starter must be able to Draw').toBeTruthy();
-    expect((await os.play(draw!)).ok).toBe(true);
-    expect(os.myTurn).toBe(true);
+    const drawRes = await os.play(draw!);
+    expect(drawRes.ok, `Draw failed: ${JSON.stringify(drawRes)}`).toBe(true);
+    expect(os.myTurn, `after Draw: actor ${driver.snapshot().view.actor} seat ${driver.snapshot().seat} status ${driver.snapshot().status}`).toBe(true);
 
     const grow = os.legal.find((x) => x.t === 'Sprout' || x.t === 'Bloom' || x.t === 'PlayFruit' || x.t === 'MegaBomb');
-    if (grow) expect((await os.play(grow)).ok).toBe(true);
+    if (grow) {
+      const growRes = await os.play(grow);
+      expect(growRes.ok, `Grow failed: ${JSON.stringify(growRes)}`).toBe(true);
+    }
 
     const end = os.legal.find((x) => x.t === 'EndAct');
     expect(end, 'EndAct ends the Grow step').toBeTruthy();
-    expect((await os.play(end!)).ok).toBe(true);
+    const endRes = await os.play(end!);
+    expect(endRes.ok, `EndAct failed: ${JSON.stringify(endRes)}`).toBe(true);
 
     // The turn is not over: the DISCARD step is offered and MUST be committed.
     const discard = os.legal.find((x) => x.t === 'Discard');
     expect(discard, 'Discard must be offered after EndAct').toBeTruthy();
-    expect((await os.play(discard!)).ok).toBe(true);
+    const discardRes = await os.play(discard!);
+    expect(discardRes.ok, `Discard failed: ${JSON.stringify(discardRes)}`).toBe(true);
 
     const snap = driver.snapshot();
     expect(snap.view.turnPlayer, 'turn handed over').toBe((1 - snap.seat) as 0 | 1);
@@ -105,7 +115,7 @@ describe('starting-player contract is surfaced to both seats', () => {
     const joined = await client.joinMatch(b.token, created.match.inviteCode);
 
     for (const payload of [created.player, joined.player]) {
-      expect(payload.startingPlayer === 0 || payload.startingPlayer === 1).toBe(true);
+      expect(payload.startingPlayer === 0 || payload.startingPlayer === 1, `startingPlayer=${String(payload.startingPlayer)}`).toBe(true);
       expect(payload.startingPlayer, 'first-turn seat equals the starting seat').toBe(payload.view.turnPlayer);
     }
     expect(created.player.startingPlayer).toBe(joined.player.startingPlayer);
