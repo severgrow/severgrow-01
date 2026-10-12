@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0–5 green (2026-10-12). Phase 5: shared-board Draw / draft / Throw, resign, finished screen, 2× catch-up replay, offline flag regression. Hosting: **Supabase Edge Functions**. Next: Phase 6 hardening (two-browser Playwright, leak audit). **Push note:** GitHub OAuth lacks `workflow` scope for `.github/workflows/futa05-keepalive.yml`; owner must push.  
+**Status:** Phase 0–6 green (2026-10-12). Phase 6: two-browser Playwright create/join/resign, leak audit, turn-gate, 409 recovery, in-process load, real-DB RLS (18), security advisors (intentional `rls_enabled_no_policy` INFO). Hosting: **Supabase Edge Functions**. Next: Phase 7 Find Opponent (flagged) → Phase 8 docs/preview.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.
