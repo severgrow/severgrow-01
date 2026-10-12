@@ -103,4 +103,19 @@ alter table match_moves        enable row level security;
 -- Deliberately no policies: anon and authenticated roles are denied everything. The API server
 -- uses the service role, which bypasses RLS. Add narrow policies only for a future read-only
 -- public view (e.g. a finished-match summary), never for `matches.state` or `player_tokens`.
-revoke all on players, player_tokens, matches, match_participants, match_moves from anon, authenticated;
+--
+-- The revoke is guarded because a plain Postgres install has neither Supabase role.
+do $$
+declare
+  client_role text;
+begin
+  foreach client_role in array array['anon', 'authenticated']
+  loop
+    if exists (select 1 from pg_roles where rolname = client_role) then
+      execute format(
+        'revoke all on players, player_tokens, matches, match_participants, match_moves from %I',
+        client_role
+      );
+    end if;
+  end loop;
+end $$;

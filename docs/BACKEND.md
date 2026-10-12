@@ -33,7 +33,9 @@ server/src/client.ts             typed isomorphic client + local session (refres
 server/src/storage/types.ts      the Storage port and its atomicity contract
 server/src/storage/memory.ts     in-memory adapter (dev/tests)
 server/src/storage/postgres.ts   Postgres/Supabase adapter (transactional)
+server/src/index.ts              entry point (DATABASE_URL → postgres, else memory)
 server/migrations/0001_init.sql  the schema, with Row Level Security
+server/scripts/smoke.ts          manual end-to-end smoke against a running server
 server/tests/                    the test suite for all of the above
 ```
 
@@ -129,10 +131,14 @@ is why the moves table *is* the revision history and the idempotency record.
 | --- | --- |
 | `server/tests/service.test.ts` | 20 tests: identity, joining, views, actions, idempotency, stale revisions, racing submissions, a full game to a finished result |
 | `server/tests/http-e2e.test.ts` | 4 tests: the whole vertical slice over real HTTP with two clients + refresh/reconnect, auth failures, error codes, card-reconstruction |
+| `server/tests/http.test.ts` | 8 tests: preflight/CORS, security headers, malformed and oversized bodies, missing bodies, 404s without internals, auth required on every match route, precise field validation, and that logs never contain tokens or bodies |
 | `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code |
 | `server/tests/client.test.ts` | 6 tests: request shape, bearer header, `since` handling, error mapping, session persistence/resume |
 | `server/tests/engine-events.test.ts` | 3 tests: `hidePrivateEvents` ≡ `eventsFor` across real games |
 | `server/tests/migration.test.ts` | 6 tests: tables, RLS everywhere, hashed tokens, immutable fields, idempotency key |
+
+59 server tests in total. A manual smoke script (`npm run server:smoke`) exercises a live deployment
+(14 checks) and reuses the same client the browser will use.
 
 The rest of the project's suite is unchanged and must stay green (see the final report).
 

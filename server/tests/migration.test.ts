@@ -18,7 +18,11 @@ describe('backend migration 0001_init.sql', () => {
     for (const table of ['players', 'player_tokens', 'matches', 'match_participants', 'match_moves']) {
       expect(squashed).toContain(`alter table ${table} enable row level security`);
     }
-    expect(squashed).toContain('revoke all on players, player_tokens, matches, match_participants, match_moves from anon, authenticated');
+    // The revoke is guarded so the migration also runs on a plain Postgres install.
+    expect(squashed).toContain('revoke all on players, player_tokens, matches, match_participants, match_moves from');
+    expect(squashed).toContain("'anon'");
+    expect(squashed).toContain("'authenticated'");
+    expect(squashed).toContain('from pg_roles where rolname = client_role');
     // No permissive policy is ever granted.
     expect(squashed).not.toContain('create policy');
   });
