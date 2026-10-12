@@ -26,12 +26,18 @@ try {
   await page.waitForFunction((prev: number | null) => {
     const game = (window as any).__severgrow;
     const lottery = document.getElementById('starter-lottery');
-    return !!game?.state() && game.state().seed !== prev && game.state().actor === 0 && !game.busy() && !!lottery?.hidden;
+    return !!game?.state() && game.state().seed !== prev && game.state().actor === 0 && game.state().phase === 'DRAW' && !game.busy() && !!lottery?.hidden;
   }, beforeNew, { timeout: 20000 });
   // DOM click exercises the real handler without Playwright waiting for the
-  // deliberately pulsing deck/card to stop moving.
-  await click('#deck');
-  await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'ACT' && !(window as any).__severgrow.busy(), undefined, { timeout: 15000 });
+  // deliberately pulsing deck/card to stop moving. Retry in case a re-render
+  // swallows the first synthetic event.
+  let drawn = false;
+  for (let i = 0; i < 4 && !drawn; i++) {
+    await click('#deck');
+    drawn = await page.waitForFunction(() => (window as any).__severgrow.state()?.phase === 'ACT' && !(window as any).__severgrow.busy(), undefined, { timeout: 4000 }).then(() => true).catch(() => false);
+    if (!drawn) await page.waitForTimeout(300);
+  }
+  assert(drawn, 'the deck tap draws a card');
   const grown = await page.evaluate(() => (window as any).__severgrow.state() as State);
   const action = legalActions(viewFor(grown, 0)).find(a => a.t === 'Sprout');
   assert(action?.t === 'Sprout');
