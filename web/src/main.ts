@@ -84,6 +84,10 @@ import {
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
+import {
+  TUTORIAL_EASTER_SELECTORS, mountTutorialEaster,
+} from './player/tutorial-easter.js';
+import type { TutorialEaster } from './player/tutorial-easter.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -232,6 +236,9 @@ let session: Session | null = null;
 let coach: CoachProgress = freshCoach();
 let glassSurface: GlassSurface | null = null;
 let tutorialGate: TutorialGate | null = null;
+let tutorialEaster: TutorialEaster | null = null;
+let tutorialAdvanceCount = 0;
+let tutorialEasterDone = false;
 let intelState: State | null = null;
 let tutorialDisplayKey = '';
 let tutorialTransitionPending = false;
@@ -910,6 +917,7 @@ async function mountPlayerEnhancements() {
       onBlocked: onTutorialBlocked,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
+    tutorialEaster = mountTutorialEaster();
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
@@ -1153,11 +1161,34 @@ function clearTutorialTimers() {
 
 function releaseTutorialLock() {
   clearTutorialTimers();
+  tutorialEaster?.dismiss();
   tutorialGate?.clear();
   glassSurface?.hide();
   tutorialDisplayKey = '';
   tutorialTransitionPending = false;
+  tutorialAdvanceCount = 0;
+  tutorialEasterDone = false;
   document.documentElement.classList.remove('futa04-tutorial');
+}
+
+/** After the easter modal closes — full normal tutorial resume (no skipped step). */
+function resumeTutorialAfterEaster() {
+  if (!coach.tutorial || !session) return;
+  tutorialDisplayKey = '';
+  tutorialTransitionPending = false;
+  syncTutorialGate();
+  render();
+}
+
+function maybeShowTutorialEaster() {
+  if (!tutorialEaster || tutorialEasterDone || tutorialAdvanceCount < 4) return;
+  if (tutorialEaster.isOpen()) return;
+  tutorialEasterDone = true;
+  tutorialGate?.set({
+    selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
+  }, 'step');
+  glassSurface?.hideFocus?.();
+  tutorialEaster.show(resumeTutorialAfterEaster);
 }
 
 /** Dead taps stay silent — the gate already swallows them; never flash a "locked" toast. */
@@ -1176,6 +1207,14 @@ function syncTutorialGate() {
   // Free play: no input lock — bulb and board stay fully usable.
   if (lesson?.action === 'FreeTurn') {
     tutorialGate.clear();
+    return;
+  }
+  // Easter modal: only its buttons (+ menu) — resume restores the real step gate.
+  if (tutorialEaster?.isOpen()) {
+    tutorialGate.set({
+      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
+    }, 'step');
+    glassSurface?.hideFocus?.();
     return;
   }
   // Pause menu / sheets stay fully usable; menu button stays reachable.
@@ -1224,6 +1263,9 @@ function exitTutorial() {
 
 function startTutorial(chapter = 0) {
   clearTutorialTimers();
+  tutorialEaster?.dismiss();
+  tutorialAdvanceCount = 0;
+  tutorialEasterDone = false;
   const state = tutorialChapter(chapter);
   log = ['A small match, played to learn.'];
   gameLevel = 7;
@@ -1289,6 +1331,7 @@ function tutorialAdvanceStep() {
   const progress = coach.tutorial;
   if (!progress) return;
   progress.step++;
+  tutorialAdvanceCount++;
   tutorialDisplayKey = '';
   tutorialStatus = null;
   const next = tutorialLesson(progress.chapter, progress.step);
@@ -1297,11 +1340,13 @@ function tutorialAdvanceStep() {
     beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
     save();
     announceTurn(HUMAN);
+    maybeShowTutorialEaster();
     return;
   }
   if (next) {
     ensureTutorialThrowPhase();
     armTutorialIdle();
+    maybeShowTutorialEaster();
     return;
   }
   tutorialStatus = tutorialFeedback('chapter-done');
@@ -1808,7 +1853,8 @@ let skippedFrom: State | null = null;
  * shows why and a Continue button (renderControls).
  */
 function autoAdvance() {
-  if (!session || coach.tutorial || !myTurn() || busy() || session.view.phase !== 'ACT') return;
+  // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
+  if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
@@ -3646,6 +3692,22 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
   });
 }
 
+/** The single hand card the current tutorial step asks for (before it is picked), or null. */
+function tutorialSingleCardId(): number | null {
+  const progress = coach.tutorial;
+  if (!progress || !session || session.sel.card !== null) return null;
+  const lesson = tutorialLesson(progress.chapter, progress.step);
+  if (!lesson || (lesson.focus !== 'card' && lesson.focus !== 'tile')) return null;
+  if (lesson.focus === 'tile' && !lesson.tile) return null;
+  const hand = session.view.hand;
+  const card = lesson.cardId != null
+    ? hand.find(c => c.id === lesson.cardId)
+    : lesson.card
+      ? hand.find(c => c.suit === lesson.card![0] && c.rank === lesson.card![1])
+      : lesson.focus === 'card' ? hand[0] : hand.find(c => c.suit === null);
+  return card?.id ?? null;
+}
+
 function renderTutorial() {
   const progress=coach.tutorial;
   if (!progress || !session || !glassSurface) {
@@ -3739,6 +3801,9 @@ function renderTutorial() {
     cta = 'TAP TILE';
   } else if (lesson.focus === 'hand' && selected === null && lesson.action !== 'EndAct') {
     cta = lesson.cta || 'TAP A CARD';
+  } else if (lesson.focus === 'tile' && lesson.action === 'Sprout' && lesson.card && selected === null && session.view.phase !== 'DRAW') {
+    // The card is already drawn: name the one card that glows instead of the lesson's "TAP DECK".
+    cta = `TAP THE ${lesson.card[1]}`;
   } else if (lesson.focus === 'bloom' && selectingBloom && lesson.action !== 'MegaBomb') {
     cta = 'TAP TILE';
   } else if (lesson.action === 'PlayFruit' && selected !== null) {
@@ -3786,12 +3851,14 @@ function renderTutorial() {
       ? (lesson.cta || 'NEXT')
       : (cta || 'NEXT');
     const nextBlink = lesson.action === 'Next';
+    const bloomDemo = lesson.id === 'bloom-explain';
     if (lockedBusy) {
       glassSurface.tutorial(tutorialStatus ?? title, progress.chapter, [], {
         shape: 'none',
         stepKey,
         chapterCount: TUTORIAL_CHAPTER_COUNT,
         reduceMotion: settings.reduceMotion,
+        bloomDemo,
         ...(tutorialStatus || lesson.action === 'Opponent'
           ? { status: tutorialStatus ?? title }
           : {}),
@@ -3813,6 +3880,7 @@ function renderTutorial() {
         ...(body != null && !tutorialStatus ? { why: body } : {}),
         chapterCount: TUTORIAL_CHAPTER_COUNT,
         reduceMotion: settings.reduceMotion,
+        bloomDemo,
         arrow: true,
         ...(tutorialStatus && /Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { praise: tutorialStatus } : {}),
         ...(tutorialStatus && !/Clean|Nice|There it is|Easy/.test(tutorialStatus) ? { status: tutorialStatus } : {}),
@@ -3928,6 +3996,10 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
+    // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
+    const tutorialCard = tutorialSingleCardId();
+    b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
+    if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
     b.setAttribute('aria-label', `${cardName(c)}${playable ? ', can be played' : ''}${fs?.reason && myTurn() ? `, ${fs.reason}` : ''}${lifted ? ', picked' : ''}${IS_FUTA04 && session!.pending?.t === 'Discard' && session!.pending.card === c.id ? ', tap again to throw and finish your turn' : ''}`);
     b.setAttribute('aria-pressed', String(lifted));

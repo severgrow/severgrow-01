@@ -23,6 +23,9 @@ try {
   await page.goto('http://localhost:4201/?tutorial=1&chapter=1');
   await page.waitForFunction(() => !!(window as any).__severgrow?.tutorial());
   for (let moves = 0; moves < 100; moves++) {
+    // The one-shot easter-egg popup (player/tutorial-easter.ts) pauses the tutorial until closed.
+    const easter = page.locator('#tutorial-easter:not([hidden]) button').first();
+    if (await easter.count()) { await easter.click(); continue; }
     const p = await progress();
     assert(p, 'tutorial remains active');
     if (p.chapter === TUTORIAL_CHAPTER_COUNT - 1 && tutorialLesson(p.chapter, p.step)?.action === 'FreeTurn') break;
@@ -64,14 +67,12 @@ try {
   await page.waitForSelector(`#board .target[data-key="${coordKey(grow.coord)}"]`);
   await tap(`#board .target[data-key="${coordKey(grow.coord)}"]`);
   await page.waitForFunction(key => !!(window as any).__severgrow.state().board[key], coordKey(grow.coord));
-  await waitReady();
+  await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'DISCARD', undefined, { timeout: 8000 });
   s = await state();
   assert.equal(s.board[coordKey(grow.coord)]?.owner, 0, 'touch placement used the real engine');
-  const end = legalActions(viewFor(s, 0)).find(a => a.t === 'EndAct');
-  assert(end, 'the free turn may finish Grow');
-  // The context slot is the normal way to proceed when Bloom is skipped.
-  await tap('#smart-context');
-  await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'DISCARD', undefined, { timeout: 8000 });
+  // With nothing left but "end", the free turn goes on to Throw by itself, as in a real game
+  // (it used to stay on Grow with the hand locked).
+  assert.equal(s.sproutsThisTurn, 1, 'free turn reached Throw after its Grow');
   await tap('#hand .card');
   await tap('#hand .card.lifted');
   await page.waitForFunction(() => !document.getElementById('menu')!.hidden, undefined, { timeout: 15000 });
