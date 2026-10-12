@@ -56,6 +56,16 @@ export class MatchService {
     return this.config.rulesVersion;
   }
 
+  /** Epoch ms from the injectable clock (also returned as `serverNow` on every response later). */
+  serverNow(): number {
+    return this.now();
+  }
+
+  /** Real storage round-trip for health checks. */
+  pingStorage(): Promise<void> {
+    return this.storage.ping();
+  }
+
   // ---- identity ----
 
   async createGuest(displayName: string | null = null): Promise<{ player: PlayerSummary; token: string }> {

@@ -13,15 +13,22 @@ export type ServerConfig = {
   maxBodyBytes: number;
   /** Open (waiting/active) matches a single player may own at once. */
   maxOpenMatchesPerPlayer: number;
-  /** Allowed browser origin for CORS, or '*' for local development. */
+  /**
+   * Allowed browser origin for CORS, or '*' for local development only.
+   * Production (Edge / deployed API) must be locked to https://severgrow.github.io
+   * — the origin has no path (P-17).
+   */
   corsOrigin: string;
 };
+
+/** The only production browser origin that may call the duel API. */
+export const PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io';
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   rulesVersion: CURRENT_RULES_VERSION,
   maxMovesPerMatch: 10_000,
   inviteCodeLength: 8,
   maxBodyBytes: 64 * 1024,
-  maxOpenMatchesPerPlayer: 10,
   corsOrigin: '*',
+  maxOpenMatchesPerPlayer: 10,
 });

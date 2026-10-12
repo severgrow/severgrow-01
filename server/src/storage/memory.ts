@@ -111,6 +111,10 @@ export class MemoryStorage implements Storage {
     return found ? copy(found) : null;
   }
 
+  async ping(): Promise<void> {
+    // In-memory: nothing to reach; always "healthy".
+  }
+
   async movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]> {
     return copy((this.moves.get(matchId) ?? []).filter((m) => m.revision > sinceRevision));
   }

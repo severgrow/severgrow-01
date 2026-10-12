@@ -109,6 +109,9 @@ export interface Storage {
   movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]>;
   /** The whole atomic pipeline: participant → idempotency → revision → decide → persist. */
   commitMove(input: CommitInput): Promise<CommitResult>;
+
+  /** A real round-trip used by `/v1/health?db=1` (keep-alive / pause detection). */
+  ping(): Promise<void>;
 }
 
 export const openMatchCount = (matches: readonly MatchRecord[]): number =>

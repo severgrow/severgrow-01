@@ -210,6 +210,10 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     return rows[0] ? rowToParticipant(rows[0]) : null;
   },
 
+  async ping(): Promise<void> {
+    await pool.query('select 1 as ok');
+  },
+
   async movesOf(matchId: string, sinceRevision: number): Promise<MoveRecord[]> {
     const { rows } = await pool.query('select * from match_moves where match_id = $1 and revision > $2 order by revision asc', [
       matchId,

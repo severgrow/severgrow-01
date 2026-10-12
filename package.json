@@ -31,6 +31,7 @@
     "server:migrate": "node --env-file-if-exists=.env --import tsx server/scripts/migrate.ts",
     "server:db-test": "REQUIRE_DATABASE=1 node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run server/tests/postgres.integration.test.ts",
     "server:verify": "node --env-file-if-exists=.env --import tsx server/scripts/verify.ts",
+    "server:build-edge": "node server/scripts/build-edge.mjs",
     "skin:manifest": "tsx web/skin-manifest.ts"
   },
   "devDependencies": {

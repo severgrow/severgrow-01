@@ -65,6 +65,22 @@ describe('HTTP surface', () => {
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
+  it('reports rules version, serverNow, and an optional database ping', async () => {
+    const health = await request('GET', '/v1/health');
+    expect(health.status).toBe(200);
+    const body = health.body as { ok: boolean; rulesVersion: string; serverNow: number; db?: unknown };
+    expect(body.ok).toBe(true);
+    expect(typeof body.rulesVersion).toBe('string');
+    expect(typeof body.serverNow).toBe('number');
+    expect(body.db).toBeUndefined();
+
+    const withDb = await request('GET', '/v1/health?db=1');
+    expect(withDb.status).toBe(200);
+    const dbBody = withDb.body as { db: { ok: true; ms: number } };
+    expect(dbBody.db.ok).toBe(true);
+    expect(typeof dbBody.db.ms).toBe('number');
+  });
+
   it('rejects malformed JSON and an oversized body', async () => {
     const malformed = await request('POST', '/v1/guests', { body: '{not json' });
     expect(malformed.status).toBe(400);
