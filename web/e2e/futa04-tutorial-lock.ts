@@ -37,7 +37,11 @@ const openTutorial = async (page: import('playwright-core').Page, chapter = 1) =
     }
   });
   await page.goto(`http://localhost:4198/?tutorial=1&chapter=${chapter}`);
-  await page.waitForFunction(() => !!(window as any).__severgrow?.tutorialGate?.()?.active, undefined, { timeout: 20000 });
+  // the free turn has no step lock; every other chapter opens locked
+  await page.waitForFunction(() => {
+    const h = (window as any).__severgrow;
+    return !!h?.tutorial() && (!!h.tutorialGate?.()?.active || !!document.querySelector('#futasaku-glass:not([hidden])'));
+  }, undefined, { timeout: 20000 });
   await page.waitForSelector('#futasaku-glass:not([hidden])');
 };
 

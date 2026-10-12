@@ -5593,10 +5593,11 @@ html.align-overlay::before {
   background: #050606;
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--curtain-out, 360ms) ease-out;
+  transition: opacity var(--curtain-out, 240ms) cubic-bezier(.33, 0, .2, 1);
+  will-change: opacity;
 }
 #tutorial-curtain.on {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--curtain-in, 220ms) ease-in;
+  transition: opacity var(--curtain-in, 160ms) cubic-bezier(.4, 0, .67, 1);
 }

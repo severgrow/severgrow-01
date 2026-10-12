@@ -1,4 +1,4 @@
-// The tutorial is a short core run plus separate extra lessons, with one word list throughout.
+// One tutorial that teaches the whole game in about sixteen steps, plus separate lessons in How to.
 import { describe, expect, it } from 'vitest';
 import {
   TUTORIAL_CHAPTER_COUNT,
@@ -17,42 +17,63 @@ import {
 const at = (id: string) => TUTORIAL_CHAPTER_IDS.indexOf(id as never);
 const all = () => Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, c) => tutorialLessons(c)).flat();
 const lesson = (id: string) => all().find(l => l.id === id)!;
+const coreSteps = () => TUTORIAL_CORE.flatMap(id => [...tutorialLessons(at(id))])
+  .filter(l => !l.autoDiscard && l.action !== 'Opponent');
 
-describe('tutorial tracks', () => {
-  it('the core run teaches the basics, then a free turn', () => {
-    expect([...TUTORIAL_CORE]).toEqual(['goal', 'turn', 'bloom', 'cut', 'win', 'free']);
+describe('the tutorial', () => {
+  it('teaches Grow with Strengthen, take over and Bomb, then Bloom with the Throw pile and Blast, then the win, a free turn and the buttons', () => {
+    expect([...TUTORIAL_CORE]).toEqual(['goal', 'turn', 'strengthen', 'cut', 'bomb', 'throw-pile', 'blast', 'win', 'free', 'buttons']);
   });
 
-  it('every other chapter belongs to exactly one extra lesson', () => {
-    expect(TUTORIAL_EXTRAS.map(e => e.id)).toEqual(['strengthen', 'bombs', 'throw-pile', 'last-round', 'buttons']);
+  it('every move of the game is in it except the last round (Skip comes with Grow)', () => {
+    const actions = new Set(coreSteps().map(l => l.action));
+    for (const a of ['Draw', 'Sprout', 'EndAct', 'Discard', 'Bloom', 'PlayFruit', 'MegaBomb', 'FreeTurn']) expect(actions.has(a as never), a).toBe(true);
+    const ids = coreSteps().map(l => l.id);
+    expect(ids).toEqual(expect.arrayContaining(['strength', 'cut', 'bomb', 'discard-draw', 'mega']));
+    expect(TUTORIAL_CORE).not.toContain('skip');
+    expect(TUTORIAL_CORE).not.toContain('final');
+  });
+
+  it('is about sixteen steps, with a short button tour after the free turn', () => {
+    const steps = coreSteps();
+    const free = steps.findIndex(l => l.action === 'FreeTurn');
+    expect(free + 1, 'steps up to and including the free turn').toBeLessThanOrEqual(16);
+    expect(steps.length).toBeLessThanOrEqual(19);
+    expect(steps.slice(free + 1).every(l => l.focus === 'button')).toBe(true);
+  });
+
+  it('throw pile is taught on a Draw, and Bloom is taught with it', () => {
+    const ids = tutorialLessons(at('throw-pile')).map(l => l.id);
+    expect(ids.indexOf('discard-draw')).toBeLessThan(ids.indexOf('discard-bloom'));
+    expect(lesson('discard-draw').action).toBe('Draw');
+    expect(tutorialLessons(at('throw-pile')).some(l => l.bloomDemo)).toBe(true);
+  });
+
+  it('moves through the chapters in order and ends after the button tour', () => {
+    expect(nextTutorialChapter(at('goal'), 'core')).toBe(at('turn'));
+    expect(nextTutorialChapter(at('turn'), 'core')).toBe(at('strengthen'));
+    expect(nextTutorialChapter(at('bomb'), 'core')).toBe(at('throw-pile'));
+    expect(nextTutorialChapter(at('throw-pile'), 'core')).toBe(at('blast'));
+    expect(nextTutorialChapter(at('free'), 'core')).toBe(at('buttons'));
+    expect(nextTutorialChapter(at('buttons'), 'core')).toBeNull();
+    expect(previousTutorialChapter(at('cut'), 'core')).toBe(at('strengthen'));
+    expect(previousTutorialChapter(at('goal'), 'core')).toBeNull();
+  });
+});
+
+describe('separate lessons (How to)', () => {
+  it('offers each topic on its own, plus Skip and the last round', () => {
+    expect(TUTORIAL_EXTRAS.map(e => e.id)).toEqual(['grow', 'bombs', 'blooms', 'last-round', 'buttons']);
     const extra = TUTORIAL_EXTRAS.flatMap(e => [...e.chapters]);
     expect(new Set(extra).size).toBe(extra.length);
-    expect(extra.filter(id => (TUTORIAL_CORE as readonly string[]).includes(id))).toEqual([]);
-    expect([...TUTORIAL_CORE, ...extra].sort()).toEqual([...TUTORIAL_CHAPTER_IDS].sort());
     for (const e of TUTORIAL_EXTRAS) expect(wordCount(e.title), e.id).toBeLessThanOrEqual(4);
   });
 
-  it('the core run is short: at most 18 steps that ask something of the player', () => {
-    const steps = TUTORIAL_CORE.flatMap(id => [...tutorialLessons(at(id))])
-      .filter(l => !l.autoDiscard && l.action !== 'Opponent');
-    expect(steps.length).toBeLessThanOrEqual(18);
-  });
-
-  it('moves through the core in order and ends after the free turn', () => {
-    expect(nextTutorialChapter(at('goal'), 'core')).toBe(at('turn'));
-    expect(nextTutorialChapter(at('bloom'), 'core')).toBe(at('cut'));
-    expect(nextTutorialChapter(at('cut'), 'core')).toBe(at('win'));
-    expect(nextTutorialChapter(at('win'), 'core')).toBe(at('free'));
-    expect(nextTutorialChapter(at('free'), 'core')).toBeNull();
-    expect(previousTutorialChapter(at('cut'), 'core')).toBe(at('bloom'));
-    expect(previousTutorialChapter(at('goal'), 'core')).toBeNull();
-  });
-
   it('an extra lesson plays only its own chapters, then ends', () => {
-    expect(nextTutorialChapter(at('strengthen'), 'strengthen')).toBeNull();
+    expect(nextTutorialChapter(at('strengthen'), 'grow')).toBe(at('cut'));
+    expect(nextTutorialChapter(at('cut'), 'grow')).toBeNull();
     expect(nextTutorialChapter(at('bomb'), 'bombs')).toBe(at('blast'));
     expect(nextTutorialChapter(at('blast'), 'bombs')).toBeNull();
-    expect(previousTutorialChapter(at('blast'), 'bombs')).toBe(at('bomb'));
     expect(previousTutorialChapter(at('bomb'), 'bombs')).toBeNull();
     expect(nextTutorialChapter(at('skip'), 'last-round')).toBe(at('final'));
   });
@@ -62,18 +83,14 @@ describe('tutorial tracks', () => {
     expect(nextTutorialChapter(at('bloom'), 'bloom')).toBeNull();
   });
 
-  it('finds the track for any chapter (links and old saves)', () => {
+  it('a chapter opened directly plays in the full tutorial when it is part of it', () => {
     expect(tutorialTrackFor(at('turn'))).toBe('core');
-    expect(tutorialTrackFor(at('free'))).toBe('core');
-    expect(tutorialTrackFor(at('strengthen'))).toBe('strengthen');
-    expect(tutorialTrackFor(at('blast'))).toBe('bombs');
-    expect(tutorialTrackFor(at('buttons'))).toBe('buttons');
+    expect(tutorialTrackFor(at('blast'))).toBe('core');
+    expect(tutorialTrackFor(at('buttons'))).toBe('core');
+    expect(tutorialTrackFor(at('skip'))).toBe('last-round');
+    expect(tutorialTrackFor(at('bloom'))).toBe('bloom');
     expect([...tutorialTrackChapters(undefined)]).toEqual([...TUTORIAL_CORE]);
     expect([...tutorialTrackChapters('nonsense')]).toEqual([...TUTORIAL_CORE]);
-  });
-
-  it('the core shows one Bloom (the examples show the run)', () => {
-    expect(tutorialLessons(at('bloom')).filter(l => l.action === 'Bloom')).toHaveLength(1);
   });
 });
 
@@ -85,9 +102,8 @@ describe('tutorial words', () => {
     expect(text()).not.toMatch(/most tiles/i);
   });
 
-  it('says which tiles are whose', () => {
-    expect(lesson('goal-mine').why).toMatch(/green/i);
-    expect(lesson('goal-theirs').why).toMatch(/red/i);
+  it('never names tile colours', () => {
+    expect(text()).not.toMatch(/\b(green|red|colou?rs?)\b/i);
   });
 
   it('says the card number becomes the tile strength when you first Grow', () => {
@@ -95,20 +111,27 @@ describe('tutorial words', () => {
     expect(lesson('grow').why).toMatch(/strength/i);
   });
 
-  it('says how to take an enemy tile', () => {
+  it('Strengthen, take over and Bomb are all ways to use your Grow', () => {
+    expect(lesson('strength').why).toMatch(/higher/i);
     expect(lesson('cut').why).toMatch(/higher/i);
     expect(lesson('cut').why).toMatch(/take/i);
+    expect(lesson('bomb').why).toMatch(/Grow/);
+  });
+
+  it('Blast is an extra move like Bloom', () => {
+    expect(lesson('mega').why).toMatch(/Bloom/);
+    expect(lesson('mega').why).toMatch(/extra/i);
   });
 
   it('scores in points, gold counting 2', () => {
-    expect(lesson('gold').why).toMatch(/2 points/i);
-    expect(lesson('win-explain').why).toMatch(/points/i);
-    expect(lesson('btn-score').why).toMatch(/points/i);
+    expect(lesson('rock-gold').why).toMatch(/2 points/i);
+    expect(lesson('rock-gold').why).toMatch(/points wins/i);
   });
 
   it('names the real buttons', () => {
     expect(lesson('skip').why).toContain('»');
-    expect(lesson('btn-display').why).not.toMatch(/respect/i);
+    expect(lesson('grow-done').why).toContain('»');
+    expect(lesson('grow-done').why).toMatch(/skip/i);
     expect(lesson('btn-display').why).toMatch(/GROW|THROW|DRAW/);
     expect(lesson('btn-history').instruction).toMatch(/BULB/);
   });

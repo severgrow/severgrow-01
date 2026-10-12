@@ -221,3 +221,6 @@ Remove tile ownership symbols in Test2; existing Forest/Volcano artwork, network
 
 ### 2026-10-12 — Tutorial v3: core run and extra lessons
 The owner approved splitting the tutorial: a short core run (goal, turn, one Bloom, take over, win, free turn) plus separate extra lessons (Strengthen, Bomb & Blast, Throw pile, Skip & last round, Buttons); one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points). Details in docs/TUTORIAL-PLAN.md.
+
+### 2026-10-12 — Tutorial v3: one tutorial, How to menu
+The owner asked for the whole game in one tutorial of about 15–16 steps: Strengthen, take over and Bomb taught with Grow, Blast with Bloom, the Throw pile on a Draw, Skip with Grow (the » step), the buttons after the free turn; the last round only as a separate lesson. No tile colours in the copy. The main menu is New game, How to, Settings; How to holds Full tutorial and the separate lessons. This supersedes the core run / More lessons split above.

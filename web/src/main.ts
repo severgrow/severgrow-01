@@ -1266,8 +1266,6 @@ function exitTutorial() {
 
 /** Saves from before the core run / extra lessons split restart their chapter (see continueGame). */
 const TUTORIAL_VERSION = 3 as const;
-/** Set once the core run is finished: the menu then offers the extra lessons. */
-const LESSONS_KEY = 'severgrow.lessons.v1';
 
 function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   clearTutorialTimers();
@@ -1298,20 +1296,13 @@ function startExtraLesson(id: string) {
   if (extra) startTutorial(TUTORIAL_CHAPTER_IDS.indexOf(extra.chapters[0]!), extra.id);
 }
 
-/** Once the core run is done, the menu's Tutorial button becomes "More tips". */
-const tipsUnlocked = () => !!store.get(LESSONS_KEY);
-
 /**
- * The menu's tutorial button: "Tutorial" (starts the core run) until the core run is done, then
- * "More tips", which unfolds the full tutorial and the extra lessons. `open` unfolds the list
- * (also from the first game's game-over link).
+ * The menu's "How to" button unfolds the full tutorial and the separate lessons. `open` unfolds
+ * the list (also from the first game's game-over link).
  */
 function syncTutorialMenu(open = false) {
   const btn = $('menu-tutorial');
   const list = $('menu-lessons-list');
-  const label = tipsUnlocked() ? 'More tips' : 'Tutorial';
-  btn.textContent = label;
-  btn.setAttribute('aria-label', label);
   if (!list.childElementCount) {
     const items = [{ id: 'core', title: 'Full tutorial' }, ...TUTORIAL_EXTRAS];
     list.replaceChildren(...items.map((e, i) => {
@@ -1329,9 +1320,8 @@ function syncTutorialMenu(open = false) {
   btn.setAttribute('aria-expanded', String(open));
 }
 
-function completeTutorial(track = 'core') {
+function completeTutorial() {
   const my = epoch;
-  if (track === 'core') store.set(LESSONS_KEY, '1');
   releaseTutorialLock();
   smartCockpit?.event({ message: 'NICE.', priority: 97, duration: 850, mode: 'green' });
   window.setTimeout(() => { if (my === epoch) smartCockpit?.event({ message: '点', priority: 98, duration: 650, mode: 'amber' }); }, 900);
@@ -1342,14 +1332,12 @@ function completeTutorial(track = 'core') {
     tutorialGate?.clear();
     glassSurface?.hide();
     showScreen('menu');
-    // The first run is done: offer the short extra lessons right away.
-    if (track === 'core') syncTutorialMenu(true);
   }, 1750);
 }
 
-/** The fade through black while the tutorial swaps the board: in, hold, out (ms). */
-const CURTAIN_IN = 220;
-const CURTAIN_OUT = 360;
+/** The fade through black while the tutorial swaps the board: in, out (ms). */
+const CURTAIN_IN = 160;
+const CURTAIN_OUT = 240;
 
 /**
  * Runs `swap` (a new chapter or position on the board) behind a short fade through black, so
@@ -1379,7 +1367,7 @@ function tutorialCurtain(swap: () => void) {
 
 /** Next chapter of the track, or the end of the track (null). */
 function advanceTutorialChapter(chapter: number | null, track = 'core') {
-  if (chapter === null || chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial(track);
+  if (chapter === null || chapter >= TUTORIAL_CHAPTER_COUNT) return completeTutorial();
   clearTutorialTimers();
   tutorialGate?.set(allowedSelectorsForLesson(null, '', 'busy'), 'busy');
   tutorialCurtain(() => {
@@ -1567,7 +1555,8 @@ function tutorialAfterPlay(p: Played, by: Player) {
       progress.step++;
       tutorialTransitionPending = true;
       const my = epoch;
-      void idle().then(() => { if (my === epoch) completeTutorial(progress.track); });
+      // the free turn is done: on to the rest of the track (the button tour), or the end
+      void idle().then(() => { if (my === epoch) advanceTutorialChapter(nextTutorialChapter(progress.chapter, progress.track), progress.track); });
     }
     return;
   }
@@ -3922,7 +3911,7 @@ function renderTutorial() {
       ? (lesson.cta || 'NEXT')
       : (cta || 'NEXT');
     const nextBlink = lesson.action === 'Next';
-    const bloomDemo = lesson.id === 'bloom-explain';
+    const bloomDemo = !!lesson.bloomDemo;
     if (lockedBusy) {
       glassSurface.tutorial(tutorialStatus ?? title, progress.chapter, [], {
         shape: 'none',
@@ -5085,10 +5074,8 @@ bind('menu-tutorial', () => {
     startGame(TUTORIAL_SEED,7);
     return;
   }
-  // after the core run the button is "More tips": it unfolds the lessons instead
-  if (tipsUnlocked()) return syncTutorialMenu($('menu-lessons-list').hidden !== false);
-  if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
-  startTutorial();
+  // How to: unfold (or fold) the full tutorial and the separate lessons
+  syncTutorialMenu($('menu-lessons-list').hidden !== false);
 });
 bind('menu-settings', () => sheet('sheet-settings'));
 bind('go-lessons', () => { showScreen('menu'); syncTutorialMenu(true); });

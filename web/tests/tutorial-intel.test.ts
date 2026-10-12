@@ -18,9 +18,9 @@ const intended = (state: State, chapter: number, step: number): Action => {
 
 describe('authored tutorial uses the current engine', () => {
   it('introduces turn rhythm, impassable rock and double-scoring gold after the first Grow', () => {
-    expect(tutorialLessons(0).map(lesson => lesson.id)).toEqual(['goal-mine', 'goal-theirs', 'goal-turn-rhythm']);
+    expect(tutorialLessons(0).map(lesson => lesson.id)).toEqual(['goal-mine', 'goal-turn-rhythm']);
     const turn = TUTORIAL_CHAPTER_IDS.indexOf('turn');
-    expect(tutorialLessons(turn).slice(0, 5).map(lesson => lesson.id)).toEqual(['draw', 'grow', 'rock', 'gold', 'connection']);
+    expect(tutorialLessons(turn).slice(0, 5).map(lesson => lesson.id)).toEqual(['draw', 'grow', 'rock-gold', 'grow-done', 'throw']);
     const state = tutorialChapter(turn);
     expect(state.terrain['-2,0']).toBe('rock');
     expect(state.terrain['0,0']).toBe('rich');
@@ -30,13 +30,13 @@ describe('authored tutorial uses the current engine', () => {
     expect(score(withGold, 0) - score(state, 0)).toBe(2);
   });
 
-  it('keeps only four Throw lessons requiring another player tap', () => {
+  it('keeps only three Throw lessons requiring another player tap', () => {
     const throws = Array.from({ length: TUTORIAL_CHAPTER_COUNT }, (_, chapter) => tutorialLessons(chapter))
       .flat().filter(lesson => lesson.action === 'Discard');
-    // one Bloom in the core run now (the examples show the run), so one routine throw fewer
-    expect(throws).toHaveLength(9);
+    // Strengthen, take over, Bomb, Blast and Bloom on the Throw pile end on their move: no routine throws
+    expect(throws).toHaveLength(4);
     expect(throws.filter(lesson => !lesson.autoDiscard).map(lesson => lesson.id))
-      .toEqual(['throw', 'skip-throw', 'discard-throw', 'final-throw']);
+      .toEqual(['throw', 'skip-throw', 'final-throw']);
   });
   it('offers a legal action at every guided step without changing card identities', () => {
     expect(TUTORIAL_CHAPTER_COUNT).toBe(13);
@@ -136,7 +136,10 @@ describe('Match Intel and replay boundaries', () => {
     const base = tutorialChapter(turn);
     const live = new Session(base, 0, [], base);
     let state = base;
-    for (let step = 0; step < 4; step++) {
+    // draw, grow, » to Throw, throw (the Next explainers between them play nothing)
+    const upToThrow = tutorialLessons(turn).findIndex(lesson => lesson.id === 'throw');
+    for (let step = 0; step <= upToThrow; step++) {
+      if (tutorialLessons(turn)[step]!.action === 'Next') continue;
       const action = intended(state, turn, step);
       expect(live.play(action)).not.toBeNull();
       state = live.state;

@@ -16,7 +16,8 @@ const state = () => page.evaluate(() => (window as any).__severgrow.state() as S
 const waitReady = () => page.waitForFunction(() => !!(window as any).__severgrow && !(window as any).__severgrow.busy(), undefined, { timeout: 15000 });
 const waitStep = (chapter: number, step: number) => page.waitForFunction(({ chapter, step }) => {
   const p = (window as any).__severgrow?.tutorial();
-  return !!p && (p.chapter > chapter || p.chapter === chapter && p.step > step);
+  // the tutorial's chapter order is not the chapter numbers' order (Bloom on the Throw pile comes before Blast)
+  return !!p && (p.chapter !== chapter || p.step > step);
 }, { chapter, step }, { timeout: 25000 });
 try {
   await page.addInitScript(reduced => localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ speed: 'fast', reduceMotion: reduced, sound: false, music: false, coach: false, eyeCandy: !reduced })), reducedMotion);
@@ -75,6 +76,12 @@ try {
   assert.equal(s.sproutsThisTurn, 1, 'free turn reached Throw after its Grow');
   await tap('#hand .card');
   await tap('#hand .card.lifted');
+  // the free turn ends in the short button tour (UNDO, BULB, DISPLAY), then the menu
+  for (const title of ['UNDO', 'BULB', 'DISPLAY']) {
+    await page.waitForFunction(t => document.querySelector('#futasaku-glass .glass-copy')?.textContent === t, title, { timeout: 15000 });
+    await page.waitForSelector('#futasaku-glass [data-tut="next"]');
+    await tap('#futasaku-glass [data-tut="next"]');
+  }
   await page.waitForFunction(() => !document.getElementById('menu')!.hidden, undefined, { timeout: 15000 });
   for (const [width, height] of [[320, 568], [360, 640], [390, 844], [430, 932], [844, 390], [900, 700], [1280, 800], [1920, 1080]] as const) {
     await page.setViewportSize({ width, height });

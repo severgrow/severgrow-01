@@ -1,14 +1,17 @@
 # FUTASAKU tutorial "Pro" overhaul — plan
 
-> **Current structure (tutorial v3, 2026-10).** The 13 chapters are now played in tracks
-> (`TUTORIAL_CORE`, `TUTORIAL_EXTRAS` in `web/src/logic/tutorial-script.ts`):
-> - **Tutorial** (core run, 18 steps): goal → your turn → one Bloom → take over / cut → how you win → a free turn
->   whose glass keeps one line for each step (Draw → Grow → Throw).
-> - **More lessons**, each played on its own and back to the menu: Strengthen · Bomb & Blast · Throw pile ·
->   Skip & last round · Buttons. Offered in the menu once the core run or a first game is done, after the first
->   game, and in How to play.
-> - One word list in all tutorial copy: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
-> - Saves from tutorial v2 restart their chapter (steps were trimmed).
+> **Current structure (tutorial v3, 2026-10).** `TUTORIAL_CORE` and `TUTORIAL_EXTRAS` in
+> `web/src/logic/tutorial-script.ts`:
+> - **Full tutorial** (16 steps to the free turn, then a 3-button tour): your home, each turn, Draw, Grow
+>   (the card number is the tile strength), rock and gold (points), » to go on to Throw (also skips Grow),
+>   Throw, their turn; then the other uses of Grow: Strengthen, take over, Bomb; then Bloom (examples on a
+>   glass panel) with a Throw pile Draw, and Blast as Bloom's twin; then close the ring to win, a free turn
+>   with one line per step, and the Undo, Bulb and Display buttons.
+> - **Menu:** New game, How to, Settings (Continue when there is a saved game). How to unfolds Full tutorial
+>   and the separate lessons: Strengthen, Bomb & Blast, Bloom, Skip & last round, Buttons.
+> - Board changes in the tutorial fade through black (160ms in, 240ms out).
+> - One word list in all tutorial copy: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points. No tile colours.
+> - Saves from tutorial v2 restart their chapter.
 >
 > The plan below is the earlier overhaul, kept for the record.
 
