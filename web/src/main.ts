@@ -5553,23 +5553,55 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
 
-// Phase 4: online lobby (hidden unless VITE_DUEL_API_URL is set at build time).
-void import('./online/lobby-ui.js').then((m) => {
-  let reopenHub: (() => void) | null = null;
+// Phase 4–5: online lobby + duel HUD shell (full board wiring continues in Phase 5).
+void import('./online/lobby-ui.js').then(async (m) => {
+  const { createOnlineDriver, duelUiFromSnapshot, renderDuelHud } = await import('./online/index.js');
+  const { DuelClient, browserStorage } = await import('../../server/src/client.js');
+  const { duelApiUrl } = await import('./online/config.js');
+  let onlineDriver: ReturnType<typeof createOnlineDriver> | null = null;
+
+  const paintOnlineHud = () => {
+    if (!onlineDriver) return;
+    const hud = document.getElementById('duel-hud');
+    const ui = duelUiFromSnapshot(onlineDriver.snapshot(), onlineDriver.draft().canUndo());
+    renderDuelHud(hud, ui);
+    const you = document.getElementById('score-you-label');
+    const bot = document.getElementById('score-bot-label');
+    if (you) you.textContent = 'Me';
+    if (bot) bot.textContent = 'Opponent';
+    const sy = document.getElementById('score-you');
+    const sb = document.getElementById('score-bot');
+    if (sy) sy.textContent = String(ui.scoreMe);
+    if (sb) sb.textContent = String(ui.scoreOpp);
+  };
+
   const lobby = m.installOnlineLobby({
-    showMenu: () => showScreen('menu'),
-    openDuel: () => {
-      // Phase 5 wires the duel screen; keep a quiet placeholder for now.
-      const n = document.getElementById('online-hub-notice');
-      if (n) {
-        void import('../../src/strings.js').then((s) => {
-          n.textContent = s.ONLINE.openDuelSoon;
-        });
-      }
-      reopenHub?.();
+    showMenu: () => {
+      onlineDriver?.stop();
+      onlineDriver = null;
+      const hud = document.getElementById('duel-hud');
+      if (hud) hud.hidden = true;
+      showScreen('menu');
+    },
+    openDuel: ({ matchId, token, view: player }) => {
+      const api = duelApiUrl();
+      if (!api) return;
+      onlineDriver?.stop();
+      const client = new DuelClient({ baseUrl: api, storage: browserStorage() });
+      // `view` from the lobby is the full MatchViewPayload (create/join/getState).
+      onlineDriver = createOnlineDriver({
+        client,
+        token,
+        matchId,
+        initial: player,
+        onChange: () => paintOnlineHud(),
+      });
+      void onlineDriver.start();
+      client.saveSession({ token, matchId, seat: player.seat });
+      showScreen('game');
+      paintOnlineHud();
     },
   });
-  reopenHub = () => void lobby.openHub();
   void lobby.handleBootHash();
 });
 

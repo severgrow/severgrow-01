@@ -73,6 +73,12 @@ export type { LobbyUiHooks, OnlineLobbyController } from './lobby-ui.js';
 
 export { ONLINE_CSS } from './online-css.js';
 
+export { presenceWord, deadlineTone, turnWord, fillDuelHud } from './duel-hud.js';
+export type { DuelHudModel } from './duel-hud.js';
+
+export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-bridge.js';
+export type { DuelUiModel } from './duel-bridge.js';
+
 export type {
   ConnectionStatus,
   PresenceStatus,

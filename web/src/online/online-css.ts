@@ -142,4 +142,33 @@ export const ONLINE_CSS = `
   gap: 0.45rem;
   margin-top: 0.4rem;
 }
+.duel-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  min-height: 36px;
+  background: color-mix(in srgb, #161a16 92%, #000);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.duel-hud [data-duel-presence]::before {
+  content: '';
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+  background: #6a7468;
+}
+.duel-hud [data-duel-presence][data-presence="online"]::before { background: #8fbf6a; }
+.duel-hud [data-duel-presence][data-presence="away"]::before { background: #c9a35a; }
+.duel-hud .duel-deadline[data-tone="amber"] { color: #d4a24a; }
+.duel-hud .duel-deadline[data-tone="red"] { color: #e07a5f; }
+.duel-hud .duel-notice {
+  margin: 0;
+  flex-basis: 100%;
+  color: #e2c48a;
+}
 `;

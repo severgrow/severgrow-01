@@ -175,7 +175,7 @@
       <header class="hud">
         <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
         <div class="score you">
-          <span class="who">You</span>
+          <span class="who" id="score-you-label">You</span>
           <span class="mark you" aria-hidden="true"></span>
           <b id="score-you" class="num" aria-label="Your score">0</b>
         </div>
@@ -183,10 +183,17 @@
         <div class="score bot" title="Opponent">
           <b id="score-bot" class="num" aria-label="Opponent score">0</b>
           <span class="mark bot" aria-hidden="true"></span>
-          <span class="who" data-short="opp">Opponent</span>
+          <span class="who" data-short="opp" id="score-bot-label">Opponent</span>
         </div>
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
+      <div id="duel-hud" class="duel-hud" hidden>
+        <span class="duel-opp"><b data-duel-opponent></b> <i data-duel-presence data-presence="unknown"></i></span>
+        <span data-duel-turn></span>
+        <span class="duel-deadline" data-duel-deadline data-tone="ok"></span>
+        <p class="duel-notice" data-duel-notice hidden></p>
+        <button id="duel-resign" class="btn ghost small" type="button" hidden>Resign</button>
+      </div>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>
 
