@@ -63,22 +63,26 @@ const rowCount = async (sql: string, values: readonly unknown[] = []): Promise<n
   return Number(rows[0]?.n ?? 0);
 };
 
-suite('real database: schema and migration process', () => {
-  beforeAll(() => {
-    pool = poolFromUrl(DATABASE_URL, { max: 8 });
-    service = new MatchService({ storage: postgresStorage(pool), config: DEFAULT_SERVER_CONFIG });
-  });
+// File-scope hooks: the connection is opened once and every suite below shares it. Guarded so
+// nothing happens when DATABASE_URL is absent (the suites are skipped in that case).
+beforeAll(() => {
+  if (!enabled) return;
+  pool = poolFromUrl(DATABASE_URL, { max: 8 });
+  service = new MatchService({ storage: postgresStorage(pool), config: DEFAULT_SERVER_CONFIG });
+});
 
-  afterAll(async () => {
+afterAll(async () => {
+  if (!enabled || pool === undefined) return;
+  try {
     // Remove everything this run created (matches cascade to participants and moves).
-    try {
-      if (MATCHES.length > 0) await pool.query('delete from matches where id = any($1::uuid[])', [MATCHES]);
-      if (PLAYERS.length > 0) await pool.query('delete from players where id = any($1::uuid[])', [PLAYERS]);
-    } finally {
-      await (pool as unknown as { end?: () => Promise<void> }).end?.();
-    }
-  });
+    if (MATCHES.length > 0) await pool.query('delete from matches where id = any($1::uuid[])', [MATCHES]);
+    if (PLAYERS.length > 0) await pool.query('delete from players where id = any($1::uuid[])', [PLAYERS]);
+  } finally {
+    await (pool as unknown as { end?: () => Promise<void> }).end?.();
+  }
+});
 
+suite('real database: schema and migration process', () => {
   it('connects and reports the server version', async () => {
     const { rows } = await pool.query('select version() as v');
     expect(String(rows[0]?.v)).toMatch(/PostgreSQL/);

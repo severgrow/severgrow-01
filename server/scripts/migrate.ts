@@ -64,8 +64,17 @@ const appliedMap = async (client: PgClient | PgPool): Promise<Map<string, string
 
 export type MigrateResult = { applied: string[]; skipped: string[]; pending: string[] };
 
-export const migrate = async (pool: PgPool, now: () => number = () => Date.now(), dryRun = false): Promise<MigrateResult> => {
-  const migrations = loadMigrations();
+/**
+ * Applies every pending migration in order. `dir` defaults to the real migrations folder; tests
+ * pass a temporary one. `now` is injectable so `applied_at` is deterministic under test.
+ */
+export const migrate = async (
+  pool: PgPool,
+  now: () => number = () => Date.now(),
+  dryRun = false,
+  dir: string = MIGRATIONS_DIR,
+): Promise<MigrateResult> => {
+  const migrations = loadMigrations(dir);
   await ensureTable(pool);
   const applied = await appliedMap(pool);
 
