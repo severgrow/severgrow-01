@@ -1,7 +1,7 @@
 # FUTASAKU 0.5 — Online Duels plan (Phase 0)
 
 **Branch:** `futa0.5-online` (from `futa0.5-supabase-verify`, plus one merge of `futa0.4` tutorial polish).  
-**Status:** Phase 0 decided and committed. Phase 1 in progress: Edge Function `duel` is live as a health stub; full MatchService bundle is built in-repo and waits on the `DATABASE_URL` Edge secret + CLI/MCP redeploy (see `docs/DEPLOY-ONLINE.md`). Hosting choice: **Supabase Edge Functions**.  
+**Status:** Phase 0 done. Phase 1 green (2026-10-12): full `duel` Edge API live, health + `?db=1` + deployed smoke passed; keep-alive workflow in repo (see `docs/DEPLOY-ONLINE.md`). Hosting: **Supabase Edge Functions**. Next: Phase 2.  
 **Rules:** the browser and the server keep using the **same** `src/engine/`. No rule changes. Test channel only. The game is always called **FUTASAKU**.
 
 This document is in plain English for the owner. Code details live in the phase commits.

@@ -1,0 +1,50 @@
+# Keep the free Supabase project awake and finish overdue matches (P-2).
+#
+# Runs every 2 days. GitHub disables scheduled workflows after ~60 days without
+# any repository activity — push a commit or re-enable under Actions if that happens.
+#
+# Required repository Variable (Settings → Secrets and variables → Actions → Variables):
+#   FUTA05_API_URL  e.g. https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel
+name: futa05-keepalive
+
+on:
+  schedule:
+    - cron: '17 6 */2 * *' # every 2 days around 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check with database round-trip
+        env:
+          API_URL: ${{ vars.FUTA05_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_URL:-}" ]; then
+            echo "FUTA05_API_URL repository variable is not set."
+            echo "GitHub → Settings → Secrets and variables → Actions → Variables → New:"
+            echo "  Name: FUTA05_API_URL"
+            echo "  Value: https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel"
+            exit 1
+          fi
+          base="${API_URL%/}"
+          echo "GET ${base}/v1/health?db=1"
+          code=$(curl -sS -o /tmp/health.json -w '%{http_code}' "${base}/v1/health?db=1")
+          echo "status=${code}"
+          cat /tmp/health.json
+          echo
+          test "$code" = "200"
+          python3 - <<'PY'
+          import json
+          body = json.load(open("/tmp/health.json"))
+          assert body.get("ok") is True, body
+          assert "rulesVersion" in body, body
+          assert "serverNow" in body, body
+          db = body.get("db")
+          if isinstance(db, dict) and db.get("ok") is False:
+              raise SystemExit(f"database ping failed: {db}")
+          if body.get("stub") is True:
+              print("WARN: Edge Function is still the Phase-1 stub (full API not deployed yet).")
+          print("keepalive ok")
+          PY
