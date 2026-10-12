@@ -400,8 +400,6 @@ export const createPerspective = (options: PerspectiveOptions): Perspective => {
         deck: [...state.deck],
         discard: [...state.discard],
         turnPlayer: toDisplayPlayer(state.turnPlayer),
-        startingPlayer:
-          state.startingPlayer === undefined ? undefined : toDisplayPlayer(state.startingPlayer),
         actor: toDisplayPlayer(state.actor),
         strengthenUsed,
         fruitKnown,
@@ -418,6 +416,9 @@ export const createPerspective = (options: PerspectiveOptions): Perspective => {
         lastResolution: state.lastResolution
           ? mapResolution(state.lastResolution, mapC, toDisplayPlayer)
           : null,
+        ...(state.startingPlayer !== undefined
+          ? { startingPlayer: toDisplayPlayer(state.startingPlayer) }
+          : {}),
       };
     },
 
