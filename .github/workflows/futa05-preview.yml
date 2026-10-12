@@ -1,0 +1,48 @@
+# Build FUTASAKU 0.5 online preview dist (Find Opponent on). Does not deploy Pages by itself —
+# compose into the live site with scripts/compose-futa05-preview.mjs so Main/futa0.4 stay intact.
+name: futa05-preview-build
+
+on:
+  push:
+    branches: [futa0.5-online]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: futa05-preview-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install and check
+        run: |
+          npm ci
+          npm run typecheck
+          npx vitest run web/tests/duel-session.test.ts web/tests/find-opponent-flag.test.ts server/tests/phase6-hardening.test.ts server/tests/phase7-matchmaking.test.ts
+      - name: Build /futa0.5/ preview channel
+        env:
+          CHANNEL: futa05
+          VITE_FIND_OPPONENT: '1'
+          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$VITE_DUEL_API_URL" || { echo "Set Actions Variable VITE_DUEL_API_URL or FUTA05_API_URL"; exit 1; }
+          npm run web:build
+          node scripts/check-channel-assets.mjs || true
+          echo "${{ github.sha }}" > web/dist/BUILD_SHA
+      - uses: actions/upload-artifact@v4
+        with:
+          name: futa05-preview-dist
+          path: web/dist
+          retention-days: 14

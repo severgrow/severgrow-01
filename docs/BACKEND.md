@@ -187,6 +187,8 @@ is why the moves table *is* the revision history and the idempotency record.
 | `server/tests/migration.test.ts` | 6 tests: tables, RLS everywhere, hashed tokens, immutable fields, idempotency key |
 | `server/tests/phase6-hardening.test.ts` | Phase 6: leak-key audit, turn-gated Draw privacy, concurrent STALE_REVISION 409 + refetch, viewPayload load p95, short action burst |
 | `web/e2e/online-duel-two-browser.ts` | Phase 6: two Chromium contexts, local API + preview, create/join, Me/Opponent HUD, resign → finished on both |
+| `server/tests/phase7-matchmaking.test.ts` | Phase 7: open-queue create + pair; invite matches stay out of the pool |
+| `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
 `vitest.config.ts` loads `.env` when it exists, so the real-database suite **runs** locally; in CI
 there is no `.env`, so it skips and is pinned separately by `npm run server:db-test`. A manual smoke

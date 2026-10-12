@@ -107,6 +107,18 @@ Logs show method, path, status and duration only — never tokens or request bod
 | Anon key | Rarely needed; if rotated, update the GitHub Variable `VITE_SUPABASE_ANON_KEY` and redeploy the web preview. |
 | Guest player tokens | Not rotatable in bulk yet — each browser holds its own token (see Settings “another browser” link-code in later phases). |
 
+## Preview channel `/futa0.5/` (Phase 8)
+
+```sh
+CHANNEL=futa05 VITE_FIND_OPPONENT=1 \
+  VITE_DUEL_API_URL=https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel \
+  npm run web:build
+# Compose into an existing Pages site tree (keeps Main / futa0.4):
+node scripts/compose-futa05-preview.mjs site web/dist "$(git rev-parse HEAD)"
+```
+
+CI builds the dist on branch `futa0.5-online` via `.github/workflows/futa05-preview.yml` (artifact only — does not wipe other Pages routes). Find Opponent stays **off** on product `futa04` builds.
+
 ## Local development (unchanged)
 
 ```sh
