@@ -20,7 +20,7 @@ const buildStorage = (): { storage: Storage; description: string } => {
   return { storage: postgresStorage(poolFromUrl(url)), description: `postgres (${redactUrl(url)})` };
 };
 
-export const startServer = async (): Promise<void> => {
+export const startServer = async (options: { port?: number } = {}): Promise<{ port: number; storage: string; close: () => Promise<void> }> => {
   const config = {
     ...DEFAULT_SERVER_CONFIG,
     ...(process.env.CORS_ORIGIN ? { corsOrigin: process.env.CORS_ORIGIN } : {}),
@@ -29,13 +29,25 @@ export const startServer = async (): Promise<void> => {
   const service = new MatchService({ storage, config });
   const server = createHttpServer({ service, config, logger: (line) => console.log(line) });
 
-  const port = Number(process.env.PORT ?? 8787);
-  server.listen(port, () => {
-    console.log(`futasaku duel server listening on http://localhost:${port}`);
-    console.log(`  rules version: ${service.rulesVersion}`);
-    console.log(`  storage: ${description}`);
-  });
-  const shutdown = () => server.close(() => process.exit(0));
+  const port = options.port ?? Number(process.env.PORT ?? 8787);
+  await new Promise<void>((resolve) => server.listen(port, resolve));
+  const address = server.address();
+  const actualPort = address !== null && typeof address === 'object' ? address.port : port;
+  console.log(`futasaku duel server listening on http://localhost:${actualPort}`);
+  console.log(`  rules version: ${service.rulesVersion}`);
+  console.log(`  storage: ${description}`);
+
+  return {
+    port: actualPort,
+    storage: description,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+};
+
+/** A convenience for the CLI entry point: start, then stop on SIGINT/SIGTERM. */
+const startAndWait = async (): Promise<void> => {
+  const started = await startServer();
+  const shutdown = () => void started.close().then(() => process.exit(0));
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 };
@@ -51,7 +63,7 @@ const isEntryPoint = (): boolean => {
 };
 
 if (isEntryPoint()) {
-  void startServer().catch((error: unknown) => {
+  void startAndWait().catch((error: unknown) => {
     console.error(error);
     process.exit(1);
   });

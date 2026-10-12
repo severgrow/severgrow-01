@@ -1,0 +1,118 @@
+// One command that verifies everything against the configured database:
+//
+//   npm run server:verify
+//
+// It (1) applies the versioned migrations, (2) runs the real-database integration suite, and
+// (3) starts the server on a random port and runs the end-to-end smoke against it. It stops at the
+// first failure so a broken database is reported immediately rather than hidden.
+//
+// Requires DATABASE_URL in the environment or a git-ignored `.env`.
+import { spawn } from 'node:child_process';
+import { databaseUrlFromEnv, redactUrl } from '../src/storage/pg-pool.js';
+import { startServer } from '../src/index.js';
+import { DuelClient } from '../src/client.js';
+import type { FetchLike, KeyValue } from '../src/client.js';
+
+const run = (label: string, command: string, args: string[]): Promise<void> =>
+  new Promise((resolve, reject) => {
+    console.log(`\n=== ${label} ===`);
+    const child = spawn(command, args, { stdio: 'inherit', env: process.env });
+    child.on('error', reject);
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${label} exited with code ${code}`))));
+  });
+
+const memory = (): KeyValue => {
+  const map = new Map<string, string>();
+  return { get: (k) => map.get(k) ?? null, set: (k, v) => void map.set(k, v), remove: (k) => void map.delete(k) };
+};
+
+/** The same checks as server/scripts/smoke.ts, in-process, against a freshly started server. */
+const smoke = async (baseUrl: string): Promise<void> => {
+  const fetchImpl = globalThis.fetch as unknown as FetchLike;
+  const a = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
+  const b = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
+  let failures = 0;
+  const check = (name: string, ok: boolean, note = ''): void => {
+    console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
+    if (!ok) failures++;
+  };
+
+  const health = (await (await fetch(`${baseUrl}/v1/health`)).json()) as { rulesVersion?: string };
+  check('health reports the pinned rules version', typeof health.rulesVersion === 'string', health.rulesVersion);
+
+  const guestA = await a.createGuest('Verify A');
+  const guestB = await b.createGuest('Verify B');
+  check('two guests are created', guestA.ok && guestB.ok);
+
+  const created = await a.createMatch(guestA.token);
+  check('guest A creates a waiting match', created.match.status === 'waiting', created.match.inviteCode);
+  const joined = await b.joinMatch(guestB.token, created.match.inviteCode);
+  check('guest B joins by invite code', joined.match.status === 'active' && joined.player.seat === 1);
+
+  const matchId = created.match.matchId;
+  const viewA = (await a.getState(guestA.token, matchId)).player;
+  const viewB = (await b.getState(guestB.token, matchId)).player;
+  const hidden = (p: typeof viewA) => !Object.keys(p.view).some((k) => ['seed', 'deck', 'hands', 'history', 'fruitKnown'].includes(k));
+  check('both views hide the seed, deck and hands', hidden(viewA) && hidden(viewB));
+
+  const acting = viewA.legalActions.length > 0 ? { client: a, token: guestA.token, payload: viewA } : { client: b, token: guestB.token, payload: viewB };
+  const action = acting.payload.legalActions[0]!;
+  const submitted = await acting.client.submitAction(acting.token, matchId, {
+    expectedRevision: acting.payload.revision,
+    requestId: 'verify-move-1',
+    action,
+  });
+  check('a legal move is accepted and the revision advances', !submitted.replayed && submitted.player.revision === acting.payload.revision + 1);
+
+  const replay = await acting.client.submitAction(acting.token, matchId, { expectedRevision: acting.payload.revision, requestId: 'verify-move-1', action });
+  check('a duplicate request is applied exactly once', replay.replayed && replay.player.revision === submitted.player.revision);
+
+  const after = (await a.getState(guestA.token, matchId)).player;
+  check('the move is persisted (read back from the database)', after.revision === submitted.player.revision);
+
+  const resumed = await a.resume();
+  check('a refresh reconnects to the same revision', resumed?.player.revision === submitted.player.revision);
+
+  const outsider = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
+  const outsiderGuest = await outsider.createGuest();
+  const denied = await outsider
+    .getState(outsiderGuest.token, matchId)
+    .then(() => 'allowed')
+    .catch((e: unknown) => (e as { code?: string }).code ?? 'unknown');
+  check('an unrelated player is refused', denied === 'NOT_A_PARTICIPANT', String(denied));
+
+  if (failures > 0) throw new Error(`${failures} end-to-end check(s) failed`);
+  console.log('  all end-to-end checks passed');
+};
+
+const main = async (): Promise<void> => {
+  const url = databaseUrlFromEnv();
+  if (!url) {
+    console.error('DATABASE_URL is not set. Put it in .env (git-ignored) or the environment.');
+    process.exit(2);
+  }
+  console.log(`Verifying against ${redactUrl(url)}`);
+
+  await run('apply migrations', 'node', ['--env-file-if-exists=.env', '--import', 'tsx', 'server/scripts/migrate.ts']);
+  await run('real-database integration tests', 'node', [
+    '--env-file-if-exists=.env',
+    './node_modules/vitest/vitest.mjs',
+    'run',
+    'server/tests/postgres.integration.test.ts',
+  ]);
+
+  console.log('\n=== end-to-end smoke (in-process server) ===');
+  const started = await startServer({ port: 0 });
+  try {
+    await smoke(`http://127.0.0.1:${started.port}`);
+  } finally {
+    await started.close();
+  }
+
+  console.log('\nVERIFICATION PASSED');
+};
+
+await main().catch((error: unknown) => {
+  console.error(`\nVERIFICATION FAILED: ${String(error)}`);
+  process.exit(1);
+});
