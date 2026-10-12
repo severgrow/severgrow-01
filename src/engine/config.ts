@@ -28,6 +28,8 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   fruitRootCountsAsTouch: true,
   fruitUsesSprout: true,
   strengthTiebreak: true,
+  // Futasaku 0.4: the engine decides the starting seat from the match seed.
+  startingPlayerLottery: true,
   rotEnabled: false,
   knockEnabled: false,
   board: null,
@@ -65,6 +67,7 @@ const BOOLEAN_KEYS = [
   'fruitRootCountsAsTouch',
   'fruitUsesSprout',
   'strengthTiebreak',
+  'startingPlayerLottery',
   'rotEnabled',
   'knockEnabled',
   'reshuffleDiscard',

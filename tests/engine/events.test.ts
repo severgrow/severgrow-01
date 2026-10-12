@@ -10,8 +10,9 @@ import {
   newGame,
   replay,
 } from '../../src/engine/index.js';
-import type { Action, Event, RulesConfig, State, Tile } from '../../src/engine/index.js';
+import type { Action, Event, Player, RulesConfig, State, Tile } from '../../src/engine/index.js';
 import { LEGACY_V03 } from '../legacy.js';
+import { fixture } from '../helpers.js';
 
 /** Seeded random legal play that also records the action log. */
 const playLog = (seed: number, maxActions = 400, config: Partial<RulesConfig> = {}): { actions: Action[]; states: State[] } => {
@@ -88,6 +89,44 @@ describe('events (spec 12, step 18)', () => {
         }
       }
     }
+  });
+
+  it('a Sever event names the cut player (the victim), and their tiles are gone afterwards', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const { states } = playLog(seed);
+      for (let i = 1; i < states.length; i++) {
+        const before = states[i - 1]!;
+        const after = states[i]!;
+        for (const e of newEvents(before, after)) {
+          if (e.t !== 'Sever') continue;
+          for (const c of e.coords) {
+            expect(before.board[coordKey(c)]!.owner).toBe(e.player);
+            expect(after.board[coordKey(c)]).toBeNull();
+          }
+        }
+      }
+    }
+  });
+
+  it('a Strangle event names the surrounded player (the loser), not the winner', () => {
+    // A connected P1 network rings P0's root; it also reaches P1's own root so nothing is
+    // severed before the Strangle check. P1's first Grow completes the surround.
+    const net: Record<string, [Player, number]> = {
+      '1,-1': [1, 1], '0,0': [1, 1], '-1,1': [1, 1], '-1,2': [1, 1],
+      '-2,1': [1, 1], '-3,2': [1, 1], '-3,3': [1, 1], '-2,3': [1, 1],
+    };
+    const f = fixture({ tiles: net });
+    const g = newGame(11);
+    const cardP1 = g.hands[1].find((c) => c.suit !== null)!;
+    const s: State = {
+      ...g, board: f.board, terrain: f.terrain, hands: [g.hands[0], [cardP1]],
+      turnPlayer: 1, actor: 1, startingPlayer: 1, phase: 'ACT', sproutsThisTurn: 0,
+    };
+    const after = apply(s, { t: 'Sprout', card: cardP1.id, coord: { q: 2, r: -1 } });
+    expect(after.phase).toBe('GAME_OVER');
+    expect(after.result).toMatchObject({ reason: 'strangle', winner: 1 });
+    expect(after.lastResolution?.strangled).toBe(0);
+    expect(after.history!.filter((e) => e.t === 'Strangle')).toEqual([{ t: 'Strangle', player: 0 }]);
   });
 
   it('every board change can be explained from the events alone (gate 6)', () => {

@@ -53,7 +53,15 @@ Each turn is **Draw → Grow → Throw**.
 
 ## Who starts
 
-Always a **seeded lottery** at match start, shown in the Who-starts UI. It is **not** coupled to difficulty. Deterministic from the match seed via an independent PRNG stream (`web/src/logic/starter.ts`).
+The engine owns this. `startingPlayerFor(seed)` is a **seeded lottery**, shown in the Who-starts
+UI, **not** coupled to difficulty. `newMatch(seed, config)` builds the opening with the winning
+seat already set (`src/engine/match.ts`); the browser and `server-core` both use it, so the client
+and the verifier can never disagree. Archived rule versions set `startingPlayerLottery: false` and
+always start with player 0, so old saves and replays still verify.
+
+A match is reproducible from its **rules version + seed + config + starting-player result**:
+`matchSetup(seed, rulesVersion)` returns exactly that record, and `stateFromSetup` rebuilds the
+opening state from it.
 
 ---
 

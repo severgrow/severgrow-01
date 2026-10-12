@@ -29,8 +29,9 @@ describe('golden games', () => {
       expect(rest.config.board).toBeNull();
       expect(rest.config.reshuffleDiscard).toBe(false);
       // Newer config keys stay off under archived rules and are omitted from the frozen hash.
-      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, ...classicConfig } = rest.config;
+      const { board, reshuffleDiscard, deckFinalTurns, expandedBloom, strengthTiebreak, startingPlayerLottery, ...classicConfig } = rest.config;
       expect(strengthTiebreak).toBe(false);
+      expect(startingPlayerLottery).toBe(false);
       expect(stateHash({ ...rest, config: classicConfig })).toBe(g.stateHash);
       expect(stateHash(history)).toBe(g.historyHash);
     });

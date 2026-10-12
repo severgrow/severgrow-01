@@ -1,5 +1,5 @@
 // Helpers for the server-core tests: real games played by real bots.
-import { apply, newGame, viewFor } from '../../src/engine/index.js';
+import { apply, newMatch, viewFor } from '../../src/engine/index.js';
 import type { Action, RulesConfig, State } from '../../src/engine/index.js';
 import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
@@ -16,7 +16,7 @@ export const playLogged = (
   rules: Partial<RulesConfig> = {},
   choose: LevelChooser = chooseLevelAction,
 ): { actions: Action[]; end: State } => {
-  let s = newGame(seed, rules);
+  let s = newMatch(seed, rules);
   const actions: Action[] = [];
   while (s.phase !== 'GAME_OVER') {
     const level = s.actor === 0 ? humanLevel : botLevel;

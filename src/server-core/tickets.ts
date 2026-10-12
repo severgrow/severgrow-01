@@ -1,6 +1,6 @@
 // Game tickets and server-side verification: the whole game is replayed with the real
 // engine; the human's moves must be legal, the bot's must match the bot exactly.
-import { apply, legalActions, newGame, rulesConfig, viewFor } from '../engine/index.js';
+import { apply, legalActions, newMatch, rulesConfig, viewFor } from '../engine/index.js';
 import type { Action, State } from '../engine/index.js';
 import { LEVELS, botSeed } from '../bots/levels.js';
 import { botFor } from '../bots/versions.js';
@@ -35,7 +35,9 @@ export type Verified = { ok: true; scores: [number, number] } | Fail;
 
 /**
  * Replays `actions` for `ticket` with exactly the rules and bot versions stored on it, so
- * earlier games still verify after an update. The human is player 0 and moves first.
+ * earlier games still verify after an update. Player 0 is the human, player 1 the bot; the
+ * engine's match setup decides which of them moves first (the 0.4 lottery, or player 0 under
+ * archived rules), so the verifier can never disagree with the client about the first mover.
  */
 export const verifyGame = (ticket: Ticket, actions: Action[], now: number, cfg: WorldConfig = DEFAULT_WORLD_CONFIG): Verified => {
   const rules = rulesConfig(ticket.rulesVersion);
@@ -46,7 +48,7 @@ export const verifyGame = (ticket: Ticket, actions: Action[], now: number, cfg: 
   if (!LEVELS.includes(ticket.level)) return { ok: false, reason: 'Unknown bot level.' };
   if (!Array.isArray(actions)) return { ok: false, reason: 'The game log is not a list of moves.' };
   if (actions.length > cfg.maxLogLength) return { ok: false, reason: 'The game log is too long.' };
-  let s: State = newGame(ticket.seed, rules);
+  let s: State = newMatch(ticket.seed, rules);
   for (let i = 0; i < actions.length; i++) {
     const a = actions[i];
     if (s.phase === 'GAME_OVER') return { ok: false, reason: `Move ${i + 1} came after the game ended.` };

@@ -4,7 +4,7 @@ import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
+import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -70,7 +70,6 @@ import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
 import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
-import { opponentStartsFromSeed } from './logic/starter.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import {
@@ -1081,15 +1080,16 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
   store.set(SEEN_KEY, '1');
   gameLevel = level;
   // the test copy: the Lab's active experiment (none: the classic game)
-  const opening = newGame(seed, IS_TEST && lab ? lab.overrides() : {});
-  // Seeded lottery, independent of difficulty. Authored base is kept when the
-  // opponent starts so saves replay the same seat order.
-  const opponentStarts = IS_FUTA04 ? opponentStartsFromSeed(seed) : false;
+  const overrides = IS_TEST && lab ? lab.overrides() : {};
+  // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
+  // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
+  const opening = IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
+  const opponentStarts = opening.startingPlayer === BOT;
   if (IS_FUTA04) {
     showScreen('game');
     await runStarterLottery(opponentStarts);
   }
-  const state: State = opponentStarts ? { ...opening, startingPlayer: BOT, turnPlayer: BOT, actor: BOT } : opening;
+  const state: State = opening;
   log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.Label} goes first.` : 'You go first.'}`];
   beginSession(state, null, [], opponentStarts ? state : null);
   dealIn();

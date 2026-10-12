@@ -57,6 +57,12 @@ export type RulesConfig = {
   fruitRootCountsAsTouch: boolean;
   /** Futasaku 0.4: after equal scores, compare total tile strengths; equal → draw. */
   strengthTiebreak: boolean;
+  /**
+   * Futasaku 0.4: who moves first is a seeded lottery over the match seed, decided by the
+   * engine (`startingPlayerFor`/`newMatch`). Off for archived rules, whose recorded matches
+   * always started with player 0 and must keep replaying that way.
+   */
+  startingPlayerLottery: boolean;
   /** v0.4: parked rules switches. */
   rotEnabled: boolean;
   knockEnabled: boolean;

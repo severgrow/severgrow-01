@@ -48,9 +48,13 @@ export const publicIntelMoves = (view: View, history: readonly Event[], me = 0):
   const byId = new Map(createCards(view.config).map((card) => [card.id, card]));
   const out: IntelMove[] = [];
   for (const event of history) {
+    // `who` is the seat the event names. Most events name the actor (the drawer, grower, thrower,
+    // bomder). Sever and Strangle are the exception: the engine names the seat whose tiles were
+    // cut, or whose home was surrounded — the victim/loser. `opposite` is the attacker/winner.
     const who: 'you' | 'opp' = event.t === 'RotPick' ? (event.picker === me ? 'you' : 'opp')
       : 'player' in event ? (event.player === me ? 'you' : 'opp')
       : 'you';
+    const opposite: 'you' | 'opp' = who === 'you' ? 'opp' : 'you';
     switch (event.t) {
       case 'Draw':
         if (event.from === 'discard' && event.card !== undefined) {
@@ -80,10 +84,12 @@ export const publicIntelMoves = (view: View, history: readonly Event[], me = 0):
         out.push({ who, verb: 'THREW', detail: cardLabel(byId.get(event.card)) });
         break;
       case 'Sever':
-        out.push({ who, verb: 'CUT', detail: String(event.coords.length) });
+        // The event names the cut player; the beat belongs to whoever did the cutting.
+        out.push({ who: opposite, verb: 'CUT', detail: String(event.coords.length) });
         break;
       case 'Strangle':
-        out.push({ who, verb: 'WIN', detail: 'HOME' });
+        // The event names the loser. Both homes surrounded is a draw: nobody won, so no WIN beat.
+        if (view.result?.reason !== 'double_strangle') out.push({ who: opposite, verb: 'WIN', detail: 'HOME' });
         break;
       default:
         break;
@@ -100,7 +106,7 @@ export const matchIntel = (view: View, history: readonly Event[], opening: reado
     if (event.t === 'Bloom') blooms[event.player]++;
     else if (event.t === 'FruitCard') bombs[event.player]++;
     else if (event.t === 'MegaBomb') bombs[event.player] += 2;
-    else if (event.t === 'Sever') cuts[1 - event.player as 0 | 1] += event.coords.length;
+    else if (event.t === 'Sever') cuts[1 - event.player as 0 | 1] += event.coords.length; // the event names the victim; the cut is credited to the other seat
   }
   const discarded = publicDiscardHistory(view, history, opening);
   const bombsInHand = view.hand.filter((card) => card.suit === null).length;

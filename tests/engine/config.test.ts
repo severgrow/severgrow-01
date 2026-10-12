@@ -26,6 +26,7 @@ describe('DEFAULT_CONFIG', () => {
       fruitRootCountsAsTouch: true, // v0.6: my root counts as touching a Fruit target
       fruitUsesSprout: true, // v0.8: a Fruit card uses the turn's Sprout
       strengthTiebreak: true, // Futasaku 0.4: equal score → strengths → draw
+      startingPlayerLottery: true, // Futasaku 0.4: the engine picks the first seat from the seed
       rotEnabled: false,
       knockEnabled: false,
       board: null,

@@ -64,6 +64,7 @@ const stateWith = (tiles: Record<string, [Player, number]>, hand: [Suit, number]
 };
 const RUN: [Suit, number][] = [[0, 3], [0, 4], [0, 5]];
 const SET3: [Suit, number][] = [[0, 6], [1, 6], [2, 6]];
+const SET4: [Suit, number][] = [[0, 6], [1, 6], [2, 6], [3, 6]];
 /** The painting machine for the group made of these card numbers (a set or a run). */
 const comboOf = (s: State, ranks: number[]) => {
   const v = viewFor(s, 0);
@@ -135,6 +136,17 @@ describe('painting a set (one number)', () => {
     expect(begun).toEqual(['-2,1']);
     expect(paint(combo, [...begun, '-1,1', '0,1'])).toEqual(['-2,1', '-1,1', '0,1']);
     expect(paintMatch(combo, paint(combo, [...begun, '-1,1', '0,1']))).not.toBeNull();
+  });
+  it('a second stroke from a hex already painted keeps the shape (a Y of 4, browser ADVERSARIAL 6)', () => {
+    const four = stateWith({}, SET4);
+    const { combo: c4 } = comboOf(four, [6, 6, 6, 6]);
+    const three = paint(c4, ['-1,1', '0,1', '1,1']); // arm, hub, arm
+    expect(three).toEqual(['-1,1', '0,1', '1,1']);
+    // the hub is a legal start, but it is already in the shape: starting there must not reset it
+    expect(paintDragBegin(c4, three, '0,1')).toEqual(three);
+    const y = paintEnter(c4, paintDragBegin(c4, three, '0,1'), '0,2');
+    expect(y).toEqual(['-1,1', '0,1', '1,1', '0,2']);
+    expect(paintMatch(c4, y)).not.toBeNull();
   });
   it('tapping: tap to add, tap the last one to remove', () => {
     let shape = paintTap(combo, [], '-1,1');

@@ -282,10 +282,12 @@ export const paintEnter = (c: Combo, shape: readonly string[], key: string, reve
 };
 
 /**
- * Where a paint drag begins: a legal start hex always becomes the sole first tile (replacing
- * any prior first hex — including a classic auto-planted natural start), so dragging across
- * that hex cannot backtrack the path away. Empty Futa04 entry + a start under the finger
- * plants tile one here. A non-start down-hex still extends the existing shape when legal.
+ * Where a paint drag begins. A drag that starts on a hex already in the shape keeps that shape
+ * (a second stroke from a hub must extend the bloom, not reset it). Otherwise a legal start hex
+ * becomes the sole first tile, replacing any prior first hex — including a classic auto-planted
+ * natural start — so dragging across that hex cannot backtrack the path away. Empty Futa04 entry
+ * plus a start under the finger plants tile one here. A non-start down-hex extends the shape when
+ * legal.
  */
 export const paintDragBegin = (
   c: Combo,
@@ -294,9 +296,9 @@ export const paintDragBegin = (
   reverse = false,
 ): string[] => {
   if (!downKey) return [...shape];
+  if (shape.includes(downKey)) return [...shape];
   if (drawStarts(c, reverse).has(downKey)) return paintEnter(c, [], downKey, reverse);
-  if (!shape.includes(downKey)) return paintEnter(c, shape, downKey, reverse);
-  return [...shape];
+  return paintEnter(c, shape, downKey, reverse);
 };
 
 /** Tapping: tap to add (same rules), tap the last one to remove it. */

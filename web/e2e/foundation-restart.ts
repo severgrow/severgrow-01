@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { legalActions, startingPlayerFor, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
-import { opponentStartsFromSeed } from '../src/logic/starter.js';
 
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4201, strictPort: true }, logLevel: 'silent' });
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM ?? '/usr/bin/chromium', args: ['--no-sandbox'] });
@@ -53,8 +52,8 @@ try {
   // New Futasaku matches can give the opening turn to the opponent. A restart
   // may already be animating that turn when this check runs.
   assert.notEqual(restarted.seed, grown.seed);
-  // Who-starts is a seeded lottery stream, not seed&1 (see web/src/logic/starter.ts).
-  assert.equal(restarted.startingPlayer, opponentStartsFromSeed(restarted.seed) ? 1 : 0);
+  // Who-starts is the engine's seeded lottery, not seed&1 (see src/engine/match.ts).
+  assert.equal(restarted.startingPlayer, startingPlayerFor(restarted.seed));
   assert.notEqual(restarted.phase, 'GAME_OVER');
   assert.equal(await page.locator('#score-you').textContent(), '0', 'old score animation cannot overwrite new game');
   assert.deepEqual(errors, []);

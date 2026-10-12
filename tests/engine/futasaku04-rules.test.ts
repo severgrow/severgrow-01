@@ -7,13 +7,13 @@ import {
   homeCoord,
   legalActions,
   newGame,
+  startingPlayerFor,
   strengthTotal,
   strengths,
   viewFor,
 } from '../../src/engine/index.js';
 import type { Action, Player, State } from '../../src/engine/index.js';
 import { DIFFICULTIES, chooseDifficultyLevel } from '../../web/src/logic/difficulty.js';
-import { opponentStartsFromSeed } from '../../web/src/logic/starter.js';
 
 const bomb = (id: number) => ({ id, suit: null, rank: 0 } as const);
 const card = (id: number, rank = 3) => ({ id, suit: 0 as const, rank });
@@ -136,19 +136,19 @@ describe('Futasaku 0.4 difficulty and starter lottery', () => {
     let bothSides = false;
     let mixedWithLevel = false;
     for (let seed = 0; seed < 64; seed++) {
-      const starts = opponentStartsFromSeed(seed);
+      const starts = startingPlayerFor(seed) === 1;
       const level = chooseDifficultyLevel('beginner', seed);
       expect(typeof starts).toBe('boolean');
-      expect(opponentStartsFromSeed(seed)).toBe(starts);
+      expect(startingPlayerFor(seed) === 1).toBe(starts);
       if (starts) bothSides = true;
       if (!starts) bothSides = bothSides || false;
       if (starts && level === 1) mixedWithLevel = true;
       if (!starts && level === 2) mixedWithLevel = true;
     }
-    expect(bothSides || opponentStartsFromSeed(1) !== opponentStartsFromSeed(2)).toBe(true);
+    expect(bothSides || startingPlayerFor(1) !== startingPlayerFor(2)).toBe(true);
     // Across seeds, harder Beginner level is not locked to opponent-first.
     expect(mixedWithLevel || chooseDifficultyLevel('beginner', 0) !== chooseDifficultyLevel('beginner', 1)).toBe(true);
-    const pairs = Array.from({ length: 32 }, (_, seed) => [opponentStartsFromSeed(seed), chooseDifficultyLevel('beginner', seed)] as const);
+    const pairs = Array.from({ length: 32 }, (_, seed) => [startingPlayerFor(seed) === 1, chooseDifficultyLevel('beginner', seed)] as const);
     expect(new Set(pairs.map(([a, b]) => `${a}:${b}`)).size).toBeGreaterThan(2);
   });
 

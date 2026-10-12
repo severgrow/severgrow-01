@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { legalActions, viewFor, newGame, apply } from '../../src/engine/index.js';
+import { legalActions, viewFor, newMatch, apply } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { BOT_VERSION, DEFAULT_WORLD_CONFIG, RULES_VERSION, finishGame, issueTicket, newAccount, verifyGame } from '../../src/server-core/index.js';
 import type { Ticket } from '../../src/server-core/index.js';
-import { losingGame, winningGame } from './helpers.js';
+import { losingGame, playLogged, winningGame } from './helpers.js';
 
 const H = 3600_000;
 const ticketFor = (seed: number, level: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9, now = 1_000_000): Ticket =>
@@ -45,7 +45,14 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
   });
 
   it('rejects a changed human action (not legal at that point)', () => {
-    const i = win.actions.findIndex((a, k) => k % 2 === 0 && a.t === 'Draw');
+    // Walk the real setup to find the human's first Draw (the seats' order comes from the lottery).
+    let s = newMatch(win.seed);
+    let i = -1;
+    for (const [k, a] of win.actions.entries()) {
+      if (s.actor === 0 && a.t === 'Draw') { i = k; break; }
+      s = apply(s, a);
+    }
+    expect(i).toBeGreaterThanOrEqual(0);
     const bad = [...win.actions];
     bad[i] = { t: 'EndAct' };
     expect(verifyGame(t, bad, 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/not allowed/) });
@@ -53,7 +60,7 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
 
   it("ADVERSARIAL 1: rejects a changed bot action (even a legal one)", () => {
     // Find a bot step with another legal option and swap it in.
-    let s = newGame(win.seed);
+    let s = newMatch(win.seed);
     let done = false;
     const bad: Action[] = [];
     for (const a of win.actions) {
@@ -96,6 +103,18 @@ describe('verifyGame: the whole game is replayed with the real engine and bot', 
     expect(verifyGame(t, [{ t: 'Nope' } as unknown as Action], 2_000_000).ok).toBe(false);
     expect(verifyGame(t, 'hello' as unknown as Action[], 2_000_000).ok).toBe(false);
     expect(verifyGame(t, Array(10_001).fill({ t: 'EndAct' }), 2_000_000)).toMatchObject({ ok: false, reason: expect.stringMatching(/too long/) });
+  });
+
+  it('accepts an honest win whichever seat the lottery gave the first turn', () => {
+    const seen = new Set<number>();
+    for (let seed = 1; seed <= 240 && seen.size < 2; seed++) {
+      const g = playLogged(seed, 4);
+      if (g.end.result?.winner !== 0) continue;
+      const start = newMatch(seed).startingPlayer ?? 0;
+      expect(verifyGame(ticketFor(seed, 4), g.actions, 2_000_000)).toEqual({ ok: true, scores: g.end.result.scores });
+      seen.add(start);
+    }
+    expect([...seen].sort()).toEqual([0, 1]);
   });
 });
 
