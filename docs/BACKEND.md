@@ -1,0 +1,169 @@
+# Futasaku 0.5 — backend foundation
+
+Status: **implemented and tested** (unit + real-HTTP integration). Not yet deployed, not yet wired
+into the game UI, and not yet run against a live database.
+
+This document says exactly what works, what is unfinished, and what must happen before real
+players are invited. The design follows [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) (the wire
+contract) and [`SERVER-CORE.md`](SERVER-CORE.md) (the world/reward boundary). The game itself is
+unchanged: the server imports the same `src/engine/` rules the browser uses.
+
+## What this is
+
+A minimal, server-authoritative backend for 1v1 duels, plus the first vertical slice:
+
+1. Guest A creates a match and gets a private invite code.
+2. Guest B joins with that code.
+3. Both receive their **own** player view (never the opponent's hand or the deck).
+4. The player to act submits a **semantic action** (the same `Action` the engine defines).
+5. The server validates it through the shared engine, commits it, and persists it.
+6. Both players receive their updated views.
+7. A page refresh reconnects from the stored session and reconstructs the match.
+
+## Layout
+
+```
+server/src/config.ts             server settings (rules version, limits, CORS)
+server/src/errors.ts             stable API error codes + HTTP statuses
+server/src/ids.ts                ids, bearer tokens (hashed at rest), invite codes, seeds
+server/src/protocol.ts           the wire format shared by server and client
+server/src/service.ts            identity, match lifecycle, the action pipeline
+server/src/http.ts               the HTTP routes (thin: parse → auth → service → JSON)
+server/src/client.ts             typed isomorphic client + local session (refresh/resume)
+server/src/storage/types.ts      the Storage port and its atomicity contract
+server/src/storage/memory.ts     in-memory adapter (dev/tests)
+server/src/storage/postgres.ts   Postgres/Supabase adapter (transactional)
+server/migrations/0001_init.sql  the schema, with Row Level Security
+server/tests/                    the test suite for all of the above
+```
+
+## Running it
+
+```sh
+npm run server:dev                                   # in-memory storage, port 8787
+DATABASE_URL=postgres://… npm run server:dev          # Postgres (requires: npm install pg)
+psql "$DATABASE_URL" -f server/migrations/0001_init.sql
+```
+
+Because the engine is shared, the server needs no build step to run under `tsx`.
+
+## Endpoints
+
+All responses are JSON. Authenticated routes require `Authorization: Bearer <token>`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/v1/health` | liveness + the pinned rules version |
+| POST | `/v1/guests` | create a guest identity → `{ player, token }` (token shown once) |
+| POST | `/v1/players/me/upgrade` | upgrade a guest to a permanent account (keeps the id) |
+| POST | `/v1/matches` | create a match → `{ match: { inviteCode, … }, player: view }` |
+| POST | `/v1/matches/join` | join by `{ inviteCode }` → `{ match, player }` |
+| GET | `/v1/matches/:id` | match summary (public: status, revision, seats) |
+| GET | `/v1/matches/:id/view?since=N` | the caller's player view (+ events after revision N) |
+| POST | `/v1/matches/:id/reconnect` | same, by `{ sinceRevision }` — used after a refresh |
+| POST | `/v1/matches/:id/actions` | submit `{ expectedRevision, requestId, action }` |
+
+A **player view** contains: the engine `View` (`viewFor(state, seat)`), the seat, the public turn
+and status, the legal actions (only when it is that seat's turn), and the public-safe events. It
+never contains the seed, the deck, either full hand, `fruitKnown`, the event history internals, or
+the authoritative `State`.
+
+## The action pipeline (exactly once)
+
+```
+receive { expectedRevision, requestId, action }
+  → authenticate the bearer token to a player
+  → resolve the seat from match_participants (never from the request)
+  → if requestId already applied → return the stored outcome (no re-apply)
+  → if expectedRevision ≠ match.revision → 409 STALE_REVISION
+  → engine: applyAs(state, seat, action)  ← the single source of gameplay truth
+  → revision += 1, persist the move + the new state atomically
+  → return the caller's new view; the opponent sees it on their next fetch
+```
+
+Guarantees:
+
+- **Exactly once.** `match_moves` has `unique (match_id, request_id)`; a duplicate returns the
+  recorded move. A *different* player reusing a request id is refused (`REQUEST_ID_CONFLICT`).
+- **No lost updates.** The `revision` must match; the Postgres adapter takes `SELECT … FOR UPDATE` on the
+  match row for the whole check-and-write, so two racing submissions cannot both advance.
+- **No forged seats.** The seat always comes from the database for the authenticated player.
+- **One rules interpretation.** Legality, resulting state, score, turn, winner and the starting
+  seat all come from `src/engine/` — the same code the browser runs.
+
+## Identity and accounts
+
+Guests get an opaque token (32 random bytes, base64url). Only `sha256(token)` is stored, so a
+database leak cannot be replayed as a token. `player_tokens.revoked_at` supports future revocation.
+`players.kind` moves `guest → account` on upgrade; the player id, its matches and its history are
+preserved, so attaching real credentials later is additive.
+
+## Hidden information
+
+The server only ever sends projections:
+
+- the board, terrain, discard pile, deck **count**, the opponent's hand **count**, scores, the
+  current turn/phase and the public result — all public;
+- the viewer's own hand and deadwood — private to that viewer;
+- events filtered by the engine's single rule `hidePrivateEvents` (the opponent's deck draws hide
+  the card), which the local game also uses (`eventsFor`).
+
+Tests fail if any of the seed, the deck order, either hand, `fruitKnown` or an internal history
+field appears in a payload, and if any card id the viewer may not know is present.
+
+## Database and RLS
+
+`server/migrations/0001_init.sql` creates `players`, `player_tokens`, `matches`,
+`match_participants` and `match_moves`. `matches.state` is the authoritative state (server-only).
+Row Level Security is **enabled on every table with no anon/authenticated policies**, and all table
+privileges are revoked from those roles: only the API server's service role can read. `matches`
+stores the immutable `rules_version`, `seed`, `config` and `starting_player`, so a match is always
+replayed under the rules that created it.
+
+`revision` on `matches` is the head; each `match_moves` row records the revision it produced, which
+is why the moves table *is* the revision history and the idempotency record.
+
+## Test results (this pass)
+
+| Suite | Result |
+| --- | --- |
+| `server/tests/service.test.ts` | 20 tests: identity, joining, views, actions, idempotency, stale revisions, racing submissions, a full game to a finished result |
+| `server/tests/http-e2e.test.ts` | 4 tests: the whole vertical slice over real HTTP with two clients + refresh/reconnect, auth failures, error codes, card-reconstruction |
+| `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code |
+| `server/tests/client.test.ts` | 6 tests: request shape, bearer header, `since` handling, error mapping, session persistence/resume |
+| `server/tests/engine-events.test.ts` | 3 tests: `hidePrivateEvents` ≡ `eventsFor` across real games |
+| `server/tests/migration.test.ts` | 6 tests: tables, RLS everywhere, hashed tokens, immutable fields, idempotency key |
+
+The rest of the project's suite is unchanged and must stay green (see the final report).
+
+## What is NOT built (on purpose or unfinished)
+
+Deliberately out of scope, per the brief: accounts with credentials/OAuth, matchmaking, clans, XP,
+world-map functionality, ranked play, and any game-mechanic change.
+
+Unfinished / next:
+
+1. **Live database run.** The Postgres adapter is verified against a recording fake (statement
+   order, rollback paths) but **not yet against a real Postgres/Supabase instance**. Installing
+   `pg`, applying the migration and running the integration test is the first next step.
+2. **No push transport.** Clients poll (`/view?since=`). The contract's realtime step needs SSE or
+   WebSocket on top of the same pipeline.
+3. **No client UI wiring.** `server/src/client.ts` is ready and tested, but the game screen does not
+   yet create/join a duel. Solo play is untouched.
+4. **No rate limiting or abuse controls.** Nothing stops rapid guest creation or invite-code
+   guessing; add per-IP/per-token limits and rotate codes.
+5. **CORS is `*` by default** for local development. Production must set `CORS_ORIGIN`.
+6. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
+7. **No observability** beyond one line per request (method, path, status, duration). No metrics,
+   tracing or alerting; logs never contain bodies or tokens.
+8. **No cleanup jobs** for abandoned guest accounts or waiting matches.
+9. **Reconnect returns only the view + events**, not a replay of the opponent's last turn visuals.
+
+## Before inviting real players
+
+1. Postgres (Supabase) with the migration applied; the adapter exercised against it in CI.
+2. TLS + a locked-down `CORS_ORIGIN`; rotate the service-role key.
+3. Rate limits on `/v1/guests`, `/v1/matches/join` and `/v1/matches/:id/actions`.
+4. A decision on the live transport (SSE/WebSocket) and reconnect behaviour under it.
+5. The client duel screen wired to `DuelClient` behind a feature flag, with solo play unchanged.
+6. Monitoring (error rate, revision conflicts, match completion) and a cleanup job.

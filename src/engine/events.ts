@@ -109,8 +109,15 @@ export const eventsOf = (before: State, a: Action, after: State): Event[] => {
   return out;
 };
 
-/** The history as `player` may see it: the opponent's deck draws hide the card. */
-export const eventsFor = (state: State, player: Player): Event[] =>
-  (state.history ?? []).map((e) =>
+/**
+ * A raw event list as `player` may see it: the opponent's deck draws hide the card.
+ * This is the only place the hidden-information rule for events lives, so the local game
+ * (`eventsFor`) and the online server share exactly one interpretation.
+ */
+export const hidePrivateEvents = (events: readonly Event[], player: Player): Event[] =>
+  events.map((e) =>
     e.t === 'Draw' && e.from === 'deck' && e.player !== player ? { t: 'Draw', player: e.player, from: 'deck' } : e,
   );
+
+/** The history as `player` may see it: the opponent's deck draws hide the card. */
+export const eventsFor = (state: State, player: Player): Event[] => hidePrivateEvents(state.history ?? [], player);

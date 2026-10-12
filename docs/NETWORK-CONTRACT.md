@@ -1,4 +1,8 @@
-# Futasaku PvP network contract (design only — not implemented)
+# Futasaku PvP network contract
+
+> **Status:** implemented for the vertical slice. See [`BACKEND.md`](BACKEND.md) for the actual
+> endpoints, the storage schema, the security model and what is still unfinished. This document
+> remains the contract the implementation follows.
 
 This is the minimum contract the future server-authoritative PvP layer will use. It defines the
 boundary now so the backend can be built without re-litigating the game underneath it. **No

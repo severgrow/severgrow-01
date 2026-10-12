@@ -24,6 +24,7 @@ Pre-cleanup archive branch: `archive/futa0.4-before-cleanup`
 | Futa04 presentation | `web/src/player/` |
 | Board, cards, effects, audio | `web/src/ui/` |
 | Save / settings / channels | `web/src/logic/persist.ts`, `web/src/channel.ts` |
+| Online duel backend | `server/` (see [`docs/BACKEND.md`](docs/BACKEND.md)) |
 | Spec | `docs/SPEC.md` |
 | Checks | `tests/`, `web/tests/`, `web/e2e/` |
 
