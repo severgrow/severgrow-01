@@ -8,6 +8,14 @@ import { ONLINE } from '../../../src/strings.js';
 export const FIRST_ONLINE_CARD_KEY = 'severgrow.duel.firstCard.v1';
 export const WARN_LAST_MS = 2 * 3_600_000; // last 2 hours (P-12)
 
+/**
+ * After this long parked in the Find-opponent queue, offer the honest computer fallback alongside
+ * waiting (never instead of it — the search keeps running). Replaces the old "invite a friend"
+ * prompt, which was the only option before parking existed.
+ */
+export const PARKED_OFFER_MS = 3 * 60 * 1000;
+export const isSearchParked = (elapsedMs: number, offerMs = PARKED_OFFER_MS): boolean => elapsedMs >= offerMs;
+
 export type LobbyBucket = 'your_turn' | 'waiting' | 'finished';
 
 export type LobbyRow = {
@@ -20,6 +28,10 @@ export type LobbyRow = {
   statusIcon: 'play' | 'hourglass' | 'flag' | 'check';
   timeLeft: string | null;
   warnLastTwoHours: boolean;
+  /** Timeout-grace line for the row (punchy): your spent grace, or the opponent's. */
+  graceWord: string | null;
+  /** True when the viewer already used their grace on a live match: their next miss loses. */
+  atRisk: boolean;
   unseenTurn: boolean;
   inviteHint: string | null;
 };
@@ -71,6 +83,17 @@ export const toLobbyRow = (
           ? { word: ONLINE.statusWaitingFriend, icon: 'hourglass' as const }
           : { word: ONLINE.statusTheirTurn, icon: 'hourglass' as const };
 
+  // Grace is public: the row explains why a match did not end on a missed deadline.
+  const opponentSeat = entry.mySeat === 0 ? 1 : 0;
+  const graceWord =
+    entry.status !== 'active'
+      ? null
+      : (entry.graceUsed?.[entry.mySeat] ?? 0) > 0
+        ? ONLINE.graceYouUsed
+        : (entry.graceUsed?.[opponentSeat] ?? 0) > 0
+          ? ONLINE.graceOpponentUsed
+          : null;
+
   return {
     matchId: entry.matchId,
     bucket,
@@ -79,6 +102,8 @@ export const toLobbyRow = (
     statusIcon: status.icon,
     timeLeft: remaining === null || bucket === 'finished' ? null : formatRemaining(remaining),
     warnLastTwoHours: remaining !== null && remaining > 0 && remaining <= WARN_LAST_MS && bucket !== 'finished',
+    graceWord,
+    atRisk: graceWord === ONLINE.graceYouUsed,
     unseenTurn: entry.unseenTurn,
     inviteHint: entry.status === 'waiting' ? ONLINE.waitingInviteHint : null,
   };

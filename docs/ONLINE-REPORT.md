@@ -15,6 +15,7 @@ Online duels are live on Supabase Edge (`duel`) with the shared `src/engine/` (n
 | 6 | `e06b604` | Two-browser Playwright, leak/409/load, DB RLS + advisors |
 | 7 | `1b99bdb` | Find Opponent + migration `0003_open_queue` + Edge redeploy |
 | 8 | this | Docs, preview build workflow, this report |
+| 7.5 | server `f85c7c8` + client | Parked search never drops a player, honest computer fallback, timeout grace — see [`docs/FIND-OPPONENT.md`](./FIND-OPPONENT.md) |
 
 ## How to play (test)
 

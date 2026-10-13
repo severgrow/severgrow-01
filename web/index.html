@@ -114,7 +114,7 @@
           <ul id="online-first-list"></ul>
           <button id="online-first-ok" class="btn primary" type="button">Got it</button>
         </div>
-        <div class="online-actions">
+        <div class="online-actions menu-buttons">
           <button id="online-create" class="btn primary big" type="button">Create a duel</button>
           <button id="online-find" class="btn ghost big" type="button" hidden>Find opponent</button>
           <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
@@ -134,12 +134,18 @@
         </header>
         <p id="online-waiting-body" class="muted"></p>
         <p id="online-invite-code" class="online-code" aria-label="Invite code"></p>
-        <div class="online-actions">
+        <div class="online-actions menu-buttons">
           <button id="online-share" class="btn primary big" type="button">Share invite</button>
           <button id="online-copy" class="btn ghost" type="button">Copy link</button>
           <button id="online-cancel-match" class="btn ghost" type="button">Cancel match</button>
         </div>
         <p id="online-waiting-expiry" class="muted small"></p>
+        <!-- Parked-search offer (shown after a while waiting). Three separate, honest choices. -->
+        <div id="online-search-options" class="online-actions menu-buttons" hidden>
+          <button id="online-search-computer" class="btn primary big" type="button">Play the computer</button>
+          <button id="online-search-invite" class="btn ghost big" type="button">Invite a friend</button>
+          <button id="online-search-keep" class="btn ghost big" type="button">Keep searching</button>
+        </div>
         <p id="online-waiting-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
@@ -154,12 +160,25 @@
           <input id="online-join-code" type="text" inputmode="text" autocomplete="off" maxlength="16" spellcheck="false" />
         </label>
         <p id="online-join-confirm" class="online-confirm" hidden></p>
-        <div class="online-actions">
+        <div class="online-actions menu-buttons">
           <button id="online-join-submit" class="btn primary big" type="button">Join</button>
         </div>
         <p id="online-join-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
+
+    <!-- Opponent found while playing the computer: gentle, dismissible, and it never loses the
+         offline game (Continue keeps it). Reuses the online-card component, no new visual language. -->
+    <div id="online-matched" class="online-matched" role="dialog" aria-modal="false" aria-labelledby="online-matched-title" hidden>
+      <div class="online-card">
+        <h3 id="online-matched-title">Opponent found</h3>
+        <p id="online-matched-body" class="muted"></p>
+        <div class="online-actions menu-buttons">
+          <button id="online-matched-now" class="btn primary big" type="button">Play now</button>
+          <button id="online-matched-later" class="btn ghost big" type="button">Later</button>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== Pick a level ===== -->
     <section id="levels" class="screen levels" aria-label="Pick a level" hidden>

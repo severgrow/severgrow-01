@@ -5,11 +5,13 @@ import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../se
 import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, findOpponentEnabled, onlineBuildEnabled } from './config.js';
+import { duelApiUrl, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { createHudBrandMark } from '../player/branding.js';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
   inviteLink,
+  isSearchParked,
   pageTitleForLobby,
   parseJoinHash,
   shareInviteText,
@@ -31,6 +33,12 @@ export type LobbyUiHooks = {
     token: string;
     liveJoin: boolean;
   }) => void;
+  /**
+   * Start a local game against the computer (the existing offline game). Offered from a long
+   * parked search; the search keeps running in the background. Never touches online state, so the
+   * offline save/Continue mechanism is unchanged.
+   */
+  startComputerGame?: () => void;
   now?: () => number;
 };
 
@@ -68,10 +76,29 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let serverOffset = 0;
 
+  // Phase 7.5: the parked Find-opponent search. It is independent of the invite `waiting` screen
+  // and keeps running (its own timer) while the player is on the board playing the computer.
+  let search: { token: string; matchId: string; startedAt: number } | null = null;
+  let searchTimer: ReturnType<typeof setInterval> | null = null;
+  let computerGameActive = false;
+  let pendingMatched: { token: string; payload: MatchViewPayload } | null = null;
+
   const hub = $('online-hub');
   const waitingEl = $('online-waiting');
   const joinEl = $('online-join');
   const menuEl = document.getElementById('menu');
+  // The small, treeless Futasaku wordmark the game HUD shows top-right (#hud-brand). Built once
+  // and moved into whichever online submenu header is open, so every screen carries the same mark
+  // at the same size instead of a big wordmark. Failure here just leaves the header bare.
+  let brandMark: SVGSVGElement | null = null;
+  try {
+    brandMark = createHudBrandMark('futasaku-online-white');
+    brandMark.id = 'online-brand';
+    brandMark.classList.add('online-brand');
+  } catch {
+    brandMark = null;
+  }
+  const screens: Record<'hub' | 'waiting' | 'join', HTMLElement> = { hub, waiting: waitingEl, join: joinEl };
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -85,6 +112,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
     if (menuEl) menuEl.hidden = next !== null;
+    if (brandMark) {
+      const head = next ? screens[next].querySelector('.online-head') : null;
+      if (head && brandMark.parentElement !== head) head.append(brandMark);
+    }
     if (next !== 'waiting' && pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -143,16 +174,22 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     empty.hidden = rows.length > 0;
     for (const row of rows) {
       const li = document.createElement('li');
-      li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours ? ' warn' : ''}`;
+      li.className = `online-row bucket-${row.bucket}${row.warnLastTwoHours || row.atRisk ? ' warn' : ''}`;
       li.tabIndex = 0;
       li.setAttribute('role', 'button');
       li.dataset.matchId = row.matchId;
+      // Grace is shown as a word next to the clock (never colour alone), plus the last-2-hours warn.
+      const warnSmall = [
+        row.graceWord ? escapeHtml(row.graceWord) : '',
+        row.warnLastTwoHours ? escapeHtml(ONLINE.warnLastTwoHours) : '',
+      ]
+        .filter(Boolean)
+        .map((t) => `<small>${t}</small>`)
+        .join('');
       li.innerHTML = `<span class="online-row-icon" data-icon="${row.statusIcon}" aria-hidden="true"></span>
         <span class="online-row-main"><b>${escapeHtml(row.opponentName)}</b>
         <span class="online-row-status">${escapeHtml(row.statusWord)}</span></span>
-        <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${
-          row.warnLastTwoHours ? `<small>${escapeHtml(ONLINE.warnLastTwoHours)}</small>` : ''
-        }</span>`;
+        <span class="online-row-time">${row.timeLeft ? escapeHtml(row.timeLeft) : ''}${warnSmall}</span>`;
       const open = () => void openMatch(row.matchId);
       li.addEventListener('click', open);
       li.addEventListener('keydown', (ev) => {
@@ -213,6 +250,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     fillCopy();
     show('hub');
     maybeFirstCard();
+    closeMatchedPrompt();
+    computerGameActive = false;
+    // A search may still be running in the background: say so, but never block the hub.
+    notice('online-hub-notice', search ? ONLINE.searchStatusSr : '');
     const linkBlock = document.getElementById('online-link-block');
     if (linkBlock) linkBlock.hidden = false;
     await reloadMatches();
@@ -222,6 +263,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     waiting = { matchId: match.matchId, inviteCode: match.inviteCode };
     fillCopy();
     show('waiting');
+    setWaitingMode('invite');
     $('online-invite-code').textContent = match.inviteCode;
     notice('online-waiting-notice', '');
     if (pollTimer) clearInterval(pollTimer);
@@ -254,6 +296,125 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     notice('online-hub-notice', ONLINE.openDuelSoon);
     show('hub');
+  };
+
+  // ---- Phase 7.5: parked Find-opponent search ----
+
+  /**
+   * The waiting screen carries two honest modes: `invite` (share a code) and `search` (you are in
+   * the queue). No new visual language: we only hide the invite-only controls and swap the words.
+   */
+  const setWaitingMode = (mode: 'invite' | 'search') => {
+    waitingEl.dataset.mode = mode;
+    waitingEl.setAttribute('aria-label', mode === 'search' ? ONLINE.searchTitle : ONLINE.waitingTitle);
+    for (const id of ['online-invite-code', 'online-share', 'online-copy', 'online-waiting-expiry']) {
+      const el = document.getElementById(id);
+      if (el) el.hidden = mode === 'search';
+    }
+    const cancel = document.getElementById('online-cancel-match') as HTMLButtonElement | null;
+    if (cancel) cancel.textContent = mode === 'search' ? ONLINE.searchStop : ONLINE.cancelMatch;
+    const options = document.getElementById('online-search-options');
+    if (options && mode !== 'search') options.hidden = true;
+  };
+
+  const renderSearch = () => {
+    if (!search) return;
+    const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
+    $('online-waiting-title').textContent = parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle;
+    $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody : ONLINE.searchBody;
+    const options = document.getElementById('online-search-options');
+    if (options) options.hidden = !parked;
+  };
+
+  const stopSearchTimer = () => {
+    if (searchTimer) {
+      clearInterval(searchTimer);
+      searchTimer = null;
+    }
+  };
+
+  const stopSearch = () => {
+    stopSearchTimer();
+    search = null;
+    setWaitingMode('invite');
+  };
+
+  const cancelSearchAndStop = async () => {
+    const s = search;
+    stopSearch();
+    if (s) {
+      try {
+        await client.cancelSearch(s.token);
+      } catch {
+        /* calm: the search may already be gone */
+      }
+    }
+  };
+
+  /** Gentle, dismissible "Opponent found" prompt while the player is inside a computer game. */
+  const openMatchedPrompt = (token: string, payload: MatchViewPayload) => {
+    pendingMatched = { token, payload };
+    const el = document.getElementById('online-matched');
+    if (!el) {
+      launchDuel(token, payload, true);
+      return;
+    }
+    $('online-matched-title').textContent = ONLINE.matchedTitle;
+    $('online-matched-body').textContent = ONLINE.matchedBody;
+    const nowBtn = document.getElementById('online-matched-now') as HTMLButtonElement | null;
+    const laterBtn = document.getElementById('online-matched-later') as HTMLButtonElement | null;
+    if (nowBtn) nowBtn.textContent = ONLINE.matchedPlayNow;
+    if (laterBtn) laterBtn.textContent = ONLINE.matchedLater;
+    el.hidden = false;
+  };
+
+  const closeMatchedPrompt = () => {
+    pendingMatched = null;
+    const el = document.getElementById('online-matched');
+    if (el) el.hidden = true;
+  };
+
+  const pollSearch = async () => {
+    if (!search) return;
+    try {
+      const res = await client.getState(search.token, search.matchId);
+      serverOffset = res.serverNow - now();
+      const payload = res.player;
+      const token = search.token;
+      if (payload.status === 'active') {
+        stopSearch();
+        void reloadMatches();
+        if (computerGameActive) openMatchedPrompt(token, payload);
+        else launchDuel(token, payload, true);
+        return;
+      }
+      if (payload.status === 'finished') {
+        // The parked search expired (nobody came within the window). Calm, honest exit.
+        stopSearch();
+        void openHub();
+        notice('online-hub-notice', ONLINE.searchCancelled);
+        return;
+      }
+    } catch {
+      /* quiet: a transient failure must not drop a parked search */
+    }
+    renderSearch();
+  };
+
+  const startSearch = (token: string, matchId: string) => {
+    search = { token, matchId, startedAt: now() };
+    waiting = null;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    fillCopy();
+    show('waiting');
+    setWaitingMode('search');
+    renderSearch();
+    notice('online-waiting-notice', ONLINE.searchStatusSr);
+    stopSearchTimer();
+    searchTimer = setInterval(() => void pollSearch(), 2000);
   };
 
   const openMatch = async (matchId: string) => {
@@ -304,8 +465,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         launchDuel(id.token, res.player, true);
         return;
       }
-      openWaiting(res.match);
-      notice('online-waiting-notice', ONLINE.findOpponentLooking);
+      // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
+      startSearch(id.token, res.match.matchId);
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
     }
@@ -389,7 +550,46 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   );
   $('online-share').addEventListener('click', () => void shareInvite());
   $('online-copy').addEventListener('click', () => void copyInvite());
-  $('online-cancel-match').addEventListener('click', () => void openHub());
+  // One button, two honest jobs: stop a parked search (search screen), or leave an invite screen.
+  $('online-cancel-match').addEventListener('click', () => {
+    if (search && waitingEl.dataset.mode === 'search') {
+      void (async () => {
+        await cancelSearchAndStop();
+        await openHub();
+        notice('online-hub-notice', ONLINE.searchCancelled);
+      })();
+      return;
+    }
+    void openHub();
+  });
+  // Play the computer: the offline game starts and the search KEEPS RUNNING in the background.
+  document.getElementById('online-search-computer')?.addEventListener('click', () => {
+    computerGameActive = true;
+    hooks.startComputerGame?.();
+  });
+  // Invite a friend instead: stop the search, then open the invite screen.
+  document.getElementById('online-search-invite')?.addEventListener('click', () => {
+    void (async () => {
+      await cancelSearchAndStop();
+      await createMatch();
+    })();
+  });
+  // Keep searching: hide the offer and give the queue another full window.
+  document.getElementById('online-search-keep')?.addEventListener('click', () => {
+    if (search) search.startedAt = now();
+    renderSearch();
+  });
+  // Opponent found while playing the computer: the offline game stays resumable.
+  document.getElementById('online-matched-now')?.addEventListener('click', () => {
+    const pending = pendingMatched;
+    closeMatchedPrompt();
+    if (pending) launchDuel(pending.token, pending.payload, true);
+  });
+  document.getElementById('online-matched-later')?.addEventListener('click', () => {
+    closeMatchedPrompt();
+    notice('online-hub-notice', ONLINE.matchedNotice);
+    void reloadMatches();
+  });
   $('online-first-ok').addEventListener('click', () => {
     browserStorage()?.set(FIRST_ONLINE_CARD_KEY, '1');
     $('online-first-card').hidden = true;

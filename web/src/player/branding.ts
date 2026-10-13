@@ -139,6 +139,16 @@ export function drawLogo() {
   container.replaceChildren(whiteLogo('futasaku-menu-white', false));
 }
 
+/**
+ * The small, treeless Futasaku wordmark the game HUD shows top-right (`#hud-brand`), built as a
+ * standalone element so other surfaces (the online submenu header) can reuse the exact same asset,
+ * filter and treatment instead of inventing one. `id` must be unique in the document: it names the
+ * SVG filter that tints the image, exactly as `#hud-brand` does.
+ */
+export function createHudBrandMark(id = 'futasaku-hud-white'): SVGSVGElement {
+  return whiteLogo(id, true, true);
+}
+
 export function mountBranding() {
   document.documentElement.classList.add('futa04-branding');
   document.title = 'Futasaku';

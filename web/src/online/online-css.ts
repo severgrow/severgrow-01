@@ -1,49 +1,59 @@
 /** Compact online lobby styles (Phase 4). Injected once beside player CSS. */
 export const ONLINE_CSS = `
 /* The online lobby is a real full-screen VIEW, not a layer on the menu. The base .screen rule
-   already makes it fixed/inset:0, but with no background of its own the menu's big title and
-   buttons painted straight through the invite panel. Give each online screen the theme
-   background (opaque, so nothing shows through), lift it above the menu in z-order as a second
-   safety net, and make the screen itself the scroll container so tall content is reachable. */
+   already makes it fixed/inset:0; give each online screen the theme background (opaque, so the
+   menu can never paint through), lift it above the menu in z-order as a second safety net, and
+   centre its column exactly like the main menu / level picker so tall content scrolls. */
 .online-hub,
 .online-waiting,
 .online-join {
+  display: grid;
+  place-items: center;
   z-index: 3;
   background: var(--c-bg);
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-.online-hub .online-inner,
-.online-waiting .online-inner,
-.online-join .online-inner {
-  max-width: 28rem;
-  margin: 0 auto;
-  padding: 1rem 1.1rem 2.5rem;
+/* Same centred column, width, padding, rhythm and heading type scale as #menu .menu-inner /
+   .levels-inner, so the online submenu reads as the same product rather than a bolted-on page. */
+.online-inner {
+  width: min(420px, 100% - 32px);
+  padding: 32px 0;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  min-height: 100%;
-  box-sizing: border-box;
+  align-items: stretch;
+  gap: 14px;
 }
 .online-head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   min-height: 44px;
 }
+/* The back button keeps its full 44x44 tap target even when the title (flexes) needs the room. */
+.online-head > .icon-only { flex: 0 0 auto; }
 .online-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  font-size: 1.25rem;
-  letter-spacing: 0.04em;
+  font-size: 1.4rem;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+  padding-top: 1px;
 }
-.online-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-.online-actions .btn {
-  min-height: 44px;
+/* The small, treeless Futasaku wordmark that the in-game HUD shows top-right (#hud-brand):
+   the same asset, filter, size and opacity, placed top-right of the online submenu header so the
+   submenu carries the same mark instead of a big wordmark. */
+.online-brand {
+  flex: 0 0 auto;
+  display: block;
+  height: 22px;
+  width: auto;
+  max-width: 90px;
+  opacity: 0.75;
+  pointer-events: none;
+  user-select: none;
 }
 .online-section {
   margin: 0.4rem 0 0;
@@ -112,7 +122,7 @@ export const ONLINE_CSS = `
   letter-spacing: 0.28em;
   text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  margin: 0.4rem 0;
+  margin: 0.75rem 0;
 }
 .online-card {
   padding: 0.9rem 1rem;
@@ -120,6 +130,19 @@ export const ONLINE_CSS = `
   background: color-mix(in srgb, #243024 90%, #000);
   border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
 }
+/* "Opponent found" prompt: a small dark-glass card centred above whatever is on screen (the
+   computer game). No new tokens or borders — it reuses the existing .online-card component. */
+.online-matched {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #0d100d 72%, transparent);
+}
+.online-matched[hidden] { display: none; }
+.online-matched .online-card { width: min(340px, 100% - 24px); }
 .online-card h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
 .online-card ul { margin: 0 0 0.85rem; padding-left: 1.1rem; }
 .online-card li { margin: 0.35rem 0; }

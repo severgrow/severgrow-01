@@ -49,11 +49,13 @@ export type {
   PersonalSetting,
 } from './perspective.js';
 
-export { duelApiUrl, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin } from './config.js';
+export { duelApiUrl, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin, parkedOfferMs } from './config.js';
 
 export {
   FIRST_ONLINE_CARD_KEY,
   WARN_LAST_MS,
+  PARKED_OFFER_MS,
+  isSearchParked,
   parseJoinHash,
   inviteLink,
   shareInviteText,

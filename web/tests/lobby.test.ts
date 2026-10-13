@@ -4,7 +4,9 @@ import type { MatchListEntry } from '../../server/src/protocol.js';
 import {
   friendlyJoinError,
   inviteLink,
+  isSearchParked,
   lobbyBucket,
+  PARKED_OFFER_MS,
   pageTitleForLobby,
   parseJoinHash,
   shareInviteText,
@@ -81,6 +83,34 @@ describe('lobby buckets and sort', () => {
     expect(row.statusIcon).toBe('play');
     expect(row.timeLeft).toBe('1h 30m');
     expect(row.warnLastTwoHours).toBe(true);
+  });
+
+  it('surfaces a spent grace as a word and flags your own as at-risk', () => {
+    const now = 5_000_000;
+    const mine = toLobbyRow(entry({ matchId: 'g1', mySeat: 0, turnPlayer: 0, graceUsed: [1, 0] }), now);
+    expect(mine.graceWord).toBe(ONLINE.graceYouUsed);
+    expect(mine.atRisk).toBe(true);
+
+    const theirs = toLobbyRow(entry({ matchId: 'g2', mySeat: 0, turnPlayer: 1, graceUsed: [0, 1] }), now);
+    expect(theirs.graceWord).toBe(ONLINE.graceOpponentUsed);
+    expect(theirs.atRisk).toBe(false);
+
+    const none = toLobbyRow(entry({ matchId: 'g3', graceUsed: [0, 0] }), now);
+    expect(none.graceWord).toBeNull();
+    expect(none.atRisk).toBe(false);
+
+    // A finished match never carries a live grace warning.
+    const done = toLobbyRow(entry({ matchId: 'g4', status: 'finished', graceUsed: [1, 1] }), now);
+    expect(done.graceWord).toBeNull();
+  });
+});
+
+describe('parked search offer timing', () => {
+  it('offers the computer fallback only after the parked window', () => {
+    expect(isSearchParked(0)).toBe(false);
+    expect(isSearchParked(PARKED_OFFER_MS - 1)).toBe(false);
+    expect(isSearchParked(PARKED_OFFER_MS)).toBe(true);
+    expect(isSearchParked(PARKED_OFFER_MS + 1)).toBe(true);
   });
 });
 

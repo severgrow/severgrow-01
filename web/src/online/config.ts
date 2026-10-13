@@ -23,6 +23,17 @@ export const findOpponentEnabled = (): boolean => {
   return channel === 'futa05';
 };
 
+/**
+ * How long a parked Find-opponent search waits before offering the honest computer fallback.
+ * Defaults to the product three-minute window; a build may override it (VITE_PARKED_OFFER_MS),
+ * which the e2e walk uses so it never has to wait three real minutes.
+ */
+export const parkedOfferMs = (): number => {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  const raw = Number(env?.VITE_PARKED_OFFER_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 3 * 60 * 1000;
+};
+
 /** Public site base used in invite links (Pages). */
 export const publicAppOrigin = (): string => {
   if (typeof location !== 'undefined' && location.origin) return location.origin + (location.pathname.replace(/\/+$/, '') || '');

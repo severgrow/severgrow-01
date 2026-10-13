@@ -268,10 +268,14 @@ button {
   place-items: center;
   overflow-y: auto;
 }
-/* One Futasaku surface: menu, difficulty pick, and result card share these cream tones. */
+/* One Futasaku surface: menu, difficulty pick, online submenu, and result card share these
+   cream tones. */
 #menu,
 #levels,
-.gameover {
+.gameover,
+#online-hub,
+#online-waiting,
+#online-join {
   --fu-cream: #e8ddc5;
   --fu-ink: #17181a;
   --fu-cream-70: color-mix(in srgb, #e8ddc5 70%, transparent);
@@ -316,8 +320,9 @@ button {
 }
 /* One button system for the whole surface: a quiet 1px cream frame for the default, and a single
    cream fill (Continue) as the only emphasis. No gradient, no glow, no drop shadow.
-   Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm. */
-#menu .menu-buttons .btn,
+   Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm; the online
+   submenu reuses `.menu-buttons` so its buttons match the menu exactly. */
+.menu-buttons .btn,
 #levels .level-grid .difficulty-tile {
   min-height: 52px;
   padding: 1px 20px 0;
@@ -332,7 +337,7 @@ button {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-#menu .menu-buttons .btn.primary,
+.menu-buttons .btn.primary,
 #levels .level-grid .difficulty-tile.primary,
 #levels .level-grid .difficulty-tile.on {
   background: var(--fu-cream);
@@ -340,9 +345,9 @@ button {
   color: var(--fu-ink);
   box-shadow: none;
 }
-#menu .menu-buttons .btn:active,
+.menu-buttons .btn:active,
 #levels .level-grid .difficulty-tile:active { transform: translateY(1px); }
-#menu .menu-buttons .btn:focus-visible,
+.menu-buttons .btn:focus-visible,
 #levels .level-grid .difficulty-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .menu-lessons {
   display: grid;

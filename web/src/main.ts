@@ -5894,6 +5894,17 @@ void import('./online/lobby-ui.js').then(async (m) => {
       leaveOnline();
       showScreen('menu');
     },
+    // The honest computer fallback: a normal offline game (same engine, same save/Continue). The
+    // parked online search keeps running in the lobby controller and surfaces an "Opponent found"
+    // prompt if someone turns up. A local game is not a server match, so it never counts against
+    // the 10-unfinished-games cap. An in-progress computer game is RESUMED, never overwritten, so
+    // choosing this offer can never lose the player's local game.
+    startComputerGame: () => {
+      leaveOnline();
+      const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
+      if (saved && saved.state.phase !== 'GAME_OVER') continueGame();
+      else void startGame(randomSeed(), settings.level);
+    },
     openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
       if (!api) return;
