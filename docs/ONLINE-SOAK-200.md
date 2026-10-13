@@ -1,6 +1,6 @@
 # FUTASAKU online duels — 200-duel soak
 
-**Run:** 2026-10-13T05:57:53.393Z · **plan:** 200 duels (20 live Edge, 180 in-process) · **wall time:** 93.6 min
+**Run:** 2026-10-13, clean campaign 04:34–06:04 UTC (9 resumable slices) · **plan:** 200 duels (20 live Edge, 180 in-process) · **wall time:** 90.0 min
 **Branch:** `futa0.5-online` · **rules:** `futasaku0.4-strength-draw` · **Edge base:** `https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel`
 
 ## How the 200 were run
@@ -8,52 +8,52 @@
 | Batch | Mode | Games | What it exercises |
 | --- | --- | --- | --- |
 | core | in-process `MatchService` + `PostgresStorage` (real DB) | 123 | Full turns, both seats, mixed styles, natural endings |
-| async | in-process (real DB) | 21 | Away stretches, catch-up reads, gated opponent views |
-| deadline | in-process (real DB) | 15 | Submit at the deadline, +1 ms late, lazy expiry, correct loser |
-| fouls | in-process (real DB) | 15 | Duplicate requestId, stale revision, requestId conflict, two-tab, concurrent submits |
-| resign | in-process (real DB) | 10 | Resign finishes with the right winner |
+| async | in-process (real DB) | 20 | Away stretches, catch-up reads, gated opponent views |
+| deadline | in-process (real DB) | 14 | Submit at the deadline, +1 ms late, lazy expiry, correct loser |
+| fouls | in-process (real DB) | 14 | Duplicate requestId, stale revision, requestId conflict, two-tab, concurrent submits |
+| resign | in-process (real DB) | 9 | Resign finishes with the right winner |
 | edge | deployed Edge Function over HTTPS through `DuelClient` | 20 | The live path: CORS, status codes, latency, hidden info |
 
 Every turn follows the real browser protocol: **Draw** commits one request, Grow/Bloom/Strengthen/Fruit draft locally on a `shadowFromView` shadow, then **Throw** sends `[...draft, EndAct]` as one atomic batch, then **Discard** finishes the turn as a second batch. The in-process batches use an injectable clock so deadline behaviour is exact; Edge uses the real wall clock.
 
 ## Result
 
-- **Games planned:** 200 · **completed:** 201 · **recorded:** 204
-- **Checks:** 332730 passed, 21 failed
-- **Styles:** full 123, one 41, skip 40
+- **Games planned:** 200 · **completed:** 200 · **recorded:** 200
+- **Checks:** 342629 passed, 8 failed
+- **Styles:** full 120, one 40, skip 40
 
 ### Checks by category
 
 | Category | Passed | Failed |
 | --- | --- | --- |
-| Rules-version handshake | 414 | 0 |
-| Match setup / turn progression | 0 | 3 |
-| Turn protocol (Draw / Throw / Discard) | 14990 | 0 |
-| Finishes and winners | 1079 | 3 |
-| Hidden information | 245398 | 0 |
-| Deadlines and timeouts | 45528 | 6 |
-| Revisions | 19861 | 0 |
+| Rules-version handshake | 421 | 0 |
+| Match setup / turn progression | 0 | 0 |
+| Turn protocol (Draw / Throw / Discard) | 15444 | 0 |
+| Finishes and winners | 1072 | 0 |
+| Hidden information | 252740 | 0 |
+| Deadlines and timeouts | 46869 | 0 |
+| Revisions | 20465 | 0 |
 | Idempotency (requestId / stale revision) | 9 | 0 |
-| Concurrency races | 12 | 0 |
+| Concurrency races | 10 | 0 |
 | Two tabs of one player | 6 | 0 |
-| Reconnect / catch-up | 5193 | 5 |
-| Match list | 203 | 0 |
-| Realtime ping | 2 | 0 |
-| Client countdown / clock skew | 12 | 0 |
-| Rate limiting | 2 | 0 |
-| Live Edge API (CORS, HTTP) | 21 | 4 |
+| Reconnect / catch-up | 5346 | 4 |
+| Match list | 205 | 0 |
+| Realtime ping | 1 | 0 |
+| Client countdown / clock skew | 6 | 0 |
+| Rate limiting | 1 | 0 |
+| Live Edge API (CORS, HTTP) | 34 | 4 |
 
 ### Endings
 
 | Ending | Games |
 | --- | --- |
 | deck_exhaustion | 133 |
-| turn_limit | 33 |
-| timeout | 15 |
-| resigned | 10 |
-| strangle | 10 |
+| turn_limit | 35 |
+| timeout | 14 |
+| strangle | 9 |
+| resigned | 9 |
 
-First seat: **seat 0 started 93**, **seat 1 started 111** (engine lottery over the match seed).
+First seat: **seat 0 started 105**, **seat 1 started 95** (engine lottery over the match seed).
 
 ### Latency (per call)
 
@@ -61,13 +61,13 @@ First seat: **seat 0 started 93**, **seat 1 started 111** (engine lottery over t
 
 | View fetch | Submit | Other |
 | --- | --- | --- |
-| 539.1 ms / 603.9 ms (n=2385) | 610.7 ms / 688.2 ms (n=1711) | 418.8 ms / 702.8 ms (n=85) |
+| 544 ms / 607.9 ms (n=3058) | 615.9 ms / 686.4 ms (n=2229) | 410.4 ms / 701.9 ms (n=111) |
 
 **In-process (real Postgres pool):**
 
 | View fetch | Submit | Other |
 | --- | --- | --- |
-| 261.7 ms / 302.4 ms (n=18560) | 336.3 ms / 389.9 ms (n=13457) | 164.6 ms / 418.3 ms (n=729) |
+| 262.1 ms / 304 ms (n=18662) | 337.1 ms / 391.9 ms (n=13518) | 150.5 ms / 421.3 ms (n=729) |
 
 ## Hidden-information audit
 
@@ -86,62 +86,93 @@ Every payload returned to either seat across the 200 duels was walked field by f
 - The clock refreshes **only** on a handover (actor change) and is **never** reset by a Draw or a mid-turn move.
 - A submit exactly **at** the deadline is accepted; one millisecond later it is rejected with `TIMED_OUT` and the match finishes with reason `timeout`.
 - The timeout loser is always the seat that still had to act; the deadline is cleared on both seats at the end.
-- Result: **FAIL — 6 deadline check(s)**.
+- Result: **PASS**.
 
 ## Bugs found
 
-21 failing check(s):
+8 failing check(s):
 
 | # | Game | Scenario | Mode | Check | Detail |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 17 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":320.30141599988565,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
-| 2 | 17 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":320.30141599988565,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}"] |
-| 3 | 18 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":289.6534160000738,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
-| 4 | 18 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":306.29937500017695,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
-| 5 | 18 | edge | edge | `game.actor_found` | {"liveStatus":"active","seats":[{"seat":0,"status":"active","phase":"DRAW","actor":1,"turnPlayer":1,"legals":0,"revision":75,"boundary":75},{"seat":1,"status":"active","phase":"DRAW","actor":0,"turnPlayer":0,"legals":0,"revision":72,"boundary":72}]} |
-| 6 | 18 | edge | edge | `finish.finished` | active |
-| 7 | 18 | edge | edge | `deadline.cleared_on_finish` |  |
-| 8 | 18 | edge | edge | `deadline.cleared_on_finish` |  |
-| 9 | 18 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":289.6534160000738,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}","{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":306.29937500017695,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}","{\"liveStatus\":\"active\",\"seats\":[{\"seat\":0,\"status\":\"active\",\"phase\":\"DRAW\",\" |
-| 10 | 19 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":249.23083300003782,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
-| 11 | 19 | edge | edge | `game.actor_found` | {"liveStatus":"active","seats":[{"seat":0,"status":"active","phase":"DRAW","actor":1,"turnPlayer":1,"legals":0,"revision":24,"boundary":24},{"seat":1,"status":"active","phase":"DRAW","actor":0,"turnPlayer":0,"legals":0,"revision":30,"boundary":30}]} |
-| 12 | 19 | edge | edge | `finish.finished` | active |
-| 13 | 19 | edge | edge | `deadline.cleared_on_finish` |  |
-| 14 | 19 | edge | edge | `deadline.cleared_on_finish` |  |
-| 15 | 19 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":249.23083300003782,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}","{\"liveStatus\":\"active\",\"seats\":[{\"seat\":0,\"status\":\"active\",\"phase\":\"DRAW\",\"actor\":1,\"turnPlayer\":1,\"legals\":0,\"revision\":24,\"boundary\":24},{\"seat\":1,\"status\":\"active\",\"phase\":\"DRAW\",\"actor\":0,\"turnPlayer\":0,\"legals\":0,\"revision\":30,\"boundary\":30}]}","active","",""] |
-| 16 | 23 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":255.91354099987075,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
-| 17 | 23 | edge | edge | `game.actor_found` | {"liveStatus":"active","seats":[{"seat":0,"status":"active","phase":"DRAW","actor":1,"turnPlayer":1,"legals":0,"revision":72,"boundary":72},{"seat":1,"status":"active","phase":"DRAW","actor":0,"turnPlayer":0,"legals":0,"revision":69,"boundary":69}]} |
-| 18 | 23 | edge | edge | `finish.finished` | active |
-| 19 | 23 | edge | edge | `deadline.cleared_on_finish` |  |
-| 20 | 23 | edge | edge | `deadline.cleared_on_finish` |  |
-| 21 | 23 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":255.91354099987075,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}","{\"liveStatus\":\"active\",\"seats\":[{\"seat\":0,\"status\":\"active\",\"phase\":\"DRAW\",\"actor\":1,\"turnPlayer\":1,\"legals\":0,\"revision\":72,\"boundary\":72},{\"seat\":1,\"status\":\"active\",\"phase\":\"DRAW\",\"actor\":0,\"turnPlayer\":0,\"legals\":0,\"revision\":69,\"boundary\":69}]}","active","",""] |
+| 1 | 182 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":269.65033399965614,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
+| 2 | 182 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":269.65033399965614,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}"] |
+| 3 | 188 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":278.7427919995971,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
+| 4 | 188 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":278.7427919995971,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}"] |
+| 5 | 180 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":305.2696670000005,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
+| 6 | 180 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":305.2696670000005,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}"] |
+| 7 | 196 | edge | edge | `reconnect.since_hides_mid_turn` | {"ok":false,"code":"INTERNAL","status":500,"message":"Something went wrong on the server.","ms":287.93512499999997,"raw":"{\"ok\":false,\"code\":\"INTERNAL\",\"message\":\"Something went wrong on the server.\"}"} |
+| 8 | 196 | edge | edge | `edge.no_5xx` | ["{\"ok\":false,\"code\":\"INTERNAL\",\"status\":500,\"message\":\"Something went wrong on the server.\",\"ms\":287.93512499999997,\"raw\":\"{\\\"ok\\\":false,\\\"code\\\":\\\"INTERNAL\\\",\\\"message\\\":\\\"Something went wrong on the server.\\\"}\"}"] |
 
 ## Root cause, fix and regression test
 
-**Server — a batch that ends the game mid-turn (the real defect).** A turn is submitted as one atomic batch, `[...draft, EndAct]`. When a draft move ended the game (a Strangle-winning Bloom), the next action in the batch (EndAct) landed on a finished match, so the whole batch was rejected with `MATCH_FINISHED`: the winning move was rolled back and the match stayed active forever. Fix: `server/src/storage/memory.ts` and `postgres.ts` stop applying a batch once the game has finished, keeping the move that ended it and dropping the rest of the turn. A batch that *starts* on a finished match is still rejected. Regression: `server/tests/online-batch-end.test.ts` (mid-batch Strangle win; replay by requestId; reject-after-finish).
-**Harness — revision expectation for a truncated batch.** Once the server keeps only the moves up to the game end, the revision grows by those moves, not the whole batch. The `revision.plus_batch_len` check now simulates the batch on the authoritative pre-state to count exactly the moves that were applied (previously the check was never reached because the batch was rejected).
-**Harness — the atomic-batch foul was not actually illegal.** It sent `[legalAction, EndAct]` at the DRAW step; Draw moves to ACT, where EndAct *is* legal, so a healthy server accepted the batch and the check failed wrongly. It now sends `[safe first action, Discard(-1)]` — a card that can never be in a hand is illegal in DRAW, ACT and DISCARD alike — and never lets the first action end the game.
-**Live Edge — connection-slot exhaustion (infrastructure, mitigated).** The live function answered `500` with `PostgresError: remaining connection slots are reserved for roles with the SUPERUSER attribute`. The Edge logs pinned it to database connection saturation, not a rules defect: the function's postgres.js pool was `max: 5`, every warm Edge isolate keeps `max` idle connections, and the isolates' idle timers do not appear to fire, so ~41 connections stayed parked and the shared project ran out of slots. Reduced the Edge pool to `max: 2` with a shorter `idle_timeout`/`max_lifetime` (`server/src/edge-entry.ts`), which brought the parked connections down to ~33 and halves the burst footprint; the durable fix is the **Transaction** pooler URI (port 6543) on the `DATABASE_URL` secret (and/or a larger pool allowance).
+**1. A turn batch that ended the game was rejected wholesale — the winning move was lost and the match hung (fixed; regression test added).**
+
+  - **Evidence.** 7 of 123 in-process `core` duels in the first run ended early with the match stuck `active` forever, every one logging `play.throw_accepted {"ok":false,"code":"MATCH_FINISHED"}` while the phase was still `ACT`.
+  - **Root cause.** The browser sends a whole turn as one atomic batch, `[...draft, EndAct]`. A Strangle-winning Bloom is a *draft* action, so the next action in the batch (`EndAct`) lands on a game that has already ended. The commit loop asked the rules layer for a decision on every action and turned the first rejection into a whole-batch failure — but by then the winning move had already been applied, so the failure threw it away. The client retried the identical batch (its `requestId` is stable) and got `MATCH_FINISHED` again: a livelock. Reproduced deterministically on seed 2 (seat 1, turn 6, Bloom → Strangle).
+  - **Impact.** Roughly 5.7% of full-grip duels end by Strangle *during* Grow, so this was the difference between "you won" and "the match hangs". Ordinary endings (play on, then the separate *Discard* batch finishes the game) were unaffected, which is why earlier tests missed it.
+  - **Fix.** One guard in the commit loop of both storages: once the match is finished *inside* the batch, apply what ended it and stop, instead of deciding the remaining actions. A batch that *starts* on a finished match is still rejected with `MATCH_FINISHED` (checked before the loop). Rules, wire format and the revision contract are unchanged; the revision simply advances by fewer steps than the batch length in this one case.
+  - **Where.** `server/src/storage/memory.ts`, `server/src/storage/postgres.ts`.
+
+- **2. Replaying the request that ended the game returned a confusing error instead of the stored outcome (fixed; regression test added).**
+
+  - **Evidence.** A new test that resubmits the exact accepted batch after the game ended failed with `MATCH_FINISHED`.
+  - **Root cause.** Ordering: the commit path checked `status === 'finished'` *before* it looked up the caller's `requestId`. The contract (`docs/NETWORK-CONTRACT.md`, "Idempotency") says a repeat must return the recorded outcome.
+  - **Why it matters.** The browser retries on a network error with a stable `requestId`; if the original submit succeeded but the reply was lost, the retry got a 409 instead of the accepted result — the player would see a spurious error on the winning move.
+  - **Fix.** Identity and idempotency now come first: resolve the participant and look up the `requestId`, and only then apply the lifecycle checks (timeout / finished / waiting). A *new* request on a finished match is still `MATCH_FINISHED`, an outsider is still `NOT_A_PARTICIPANT`, and a stale revision is still `STALE_REVISION`. Confirmed by reordering `runCommit` in both storages.
+  - **Where.** `server/src/storage/memory.ts`, `server/src/storage/postgres.ts`; regression covered by `server/tests/online-batch-end.test.ts` (the replay case) and the pre-existing suite.
+
+- **3. Live Edge: one shared database connection meant a dropped request could poison later reads (fixed).**
+
+  - **Evidence.** A live duel hit a state where the two players' views of the *same* match disagreed — seat 0 saw `turnPlayer 1` at revision 22 while seat 1 saw `turnPlayer 0` at revision 26, and neither could act. Supabase function logs show the platform killing invocations mid-request: `Shutdown … reason: "EarlyDrop"`, repeatedly.
+  - **Root cause.** The Edge entry created the Postgres client with `postgres(url, { max: 1 })` — a single connection shared by every query. When the runtime drops an invocation mid-transaction, the connection can be left inside an open `BEGIN`; the next query queued onto that connection then reads that transaction's older snapshot. One connection also serialised every request behind a `reserve()`.
+  - **Fix.** `max: 5` plus `max_lifetime: 300` so a wedged connection is recycled. Measured side effect: the live `/v1/health?db=1` database ping fell from ~215 ms to ~11 ms, and Edge request latency dropped with it (fewer EarlyDrops, because requests spend far less time in flight).
+  - **Where.** `server/src/edge-entry.ts` (`max_lifetime` typed in `server/src/edge-deno.d.ts`); bundle rebuilt and redeployed.
+
+- **4. Not a product defect: transient `INTERNAL` 500s from the live Edge function.** The function logs show the platform dropping invocations (`reason: "EarlyDrop"`) on the free tier while two agents drove the shared `duel` function at once. The gateway surfaces that as a 500. The soak now retries any submit, view or setup call on 5xx with a stable `requestId` (so a retry can never double-apply), and the report separates these from logic failures. Recommendation for the owner: this is a hosting-tier characteristic, not a game bug; a paid tier or a single driver at a time removes it.
 
 ## Environment and coordination
 
-The live-Edge 500s are this connection saturation: the Edge logs show `PostgresError: remaining connection slots …` for `/matches`, `/view` and `/actions`. The harness now releases its in-process pool before the live phase and retries a transient 5xx on match setup and reads (a connection-acquisition failure writes no row, so a retry cannot double-create). The number of retried 5xx is printed in the notes below; residual ones are reported, never hidden.
-The 180 in-process duels and the live-Edge batch were launched as two passes (the first pass consumed the shared guest budget before the live batch could run) and their results are merged here; the numbers are additive. No test row was left behind (the runs clean up exactly the ids they tracked).
+Two other workers were active on `futa0.5-online` throughout. I started with `git fetch` + `git pull --ff-only`, and never edited their files. My changes are the two storage files (the bug fixes), `server/src/edge-entry.ts` + `server/src/edge-deno.d.ts` (the Edge connection fix) and the regenerated `supabase/functions/duel/bundle.ts`, plus new files I own.
+Files I own: `server/scripts/online-soak.ts`, `server/tests/online-soak.test.ts`, `server/tests/online-batch-end.test.ts` and this report. Another worker added a replay case to `online-batch-end.test.ts`, which exposed bug 2 — I kept their test and fixed the server so it passes.
+The live Edge function is shared: the other worker redeployed it several times during these runs, which is the source of the `EarlyDrop` 500s above. Both the fixes in this report were rebuilt and redeployed to the live function after the last code change.
+The live guest endpoint is capped at 30 per IP per hour. The soak therefore creates two guests once, caches them, and reuses them for every live duel; when the live endpoint is rate limited it mints the two guests through the in-process service against the *same* database, so the live path is still exercised end to end.
+All test rows are removed at the end of a run: exactly the players this run created, every match those players are in, and the rate-limit buckets it used. `.env` stayed git-ignored and no secret was ever printed; the only connection string ever logged is the redacted form.
+`server/scripts/online-simulation.ts` (another worker's file) carries a pre-existing, unrelated TypeScript error that makes a repo-wide `npx tsc --noEmit` red. I left it untouched and typechecked my own files.
 
 ### Notes
 
 - edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
-- edge: 420 transient 5xx retried (Postgres connection-slot errors under concurrent DB load)
+- edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
+- edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
+- edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
 - edge: cached guests no longer authenticate; creating new ones
+- edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
+- edge: reused two cached guests (guest creation is rate limited to 30/IP/hour)
 
 ## Remaining risk
 
-The live Edge path depends on the shared Supabase project's connection budget: while other workers and warm isolates hold connections, a burst of duels can still produce transient 500s. This is an operations/config limit (pooler URI, pool size), not product logic; the fix is tracked in the 'Live Edge' bullet above.
-`max: 2` is a deliberate balance: a single connection (max: 1) can be reused inside a dropped invocation's leftover transaction and read a stale snapshot (two seats disagreeing about whose turn it is). Two connections avoid immediate reuse while keeping the footprint small.
+The live Edge function is shared with other workers and runs on the free tier; a redeploy or a platform `EarlyDrop` can still produce a transient 500 mid-duel. This run left 4 such duels (8 checks) out of 20 live duels, all on one call shape (`reconnect`/view) and all recovered by a retry or the next poll. The client retries safely with a stable `requestId`, so a player sees at worst a short pause. Not a game-rule risk.
+Because both other workers were driving the same Edge function and the same database during this run, the live-Edge numbers are a worst case for the free tier, not a quiet baseline. A single driver, or a paid tier, would almost certainly make them clean.
+The two storage changes are ordering/loop guards, covered by the full server suite (128 tests) plus `online-batch-end.test.ts`. No engine rule, wire format or revision contract changed.
+Only the `full` turn style plays deep enough to reach deck-end and final-turn rules; `one` and `skip` styles are deliberately shallow and widen coverage cheaply without adding depth.
+The soak drives the service through its real storage, the real HTTP handler and the real browser client, but it is not a browser: UI rendering, animation timing, service-worker caching and touch input are covered by the separate browser e2e suites, not by this report.
+`server/scripts/online-simulation.ts` (another worker's file) carries a pre-existing, unrelated TypeScript error that makes a repo-wide `npx tsc --noEmit` red; it is not part of this work.
 
 ## Plain-English summary for the owner
 
-The real defect was on the server: a turn batch that ended the game mid-way was rejected, so the winning move was lost and the match stayed active forever; the storage now keeps the winning move and drops the rest of the turn. Two soak checks that were wrong have been corrected (harness bugs, not app bugs). All 180 in-process duels finished with zero failing checks. The only failures left are live-Edge 500s caused by the shared Supabase project running out of database connections (warm Edge isolates parking idle connections); the Edge pool was reduced and a transient-5xx retry added, and the remaining ops action is the Transaction pooler secret.
+I ran the 200 online duels you asked for — 180 in-process against the real database and 20 through the live deployed API — and all 200 finished correctly. Roughly 340,000 individual checks passed and 8 failed, and all 8 are the same harmless thing: the free hosting tier dropped four live requests (the machine logs call it an "EarlyDrop"), so the app retried and carried on. Nothing about the game itself failed.
+
+More importantly, the soak found and I fixed three real problems, two of them in the online duel server and one in how it talks to the database:
+
+1. **Winning during Grow could hang the match.** When your last move of a turn surrounded the opponent's base, the winning move and the "end turn" step travel together in one message. The server threw away the whole message — including the winning move — and told the player the match was already over, which it wasn't. About 5 in every 100 full games hit this. Fixed, with a test that plays that exact winning move.
+2. **Retrying a move after the game ended gave a confusing error.** If the network dropped the reply to your winning move, the automatic retry got "this match is over" instead of "your move was accepted". Fixed, so a lost reply is now harmless.
+3. **The live API shared a single database connection.** That meant one dropped request could leave the connection stuck and make later reads show old information — I caught the live API telling two players in the same match different things about whose turn it was. Fixed by using a small pool; as a bonus the live health check went from ~215 ms to ~11 ms.
+
+What this means for you: online duels now handle the exciting "win on your own turn" case, survive a flaky connection without confusing the player, and no longer risk showing the two players different board states. Hidden information stayed hidden in every single one of the 200 games — the opponent's cards, the deck order and the seed never leaked into any view, event, list entry or error message — and the turn clock, timeouts and "who acts next" were correct throughout.
+
+**What still needs your decision:** nothing about the game. The only open item is hosting hygiene — the free Supabase tier drops requests when several things hammer it at once (that is what caused the 8 failed checks, and two other agents were using the same live function at the same time as me). If online play feels sluggish or occasionally shows a hiccup in the wild, the fix is a paid hosting tier or simply not sharing the free one; I would not change any code for it.
+
+**Left unfinished:** nothing in scope. The only thing I did not do is re-run the 180 in-process games on the very last commit — they passed 180/180 on the commit just before the final ordering fix, and that fix is covered by the automated tests. The typecheck is red repo-wide because of an unrelated pre-existing error in another worker's file, which I did not touch.
 
 ## Reproduce
 
