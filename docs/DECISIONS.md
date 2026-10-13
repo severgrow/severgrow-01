@@ -224,3 +224,6 @@ The owner approved splitting the tutorial: a short core run (goal, turn, one Blo
 
 ### 2026-10-12 — Tutorial v3: one tutorial, How to menu
 The owner asked for the whole game in one tutorial of about 15–16 steps: Strengthen, take over and Bomb taught with Grow, Blast with Bloom, the Throw pile on a Draw, Skip with Grow (the » step), the buttons after the free turn; the last round only as a separate lesson. No tile colours in the copy. The main menu is New game, How to, Settings; How to holds Full tutorial and the separate lessons. This supersedes the core run / More lessons split above.
+
+### 2026-10-13 — Display glow optics (owner-approved, not merged)
+Owner reviewed the display→keys optics and approved them: "lock it in for now; may revisit later." Approved but not merged into `futa0.4` and not deployed to `/futa0.4/`; it stays on `futa04-display-glow`. Details and before/after evidence: `docs/DISPLAY-GLOW.md`. Merged into `futa0.5-online` (the combined FUTASAKU 0.5 build) on 2026-10-13.
