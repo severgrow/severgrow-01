@@ -79,4 +79,47 @@ describe('duelUiFromSnapshot', () => {
     expect(ui.screenView.board[screenHome]?.owner).toBe(0);
     expect(ui.screenView.board[screenHome]?.root).toBe(true);
   });
+
+  it('does not announce "Your turn" while the opponent turn is still replaying', () => {
+    const state = newGame(9);
+    const view = viewFor(state, 0);
+    const payload: MatchViewPayload = {
+      matchId: 'm',
+      seat: 0,
+      status: 'active',
+      revision: 2,
+      turnStartRevision: 2,
+      startingPlayer: 0,
+      view: { ...view, actor: 0, turnPlayer: 0 },
+      legalActions: legalActions({ ...view, actor: 0, turnPlayer: 0 }),
+      events: [],
+      turnDeadlineAt: Date.now() + 3_600_000,
+      graceUsed: [0, 0],
+      gracePeriods: 1,
+      result: null,
+      opponent: { seat: 1, displayName: 'Ash', playerId: 'p1' },
+      rulesVersion: CURRENT_RULES_VERSION,
+      serverNow: Date.now(),
+      actor: 0,
+      turnPlayer: 0,
+    };
+    const fetchImpl: FetchLike = async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ ok: true, player: payload, serverNow: Date.now() }),
+    });
+    const driver = createOnlineDriver({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 't',
+      matchId: 'm',
+      initial: payload,
+      setTimer: () => 1,
+      clearTimer: () => undefined,
+    });
+    const snap = driver.snapshot();
+    expect(duelUiFromSnapshot(snap, false, false).hud.myTurn).toBe(true);
+    const revealing = duelUiFromSnapshot(snap, false, true);
+    expect(revealing.hud.myTurn, 'mid-replay the HUD still shows the opponent turn').toBe(false);
+    expect(turnWord(revealing.hud.myTurn, revealing.hud.finished)).toBe("Opponent's turn");
+  });
 });

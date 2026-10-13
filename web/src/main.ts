@@ -1746,7 +1746,7 @@ function paintOnlineHudFromSession() {
   os.driver.sync().setWaiting(!os.myTurn);
   void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
     const hud = document.getElementById('duel-hud');
-    const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo);
+    const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo, os.isRevealing);
     renderDuelHud(hud, ui);
     const you = document.getElementById('score-you-label');
     const bot = document.getElementById('score-bot-label');
@@ -1924,7 +1924,10 @@ function fastForward() {
   document.querySelectorAll('.flyer').forEach((f) => f.remove());
   for (const s of queue.skipAll()) settleStep(s, false);
   pumping = false;
-  getOnlineSession()?.endReveal();
+  if (getOnlineSession()) {
+    getOnlineSession()!.endReveal();
+    paintOnlineHudFromSession();
+  }
   render();
   flushIdle();
   // A bot turn that was waiting on the animations carries on.
@@ -2087,14 +2090,20 @@ async function pump() {
     await playStep(queue.peek()!, my);
   }
   if (my !== epoch) {
-    getOnlineSession()?.endReveal();
+    if (getOnlineSession()) {
+      getOnlineSession()!.endReveal();
+      paintOnlineHudFromSession();
+    }
     return;
   }
   pumping = false;
   replaying = false;
   board.focus(null);
   // The opponent's turn has fully played out (or was skipped): the player may act now.
-  getOnlineSession()?.endReveal();
+  if (getOnlineSession()) {
+    getOnlineSession()!.endReveal();
+    paintOnlineHudFromSession();
+  }
   if (reopenGameOver) {
     reopenGameOver = false;
     gameOverDismissed = false;

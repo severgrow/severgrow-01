@@ -27,8 +27,13 @@ export type DuelUiModel = {
   hud: DuelHudModel;
 };
 
-export const duelUiFromSnapshot = (snap: MatchDriverSnapshot, canUndo: boolean): DuelUiModel => {
-  const myTurn = snap.view.actor === snap.seat && snap.status === 'active';
+export const duelUiFromSnapshot = (
+  snap: MatchDriverSnapshot,
+  canUndo: boolean,
+  /** True while the opponent's finished turn is still replaying: it is NOT this seat's turn yet. */
+  revealing = false,
+): DuelUiModel => {
+  const myTurn = !revealing && snap.view.actor === snap.seat && snap.status === 'active';
   const finished = snap.status === 'finished' || snap.view.phase === 'GAME_OVER';
   return {
     seat: snap.seat,
