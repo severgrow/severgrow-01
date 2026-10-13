@@ -25,13 +25,25 @@ no scoring, deck, Bloom/Bomb/Blast, Strangle or deck-end change).
 
 ## 1. The measured verdict on "did the queue refill / never drain?"
 
-**KILLED for the deployed build's normal path.** Over 5 duels × 3 turns the gate always drained:
-`queued` returned to 0 and `pumping` to `false` after every reveal, and no run produced a
-`watch:release` (the safety net never fired). The 12-turn repeat suite confirms this: gate p50
-**708 ms**, p95/max **4325 ms**, and "repeated turns do not degrade" (1st 706 ms, 10th 708 ms).
+**KILLED — and the real mechanism is different (and now measured).** The queue did **not** refill in
+any run. On the **pre-fix** build (`68e0d05`) the repeat suite reproduced the stall, and the signature
+is **`queued: 0` with the gate shut and the word stuck on "Opponent's turn" for tens of samples**
+(turns 2, 4 and 6 of a six-turn run never reopened the gate; screenshots
+`docs/screens/online/gate-stuck-turn-2.png` / `-12.png`). `queued: 0` is the opposite of a refilling
+queue: **the replay was never enqueued at all**, because an exception was thrown while *applying* the
+view (applying a view renders, and the render path rebuilt the previous turn from an action log an
+online duel does not keep). That exception sat inside the sync engine's network `try/catch`, so it was
+disguised as "Reconnecting" and the gate — already closed when the completed turn was detected — was
+never lifted.
 
-The refill/never-drain shape **was** real in the code and is fixed (see §3): three separate defects
-could leave the gate shut, and the fixes plus the hard safety net cover all three.
+**On the fixed build** the gate always drains: over 5 duels × 3 turns, and 12 repeat turns, `queued`
+returns to 0 and `pumping` to `false` after every reveal, and no normal replay produced a
+`watch:release` (the safety net never had to fire). In an all-empty-turn repeat run the gate was
+p50 **710 ms**, p95/max **726 ms**; the heavier run in the table below (a 6-tile sequential Bloom)
+reached **2334 ms**, and "repeated turns do not degrade" (1st 700 ms, 10th 699 ms).
+
+So three separate defects could leave the gate shut — a thrown apply/render path (the reproduced one),
+a lost pump wake-up, and a hung step — and the fixes plus the hard safety net cover all three.
 
 ## 2. The biggest cause of the long "Opponent's turn"
 
@@ -83,10 +95,10 @@ region costs one-off ~450 ms on the first request.)
 
 | Target (median) | Before | After |
 | --- | --- | --- |
-| Turn visible on the other phone < 1.5 s | ~1.2–1.4 s, but the word was wrong for the whole replay | see the after-run table below |
-| Input open within replay length + 0.5 s | gate 1.2–6.9 s, input 2.1–11.8 s | see below |
-| No frame over 50 ms at 4x CPU throttle | 2–274 long frames per reveal | see below |
-| Zero stuck gates | intermittent (see §2) | see below |
+| Turn visible on the other phone < 1.5 s | ~1.2–1.4 s, but the word was wrong for the whole replay | **1084 ms** (live, deployed) |
+| Input open within replay length + 0.5 s | gate 1.2–6.9 s, input 2.1–11.8 s | **no** — 2433 ms over a 1299 ms replay (≈ +1.1 s, dominated by detection) |
+| No frame over 50 ms at 4x CPU throttle | 2–274 long frames per reveal | **no** — 29 of 1189 frames (~2.4%) |
+| Zero stuck gates | intermittent; reproduced — see "This suite bites the pre-fix code" below | **yes** — 0 in 5 live reveals, 12 repeat turns, and the injected-stall backstop |
 
 The **before** timing rows are noisy: they were taken while the machine was also busy (a full test
 suite ran concurrently), which is exactly the false-load condition the CI notes warn about. The
@@ -120,6 +132,33 @@ moments. `queued: 0` with the gate shut is the signature of the replay/render pa
 the catch-up was enqueued (see §3), not of a leaked `pumping` holding unplayed steps — the pre-fix
 failure screenshots are `docs/screens/online/gate-stuck-turn-2.png` and `-12.png`.
 
+
+### Live deployed measurement (two phones, 4x CPU throttle)
+
+Deployed build **`69ae63a`** (`release.json` confirmed moved from `68e0d05`),
+`TIMING=1 DUELS=5 TURNS=3 npx tsx web/e2e/online-live-smoothness.ts`, two real contexts against the
+**deployed** Edge API, nothing else running. 5 of 5 reveals measured.
+
+| Segment (from the Throw) | median | p95 | worst |
+| --- | --- | --- | --- |
+| Turn visible on the other phone | **1084 ms** | 1282 ms | 1282 ms |
+| Input open | 2433 ms | 4661 ms | 4661 ms |
+| Gate closed (replay) duration | 1299 ms | 3577 ms | 3577 ms |
+
+- Detection: **5 Realtime pings** (exactly one per turn boundary — the ping genuinely arrives in
+  production, now counted by the `?debug=timing` trace) and 28 safety polls. The ping is the
+  trigger; the poll is the net.
+- Turn word on the replaying phone: **`["Replaying their turn"]`** at every sampled moment;
+  **0 label violations** (the pre-fix build was wrong at 100% of reveals).
+- Frames over 50 ms during the reveals: **29 of 1189 (~2.4%)** at 4x CPU throttle.
+- "Input open" = detection + replay: the +0.5 s budget over the replay would need detection to be
+  nearly free; it is instead bounded by the 1.5 s detection target, which is met.
+
+**Confirmation on the current live build (`95b4190`, which adds the unrelated install-invitation
+feature; its duel code is byte-identical to the measured build).** `DUELS=2 TURNS=2`, 4/4 reveals:
+turn visible **median 828 ms** (p95 1081 ms), gate median 3400 ms with real 3–4 tile grows,
+**1 Realtime ping per reveal**, **0 label violations**, 15 of 1155 frames over 50 ms. All four
+live checks pass.
 
 ## 6. Honest limits
 

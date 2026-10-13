@@ -165,6 +165,8 @@ export type SeatOptions = {
   isMobile?: boolean;
   reduceMotion?: boolean;
   speed?: 'slow' | 'normal' | 'fast' | 'skip';
+  /** Override the user agent (e.g. to exercise the iOS Safari instruction face). */
+  userAgent?: string;
 };
 
 /**
@@ -184,6 +186,7 @@ export const openSeat = async (
     viewport: options.viewport ?? { width: 390, height: 844 },
     hasTouch: options.hasTouch ?? true,
     isMobile: options.isMobile ?? true,
+    ...(options.userAgent ? { userAgent: options.userAgent } : {}),
   });
   await context.addInitScript(
     ({ identityKey: ik, sessionKey: sk, identity, session, speed, reduceMotion }) => {
