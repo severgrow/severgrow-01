@@ -28,8 +28,8 @@ import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import type { ServerConfig } from '../src/config.js';
 import { ApiError } from '../src/errors.js';
 import { newId } from '../src/ids.js';
-import { INVITE_CODE_LENGTH } from '../../src/invite-code.js';
-import { ONLINE, inviteCodeFormatHint } from '../../src/strings.js';
+import { INVITE_CODE_LENGTH, LINK_CODE_LENGTH } from '../../src/invite-code.js';
+import { ONLINE, inviteCodeFormatHint, linkCodeHelpText } from '../../src/strings.js';
 import { MAX_INVITE_CODE_ATTEMPTS, MatchService } from '../src/service.js';
 import { MemoryStorage } from '../src/storage/memory.js';
 import { poolFromUrl } from '../src/storage/pg-pool.js';
@@ -169,9 +169,73 @@ describe('invite codes: length and safe generation (memory adapter)', () => {
   });
 });
 
-// The displayed format hint is derived from the same constant the server config uses, so this class
-// of drift (a hard-coded length in the copy) can never return. It must read correctly for the
-// default AND for a non-default length.
+// A DEVICE LINK code is a different concept from a match invite code: redeeming it mints a new token
+// for another player (account takeover), so it must be long. These tests pin that the two lengths
+// are independent — the exact regression that shipped when `createLinkCode` read the invite length.
+describe('device link codes keep their own length (account-takeover guard)', () => {
+  const harness = (overrides: Partial<ServerConfig> = {}) => {
+    const storage = new MemoryStorage();
+    const service = new MatchService({ storage, config: testConfig(overrides), now: () => 1_000_000 });
+    return { storage, service };
+  };
+
+  it('a match invite code is 4 characters and a device link code is 8, by default', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'A');
+    const match = await service.createMatch(a.player);
+    expect(match.match.inviteCode).toHaveLength(4);
+    expect(match.match.inviteCode).toHaveLength(INVITE_CODE_LENGTH);
+    const link = await service.createLinkCode(a.player);
+    expect(link.code).toHaveLength(8);
+    expect(link.code).toHaveLength(LINK_CODE_LENGTH);
+  });
+
+  it('the two lengths are INDEPENDENT: a longer invite length never lengthens a link code', async () => {
+    const { service } = harness({ inviteCodeLength: 10 });
+    const a = await guest(service, 'A');
+    const match = await service.createMatch(a.player);
+    expect(match.match.inviteCode).toHaveLength(10);
+    const link = await service.createLinkCode(a.player);
+    // The regression: this used to be 10 too, because link codes shared `inviteCodeLength`.
+    expect(link.code).toHaveLength(LINK_CODE_LENGTH);
+    expect(link.code).toHaveLength(8);
+  });
+
+  it('the two lengths are INDEPENDENT: a longer link length never lengthens an invite code', async () => {
+    const { service } = harness({ linkCodeLength: 12 });
+    const a = await guest(service, 'A');
+    const match = await service.createMatch(a.player);
+    expect(match.match.inviteCode).toHaveLength(INVITE_CODE_LENGTH);
+    expect(match.match.inviteCode).toHaveLength(4);
+    const link = await service.createLinkCode(a.player);
+    expect(link.code).toHaveLength(12);
+  });
+
+  it('a link code round-trips: created, then redeemed for the same player with a new token', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'A');
+    const { code, expiresAt } = await service.createLinkCode(a.player);
+    expect(expiresAt).toBeGreaterThan(1_000_000);
+    const linked = await service.redeemLinkCode(code);
+    expect(linked.player.id).toBe(a.player.id);
+    expect(linked.token).not.toBe(a.token);
+    // Single use: the same code cannot be redeemed twice.
+    await expectCode(service.redeemLinkCode(code), 'NOT_FOUND');
+  });
+
+  it('redeems a link code typed in groups, case-insensitively (normalisation is length-agnostic)', async () => {
+    const { service } = harness();
+    const a = await guest(service, 'A');
+    const { code } = await service.createLinkCode(a.player);
+    const grouped = `${code.slice(0, 4).toLowerCase()}-${code.slice(4).toLowerCase()}`;
+    const linked = await service.redeemLinkCode(grouped);
+    expect(linked.player.id).toBe(a.player.id);
+  });
+});
+
+// The displayed format hints are derived from the same constants the server config uses, so this
+// class of drift (a hard-coded length in the copy) can never return. They must read correctly for
+// the default AND for a non-default length.
 describe('the invite-code format hint cannot drift from the configured length', () => {
   it('ties the server config and the player copy to the one shared length', () => {
     expect(DEFAULT_SERVER_CONFIG.inviteCodeLength).toBe(INVITE_CODE_LENGTH);
@@ -189,6 +253,29 @@ describe('the invite-code format hint cannot drift from the configured length', 
   it('follows a configured invite length, not a fixed string', () => {
     const six = testConfig({ inviteCodeLength: 6 });
     expect(inviteCodeFormatHint(six.inviteCodeLength)).toBe('Enter the 6 characters.');
+  });
+});
+
+// Same guarantee for the LINK-code copy: the Settings hint states the length, and that number is
+// derived from `LINK_CODE_LENGTH`/`config.linkCodeLength`, so it can never be hard-coded or inherit
+// the invite length by accident.
+describe('the link-code help copy cannot drift from the configured length', () => {
+  it('ties the server config and the player copy to the one shared link length', () => {
+    expect(DEFAULT_SERVER_CONFIG.linkCodeLength).toBe(LINK_CODE_LENGTH);
+    expect(LINK_CODE_LENGTH).toBe(8);
+    expect(ONLINE.linkCodeHelp).toBe(linkCodeHelpText(DEFAULT_SERVER_CONFIG.linkCodeLength));
+  });
+
+  it('reads the real number for the default (8) and for a non-default length (12)', () => {
+    expect(linkCodeHelpText(8)).toBe(
+      'Creates a one-time 8-character code (10 minutes). It never moves your existing token.',
+    );
+    expect(linkCodeHelpText(12)).toBe(
+      'Creates a one-time 12-character code (10 minutes). It never moves your existing token.',
+    );
+    expect(ONLINE.linkCodeHelp).toMatch(new RegExp(`\\b${DEFAULT_SERVER_CONFIG.linkCodeLength}\\b`));
+    // It must describe the LINK length, not the invite length.
+    expect(ONLINE.linkCodeHelp).not.toMatch(new RegExp(`\\b${DEFAULT_SERVER_CONFIG.inviteCodeLength}\\b`));
   });
 });
 

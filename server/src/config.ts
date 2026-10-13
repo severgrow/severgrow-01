@@ -1,7 +1,7 @@
 // Server configuration. Times are epoch milliseconds and are always passed in by the caller
 // (the service owns the clock), so the core logic stays testable and deterministic.
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
-import { INVITE_CODE_LENGTH } from '../../src/invite-code.js';
+import { INVITE_CODE_LENGTH, LINK_CODE_LENGTH } from '../../src/invite-code.js';
 
 export type ServerConfig = {
   /** The rules version every new match is created under. Immutable once a match exists. */
@@ -24,6 +24,16 @@ export type ServerConfig = {
    * `INVITE_CODE_LENGTH` in `src/invite-code.ts` — the one line both layers read.
    */
   inviteCodeLength: number;
+  /**
+   * One-time DEVICE LINK-code length (Crockford base32, unambiguous alphabet).
+   *
+   * Deliberately a SEPARATE value from `inviteCodeLength` — redeeming a link code mints a new token
+   * for another player (account takeover), while a match invite code only joins a duel. The value
+   * lives in ONE place — `LINK_CODE_LENGTH` in `src/invite-code.ts` — and is re-exported here so the
+   * service keeps reading it from its config. The player-facing hint (`ONLINE.linkCodeHelp` in
+   * `src/strings.ts`) derives from the same constant. Never couple this to `inviteCodeLength`.
+   */
+  linkCodeLength: number;
   /** Maximum decoded JSON request body size in bytes. */
   maxBodyBytes: number;
   /** Open (waiting/active) matches a single player may own at once. */
@@ -109,6 +119,7 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   rulesVersion: CURRENT_RULES_VERSION,
   maxMovesPerMatch: 10_000,
   inviteCodeLength: INVITE_CODE_LENGTH,
+  linkCodeLength: LINK_CODE_LENGTH,
   maxBodyBytes: 64 * 1024,
   corsOrigin: '*',
   maxOpenMatchesPerPlayer: 10,

@@ -1,6 +1,6 @@
 // The words the player sees for the other side, in one place (UI polish pass 3). Only text
 // the player can read uses these; code names (src/bots/, botVersion, BOT, CSS classes) stay.
-import { INVITE_CODE_LENGTH } from './invite-code.js';
+import { INVITE_CODE_LENGTH, LINK_CODE_LENGTH } from './invite-code.js';
 
 /** What the other side is called everywhere on the page. */
 export const OPPONENT_LABEL = 'Opponent';
@@ -35,6 +35,17 @@ export const GAME_TITLE = 'Futasaku';
  * tests pass an explicit value to prove the wording tracks the number.
  */
 export const inviteCodeFormatHint = (length: number = INVITE_CODE_LENGTH): string => `Enter the ${length} characters.`;
+
+/**
+ * The Settings hint for the device link code ("Use my matches on another browser"). Built from the
+ * ONE link-code length (`src/invite-code.ts`, re-exported by the server as `linkCodeLength`), so the
+ * copy can never drift from the codes the server actually generates. A link code is longer than a
+ * match invite code on purpose: redeeming it mints a new token for another player (account
+ * takeover), so it must never inherit the short invite length. The parameter defaults to the real
+ * length; tests pass an explicit value to prove the wording tracks the number.
+ */
+export const linkCodeHelpText = (length: number = LINK_CODE_LENGTH): string =>
+  `Creates a one-time ${length}-character code (10 minutes). It never moves your existing token.`;
 
 /** Online Duels (FUTASAKU 0.5) — every lobby / menu word the player reads. */
 export const ONLINE = Object.freeze({
@@ -120,7 +131,7 @@ export const ONLINE = Object.freeze({
   storageNote:
     'Your online matches live on this device until accounts exist.',
   linkCodeTitle: 'Use my matches on another browser',
-  linkCodeHelp: 'Creates a one-time code (10 minutes). It never moves your existing token.',
+  linkCodeHelp: linkCodeHelpText(),
   linkCodeMake: 'Make a link code',
   linkCodeRedeem: 'Enter a link code',
   linkCodeDone: (code: string) => `Code ${code} — enter it on the other browser.`,

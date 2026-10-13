@@ -165,7 +165,10 @@ export class MatchService {
   async createLinkCode(player: PlayerRecord): Promise<{ code: string; expiresAt: number }> {
     await this.rateLimit(`link:player:${player.id}`, HOUR_MS, this.config.rateLimits.linkCodePerPlayerPerHour);
     const now = this.now();
-    const code = newInviteCode(this.config.inviteCodeLength);
+    // A DEVICE LINK code is a different concept from a match invite code: redeeming it mints a new
+    // token for another player (account takeover), so it uses the longer `linkCodeLength` and must
+    // never be coupled to `inviteCodeLength`.
+    const code = newInviteCode(this.config.linkCodeLength);
     await this.storage.createLinkCode({
       id: newId(),
       codeHash: hashToken(code),

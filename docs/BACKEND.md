@@ -185,6 +185,26 @@ change (for example 8 characters) still resolves and joins. **Path to longer cod
 `INVITE_CODE_LENGTH` in `src/invite-code.ts` — that one constant feeds both the server config and
 the player-facing hint.
 
+## Device link codes (different from invite codes)
+
+A link code (the Settings **"Use my matches on another browser"** path) is **NOT** an invite code,
+and the two must never share a length:
+
+| | Match invite code | Device link code |
+| --- | --- | --- |
+| Length | `INVITE_CODE_LENGTH` = **4** | `LINK_CODE_LENGTH` = **8** |
+| Server config | `config.inviteCodeLength` | `config.linkCodeLength` |
+| Harm if guessed | A stranger joins somebody's private duel — low | **A new token for another player** — full account takeover, and every match they own — high |
+| Read aloud? | Yes (shared, typed on another device) | No (generated and entered once, same device, by copy/paste) |
+
+Both lengths have **one home** each in `src/invite-code.ts`; `server/src/config.ts` re-exports them
+as `inviteCodeLength` / `linkCodeLength`, and the player-facing hints (`ONLINE.errCodeFormat`,
+`ONLINE.linkCodeHelp`) derive from the same constants. Shortening link codes buys nothing — there is
+no readability use case — so link codes stay long. `createLinkCode` generates
+`newInviteCode(config.linkCodeLength)` (Crockford base32) and `redeemLinkCode` normalises and hashes
+the typed code; redemption is single-use and rate limited per IP (`linkRedeemPerIpPerHour`), and
+creation is rate limited per player (`linkCodePerPlayerPerHour`).
+
 ## The action pipeline (exactly once)
 
 ```
