@@ -133,6 +133,9 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
   let ref = 0;
   let reconnectDelay = 500;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive failed connection attempts. After a few, Realtime is treated as unavailable. */
+  let failures = 0;
+  const MAX_ATTEMPTS = 5;
 
   const send = (topic: string, event: string, payload: unknown): void => {
     if (socket?.readyState !== OPEN) return;
@@ -163,6 +166,10 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
 
   const scheduleReconnect = (): void => {
     if (reconnectTimer !== null || subs.size === 0) return;
+    failures += 1;
+    // Realtime is a hint, not the truth (P-11): if it cannot connect, stop trying and let the
+    // sync engine's polling carry the match. Never churn a socket for a ping that may not exist.
+    if (failures > MAX_ATTEMPTS) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       open();
@@ -183,6 +190,7 @@ export const createRealtimeChannel = (options: RealtimeChannelOptions): MatchCha
     socket = next;
     next.addEventListener('open', () => {
       reconnectDelay = 500;
+      failures = 0;
       joinAll();
       if (heartbeat === null) {
         heartbeat = setInterval(() => send('phoenix', 'heartbeat', {}), options.heartbeatMs ?? 25_000);

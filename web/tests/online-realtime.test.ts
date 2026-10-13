@@ -96,6 +96,34 @@ describe('createRealtimeChannel', () => {
       vi.useRealTimers();
     }
   });
+
+  it('gives up (and keeps polling) when Realtime never connects', () => {
+    vi.useFakeTimers();
+    try {
+      const sockets: FakeSocket[] = [];
+      const channel = createRealtimeChannel({
+        url: 'wss://example.supabase.co/realtime/v1/websocket',
+        socket: (url) => {
+          const s = new FakeSocket(url);
+          sockets.push(s);
+          return s;
+        },
+        heartbeatMs: 1_000_000,
+      });
+      channel.subscribe('match:3', { onPing: () => undefined, onPresence: () => undefined });
+      // Every attempt opens a socket that immediately drops, up to the retry budget.
+      for (let i = 0; i < 8; i++) {
+        sockets.at(-1)!.emit('close');
+        vi.advanceTimersByTime(20_000);
+      }
+      const settled = sockets.length;
+      sockets.at(-1)!.emit('close');
+      vi.advanceTimersByTime(120_000);
+      expect(sockets.length).toBe(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('createSupabaseBroadcaster', () => {
