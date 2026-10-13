@@ -11,6 +11,8 @@ import { corsHeaders } from './cors.js';
 import { ApiError } from './errors.js';
 import { createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
+import { createSupabaseBroadcaster } from './broadcast-supabase.js';
+import type { MatchBroadcaster } from './broadcast.js';
 import { postgresStorage } from './storage/postgres.js';
 import type { PgPool } from './storage/postgres.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
@@ -85,6 +87,14 @@ const databaseUnavailable = (error: unknown): never => {
   throw error;
 };
 
+/** Realtime broadcast publisher, or undefined when the platform key is unavailable. */
+const broadcaster = ((): MatchBroadcaster | undefined => {
+  const url = Deno.env.get('SUPABASE_URL') ?? '';
+  const key = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  if (!url || !key) return undefined;
+  return createSupabaseBroadcaster({ url, key, onError: (error) => log(`REALTIME_PING_ERROR ${safeErrorText(error)}`) });
+})();
+
 const buildRuntime = async (): Promise<EdgeRuntime> => {
   const databaseUrl = Deno.env.get('DATABASE_URL') ?? '';
   if (!databaseUrl) {
@@ -101,6 +111,9 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   const service = new MatchService({
     storage: postgresStorage(pool),
     config: edgeConfig,
+    // Live pings: the platform exposes SUPABASE_URL / SUPABASE_ANON_KEY to every function.
+    // Missing values just mean the browser falls back to polling (P-11); no failure either way.
+    ...(broadcaster ? { broadcaster } : {}),
   });
   const app = createFetchApp({ service, config: edgeConfig, logger: log });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };

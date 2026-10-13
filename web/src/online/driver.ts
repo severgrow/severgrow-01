@@ -109,6 +109,9 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
 
   if (player) {
     draft.syncFromServer(player.view, player.revision);
+    // A reconnect/resume payload carries only the turns missed while away. Buffer them so the
+    // page replays them (at 2x) through the same AnimQueue as a live opponent turn.
+    if (player.events.length > 0) pendingEvents = [...player.events];
   }
 
   const sync = createSyncEngine({

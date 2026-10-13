@@ -8,6 +8,13 @@ import type { ConnectionStatus, MatchChannel, MatchPing, PresenceSnapshot, Prese
 
 export const POLL_ACTIVE_MS = 2_000;
 export const POLL_HIDDEN_MS = 30_000;
+/**
+ * While it is the opponent's turn, we are waiting for a whole turn to complete. Poll faster than
+ * the idle cadence so their finished turn appears (and replays) almost at once. A live Realtime
+ * ping still arrives first when the transport is configured; this is the safety net that makes the
+ * wait feel immediate even when the ping is unavailable.
+ */
+export const POLL_WAITING_MS = 900;
 
 export type SyncEngineOptions = {
   client: DuelClient;
@@ -43,6 +50,8 @@ export type SyncEngine = {
   setVisible(visible: boolean): void;
   /** Tell the engine the network came back / went away. */
   setOnline(online: boolean): void;
+  /** True while we are waiting for the opponent (polls faster so their turn replays promptly). */
+  setWaiting(waiting: boolean): void;
 };
 
 const defaultVisible = (): boolean => {
@@ -71,6 +80,8 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
   let unsub: (() => void) | null = null;
   let stopped = true;
   let inFlight: Promise<void> | null = null;
+  /** Waiting on the opponent: poll faster so their finished turn appears almost at once. */
+  let waiting = false;
 
   const setConnection = (status: ConnectionStatus, nextNotice: string | null = null) => {
     connection = status;
@@ -112,7 +123,10 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     await inFlight;
   };
 
-  const pollMs = (): number => (visible ? POLL_ACTIVE_MS : POLL_HIDDEN_MS);
+  const pollMs = (): number => {
+    if (!visible) return POLL_HIDDEN_MS;
+    return waiting ? POLL_WAITING_MS : POLL_ACTIVE_MS;
+  };
 
   const schedule = () => {
     if (stopped) return;
@@ -176,6 +190,13 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       } else {
         setConnection('offline', 'Reconnecting');
       }
+    },
+
+    setWaiting(next) {
+      if (waiting === next) return;
+      waiting = next;
+      // Re-arm at the new cadence straight away so the wait feels prompt.
+      if (!stopped) schedule();
     },
   };
 };

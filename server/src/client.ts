@@ -67,7 +67,7 @@ export class DuelError extends Error {
 }
 
 /** What a client keeps between reloads to resume its match ("refresh" / reconnect). */
-export type DuelSession = { token: string; matchId: string; seat: Player };
+export type DuelSession = { token: string; matchId: string; seat: Player; revision?: number };
 
 export type DuelClientOptions = {
   baseUrl: string;
@@ -199,7 +199,9 @@ export class DuelClient {
       const parsed = JSON.parse(raw) as Partial<DuelSession>;
       if (typeof parsed.token !== 'string' || typeof parsed.matchId !== 'string') return null;
       const seat: Player = parsed.seat === 1 ? 1 : 0;
-      return { token: parsed.token, matchId: parsed.matchId, seat };
+      return typeof parsed.revision === 'number'
+        ? { token: parsed.token, matchId: parsed.matchId, seat, revision: parsed.revision }
+        : { token: parsed.token, matchId: parsed.matchId, seat };
     } catch {
       return null;
     }
@@ -209,13 +211,21 @@ export class DuelClient {
     this.storage?.remove(this.sessionKey);
   }
 
-  /** Resume a stored match: reconnect and return the fresh view, or null when there is none. */
+  /**
+   * Resume a stored match: reconnect and return the fresh view, or null when there is none.
+   * When the last-seen revision is known, only the gap events come back, so the caller can replay
+   * exactly the turns missed while away. With no stored revision (an older save) the view is
+   * fetched whole but its history is withheld — we cannot tell the gap from the whole match, and
+   * replaying every turn ever played would be worse than no animation.
+   */
   async resume(): Promise<{ session: DuelSession; player: MatchViewPayload } | null> {
     const session = this.loadSession();
     if (!session) return null;
-    const { player } = await this.reconnect(session.token, session.matchId);
-    this.saveSession({ token: session.token, matchId: player.matchId, seat: player.seat });
-    return { session: { token: session.token, matchId: player.matchId, seat: player.seat }, player };
+    const knownRevision = typeof session.revision === 'number';
+    const { player } = await this.reconnect(session.token, session.matchId, session.revision);
+    const view = knownRevision ? player : { ...player, events: [] };
+    this.saveSession({ token: session.token, matchId: view.matchId, seat: view.seat, revision: view.revision });
+    return { session: { token: session.token, matchId: view.matchId, seat: view.seat, revision: view.revision }, player: view };
   }
 
   // ---- transport ----

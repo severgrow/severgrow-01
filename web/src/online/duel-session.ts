@@ -7,6 +7,7 @@ import type { Step } from '../logic/anim.js';
 import { EMPTY_SEL, pendingAction, tapCard, tapHex, tapKind } from '../logic/interaction.js';
 import type { Sel } from '../logic/interaction.js';
 import type { Played } from '../logic/session.js';
+import { ONLINE } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
 import { shadowFromView } from './shadow.js';
 import { stepsFromEvents, syncStep } from './steps-from-events.js';
@@ -28,6 +29,12 @@ export class OnlineSession {
   readonly base: State | null = null;
   private drawn: Action | null = null;
   private lastCatchUp: Step[] = [];
+  /**
+   * True from the moment a catch-up replay (the opponent's finished turn) is handed to the page
+   * until that replay has finished draining. While set, NOTHING may be played and no action is
+   * offered: the player must see the true board before they can act.
+   */
+  private revealing = false;
 
   constructor(readonly driver: OnlineDriver) {
     this.state = this.buildDisplayState();
@@ -46,6 +53,7 @@ export class OnlineSession {
   }
 
   get legal(): Action[] {
+    if (this.revealing) return []; // never act on a board that is still replaying
     const snap = this.driver.snapshot();
     if (snap.view.actor !== snap.seat || snap.status !== 'active') return [];
     // Legal in engine space → map to display (screen) coords for the UI.
@@ -53,15 +61,27 @@ export class OnlineSession {
   }
 
   get pending(): Action | null {
+    if (this.revealing) return null;
     if (this.drawn && this.legal.some((a) => same(a, this.drawn!))) return this.drawn;
     return this.legal.length ? pendingAction(this.view, this.legal, this.sel) : null;
   }
 
   get canUndo(): boolean {
-    return this.driver.draft().canUndo();
+    return !this.revealing && this.driver.draft().canUndo();
+  }
+
+  /** True while the opponent's finished turn is still replaying; input is closed. */
+  get isRevealing(): boolean {
+    return this.revealing;
+  }
+
+  /** Called by the page the moment a catch-up replay drains (or is skipped). */
+  endReveal(): void {
+    this.revealing = false;
   }
 
   get myTurn(): boolean {
+    if (this.revealing) return false;
     const snap = this.driver.snapshot();
     return snap.status === 'active' && snap.view.actor === snap.seat && snap.view.phase !== 'GAME_OVER';
   }
@@ -72,6 +92,7 @@ export class OnlineSession {
   }
 
   preset(a: Action | null) {
+    if (this.revealing) return;
     this.drawn = a && this.legal.some((x) => same(x, a)) ? a : null;
   }
   get presetMove(): Action | null {
@@ -79,14 +100,17 @@ export class OnlineSession {
   }
 
   tapCard(id: number) {
+    if (this.revealing) return;
     this.drawn = null;
     this.sel = tapCard(this.view, this.legal, this.sel, id);
   }
   tapHex(key: string) {
+    if (this.revealing) return;
     this.drawn = null;
     this.sel = tapHex(this.view, this.legal, this.sel, key);
   }
   tapKind(kind: string) {
+    if (this.revealing) return;
     this.drawn = null;
     this.sel = tapKind(this.sel, kind);
   }
@@ -111,6 +135,8 @@ export class OnlineSession {
     const v = this.view;
     steps.push(syncStep(this.state.board, [v.score, v.opponentScore]));
     this.lastCatchUp = steps;
+    // The page will replay these through the shared AnimQueue; until it drains, input stays shut.
+    if (steps.length > 0) this.revealing = true;
     return steps;
   }
 
@@ -122,6 +148,9 @@ export class OnlineSession {
    * Play a UI action (display coords). Draw/Throw are async; mid-turn Grow is local draft.
    */
   async play(action: Action): Promise<OnlinePlayResult> {
+    if (this.revealing) {
+      return { ok: false, message: ONLINE.statusRevealWait };
+    }
     const engine = this.driver.toEngineAction(action);
     if (engine.t === 'Draw') {
       const before = this.buildEngineShadow();

@@ -1742,6 +1742,8 @@ async function humanPlayOnline(a: Action) {
 function paintOnlineHudFromSession() {
   const os = getOnlineSession();
   if (!os) return;
+  // Waiting on the opponent? Poll faster so their finished turn replays almost at once.
+  os.driver.sync().setWaiting(!os.myTurn);
   void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
     const hud = document.getElementById('duel-hud');
     const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo);
@@ -1922,6 +1924,7 @@ function fastForward() {
   document.querySelectorAll('.flyer').forEach((f) => f.remove());
   for (const s of queue.skipAll()) settleStep(s, false);
   pumping = false;
+  getOnlineSession()?.endReveal();
   render();
   flushIdle();
   // A bot turn that was waiting on the animations carries on.
@@ -2083,10 +2086,15 @@ async function pump() {
     }
     await playStep(queue.peek()!, my);
   }
-  if (my !== epoch) return;
+  if (my !== epoch) {
+    getOnlineSession()?.endReveal();
+    return;
+  }
   pumping = false;
   replaying = false;
   board.focus(null);
+  // The opponent's turn has fully played out (or was skipped): the player may act now.
+  getOnlineSession()?.endReveal();
   if (reopenGameOver) {
     reopenGameOver = false;
     gameOverDismissed = false;
@@ -5832,6 +5840,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
     hasStarterRevealed,
     markStarterRevealed,
     shouldPlayStarterLottery,
+    realtimeChannelFromEnv,
   } = await import('./online/index.js');
   const { DuelClient, browserStorage } = await import('../../server/src/client.js');
   const { duelApiUrl } = await import('./online/config.js');
@@ -5871,6 +5880,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
         token,
         matchId,
         initial: player,
+        channel: realtimeChannelFromEnv(),
         onChange: () => {
           const os = getOnlineSession();
           if (!os) return;
@@ -5888,6 +5898,9 @@ void import('./online/lobby-ui.js').then(async (m) => {
           }
           paintOnlineHudFromSession();
           if (os.finished) gameOverDismissed = false;
+          // Remember how far this device has seen, so a later resume replays only the gap.
+          const snap = os.driver.snapshot();
+          client.saveSession({ token, matchId, seat: snap.seat, revision: snap.revision });
           render();
         },
       });
@@ -5900,7 +5913,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
         shownScores = [session.view.score, session.view.opponentScore];
       }
       void driver.start();
-      client.saveSession({ token, matchId, seat: player.seat });
+      client.saveSession({ token, matchId, seat: player.seat, revision: player.revision });
       const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
       if (resignBtn) {
         resignBtn.hidden = false;

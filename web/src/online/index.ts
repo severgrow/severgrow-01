@@ -15,10 +15,10 @@ export { shadowFromView, fruitKnownFromView, PLACEHOLDER_ID_BASE } from './shado
 export { createDraftEngine, draftStorageKey } from './draft.js';
 export type { DraftEngine, DraftSnapshot } from './draft.js';
 
-export { createFakeChannel, createNoopChannel } from './channel.js';
-export type { FakeChannelController } from './channel.js';
+export { createFakeChannel, createNoopChannel, createRealtimeChannel, realtimeChannelFromEnv, pingFromFrame } from './channel.js';
+export type { FakeChannelController, RealtimeFrame } from './channel.js';
 
-export { createSyncEngine, POLL_ACTIVE_MS, POLL_HIDDEN_MS } from './sync.js';
+export { createSyncEngine, POLL_ACTIVE_MS, POLL_HIDDEN_MS, POLL_WAITING_MS } from './sync.js';
 export type { SyncEngine, SyncEngineOptions } from './sync.js';
 
 export { submitWithRetries, newRequestId } from './retries.js';

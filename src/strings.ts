@@ -94,6 +94,8 @@ export const ONLINE = Object.freeze({
   starterOpponentSr: 'Your opponent moves first in this match.',
   statusYourTurn: 'Your turn',
   statusTheirTurn: "Opponent's turn",
+  /** Shown only if a move is attempted while the opponent's turn is still replaying. */
+  statusRevealWait: 'Watching their turn play out',
   statusWaitingFriend: 'Waiting',
   statusActive: 'In play',
   statusFinished: 'Finished',
