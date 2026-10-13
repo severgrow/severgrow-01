@@ -10,6 +10,29 @@ layout, geometry, hit targets, gameplay, engine, strings or colour meaning, and 
 
 ---
 
+## STATUS — OWNER-APPROVED (2026-10-13)
+
+**Status: OWNER-APPROVED on 2026-10-13.** Owner decision: **"lock it in for now;
+maybe we'll work on it further later, but good for now."**
+
+- **Not merged, not deployed.** This change is **not** merged into `futa0.4` and is
+  **not** in the live `/futa0.4/` build. It stays on `futa04-display-glow` until the
+  owner chooses to merge and deploy it.
+- **What it is.** The display→keys optics: light from the LED window now reads as light
+  *falling on* the matte keys from above (a thin top-edge catch and faint seam light,
+  decaying over about one key row), instead of each key brightening its own frame on the
+  display's beat. CSS-only, in `web/src/player/smart-cockpit.ts`; no change to layout,
+  geometry, hit targets, gameplay, engine, strings or colour meaning.
+- **Evidence.** Raw before/after frames in
+  [`docs/screens/glow/before/`](screens/glow/before) and
+  [`docs/screens/glow/after/`](screens/glow/after), with side-by-side strips in
+  [`docs/screens/glow/`](screens/glow) (`pair-*.png`).
+- **Possible future work (to resume easily):** further tuning across the colour modes and
+  a Safari/Firefox cross-browser pass — see §6 (honest notes) and §7 (cross-browser risk)
+  below.
+
+---
+
 ## 1. The problem
 
 When the display blinked, the **buttons looked like they were emitting light too**.
