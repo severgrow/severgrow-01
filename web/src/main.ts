@@ -5870,7 +5870,13 @@ else showScreen('menu');
 type OnlineLobbyCtl = { openHub(): Promise<void> };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 void import('./online/lobby-ui.js').then(async (m) => {
-  const { createOnlineDriver, OnlineSession } = await import('./online/index.js');
+  const {
+    createOnlineDriver,
+    OnlineSession,
+    hasStarterRevealed,
+    markStarterRevealed,
+    shouldPlayStarterLottery,
+  } = await import('./online/index.js');
   const { DuelClient, browserStorage } = await import('../../server/src/client.js');
   const { duelApiUrl } = await import('./online/config.js');
 
@@ -5888,7 +5894,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
       leaveOnline();
       showScreen('menu');
     },
-    openDuel: ({ matchId, token, view: player }) => {
+    openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
       if (!api) return;
       leaveOnline();
@@ -5948,13 +5954,37 @@ void import('./online/lobby-ui.js').then(async (m) => {
           })();
         };
       }
+      // Board first: the duel board is already visible before any lottery. The chip (painted by
+      // paintOnlineHudFromSession) is the permanent, perspective-correct "who starts" indicator.
       showScreen('game');
-      // Surface the shared-engine starting-player contract once, at the very first turn:
-      // the same "You start / Opponent starts" lottery the offline game already shows.
-      if (player.status === 'active' && player.view.turnNumber === 1 && player.view.phase !== 'GAME_OVER') {
+      // The lottery animation is a one-off courtesy. It plays exactly once per player per match,
+      // and only at the live-join moment: the waiting creator when the friend joins, or the joiner
+      // itself. The per-match marker means a refresh, a return later, an async catch-up, or a
+      // later turn never replays it. The offline game is untouched (startGame still awaits it).
+      const store = browserStorage();
+      const revealed = hasStarterRevealed(store, matchId);
+      if (shouldPlayStarterLottery({ status: player.status, liveJoin, alreadyRevealed: revealed })) {
+        markStarterRevealed(store, matchId);
         const meFirst = (player.startingPlayer ?? player.view.turnPlayer) === player.seat;
         announceTurn(meFirst ? HUMAN : BOT);
-        void runStarterLottery(!meFirst);
+        const play = () => {
+          const cur = getOnlineSession();
+          if (!cur || cur.driver !== driver || $('game').hidden) return;
+          void runStarterLottery(!meFirst);
+        };
+        // "Actually on the screen": if this tab is hidden at the live-join moment, wait for it to
+        // come back rather than animating off-screen (the marker is already written, so it plays
+        // at most once either way).
+        if (document.visibilityState === 'hidden') {
+          const onVisible = () => {
+            if (document.visibilityState !== 'visible') return;
+            document.removeEventListener('visibilitychange', onVisible);
+            play();
+          };
+          document.addEventListener('visibilitychange', onVisible);
+        } else {
+          play();
+        }
       }
       paintOnlineHudFromSession();
       render();

@@ -59,6 +59,8 @@ export const duelUiFromSnapshot = (snap: MatchDriverSnapshot, canUndo: boolean):
             ? 'Draw'
             : 'You lost'
         : null,
+      // Perspective-correct: the shared engine's starting seat vs this seat (not seat 0).
+      starterMeStarts: snap.startingPlayer === snap.seat,
     },
   };
 };

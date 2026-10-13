@@ -207,4 +207,28 @@ export const ONLINE_CSS = `
 .duel-hud .duel-notice {
   color: #e2c48a;
 }
+/* Permanent "who starts" chip. Never colour-only (a flag icon plus a word), legible at 360x640,
+   and it stays on one line so it cannot push the Resign control out of the strip. */
+.duel-hud .duel-starter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  font-size: 0.8rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.duel-hud .duel-starter[hidden] { display: none; }
+.duel-hud .duel-starter-icon { width: 1em; height: 1em; flex: 0 0 auto; }
+.duel-hud .duel-starter[data-starter="me"] {
+  background: color-mix(in srgb, #3d7a4a 42%, #161a16);
+  border-color: color-mix(in srgb, #8fbf6a 55%, transparent);
+}
+.duel-hud .duel-starter[data-starter="opponent"] {
+  background: color-mix(in srgb, #b86a2c 34%, #161a16);
+  border-color: color-mix(in srgb, #d4a24a 55%, transparent);
+}
 `;

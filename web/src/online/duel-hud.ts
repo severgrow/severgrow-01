@@ -12,6 +12,11 @@ export type DuelHudModel = {
   notice: string | null;
   finished: boolean;
   finishedTitle: string | null;
+  /**
+   * Who starts, seen from this seat (perspective-correct). `null` hides the chip until the match
+   * is active. Never colour-only: the chip carries a word plus a non-colour icon.
+   */
+  starterMeStarts: boolean | null;
 };
 
 export const presenceWord = (p: PresenceStatus): string => {
@@ -39,6 +44,7 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
   const turn = root.querySelector('[data-duel-turn]');
   const deadline = root.querySelector('[data-duel-deadline]');
   const notice = root.querySelector('[data-duel-notice]');
+  const starter = root.querySelector<HTMLElement>('[data-duel-starter]');
   if (name) name.textContent = model.opponentName || ONLINE.opponentFallback;
   if (presence) {
     presence.textContent = presenceWord(model.presence);
@@ -54,5 +60,16 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
   if (notice) {
     notice.textContent = model.notice ?? '';
     (notice as HTMLElement).hidden = !model.notice;
+  }
+  if (starter) {
+    const meStarts = model.starterMeStarts;
+    starter.hidden = meStarts === null;
+    if (meStarts !== null) {
+      starter.setAttribute('data-starter', meStarts ? 'me' : 'opponent');
+      const word = starter.querySelector('[data-duel-starter-word]');
+      const sr = starter.querySelector('[data-duel-starter-sr]');
+      if (word) word.textContent = meStarts ? ONLINE.starterYou : ONLINE.starterOpponent;
+      if (sr) sr.textContent = meStarts ? ONLINE.starterYouSr : ONLINE.starterOpponentSr;
+    }
   }
 };

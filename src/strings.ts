@@ -59,6 +59,11 @@ export const ONLINE = Object.freeze({
   cancelMatch: 'Cancel match',
   shareInvite: (link: string) => `Join my FUTASAKU duel: ${link}`,
   opponentFallback: 'Friend',
+  /** Who-starts chip in the online duel HUD (perspective-correct, icon + word, never colour only). */
+  starterYou: 'You start',
+  starterOpponent: 'Opponent starts',
+  starterYouSr: 'You move first in this match.',
+  starterOpponentSr: 'Your opponent moves first in this match.',
   statusYourTurn: 'Your turn',
   statusTheirTurn: "Opponent's turn",
   statusWaitingFriend: 'Waiting',

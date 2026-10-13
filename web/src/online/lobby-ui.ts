@@ -21,8 +21,16 @@ import {
 export type LobbyUiHooks = {
   /** Return to the main menu screen. */
   showMenu: () => void;
-  /** Phase 5 will open the duel; until then show a quiet notice. */
-  openDuel?: (payload: { matchId: string; seat: 0 | 1; view: MatchViewPayload; token: string }) => void;
+  /** Open the duel board. `liveJoin` is true only when the match turned ACTIVE while this player
+   *  was on the screen (the waiting creator when the friend joins, or the joiner itself); it is
+   *  false when the player returns to a match later. Used only to gate the one-off lottery. */
+  openDuel?: (payload: {
+    matchId: string;
+    seat: 0 | 1;
+    view: MatchViewPayload;
+    token: string;
+    liveJoin: boolean;
+  }) => void;
   now?: () => number;
 };
 
@@ -226,16 +234,17 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
         const payload = res.player;
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
-        launchDuel(id.token, payload);
+        // The friend just joined while we sat on the waiting screen: this is our live-join moment.
+        launchDuel(id.token, payload, true);
       }
     } catch {
       /* keep waiting; quiet */
     }
   };
 
-  const launchDuel = (token: string, player: MatchViewPayload) => {
+  const launchDuel = (token: string, player: MatchViewPayload, liveJoin: boolean) => {
     if (hooks.openDuel) {
-      hooks.openDuel({ matchId: player.matchId, seat: player.seat, view: player, token });
+      hooks.openDuel({ matchId: player.matchId, seat: player.seat, view: player, token, liveJoin });
       return;
     }
     notice('online-hub-notice', ONLINE.openDuelSoon);
@@ -258,7 +267,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
           return;
         }
       }
-      launchDuel(id.token, res.player);
+      // Returning to a match from the list is never a live join: no lottery, the chip carries it.
+      launchDuel(id.token, res.player, false);
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
     }
@@ -285,7 +295,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       const res = await client.findOpponent(id.token);
       serverOffset = res.serverNow - now();
       if (res.paired && res.player.status === 'active') {
-        launchDuel(id.token, res.player);
+        // Paired with an opponent right now: a live join.
+        launchDuel(id.token, res.player, true);
         return;
       }
       openWaiting(res.match);
@@ -306,7 +317,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     try {
       const res = await client.joinMatch(id.token, cleaned);
       serverOffset = res.serverNow - now();
-      launchDuel(id.token, res.player);
+      // Joining a duel in person is the joiner's live-join moment.
+      launchDuel(id.token, res.player, true);
     } catch (error) {
       if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
         notice('online-join-notice', ONLINE.errAlreadyJoined);

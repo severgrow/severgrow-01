@@ -76,6 +76,16 @@ export { ONLINE_CSS } from './online-css.js';
 export { presenceWord, deadlineTone, turnWord, fillDuelHud } from './duel-hud.js';
 export type { DuelHudModel } from './duel-hud.js';
 
+export {
+  STARTER_REVEAL_PREFIX,
+  starterRevealKey,
+  hasStarterRevealed,
+  markStarterRevealed,
+  starterChip,
+  shouldPlayStarterLottery,
+} from './starter-reveal.js';
+export type { StarterChipModel, StarterRevealContext } from './starter-reveal.js';
+
 export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-bridge.js';
 export type { DuelUiModel } from './duel-bridge.js';
 
