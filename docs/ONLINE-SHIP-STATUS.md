@@ -6,7 +6,7 @@
 
 This document is the honest, evidence-first verification of the 0.5 online-duels work. It is
 written by the verification/infrastructure worker (scope: `server/scripts/*`, `server/tests/*`,
-the keep-alive workflow, and docs). It does **not** claim more than was measured.
+`server/migrations/0005_*`, and docs). It does **not** claim more than was measured.
 
 ---
 
@@ -41,7 +41,7 @@ Neither is a correctness or security problem.
 
 ### 1.1 Anon / authenticated are DENIED on the new tables (proved, not assumed)
 
-All four migrations are applied (`schema_migrations`: `0001_init.sql` … `0004_timeout_grace.sql`).
+All five migrations are applied (`schema_migrations`: `0001_init.sql` … `0005_keepalive_cron.sql`).
 
 - `has_table_privilege` for `anon` and `authenticated` returns **false for SELECT/INSERT/UPDATE/
   DELETE on all 8 public tables** (checked at the SQL level, 8 tables × 8 privileges).
@@ -51,8 +51,10 @@ All four migrations are applied (`schema_migrations`: `0001_init.sql` … `0004_
   - `0002` → `rate_limits`, `device_link_codes`
   - `0003` → `matches.open_queue`
   - `0004` → `matches.grace_used_seat0/_seat1`, `grace_periods`, `grace_extension_ms`
+  - `0005` → no new table (it schedules a pg_cron job; see §1.5)
 - Reproduce: `npm run server:verify-security` (script `server/scripts/verify-security.ts`) — this
-  prints `8/8 checks passed`; and the same denials are asserted inside
+  prints `20/20 checks passed` (as of the P-2 run) and now also covers the pg_cron/pg_net checks;
+  the table denials are asserted inside
   `npm run server:db-test` (`server/tests/postgres.integration.test.ts`).
 
 ### 1.2 Migration `0004_timeout_grace.sql` obeys the project security rule
@@ -93,27 +95,66 @@ Added to `server/tests/postgres.integration.test.ts` (additive only):
    `postgres`-role default ACLs in `public` grant nothing to `anon`/`authenticated`.
 3. `has the 0004 timeout-grace columns on matches` — locks in the `0004` schema.
 
+### 1.5 pg_cron / pg_net for the keep-alive (P-2 + P-21 adjacent)
+
+Migration `0005_keepalive_cron.sql` enables `pg_cron` + `pg_net` and schedules the
+`futasaku-keepalive` job. Because `pg_net` can make OUTBOUND HTTP from the database, both roles were
+audited (verified live, not assumed):
+
+- **`cron` schema — DENIED.** anon and authenticated have no schema `USAGE`, so a real
+  `set role anon`/`set role authenticated` then `select … from cron.job`,
+  `cron.job_run_details` and `cron.schedule(…)` all fail with **`42501`**. So the API URL and any
+  error output in those tables are not exposed. (`has_schema_privilege(role,'cron','USAGE')` = false.)
+- **`net` schema — platform-owned, unreachable through the API.** anon/authenticated hold PUBLIC
+  grants on `net`, but they are non-login roles and the Data API (PostgREST) exposes only `public`.
+  Proved live with the project's anon key:
+  `POST /rest/v1/rpc/http_get` → **`404 PGRST202`** and `GET /rest/v1/_http_response` →
+  **`404 PGRST205`** (and the same for `http_request_queue`). This matches Supabase's documented
+  constraint: `postgres` cannot revoke those grants (a no-op) and removing them outright would
+  **break** pg_net — so the migration deliberately does not, and the reachable denial is asserted
+  instead.
+- **No secret in the queue.** The job sends no `x-futasaku-cron` header, so
+  `net.http_request_queue` holds only the public URL and an empty body (P-2 design choice; see §2).
+
+Reproduce: `npm run server:verify-security` now also runs these cron/pg_net checks (and the live
+anon Data-API probe when the anon key is set).
+
 ---
 
-## 2. Keep-alive workflow (P-2) — outcome
+## 2. Keep-alive — Supabase-native cron job (P-2) — HANDLED
 
-- `.github/workflows/futa05-keepalive.yml` calls `GET $FUTA05_API_URL/v1/health?db=1`, then asserts
-  `ok`, `rulesVersion`, `serverNow` and `db.ok`.
-- The repo **Variable `FUTA05_API_URL` is set** to
-  `https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel`.
-- **Verified by a real run of the workflow's exact steps** against the live API (HTTP 200,
-  `db.ok=true`, real Postgres round-trip ≈160 ms, correct `rulesVersion`) and by the failure path
-  (variable unset → clear message + exit 1).
-- **⚠ Could not trigger the workflow through GitHub.** `workflow_dispatch` via the REST API returns
-  **404**, and the workflow never appears in Actions, because **the workflow file exists only on
-  `futa0.5-online`, and GitHub runs `schedule`/`workflow_dispatch` only for a workflow file present
-  on the default branch (`main`).** No keep-alive run has ever executed. The 2-day schedule is
-  therefore **inert** until this file lands on `main`. This worker does not touch `main`; landing it
-  is the owner's/maintainer's call.
-- Re-enable / recovery steps for the owner are documented in
-  [`DEPLOY-ONLINE.md`](./DEPLOY-ONLINE.md#keep-alive-p-2) ("what the owner must click").
+The keep-alive moved OUT of GitHub and INTO the database. Migration `0005_keepalive_cron.sql`
+schedules one job:
 
-**Status: logic verified, scheduling NOT in effect.** This is the single most important P-2 gap.
+| | |
+| --- | --- |
+| Job | `futasaku-keepalive` (id 1), runs as `postgres` |
+| Schedule | `17 6 */2 * *` — 06:17 UTC every 2 days (the old cadence) |
+| Step 1 | `net.http_get(…/duel/v1/health?db=1)` → a **real Postgres round trip** |
+| Step 2 | `net.http_post(…/duel/v1/sweep)` → finishes overdue / expired matches server-side |
+
+**Why this replaces the workflow.** `.github/workflows/futa05-keepalive.yml` had never run: GitHub
+only fires `schedule`/`workflow_dispatch` for a workflow file present on the DEFAULT branch (`main`),
+and that file existed only on `futa0.5-online`. GitHub also disables schedules after ~60 days of repo
+inactivity. The database job depends on neither. **The redundant workflow file was deleted** so there
+is a single mechanism.
+
+**Proved to actually run (real observed results):**
+
+- The job was scheduled by the migration and then triggered by pg_cron itself (temporarily set to
+  `* * * * *`, later restored to `17 6 */2 * *`). `cron.job_run_details` shows **two consecutive runs,
+  `status = 'succeeded'`** (12:33:00 and 12:34:00 UTC).
+- `net._http_response` shows the real results: the health call returned **HTTP 200** with
+  `{"ok":true,…,"db":{"ok":true,"ms":102/111,"pooler":"transaction-pooler","port":"6543"}}`, and the
+  sweep returned **HTTP 200** with all counters `0` (it created no data).
+- A manual call of the same two endpoints produced the same 200/`db.ok` result — so the round trip is
+  real, not a cached liveness answer.
+- Cleanup: the pg_net response rows and the two test `cron.job_run_details` rows were deleted after
+  the evidence was captured; exactly one job remains; the schedule is back to `17 6 */2 * *`.
+
+**Status: scheduling IN EFFECT, round trip verified.** See
+[`DEPLOY-ONLINE.md`](./DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github) for inspect /
+pause / resume / cadence-change commands and the free-tier reasoning.
 
 ---
 
@@ -230,7 +271,7 @@ caveat; **Not handled** = not done.
 | # | Problem | Status | Evidence | Gap / caveat |
 | --- | --- | --- | --- | --- |
 | P-1 | Hosting / Edge limits / pooler | **Handled / tested** | `docs/DEPLOY-ONLINE.md` measured 33/40 → 0/40 five-hundreds and peak 63→19 connections after the Transaction-pooler (6543) switch; `server/tests/edge-pool.test.ts`; commit `401f262`. | Depends on the deployed `DATABASE_URL` secret staying on the transaction pooler. |
-| P-2 | Free project pause / GH schedule | **Partial — NOT in effect** | Workflow logic verified by a real run of its steps (HTTP 200, `db.ok`, ~160 ms). Variable set. | **Workflow is not on the default branch, so neither the 2-day schedule nor `workflow_dispatch` runs (404).** Nothing keeps the project awake yet. See §2. |
+| P-2 | Free project pause / GH schedule | **Handled / tested** | Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005`): every 2 days it makes a real DB round trip (`/v1/health?db=1`, `db.ok:true`) and runs the sweeper. pg_cron ran it twice with `status='succeeded'`; `net._http_response` shows HTTP 200 (§2). Redundant GH workflow deleted. | A paused project cannot run its own cron — restore it first; the 2-day cadence keeps it from pausing. |
 | P-3 | iOS Safari vs Home Screen storage | **Handled (read)** | `device_link_codes` table (`0002`) + single-use 8-char codes; `server/tests/http.test.ts`, `service.test.ts`; Settings warning in the client. | Client storage warning is UI (not re-verified here). |
 | P-4 | Invite opens in another browser | **Handled (read)** | Join creates a guest on the spot; `#/join/CODE` deep link; `web/tests/lobby.test.ts`, e2e `online-invite-flow.ts`. | UI path not re-run by this worker. |
 | P-5 | Service-worker caching / old client | **Handled / tested** | `CLIENT_TOO_OLD` handshake (`server/tests/http-e2e.test.ts`, soak `handshake.client_too_old`); API is cross-origin and uncached. | — |
@@ -249,7 +290,7 @@ caveat; **Not handled** = not done.
 | P-18 | A11y countdown spam | **Handled (read)** | Announce only at 2 h / 15 m / time's-up; status not colour-alone (`web/tests/*`). | UI not re-verified here. |
 | P-19 | Time zones | **Handled (read)** | Durations only ("18h 42m"), never wall-clock times. | — |
 | P-20 | Two devices, one player | **Tested** | Clean `STALE_REVISION` 409 + refetch recovery (`phase6-hardening.test.ts`, real-DB concurrency suite). | — |
-| P-21 | Supabase default grants | **Tested** | Security advisors: only the expected INFO lint; anon/authenticated denied on every table incl. `0002`/`0003`/`0004`; `0004` guard present; publication empty; new regression tests (§1). | — |
+| P-21 | Supabase default grants | **Tested** | Security advisors: only the expected INFO lint; anon/authenticated denied on every table incl. `0002`/`0003`/`0004`; the `0004`/`0005` guard present; publication empty; new regression tests (§1). Plus `pg_cron`/`pg_net` audited: `cron` denied `42501`; `net` unreachable through the Data API with the anon key (§1.5). | `net` grants are a Supabase platform constraint — mitigated by non-exposure, not revoke. |
 
 ---
 
@@ -260,8 +301,9 @@ caveat; **Not handled** = not done.
 - the `0004` migration contains RLS + revokes + the default-privileges guard.
 - the `postgres`-role default ACLs for `public` no longer grant anon/authenticated.
 - no authoritative table is in `supabase_realtime`, and a live anon DB-change subscription gets nothing.
-- the keep-alive script's steps succeed against the live API (HTTP 200 + real DB round-trip) and its
-  missing-variable path fails loudly.
+- the scheduled `futasaku-keepalive` job runs from the database: pg_cron recorded two runs with
+  `status='succeeded'`, and `net._http_response` shows HTTP 200 with `db.ok:true` for the health call
+  (a real round trip) and HTTP 200 with all-zero counters for the sweep.
 - 50 concurrent matches / 100 players for ~5 min against the real database: 98/99 finished, no
   429/500/503, peak 22/60 connections, measured ≈26 KB storage per finished match.
 - the full and DB-only test suites (numbers in §6).
@@ -284,17 +326,20 @@ caveat; **Not handled** = not done.
 - **One database, one project.** Everything (players, matches, moves, rate limits) is the single
   free-tier Supabase project; there is no sharding or replica.
 - **No ranking / matchmaking skill.** "Find opponent" pairs the open queue; there is no ladder.
-- **Keep-alive is not actually running** (P-2) until the workflow is on the default branch.
+- **Keep-alive now runs in the database** (P-2): the pg_cron job is proven by a real run, not just
+  scheduled. It cannot survive the project being paused — but the 2-day cadence prevents that.
 - **Storage grows unpruned** (~26 KB/match; 10k ≈ 267 MB of a 500 MB database).
 - **Advisors:** only informational lints (one `rls_enabled_no_policy`, two performance INFO). Nothing
   security-actionable.
 
 ### DB test counts (explicit)
 
-- `npm run server:db-test` (real database, pinned): **24 tests ran, 24 passed, 0 failed, 0 skipped.**
-  (`postgres.integration.test.ts`, 1 file.)
+- `npm run server:db-test` (real database, pinned): **28 tests ran, 28 passed, 0 failed, 0 skipped.**
+  (`postgres.integration.test.ts`, 1 file; 24 pre-existing + 4 new keep-alive/pg_cron tests.)
 - `npm run server:verify` (migrate + real-DB suite + in-process smoke): **PASSED**
-  (`VERIFICATION PASSED` — 0 migrations pending, 24/24 DB tests, every smoke check green).
+  (`VERIFICATION PASSED` — 0 migrations pending, 28/28 DB tests, every smoke check green).
+- `npm run server:verify-security` (live project, with the public anon key): **20/20 checks passed**,
+  including the new pg_cron/pg_net denial checks (§1.5).
 - `npx tsc --noEmit` (root typecheck): **green** after every change.
 - Without `DATABASE_URL`, the whole DB suite is **skipped loudly** (never silently) and
   `REQUIRE_DATABASE=1` makes that failure explicit.
@@ -317,7 +362,7 @@ caveat; **Not handled** = not done.
 ## 7. Reproduce
 
 ```sh
-# P-21 security evidence (prints 8/8; the live Realtime step needs the public anon key):
+# P-21 security evidence (prints 20/20; the live Realtime + pg_net Data-API steps need the anon key):
 VITE_SUPABASE_ANON_KEY=… node --env-file-if-exists=.env --import tsx server/scripts/verify-security.ts
 
 # real-database suite (prints the 24 tests; includes the new P-21 regressions):

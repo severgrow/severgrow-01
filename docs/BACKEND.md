@@ -39,6 +39,7 @@ server/src/storage/postgres.ts   Postgres/Supabase adapter (transactional)
 server/src/storage/pg-pool.ts    one place that builds the pool + TLS from DATABASE_URL
 server/src/index.ts              entry point (DATABASE_URL → postgres, else memory)
 server/migrations/0001_init.sql  the schema, with Row Level Security
+server/migrations/0005_keepalive_cron.sql  Supabase-native keep-alive + sweeper (pg_cron + pg_net)
 server/scripts/migrate.ts         versioned, checksummed migration runner
 server/scripts/smoke.ts          manual end-to-end smoke against a running server
 server/tests/                    the test suite for all of the above
@@ -253,7 +254,9 @@ field appears in a payload, and if any card id the viewer may not know is presen
 `server/migrations/0001_init.sql` creates `players`, `player_tokens`, `matches`,
 `match_participants` and `match_moves`. Migration `0002_deadlines_lists.sql` adds turn deadline /
 gated-view columns, `rate_limits`, and `device_link_codes`, plus
-`alter default privileges … revoke` for future tables (P-21). `matches.state` and
+`alter default privileges … revoke` for future tables (P-21). Migration
+`0005_keepalive_cron.sql` adds the scheduled keep-alive/sweeper job (below) and re-issues the same
+guard. `matches.state` and
 `matches.turn_start_state` are authoritative (server-only). Row Level Security is **enabled on
 every table with no anon/authenticated policies**, and all table privileges are revoked from those
 roles: only the API server's service role can read. Do **not** add these tables to the
@@ -271,6 +274,34 @@ is why the moves table *is* the revision history and the idempotency record.
 > has `bypassrls = true`, so it is unaffected. The integration suite proves the denial with a real
 > `set role anon; select * from matches` that must fail with `42501`. Expect an informational
 > `rls_enabled_no_policy` advisor lint — that is intentional.
+
+## Keep-alive (pg_cron + pg_net)
+
+Migration `0005_keepalive_cron.sql` enables `pg_cron` + `pg_net` and schedules one job,
+`futasaku-keepalive`, at `17 6 */2 * *` (06:17 UTC every 2 days) as the `postgres` role. Each run
+does a **real database round trip** (`GET /v1/health?db=1` → `service.pingStorage()`) — which is what
+resets the free project's ~1 week inactivity clock — and then `POST /v1/sweep` so overdue matches
+and expired waiting matches are finished without a client visiting. This replaces the inert GitHub
+Actions workflow (`futa05-keepalive.yml`), which could never fire because it was never on the
+default branch; the workflow file was deleted.
+
+Full operator guide (inspect, pause, resume, change cadence, free-tier reasoning) is in
+[`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github). In short:
+`select * from cron.job;`, `select * from cron.job_run_details order by start_time desc;`, and
+`select * from net._http_response order by created desc;`.
+
+**Security (P-21 adjacent).** `pg_net` makes OUTBOUND HTTP from the database, so anon/authenticated
+must not reach it.
+- `cron` schema: anon and authenticated have no `USAGE`, so `cron.job`, `cron.job_run_details` and
+  `cron.schedule()`/`unschedule()` are refused with `42501` (proved with a real `set role` in
+  `server/tests/postgres.integration.test.ts` and `npm run server:verify-security`).
+- `net` schema: owned by `supabase_admin`; anon/authenticated hold PUBLIC grants but are non-login
+  roles and the Data API exposes only `public`, so `net.http_get`/`http_post` and
+  `net._http_response` are unreachable through the API. This is Supabase's documented platform
+  constraint — `postgres` cannot revoke those grants (a no-op) and removing them outright would
+  break pg_net. `verify-security.ts` proves the reachable denial live with the anon key
+  (`POST /rest/v1/rpc/http_get` → `PGRST202`, `GET /rest/v1/_http_response` → `PGRST205`).
+- The job sends no auth header, so its request queue holds only the public URL and an empty body.
 
 ## Test results
 
@@ -320,8 +351,10 @@ Unfinished / next:
 6. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
 7. **No observability** beyond one line per request (method, path, status, duration). No metrics,
    tracing or alerting; logs never contain bodies or tokens.
-8. **Sweeper exists** (`POST /v1/sweep` + keep-alive): timeouts, waiting expiry, stale guests.
-   Schedule it every ~5 minutes in production (pg_cron if available, else the keep-alive job).
+8. **Sweeper exists and now runs itself** (`POST /v1/sweep`): timeouts, waiting expiry, stale
+   guests. Migration `0005_keepalive_cron.sql` schedules it from inside the database (pg_cron every
+   2 days, together with a `GET /v1/health?db=1` round trip that keeps the free project awake) — see
+   [Keep-alive](#keep-alive-pgcron--pgnet). Make it more frequent with `cron.alter_job` if wanted.
 9. **Reconnect returns only the view + events**, not a replay of the opponent's last turn visuals.
 
 ## Before inviting real players

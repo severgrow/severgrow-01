@@ -212,41 +212,95 @@ Repo → **Settings** → **Secrets and variables** → **Actions** → tab **Va
 
 The anon key is public by design. Never put the **service_role** key or `DATABASE_URL` in Variables.
 
-## Keep-alive (P-2)
+`FUTA05_API_URL` is now used only by the preview build (`.github/workflows/futa05-preview.yml`); the
+keep-alive no longer reads it (see below).
 
-Workflow: `.github/workflows/futa05-keepalive.yml` — every 2 days, and on **Run workflow**.
+## Keep-alive (P-2) — Supabase-native, no GitHub
 
-It calls `GET $FUTA05_API_URL/v1/health?db=1` so a real database query runs (helps prevent the free project pausing after ~1 week idle). It is a single job: fails loudly if the `FUTA05_API_URL` variable is missing, then asserts `ok`, `rulesVersion`, `serverNow` and `db.ok`.
+The keep-alive now lives **inside the database**, not in GitHub Actions. Migration
+`server/migrations/0005_keepalive_cron.sql` enables `pg_cron` + `pg_net` and schedules one named
+job:
 
-**Verified 2026-10-13:** the `FUTA05_API_URL` repository Variable is set to
-`https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel`, and the workflow's exact steps were
-run against the live API: HTTP 200, `db.ok=true` (real Postgres round-trip, ~160 ms), correct
-`rulesVersion`. The missing-variable path prints the clear message and exits 1 — both paths behave
-as designed.
+| | |
+| --- | --- |
+| Job name | `futasaku-keepalive` |
+| Schedule | `17 6 */2 * *` — **06:17 UTC every 2 days** (the previous cadence, quiet hour) |
+| Runs as | `postgres` (the role that created it) |
+| Step 1 | `GET …/duel/v1/health?db=1` — a **real database round trip** |
+| Step 2 | `POST …/duel/v1/sweep` — finishes overdue matches / expires waiting matches |
 
-> **Blocker (must be fixed for the schedule to ever fire): the workflow only exists on the
-> `futa0.5-online` branch, not on the default branch (`main`).** GitHub runs `schedule` triggers —
-> and allows `workflow_dispatch` — **only for a workflow file that is present on the default
-> branch**. Until this file is on `main`, the 2-day schedule will never run and
-> `workflow_dispatch` returns 404 (confirmed: `POST …/actions/workflows/futa05-keepalive.yml/
-> dispatches` → `404 Not Found`). No keep-alive run has ever executed. Landing this workflow on the
-> default branch is the owner's/maintainer's call (this worker does not touch `main`).
+**Why `?db=1` matters.** The plain `/v1/health` route answers from the Edge isolate and touches
+nothing. With `?db=1` the function runs `service.pingStorage()` — a live query against Postgres.
+That round trip is what resets the free-tier inactivity clock; a bare liveness ping would not. The
+sweeper call is the same database work with a purpose: matches past their deadline, waiting matches
+past the 48 h expiry and stale guests are cleaned up even when no client visits.
 
-**If GitHub stops scheduled workflows** (~60 days with no repo activity):
+**Why it moved off GitHub.** `.github/workflows/futa05-keepalive.yml` had **never run** — GitHub
+only fires `schedule`/`workflow_dispatch` for a workflow file present on the DEFAULT branch
+(`main`), and that file existed only on `futa0.5-online`. GitHub also disables scheduled workflows
+after ~60 days without repository activity. Running the ping in the database removes both
+dependencies, and nothing has to land on `main`. *The redundant GitHub workflow was **deleted** so
+there is exactly one mechanism and nobody mistakes the inert one for the keep-alive.*
 
-1. GitHub → **Actions** → **futa05-keepalive** → **Enable workflow** (or push any commit).
-2. Optionally click **Run workflow** once.
+**No secret is stored.** `/v1/sweep` only needs the `x-futasaku-cron` header (`SWEEP_CRON_TOKEN`)
+to get a dedicated rate-limit bucket. At two sweeps every two days the ordinary per-IP budget
+(120/h) can never be exhausted, so the job sends **no** header and the migration embeds no
+credential. If a token is ever wanted, put it in Supabase Vault — never in the migration.
 
-**If the workflow is missing from Actions entirely** (most likely because it is still only on a
-side branch): copy `.github/workflows/futa05-keepalive.yml` onto the default branch, then
-**Actions → futa05-keepalive → Run workflow**. Verify the repo Variable `FUTA05_API_URL` is still
-set under **Settings → Secrets and variables → Actions → Variables**.
+### Inspect it (SQL Editor runs as `postgres`, the job's role)
 
-**If the Supabase project is paused:**
+```sql
+-- the scheduled job (name, cadence, target URL, role):
+select jobid, jobname, schedule, command, username, active from cron.job;
+
+-- the last runs (status should be 'succeeded'):
+select jobid, runid, status, return_message, start_time, end_time
+  from cron.job_run_details order by start_time desc limit 10;
+
+-- what the calls actually got back (health db.ok + sweep counters):
+select id, status_code, timed_out, error_msg, created, content
+  from net._http_response order by created desc limit 10;
+```
+
+A healthy run shows the health response in `net._http_response.content` containing
+`"db":{"ok":true,…}` and the matching `cron.job_run_details` row with `status = 'succeeded'`.
+
+### Pause / resume / change the cadence
+
+```sql
+-- Pause (remove) the job:
+select cron.unschedule('futasaku-keepalive');
+
+-- Recreate the migration defaults (idempotent):
+--   npm run server:migrate
+
+-- Or just change the schedule, e.g. daily:
+select cron.alter_job(job_id := (select jobid from cron.job where jobname = 'futasaku-keepalive'),
+                      schedule := '17 6 * * *');
+```
+
+`postgres` has **read-only** access to `cron.job`, so pause with `cron.unschedule`, not an `UPDATE`.
+
+The 2-day cadence is more than enough to keep the free project awake (the pause threshold is
+~1 week) and to keep overdue matches moving. A more frequent sweeper — e.g. hourly — is a one-line
+`cron.alter_job` change if the owner wants overdue matches finished sooner; every-2-days is the
+conservative default.
+
+### If the Supabase project pauses anyway
 
 1. Dashboard → **FUTASAKU** → **Restore** / resume the project.
-2. Re-run the keep-alive workflow (or click **Run workflow**).
-3. Confirm `…/v1/health?db=1` returns `ok`.
+2. Confirm the job survived: `select * from cron.job;` — pg_cron metadata lives in the database, so
+   it is intact across a pause. If it is missing, re-run `npm run server:migrate`.
+3. Confirm `…/v1/health?db=1` returns `ok` with `db.ok`.
+
+### Free-tier reasoning
+
+- `pg_cron` and `pg_net` ship on the free plan and are already in the server's
+  `shared_preload_libraries`, so enabling them from SQL is enough (no dashboard toggle required).
+- Two days ⇒ ~15 runs/month, two outbound requests each — negligible against the free-tier Edge
+  invocation budget (500k/mo).
+- The round trip is one small query (~100 ms end to end, measured).
+- The job is the ONLY scheduled mechanism; there is nothing else to check or keep enabled.
 
 ## Read logs
 

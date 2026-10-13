@@ -102,6 +102,104 @@ const realtimeProbe = async (anon: string, trigger: () => Promise<void>): Promis
   }
 };
 
+// ----------------------------------------------------------------- pg_cron / pg_net (P-2, P-21 adjacent)
+
+/**
+ * The 0005 keep-alive job plus the pg_net SSRF guard.
+ *
+ * pg_net can make OUTBOUND HTTP requests from inside the database. It is platform-owned (the
+ * `postgres` role cannot revoke its PUBLIC grants — a documented Supabase constraint), so the
+ * guarantee that matters is that an anonymous visitor cannot reach it through the Data API. That
+ * is proved here with the real anon key against PostgREST, alongside the DB-level cron denial.
+ */
+const keepaliveChecks = async (pool: PgPool, anon: string): Promise<void> => {
+  const cronInstalled = num((await rows(pool, `select count(*)::int as n from pg_extension where extname = 'pg_cron'`))[0]?.n) > 0;
+  const netInstalled = num((await rows(pool, `select count(*)::int as n from pg_extension where extname = 'pg_net'`))[0]?.n) > 0;
+  check('pg_cron extension is installed', cronInstalled);
+  check('pg_net extension is installed', netInstalled);
+
+  if (cronInstalled) {
+    const job = (await rows(pool, `select jobname, schedule, command, username, active from cron.job where jobname = 'futasaku-keepalive'`))[0];
+    const command = String(job?.command ?? '');
+    check(
+      'futasaku-keepalive job exists with the intended cadence, target and role',
+      Boolean(job) && job!.schedule === '17 6 */2 * *' && command.includes('/v1/health?db=1') && command.includes('/v1/sweep') && command.includes('net.http_get') && command.includes('net.http_post') && job!.username === 'postgres' && job!.active === true,
+      job ? `${String(job.schedule)} as ${String(job.username)} (active=${String(job.active)})` : 'job missing — run `npm run server:migrate`',
+    );
+    check('the keep-alive job embeds no secret header', !command.includes('x-futasaku-cron'), 'no x-futasaku-cron header sent');
+  }
+
+  if (netInstalled) {
+    const owner = String((await rows(pool, `select pg_get_userbyid(extowner) as owner from pg_extension where extname = 'pg_net'`))[0]?.owner ?? '');
+    check('pg_net is platform-owned (not ours to revoke)', owner === 'supabase_admin', `owner=${owner}`);
+    const login = await rows(pool, `select rolname, rolcanlogin from pg_roles where rolname in ('anon','authenticated')`);
+    check('anon/authenticated cannot log in (no direct DB path to net)', login.length > 0 && login.every((r) => r.rolcanlogin === false));
+  }
+
+  // DB-level cron denial for both client roles (the row/function ACLs look permissive; schema
+  // USAGE is what actually denies, so this is a real set-role attempt).
+  for (const role of ['anon', 'authenticated']) {
+    const exists = num((await rows(pool, 'select count(*)::int as n from pg_roles where rolname = $1', [role]))[0]?.n);
+    if (exists === 0) {
+      check(`cron: ${role} denied`, false, `role ${role} does not exist`);
+      continue;
+    }
+    const client = (await pool.connect()) as PgClient;
+    const denied: string[] = [];
+    const allowed: string[] = [];
+    try {
+      await client.query(`set role ${role}`);
+      for (const sql of ['select count(*) from cron.job', 'select count(*) from cron.job_run_details', `select cron.schedule('probe','* * * * *','select 1')`]) {
+        try {
+          await client.query(sql);
+          allowed.push(sql);
+        } catch (e) {
+          const code = (e as { code?: string }).code;
+          if (code === '42501') denied.push(sql);
+          else allowed.push(`${sql}:${code ?? 'error'}`);
+        }
+      }
+    } finally {
+      await client.query('reset role').catch(() => undefined);
+      client.release?.();
+    }
+    check(`set role ${role}: cron.job, cron.job_run_details and cron.schedule are refused (42501)`, allowed.length === 0, allowed.length ? `ALLOWED: ${allowed.join(' | ')}` : `denied ${denied.length}/3`);
+  }
+
+  // The reachable-path proof for pg_net (needs the public anon key).
+  if (anon.length === 0) {
+    console.log('  SKIP  data API: pg_net SSRF probe (set VITE_SUPABASE_ANON_KEY to run it)');
+    return;
+  }
+  const base = `https://${PROJECT_REF}.supabase.co/rest/v1`;
+  const probes: { path: string; method: 'GET' | 'POST'; body?: string }[] = [
+    { path: '/rpc/http_get', method: 'POST', body: JSON.stringify({ url: 'https://example.com' }) },
+    { path: '/rpc/http_post', method: 'POST', body: JSON.stringify({ url: 'https://example.com' }) },
+    { path: '/_http_response?select=*&limit=1', method: 'GET' },
+    { path: '/http_request_queue?select=*&limit=1', method: 'GET' },
+  ];
+  for (const probe of probes) {
+    let status = 0;
+    let note = '';
+    try {
+      const res = await fetch(`${base}${probe.path}`, {
+        method: probe.method,
+        headers: {
+          apikey: anon,
+          authorization: `Bearer ${anon}`,
+          ...(probe.method === 'POST' ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(probe.body ? { body: probe.body } : {}),
+      });
+      status = res.status;
+      note = (await res.text()).slice(0, 100).replace(/\s+/g, ' ');
+    } catch (error) {
+      note = error instanceof Error ? error.message : String(error);
+    }
+    check(`data API: anon cannot reach net${probe.path}`, status !== 200, `HTTP ${status} ${note}`);
+  }
+};
+
 // ----------------------------------------------------------------- main
 
 const main = async (): Promise<void> => {
@@ -116,7 +214,7 @@ const main = async (): Promise<void> => {
     // 1) migrations
     const migrations = await rows(pool, 'select version from schema_migrations order by version');
     const versions = migrations.map((m) => String(m.version));
-    check('migrations 0001–0004 applied', ['0001_init.sql', '0002_deadlines_lists.sql', '0003_open_queue.sql', '0004_timeout_grace.sql'].every((v) => versions.includes(v)), versions.join(', '));
+    check('migrations 0001–0005 applied', ['0001_init.sql', '0002_deadlines_lists.sql', '0003_open_queue.sql', '0004_timeout_grace.sql', '0005_keepalive_cron.sql'].every((v) => versions.includes(v)), versions.join(', '));
 
     // 2) RLS on every public table
     const rls = await rows(
@@ -214,6 +312,10 @@ const main = async (): Promise<void> => {
       });
       console.log(`    (inserted and deleted one namespaced players row while subscribed: ${marker})`);
     }
+
+    // 7) P-2 keep-alive job + the pg_net SSRF guard (DB-level cron denial and a live Data-API
+    //    probe with the anon key; the probe is skipped loudly when the key is not set).
+    await keepaliveChecks(pool, anon);
   } finally {
     await (pool as unknown as { end?: () => Promise<void> }).end?.();
   }

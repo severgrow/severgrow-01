@@ -50,7 +50,7 @@ Menu (later phases): FUTASAKU, tagline **GROW · CONNECT · CONQUER** (one line 
    - `VITE_SUPABASE_URL` — `https://wbfrbeedlvjercrukngn.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` — Project Settings → **API Keys** → **anon** / **public** key (safe to put in the client).
 
-**C. If the free project pauses after ~1 week idle:** Dashboard → project → **Restore** / resume. Then the keep-alive workflow (Phase 1) should prevent most pauses. GitHub also stops scheduled workflows after ~60 days with no repo activity — push any small commit or re-enable the workflow manually: **Actions** → keep-alive workflow → **Enable workflow**.
+**C. If the free project pauses after ~1 week idle:** Dashboard → project → **Restore** / resume. The Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`, every 2 days) keeps it awake with a real DB round trip and runs the sweeper; it replaced the GitHub workflow, which never fired from a side branch. See [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
 
 ---
 
@@ -158,7 +158,7 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 
 1. **Nothing blocking Phase 0** — verify and spikes are done on this machine.
 2. **Phase 1:** add the Edge Function `DATABASE_URL` secret (clicks in §2 A) if the agent cannot set it via CLI/MCP. Confirm GitHub Variables (clicks in §2 B) when asked.
-3. **Later:** two-phone playtest script (Phase 8). Re-enable keep-alive if GitHub disables schedules after 60 idle days.
+3. **Later:** two-phone playtest script (Phase 8). The keep-alive is now a database `pg_cron` job — no GitHub re-enabling needed.
 4. **Do not** share the database password, service role key, or `.env` in chat.
 
 ---

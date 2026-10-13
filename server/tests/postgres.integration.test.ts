@@ -603,3 +603,92 @@ suite('real database: player views never leak', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// P-2 keep-alive (migration 0005_keepalive_cron.sql): the Supabase-native scheduled job.
+// A real cron/pg_net round trip and the Data-API denial for anon are proved by
+// `npm run server:verify-security`; here we prove the persisted job and the DB-level role denial.
+// ---------------------------------------------------------------------------------------------
+suite('real database: Supabase keep-alive job (P-2)', () => {
+  const cronInstalled = async (): Promise<boolean> =>
+    (await rowCount(`select count(*)::int as n from pg_extension where extname = 'pg_cron'`)) === 1;
+
+  it('schedules exactly one futasaku-keepalive job: intended target, cadence and role', async () => {
+    if (!(await cronInstalled())) {
+      console.log('    pg_cron is not installed on this database — skipping the keep-alive job check');
+      return;
+    }
+    const { rows } = await pool.query(
+      `select jobid, jobname, schedule, command, username, active from cron.job where jobname = 'futasaku-keepalive'`,
+    );
+    expect(rows).toHaveLength(1);
+    const job = rows[0]!;
+    expect(job.schedule).toBe('17 6 */2 * *');
+    expect(job.username).toBe('postgres');
+    expect(job.active).toBe(true);
+    const command = String(job.command);
+    // A REAL database round trip on the health route, then the sweeper.
+    expect(command).toContain('/v1/health?db=1');
+    expect(command).toContain('/v1/sweep');
+    expect(command).toContain('net.http_get');
+    expect(command).toContain('net.http_post');
+    // No secret is embedded (no cron/auth header).
+    expect(command).not.toContain('x-futasaku-cron');
+  });
+
+  it('re-running the migration never duplicates the job (idempotent)', async () => {
+    if (!(await cronInstalled())) return;
+    const five = loadMigrations().find((m) => m.version.startsWith('0005_'));
+    expect(five, 'the 0005 migration must exist').toBeDefined();
+    // Re-execute the migration body directly (the runner itself would skip it as applied). This is
+    // the real test of the unschedule-then-schedule guard, not the checksum skip.
+    await pool.query(five!.sql);
+    const { rows } = await pool.query(`select count(*)::int as n from cron.job where jobname = 'futasaku-keepalive'`);
+    expect(Number(rows[0]?.n)).toBe(1);
+    const { rows: one } = await pool.query(`select schedule from cron.job where jobname = 'futasaku-keepalive'`);
+    expect(one[0]?.schedule).toBe('17 6 */2 * *');
+  });
+
+  it('denies anon and authenticated on every cron surface with 42501', async () => {
+    if (!(await cronInstalled())) return;
+    const roles = (await pool.query(`select rolname from pg_roles where rolname in ('anon', 'authenticated') order by rolname`)).rows.map((r) => String(r.rolname));
+    if (roles.length === 0) {
+      console.log('    no anon/authenticated roles — skipping the cron privilege check');
+      return;
+    }
+    for (const role of roles) {
+      const usage = (await pool.query('select has_schema_privilege($1, $2, $3) as ok', [role, 'cron', 'USAGE'])).rows[0]?.ok;
+      expect(usage, `${role} must have no USAGE on the cron schema`).toBe(false);
+      const client = (await pool.connect()) as PgClient;
+      try {
+        await client.query(`set role ${role}`);
+        // Job table, run log (which can hold our API URL / error output) and the scheduler API.
+        await expect(client.query('select count(*) from cron.job')).rejects.toMatchObject({ code: '42501' });
+        await expect(client.query('select count(*) from cron.job_run_details')).rejects.toMatchObject({ code: '42501' });
+        await expect(client.query(`select cron.schedule('probe', '* * * * *', 'select 1')`)).rejects.toMatchObject({ code: '42501' });
+      } finally {
+        await client.query('reset role').catch(() => undefined);
+        client.release?.();
+      }
+    }
+  });
+
+  it('documents the pg_net platform constraint honestly (client roles cannot reach it)', async () => {
+    if ((await rowCount(`select count(*)::int as n from pg_extension where extname = 'pg_net'`)) !== 1) {
+      console.log('    pg_net is not installed — skipping');
+      return;
+    }
+    // pg_net is owned by the platform role, so the `postgres` migration role cannot revoke its
+    // PUBLIC grants (a documented no-op that would also break pg_net). The reachable-path denial —
+    // that an anonymous API caller cannot call net.http_get or read net._http_response — is proved
+    // live with the anon key in server/scripts/verify-security.ts. Here we lock in the *reason*:
+    const owners = (await pool.query(
+      `select pg_get_userbyid(e.extowner) as owner, n.nspname as schema from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname = 'pg_net'`,
+    )).rows;
+    expect(owners).toHaveLength(1);
+    expect(String(owners[0]?.owner)).toBe('supabase_admin');
+    // anon/authenticated are non-login roles: they cannot open a database connection at all.
+    const login = (await pool.query(`select rolname, rolcanlogin from pg_roles where rolname in ('anon', 'authenticated')`)).rows;
+    for (const row of login) expect(row.rolcanlogin, `${String(row.rolname)} must not be able to log in`).toBe(false);
+  });
+});
