@@ -293,6 +293,9 @@ caveat; **Not handled** = not done.
 
 - `npm run server:db-test` (real database, pinned): **24 tests ran, 24 passed, 0 failed, 0 skipped.**
   (`postgres.integration.test.ts`, 1 file.)
+- `npm run server:verify` (migrate + real-DB suite + in-process smoke): **PASSED**
+  (`VERIFICATION PASSED` — 0 migrations pending, 24/24 DB tests, every smoke check green).
+- `npx tsc --noEmit` (root typecheck): **green** after every change.
 - Without `DATABASE_URL`, the whole DB suite is **skipped loudly** (never silently) and
   `REQUIRE_DATABASE=1` makes that failure explicit.
 - Full `npm run check` (typecheck + all unit suites, including `web/tests` and the DB suite):
