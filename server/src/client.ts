@@ -5,6 +5,7 @@
 import type { Player } from '../../src/engine/index.js';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type {
+  CancelSearchResponse,
   CreateGuestResponse,
   CreateMatchResponse,
   FindOpponentResponse,
@@ -146,6 +147,11 @@ export class DuelClient {
   /** Phase 7 Find Opponent (server pairs or creates an open-queue waiting match). */
   findOpponent(token: string): Promise<FindOpponentResponse> {
     return this.request<FindOpponentResponse>('POST', '/v1/matchmaking/find', { token, body: {} });
+  }
+
+  /** Stop a parked Find Opponent search (retires the waiting open-queue match). */
+  cancelSearch(token: string): Promise<CancelSearchResponse> {
+    return this.request<CancelSearchResponse>('POST', '/v1/matchmaking/cancel', { token, body: {} });
   }
 
   getMatch(token: string, matchId: string): Promise<MatchSummaryResponse> {

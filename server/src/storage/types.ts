@@ -44,6 +44,12 @@ export type MatchRecord = {
   turnDeadlineAt: number | null;
   /** Snapshot of the turn timeout used for this match (config changes never alter it). */
   turnTimeoutMs: number;
+  /** Per-seat count of grace periods already spent in this match (index = seat). */
+  graceUsed: [number, number];
+  /** Snapshot of the per-player grace allowance for this match. */
+  gracePeriods: number;
+  /** Snapshot of how far one grace extends the deadline (defaults to turnTimeoutMs). */
+  graceExtensionMs: number;
   /** Revision of the last completed turn boundary. */
   turnStartRevision: number;
   /** Authoritative state at the last turn boundary (server-only; drives opponent views). */
@@ -84,6 +90,17 @@ export type DeviceLinkCode = {
 };
 
 export type Fail = { ok: false; code: string; reason: string };
+
+/**
+ * The outcome of one atomic Find-Opponent step (Phase 7 open queue).
+ *
+ * `paired` is true when the player joined an existing parked search; false when they parked
+ * (a brand-new parked match) or were already parked (their own match is returned unchanged, so a
+ * repeated tap is idempotent and never creates a second entry).
+ */
+export type OpenQueueSeat =
+  | { ok: true; match: MatchRecord; seat: Player; paired: boolean }
+  | Fail;
 
 /** What the rules layer decided for one submitted action, computed inside the atomic section. */
 export type Decision =
@@ -133,6 +150,10 @@ export type SweepResult = {
   timedOut: number;
   expiredWaiting: number;
   deletedGuests: number;
+  /** Active matches whose deadline was pushed forward by a spent grace (not finished). */
+  graceExtended: number;
+  /** The ids of those matches, so the caller can publish the state change. */
+  graceExtendedIds: string[];
 };
 
 export type MatchListRow = {
@@ -153,9 +174,43 @@ export interface Storage {
   createMatch(match: MatchRecord): Promise<{ ok: true } | Fail>;
   /**
    * Oldest waiting open-queue match that `playerId` is not already in, or null.
-   * Caller then joins via addParticipant + activateMatch.
+   * Read-only helper (used to assert the pool is empty); the pairing itself goes through
+   * `claimOpenQueueOrPark`, which is one atomic step.
    */
   findOpenQueueMatch(playerId: string): Promise<MatchRecord | null>;
+
+  /**
+   * Phase 7 Find Opponent, atomic and race-safe. Inside one serialized section (in Postgres, a
+   * transaction holding an advisory lock; in memory, a synchronous critical section):
+   *
+   *   1. the player's own `waiting` open-queue match, if any — returned as-is so a repeated tap
+   *      never creates a second parked entry (pairing with self is impossible);
+   *   2. else the oldest `waiting` open-queue match with one free seat (FIFO) — the player is
+   *      seated in the free seat and the match is activated in the same step, so two simultaneous
+   *      searchers can never both claim it or both end up waiting;
+   *   3. else `parked` is inserted and the player is seated in seat 0.
+   *
+   * `maxOpenMatches` is the per-player cap on unfinished matches; a player at the cap is refused
+   * (case 2 and 3) rather than silently parked or matched. `expiresAt` on `parked` is the
+   * parked-search expiry, set by the caller from `waitingExpireMs`.
+   */
+  claimOpenQueueOrPark(input: {
+    playerId: string;
+    parked: MatchRecord;
+    now: number;
+    turnTimeoutMs: number;
+    maxOpenMatches: number;
+  }): Promise<OpenQueueSeat>;
+
+  /** The player's own `waiting` open-queue match, or null. Used by cancel and idempotent re-taps. */
+  openQueueMatchOfPlayer(playerId: string): Promise<MatchRecord | null>;
+
+  /**
+   * Cancel a parked search: delete the player's `waiting` open-queue match when they are its only
+   * participant, so no later searcher can be matched into it. Never touches an `active`/`finished`
+   * match. Returns true when a parked search was retired.
+   */
+  cancelOpenQueueMatch(playerId: string, now: number): Promise<boolean>;
   matchById(id: string): Promise<MatchRecord | null>;
   matchByInviteCode(code: string): Promise<MatchRecord | null>;
   /** Every match the player is a participant of (any status). */

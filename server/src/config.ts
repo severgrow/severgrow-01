@@ -21,6 +21,13 @@ export type ServerConfig = {
   corsOrigin: string;
   /** Per-match turn clock snapshot default (24h prod; tests pass seconds). */
   turnTimeoutMs: number;
+  /**
+   * Grace periods each player gets per match before a missed deadline loses. Default 1: the first
+   * timeout warns and extends, the next loses. 0 disables grace (the old behaviour).
+   */
+  gracePeriodsPerPlayer: number;
+  /** How far one grace extends the deadline. Defaults to `TURN_TIMEOUT_MS` (one full turn window). */
+  graceExtensionMs: number;
   /** Waiting-for-a-friend matches expire after this many ms (48h). */
   waitingExpireMs: number;
   /** One-time device link codes expire after this many ms (10 min). */
@@ -70,6 +77,14 @@ const envInt = (name: string, fallback: number): number => {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 };
 
+/** Like `envInt`, but 0 is a meaningful value (e.g. disabling timeout grace). */
+const envCount = (name: string, fallback: number): number => {
+  const raw = readEnv(name)?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+};
+
 const envStr = (name: string): string | null => {
   const raw = readEnv(name)?.trim();
   return raw && raw.length > 0 ? raw : null;
@@ -83,6 +98,9 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   corsOrigin: '*',
   maxOpenMatchesPerPlayer: 10,
   turnTimeoutMs: envInt('TURN_TIMEOUT_MS', DAY_MS),
+  // One grace per player per match by default; the extension is one full turn window.
+  gracePeriodsPerPlayer: envCount('TURN_GRACE_PER_PLAYER', 1),
+  graceExtensionMs: envInt('TURN_GRACE_MS', envInt('TURN_TIMEOUT_MS', DAY_MS)),
   waitingExpireMs: 48 * 60 * 60 * 1000,
   linkCodeTtlMs: 10 * 60 * 1000,
   minClientVersion: '0.5.0',

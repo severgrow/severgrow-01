@@ -14,6 +14,7 @@
 // service-role connection; never a client-side key.
 import type { Action, Event, Player, RulesConfig, State } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
+import { hasGrace, spendGrace } from '../grace.js';
 import type { MatchStatus, OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
@@ -25,6 +26,7 @@ import type {
   MatchListRow,
   MatchRecord,
   MoveRecord,
+  OpenQueueSeat,
   Participant,
   PlayerRecord,
   Storage,
@@ -80,6 +82,9 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
     row.turn_start_state === null || row.turn_start_state === undefined ? null : asJson<State>(row.turn_start_state),
   expiresAt: asNullableNumber(row.expires_at),
   openQueue: row.open_queue === true || row.open_queue === 't' || row.open_queue === 1,
+  graceUsed: [asNumber(row.grace_used_seat0 ?? 0), asNumber(row.grace_used_seat1 ?? 0)],
+  gracePeriods: asNumber(row.grace_periods ?? 1),
+  graceExtensionMs: asNumber(row.grace_extension_ms ?? row.turn_timeout_ms ?? 86_400_000),
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
@@ -103,6 +108,47 @@ const rowToMove = (row: PgRow): MoveRecord => ({
 
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
+
+// One row shape for every match insert (createMatch and the Find-Opponent parked path).
+const INSERT_MATCH_SQL = `insert into matches
+  (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
+   created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision,
+   turn_start_state, expires_at, open_queue, grace_used_seat0, grace_used_seat1, grace_periods,
+   grace_extension_ms)
+ values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`;
+
+const matchInsertValues = (match: MatchRecord): unknown[] => [
+  match.id,
+  match.inviteCode,
+  match.rulesVersion,
+  match.seed,
+  JSON.stringify(match.config),
+  match.startingPlayer,
+  match.status,
+  match.revision,
+  JSON.stringify(match.state),
+  match.result === null ? null : JSON.stringify(match.result),
+  match.createdAt,
+  match.updatedAt,
+  match.finishedAt,
+  match.turnDeadlineAt,
+  match.turnTimeoutMs,
+  match.turnStartRevision,
+  match.turnStartState === null ? null : JSON.stringify(match.turnStartState),
+  match.expiresAt,
+  !!match.openQueue,
+  match.graceUsed[0],
+  match.graceUsed[1],
+  match.gracePeriods,
+  match.graceExtensionMs,
+];
+
+/**
+ * Postgres advisory-lock key for the Find-Opponent section. Taking this inside the transaction
+ * serializes every claim/park so two simultaneous searchers can never both create a parked match
+ * (the second joins the first's). Arbitrary constant, stable across deploys.
+ */
+const OPEN_QUEUE_LOCK_KEY = 724_202_504;
 
 const timeoutResult = (match: MatchRecord): OnlineGameResult => {
   const actor = match.state.actor;
@@ -134,7 +180,9 @@ const finishExpiredWaiting = (match: MatchRecord, now: number): MatchRecord => (
 
 const expiryDecision = (match: MatchRecord, now: number): MatchRecord => {
   if (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
-    return finishTimeout(match, now);
+    // The single decision point: spare the seat its first timeout, or finish on a later one.
+    const seat = match.state.actor;
+    return hasGrace(match, seat) ? spendGrace(match, seat, now) : finishTimeout(match, now);
   }
   if (match.status === 'waiting' && match.expiresAt !== null && now > match.expiresAt) {
     return finishExpiredWaiting(match, now);
@@ -155,7 +203,11 @@ const persistMatch = async (client: PgClient, match: MatchRecord): Promise<void>
        turn_timeout_ms = $9,
        turn_start_revision = $10,
        turn_start_state = $11,
-       expires_at = $12
+       expires_at = $12,
+       grace_used_seat0 = $13,
+       grace_used_seat1 = $14,
+       grace_periods = $15,
+       grace_extension_ms = $16
      where id = $1`,
     [
       match.id,
@@ -170,6 +222,10 @@ const persistMatch = async (client: PgClient, match: MatchRecord): Promise<void>
       match.turnStartRevision,
       match.turnStartState === null ? null : JSON.stringify(match.turnStartState),
       match.expiresAt,
+      match.graceUsed[0],
+      match.graceUsed[1],
+      match.gracePeriods,
+      match.graceExtensionMs,
     ],
   );
 };
@@ -185,9 +241,14 @@ const applyExpiryOnLockedRow = async (
   now: number,
 ): Promise<{ match: MatchRecord; updated: boolean }> => {
   const next = expiryDecision(match, now);
-  if (next.status === match.status && next.revision === match.revision && next.finishedAt === match.finishedAt) {
-    return { match, updated: false };
-  }
+  const unchanged =
+    next.status === match.status &&
+    next.revision === match.revision &&
+    next.finishedAt === match.finishedAt &&
+    next.turnDeadlineAt === match.turnDeadlineAt &&
+    next.graceUsed[0] === match.graceUsed[0] &&
+    next.graceUsed[1] === match.graceUsed[1];
+  if (unchanged) return { match, updated: false };
   await persistMatch(client, next);
   return { match: next, updated: true };
 };
@@ -409,33 +470,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
 
   async createMatch(match: MatchRecord): Promise<{ ok: true } | Fail> {
     try {
-      await pool.query(
-        `insert into matches
-           (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
-            created_at, updated_at, finished_at, turn_deadline_at, turn_timeout_ms, turn_start_revision, turn_start_state, expires_at, open_queue)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-        [
-          match.id,
-          match.inviteCode,
-          match.rulesVersion,
-          match.seed,
-          JSON.stringify(match.config),
-          match.startingPlayer,
-          match.status,
-          match.revision,
-          JSON.stringify(match.state),
-          match.result === null ? null : JSON.stringify(match.result),
-          match.createdAt,
-          match.updatedAt,
-          match.finishedAt,
-          match.turnDeadlineAt,
-          match.turnTimeoutMs,
-          match.turnStartRevision,
-          match.turnStartState === null ? null : JSON.stringify(match.turnStartState),
-          match.expiresAt,
-          !!match.openQueue,
-        ],
-      );
+      await pool.query(INSERT_MATCH_SQL, matchInsertValues(match));
       return { ok: true };
     } catch (error) {
       if (isUniqueViolation(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
@@ -461,6 +496,165 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       [playerId],
     );
     return rows[0] ? rowToMatch(rows[0]) : null;
+  },
+
+  async openQueueMatchOfPlayer(playerId: string): Promise<MatchRecord | null> {
+    const { rows } = await pool.query(
+      `select m.*
+         from matches m
+         join match_participants p on p.match_id = m.id
+        where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+        order by m.created_at asc
+        limit 1`,
+      [playerId],
+    );
+    return rows[0] ? rowToMatch(rows[0]) : null;
+  },
+
+  async claimOpenQueueOrPark(input: {
+    playerId: string;
+    parked: MatchRecord;
+    now: number;
+    turnTimeoutMs: number;
+    maxOpenMatches: number;
+  }): Promise<OpenQueueSeat> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      // Serialize every Find-Opponent step: two simultaneous searchers can never both park.
+      await client.query('select pg_advisory_xact_lock($1)', [OPEN_QUEUE_LOCK_KEY]);
+
+      // 0. Lazily expire parked searches past their window so an expired search is never matched.
+      await client.query(
+        `update matches
+            set status = 'finished', expires_at = null, updated_at = $1, finished_at = $1
+          where status = 'waiting' and open_queue = true and expires_at is not null and expires_at < $1`,
+        [input.now],
+      );
+
+      // 1. Already parked? Return the player's own search (a re-tap never creates a second).
+      const own = await client.query(
+        `select m.*, p.seat as my_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+          order by m.created_at asc
+          limit 1
+          for update of m`,
+        [input.playerId],
+      );
+      if (own.rows[0]) {
+        await client.query('commit');
+        return { ok: true, match: rowToMatch(own.rows[0]), seat: asNumber(own.rows[0].my_seat) === 1 ? 1 : 0, paired: false };
+      }
+
+      // 2. CAP: a player at the per-player limit may not park or accept another match.
+      const cap = await client.query(
+        `select count(*)::int as n
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status <> 'finished'`,
+        [input.playerId],
+      );
+      if (asNumber(cap.rows[0]?.n ?? 0) >= input.maxOpenMatches) {
+        await client.query('rollback');
+        return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+      }
+
+      // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+      const claim = await client.query(
+        `select m.*, p.seat as opener_seat
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where m.status = 'waiting'
+            and m.open_queue = true
+            and not exists (select 1 from match_participants p2 where p2.match_id = m.id and p2.player_id = $1)
+            and (select count(*)::int from match_participants p3 where p3.match_id = m.id) = 1
+          order by m.created_at asc
+          limit 1
+          for update of m skip locked`,
+        [input.playerId],
+      );
+      if (claim.rows[0]) {
+        const row = claim.rows[0];
+        const matchId = asString(row.id);
+        const seat: Player = asNumber(row.opener_seat) === 0 ? 1 : 0;
+        await client.query(
+          'insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,$3,$4,$5)',
+          [matchId, input.playerId, seat, input.now, input.now],
+        );
+        const activated = await client.query(
+          `update matches set
+             status = 'active',
+             updated_at = $2,
+             turn_timeout_ms = $3,
+             turn_deadline_at = $4,
+             turn_start_revision = revision,
+             turn_start_state = state,
+             expires_at = null
+           where id = $1 and status = 'waiting'
+           returning *`,
+          [matchId, input.now, input.turnTimeoutMs, input.now + input.turnTimeoutMs],
+        );
+        await client.query('commit');
+        const match = activated.rows[0] ? rowToMatch(activated.rows[0]) : rowToMatch(row);
+        return { ok: true, match, seat, paired: true };
+      }
+
+      // 4. Nobody is waiting: park the player's search.
+      try {
+        await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          await client.query('rollback');
+          return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+        }
+        throw error;
+      }
+      await client.query(
+        'insert into match_participants (match_id, player_id, seat, joined_at, last_seen_at) values ($1,$2,0,$3,$3)',
+        [input.parked.id, input.playerId, input.now],
+      );
+      await client.query('commit');
+      return { ok: true, match: copy({ ...input.parked, openQueue: true }), seat: 0, paired: false };
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
+  },
+
+  async cancelOpenQueueMatch(playerId: string, _now: number): Promise<boolean> {
+    const client = await pool.connect();
+    try {
+      await client.query('begin');
+      await client.query('select pg_advisory_xact_lock($1)', [OPEN_QUEUE_LOCK_KEY]);
+      const { rows } = await client.query(
+        `select m.id
+           from matches m
+           join match_participants p on p.match_id = m.id
+          where p.player_id = $1 and m.status = 'waiting' and m.open_queue = true
+            and (select count(*)::int from match_participants p2 where p2.match_id = m.id) = 1
+          order by m.created_at asc
+          limit 1
+          for update of m`,
+        [playerId],
+      );
+      if (!rows[0]) {
+        await client.query('rollback');
+        return false;
+      }
+      // Scoped delete (status guard): only ever retires this player's parked search.
+      await client.query("delete from matches where id = $1 and status = 'waiting'", [asString(rows[0].id)]);
+      await client.query('commit');
+      return true;
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release?.();
+    }
   },
 
   async matchById(id: string): Promise<MatchRecord | null> {
@@ -634,6 +828,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
   async sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult> {
     let timedOut = 0;
     let expiredWaiting = 0;
+    const graceExtendedIds: string[] = [];
     const { rows: expiring } = await pool.query(
       `select * from matches
         where (status = 'active' and turn_deadline_at is not null and turn_deadline_at < $1)
@@ -642,12 +837,13 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     );
     for (const row of expiring) {
       const match = rowToMatch(row);
-      const wasActive = match.status === 'active';
       const next = expiryDecision(match, now);
-      if (next.status === match.status && next.finishedAt === match.finishedAt) continue;
+      const graceMoved = next.graceUsed[0] !== match.graceUsed[0] || next.graceUsed[1] !== match.graceUsed[1];
+      if (next.status === match.status && next.finishedAt === match.finishedAt && !graceMoved) continue;
       await persistMatch(pool, next);
-      if (wasActive) timedOut += 1;
-      else expiredWaiting += 1;
+      if (next.status === 'finished' && match.status === 'active') timedOut += 1;
+      else if (next.status === 'finished' && match.status === 'waiting') expiredWaiting += 1;
+      else if (graceMoved) graceExtendedIds.push(match.id);
     }
 
     let deletedGuests = 0;
@@ -660,7 +856,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query('delete from players where id = $1', [asString(row.id)]);
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests };
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds };
   },
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

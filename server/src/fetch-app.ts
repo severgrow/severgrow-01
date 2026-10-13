@@ -143,6 +143,13 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...found, serverNow: service.serverNow() } };
     }
 
+    if (method === 'POST' && path === '/v1/matchmaking/cancel') {
+      const player = await service.authenticate(bearer(req.headers.get('authorization')));
+      await readJson(req, config.maxBodyBytes);
+      const cancelled = await service.cancelSearch(player);
+      return { status: 200, body: { ok: true, ...cancelled, serverNow: service.serverNow() } };
+    }
+
     if (method === 'POST' && path === '/v1/sweep') {
       await readJson(req, config.maxBodyBytes);
       // Routine sweeps run from cron/CI from a shared or changing address. When the caller presents

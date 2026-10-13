@@ -192,6 +192,56 @@ describe('online duel vertical slice (real HTTP)', () => {
   });
 });
 
+describe('Find Opponent over real HTTP', () => {
+  let server: Server;
+  let baseUrl: string;
+  const service = new MatchService({ storage: new MemoryStorage(), config: DEFAULT_SERVER_CONFIG });
+
+  beforeAll(async () => {
+    server = createHttpServer({ service, config: DEFAULT_SERVER_CONFIG });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('parks a lone searcher, pairs the next one, and cancels a parked search', async () => {
+    const a = clientOn(baseUrl, makeStore());
+    const b = clientOn(baseUrl, makeStore());
+    const guestA = await a.createGuest('FindA');
+    const guestB = await b.createGuest('FindB');
+
+    // Nobody waiting: guest A parks.
+    const parked = await a.findOpponent(guestA.token);
+    expect(parked.paired).toBe(false);
+    expect(parked.match.status).toBe('waiting');
+
+    // Guest B joins the parked search; it becomes a live duel.
+    const paired = await b.findOpponent(guestB.token);
+    expect(paired.paired).toBe(true);
+    expect(paired.match.matchId).toBe(parked.match.matchId);
+    expect(paired.match.status).toBe('active');
+
+    // A third player parks again, then cancels: the search is retired, not left in the pool.
+    const c = clientOn(baseUrl, makeStore());
+    const guestC = await c.createGuest('FindC');
+    const parkedC = await c.findOpponent(guestC.token);
+    expect(parkedC.paired).toBe(false);
+    const cancelled = await c.cancelSearch(guestC.token);
+    expect(cancelled.cancelled).toBe(true);
+    expect((await c.cancelSearch(guestC.token)).cancelled).toBe(false);
+  });
+
+  it('returns the friendly TOO_MANY_MATCHES code at the cap', async () => {
+    const a = clientOn(baseUrl, makeStore());
+    const guest = await a.createGuest('Capped');
+    for (let i = 0; i < DEFAULT_SERVER_CONFIG.maxOpenMatchesPerPlayer; i++) await a.createMatch(guest.token);
+    await expect(a.findOpponent(guest.token)).rejects.toMatchObject({ code: 'TOO_MANY_MATCHES', status: 409 });
+  });
+});
+
 describe('cards can never be reconstructed from a payload', () => {
   it('a player view never contains more card ids than the viewer is allowed to know', async () => {
     const service = new MatchService({ storage: new MemoryStorage(), config: DEFAULT_SERVER_CONFIG });

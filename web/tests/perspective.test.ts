@@ -296,6 +296,8 @@ describe('OnlineDriver exposes perspective', () => {
       legalActions: legalActions(view),
       events: [],
       turnDeadlineAt: null,
+      graceUsed: [0, 0],
+      gracePeriods: 1,
       result: null,
       opponent: { seat: 0, displayName: 'Friend', playerId: 'p0' },
       rulesVersion: CURRENT_RULES_VERSION,

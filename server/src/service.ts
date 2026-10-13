@@ -34,6 +34,7 @@ import type {
 } from './protocol.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
+import { graceSpentBetween } from './grace.js';
 import { playerSummary } from './storage/types.js';
 import type { Decision, MatchRecord, Participant, PlayerRecord, Storage } from './storage/types.js';
 
@@ -197,6 +198,40 @@ export class MatchService {
 
   // ---- match lifecycle ----
 
+  /**
+   * A fresh `waiting` match record (no storage write). Shared by invite creation and the parked
+   * Find-Opponent path so both get the same seed/config/expiry. `expiresAt` is the waiting-match
+   * window (`waitingExpireMs`, 48h in production) — the same window a parked search reuses, since
+   * a parked search is exactly a waiting open-queue match.
+   */
+  private buildWaitingMatch(now: number, openQueue: boolean): MatchRecord {
+    const setup = matchSetup(newSeed(), this.config.rulesVersion);
+    return {
+      id: newId(),
+      inviteCode: newInviteCode(this.config.inviteCodeLength),
+      rulesVersion: setup.rulesVersion,
+      seed: setup.seed,
+      config: setup.config,
+      startingPlayer: setup.startingPlayer,
+      status: 'waiting',
+      revision: 0,
+      state: stateFromSetup(setup),
+      result: null,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+      turnDeadlineAt: null,
+      turnTimeoutMs: this.config.turnTimeoutMs,
+      graceUsed: [0, 0],
+      gracePeriods: this.config.gracePeriodsPerPlayer,
+      graceExtensionMs: this.config.graceExtensionMs,
+      turnStartRevision: 0,
+      turnStartState: null,
+      expiresAt: now + this.config.waitingExpireMs,
+      openQueue,
+    };
+  }
+
   async createMatch(
     player: PlayerRecord,
     options: { openQueue?: boolean } = {},
@@ -207,33 +242,11 @@ export class MatchService {
     }
 
     const now = this.now();
-    const setup = matchSetup(newSeed(), this.config.rulesVersion);
-    const state = stateFromSetup(setup);
     const openQueue = !!options.openQueue;
 
     let created: MatchRecord | null = null;
     for (let attempt = 0; attempt < 5 && created === null; attempt++) {
-      const candidate: MatchRecord = {
-        id: newId(),
-        inviteCode: newInviteCode(this.config.inviteCodeLength),
-        rulesVersion: setup.rulesVersion,
-        seed: setup.seed,
-        config: setup.config,
-        startingPlayer: setup.startingPlayer,
-        status: 'waiting',
-        revision: 0,
-        state,
-        result: null,
-        createdAt: now,
-        updatedAt: now,
-        finishedAt: null,
-        turnDeadlineAt: null,
-        turnTimeoutMs: this.config.turnTimeoutMs,
-        turnStartRevision: 0,
-        turnStartState: null,
-        expiresAt: now + this.config.waitingExpireMs,
-        openQueue,
-      };
+      const candidate = this.buildWaitingMatch(now, openQueue);
       const result = await this.storage.createMatch(candidate);
       if (result.ok) created = candidate;
       else if (result.code !== 'DUPLICATE_INVITE_CODE') throw new ApiError('INTERNAL', 'Could not create the match.');
@@ -253,7 +266,11 @@ export class MatchService {
   }
 
   /**
-   * Phase 7 Find Opponent: join the oldest waiting open-queue match, or create one and wait.
+   * Phase 7 Find Opponent. One atomic storage step guarantees the player is never left with
+   * nothing: it joins the oldest waiting open-queue match (FIFO), or parks this search when nobody
+   * is waiting, or returns the player's own parked search so a repeat tap never creates a second.
+   * A parked search is intentional and long-lived; it expires on the waiting-match window only.
+   * A player at the per-player cap is refused (friendly TOO_MANY_MATCHES), never silently stuck.
    */
   async findOpponent(
     player: PlayerRecord,
@@ -262,13 +279,40 @@ export class MatchService {
     await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
     await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
 
-    const open = await this.storage.findOpenQueueMatch(player.id);
-    if (open) {
-      const joined = await this.joinMatch(player, open.inviteCode, clientIp);
-      return { ...joined, paired: true };
+    const now = this.now();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = await this.storage.claimOpenQueueOrPark({
+        playerId: player.id,
+        parked: this.buildWaitingMatch(now, true),
+        now,
+        turnTimeoutMs: this.config.turnTimeoutMs,
+        maxOpenMatches: this.config.maxOpenMatchesPerPlayer,
+      });
+      if (!result.ok) {
+        // A fresh invite code on the next attempt; the others are retried for the same reason.
+        if (result.code === 'DUPLICATE_INVITE_CODE' || result.code === 'MATCH_FULL') continue;
+        if (result.code === 'TOO_MANY_MATCHES') {
+          throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
+        }
+        throw new ApiError('INTERNAL', 'Could not find an opponent.');
+      }
+      if (result.paired) {
+        // The parked player's page learns about the activation from this ping.
+        await safePublish(this.broadcaster, result.match.id, { revision: result.match.revision, status: result.match.status });
+      }
+      return {
+        match: await this.summary(result.match),
+        player: await this.payload(result.match, result.seat, []),
+        paired: result.paired,
+      };
     }
-    const created = await this.createMatch(player, { openQueue: true });
-    return { ...created, paired: false };
+    throw new ApiError('INTERNAL', 'Could not find an opponent.');
+  }
+
+  /** Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise. */
+  async cancelSearch(player: PlayerRecord): Promise<{ cancelled: boolean }> {
+    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    return { cancelled: await this.storage.cancelOpenQueueMatch(player.id, this.now()) };
   }
 
   async joinMatch(
@@ -340,7 +384,9 @@ export class MatchService {
         (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) ||
         (match.status === 'waiting' && match.expiresAt !== null && now > match.expiresAt)
       ) {
+        const before = match;
         match = (await this.storage.applyExpiry(match.id, now)) ?? match;
+        await this.publishGraceChange(before, match);
       }
       this.assertRulesSupported(match.rulesVersion);
       const gated = gatedStateFor(match, row.mySeat);
@@ -355,6 +401,8 @@ export class MatchService {
         lastActivityAt: match.updatedAt,
         unseenTurn: match.status === 'active' && gated.turnPlayer === row.mySeat && row.lastSeenAt < match.updatedAt,
         revision: rev,
+        graceUsed: match.graceUsed,
+        gracePeriods: match.gracePeriods,
         result: match.result,
       });
     }
@@ -401,17 +449,28 @@ export class MatchService {
   async sweep(
     clientIp: string | null = null,
     options: { internal?: boolean } = {},
-  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number }> {
+  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number; graceExtended: number }> {
     // An authenticated cron/CI sweep gets its own bucket so a player's per-IP budget (or a shared
     // "unknown" bucket) can never block routine housekeeping. It is still rate limited.
     const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
     await this.rateLimit(bucket, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
     const result = await this.storage.sweep(this.now(), GUEST_MAX_AGE_MS);
+    // A sweeper-spent grace is the same visible state change as a lazily-spent one.
+    for (const matchId of result.graceExtendedIds) {
+      const match = await this.storage.matchById(matchId);
+      if (match) await safePublish(this.broadcaster, matchId, { revision: match.revision, status: match.status });
+    }
     if (result.deletedGuests > 0) {
       // Housekeeping log for operators (no secrets).
       console.info(`sweep: deleted ${result.deletedGuests} guest account(s) with no matches`);
     }
-    return result;
+    // The wire response stays lean: the ids were only needed to fire the pings above.
+    return {
+      timedOut: result.timedOut,
+      expiredWaiting: result.expiredWaiting,
+      deletedGuests: result.deletedGuests,
+      graceExtended: result.graceExtended,
+    };
   }
 
   // ---- the authoritative action pipeline ----
@@ -461,6 +520,8 @@ export class MatchService {
     if (boundaryMoved || result.match.status === 'finished') {
       await safePublish(this.broadcaster, matchId, { revision: result.match.turnStartRevision, status: result.match.status });
     }
+    // The commit's own expiry step may have spent a grace before applying the action.
+    if (!result.replayed) await this.publishGraceChange(before, result.match);
 
     const events = result.moves.flatMap((m) => m.events);
     return {
@@ -575,6 +636,8 @@ export class MatchService {
       legalActions: canAct ? legalActions(view) : [],
       events: hidePrivateEvents(events, seat),
       turnDeadlineAt: match.status === 'finished' ? null : match.turnDeadlineAt,
+      graceUsed: match.graceUsed,
+      gracePeriods: match.gracePeriods,
       opponent: opp
         ? { seat: opp.seat, playerId: opp.playerId, displayName: oppPlayer?.displayName ?? null }
         : null,
@@ -593,12 +656,23 @@ export class MatchService {
 
   /** Participant check + lazy expiry (same decision point as writes). */
   private async requireParticipantFresh(player: PlayerRecord, matchId: string): Promise<MatchRecord> {
-    await this.requireParticipant(player, matchId);
+    const before = await this.requireParticipant(player, matchId);
     const fresh = await this.storage.applyExpiry(matchId, this.now());
     if (!fresh) throw new ApiError('MATCH_NOT_FOUND', 'Unknown match.');
     const participant = await this.storage.participantOf(matchId, player.id);
     if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
+    await this.publishGraceChange(before, fresh);
     return fresh;
+  }
+
+  /**
+   * A spent grace is a state change both players must be able to see (it is never a secret), so it
+   * goes out on the existing status-change ping path. Never fired for a mid-turn action: the move
+   * itself does not touch the grace flags.
+   */
+  private async publishGraceChange(before: MatchRecord | null, after: MatchRecord): Promise<void> {
+    if (!graceSpentBetween(before, after)) return;
+    await safePublish(this.broadcaster, after.id, { revision: after.revision, status: after.status });
   }
 
   private async seatOf(player: PlayerRecord, matchId: string): Promise<Player> {
@@ -622,6 +696,8 @@ export class MatchService {
       turnStartRevision: match.turnStartRevision,
       turnDeadlineAt: match.status === 'finished' ? null : match.turnDeadlineAt,
       expiresAt: match.status === 'waiting' ? match.expiresAt : null,
+      graceUsed: match.graceUsed,
+      gracePeriods: match.gracePeriods,
       seats,
       result: match.result,
       serverNow: this.now(),

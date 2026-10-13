@@ -24,6 +24,8 @@ const entry = (partial: Partial<MatchListEntry> & Pick<MatchListEntry, 'matchId'
   lastActivityAt: 1,
   unseenTurn: false,
   revision: 1,
+  graceUsed: [0, 0],
+  gracePeriods: 1,
   result: null,
   ...partial,
 });

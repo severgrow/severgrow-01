@@ -43,6 +43,8 @@ describe('duelUiFromSnapshot', () => {
       legalActions: legalActions(view),
       events: [],
       turnDeadlineAt: Date.now() + 3_600_000,
+      graceUsed: [0, 0],
+      gracePeriods: 1,
       result: null,
       opponent: { seat: 0, displayName: 'Ash', playerId: 'p0' },
       rulesVersion: CURRENT_RULES_VERSION,

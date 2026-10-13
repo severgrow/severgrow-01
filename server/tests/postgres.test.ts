@@ -133,6 +133,8 @@ describe('postgres storage: commitMove is atomic and idempotent', () => {
     expect(statements.some((s) => s.includes('from match_moves where match_id = $1 and request_id = $2'))).toBe(true);
     expect(statements.some((s) => s.startsWith('insert into match_moves'))).toBe(true);
     expect(statements.some((s) => s.includes('update matches set') && s.includes('turn_deadline_at'))).toBe(true);
+    // The grace state is persisted on the same row update (no second code path).
+    expect(statements.some((s) => s.includes('update matches set') && s.includes('grace_used_seat0'))).toBe(true);
     expect(statements.at(-1)).toBe('commit');
     expect(statements).not.toContain('rollback');
   });
@@ -235,6 +237,9 @@ describe('postgres storage: write paths', () => {
       finishedAt: null,
       turnDeadlineAt: null,
       turnTimeoutMs: 86_400_000,
+      graceUsed: [0, 0],
+      gracePeriods: 1,
+      graceExtensionMs: 86_400_000,
       turnStartRevision: 0,
       turnStartState: null,
       expiresAt: null,
@@ -265,5 +270,120 @@ describe('postgres storage: write paths', () => {
     const moves: MoveRecord[] = await storage.movesOf('m1', 0);
     expect(moves).toHaveLength(1);
     expect(moves[0]).toMatchObject({ revision: 7, seat: 1, requestId: 'r9' });
+  });
+});
+
+const parkedRecord = (overrides: Partial<MatchRecord> = {}): MatchRecord => ({
+  id: 'parked1',
+  inviteCode: 'PARKED01',
+  rulesVersion: 'futasaku0.4-strength-draw',
+  seed: 42,
+  config: DEFAULT_CONFIG,
+  startingPlayer: 0,
+  status: 'waiting',
+  revision: 0,
+  state: matchRow().state as never,
+  result: null,
+  createdAt: 10,
+  updatedAt: 10,
+  finishedAt: null,
+  turnDeadlineAt: null,
+  turnTimeoutMs: 86_400_000,
+  graceUsed: [0, 0],
+  gracePeriods: 1,
+  graceExtensionMs: 86_400_000,
+  turnStartRevision: 0,
+  turnStartState: null,
+  expiresAt: 20,
+  openQueue: true,
+  ...overrides,
+});
+
+describe('postgres storage: Find-Opponent is one atomic, serialized step', () => {
+  it('parks when nobody is waiting, inside an advisory-locked transaction', async () => {
+    const fake = fakePool();
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p1',
+      parked: parkedRecord(),
+      now: 100,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: false, seat: 0 });
+
+    const statements = fake.statements();
+    expect(statements[0]).toBe('begin');
+    // The advisory lock is what stops two simultaneous searchers both parking.
+    expect(statements.some((s) => s.includes('pg_advisory_xact_lock'))).toBe(true);
+    expect(statements.some((s) => s.startsWith('insert into matches'))).toBe(true);
+    expect(statements.some((s) => s.startsWith('insert into match_participants'))).toBe(true);
+    expect(statements.at(-1)).toBe('commit');
+  });
+
+  it('claims the oldest waiting open-queue match with FOR UPDATE SKIP LOCKED and activates it', async () => {
+    const fake = fakePool();
+    fake.script('as opener_seat', [{ ...matchRow({ status: 'waiting' }), opener_seat: 0 }]);
+    fake.script('returning *', [matchRow({ status: 'active' })]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p2',
+      parked: parkedRecord(),
+      now: 200,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: true, seat: 1 });
+
+    const statements = fake.statements();
+    const claim = statements.find((s) => s.includes('as opener_seat'))!;
+    expect(claim).toContain('for update of m skip locked');
+    expect(statements.some((s) => s.startsWith('update matches set') && s.includes("status = 'active'"))).toBe(true);
+    // No second parked match is inserted when one is claimed.
+    expect(statements.some((s) => s.startsWith('insert into matches'))).toBe(false);
+    expect(statements.at(-1)).toBe('commit');
+  });
+
+  it('refuses a player at the cap and rolls back without parking', async () => {
+    const fake = fakePool();
+    fake.script('as n', [{ n: '10' }]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'capped',
+      parked: parkedRecord(),
+      now: 300,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: false, code: 'TOO_MANY_MATCHES' });
+    expect(fake.statements()).toContain('rollback');
+    expect(fake.statements().some((s) => s.startsWith('insert into matches'))).toBe(false);
+  });
+
+  it('returns the player own parked search without creating a second', async () => {
+    const fake = fakePool();
+    fake.script('as my_seat', [{ ...matchRow({ status: 'waiting' }), my_seat: 0 }]);
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p1',
+      parked: parkedRecord(),
+      now: 400,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: true, paired: false, seat: 0 });
+    expect(fake.statements().some((s) => s.startsWith('insert into matches'))).toBe(false);
+    expect(fake.statements().some((s) => s.startsWith('insert into match_participants'))).toBe(false);
+  });
+
+  it('cancels a parked search with a scoped delete and never touches an active match', async () => {
+    const fake = fakePool();
+    fake.onQuery((text) => (text.includes('select m.id') && text.includes('for update of m') ? { rows: [{ id: 'parked1' }] } : undefined));
+    const storage = postgresStorage(fake.pool);
+    expect(await storage.cancelOpenQueueMatch('p1', 500)).toBe(true);
+    const statements = fake.statements();
+    const del = statements.find((s) => s.startsWith('delete from matches'))!;
+    expect(del).toContain("and status = 'waiting'");
+    expect(statements.at(-1)).toBe('commit');
   });
 });

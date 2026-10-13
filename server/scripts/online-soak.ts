@@ -1072,28 +1072,56 @@ export const playGame = async (spec: GameSpec, rt: Runtime, provided?: [GuestHan
             bySeat[actor.seat] = accepted.value.player;
             counters.moves += 1;
           }
-          // 2. the same seat now misses the clock: lazy expiry on a read, or a late submit
+          // 2. the same seat now misses the clock TWICE. The first miss spends the seat's one
+          //    grace (warn + extend, match stays active); the second miss finishes with 'timeout'.
           expiryActor = actor.seat;
-          const current = bySeat[actor.seat];
+          let current = bySeat[actor.seat];
           if (current.turnDeadlineAt !== null) {
+            const graceMs = rt.config?.graceExtensionMs ?? timeoutMs;
+            const firstDeadline = current.turnDeadlineAt;
             if (game % 2 === 0) {
-              rt.clock.set(current.turnDeadlineAt + 1_000);
+              rt.clock.set(firstDeadline + 1_000);
               const lazy = await actor.port.getView(actor.token, matchId);
               if (lazy.ok) {
                 bySeat[actor.seat] = lazy.value;
                 ctx.report.check(
-                  'deadline.lazy_expiry',
-                  lazy.value.status === 'finished' && lazy.value.result?.reason === 'timeout',
+                  'deadline.first_miss_spends_grace',
+                  lazy.value.status === 'active',
                   ctx,
-                  { status: lazy.value.status, reason: lazy.value.result?.reason },
+                  { status: lazy.value.status },
                 );
               }
             } else {
-              rt.clock.set(current.turnDeadlineAt + 1);
+              rt.clock.set(firstDeadline + 1);
               const late = await submitSafe(actor.port, actor.token, matchId, { expectedRevision: current.revision, requestId: rid(), actions: [current.legalActions[0]!] });
-              ctx.report.check('deadline.late_submit_timed_out', !late.ok && late.code === 'TIMED_OUT', ctx, late);
+              // The submit arrives after the extension, so it is accepted (never a spurious loss).
+              ctx.report.check('deadline.submit_after_grace_accepted', late.ok, ctx, late.ok ? undefined : late);
               const fresh = await actor.port.getView(actor.token, matchId);
               if (fresh.ok) bySeat[actor.seat] = fresh.value;
+            }
+
+            // The first miss extended the deadline by one turn window (never finished).
+            current = bySeat[actor.seat];
+            ctx.report.check(
+              'deadline.grace_extends_deadline',
+              current.status !== 'active' || current.turnDeadlineAt === null || current.turnDeadlineAt >= firstDeadline + graceMs,
+              ctx,
+              { status: current.status, before: firstDeadline, after: current.turnDeadlineAt, graceMs },
+            );
+
+            // Second miss: past the extended deadline the seat loses with reason 'timeout'.
+            if (current.turnDeadlineAt !== null) {
+              rt.clock.set(current.turnDeadlineAt + 1);
+              const final = await actor.port.getView(actor.token, matchId);
+              if (final.ok) {
+                bySeat[actor.seat] = final.value;
+                ctx.report.check(
+                  'deadline.second_miss_times_out',
+                  final.value.status === 'finished' && final.value.result?.reason === 'timeout',
+                  ctx,
+                  { status: final.value.status, reason: final.value.result?.reason },
+                );
+              }
             }
           }
         }
@@ -1607,7 +1635,7 @@ export const renderDoc = (
   lines.push('| --- | --- | --- | --- |');
   lines.push(`| core | in-process \`MatchService\` + \`PostgresStorage\` (real DB) | ${scenarios.get('core') ?? 0} | Full turns, both seats, mixed styles, natural endings |`);
   lines.push(`| async | in-process (real DB) | ${scenarios.get('async') ?? 0} | Away stretches, catch-up reads, gated opponent views |`);
-  lines.push(`| deadline | in-process (real DB) | ${scenarios.get('deadline') ?? 0} | Submit at the deadline, +1 ms late, lazy expiry, correct loser |`);
+  lines.push(`| deadline | in-process (real DB) | ${scenarios.get('deadline') ?? 0} | Submit at the deadline, first miss spends grace, second miss times out, correct loser |`);
   lines.push(`| fouls | in-process (real DB) | ${scenarios.get('fouls') ?? 0} | Duplicate requestId, stale revision, requestId conflict, two-tab, concurrent submits |`);
   lines.push(`| resign | in-process (real DB) | ${scenarios.get('resign') ?? 0} | Resign finishes with the right winner |`);
   lines.push(`| edge | deployed Edge Function over HTTPS through \`DuelClient\` | ${scenarios.get('edge') ?? 0} | The live path: CORS, status codes, latency, hidden info |`);
@@ -1665,8 +1693,8 @@ export const renderDoc = (
   const dlFail = [...report.checks].filter(([n]) => n.startsWith('deadline.')).reduce((n, [, s]) => n + s.fail, 0);
   lines.push('- The deadline is set when the match activates and belongs to the seat that must act.');
   lines.push('- The clock refreshes **only** on a handover (actor change) and is **never** reset by a Draw or a mid-turn move.');
-  lines.push('- A submit exactly **at** the deadline is accepted; one millisecond later it is rejected with `TIMED_OUT` and the match finishes with reason `timeout`.');
-  lines.push('- The timeout loser is always the seat that still had to act; the deadline is cleared on both seats at the end.');
+  lines.push('- A submit exactly **at** the deadline is accepted. A *first* miss past the deadline is spared: the grace extends it by one turn window and the match stays active.');
+  lines.push('- A *second* miss by the same seat finishes the match with reason `timeout`; the loser is always the seat that still had to act, and the deadline is cleared on both seats at the end.');
   lines.push(`- Result: **${dlFail === 0 ? 'PASS' : `FAIL — ${dlFail} deadline check(s)`}**.`);
   lines.push('');
   lines.push('## Bugs found');

@@ -48,6 +48,10 @@ export type MatchViewPayload = {
   events: Event[];
   /** Epoch ms when this seat's turn clock expires; null when finished/waiting. */
   turnDeadlineAt: number | null;
+  /** Per-seat grace periods already spent (index = seat). Public: grace is not a secret. */
+  graceUsed: [number, number];
+  /** Grace periods each player gets in this match. */
+  gracePeriods: number;
   opponent: { seat: Player; playerId: string; displayName: string | null } | null;
   result: OnlineGameResult | null;
   serverNow: number;
@@ -69,6 +73,9 @@ export type MatchSummary = {
   turnStartRevision: number;
   turnDeadlineAt: number | null;
   expiresAt: number | null;
+  /** Per-seat grace periods already spent (index = seat). Public: grace is not a secret. */
+  graceUsed: [number, number];
+  gracePeriods: number;
   seats: { seat: Player; playerId: string; displayName: string | null }[];
   result: OnlineGameResult | null;
   serverNow: number;
@@ -84,6 +91,9 @@ export type MatchListEntry = {
   lastActivityAt: number;
   unseenTurn: boolean;
   revision: number;
+  /** Per-seat grace periods already spent (index = seat), so the list can explain a warning. */
+  graceUsed: [number, number];
+  gracePeriods: number;
   result: OnlineGameResult | null;
 };
 
@@ -100,6 +110,9 @@ export type FindOpponentResponse = {
   paired: boolean;
   serverNow: number;
 };
+
+/** Phase 7 Find Opponent — stop a parked search (retires the waiting open-queue match). */
+export type CancelSearchResponse = { ok: true; cancelled: boolean; serverNow: number };
 
 export type SubmitActionRequest = {
   expectedRevision: number;
@@ -133,6 +146,7 @@ export type SweepResponse = {
   timedOut: number;
   expiredWaiting: number;
   deletedGuests: number;
+  graceExtended: number;
   serverNow: number;
 };
 

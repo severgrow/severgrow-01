@@ -94,6 +94,8 @@ const samplePayload = (overrides: Partial<MatchViewPayload> = {}): MatchViewPayl
     legalActions: legalActions(view),
     events: [],
     turnDeadlineAt: Date.now() + 3_600_000,
+    graceUsed: [0, 0],
+    gracePeriods: 1,
     opponent: { seat: seat === 0 ? 1 : 0, playerId: 'opp', displayName: 'PineFox' },
     result: null,
     serverNow: Date.now(),

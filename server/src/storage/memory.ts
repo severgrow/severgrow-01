@@ -4,6 +4,7 @@
 // row lock the Postgres adapter takes.
 import type { Player } from '../../../src/engine/index.js';
 import { scores } from '../../../src/engine/index.js';
+import { hasGrace, spendGrace } from '../grace.js';
 import type { OnlineGameResult } from '../protocol.js';
 import type {
   CommitBatchInput,
@@ -14,6 +15,7 @@ import type {
   MatchListRow,
   MatchRecord,
   MoveRecord,
+  OpenQueueSeat,
   Participant,
   PlayerRecord,
   Storage,
@@ -109,6 +111,112 @@ export class MemoryStorage implements Storage {
       if (parts.length === 1) return copy(match);
     }
     return null;
+  }
+
+  /** Raw (non-copied) own-parked lookup for the synchronous critical sections below. */
+  private ownParked(playerId: string): MatchRecord | null {
+    const own = [...this.matches.values()]
+      .filter((m) => m.status === 'waiting' && m.openQueue)
+      .filter((m) => (this.participants.get(m.id) ?? []).some((p) => p.playerId === playerId))
+      .sort((a, b) => a.createdAt - b.createdAt);
+    return own[0] ?? null;
+  }
+
+  async openQueueMatchOfPlayer(playerId: string): Promise<MatchRecord | null> {
+    const own = this.ownParked(playerId);
+    return own ? copy(own) : null;
+  }
+
+  private openMatchCountFor(playerId: string): number {
+    let count = 0;
+    for (const [matchId, list] of this.participants) {
+      if (!list.some((p) => p.playerId === playerId)) continue;
+      const match = this.matches.get(matchId);
+      if (match && match.status !== 'finished') count += 1;
+    }
+    return count;
+  }
+
+  // Atomic in memory: no await runs between the checks and the writes (Node is single-threaded),
+  // exactly like the Postgres adapter's advisory-locked transaction.
+  async claimOpenQueueOrPark(input: {
+    playerId: string;
+    parked: MatchRecord;
+    now: number;
+    turnTimeoutMs: number;
+    maxOpenMatches: number;
+  }): Promise<OpenQueueSeat> {
+    // 0. Lazily expire parked searches past their window so an expired search is never matched.
+    for (const [id, match] of this.matches) {
+      if (match.status === 'waiting' && match.expiresAt !== null && input.now > match.expiresAt) {
+        this.matches.set(id, copy(finishExpiredWaiting(match, input.now)));
+      }
+    }
+
+    // 1. Already parked: return the player's own search so a re-tap never creates a second entry.
+    const own = this.ownParked(input.playerId);
+    if (own) {
+      const seat = (this.participants.get(own.id) ?? []).find((p) => p.playerId === input.playerId)!.seat;
+      return { ok: true, match: copy(own), seat, paired: false };
+    }
+
+    // 2. CAP: a player at the per-player limit may not park or accept another match.
+    if (this.openMatchCountFor(input.playerId) >= input.maxOpenMatches) {
+      return { ok: false, code: 'TOO_MANY_MATCHES', reason: 'Finish or leave a match before starting another.' };
+    }
+
+    // 3. Join the oldest waiting open-queue match with one free seat (FIFO), atomically.
+    const waiting = [...this.matches.values()]
+      .filter((m) => m.status === 'waiting' && m.openQueue)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    for (const match of waiting) {
+      const parts = this.participants.get(match.id) ?? [];
+      if (parts.some((p) => p.playerId === input.playerId)) continue;
+      if (parts.length !== 1) continue;
+      const seat: Player = parts.some((p) => p.seat === 0) ? 1 : 0;
+      const next: Participant[] = [
+        ...parts,
+        { matchId: match.id, playerId: input.playerId, seat, joinedAt: input.now, lastSeenAt: input.now },
+      ];
+      this.participants.set(match.id, next);
+      const activated: MatchRecord = {
+        ...match,
+        status: 'active',
+        updatedAt: input.now,
+        turnTimeoutMs: input.turnTimeoutMs,
+        turnDeadlineAt: input.now + input.turnTimeoutMs,
+        turnStartRevision: match.revision,
+        turnStartState: copy(match.state),
+        expiresAt: null,
+      };
+      this.matches.set(match.id, copy(activated));
+      return { ok: true, match: copy(activated), seat, paired: true };
+    }
+
+    // 4. Nobody is waiting: park the player's search.
+    if (this.inviteIndex.has(input.parked.inviteCode)) {
+      return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+    }
+    const parked = { ...input.parked, openQueue: true };
+    this.matches.set(parked.id, copy(parked));
+    this.inviteIndex.set(parked.inviteCode, parked.id);
+    this.participants.set(parked.id, [
+      { matchId: parked.id, playerId: input.playerId, seat: 0, joinedAt: input.now, lastSeenAt: input.now },
+    ]);
+    this.moves.set(parked.id, []);
+    return { ok: true, match: copy(parked), seat: 0, paired: false };
+  }
+
+  async cancelOpenQueueMatch(playerId: string, _now: number): Promise<boolean> {
+    const own = this.ownParked(playerId);
+    if (!own) return false;
+    const parts = this.participants.get(own.id) ?? [];
+    if (parts.length !== 1 || !parts.some((p) => p.playerId === playerId)) return false;
+    this.matches.delete(own.id);
+    this.inviteIndex.delete(own.inviteCode);
+    this.participants.delete(own.id);
+    this.moves.delete(own.id);
+    return true;
   }
 
   async matchById(id: string): Promise<MatchRecord | null> {
@@ -215,7 +323,9 @@ export class MemoryStorage implements Storage {
 
   private expiryDecision(match: MatchRecord, now: number): MatchRecord {
     if (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
-      return finishTimeout(match, now);
+      // The single decision point: spare the seat its first timeout, or finish on a later one.
+      const seat = match.state.actor;
+      return hasGrace(match, seat) ? spendGrace(match, seat, now) : finishTimeout(match, now);
     }
     if (match.status === 'waiting' && match.expiresAt !== null && now > match.expiresAt) {
       return finishExpiredWaiting(match, now);
@@ -247,12 +357,15 @@ export class MemoryStorage implements Storage {
   async sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult> {
     let timedOut = 0;
     let expiredWaiting = 0;
+    const graceExtendedIds: string[] = [];
     for (const [id, match] of this.matches) {
       const next = this.expiryDecision(match, now);
       if (next === match) continue;
       this.matches.set(id, copy(next));
-      if (match.status === 'active') timedOut += 1;
-      if (match.status === 'waiting') expiredWaiting += 1;
+      if (next.status === 'finished' && match.status === 'active') timedOut += 1;
+      else if (next.status === 'finished' && match.status === 'waiting') expiredWaiting += 1;
+      else if (match.status === 'active' && next.graceUsed[0] !== match.graceUsed[0]) graceExtendedIds.push(id);
+      else if (match.status === 'active' && next.graceUsed[1] !== match.graceUsed[1]) graceExtendedIds.push(id);
     }
     let deletedGuests = 0;
     for (const [id, player] of [...this.players]) {
@@ -266,7 +379,7 @@ export class MemoryStorage implements Storage {
       }
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests };
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds };
   }
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

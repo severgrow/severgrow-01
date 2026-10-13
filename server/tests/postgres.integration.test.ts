@@ -222,6 +222,10 @@ suite('real database: schema and migration process', () => {
     try {
       await client.query(`set role ${roles[0]}`);
       await expect(client.query('select * from matches limit 1')).rejects.toMatchObject({ code: '42501' });
+      // The Find-Opponent queue lives on `matches`, so an anon client cannot read the queue either.
+      await expect(
+        client.query("select * from matches where open_queue and status = 'waiting' limit 1"),
+      ).rejects.toMatchObject({ code: '42501' });
       await expect(client.query('select * from rate_limits limit 1')).rejects.toMatchObject({ code: '42501' });
       await expect(client.query('select * from device_link_codes limit 1')).rejects.toMatchObject({ code: '42501' });
     } finally {
@@ -450,6 +454,79 @@ suite('real database: concurrency and atomicity', () => {
     expect(clash.code).toMatch(/DUPLICATE_INVITE_CODE|23505/i);
     // The pool still answers afterwards.
     expect((await storage.matchById(matchId))?.inviteCode).toBe(inviteCode);
+  });
+});
+
+suite('real database: Find-Opponent queue', () => {
+  it('two simultaneous searchers produce exactly one active match, no duplicate and no orphan', async () => {
+    const a = await guest('Find-A');
+    const b = await guest('Find-B');
+    const pa = await service.authenticate(a.token);
+    const pb = await service.authenticate(b.token);
+
+    // Fire both at once: the advisory lock makes one park and the other join it. The first
+    // searcher's own response is the pre-activation snapshot (their page learns from the list /
+    // ping); the invariant is one shared match that is active on disk, not two and not an orphan.
+    const [ra, rb] = await Promise.all([service.findOpponent(pa), service.findOpponent(pb)]);
+    MATCHES.push(ra.match.matchId);
+    expect(ra.match.matchId).toBe(rb.match.matchId);
+    expect((await postgresStorage(pool).matchById(ra.match.matchId))?.status).toBe('active');
+    expect([ra.paired, rb.paired].filter(Boolean)).toHaveLength(1);
+    expect(await rowCount('select count(*)::int as n from match_participants where match_id = $1', [ra.match.matchId])).toBe(2);
+    // Nothing is left waiting in the pool for either searcher.
+    expect(
+      await rowCount(
+        `select count(*)::int as n from matches m
+          where m.status = 'waiting' and m.open_queue = true
+            and exists (select 1 from match_participants p where p.match_id = m.id and p.player_id = any($1::uuid[]))`,
+        [[pa.id, pb.id]],
+      ),
+    ).toBe(0);
+  });
+
+  it('cancel retires the parked search row so no later searcher meets it', async () => {
+    const a = await guest('Cancel-A');
+    const pa = await service.authenticate(a.token);
+    const parked = await service.findOpponent(pa);
+    expect(parked.paired).toBe(false);
+    expect(await postgresStorage(pool).matchById(parked.match.matchId)).not.toBeNull();
+    expect(await service.cancelSearch(pa)).toEqual({ cancelled: true });
+    expect(await postgresStorage(pool).matchById(parked.match.matchId)).toBeNull();
+    // Idempotent calm no-op afterwards.
+    expect(await service.cancelSearch(pa)).toEqual({ cancelled: false });
+  });
+});
+
+suite('real database: timeout grace', () => {
+  it('extends on the first miss and finishes on the second, on real rows', async () => {
+    let t = Date.now();
+    const svc = new MatchService({
+      storage: postgresStorage(pool),
+      config: { ...INTEGRATION_CONFIG, turnTimeoutMs: 3_600_000, graceExtensionMs: 3_600_000 },
+      now: () => t,
+    });
+    const a = await svc.createGuest();
+    const b = await svc.createGuest();
+    PLAYERS.push(a.player.id, b.player.id);
+    const pa = await svc.authenticate(a.token);
+    const pb = await svc.authenticate(b.token);
+    const created = await svc.createMatch(pa);
+    MATCHES.push(created.match.matchId);
+    await svc.joinMatch(pb, created.match.inviteCode);
+    const matchId = created.match.matchId;
+
+    const m0 = (await postgresStorage(pool).matchById(matchId))!;
+    t = m0.turnDeadlineAt! + 1;
+    const first = await svc.viewPayload(pa, matchId);
+    expect(first.status).toBe('active');
+    const m1 = (await postgresStorage(pool).matchById(matchId))!;
+    expect(m1.graceUsed[0] + m1.graceUsed[1]).toBe(1);
+    expect(m1.turnDeadlineAt).toBe(m0.turnDeadlineAt! + 3_600_000);
+
+    t = m1.turnDeadlineAt! + 1;
+    const lost = await svc.viewPayload(pa, matchId);
+    expect(lost.status).toBe('finished');
+    expect(lost.result?.reason).toBe('timeout');
   });
 });
 

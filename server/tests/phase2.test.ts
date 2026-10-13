@@ -15,6 +15,8 @@ import { readFileSync } from 'node:fs';
 const shortTimeoutConfig = (): ServerConfig => ({
   ...DEFAULT_SERVER_CONFIG,
   turnTimeoutMs: 10_000,
+  // One grace = one turn window, so a first miss extends by exactly `turnTimeoutMs`.
+  graceExtensionMs: 10_000,
   waitingExpireMs: 60_000,
   linkCodeTtlMs: 60_000,
   rateLimits: {
@@ -108,6 +110,24 @@ const playDull = async (
   await service.submitAction(next.player, matchId, { expectedRevision: next.revision, requestId, action });
 };
 
+describe('migration 0004 (timeout grace)', () => {
+  it('is additive on the match row, never edits 0001-0003, and obeys P-21', () => {
+    const sql = readFileSync(new URL('../migrations/0004_timeout_grace.sql', import.meta.url), 'utf8');
+    const squashed = sql.replace(/\s+/g, ' ').toLowerCase();
+    expect(squashed).toContain('alter table matches add column if not exists grace_used_seat0 integer not null default 0');
+    expect(squashed).toContain('alter table matches add column if not exists grace_used_seat1 integer not null default 0');
+    expect(squashed).toContain('alter table matches add column if not exists grace_periods integer not null default 1');
+    expect(squashed).toContain('alter table matches add column if not exists grace_extension_ms bigint not null default 0');
+    expect(squashed).toContain('alter table matches enable row level security');
+    expect(squashed).toContain('revoke all on matches from');
+    expect(squashed).toContain('alter default privileges in schema public revoke all on tables');
+    expect(squashed).toContain('alter default privileges in schema public revoke all on sequences');
+    expect(squashed).toContain('alter default privileges in schema public revoke all on functions');
+    expect(squashed).not.toContain('drop table');
+    expect(squashed).not.toContain('create policy');
+  });
+});
+
 describe('migration 0002', () => {
   it('is additive, enables RLS on new tables, and revokes default privileges', () => {
     const sql = readFileSync(new URL('../migrations/0002_deadlines_lists.sql', import.meta.url), 'utf8');
@@ -142,7 +162,11 @@ describe('rule 1–3: deadlines and expiry', () => {
     expect(afterDraw.turnStartRevision).toBe(0);
   });
 
-  it('accepts an action at the deadline and rejects one millisecond later with TIMED_OUT', async () => {
+  // Owner rule (timeout grace): the FIRST miss no longer loses — it warns and extends by one turn
+  // window. Only a later miss by the same seat finishes with reason 'timeout'. The assertions below
+  // are as strong as before; they now span the two misses the rule requires. See
+  // server/tests/timeout-grace.test.ts for the per-seat and idempotency proofs.
+  it('accepts an action at the deadline, spares the first miss, then TIMED_OUT on the second', async () => {
     const h = await twoPlayers();
     const match = (await h.storage.matchById(h.matchId))!;
     const deadline = match.turnDeadlineAt!;
@@ -158,32 +182,62 @@ describe('rule 1–3: deadlines and expiry', () => {
     const h2 = await twoPlayers();
     const m2 = (await h2.storage.matchById(h2.matchId))!;
     const n2 = (await actor(h2.service, h2.pa, h2.pb, h2.matchId))!;
+
+    // First miss: the grace extends and an action arriving after the extension is accepted.
     h2.setNow(m2.turnDeadlineAt! + 1);
+    await h2.service.submitAction(n2.player, h2.matchId, {
+      expectedRevision: n2.revision,
+      requestId: 'late-first',
+      action: n2.legal[0]!,
+    });
+    const extended = (await h2.storage.matchById(h2.matchId))!;
+    expect(extended.status).toBe('active');
+    expect(extended.graceUsed[n2.seat]).toBe(1);
+    expect(extended.turnDeadlineAt).toBe(m2.turnDeadlineAt! + 10_000);
+
+    // Second miss for the same seat: it loses, reason unchanged.
+    h2.setNow(extended.turnDeadlineAt! + 1);
+    const lost = await h2.service.viewPayload(n2.player, h2.matchId);
+    expect(lost.status).toBe('finished');
+    expect(lost.result?.reason).toBe('timeout');
+    expect(lost.result?.winner).toBe(n2.seat === 0 ? 1 : 0);
+    const finished = (await h2.storage.matchById(h2.matchId))!;
+    expect(finished.turnDeadlineAt).toBeNull();
+    // A late submit on the timeout-finished match still reports TIMED_OUT.
     await expectCode(
-      h2.service.submitAction(n2.player, h2.matchId, { expectedRevision: 0, requestId: 'late', action: n2.legal[0]! }),
+      h2.service.submitAction(n2.player, h2.matchId, { expectedRevision: n2.revision, requestId: 'late-second', action: n2.legal[0]! }),
       'TIMED_OUT',
     );
-    const finished = (await h2.storage.matchById(h2.matchId))!;
-    expect(finished.status).toBe('finished');
-    expect(finished.result?.reason).toBe('timeout');
-    expect(finished.turnDeadlineAt).toBeNull();
   });
 
   it('lazy read and sweeper share one expiry outcome and are idempotent', async () => {
     const h = await twoPlayers();
     const deadline = (await h.storage.matchById(h.matchId))!.turnDeadlineAt!;
+    // First miss at the deadline extends, it does not finish.
     h.setNow(deadline + 1);
     const view = await h.service.viewPayload(h.pa, h.matchId);
-    expect(view.status).toBe('finished');
-    expect(view.result?.reason).toBe('timeout');
+    expect(view.status).toBe('active');
+    const extended = (await h.storage.matchById(h.matchId))!;
+    expect(extended.turnDeadlineAt).toBe(deadline + 10_000);
     const again = await h.service.sweep();
     expect(again.timedOut).toBe(0);
+
+    // Past the extended deadline the lazy read finishes; the sweeper is idempotent after.
+    h.setNow(extended.turnDeadlineAt! + 1);
+    const final = await h.service.viewPayload(h.pa, h.matchId);
+    expect(final.status).toBe('finished');
+    expect(final.result?.reason).toBe('timeout');
+    const idempotent = await h.service.sweep();
+    expect(idempotent.timedOut).toBe(0);
+
+    // Sweeper-first: the first miss extends, the second (past the extension) finishes.
     const sweepFirst = await (async () => {
       const x = await twoPlayers();
       x.setNow((await x.storage.matchById(x.matchId))!.turnDeadlineAt! + 1);
       return x.service.sweep();
     })();
-    expect(sweepFirst.timedOut).toBe(1);
+    expect(sweepFirst.graceExtended).toBe(1);
+    expect(sweepFirst.timedOut).toBe(0);
   });
 });
 
