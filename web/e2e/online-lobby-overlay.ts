@@ -24,6 +24,7 @@
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
+import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
@@ -135,7 +136,7 @@ const openWaiting = async (page: Page): Promise<boolean> => {
   await page.waitForSelector('#online-waiting:not([hidden])', { timeout: 25_000 });
   await page
     .waitForFunction(
-      () => /^[0-9A-HJKMNP-TV-Z]{8}$/.test((document.getElementById('online-invite-code')?.textContent ?? '').trim()),
+      () => new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test((document.getElementById('online-invite-code')?.textContent ?? '').trim()),
       { timeout: 15_000 },
     )
     .catch(() => undefined);

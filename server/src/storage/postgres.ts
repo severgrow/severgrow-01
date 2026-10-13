@@ -109,6 +109,17 @@ const rowToMove = (row: PgRow): MoveRecord => ({
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
 
+/**
+ * True ONLY for a genuine unique violation on `matches.invite_code` — the one failure the service
+ * retries with a fresh code. The column's inline `unique` constraint is named
+ * `matches_invite_code_key`; any other 23505 (for example `matches_pkey` on the id) is NOT an
+ * invite collision and must surface as a real error, never be swallowed as a retry. We match on a
+ * constraint name that mentions `invite_code` so a future index rename stays covered.
+ */
+export const isInviteCodeCollision = (error: unknown): boolean =>
+  isUniqueViolation(error) &&
+  String((error as { constraint?: unknown }).constraint ?? '').includes('invite_code');
+
 // One row shape for every match insert (createMatch and the Find-Opponent parked path).
 const INSERT_MATCH_SQL = `insert into matches
   (id, invite_code, rules_version, seed, config, starting_player, status, revision, state, result,
@@ -473,7 +484,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query(INSERT_MATCH_SQL, matchInsertValues(match));
       return { ok: true };
     } catch (error) {
-      if (isUniqueViolation(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
+      if (isInviteCodeCollision(error)) return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
       throw error;
     }
   },
@@ -605,7 +616,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       try {
         await client.query(INSERT_MATCH_SQL, matchInsertValues({ ...input.parked, openQueue: true }));
       } catch (error) {
-        if (isUniqueViolation(error)) {
+        if (isInviteCodeCollision(error)) {
           await client.query('rollback');
           return { ok: false, code: 'DUPLICATE_INVITE_CODE', reason: 'Invite code already exists.' };
         }

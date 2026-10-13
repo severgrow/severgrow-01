@@ -6,6 +6,7 @@
 //   BASE_URL=https://severgrow.github.io/severgrow-01/futa0.5/ npx tsx web/e2e/online-live-proof.ts
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, ConsoleMessage, Page } from 'playwright-core';
+import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 const CHROME =
@@ -82,7 +83,7 @@ try {
   await pageA.waitForSelector('#online-waiting:not([hidden])', { timeout: 25_000 });
   check('A: guest identity stored', await identityPresent(pageA));
   const invite = ((await pageA.locator('#online-invite-code').textContent()) ?? '').trim();
-  check('A: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(invite), invite);
+  check('A: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(invite), invite);
 
   // --- Player B: guest + join ---
   const pageB = await openPlayer(browser, 'B', loggedB);

@@ -1,13 +1,28 @@
 // Server configuration. Times are epoch milliseconds and are always passed in by the caller
 // (the service owns the clock), so the core logic stays testable and deterministic.
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
+import { INVITE_CODE_LENGTH } from '../../src/invite-code.js';
 
 export type ServerConfig = {
   /** The rules version every new match is created under. Immutable once a match exists. */
   rulesVersion: string;
   /** Hard cap on committed moves per match (guards storage and replay cost). */
   maxMovesPerMatch: number;
-  /** Private invite-code length (Crockford base32, unambiguous alphabet). */
+  /**
+   * Private invite-code length (Crockford base32, unambiguous alphabet).
+   *
+   * The value lives in ONE place — `INVITE_CODE_LENGTH` in `src/invite-code.ts` — and is re-exported
+   * here so the service keeps reading it from its config. The player-facing format hint
+   * (`ONLINE.errCodeFormat` in `src/strings.ts`) derives from the same constant, so the two can
+   * never drift.
+   *
+   * Codes are PERMANENT: the unique index on `matches.invite_code` spans every match ever created
+   * (a finished duel never releases its code), so the usable pool only shrinks as the game grows —
+   * this is why 4 characters is only safe together with the bounded collision retry in
+   * `MatchService` (`createMatch` and the parked Find-Opponent path), not on its own. The join
+   * endpoint is also rate-limited per player AND per IP (P-13). To lengthen the codes later, change
+   * `INVITE_CODE_LENGTH` in `src/invite-code.ts` — the one line both layers read.
+   */
   inviteCodeLength: number;
   /** Maximum decoded JSON request body size in bytes. */
   maxBodyBytes: number;
@@ -93,7 +108,7 @@ const envStr = (name: string): string | null => {
 export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   rulesVersion: CURRENT_RULES_VERSION,
   maxMovesPerMatch: 10_000,
-  inviteCodeLength: 8,
+  inviteCodeLength: INVITE_CODE_LENGTH,
   maxBodyBytes: 64 * 1024,
   corsOrigin: '*',
   maxOpenMatchesPerPlayer: 10,

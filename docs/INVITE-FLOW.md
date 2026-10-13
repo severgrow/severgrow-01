@@ -1,9 +1,9 @@
 # Link-first invites (FUTASAKU 0.5)
 
 Owner-approved change to the duel invite flow, on branch `futa0.5-online`. The **link is the
-primary action**; the 8-character code stays as a fallback (in-app browsers keep separate storage,
-links get truncated, people read codes aloud). A link arrival **confirms** before joining; a typed
-code **joins straight away**.
+primary action**; the code (now **4 characters** — see `INVITE_CODE_LENGTH` in `src/invite-code.ts`)
+stays as a fallback (in-app browsers keep separate storage, links get truncated, people read codes
+aloud). A link arrival **confirms** before joining; a typed code **joins straight away**.
 
 Code: `web/src/online/lobby-ui.ts`, `web/src/online/lobby.ts`, `web/src/online/online-css.ts`,
 `src/strings.ts`, `web/index.html` (two lines). Spec: `web/e2e/online-invite-flow.ts`.
@@ -43,7 +43,7 @@ Player-facing words live in `src/strings.ts` (`ONLINE.*`). Every new/changed lin
 | Code copied confirmation | — | `Code copied` |
 | Link-arrival confirm (`#online-join-confirm`) | `Join this duel?` | `Join this duel?` (unchanged; name unavailable) |
 | Join-cancel button (new) | — | `Cancel` (reuses `ONLINE.cancel`) |
-| Malformed typed code (new) | — | `Codes are 8 letters and numbers.` |
+| Malformed typed code (new) | — | `Enter the 4 characters.` |
 | Broken invite link (new) | — | `Link looks broken. Enter the code.` |
 
 Unchanged and kept: `Share invite`, `Copy link`, `Link copied`, `Cancel match`,

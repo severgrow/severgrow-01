@@ -259,7 +259,7 @@ try {
   const { context: ctxA, page: A } = await openApp(browser, origin, { width: 1280, height: 800 });
   await openHub(A);
   const invite = await createDuel(A);
-  check('live: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(invite), invite);
+  check('live: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(invite), invite);
 
   const { context: ctxB, page: B } = await openApp(browser, origin, { width: 390, height: 844 });
   await openHub(B);

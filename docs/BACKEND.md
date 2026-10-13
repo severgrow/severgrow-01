@@ -132,7 +132,7 @@ players. The worldwide-shared-`unknown` bucket only affects in-process/cron call
 Per-IP limits are deliberately loose because a **household, cafe, office or mobile carrier NAT**
 shares one public address. The **per-player** limits are the real anti-abuse control: they are keyed
 by the player's own token, so players cannot share or pool them. The 10-open-matches-per-player cap
-and the 8-char invite codes are unchanged.
+is unchanged. Invite codes are now **4 characters** (see [Invite codes](#invite-codes)).
 
 | Bucket (default window) | Default | Environment variable |
 | --- | --- | --- |
@@ -154,6 +154,36 @@ function can be tuned without a code change. Defaults are the safe values above.
 sweep uses the dedicated `sweep:internal` bucket, so a player's per-IP budget (or a shared
 `unknown` bucket) can never starve routine housekeeping. It is still rate limited. Without the token
 the ordinary `sweep:ip:<ip>` bucket applies.
+
+## Invite codes
+
+A code is **4 characters** of Crockford base32 (`0123456789ABCDEFGHJKMNPQRSTVWXYZ` — no `I`, `L`,
+`O` or `U`), i.e. 32⁴ = 1,048,576 possibilities, generated server-side by `newInviteCode`. The
+length has **one home**: `INVITE_CODE_LENGTH` in `src/invite-code.ts`, which the server re-exports as
+`config.inviteCodeLength` and which the player-facing format hint (`ONLINE.errCodeFormat` in
+`src/strings.ts`) derives from — so the copy and the generated codes can never drift. The client
+accepts any 4–16 uppercase alphanumerics and the join lookup normalises case, spaces and dashes, so
+it needs no change when this value moves.
+
+**Codes are permanent.** `matches.invite_code` is `not null unique`, and that unique index spans
+every match ever created — a finished duel never releases its code, so the usable pool only shrinks
+as the game grows. Short codes are therefore only safe together with the bounded retry below; code
+recycling is deliberately out of scope (do not make the index partial).
+
+**Safe generation (bounded retry, P-13).** Both paths that create a match — `createMatch` (invite)
+and the parked Find-Opponent path (`findOpponent` → `claimOpenQueueOrPark`) — generate a *fresh*
+code and retry up to `MAX_INVITE_CODE_ATTEMPTS` (5) times when the insert fails with a **genuine**
+unique violation on `matches.invite_code`. The Postgres adapter reports `DUPLICATE_INVITE_CODE` only
+for a `23505` whose constraint is `matches_invite_code_key` (the memory adapter checks its own invite
+index), so an unrelated failure is never swallowed and never retried. After the last attempt the
+caller gets a friendly `INTERNAL` error, and because each insert is a single statement there is no
+partial row. A warning is logged only when a retry actually happens, and the code itself is never
+logged, so the collision rate is observable.
+
+**Existing codes keep working:** lookup is by value, not length, so a code created before this
+change (for example 8 characters) still resolves and joins. **Path to longer codes later:** raise
+`INVITE_CODE_LENGTH` in `src/invite-code.ts` — that one constant feeds both the server config and
+the player-facing hint.
 
 ## The action pipeline (exactly once)
 

@@ -8,6 +8,7 @@
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
+import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
@@ -179,7 +180,7 @@ try {
   await A.click('#online-create');
   await A.waitForSelector('#online-waiting:not([hidden])', { timeout: 25_000 });
   const invite = ((await A.locator('#online-invite-code').textContent()) ?? '').trim();
-  check('waiting: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(invite), invite);
+  check('waiting: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(invite), invite);
   await shoot(A, '05-waiting-desktop');
   await shoot(B, '06-hub-phone-before-join');
 

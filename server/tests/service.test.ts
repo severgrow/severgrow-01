@@ -97,7 +97,7 @@ describe('match creation and joining', () => {
     const { match, player: view } = await h.service.createMatch(player);
     expect(match.status).toBe('waiting');
     expect(match.revision).toBe(0);
-    expect(match.inviteCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
+    expect(match.inviteCode).toMatch(new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`));
     expect(match.seats).toHaveLength(1);
     expect(view.seat).toBe(0);
     // Waiting for an opponent: no legal actions yet.

@@ -5,6 +5,7 @@
 //   npm run server:smoke                         # terminal 2
 //   BASE_URL=https://duel.example npm run server:smoke
 import { DuelClient } from '../src/client.js';
+import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
 const baseUrl = process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
@@ -34,7 +35,7 @@ const main = async (): Promise<void> => {
   check('two guests can be created', guestA.ok && guestB.ok);
 
   const created = await a.createMatch(guestA.token);
-  check('guest A creates a waiting match with an invite code', created.match.status === 'waiting' && created.match.inviteCode.length === 8, created.match.inviteCode);
+  check('guest A creates a waiting match with an invite code', created.match.status === 'waiting' && created.match.inviteCode.length === DEFAULT_SERVER_CONFIG.inviteCodeLength, created.match.inviteCode);
 
   const joined = await b.joinMatch(guestB.token, created.match.inviteCode);
   check('guest B joins with the code and the match becomes active', joined.match.status === 'active' && joined.player.seat === 1);

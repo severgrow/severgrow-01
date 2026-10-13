@@ -486,11 +486,12 @@ suite('real database: concurrency and atomicity', () => {
     const { inviteCode, matchId } = await newMatchFor('Constraint');
     const storage = postgresStorage(pool);
     const existing = (await storage.matchById(matchId)) as MatchRecord;
-    // Re-inserting the same invite code violates a real unique index.
-    const clash = await storage.createMatch({ ...existing, id: existing.id });
+    // Re-inserting the SAME invite code under a NEW id violates the real invite_code unique
+    // constraint (matches_invite_code_key) — a genuine collision, not a primary-key clash.
+    const clash = await storage.createMatch({ ...existing, id: globalThis.crypto.randomUUID() });
     expect(clash.ok).toBe(false);
     if (clash.ok) return;
-    expect(clash.code).toMatch(/DUPLICATE_INVITE_CODE|23505/i);
+    expect(clash.code).toBe('DUPLICATE_INVITE_CODE');
     // The pool still answers afterwards.
     expect((await storage.matchById(matchId))?.inviteCode).toBe(inviteCode);
   });

@@ -89,7 +89,7 @@ const openHub = async (page: Page, label: string): Promise<void> => {
 
 const inviteCodeOf = async (page: Page): Promise<string> => {
   await page.waitForFunction(
-    () => /^[0-9A-HJKMNP-TV-Z]{8}$/.test((document.getElementById('online-invite-code')?.textContent ?? '').trim()),
+    () => new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test((document.getElementById('online-invite-code')?.textContent ?? '').trim()),
     { timeout: 20_000 },
   );
   return ((await page.locator('#online-invite-code').textContent()) ?? '').trim();
@@ -159,7 +159,7 @@ try {
   await A.page.click('#online-create');
   await waitVisible(A.page, '#online-waiting', 25_000);
   const codeA = await inviteCodeOf(A.page);
-  check('A: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(codeA), codeA);
+  check('A: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(codeA), codeA);
 
   // Share is the primary action; the code is not a primary button.
   const sharePrimary = await A.page.evaluate(() => {
@@ -255,7 +255,7 @@ try {
   await C.page.click('#online-create');
   await waitVisible(C.page, '#online-waiting', 25_000);
   const codeC = await inviteCodeOf(C.page);
-  check('C: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(codeC), codeC);
+  check('C: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(codeC), codeC);
 
   const D = await newContext(browser, origin);
   await D.page.goto(`${origin}/`);

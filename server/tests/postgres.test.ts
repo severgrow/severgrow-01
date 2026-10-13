@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../../src/engine/index.js';
 import type { Action, Player } from '../../src/engine/index.js';
-import { postgresStorage } from '../src/storage/postgres.js';
+import { isInviteCodeCollision, postgresStorage } from '../src/storage/postgres.js';
 import type { PgClient, PgPool, PgQueryResult, PgRow } from '../src/storage/postgres.js';
 import type { Decision, MatchRecord, MoveRecord } from '../src/storage/types.js';
 
@@ -214,8 +214,10 @@ describe('postgres storage: write paths', () => {
     const fake = fakePool();
     fake.onQuery((text) => {
       if (text.startsWith('insert into matches')) {
-        const error = new Error('duplicate key') as Error & { code: string };
+        // A genuine unique violation on matches.invite_code, as node-postgres reports it.
+        const error = new Error('duplicate key') as Error & { code: string; constraint: string };
         error.code = '23505';
+        error.constraint = 'matches_invite_code_key';
         throw error;
       }
       return undefined;
@@ -385,5 +387,66 @@ describe('postgres storage: Find-Opponent is one atomic, serialized step', () =>
     const del = statements.find((s) => s.startsWith('delete from matches'))!;
     expect(del).toContain("and status = 'waiting'");
     expect(statements.at(-1)).toBe('commit');
+  });
+});
+
+// The retry in the service is only safe if a duplicate is reported for a GENUINE invite_code
+// collision — nothing else. These pin that boundary in the adapter (P-13).
+describe('postgres storage: only a genuine invite_code collision is retryable', () => {
+  const uniqueViolation = (constraint: string) =>
+    Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505', constraint });
+
+  it('classifies a 23505 on matches_invite_code_key as an invite collision', () => {
+    expect(isInviteCodeCollision(uniqueViolation('matches_invite_code_key'))).toBe(true);
+    expect(isInviteCodeCollision({ code: '23505' })).toBe(false);
+    expect(isInviteCodeCollision(uniqueViolation('matches_pkey'))).toBe(false);
+    expect(isInviteCodeCollision(uniqueViolation('match_participants_pkey'))).toBe(false);
+    expect(isInviteCodeCollision(new Error('boom'))).toBe(false);
+  });
+
+  it('rethrows a non-invite unique violation from createMatch instead of calling it a duplicate', async () => {
+    const fake = fakePool();
+    fake.onQuery((text) => {
+      if (text.startsWith('insert into matches')) throw uniqueViolation('matches_pkey');
+      return undefined;
+    });
+    const storage = postgresStorage(fake.pool);
+    await expect(storage.createMatch(parkedRecord({ inviteCode: 'ABCD' }))).rejects.toThrow(/unique/i);
+  });
+
+  it('reports a real invite collision on the park path and rolls back', async () => {
+    const fake = fakePool();
+    fake.onQuery((text) => {
+      if (text.startsWith('insert into matches')) throw uniqueViolation('matches_invite_code_key');
+      return undefined;
+    });
+    const storage = postgresStorage(fake.pool);
+    const result = await storage.claimOpenQueueOrPark({
+      playerId: 'p1',
+      parked: parkedRecord({ inviteCode: 'ABCD' }),
+      now: 600,
+      turnTimeoutMs: 60_000,
+      maxOpenMatches: 10,
+    });
+    expect(result).toMatchObject({ ok: false, code: 'DUPLICATE_INVITE_CODE' });
+    expect(fake.statements()).toContain('rollback');
+  });
+
+  it('rethrows a non-invite unique violation on the park path', async () => {
+    const fake = fakePool();
+    fake.onQuery((text) => {
+      if (text.startsWith('insert into matches')) throw uniqueViolation('matches_pkey');
+      return undefined;
+    });
+    const storage = postgresStorage(fake.pool);
+    await expect(
+      storage.claimOpenQueueOrPark({
+        playerId: 'p1',
+        parked: parkedRecord({ inviteCode: 'ABCD' }),
+        now: 700,
+        turnTimeoutMs: 60_000,
+        maxOpenMatches: 10,
+      }),
+    ).rejects.toThrow(/unique/i);
   });
 });

@@ -136,7 +136,7 @@ try {
   let invite = '';
   if (await pageA.locator('#online-waiting:not([hidden])').isVisible().catch(() => false)) {
     invite = ((await pageA.locator('#online-invite-code').textContent()) ?? '').trim();
-    check('A: invite code shown', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(invite), invite);
+    check('A: invite code shown', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(invite), invite);
   } else {
     // Fallback: read from API via create was UI-only — pull from service list
     const guests = await service.createGuest('probe');

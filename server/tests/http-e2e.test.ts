@@ -60,7 +60,7 @@ describe('online duel vertical slice (real HTTP)', () => {
     const guestA = await a.createGuest('A');
     const created = await a.createMatch(guestA.token);
     expect(created.match.status).toBe('waiting');
-    expect(created.match.inviteCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
+    expect(created.match.inviteCode).toMatch(new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`));
     expect(created.player.seat).toBe(0);
     expect(created.player.legalActions).toEqual([]);
     a.saveSession({ token: guestA.token, matchId: created.match.matchId, seat: created.player.seat });

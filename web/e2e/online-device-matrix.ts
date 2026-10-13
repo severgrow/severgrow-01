@@ -12,6 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import {
   BrowserPool,
   DEVICES,
@@ -313,7 +314,7 @@ const setupDuel = async (
   // The shared IP budget can refuse new guests/matches; say so plainly instead of timing out.
   await guardNotice(creator, '#online-hub-notice');
   const { inviteCode } = await createDuel(creator);
-  addCheck(env.rec, 'invite code shown and well-formed', /^[0-9A-HJKMNP-TV-Z]{8}$/.test(inviteCode), inviteCode || '(empty)');
+  addCheck(env.rec, 'invite code shown and well-formed', new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(inviteCode), inviteCode || '(empty)');
   await openHub(joiner);
   await guardNotice(joiner, '#online-hub-notice');
   if (options.joinVia === 'link') await joinDuelViaLink(joiner, inviteCode);

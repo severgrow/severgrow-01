@@ -145,7 +145,7 @@ try {
     await shoot(a.page, `online-hub-${vp.tag}`);
 
     const invite = await createDuel(a.page);
-    check(`[${vp.tag}] invite screen shows a code`, /^[0-9A-HJKMNP-TV-Z]{8}$/.test(invite), invite);
+    check(`[${vp.tag}] invite screen shows a code`, new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(invite), invite);
     await a.page.waitForTimeout(400);
     await shoot(a.page, `invite-${vp.tag}`);
 

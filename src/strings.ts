@@ -1,5 +1,6 @@
 // The words the player sees for the other side, in one place (UI polish pass 3). Only text
 // the player can read uses these; code names (src/bots/, botVersion, BOT, CSS classes) stay.
+import { INVITE_CODE_LENGTH } from './invite-code.js';
 
 /** What the other side is called everywhere on the page. */
 export const OPPONENT_LABEL = 'Opponent';
@@ -26,6 +27,14 @@ export const OPP = Object.freeze({
 
 /** The game's player-facing name. Historical save keys keep their original namespace. */
 export const GAME_TITLE = 'Futasaku';
+
+/**
+ * The hint shown when a typed invite code is malformed. Built from the ONE invite-code length
+ * (`src/invite-code.ts`, re-exported by the server as `inviteCodeLength`), so the copy can never
+ * drift from the codes the server actually generates. The parameter defaults to the real length;
+ * tests pass an explicit value to prove the wording tracks the number.
+ */
+export const inviteCodeFormatHint = (length: number = INVITE_CODE_LENGTH): string => `Enter the ${length} characters.`;
 
 /** Online Duels (FUTASAKU 0.5) — every lobby / menu word the player reads. */
 export const ONLINE = Object.freeze({
@@ -117,7 +126,7 @@ export const ONLINE = Object.freeze({
   linkCodeDone: (code: string) => `Code ${code} — enter it on the other browser.`,
   openDuelSoon: 'Duel screen opens in the next update.',
   errBadOrExpired: 'That code is wrong or has expired.',
-  errCodeFormat: 'Codes are 8 letters and numbers.',
+  errCodeFormat: inviteCodeFormatHint(),
   errLinkBroken: 'Link looks broken. Enter the code.',
   errOwnCode: 'That is your own invite code.',
   errFull: 'That duel is already full.',

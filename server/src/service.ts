@@ -43,6 +43,14 @@ const GUEST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 
+/**
+ * Bounded attempts when a freshly generated invite code is already taken (P-13). The storage
+ * adapter only reports `DUPLICATE_INVITE_CODE` for a genuine unique violation on
+ * `matches.invite_code`, so this retries a real collision — never an unrelated failure. After the
+ * last attempt creation fails with a friendly error instead of looping forever.
+ */
+export const MAX_INVITE_CODE_ATTEMPTS = 5;
+
 /** Drops the event history before persisting: authoritative rows stay small; events live in match_moves. */
 const withoutHistory = (state: State): State => {
   if (state.history === undefined) return state;
@@ -245,13 +253,17 @@ export class MatchService {
     const openQueue = !!options.openQueue;
 
     let created: MatchRecord | null = null;
-    for (let attempt = 0; attempt < 5 && created === null; attempt++) {
+    for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS && created === null; attempt++) {
       const candidate = this.buildWaitingMatch(now, openQueue);
       const result = await this.storage.createMatch(candidate);
       if (result.ok) created = candidate;
-      else if (result.code !== 'DUPLICATE_INVITE_CODE') throw new ApiError('INTERNAL', 'Could not create the match.');
+      else if (result.code === 'DUPLICATE_INVITE_CODE') {
+        // A real collision: generate a fresh code and retry. Warn only when a retry is needed, so
+        // the collision rate is visible in the logs. Never log the code itself.
+        console.warn(`createMatch: invite code collision, retrying (attempt ${attempt + 1}/${MAX_INVITE_CODE_ATTEMPTS})`);
+      } else throw new ApiError('INTERNAL', 'Could not create the match.');
     }
-    if (!created) throw new ApiError('INTERNAL', 'Could not allocate an invite code.');
+    if (!created) throw new ApiError('INTERNAL', 'Could not start a duel right now. Please try again.');
 
     const seated = await this.storage.addParticipant({
       matchId: created.id,
@@ -280,7 +292,7 @@ export class MatchService {
     await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
 
     const now = this.now();
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
       const result = await this.storage.claimOpenQueueOrPark({
         playerId: player.id,
         parked: this.buildWaitingMatch(now, true),
@@ -289,8 +301,14 @@ export class MatchService {
         maxOpenMatches: this.config.maxOpenMatchesPerPlayer,
       });
       if (!result.ok) {
-        // A fresh invite code on the next attempt; the others are retried for the same reason.
-        if (result.code === 'DUPLICATE_INVITE_CODE' || result.code === 'MATCH_FULL') continue;
+        if (result.code === 'DUPLICATE_INVITE_CODE') {
+          // A real invite-code collision: build a fresh code and retry. Warn only when a retry is
+          // actually needed; never log the code itself.
+          console.warn(`findOpponent: invite code collision, retrying (attempt ${attempt + 1}/${MAX_INVITE_CODE_ATTEMPTS})`);
+          continue;
+        }
+        // A racing searcher took the free seat first; the next attempt re-reads the queue.
+        if (result.code === 'MATCH_FULL') continue;
         if (result.code === 'TOO_MANY_MATCHES') {
           throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
         }
@@ -306,7 +324,7 @@ export class MatchService {
         paired: result.paired,
       };
     }
-    throw new ApiError('INTERNAL', 'Could not find an opponent.');
+    throw new ApiError('INTERNAL', 'Could not find an opponent right now. Please try again.');
   }
 
   /** Stop a parked search: retire it so no later searcher is matched into it. Calm no-op otherwise. */
