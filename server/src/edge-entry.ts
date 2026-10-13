@@ -8,10 +8,20 @@ import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import { DEFAULT_SERVER_CONFIG, PRODUCTION_CORS_ORIGIN } from './config.js';
 import type { ServerConfig } from './config.js';
 import { corsHeaders } from './cors.js';
+import { ApiError } from './errors.js';
 import { createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
 import { postgresStorage } from './storage/postgres.js';
+import type { PgPool } from './storage/postgres.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
+import {
+  classifyDatabaseUrl,
+  edgePoolOptions,
+  isConnectionAcquisitionError,
+  safeErrorText,
+  withSingleRetry,
+} from './storage/pool-config.js';
+import type { ConnectionDiagnostics } from './storage/pool-config.js';
 
 const edgeConfig: ServerConfig = {
   ...DEFAULT_SERVER_CONFIG,
@@ -24,45 +34,89 @@ const edgeConfig: ServerConfig = {
 const cors = corsHeaders(PRODUCTION_CORS_ORIGIN);
 const corsJson = { ...cors, 'content-type': 'application/json; charset=utf-8' };
 
-let appPromise: Promise<(req: Request) => Promise<Response>> | null = null;
+const log = (line: string): void => console.log(line);
 
-const buildApp = async (): Promise<(req: Request) => Promise<Response>> => {
+type EdgeRuntime = {
+  app: (req: Request) => Promise<Response>;
+  service: MatchService;
+  /** Which pooler the DATABASE_URL secret points at (host/port only — never the URL). */
+  dbInfo: ConnectionDiagnostics;
+};
+
+let runtimePromise: Promise<EdgeRuntime> | null = null;
+
+/**
+ * Wrap the postgres.js pool so a transient failure to OPEN a connection is retried once, and a
+ * persistent one becomes a clean `DB_UNAVAILABLE` (503) instead of an opaque 500.
+ *
+ * Only the two acquisition points are retried — a standalone `query` (autocommit, no statement has
+ * been sent when the connection cannot be opened) and `connect`/`reserve` (nothing executed yet).
+ * Queries already running on a reserved client are NOT retried, so a write can never be applied
+ * twice. `isConnectionAcquisitionError` also excludes mid-statement errors like `ECONNRESET`.
+ */
+const withEdgeConnectionRetry = (pool: PgPool): PgPool => ({
+  async query(text, values) {
+    try {
+      return await withSingleRetry(
+        () => pool.query(text, values),
+        (error) => log(`EDGE_DB_RETRY query ${safeErrorText(error)}`),
+      );
+    } catch (error) {
+      return databaseUnavailable(error);
+    }
+  },
+  async connect() {
+    try {
+      return await withSingleRetry(
+        () => pool.connect(),
+        (error) => log(`EDGE_DB_RETRY connect ${safeErrorText(error)}`),
+      );
+    } catch (error) {
+      return databaseUnavailable(error);
+    }
+  },
+});
+
+/** A persistent connection-acquisition failure becomes a friendly 503; anything else is rethrown. */
+const databaseUnavailable = (error: unknown): never => {
+  if (isConnectionAcquisitionError(error)) {
+    throw new ApiError('DB_UNAVAILABLE', 'The duel database is briefly busy. Please retry in a moment.');
+  }
+  throw error;
+};
+
+const buildRuntime = async (): Promise<EdgeRuntime> => {
   const databaseUrl = Deno.env.get('DATABASE_URL') ?? '';
   if (!databaseUrl) {
     throw new Error('DATABASE_URL secret is not set on the Edge Function.');
   }
   const sql = postgres(databaseUrl, {
-    prepare: false,
-    // Two connections. A single connection (max: 1) is shared by every query, so when the Edge
-    // runtime drops an invocation mid-transaction (`Shutdown … EarlyDrop`) the next query can run
-    // inside that leftover transaction and read a stale snapshot — which showed up as the two seats
-    // disagreeing about whose turn it was. But a large pool is not free either: every warm Edge
-    // isolate keeps `max` idle connections, and a burst of isolates exhausted the project's
-    // connection slots (Postgres "remaining connection slots are reserved for the SUPERUSER
-    // attribute"), which made the live API answer 500 for everyone. Two is the balance: a poisoned
-    // connection is not immediately reused, yet the footprint stays small. The durable fix is the
-    // Transaction pooler URI (port 6543) on the DATABASE_URL secret.
-    max: 2,
-    idle_timeout: 15,
-    // Recycle connections so a connection wedged by a dropped invocation cannot linger.
-    max_lifetime: 120,
-    connect_timeout: 10,
+    // `edgePoolOptions` holds `prepare: false` (required for the Transaction pooler, port 6543),
+    // the bounded pool size and the idle/lifetime/connect-timeout values. Every value is
+    // overridable with an Edge secret so the pool can be tuned without a code change.
+    ...edgePoolOptions((name) => Deno.env.get(name)),
     ssl: 'require',
   });
+  const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
   const service = new MatchService({
-    storage: postgresStorage(poolFromPostgresJs(sql)),
+    storage: postgresStorage(pool),
     config: edgeConfig,
   });
-  return createFetchApp({
-    service,
-    config: edgeConfig,
-    logger: (line) => console.log(line),
-  });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log });
+  return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 
-const getApp = (): Promise<(req: Request) => Promise<Response>> => {
-  if (!appPromise) appPromise = buildApp();
-  return appPromise;
+const getRuntime = (): Promise<EdgeRuntime> => {
+  if (!runtimePromise) {
+    runtimePromise = buildRuntime().catch((error: unknown) => {
+      // Never cache a failed boot: a transient connection problem must not permanently wedge the
+      // isolate (the previous promise would have stayed rejected forever, turning every later
+      // request into a 500).
+      runtimePromise = null;
+      throw error;
+    });
+  }
+  return runtimePromise;
 };
 
 const normalizePath = (pathname: string): string => {
@@ -74,42 +128,59 @@ const normalizePath = (pathname: string): string => {
   return path;
 };
 
+/** A start/connection failure the caller can read: 503 when retryable, 500 when something else broke. */
+const failureResponse = (error: unknown): Response => {
+  const message = error instanceof Error ? error.message : String(error);
+  const missingSecret = message.includes('DATABASE_URL');
+  const unavailable = !missingSecret && isConnectionAcquisitionError(error);
+  const code = missingSecret ? 'DB_SECRET_MISSING' : unavailable ? 'DB_UNAVAILABLE' : 'EDGE_BOOT_ERROR';
+  const body = missingSecret
+    ? 'Set the DATABASE_URL Edge secret to the Transaction pooler URI (port 6543). See docs/DEPLOY-ONLINE.md.'
+    : unavailable
+      ? 'The duel database is briefly busy. Please retry in a moment.'
+      : 'The duel API failed to start. Check Edge Function logs.';
+  log(`EDGE_BOOT_ERROR ${code} ${safeErrorText(error)}`);
+  return new Response(
+    JSON.stringify({ ok: false, code, message: body, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now() }),
+    { status: missingSecret || unavailable ? 503 : 500, headers: corsJson },
+  );
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors });
   }
   const url = new URL(req.url);
   const path = normalizePath(url.pathname);
-  // Health without ?db=1 answers even before DATABASE_URL is configured.
-  if (req.method === 'GET' && path === '/v1/health' && url.searchParams.get('db') !== '1') {
-    return new Response(
-      JSON.stringify({
+  // Health is answered by the Edge entry so `?db=1` doubles as a connection diagnostic: it reports
+  // which pooler the DATABASE_URL secret points at (classification only — never the URL or secret).
+  if (req.method === 'GET' && path === '/v1/health') {
+    const dbConfigured = Boolean(Deno.env.get('DATABASE_URL'));
+    if (url.searchParams.get('db') !== '1') {
+      return new Response(
+        JSON.stringify({ ok: true, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now(), dbConfigured }),
+        { status: 200, headers: corsJson },
+      );
+    }
+    try {
+      const runtime = await getRuntime();
+      const startedDb = Date.now();
+      await runtime.service.pingStorage();
+      const body = {
         ok: true,
-        rulesVersion: CURRENT_RULES_VERSION,
-        serverNow: Date.now(),
-        dbConfigured: Boolean(Deno.env.get('DATABASE_URL')),
-      }),
-      { status: 200, headers: corsJson },
-    );
+        rulesVersion: runtime.service.rulesVersion,
+        serverNow: runtime.service.serverNow(),
+        db: { ok: true, ms: Date.now() - startedDb, pooler: runtime.dbInfo.kind, port: runtime.dbInfo.port },
+      };
+      return new Response(JSON.stringify(body), { status: 200, headers: corsJson });
+    } catch (error: unknown) {
+      return failureResponse(error);
+    }
   }
   try {
-    const app = await getApp();
-    return await app(req);
+    const runtime = await getRuntime();
+    return await runtime.app(req);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const missingSecret = message.includes('DATABASE_URL');
-    console.log(`EDGE_BOOT_ERROR ${message}`);
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        code: missingSecret ? 'DB_SECRET_MISSING' : 'EDGE_BOOT_ERROR',
-        message: missingSecret
-          ? 'Set the DATABASE_URL Edge secret to the Transaction pooler URI (port 6543). See docs/DEPLOY-ONLINE.md.'
-          : 'The duel API failed to start. Check Edge Function logs.',
-        rulesVersion: CURRENT_RULES_VERSION,
-        serverNow: Date.now(),
-      }),
-      { status: missingSecret ? 503 : 500, headers: corsJson },
-    );
+    return failureResponse(error);
   }
 });

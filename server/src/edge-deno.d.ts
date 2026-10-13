@@ -21,6 +21,8 @@ declare module 'postgres' {
     max_lifetime?: number;
     connect_timeout?: number;
     ssl?: 'require' | boolean | object;
+    /** Startup connection parameters (e.g. the `application_name` seen in `pg_stat_activity`). */
+    connection?: { application_name?: string };
   };
   export default function postgres(url: string, options?: Options): Sql;
 }

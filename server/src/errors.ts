@@ -29,6 +29,8 @@ export type ApiErrorCode =
   | 'RATE_LIMITED'
   | 'CLIENT_TOO_OLD'
   | 'UNSUPPORTED_RULES'
+  // infrastructure
+  | 'DB_UNAVAILABLE'
   // everything else
   | 'INTERNAL';
 
@@ -53,6 +55,9 @@ const STATUS: Record<ApiErrorCode, number> = {
   RATE_LIMITED: 429,
   CLIENT_TOO_OLD: 426,
   UNSUPPORTED_RULES: 409,
+  // A transient database-connection failure. 503 (not 500) so a client/retry layer can tell it
+  // apart from a genuine server bug and back off instead of treating it as a crash.
+  DB_UNAVAILABLE: 503,
   INTERNAL: 500,
 };
 

@@ -10,7 +10,7 @@ The game site stays on GitHub Pages. The API runs as a **Supabase Edge Function*
 | Piece | URL / place |
 | --- | --- |
 | Edge Function | `https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel` |
-| Health | `…/duel/v1/health` (add `?db=1` for a real database ping once the full bundle is live) |
+| Health | `…/duel/v1/health` (add `?db=1` for a real database ping **and** the pooler diagnostic) |
 | CORS | Locked to `https://severgrow.github.io` (no path on the origin) |
 | JWT gate | **Off** — guests use our own bearer tokens, not Supabase Auth |
 
@@ -18,9 +18,47 @@ The game site stays on GitHub Pages. The API runs as a **Supabase Edge Function*
 
 ## One-time: put the database secret on the Edge Function
 
-Migrations and local tests use the **Session** pooler (port **5432**). The Edge Function must use the **Transaction** pooler (port **6543**) with prepared statements off (already coded).
+**Use the Transaction pooler (port `6543`).** Migrations and local tests use the **Session** pooler
+(port `5432`); the Edge Function must not.
 
-**Exact clicks:**
+### Why the Transaction pooler
+
+The free-tier project allows **`max_connections = 60`** Postgres backends, of which **3** are
+reserved for the superuser, and Supabase's own services (PostgREST, pg_cron, pg_net, the exporter and
+Supavisor itself) hold ~6. That leaves roughly **50 usable client connections**.
+
+- The **Session** pooler (5432) **and the direct host `db.<ref>.supabase.co`** both pin **one
+  Postgres backend per client connection**. Every warm Edge isolate holds up to `max` connections
+  (currently **2**), so N isolates need up to `2 × N` backends. A burst of ~40 concurrent requests was
+  measured to open **~48** `postgres.js` backends and push the project to **63/60** connections — new
+  connections are then refused and the live API answers **500** for everyone (including real players).
+- The **Transaction** pooler (6543) multiplexes many client connections onto a small, bounded
+  server-side pool, so isolate count no longer multiplies backend count. It does **not** support
+  named prepared statements, which is why the Edge client sets `prepare: false` (already coded, and
+  enforced at build time).
+
+### What we found and changed (2026-10-13)
+
+The deployed `DATABASE_URL` secret was pointing at the **direct** host
+(`db.wbfrbeedlvjercrukngn.supabase.co:5432`) — `GET /v1/health?db=1` reported
+`"pooler":"direct","port":"5432"`. That is the connection-per-client worst case above. It was
+switched to the project's **Transaction** pooler (`…pooler.supabase.com:6543`), the function was
+redeployed, and `?db=1` then reported `"pooler":"transaction-pooler","port":"6543"`.
+
+Measured effect of the same 40-concurrent-request burst, before → after:
+
+| | Before (direct, 5432) | After (transaction, 6543) |
+| --- | --- | --- |
+| HTTP 500s | **33 / 40** (first run) | **0 / 40** (two runs) |
+| Peak Postgres connections | **63** (of a 60 limit) | **19** |
+| Edge-pinned `postgres.js` backends | **up to 48** | **0** (Supavisor multiplexes) |
+| p50 under the burst | 462 ms (mostly failures) | ~0.99–1.04 s (all succeed) |
+
+**To revert:** set the `DATABASE_URL` Edge secret back to the previous direct URI and redeploy. The
+code changes (`server/src/storage/pool-config.ts`, `server/src/edge-entry.ts`) are pooler-agnostic
+and safe on either.
+
+### Exact clicks
 
 1. Open [https://supabase.com/dashboard](https://supabase.com/dashboard) → project **FUTASAKU**.
 2. Left sidebar → **Project Settings** (gear) → **Database**.
@@ -30,6 +68,39 @@ Migrations and local tests use the **Session** pooler (port **5432**). The Edge 
    - Name: `DATABASE_URL`
    - Value: paste the Transaction URI (same database password you already set)
 6. Save. Never paste this into chat, GitHub, or the repo.
+
+### Verify it from outside (no secret needed)
+
+`GET /v1/health?db=1` now reports the pooler the secret actually points at — classification only,
+never the URL, host or password:
+
+```sh
+curl -sS 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel/v1/health?db=1'
+# {"ok":true,"rulesVersion":"…","serverNow":…,"db":{"ok":true,"ms":173,
+#   "pooler":"transaction-pooler","port":"6543"}}
+```
+
+| `db.pooler` | Meaning |
+| --- | --- |
+| `transaction-pooler` | Correct — the 6543 Supavisor pooler. |
+| `session-pooler` | Wrong pooler for Edge — switch the secret to 6543 (above). |
+| `direct` | `db.<ref>.supabase.co` — switch the secret to 6543. |
+| `local` / `unknown` | Not a managed pooler; re-copy the Transaction URI. |
+
+### Tuning the Edge pool without a code change
+
+Every value is an Edge secret with a safe clamp (see `server/src/storage/pool-config.ts`):
+
+| Secret | Default | Clamp | Meaning |
+| --- | --- | --- | --- |
+| `EDGE_POOL_MAX` | `2` | 1–4 | Connections one warm isolate may hold |
+| `EDGE_POOL_IDLE_TIMEOUT` | `10` | 2–120 | Seconds an idle connection may sit |
+| `EDGE_POOL_MAX_LIFETIME` | `60` | 15–900 | Seconds before a connection is recycled |
+| `EDGE_POOL_CONNECT_TIMEOUT` | `8` | 2–30 | Seconds to wait for a new connection |
+
+Do **not** raise `EDGE_POOL_MAX` to "fix" 500s on the Session pooler: more connections per isolate
+makes the exhaustion worse. Switch to the Transaction pooler instead. Redeploy after changing a
+secret so a fresh isolate picks it up.
 
 ## Deploy the full duel API from this repo
 
@@ -93,6 +164,40 @@ Or point a local smoke at it (no secrets printed):
 ```sh
 BASE_URL=https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel npm run server:smoke
 ```
+
+## If you see 500s (`code: "INTERNAL"`)
+
+The most common live failure is the shared project running out of **database connections**, not a
+game bug. Work through this list:
+
+1. **Confirm the pooler.** `curl -sS '…/duel/v1/health?db=1'` → `db.pooler` must be
+   `transaction-pooler` on port `6543`. If it says `session-pooler` or `direct`, switch the
+   `DATABASE_URL` secret to the Transaction URI (above) and redeploy. This is the durable fix.
+2. **Check how close the project is to its limit.** The free tier allows **60** connections with
+   **3** reserved and ~6 used by Supabase services (~50 usable). Bursts that open many connections
+   at once are the risk, especially with more than one load driver or a redeploy in flight.
+3. **Isolate the cause.** `400`/`409`/`422` are correct refusals (bad input, stale revision, illegal
+   action) — only `500`/`503` are infrastructure. A `503` with `code: "DB_UNAVAILABLE"` is the
+   bounded, retried "the pooler was briefly saturated" path; it is expected to be rare.
+4. **A redeploy drops in-flight invocations.** The platform logs `Shutdown … reason: "EarlyDrop"`.
+   Those requests can surface as a one-off 500; the client retries safely with a stable `requestId`,
+   so a player sees at worst a short pause.
+5. **Do not raise `EDGE_POOL_MAX` to chase 500s** — that adds connections per isolate. Lower it, or
+   shorten `EDGE_POOL_MAX_LIFETIME`, only to *reduce* the project's footprint on the Session pooler;
+   the real fix is the Transaction pooler.
+6. **Reproduce lightly.** A short burst of 20–40 concurrent `?db=1` calls (they are not rate
+   limited) is enough to see exhaustion without disturbing the shared project:
+
+   ```sh
+   for i in $(seq 1 40); do
+     curl -sS -o /dev/null -w '%{http_code}\n' '…/duel/v1/health?db=1' &
+   done > /tmp/duel-codes.txt; wait
+   sort /tmp/duel-codes.txt | uniq -c
+   # Expect: 40  200. Many 500s ⇒ check step 1.
+   ```
+
+7. **Only one driver at a time.** The function is shared; two agents (or a soak plus a redeploy) at
+   once is the worst case for the free tier and produces 500s that are not a code defect.
 
 ## GitHub Actions variables (public — not Secrets)
 

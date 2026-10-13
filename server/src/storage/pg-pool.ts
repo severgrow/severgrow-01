@@ -9,6 +9,11 @@ import type { PgPool } from './postgres.js';
 
 export type SslSetting = false | { rejectUnauthorized: boolean };
 
+// Which pooler a connection string points at, and the Edge pool options, both live in a
+// dependency-free module so the Deno Edge bundle can share them without dragging in `pg`.
+export { classifyDatabaseUrl } from './pool-config.js';
+export type { ConnectionDiagnostics, PoolerKind } from './pool-config.js';
+
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /** Decides TLS from the URL/`PGSSL`, defaulting to TLS for anything that is not localhost. */
@@ -37,14 +42,22 @@ export const sslForUrl = (url: string, env: NodeJS.ProcessEnv = process.env): Ss
 
 export type PoolOptions = { max?: number; connectionTimeoutMillis?: number; idleTimeoutMillis?: number };
 
+/**
+ * Defaults for the long-lived Node pool (server, migrations, scripts, tests). One process holds a
+ * single pool, so 5 connections is plenty; the short idle timeout stops a dev/test process from
+ * parking connections on the shared Supabase project (free tier allows ~57 non-superuser slots).
+ * The serverless Edge path uses its own postgres.js pool instead — see `pool-config.ts`.
+ */
+export const NODE_POOL_DEFAULTS = { max: 5, connectionTimeoutMillis: 8_000, idleTimeoutMillis: 10_000 } as const;
+
 /** A pool with a small cap (Supabase's free tier has a low connection limit). */
 export const poolFromUrl = (url: string, options: PoolOptions = {}, env: NodeJS.ProcessEnv = process.env): PgPool => {
   const pool = new Pool({
     connectionString: url,
     ssl: sslForUrl(url, env),
-    max: options.max ?? 5,
-    connectionTimeoutMillis: options.connectionTimeoutMillis ?? 15_000,
-    idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,
+    max: options.max ?? NODE_POOL_DEFAULTS.max,
+    connectionTimeoutMillis: options.connectionTimeoutMillis ?? NODE_POOL_DEFAULTS.connectionTimeoutMillis,
+    idleTimeoutMillis: options.idleTimeoutMillis ?? NODE_POOL_DEFAULTS.idleTimeoutMillis,
     application_name: 'futasaku-duel',
   });
   // The adapter only needs `query` and `connect`; the structural cast keeps it decoupled from pg.
