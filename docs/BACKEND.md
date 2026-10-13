@@ -25,7 +25,8 @@ A minimal, server-authoritative backend for 1v1 duels, plus the first vertical s
 ## Layout
 
 ```
-server/src/config.ts             server settings (rules version, limits, CORS)
+server/src/config.ts             server settings (rules version, limits, CORS, env overrides)
+server/src/client-ip.ts          trustworthy client-IP derivation behind the proxy
 server/src/errors.ts             stable API error codes + HTTP statuses
 server/src/ids.ts                ids, bearer tokens (hashed at rest), invite codes, seeds
 server/src/protocol.ts           the wire format shared by server and client
@@ -103,6 +104,56 @@ A **player view** contains: the engine `View` (`viewFor(state, seat)`), the seat
 and status, the legal actions (only when it is that seat's turn), and the public-safe events. It
 never contains the seed, the deck, either full hand, `fruitKnown`, the event history internals, or
 the authoritative `State`.
+
+## Rate limits (NAT-friendly)
+
+Limits are Postgres-backed counters keyed by a **bucket string** (`rate_limits(bucket, window_start,
+count)`). The service derives the key from the bucket type plus either the authenticated player id
+or the client IP.
+
+**How the client IP is derived** (`server/src/client-ip.ts`). Behind Supabase Edge a request passes
+through Cloudflare and the runtime proxy, so the header order matters:
+
+1. `cf-connecting-ip` — Cloudflare sets this to the real client; a forged value is rejected with
+   HTTP 403, so it cannot be spoofed. Preferred.
+2. `x-real-ip`.
+3. The leftmost **valid public** entry of `x-forwarded-for`. The Supabase Edge proxy *replaces* this
+   header, so the leftmost entry is the client and a client-sent value never survives. Private /
+   loopback / benchmark hops (e.g. the internal `198.19.9.x` seen in production) are skipped so one
+   proxy hop cannot collapse unrelated players into a single bucket.
+4. If only private candidates exist, the first valid one is used (an internal caller still gets its
+   own bucket).
+5. Otherwise `null`, which the service buckets as `unknown`.
+
+Verified against the live Edge: a request with no forwarding headers was bucketed under the caller's
+public IP, and a spoofed `x-forwarded-for` was ignored — so per-IP bucketing really isolates
+players. The worldwide-shared-`unknown` bucket only affects in-process/cron callers that pass no IP.
+
+Per-IP limits are deliberately loose because a **household, cafe, office or mobile carrier NAT**
+shares one public address. The **per-player** limits are the real anti-abuse control: they are keyed
+by the player's own token, so players cannot share or pool them. The 10-open-matches-per-player cap
+and the 8-char invite codes are unchanged.
+
+| Bucket (default window) | Default | Environment variable |
+| --- | --- | --- |
+| Guest creation, per IP per hour | `200` | `RATE_GUEST_PER_IP_PER_HOUR` |
+| Match join, per **player** per hour | `60` | `RATE_JOIN_PER_PLAYER_PER_HOUR` |
+| Match join, per IP per hour | `400` | `RATE_JOIN_PER_IP_PER_HOUR` |
+| Link-code creation, per player per hour | `10` | `RATE_LINK_CODE_PER_PLAYER_PER_HOUR` |
+| Link-code redeem, per IP per hour | `20` | `RATE_LINK_REDEEM_PER_IP_PER_HOUR` |
+| Actions, per player per minute | `120` | `RATE_ACTIONS_PER_PLAYER_PER_MINUTE` |
+| Sweep, per IP per hour | `120` | `RATE_SWEEP_PER_IP_PER_HOUR` |
+| Cron sweep token (`x-futasaku-cron`) | unset | `SWEEP_CRON_TOKEN` |
+
+Every limit is overridable at runtime by the environment variable above (read through
+`readEnv` in `server/src/config.ts`, which checks `process.env` then `Deno.env`), so the live Edge
+function can be tuned without a code change. Defaults are the safe values above.
+
+**Sweeping.** `POST /v1/sweep` is meant to run from cron/CI, not from players. When the
+`SWEEP_CRON_TOKEN` secret is set and the caller sends the matching `x-futasaku-cron` header, the
+sweep uses the dedicated `sweep:internal` bucket, so a player's per-IP budget (or a shared
+`unknown` bucket) can never starve routine housekeeping. It is still rate limited. Without the token
+the ordinary `sweep:ip:<ip>` bucket applies.
 
 ## The action pipeline (exactly once)
 
@@ -188,6 +239,8 @@ is why the moves table *is* the revision history and the idempotency record.
 | `server/tests/phase6-hardening.test.ts` | Phase 6: leak-key audit, turn-gated Draw privacy, concurrent STALE_REVISION 409 + refetch, viewPayload load p95, short action burst |
 | `web/e2e/online-duel-two-browser.ts` | Phase 6: two Chromium contexts, local API + preview, create/join, Me/Opponent HUD, resign → finished on both |
 | `server/tests/phase7-matchmaking.test.ts` | Phase 7: open-queue create + pair; invite matches stay out of the pool |
+| `server/tests/client-ip.test.ts` | client-IP derivation: `cf-connecting-ip` precedence, `x-real-ip`, `x-forwarded-for` leftmost public pick, private-hop skipping, malformed/`unknown` fallbacks, private-range classification |
+| `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket |
 | `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
 `vitest.config.ts` loads `.env` when it exists, so the real-database suite **runs** locally; in CI
@@ -210,8 +263,9 @@ Unfinished / next:
    WebSocket on top of the same pipeline.
 3. **No client UI wiring.** `server/src/client.ts` is ready and tested, but the game screen does not
    yet create/join a duel. Solo play is untouched.
-4. **Rate limits are in Postgres** (guest/join/actions/link/sweep). Tune the caps in
-   `ServerConfig.rateLimits` before a public invite.
+4. **Rate limits are in Postgres** (guest/join/actions/link/sweep), now NAT-friendly and
+   env-tunable — see [Rate limits (NAT-friendly)](#rate-limits-nat-friendly). Defaults are safe;
+   adjust with the `RATE_*` environment variables if a deployment needs different caps.
 5. **CORS is `*` by default** for local development. Production must set `CORS_ORIGIN`.
 6. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
 7. **No observability** beyond one line per request (method, path, status, duration). No metrics,
@@ -224,7 +278,8 @@ Unfinished / next:
 
 1. Postgres (Supabase) with the migration applied; the adapter exercised against it in CI.
 2. TLS + a locked-down `CORS_ORIGIN`; rotate the service-role key.
-3. Rate limits on `/v1/guests`, `/v1/matches/join` and `/v1/matches/:id/actions`.
+3. Rate limits on `/v1/guests`, `/v1/matches/join` and `/v1/matches/:id/actions` (per-IP plus the
+   per-player limits that are the real abuse control).
 4. A decision on the live transport (SSE/WebSocket) and reconnect behaviour under it.
 5. The client duel screen wired to `DuelClient` behind a feature flag, with solo play unchanged.
 6. Monitoring (error rate, revision conflicts, match completion) and a cleanup job.

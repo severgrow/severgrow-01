@@ -48,6 +48,38 @@ npx supabase functions deploy duel --project-ref wbfrbeedlvjercrukngn --no-verif
 
 **If you prefer the dashboard:** Edge Functions → **duel** → deploy from CLI is the supported path for this sized bundle; the agent can also redeploy via MCP once `DATABASE_URL` is set.
 
+## Rate limits (Edge secrets — tune without a code change)
+
+Per-IP limits are **NAT-friendly** because a household / cafe / office / mobile carrier shares one
+public IP. The **per-player** limits (keyed by each player's token) are the real anti-abuse control
+and stay tight. The client IP is read from `cf-connecting-ip` (Cloudflare-protected), then
+`x-real-ip`, then the leftmost *public* `x-forwarded-for` entry — real players are never dumped into
+a shared `unknown` bucket. See [`BACKEND.md`](BACKEND.md#rate-limits-nat-friendly) for the full model.
+
+Every limit is overridable with an Edge Function secret/env var; the code default is the value in
+brackets. Set only the ones you want to change:
+
+| Secret / env var | Default | Meaning |
+| --- | --- | --- |
+| `RATE_GUEST_PER_IP_PER_HOUR` | `200` | Guest creations per IP per hour |
+| `RATE_JOIN_PER_PLAYER_PER_HOUR` | `60` | Joins per **player** per hour (anti-abuse) |
+| `RATE_JOIN_PER_IP_PER_HOUR` | `400` | Joins per IP per hour |
+| `RATE_LINK_CODE_PER_PLAYER_PER_HOUR` | `10` | Link codes per player per hour |
+| `RATE_LINK_REDEEM_PER_IP_PER_HOUR` | `20` | Link-code redemptions per IP per hour |
+| `RATE_ACTIONS_PER_PLAYER_PER_MINUTE` | `120` | Actions per player per minute |
+| `RATE_SWEEP_PER_IP_PER_HOUR` | `120` | Sweeps per IP per hour |
+| `SWEEP_CRON_TOKEN` | unset | Shared secret so a cron/CI sweeper gets its own bucket |
+
+When `SWEEP_CRON_TOKEN` is set, a caller sending the matching `x-futasaku-cron: <token>` header on
+`POST /v1/sweep` uses the dedicated `sweep:internal` bucket, so player traffic can never exhaust the
+housekeeping budget. Without it, sweeps use the normal per-IP bucket.
+
+```sh
+# Optional: set one or more overrides (never print the values afterwards)
+npx supabase secrets set --project-ref wbfrbeedlvjercrukngn RATE_GUEST_PER_IP_PER_HOUR=200
+# Then redeploy so a fresh isolate picks them up.
+```
+
 ### Smoke the deployed URL
 
 ```sh

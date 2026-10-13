@@ -1,5 +1,6 @@
 // Fetch-API request handler shared by the Node HTTP server and the Deno Edge entry.
 // Same routes, same MatchService — no rules live here.
+import { pickClientIp } from './client-ip.js';
 import { PRODUCTION_CORS_ORIGIN, type ServerConfig } from './config.js';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
 import { corsHeaders } from './cors.js';
@@ -45,11 +46,9 @@ const readJson = async (req: Request, maxBytes: number): Promise<unknown> => {
   }
 };
 
-const clientIpOf = (req: Request): string | null => {
-  const fwd = req.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0]!.trim();
-  return req.headers.get('x-real-ip');
-};
+// The real client IP behind the proxy, or null (which the service buckets as "unknown").
+// See client-ip.ts for why the header order and validation matter.
+const clientIpOf = (req: Request): string | null => pickClientIp(req.headers);
 
 /** Build a Fetch handler. Production hosts should pass corsOrigin = PRODUCTION_CORS_ORIGIN. */
 export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<Response>) => {
@@ -146,7 +145,12 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/sweep') {
       await readJson(req, config.maxBodyBytes);
-      const result = await service.sweep(clientIpOf(req));
+      // Routine sweeps run from cron/CI from a shared or changing address. When the caller presents
+      // the configured internal token they use a dedicated bucket, so player per-IP budgets can
+      // never starve housekeeping. Without the token the normal per-IP player bucket applies.
+      const cronToken = config.sweepCronToken;
+      const internal = typeof cronToken === 'string' && cronToken.length > 0 && req.headers.get('x-futasaku-cron') === cronToken;
+      const result = await service.sweep(clientIpOf(req), { internal });
       return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
     }
 

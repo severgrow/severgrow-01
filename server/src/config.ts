@@ -29,6 +29,13 @@ export type ServerConfig = {
   minClientVersion: string;
   /** Actions allowed in one atomic batch submit. */
   maxBatchActions: number;
+  /**
+   * Optional shared secret a cron/CI caller presents as `x-futasaku-cron` on `/v1/sweep`.
+   * When set and matched, the sweep uses a dedicated bucket so player per-IP budgets never block
+   * routine housekeeping. Unset (default) means every sweep uses the normal per-IP bucket.
+   * Set with the `SWEEP_CRON_TOKEN` environment variable / Edge secret.
+   */
+  sweepCronToken?: string | null;
   /** Rate limits (Postgres-backed). */
   rateLimits: {
     guestPerIpPerHour: number;
@@ -46,11 +53,26 @@ export const PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Reads an environment variable from Node (process.env) or Deno (Deno.env), without logging it. */
+const readEnv = (name: string): string | undefined => {
+  if (typeof process !== 'undefined' && process.env) {
+    const fromNode = process.env[name];
+    if (fromNode !== undefined) return fromNode;
+  }
+  const deno = (globalThis as { Deno?: { env?: { get?: (key: string) => string | undefined } } }).Deno;
+  return deno?.env?.get?.(name);
+};
+
 const envInt = (name: string, fallback: number): number => {
-  const raw = (typeof process !== 'undefined' ? process.env?.[name] : undefined)?.trim();
+  const raw = readEnv(name)?.trim();
   if (!raw) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+};
+
+const envStr = (name: string): string | null => {
+  const raw = readEnv(name)?.trim();
+  return raw && raw.length > 0 ? raw : null;
 };
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
@@ -65,14 +87,19 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   linkCodeTtlMs: 10 * 60 * 1000,
   minClientVersion: '0.5.0',
   maxBatchActions: 12,
+  sweepCronToken: envStr('SWEEP_CRON_TOKEN'),
+  // Per-IP limits are deliberately generous: a household/cafe/office/carrier NAT shares one public
+  // address, so tight per-IP budgets punished real players. The per-PLAYER limits (keyed by token)
+  // are the real anti-abuse control because they cannot be shared between players. Every value is
+  // overridable at runtime with the RATE_* environment variable named next to it.
   rateLimits: Object.freeze({
-    guestPerIpPerHour: 30,
-    joinPerPlayerPerHour: 60,
-    joinPerIpPerHour: 60,
-    linkCodePerPlayerPerHour: 10,
-    linkRedeemPerIpPerHour: 20,
-    actionsPerPlayerPerMinute: 120,
-    sweepPerIpPerHour: 30,
+    guestPerIpPerHour: envInt('RATE_GUEST_PER_IP_PER_HOUR', 200),
+    joinPerPlayerPerHour: envInt('RATE_JOIN_PER_PLAYER_PER_HOUR', 60),
+    joinPerIpPerHour: envInt('RATE_JOIN_PER_IP_PER_HOUR', 400),
+    linkCodePerPlayerPerHour: envInt('RATE_LINK_CODE_PER_PLAYER_PER_HOUR', 10),
+    linkRedeemPerIpPerHour: envInt('RATE_LINK_REDEEM_PER_IP_PER_HOUR', 20),
+    actionsPerPlayerPerMinute: envInt('RATE_ACTIONS_PER_PLAYER_PER_MINUTE', 120),
+    sweepPerIpPerHour: envInt('RATE_SWEEP_PER_IP_PER_HOUR', 120),
   }),
 });
 

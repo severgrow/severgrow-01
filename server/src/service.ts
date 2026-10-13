@@ -398,8 +398,14 @@ export class MatchService {
     return { match: await this.summary(finished), player: await this.payload(finished, seat, []) };
   }
 
-  async sweep(clientIp: string | null = null): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number }> {
-    await this.rateLimit(`sweep:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
+  async sweep(
+    clientIp: string | null = null,
+    options: { internal?: boolean } = {},
+  ): Promise<{ timedOut: number; expiredWaiting: number; deletedGuests: number }> {
+    // An authenticated cron/CI sweep gets its own bucket so a player's per-IP budget (or a shared
+    // "unknown" bucket) can never block routine housekeeping. It is still rate limited.
+    const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
+    await this.rateLimit(bucket, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
     const result = await this.storage.sweep(this.now(), GUEST_MAX_AGE_MS);
     if (result.deletedGuests > 0) {
       // Housekeeping log for operators (no secrets).

@@ -97,6 +97,20 @@ Every match record stores the exact rules version that created it (Section 11). 
 silently reinterpret an old match under new rules — it replays it with the stored `rulesVersion`
 through `rulesConfig()`.
 
+## Abuse controls (rate limiting)
+
+Rate limiting is part of the contract because it shapes what a legitimate player can do:
+
+- **Per-IP limits are NAT-friendly.** A household, cafe, office or mobile carrier puts several real
+  players behind one public IP, so per-IP caps must be generous enough for normal play for hours.
+  The server derives that IP from `cf-connecting-ip` (Cloudflare-protected), then `x-real-ip`, then
+  the leftmost *public* `x-forwarded-for` entry — never a shared/`unknown` bucket for real clients.
+- **Per-player limits are the real anti-abuse control.** They are keyed by the player's own token,
+  so they cannot be shared or pooled between players, and they stay tight.
+- **Over-limit responses** are `429 RATE_LIMITED` with the same friendly message for every bucket.
+- Exact defaults, bucket names and the `RATE_*` / `SWEEP_CRON_TOKEN` environment variables are
+  documented in [`BACKEND.md`](BACKEND.md#rate-limits-nat-friendly).
+
 ## What this pass does NOT do
 
 No accounts, database, matchmaking, WebSockets/realtime, world-map UI, clans or progression.
