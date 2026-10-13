@@ -1,0 +1,873 @@
+{
+  "stamp": "2026-10-13T06:32:15.422Z",
+  "liveApp": "https://severgrow.github.io/severgrow-01/futa0.5/",
+  "games": [
+    {
+      "index": 0,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "DPBHY8CE"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "ba3fad0c / ba3fad0c"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 55s); joiner 23h 59m (drift 55s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s0 42x58; button.card.s0 40x57; button.card.s1 42x58; button.card.s1 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/0-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/0-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/0-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 33468,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 5,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "0HR3T97G"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "c417432b / c417432b"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] duel-hud 299>268"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/5-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/5-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/5-double-tap-after-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 36512,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 10,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "WRA599Z7"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "77f5c618 / 77f5c618"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/10-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/10-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/10-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 28009,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 15,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "BQX5ERMJ"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "dd8e9c46 / dd8e9c46"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s3 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] duel-hud 299>268"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/15-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/15-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/15-double-tap-after-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 28035,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 20,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "S975ANXN"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "fa131b8a / fa131b8a"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s0 42x58; button.card.s2 40x57; button.card.s3 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] duel-hud 299>268"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/20-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/20-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/20-double-tap-after-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 29944,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 25,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "WNKE3K5Y"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "d610d048 / d610d048"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "the opponent stays gated while the double-tapper is mid-turn",
+          "ok": true,
+          "note": "opp rev 0 vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s2 42x58; button.card.s2 40x57; button.card.s3 42x58; button.card.s3 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume-dbl/25-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/25-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume-dbl/25-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 24638,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    }
+  ]
+}

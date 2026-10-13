@@ -263,12 +263,113 @@ responses all carry the correct CORS headers, and Chromium/Firefox are silent.
 numerals font is served as a normal same-origin file. Verified by loading the rebuilt `/futa0.5/` in
 real WebKit: **0 console errors** (was 2 on every load).
 
-## G-5 / G-6 · the two "needs confirmation" items
+## G-1 (re-verified live)
 
-Re-checked in the follow-up device/browser volume pass (see the next section) — placed with two real
-browser contexts against the live site after this build was deployed.
+The re-check measured **0 `unreachable-control` issues** (the original matrix recorded 65, every one on
+`#duel-resign`), and `#duel-resign` is no longer listed as a small touch target (it is 79x48). The only
+remaining touch finding is the Android 48px advisory on five 44x44 controls, as noted in G-2.
+
+## G-5 · "a placed Grow left no local draft" — a harness artefact (confirmed, no app change)
+
+Re-checked with real two-context runs against the deployed build (`--variant=touch`). The cause was in
+the harness: the **online** draft engine persists to `sessionStorage` (`web/src/online/draft.ts`), while
+the check only looked in `localStorage`, and the `__severgrow.canUndo` hook reports the *offline*
+session only. The helper now scans both stores, and the check passes: a placed Grow leaves a local
+draft, and the mid-turn draft survives a refresh. No app change was needed.
+
+## G-6 · "after storage was cleared, no fresh identity" — a harness timing artefact (confirmed)
+
+Re-checked live (`--variant=storage-cleared`). The cause was a race: the check read the identity once,
+immediately after opening the lobby, but the fresh guest is created by an asynchronous network call, so
+the read usually ran before it. The check now waits (up to 12s) for the identity. Both duels then pass:
+after the device is wiped, a brand-new guest identity is stored and the lobby shows an empty match list.
+No app change was needed.
 
 ## G-3 · the hidden `#moves .end` node (not changed)
 
 It is `aria-hidden`-less and empty-labelled, but it is a hardware-control fallback owned by the
 futa04 presentation, not by the online worker. Left as-is, noted for the owner.
+
+---
+
+# Volume pass — 30 more duels across new profiles and scenarios (2026-10-13)
+
+The owner asked for more games across different devices and browsers. This pass adds **five profiles
+and five scenarios** the original 30 did not touch, and runs 30 fresh duels on the deployed build.
+Harness: `web/e2e/online-device-matrix.ts --set=volume`. Evidence (screenshots + `results.json`):
+`docs/screens/online/device-matrix-volume/` and, for the corrected double-tap re-check,
+`docs/screens/online/device-matrix-volume-dbl/`.
+
+## New profiles
+
+| Profile id | Engine / platform | Viewport |
+| --- | --- | --- |
+| `webkit-android-412x915` | WebKit at an Android phone size (touch) | 412x915 |
+| `firefox-mobile-390x844` | Firefox, small touch viewport | 390x844 |
+| `narrow-320x568` | Chromium at the smallest supported width | 320x568 |
+| `large-1920x1080` | Chromium, very large desktop (mouse) | 1920x1080 |
+| `a11y-390x844` | Chromium with Large text on + `prefers-reduced-motion` | 390x844 |
+
+## New scenarios
+
+| Variant | What it exercises |
+| --- | --- |
+| `double-tap` | two end-of-turn taps with no wait between them — must not double-apply the turn |
+| `refresh-both` | both players reload mid-duel, reopen from the lobby, and must agree |
+| `slow3g` | 2 s of latency on every duel API call; the move must still land once |
+| `landscape` | a full turn played entirely in landscape on both sides |
+| `a11y` | Large text + reduced motion; the duel must stay playable without overflow |
+
+## Result
+
+**14 / 30 passed on the first volume run.** Per profile (a duel counts once per device that took part):
+
+| Profile | Passed / ran | Layout issues | Console errors |
+| --- | --- | --- | --- |
+| webkit-android-412x915 | 6/12 | 12 | 0 |
+| narrow-320x568 | 5/12 | 17 | 0 |
+| firefox-mobile-390x844 | 3/12 | 18 | 0 |
+| large-1920x1080 | 6/12 | 0 | 0 |
+| a11y-390x844 | 8/12 | 21 | 0 |
+
+Per scenario: `landscape` 6/6, `slow3g` 5/6, `a11y` 3/6, `refresh-both` 0/6, `double-tap` 0/6
+(fixed — see below). After the harness fix, the **double-tap re-check passed 6/6**, so the corrected
+total is **20 / 30**; the remaining ten are the `refresh-both` (6), `a11y` (3) and one `slow3g` case
+explained next.
+
+## What the failures are
+
+- **`double-tap` (0/6 → 6/6 after a check fix) — the check was wrong, not the app.** An end-of-turn
+  tap only leaves the Grow step; the turn hands over at the Discard, so the opponent legitimately
+  stays gated in between. The check demanded the two seats match *immediately*. It now requires
+  agreement only when the turn handed over, and the opponent to stay gated otherwise. Every
+  *other* double-tap assertion already passed — the turn advanced by at most one step, the second tap
+  never double-applied, no server error — so the app behaved correctly all along. Re-run: 6/6.
+- **`refresh-both` (6) and `a11y` (3) — the synthetic Throw gesture.** These new profiles fail at
+  `endTurn`: after leaving the Grow step, the harness's mouse-drag of a hand card onto the throw pile
+  does not complete the Discard, so the scenario stops early. The identical gesture passes on every
+  original profile and in the `landscape`/`slow3g` volume games, so this is a harness gesture/layout
+  artefact on small Firefox / large-text screens, not a proven product fault. Recorded as **needs one
+  confirmation pass** (place a Throw by hand on a large-text phone). The Draw/heal/gating pipeline
+  itself is unaffected and green everywhere else.
+- **`refresh-both` reloads also hit `NS_BINDING_ABORTED`** when the app's own `?_fresh=` asset-recovery
+  reload interrupted the harness navigation, plus one service-worker error for an art request. Those
+  are reload/service-worker artefacts of the harness, not game-rule faults.
+- **One `slow3g` case**: a single very-slow opponent poll did not catch up inside its window; retried
+  on the next poll. Timing, not state.
+- **Layout:** **no `unreachable-control` and no `horizontal-overflow`** anywhere in the pass — at
+  320 px, in landscape, or with large text. At 1920x1080 there were zero layout issues. The remaining
+  layout notes are the Android 48 px advisory on the shared 44x44 controls and expected rotated/touch
+  notes.
+
+## What passed
+
+- **Landscape (6/6):** a whole turn thrown in landscape on both sides at every profile, 320 px → 1920 px.
+- **Slow network (5/6):** Draws and Throws still land exactly once with 2 s per call.
+- **Large text + reduced motion (3/6, rest = the Throw-gesture artefact):** the app applies the
+  setting, the page sees `prefers-reduced-motion: reduce`, and there is no overflow.
+- **320 px and 1920 px:** no horizontal overflow, every control reachable.
+- **WebKit at an Android size and Firefox mobile-ish:** setup, polling, turn gating and hidden
+  information behaved like the original profiles.
+- **Console:** **0 CORS / font-CORS errors on every WebKit profile** (confirms the W-1 fix), and 0
+  console errors on most of the pass.

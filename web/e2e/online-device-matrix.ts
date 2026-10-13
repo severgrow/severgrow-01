@@ -16,6 +16,9 @@ import {
   BrowserPool,
   DEVICES,
   SCREEN_DIR,
+  VOLUME_DEVICES,
+  VOLUME_SCREEN_DIR,
+  setScreenDir,
   addCheck,
   applyLocalDraft,
   auditLayout,
@@ -67,7 +70,8 @@ const CONCURRENCY = Math.max(1, Math.min(3, Number(argOf('concurrency') ?? 2)));
 const ONLY = argOf('only');
 const VARIANT_ONLY = argOf('variant');
 
-const VARIANTS = [
+/** The original 30-duel plan's variants — never change this list without re-reporting. */
+const BASE_VARIANTS = [
   'basic',
   'async',
   'rotate',
@@ -80,6 +84,9 @@ const VARIANTS = [
   'refresh',
   'leak',
 ] as const;
+/** TASK 3 volume variants: only used by the extra device/browser pass. */
+const VOLUME_VARIANTS = ['double-tap', 'refresh-both', 'slow3g', 'landscape', 'a11y'] as const;
+const VARIANTS = [...BASE_VARIANTS, ...VOLUME_VARIANTS] as const;
 type VariantName = (typeof VARIANTS)[number];
 
 type GamePlan = { index: number; variant: VariantName; creator: DeviceProfile; joiner: DeviceProfile };
@@ -90,17 +97,31 @@ const DEVICE_COUNT = DEVICES.length;
 const planFor = (index: number): GamePlan => {
   const creator = DEVICES[index % DEVICE_COUNT]!;
   const joiner = DEVICES[(index % DEVICE_COUNT + 1 + (index % 7)) % DEVICE_COUNT]!;
-  return { index, variant: VARIANTS[index % VARIANTS.length]!, creator, joiner };
+  return { index, variant: BASE_VARIANTS[index % BASE_VARIANTS.length]!, creator, joiner };
 };
 
+/** TASK 3 volume plan: the extra profiles × the extra variants, deterministically paired. */
+const SET = argOf('set');
+const VOLUME_SET = SET !== undefined && SET.startsWith('volume');
+const EVIDENCE_DIR = SET === 'volume' ? VOLUME_SCREEN_DIR : SET ? `${SCREEN_DIR}-${SET}` : SCREEN_DIR;
+if (SET) setScreenDir(EVIDENCE_DIR);
+const RESULTS_PATH = `${EVIDENCE_DIR}/results.json`;
+
 let plan: GamePlan[] = Array.from({ length: TOTAL_GAMES }, (_, i) => planFor(i));
+if (VOLUME_SET) {
+  plan = Array.from({ length: TOTAL_GAMES }, (_, i) => {
+    const creator = VOLUME_DEVICES[i % VOLUME_DEVICES.length]!;
+    const joiner = VOLUME_DEVICES[(i + 2) % VOLUME_DEVICES.length]!;
+    return { index: i, variant: VOLUME_VARIANTS[i % VOLUME_VARIANTS.length]!, creator, joiner };
+  });
+}
 if (ONLY) plan = plan.filter((p) => p.creator.id === ONLY || p.joiner.id === ONLY);
 if (VARIANT_ONLY) plan = plan.filter((p) => p.variant === VARIANT_ONLY);
 
 // ---------------------------------------------------------------------------- output
 
 const stamp = new Date().toISOString();
-mkdirSync(SCREEN_DIR, { recursive: true });
+mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 const line = (text: string): void => console.log(text);
 
@@ -634,14 +655,21 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
     addCheck(env.rec, 'reload after clearing storage returns to the menu', backToMenu);
     await openHub(joiner);
     // A cleared device must recreate an identity honestly (a brand new guest) and show an empty list.
-    const regenerated = await joiner.page.evaluate(() => {
-      const raw = localStorage.getItem('severgrow.duel.identity.v1');
-      try {
-        return (JSON.parse(raw ?? '{}') as { token?: string }).token ?? null;
-      } catch {
-        return null;
-      }
-    });
+    // The create is an asynchronous network call from the lobby, so wait for it: the earlier single
+    // read raced the guest creation and reported "no identity" even when one was about to appear.
+    let regenerated: string | null = null;
+    for (let attempt = 0; attempt < 24 && !regenerated; attempt++) {
+      regenerated = await joiner.page
+        .evaluate(() => {
+          try {
+            return (JSON.parse(localStorage.getItem('severgrow.duel.identity.v1') ?? '{}') as { token?: string }).token ?? null;
+          } catch {
+            return null;
+          }
+        })
+        .catch(() => null);
+      if (!regenerated) await sleep(500);
+    }
     addCheck(env.rec, 'a fresh guest identity is recreated', typeof regenerated === 'string' && regenerated.length > 0, regenerated ? 'token stored again' : 'no identity');
     addCheck(env.rec, 'the cleared device forgets its old token', regenerated !== joiner.guest.token);
     addCheck(env.rec, 'no crash after clearing storage', joiner.pageErrors.length === 0, joiner.pageErrors.join('; ').slice(0, 120));
@@ -760,6 +788,184 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
     env.rec.screenshots.push(await shot(actor, `${tag}-actor-${actor.device.id}`));
     await finishByResign(env.rec, waiter, actor);
   },
+
+  /** A rapid double tap of the end-of-turn control must not double-apply the turn. */
+  async 'double-tap'(env) {
+    const { creator, joiner } = await setupDuel(env);
+    const tag = `${env.rec.index}-double-tap`;
+    const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
+    if (!views) return;
+    const { actor, waiter, actorView } = actorPair(creator, joiner, views);
+    const matchId = actorView.matchId;
+    const drew = await drawViaDeck(actor, actor.device.hasTouch);
+    addCheck(env.rec, 'Draw commits before the double tap', drew);
+    const before = await fetchView(actor.guest.token, matchId);
+    const smart = actor.page.locator('#smart-context');
+    const box = await smart.boundingBox().catch(() => null);
+    if (box) {
+      const tap = (): Promise<void> =>
+        actor.device.hasTouch
+          ? actor.page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+          : actor.page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      // Fire both with no wait between them, so the second lands while the first is committing.
+      await Promise.all([tap(), tap()]);
+      env.rec.notes.push('fired two end-of-turn taps with no wait between them');
+    } else {
+      env.rec.notes.push('#smart-context had no box — double tap not fired');
+    }
+    await sleep(6_000);
+    const after = await fetchView(actor.guest.token, matchId);
+    const advanced = after.revision - before.revision;
+    addCheck(env.rec, 'the double tap advanced the turn', advanced >= 1, `rev ${before.revision} → ${after.revision}`);
+    addCheck(env.rec, 'a double tap applies at most one turn', advanced <= 3, `+${advanced} revisions (a single EndAct is +1)`);
+    addCheck(env.rec, 'no server error from the double tap', actor.httpErrors.length === 0, actor.httpErrors.join('; ').slice(0, 140));
+    // The end-of-turn tap only leaves the Grow step; the turn hands over only after the Discard.
+    // So the opponent must match the new revision when the turn handed over, and stay gated behind
+    // the turn boundary while the double-tapper is still mid-turn.
+    if (after.actor !== before.actor) {
+      const opp = await waitForRevision(waiter.guest, matchId, (v) => v.revision === after.revision, 15_000);
+      addCheck(env.rec, 'both sides agree after the double tap (turn handed over)', opp !== null, `opp rev ${opp?.revision ?? '?'} vs ${after.revision}`);
+    } else {
+      const opp = await fetchView(waiter.guest.token, matchId);
+      addCheck(env.rec, 'the opponent stays gated while the double-tapper is mid-turn', opp.revision < after.revision, `opp rev ${opp.revision} vs ${after.revision}`);
+    }
+    env.rec.screenshots.push(await shot(actor, `${tag}-after-${actor.device.id}`));
+    await finishByResign(env.rec, waiter, actor);
+  },
+
+  /** Reload both players mid-duel: each must find the match again and rebuild the same revision. */
+  async 'refresh-both'(env) {
+    const { creator, joiner } = await setupDuel(env);
+    const tag = `${env.rec.index}-refresh-both`;
+    const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
+    if (!views) return;
+    const { actor, waiter, actorView } = actorPair(creator, joiner, views);
+    const matchId = actorView.matchId;
+    const drew = await drawViaDeck(actor, actor.device.hasTouch);
+    addCheck(env.rec, 'Draw commits before both refresh', drew);
+    const threw = await endTurn(actor);
+    addCheck(env.rec, 'a full turn completes before both refresh', threw.ok, threw.steps.join(' | '));
+    const settled = await fetchView(joiner.guest.token, matchId).catch(() => null);
+    for (const [name, session] of [
+      ['creator', creator],
+      ['joiner', joiner],
+    ] as const) {
+      await session.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => undefined);
+      const backToMenu = await session.page
+        .waitForSelector('#menu:not([hidden])', { timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false);
+      addCheck(env.rec, `${name} returns to the menu after refresh`, backToMenu);
+      await openHub(session);
+      const row = session.page.locator(`#online-matches li[data-match-id="${matchId}"]`);
+      const listed = await row
+        .waitFor({ state: 'visible', timeout: 20_000 })
+        .then(() => true)
+        .catch(() => false);
+      addCheck(env.rec, `${name} still sees the match after refresh`, listed);
+      if (listed) {
+        await row.click();
+        await waitGame(session, 40_000);
+      }
+    }
+    await sleep(2_500);
+    const a = await fetchView(creator.guest.token, matchId);
+    const b = await fetchView(joiner.guest.token, matchId);
+    addCheck(env.rec, 'both sides agree on the revision after refresh', a.revision === b.revision, `${a.revision} vs ${b.revision}`);
+    addCheck(env.rec, 'the revision survived both refreshes', settled === null || a.revision === settled.revision, `settled ${settled?.revision ?? '?'} vs ${a.revision}`);
+    addCheck(
+      env.rec,
+      'no crash after a double refresh',
+      creator.pageErrors.length === 0 && joiner.pageErrors.length === 0,
+      [...creator.pageErrors, ...joiner.pageErrors].join('; ').slice(0, 140),
+    );
+    env.rec.screenshots.push(await shot(creator, `${tag}-creator-${creator.device.id}`));
+    await finishByResign(env.rec, waiter, actor);
+  },
+
+  /** Very slow network (2s per API call): the move must still land exactly once. */
+  async slow3g(env) {
+    const { creator, joiner } = await setupDuel(env, {
+      creator: { apiLatencyMs: 2_000 },
+      joiner: { apiLatencyMs: 2_000 },
+    });
+    const tag = `${env.rec.index}-slow3g`;
+    const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
+    if (!views) return;
+    const { actor, waiter, actorView } = actorPair(creator, joiner, views);
+    const started = Date.now();
+    const drew = await drawViaDeck(actor, actor.device.hasTouch);
+    addCheck(env.rec, 'Draw survives a 2s-per-call network', drew, `commit seen after ${Date.now() - started}ms`);
+    const view = await fetchView(actor.guest.token, actorView.matchId);
+    addCheck(env.rec, 'no duplicate draw under a very slow network', view.phase === 'ACT', `phase ${view.phase}`);
+    const threw = await endTurn(actor);
+    addCheck(env.rec, 'the turn still ends under a very slow network', threw.ok, threw.steps.join(' | '));
+    const polled = await waitForTurnWord(waiter, 'Your turn', 30_000);
+    addCheck(env.rec, 'the very slow turn still reaches the opponent', polled);
+    env.rec.screenshots.push(await shot(waiter, `${tag}-slow-net-${waiter.device.id}`));
+    await finishByResign(env.rec, waiter, actor);
+  },
+
+  /** Play a whole turn with both sides already rotated to landscape. */
+  async landscape(env) {
+    const { creator, joiner } = await setupDuel(env);
+    const tag = `${env.rec.index}-landscape`;
+    const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
+    if (!views) return;
+    const { actor, waiter, actorView, waiterView } = actorPair(creator, joiner, views);
+    for (const [name, session] of [
+      ['creator', creator],
+      ['joiner', joiner],
+    ] as const) {
+      const land = session.device.rotated ?? { width: session.device.viewport.height, height: session.device.viewport.width };
+      await session.page.setViewportSize(land);
+      await sleep(700);
+      const audit = await auditLayout(session);
+      env.rec.layout.push(...audit.issues.map((i) => ({ ...i, detail: `[${name} landscape ${land.width}x${land.height}] ${i.detail}` })));
+      env.rec.screenshots.push(await shot(session, `${tag}-${name}-${session.device.id}`));
+    }
+    const drew = await drawViaDeck(actor, actor.device.hasTouch);
+    addCheck(env.rec, 'Draw commits in landscape', drew);
+    const threw = await endTurn(actor);
+    addCheck(env.rec, 'the turn can be thrown entirely in landscape', threw.ok, threw.steps.join(' | '));
+    const revealed = await waitForRevision(waiter.guest, actorView.matchId, (v) => v.revision > waiterView.revision, 20_000);
+    addCheck(env.rec, 'the landscape turn reaches the opponent', revealed !== null, `rev ${revealed?.revision ?? '?'}`);
+    for (const session of [creator, joiner]) {
+      await session.page.setViewportSize(session.device.viewport);
+      await sleep(500);
+    }
+    await finishByResign(env.rec, waiter, actor);
+  },
+
+  /** Reduced motion + Large text: the duel must stay playable and must not overflow. */
+  async a11y(env) {
+    const { creator, joiner } = await setupDuel(env, {
+      creator: { largeText: true, reducedMotion: true },
+      joiner: { largeText: true, reducedMotion: true },
+    });
+    const tag = `${env.rec.index}-a11y`;
+    const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
+    if (!views) return;
+    const { actor, waiter } = actorPair(creator, joiner, views);
+    const classes = await actor.page.evaluate(() => document.documentElement.className);
+    addCheck(env.rec, 'Large text setting is applied', /large-text/.test(classes), classes);
+    const media = await actor.page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+    addCheck(env.rec, 'reduced-motion preference is seen by the page', media);
+    const drew = await drawViaDeck(actor, actor.device.hasTouch);
+    addCheck(env.rec, 'Draw commits with large text + reduced motion', drew);
+    const threw = await endTurn(actor);
+    addCheck(env.rec, 'the turn can be thrown with large text + reduced motion', threw.ok, threw.steps.join(' | '));
+    const audit = await auditLayout(actor);
+    env.rec.layout.push(...audit.issues.map((i) => ({ ...i, detail: `[a11y ${actor.device.id}] ${i.detail}` })));
+    addCheck(
+      env.rec,
+      'no horizontal overflow with large text',
+      !audit.issues.some((i) => i.kind === 'horizontal-overflow'),
+      audit.issues.map((i) => i.kind).join(',') || 'none',
+    );
+    env.rec.screenshots.push(await shot(actor, `${tag}-${actor.device.id}`));
+    await finishByResign(env.rec, waiter, actor);
+  },
 };
 
 // ---------------------------------------------------------------------------- runner
@@ -835,7 +1041,7 @@ const runGame = async (gamePlan: GamePlan, pair: { creator: Guest; joiner: Guest
   if (rec.httpErrors.length) line(`      http: ${rec.httpErrors.slice(0, 3).join(' | ').slice(0, 200)}`);
   // Flush after every game so a long run is debuggable and partial results survive.
   writeFileSync(
-    `${SCREEN_DIR}/results.json`,
+    RESULTS_PATH,
     JSON.stringify({ stamp, liveApp: 'https://severgrow.github.io/severgrow-01/futa0.5/', games: results.filter(Boolean) }, null, 2),
   );
   return rec;
@@ -843,8 +1049,8 @@ const runGame = async (gamePlan: GamePlan, pair: { creator: Guest; joiner: Guest
 
 // ---------------------------------------------------------------------------- main
 
-line(`FUTASAKU 0.5 device matrix — ${plan.length} duel(s), concurrency ${CONCURRENCY}, ${stamp}`);
-line(`live app  ${SCREEN_DIR} → screenshots`);
+line(`FUTASAKU 0.5 device matrix — ${plan.length} duel(s), concurrency ${CONCURRENCY}, ${stamp}${SET ? `, set=${SET}` : ''}`);
+line(`live app  ${EVIDENCE_DIR} → screenshots`);
 if (plan.length === 0) {
   line('nothing to run (filters removed every game)');
   process.exit(1);
@@ -982,7 +1188,7 @@ if (skipped.length) {
   for (const r of skipped) line(`  #${r.index} ${r.variant} ${r.creator} vs ${r.joiner}`);
 }
 
-const out = `${SCREEN_DIR}/results.json`;
+const out = RESULTS_PATH;
 writeFileSync(
   out,
   JSON.stringify({ stamp, liveApp: 'https://severgrow.github.io/severgrow-01/futa0.5/', games: results }, null, 2),

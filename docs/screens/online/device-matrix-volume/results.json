@@ -1,0 +1,4159 @@
+{
+  "stamp": "2026-10-13T06:15:58.942Z",
+  "liveApp": "https://severgrow.github.io/severgrow-01/futa0.5/",
+  "games": [
+    {
+      "index": 0,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "EPW65F8D"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "52d2d150 / 52d2d150"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s2 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/0-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/0-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/0-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 41669,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 1,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "JHDHXYF2"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "cf0bdd60 / cf0bdd60"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/1-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/1-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 19399,
+      "notes": []
+    },
+    {
+      "index": 2,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "R6SY4ZQM"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "8051d9c9 / 8051d9c9"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 2744ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": true
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s1 40x57; button.card.s1 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/2-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/2-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/2-slow3g-slow-net-a11y-390x844.jpg"
+      ],
+      "durationMs": 32090,
+      "notes": []
+    },
+    {
+      "index": 3,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "MHZ9SHGA"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "e8a1dbcd / e8a1dbcd"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s1 47x65"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/3-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/3-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/3-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/3-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 19540,
+      "notes": []
+    },
+    {
+      "index": 4,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "5QQWH7CS"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "67d2b14d / 67d2b14d"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-card-art-ready futa04-information futa04-cards mat-textures large-text reduce-motion idle-urgency"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] duel-hud 348>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/4-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/4-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/4-a11y-firefox-mobile-390x844.jpg"
+      ],
+      "durationMs": 39068,
+      "notes": []
+    },
+    {
+      "index": 5,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "252GNZGN"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "44cccbb8 / 44cccbb8"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s2 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/5-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/5-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/5-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 36731,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 6,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "082B5M6K"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "5af97012 / 5af97012"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [
+        "[6-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/rock_hex_04-BnduomSj.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[6-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/rock_hex_05-Cty6l_K6.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[6-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/01-meadow-D-S1I2M2.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[6-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/empty_ground_01-Dbf6w7sd.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]"
+      ],
+      "networkFailures": [
+        "[6-creator] GET /futa0.5/assets/rock_hex_04-BnduomSj.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/rock_hex_05-Cty6l_K6.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/01-meadow-D-S1I2M2.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/empty_ground_01-Dbf6w7sd.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/cards-leOO1r85.js — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/overlay-placement-CL5zbv74.js — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/03-meadow-rb_EWFvF.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/17-ashen-DbpclWJu.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/rock_hex_03-C9kedpgB.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/09-meadow-8E-yvv0S.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/16-ashen-DofX07jW.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/15-ashen-DWMnWJqz.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/05-meadow-DuN6nTq8.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/08-meadow-DWx55414.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/12-ashen-dPDBEPPy.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/18-ashen-j2nNfpwh.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/04-meadow-Drn35Cmw.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/02-meadow-B37eKpKY.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/rock_hex_01-CMK9mx8z.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/07-meadow-CDpZiRyw.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/14-ashen-BOrY_KyU.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/13-ashen-Bx2VMh7q.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/06-meadow-Dh72wgH9.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/11-ashen-BKCNHF3-.webp — NS_BINDING_ABORTED",
+        "[6-creator] GET /futa0.5/assets/10-ashen-BC5lc6ox.webp — NS_BINDING_ABORTED"
+      ],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/6-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/6-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 43783,
+      "notes": []
+    },
+    {
+      "index": 7,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "3KBGZ552"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "9e4e33d4 / 9e4e33d4"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 3043ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": true
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s2 44x59"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/7-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/7-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/7-slow3g-slow-net-a11y-390x844.jpg"
+      ],
+      "durationMs": 32122,
+      "notes": []
+    },
+    {
+      "index": 8,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "XX0JDNEG"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "0617bfb1 / 0617bfb1"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s1 47x65"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/8-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/8-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/8-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/8-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 31650,
+      "notes": []
+    },
+    {
+      "index": 9,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "0ZW528WB"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "cd47625e / cd47625e"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-card-art-ready futa04-information futa04-cards mat-textures large-text reduce-motion idle-urgency"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] duel-hud 348>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/9-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/9-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/9-a11y-firefox-mobile-390x844.jpg"
+      ],
+      "durationMs": 44775,
+      "notes": []
+    },
+    {
+      "index": 10,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "NTKJSFGG"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "4ea6c413 / 4ea6c413"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s1 40x57; button.card.s3 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] duel-hud 299>268"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/10-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/10-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/10-double-tap-after-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 46569,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 11,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "REPS912W"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "b9dea30e / b9dea30e"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [
+        "[11-creator] GET /duel/v1/matches/b9dea30e-221c-4fd2-b0f4-dbc4d062f185/view?since=2 — NS_BINDING_ABORTED",
+        "[11-creator] GET /futa0.5/assets/cards-leOO1r85.js — NS_BINDING_ABORTED",
+        "[11-creator] GET /futa0.5/assets/overlay-placement-CL5zbv74.js — NS_BINDING_ABORTED"
+      ],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/11-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/11-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 51188,
+      "notes": []
+    },
+    {
+      "index": 12,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "WW49D5JJ"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "af28466c / af28466c"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 2783ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": true
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s2 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] duel-hud 299>268"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/12-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/12-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/12-slow3g-slow-net-narrow-320x568.jpg"
+      ],
+      "durationMs": 30327,
+      "notes": []
+    },
+    {
+      "index": 13,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "0TA6T5YB"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "5a2b11d3 / 5a2b11d3"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s1 47x65"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/13-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/13-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/13-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/13-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 28761,
+      "notes": []
+    },
+    {
+      "index": 14,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "YFEJGWJW"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "9fc9ec9b / 9fc9ec9b"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-information futa04-cards futa04-card-art-ready mat-textures large-text reduce-motion idle-urgency"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target,clipped-text"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] duel-hud 362>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] duel-hud 348>338"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/14-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/14-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/14-a11y-a11y-390x844.jpg"
+      ],
+      "durationMs": 18162,
+      "notes": []
+    },
+    {
+      "index": 15,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "Q1T1SWM1"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "4e660554 / 4e660554"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s1 40x57; button.card.s1 42x58; button.card.s2 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/15-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/15-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/15-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 40262,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 16,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "PS2J9B7M"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "22275260 / 22275260"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/16-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/16-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 40853,
+      "notes": []
+    },
+    {
+      "index": 17,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "3WQ5P6VZ"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "702c2b7a / 702c2b7a"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 2935ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": false
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s1 40x57; button.card.s2 42x58; button.card.s2 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] duel-hud 299>268"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/17-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/17-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/17-slow3g-slow-net-narrow-320x568.jpg"
+      ],
+      "durationMs": 53298,
+      "notes": []
+    },
+    {
+      "index": 18,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "7Z39P8AX"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "6d187c64 / 6d187c64"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 57s); joiner 23h 59m (drift 57s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s2 47x65"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/18-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/18-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/18-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/18-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 28418,
+      "notes": []
+    },
+    {
+      "index": 19,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "23JZZMDF"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "fa116cec / fa116cec"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-information futa04-cards futa04-card-art-ready mat-textures large-text reduce-motion idle-urgency gd-tired"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target,clipped-text"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] duel-hud 362>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] duel-hud 348>338"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/19-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/19-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/19-a11y-a11y-390x844.jpg"
+      ],
+      "durationMs": 21832,
+      "notes": []
+    },
+    {
+      "index": 20,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "8TEM8SKG"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "984fd35d / 984fd35d"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s0 42x58; button.card.s1 40x57; button.card.s1 42x58; button.card.s2 44x59"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/20-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/20-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/20-double-tap-after-narrow-320x568.jpg"
+      ],
+      "durationMs": 39606,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 21,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "DYRFE3CZ"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "eeda709c / eeda709c"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/21-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/21-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 18805,
+      "notes": []
+    },
+    {
+      "index": 22,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "VFR7Z247"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "55b30610 / 55b30610"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 2692ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": true
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s1 40x57; button.card.s3 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/22-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/22-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/22-slow3g-slow-net-a11y-390x844.jpg"
+      ],
+      "durationMs": 33434,
+      "notes": []
+    },
+    {
+      "index": 23,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "48STKW78"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "638da377 / 638da377"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 54s); joiner 23h 59m (drift 54s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s0 47x65"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/23-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/23-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/23-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/23-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 30954,
+      "notes": []
+    },
+    {
+      "index": 24,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "8KJZZ7NH"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "2c97352d / 2c97352d"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-information futa04-cards futa04-card-art-ready mat-textures large-text reduce-motion idle-urgency"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target,clipped-text"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] duel-hud 362>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[a11y a11y-390x844] duel-hud 348>338"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/24-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/24-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/24-a11y-a11y-390x844.jpg"
+      ],
+      "durationMs": 29858,
+      "notes": []
+    },
+    {
+      "index": 25,
+      "variant": "double-tap",
+      "creator": "webkit-android-412x915",
+      "joiner": "narrow-320x568",
+      "engines": "chromium+webkit",
+      "views": "412x915 / 320x568",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "YZFDKWD0"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "89d57295 / 89d57295"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 55s); joiner 23h 59m (drift 55s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before the double tap",
+          "ok": true
+        },
+        {
+          "name": "the double tap advanced the turn",
+          "ok": true,
+          "note": "rev 1 → 2"
+        },
+        {
+          "name": "a double tap applies at most one turn",
+          "ok": true,
+          "note": "+1 revisions (a single EndAct is +1)"
+        },
+        {
+          "name": "no server error from the double tap",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "both sides agree after the double tap",
+          "ok": false,
+          "note": "opp rev ? vs 2"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] 5 control(s) under 44px: button.card.s0 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s2 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[joiner narrow-320x568] duel-hud 299>268"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/25-double-tap-creator-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/25-double-tap-joiner-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/25-double-tap-after-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 52470,
+      "notes": [
+        "fired two end-of-turn taps with no wait between them"
+      ]
+    },
+    {
+      "index": 26,
+      "variant": "refresh-both",
+      "creator": "firefox-mobile-390x844",
+      "joiner": "large-1920x1080",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 1920x1080",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "02SCCEX5"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "60c288f0 / 60c288f0"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 56s); joiner 23h 59m (drift 56s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits before both refresh",
+          "ok": true
+        },
+        {
+          "name": "a full turn completes before both refresh",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "creator returns to the menu after refresh",
+          "ok": true
+        },
+        {
+          "name": "scenario completed",
+          "ok": false,
+          "note": "page.goto: NS_BINDING_ABORTED\nCall log:\n  - navigating to \"https://severgrow.github.io/severgrow-01/futa0.5/\", waiting until \"domcontentloaded\"\n"
+        }
+      ],
+      "consoleErrors": [
+        "[26-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/03-meadow-rb_EWFvF.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[26-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/04-meadow-Drn35Cmw.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[26-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/05-meadow-DuN6nTq8.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]",
+        "[26-creator] [JavaScript Error: \"Failed to load ‘https://severgrow.github.io/severgrow-01/futa0.5/assets/06-meadow-Dh72wgH9.webp’. A ServiceWorker intercepted the request and encountered an unexpected error.\" {file: \"https://severgrow.github.io/severgrow-01/futa0.5/futa04-sw.js\" line: 53}]"
+      ],
+      "networkFailures": [
+        "[26-creator] GET /duel/v1/matches/60c288f0-88c0-486a-a986-f194474ee2b9/view?since=0 — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/03-meadow-rb_EWFvF.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/04-meadow-Drn35Cmw.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/05-meadow-DuN6nTq8.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/06-meadow-Dh72wgH9.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/cards-leOO1r85.js — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/overlay-placement-CL5zbv74.js — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/rock_hex_02-C0kzf6xB.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/09-meadow-8E-yvv0S.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/07-meadow-CDpZiRyw.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/15-ashen-DWMnWJqz.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/rock_hex_04-BnduomSj.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/13-ashen-Bx2VMh7q.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/12-ashen-dPDBEPPy.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/11-ashen-BKCNHF3-.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/10-ashen-BC5lc6ox.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/14-ashen-BOrY_KyU.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/18-ashen-j2nNfpwh.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/17-ashen-DbpclWJu.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/08-meadow-DWx55414.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/16-ashen-DofX07jW.webp — NS_BINDING_ABORTED",
+        "[26-creator] GET /futa0.5/assets/rock_hex_03-C9kedpgB.webp — NS_BINDING_ABORTED"
+      ],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/26-refresh-both-creator-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/26-refresh-both-joiner-large-1920x1080.jpg"
+      ],
+      "durationMs": 21604,
+      "notes": []
+    },
+    {
+      "index": 27,
+      "variant": "slow3g",
+      "creator": "narrow-320x568",
+      "joiner": "a11y-390x844",
+      "engines": "chromium",
+      "views": "320x568 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "HNS5GGX8"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "96874a27 / 96874a27"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Draw survives a 2s-per-call network",
+          "ok": true,
+          "note": "commit seen after 4009ms"
+        },
+        {
+          "name": "no duplicate draw under a very slow network",
+          "ok": true,
+          "note": "phase ACT"
+        },
+        {
+          "name": "the turn still ends under a very slow network",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the very slow turn still reaches the opponent",
+          "ok": true
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] 5 control(s) under 44px: button.card.s1 44x59; button.card.s1 42x58; button.card.s2 40x57; button.card.s2 42x58; button.card.s3 44x59"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator narrow-320x568] duel-hud 299>268"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/27-slow3g-creator-narrow-320x568.jpg",
+        "docs/screens/online/device-matrix-volume/27-slow3g-joiner-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/27-slow3g-slow-net-narrow-320x568.jpg"
+      ],
+      "durationMs": 36713,
+      "notes": []
+    },
+    {
+      "index": 28,
+      "variant": "landscape",
+      "creator": "large-1920x1080",
+      "joiner": "webkit-android-412x915",
+      "engines": "chromium+webkit",
+      "views": "1920x1080 / 412x915",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "QCZD32X6"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "9d24a8a4 / 9d24a8a4"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 55s); joiner 23h 59m (drift 55s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "1 issue(s) this game"
+        },
+        {
+          "name": "Draw commits in landscape",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown entirely in landscape",
+          "ok": true,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | threw hand card #0 onto the throw pile"
+        },
+        {
+          "name": "the landscape turn reaches the opponent",
+          "ok": true,
+          "note": "rev 3"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner webkit-android-412x915] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner landscape 915x412] 8 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44; button.card.s0 47x65"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/28-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/28-landscape-joiner-webkit-android-412x915.jpg",
+        "docs/screens/online/device-matrix-volume/28-landscape-creator-large-1920x1080.jpg",
+        "docs/screens/online/device-matrix-volume/28-landscape-joiner-webkit-android-412x915.jpg"
+      ],
+      "durationMs": 38940,
+      "notes": []
+    },
+    {
+      "index": 29,
+      "variant": "a11y",
+      "creator": "a11y-390x844",
+      "joiner": "firefox-mobile-390x844",
+      "engines": "chromium+firefox",
+      "views": "390x844 / 390x844",
+      "pass": false,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "TBE7AATK"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "404e77ee / 404e77ee"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Opponent's turn\" (want \"Opponent's turn\"), joiner \"Your turn\" (want \"Your turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "LeafyHare vs OakMole"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 54s); joiner 23h 59m (drift 54s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "3 issue(s) this game"
+        },
+        {
+          "name": "Large text setting is applied",
+          "ok": true,
+          "note": "test-typography-v2 futa04-branding slim-hud futa04-card-art-ready futa04-information futa04-cards mat-textures large-text reduce-motion idle-urgency"
+        },
+        {
+          "name": "reduced-motion preference is seen by the page",
+          "ok": true
+        },
+        {
+          "name": "Draw commits with large text + reduced motion",
+          "ok": true
+        },
+        {
+          "name": "the turn can be thrown with large text + reduced motion",
+          "ok": false,
+          "note": "tapped #smart-context (on-screen Skip / end Grow) | hand card #0: drag did not end the turn | hand card #1: drag did not end the turn | hand card #2: drag did not end the turn | hand card #3: drag did not end the turn"
+        },
+        {
+          "name": "no horizontal overflow with large text",
+          "ok": true,
+          "note": "small-touch-target"
+        },
+        {
+          "name": "resign finishes the duel",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "opponent sees the finish live",
+          "ok": true,
+          "note": "You won"
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "clipped-text",
+          "severity": "medium",
+          "detail": "[creator a11y-390x844] duel-hud 348>338"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[a11y firefox-mobile-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "joiner",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-volume/29-a11y-creator-a11y-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/29-a11y-joiner-firefox-mobile-390x844.jpg",
+        "docs/screens/online/device-matrix-volume/29-a11y-firefox-mobile-390x844.jpg"
+      ],
+      "durationMs": 62603,
+      "notes": []
+    }
+  ]
+}

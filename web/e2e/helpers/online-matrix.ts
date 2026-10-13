@@ -20,6 +20,12 @@ export const CLIENT_VERSION = '0.5.0';
 /** Storage prefix the futa05 preview channel adds (see web/src/channel.ts). */
 export const STORAGE_PREFIX = 'futa05:';
 export const SCREEN_DIR = 'docs/screens/online/device-matrix';
+/** Evidence folder for the extra device/browser volume pass (TASK 3). */
+export const VOLUME_SCREEN_DIR = 'docs/screens/online/device-matrix-volume';
+let activeScreenDir = SCREEN_DIR;
+export const setScreenDir = (dir: string): void => {
+  activeScreenDir = dir;
+};
 
 export const IDENTITY_KEY = 'severgrow.duel.identity.v1';
 export const FIRST_CARD_KEY = 'severgrow.duel.firstCard.v1';
@@ -62,6 +68,80 @@ const DESKTOP_FIREFOX_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:142.0) Gecko/20100101 Firefox/142.0';
 const DESKTOP_SAFARI_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+
+const FIREFOX_MOBILE_UA =
+  'Mozilla/5.0 (Android 14; Mobile; rv:142.0) Gecko/142.0 Firefox/142.0';
+
+/**
+ * Extra profiles for the TASK 3 volume pass. Kept separate from `DEVICES` so the original
+ * 30-duel report and its screenshot names never change.
+ */
+export const VOLUME_DEVICES: readonly DeviceProfile[] = Object.freeze([
+  {
+    id: 'webkit-android-412x915',
+    label: 'WebKit at an Android phone size 412x915',
+    engine: 'webkit',
+    platform: 'WebKit, Android-sized (touch)',
+    viewport: { width: 412, height: 915 },
+    rotated: { width: 915, height: 412 },
+    hasTouch: true,
+    isMobile: true,
+    userAgent: ANDROID_UA,
+    deviceScaleFactor: 3,
+    touchTargetPx: 48,
+  },
+  {
+    id: 'firefox-mobile-390x844',
+    label: 'Firefox mobile-ish 390x844',
+    engine: 'firefox',
+    platform: 'Firefox mobile-ish (touch)',
+    viewport: { width: 390, height: 844 },
+    rotated: { width: 844, height: 390 },
+    hasTouch: true,
+    // Playwright's isMobile is Chromium/WebKit only; a small touch viewport stands in for mobile.
+    isMobile: false,
+    userAgent: FIREFOX_MOBILE_UA,
+    deviceScaleFactor: 3,
+    touchTargetPx: 48,
+  },
+  {
+    id: 'narrow-320x568',
+    label: 'Chromium 320x568 (smallest supported)',
+    engine: 'chromium',
+    platform: 'Chromium 320px (touch)',
+    viewport: { width: 320, height: 568 },
+    rotated: { width: 568, height: 320 },
+    hasTouch: true,
+    isMobile: true,
+    userAgent: ANDROID_UA,
+    deviceScaleFactor: 2,
+    touchTargetPx: 44,
+  },
+  {
+    id: 'large-1920x1080',
+    label: 'Desktop Chrome 1920x1080',
+    engine: 'chromium',
+    platform: 'Desktop Chrome large (mouse)',
+    viewport: { width: 1920, height: 1080 },
+    hasTouch: false,
+    isMobile: false,
+    userAgent: DESKTOP_CHROME_UA,
+    deviceScaleFactor: 1,
+    touchTargetPx: 24,
+  },
+  {
+    id: 'a11y-390x844',
+    label: 'Android Chrome 390x844 — reduced motion + large text',
+    engine: 'chromium',
+    platform: 'Chromium accessibility settings (touch)',
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+    userAgent: ANDROID_UA,
+    deviceScaleFactor: 3,
+    touchTargetPx: 48,
+  },
+] as const);
 
 export const DEVICES: readonly DeviceProfile[] = Object.freeze([
   {
@@ -481,6 +561,10 @@ export type SessionOptions = {
   offlineAtStart?: boolean;
   /** Start with no stored identity at all, even when one is supplied. */
   anonymous?: boolean;
+  /** Apply the OS-level reduced-motion preference to the page (media query + app setting). */
+  reducedMotion?: boolean;
+  /** Turn on the app's Large text accessibility setting. */
+  largeText?: boolean;
 };
 
 export type Session = {
@@ -519,7 +603,15 @@ export const seedScript = (guest: Guest, options: SessionOptions): { content: st
     options.seedSettings === false
       ? ''
       : `  localStorage.setItem(${literal(STORAGE_PREFIX + SETTINGS_KEY)}, ${literal(
-          JSON.stringify({ sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, eyeCandy: false }),
+          JSON.stringify({
+            sound: false,
+            music: false,
+            coach: false,
+            speed: 'skip',
+            reduceMotion: true,
+            largeText: options.largeText === true,
+            eyeCandy: false,
+          }),
         )});`,
     '} catch (e) {}',
   ];
@@ -549,6 +641,7 @@ export const openSession = async (
   await context.addInitScript({ content: "try { window.confirm = function () { return true; }; } catch (e) {}" });
 
   const page = await context.newPage();
+  if (options.reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
   const session: Session = {
     label,
     device,
@@ -611,6 +704,7 @@ export const shortUrl = (url: string): string => url.replace(LIVE_API, '/duel').
 export const newPage = async (session: Session, options: SessionOptions = {}): Promise<Page> => {
   if (Object.keys(options).length > 0) await session.context.addInitScript(seedScript(session.guest, options));
   const page = await session.context.newPage();
+  if (options.reducedMotion) await page.emulateMedia({ reducedMotion: 'reduce' });
   session.page = page;
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
@@ -1022,8 +1116,19 @@ export const applyLocalDraft = async (
   return { action: pending ?? grow, draft: await hasDraftNow() };
 };
 
+/**
+ * Whether this device has a local mid-turn draft. The ONLINE draft engine persists to
+ * `sessionStorage` (`web/src/online/draft.ts`), not `localStorage`, so both are checked — the
+ * original check only looked at localStorage and so reported "no draft" even when one existed.
+ */
 export const hasDraft = async (session: Session): Promise<boolean> =>
-  session.page.evaluate((prefix) => Object.keys(localStorage).some((k) => k.includes(prefix)), DRAFT_KEY_PREFIX);
+  session.page.evaluate(`(() => {
+  const prefix = ${JSON.stringify(DRAFT_KEY_PREFIX)};
+  let found = false;
+  try { found = Object.keys(localStorage).some((k) => k.indexOf(prefix) !== -1); } catch (e) {}
+  if (!found) { try { found = Object.keys(sessionStorage).some((k) => k.indexOf(prefix) !== -1); } catch (e) {} }
+  return found;
+})()`);
 
 /** Resign from a session's duel (the page's confirm() is stubbed at context creation). */
 export const resign = async (session: Session, timeout = 30_000): Promise<boolean> => {
@@ -1147,7 +1252,7 @@ export const auditLayout = async (session: Session): Promise<LayoutAudit> => {
 
 // ---------------------------------------------------------------------------- misc
 
-export const shot = async (session: Session, name: string, dir = SCREEN_DIR): Promise<string> => {
+export const shot = async (session: Session, name: string, dir = activeScreenDir): Promise<string> => {
   mkdirSync(dir, { recursive: true });
   // JPEG at a width fitted to 1024px: the evidence stays readable and the folder stays small
   // enough to keep in the repo (retina PNG dumps were ~300 MB for 110 shots).

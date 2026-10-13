@@ -1,0 +1,270 @@
+{
+  "stamp": "2026-10-13T06:15:14.159Z",
+  "liveApp": "https://severgrow.github.io/severgrow-01/futa0.5/",
+  "games": [
+    {
+      "index": 8,
+      "variant": "storage-cleared",
+      "creator": "iphone-390x844",
+      "joiner": "iphone-360x640",
+      "engines": "webkit",
+      "views": "390x844 / 360x640",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "V0VT1FSA"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "706bcc53 / 706bcc53"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "0 issue(s) this game"
+        },
+        {
+          "name": "reload after clearing storage returns to the menu",
+          "ok": true
+        },
+        {
+          "name": "a fresh guest identity is recreated",
+          "ok": true,
+          "note": "token stored again"
+        },
+        {
+          "name": "the cleared device forgets its old token",
+          "ok": true
+        },
+        {
+          "name": "no crash after clearing storage",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "empty lobby list rendered for the new identity",
+          "ok": true,
+          "note": "0 row(s)"
+        },
+        {
+          "name": "the other player can still finish the duel",
+          "ok": true
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [
+        "[8-joiner] GET /duel/v1/matches/706bcc53-4bcc-4ab9-b9fd-52a93bb0f206/view?since=0 — cancelled",
+        "[8-joiner] GET /futa0.5/assets/futasaku-white-CvdETqfx.webp — cancelled",
+        "[8-joiner] GET /futa0.5/assets/defaultArtBoard-CMhiafx_.js — cancelled",
+        "[8-joiner] GET /futa0.5/ — cancelled"
+      ],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-recheck/8-storage-cleared-creator-iphone-390x844.jpg",
+        "docs/screens/online/device-matrix-recheck/8-storage-cleared-joiner-iphone-360x640.jpg",
+        "docs/screens/online/device-matrix-recheck/8-storage-cleared-cleared-iphone-360x640.jpg"
+      ],
+      "durationMs": 16139,
+      "notes": [
+        "old token still lists 12 match(es) — expected, the server keeps the row for the old player"
+      ]
+    },
+    {
+      "index": 19,
+      "variant": "storage-cleared",
+      "creator": "android-360x640",
+      "joiner": "android-390x844",
+      "engines": "chromium",
+      "views": "360x640 / 390x844",
+      "pass": true,
+      "checks": [
+        {
+          "name": "invite code shown and well-formed",
+          "ok": true,
+          "note": "10S7DQ9C"
+        },
+        {
+          "name": "both players reached the shared board",
+          "ok": true,
+          "note": "9402da40 / 9402da40"
+        },
+        {
+          "name": "page used the seeded guest — creator",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "page used the seeded guest — joiner",
+          "ok": true,
+          "note": "token matches"
+        },
+        {
+          "name": "both seats present",
+          "ok": true,
+          "note": "seats 0/1"
+        },
+        {
+          "name": "match active",
+          "ok": true,
+          "note": "active/active"
+        },
+        {
+          "name": "revisions agree",
+          "ok": true,
+          "note": "0 vs 0"
+        },
+        {
+          "name": "who-starts shown correctly in both HUDs",
+          "ok": true,
+          "note": "creator \"Your turn\" (want \"Your turn\"), joiner \"Opponent's turn\" (want \"Opponent's turn\")"
+        },
+        {
+          "name": "duel HUD visible both sides",
+          "ok": true
+        },
+        {
+          "name": "resign available both sides",
+          "ok": true
+        },
+        {
+          "name": "perspective labels are Me / Opponent",
+          "ok": true,
+          "note": "Me/Opponent"
+        },
+        {
+          "name": "opponent name shown",
+          "ok": true,
+          "note": "CedarOtter vs MossyFinch"
+        },
+        {
+          "name": "turn clock matches the server clock",
+          "ok": true,
+          "note": "creator 23h 59m (drift 58s); joiner 23h 59m (drift 58s)"
+        },
+        {
+          "name": "layout measured on both devices",
+          "ok": true,
+          "note": "2 issue(s) this game"
+        },
+        {
+          "name": "reload after clearing storage returns to the menu",
+          "ok": true
+        },
+        {
+          "name": "a fresh guest identity is recreated",
+          "ok": true,
+          "note": "token stored again"
+        },
+        {
+          "name": "the cleared device forgets its old token",
+          "ok": true
+        },
+        {
+          "name": "no crash after clearing storage",
+          "ok": true,
+          "note": ""
+        },
+        {
+          "name": "empty lobby list rendered for the new identity",
+          "ok": true,
+          "note": "0 row(s)"
+        },
+        {
+          "name": "the other player can still finish the duel",
+          "ok": true
+        }
+      ],
+      "consoleErrors": [],
+      "networkFailures": [],
+      "httpErrors": [],
+      "corsIssues": [],
+      "layout": [
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[creator android-360x640] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        },
+        {
+          "kind": "small-touch-target",
+          "severity": "medium",
+          "detail": "[joiner android-390x844] 5 control(s) under 48px: #hud-menu 44x44; #smart-context 44x44; #tool-undo 44x44; #futa04-help-button 44x44; #hand-sort 44x44"
+        }
+      ],
+      "whoStarts": "creator",
+      "whoStartsShown": true,
+      "opponentMidTurnHidden": null,
+      "timerOk": true,
+      "screenshots": [
+        "docs/screens/online/device-matrix-recheck/19-storage-cleared-creator-android-360x640.jpg",
+        "docs/screens/online/device-matrix-recheck/19-storage-cleared-joiner-android-390x844.jpg",
+        "docs/screens/online/device-matrix-recheck/19-storage-cleared-cleared-android-390x844.jpg"
+      ],
+      "durationMs": 11960,
+      "notes": [
+        "old token still lists 13 match(es) — expected, the server keeps the row for the old player"
+      ]
+    }
+  ]
+}

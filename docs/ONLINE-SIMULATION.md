@@ -274,3 +274,34 @@ decided and done.
 Another agent/run was writing online-soak files into the same checkout during this pass
 (`server/scripts/online-soak.ts`, `docs/ONLINE-SOAK-200.md`, `web/e2e/online-device-matrix.ts`, …).
 I did not touch or commit those; my commits contain only the fix files listed above.
+
+---
+
+## Phase D — device/browser matrix follow-up (2026-10-13)
+
+The 30-duel device/browser matrix (`docs/ONLINE-DEVICE-MATRIX.md`) found one clear UI bug and two
+"needs confirmation" items. All were re-checked against the deployed `/futa0.5/` build:
+
+- **Resign was not tappable** (it overflowed the 44px duel strip and was painted over by the header/board):
+  fixed in `web/src/online/online-css.ts` (the strip is lifted above both, starts after the menu button,
+  and keeps its controls on one line). Re-verified live: **0 unreachable-control issues, was 65**, and
+  `#duel-resign` is 79x48.
+- **Hidden / offline tabs kept the 2s poll**: `web/src/main.ts` now wires `visibilitychange` / `online` /
+  `offline` to `sync.setVisible` / `setOnline`.
+- **WebKit logged a spurious CORS console error** on every load: the numerals font was inlined as a
+  `data:` URI; on the `futa05` channel fonts are no longer inlined, and a real WebKit load now logs
+  **0 console errors**.
+- **"Placed Grow left no draft" and "no fresh identity after clearing storage"** were both **harness
+  artefacts** (the draft lives in `sessionStorage`, and the identity is created asynchronously); the
+  harness checks were corrected and both now pass, with no app change.
+
+A second, **volume pass of 30 more duels** covers five new profiles (WebKit at an Android size, Firefox
+mobile-ish, 320px, 1920px, and Large text + reduced motion) and five new scenarios (rapid double-tap
+Throw, refresh on both sides, slow 3G, full-landscape turns, accessibility settings). It confirms
+landscape and slow-network play, no overflow at 320px/1920px, and a corrected double-tap check
+(6/6); the remaining failures are harness Throw-gesture / reload artefacts, detailed in the matrix
+report.
+
+The 200-duel soak (`docs/ONLINE-SOAK-200.md`) is the matching server-side report: all 180 in-process
+duels are green after the mid-batch fix, and the only live-Edge failures are the shared Supabase
+project's connection limit.
