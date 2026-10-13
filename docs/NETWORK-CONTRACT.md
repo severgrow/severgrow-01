@@ -116,3 +116,34 @@ Rate limiting is part of the contract because it shapes what a legitimate player
 No accounts, database, matchmaking, WebSockets/realtime, world-map UI, clans or progression.
 Sections 9 and 10 keep the existing `server-core` groundwork and the reward/world boundary
 documented in `docs/SERVER-CORE.md`.
+
+## Live duels (test channel; `docs/LIVE.md`)
+
+Same bearer auth, headers, error shape (`{ ok:false, code, message }`) and rate-limit rules as above.
+Routes live in their own router (`server/src/live/router.ts`).
+
+| Method | Path | Body | Returns |
+| --- | --- | --- | --- |
+| POST | `/v1/players/me/presence` | `{ status: idle\|offline_game\|in_match\|in_live\|tutorial, matchId? }` | `{ status }` — heartbeat every 20 s while visible; older than 45 s = offline |
+| PATCH | `/v1/players/me` | `{ liveChallengesEnabled: boolean }` | `{ liveChallengesEnabled }` (a `displayName` body still goes to the rename route) |
+| GET | `/v1/players/me/challenges` | — | `{ incoming[], outgoing[], liveMatchId, challengesEnabled }` — the polling fallback (every 4 s while visible) |
+| GET | `/v1/matches/:id/live` | — | `{ live: LiveStatus }` — also the lazy clock check for that match |
+| POST | `/v1/matches/:id/live/challenge` | `{ kind?: 'live' \| 'rematch' }` | `{ challenge, liveMatchId }` (`liveMatchId` set when a mutual challenge became the accept) |
+| POST | `/v1/challenges/:id/accept` · `/decline` · `/cancel` | `{}` | `{ challenge, liveMatchId? }` |
+| POST | `/v1/matches/:id/live/leave` | `{}` | `{ live: LiveStatus }` |
+
+**Challenge payload (hidden-information audit):** `id, matchId, kind, fromName, toName, fromMe,
+limitMs, status, createdAt, expiresAt, newMatchId` — names and ids only, tested.
+
+**Realtime hint:** broadcast event `challenge` on channel `player:<playerId>` with ONLY
+`{ challengeId, fromName, kind }`. It means "poll now"; the data always comes from the authenticated
+GET. A failed publish never fails the request.
+
+**Stable error codes:** `BUSY_LIVE`, `BUSY` (tutorial), `NOT_AVAILABLE`, `OFFLINE`, `COOLDOWN`,
+`TOO_MANY_PENDING`, `RATE_LIMITED`, `CHALLENGE_NOT_FOUND`, `CHALLENGE_CLOSED`, `NOT_LIVE`,
+`MATCH_NOT_ACTIVE`, `TOO_MANY_MATCHES`.
+
+**Clock:** the live clock reuses `turnDeadlineAt` (already in every view). Timeouts are decided at
+the same lazy points as 24-hour deadlines (every read/write of the match, plus the sweeper); the
+timed-out turn is committed through the normal move pipeline with request id `live-auto-<revision>`,
+so both players see it as an ordinary turn (turn-gated, private draw hidden).

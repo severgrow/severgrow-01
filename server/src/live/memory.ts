@@ -170,6 +170,6 @@ export class MemoryLiveStore implements LiveStore {
     const live = this.lives.get(matchId);
     if (!live || !liveManaged(live)) return false;
     const m = await this.base.matchById(matchId);
-    return !!m && m.status === 'active' && m.turnDeadlineAt !== null && now > m.turnDeadlineAt;
+    return !!m && ((m.status === 'active' && m.turnDeadlineAt !== null && now > m.turnDeadlineAt) || m.status === 'finished');
   }
 }

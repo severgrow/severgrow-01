@@ -9,6 +9,8 @@ import type { Storage } from '../storage/types.js';
 import type { LiveConfig } from './config.js';
 import { DEFAULT_LIVE_CONFIG } from './config.js';
 import type { LiveNotifier } from './notifier.js';
+import { supabaseLiveNotifier } from './notifier.js';
+import { postgresLiveStore } from './postgres.js';
 import { createLiveRouter } from './router.js';
 import type { LiveRouter } from './router.js';
 import { LiveService } from './service.js';
@@ -51,4 +53,23 @@ export const createLiveRuntime = (options: {
     service,
     router: (match) => createLiveRouter({ live: service, authenticate: (t) => match.authenticate(t), now }),
   };
+};
+
+/** Edge entry: the same pool, the match broadcaster, and per-player pings when the keys exist. */
+export const wireLiveEdge = (options: {
+  storage: Storage;
+  pool: import('../storage/postgres.js').PgPool;
+  server: ServerConfig;
+  broadcaster?: MatchBroadcaster;
+  env: (name: string) => string | undefined;
+}): LiveRuntime => {
+  const url = options.env('SUPABASE_URL') ?? '';
+  const key = options.env('SUPABASE_ANON_KEY') ?? '';
+  return createLiveRuntime({
+    storage: options.storage,
+    live: postgresLiveStore(options.pool),
+    server: options.server,
+    ...(options.broadcaster ? { broadcaster: options.broadcaster } : {}),
+    ...(url && key ? { notifier: supabaseLiveNotifier({ url, key }) } : {}),
+  });
 };

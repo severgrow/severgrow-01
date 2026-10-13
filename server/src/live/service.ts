@@ -446,14 +446,19 @@ export class LiveService {
     const seat = await this.seatIn(player, matchId);
     await this.tickMatch(matchId);
     const now = this.now();
-    const match = await this.storage.matchById(matchId);
+    // Independent reads in parallel: this is polled every 1-3 s by both players while in a match.
+    const [match, live, parts, me, involving] = await Promise.all([
+      this.storage.matchById(matchId),
+      this.live.liveOf(matchId),
+      this.storage.participantsOf(matchId),
+      this.live.player(player.id),
+      this.live.challengesInvolving(player.id, now - OUTGOING_WINDOW_MS),
+    ]);
     if (!match) throw new LiveError('CHALLENGE_NOT_FOUND', 'Unknown match.');
-    const live = await this.live.liveOf(matchId);
-    const parts = await this.storage.participantsOf(matchId);
     const oppPart = parts.find((p) => p.seat !== seat) ?? null;
-    const me = await this.live.player(player.id);
-    const opp: LivePlayer | null = oppPart ? await this.live.player(oppPart.playerId) : null;
-    const involving = await this.live.challengesInvolving(player.id, now - OUTGOING_WINDOW_MS);
+    const [opp, oppName] = oppPart
+      ? await Promise.all([this.live.player(oppPart.playerId), this.nameOf(oppPart.playerId)])
+      : [null as LivePlayer | null, null as string | null];
     const pendingRow = involving.find((c) => c.matchId === matchId && effectiveStatus(c, now) === 'pending') ?? null;
     const sent = involving.filter((c) => c.matchId === matchId && c.fromPlayer === player.id);
     // A wider window for the decline limit.
@@ -490,7 +495,7 @@ export class LiveService {
       endedBySeat: live.endedBySeat,
       leftBy: live.leftBy,
       opponent: {
-        name: oppPart ? await this.nameOf(oppPart.playerId) : null,
+        name: oppName,
         presence: opp ? presenceWord(opp, now, this.config) : 'offline',
         inLive: !!opp?.liveMatchId,
         available: opp?.challengesEnabled ?? false,
@@ -513,6 +518,8 @@ export class LiveService {
   async tickMatch(matchId: string, now: number = this.now()): Promise<boolean> {
     let changed = false;
     try {
+      // Cheap unlocked check first: the row lock is only taken when a decision is actually due.
+      if (!(await this.live.needsTick(matchId, now))) return false;
       for (let i = 0; i < 6; i++) {
         const plan = await this.planTick(matchId, now);
         if (!plan) break;

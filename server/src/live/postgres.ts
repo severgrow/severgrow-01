@@ -250,9 +250,9 @@ export const postgresLiveStore = (pool: PgPool): LiveStore => ({
   },
   async needsTick(matchId, now) {
     const { rows } = await pool.query(
-      `select 1 from matches where id = $1 and status = 'active'
+      `select 1 from matches where id = $1
           and (live_since is not null or live_tail_rev is not null or live_autoplay_rev is not null)
-          and turn_deadline_at is not null and turn_deadline_at < $2`,
+          and ((status = 'active' and turn_deadline_at is not null and turn_deadline_at < $2) or status = 'finished')`,
       [matchId, now],
     );
     return rows.length > 0;

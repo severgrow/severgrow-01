@@ -13,16 +13,12 @@ import { MemoryStorage } from './storage/memory.js';
 import { databaseUrlFromEnv, poolFromUrl, redactUrl } from './storage/pg-pool.js';
 import { postgresStorage } from './storage/postgres.js';
 import type { Storage } from './storage/types.js';
-import { MemoryLiveStore } from './live/memory.js';
-import { postgresLiveStore } from './live/postgres.js';
-import { createLiveRuntime } from './live/runtime.js';
-import type { LiveStore } from './live/types.js';
+import { wireLiveNode } from './live/node.js';
 
-const buildStorage = (): { storage: Storage; description: string; live: LiveStore } => {
+const buildStorage = (): { storage: Storage; description: string } => {
   const url = databaseUrlFromEnv();
-  if (!url) { const memory = new MemoryStorage(); return { storage: memory, live: new MemoryLiveStore(memory), description: 'in-memory (dev only: nothing is persisted)' }; }
-  const pool = poolFromUrl(url);
-  return { storage: postgresStorage(pool), live: postgresLiveStore(pool), description: `postgres (${redactUrl(url)})` };
+  if (!url) return { storage: new MemoryStorage(), description: 'in-memory (dev only: nothing is persisted)' };
+  return { storage: postgresStorage(poolFromUrl(url)), description: `postgres (${redactUrl(url)})` };
 };
 
 export const startServer = async (options: { port?: number } = {}): Promise<{ port: number; storage: string; close: () => Promise<void> }> => {
@@ -30,10 +26,10 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
     ...DEFAULT_SERVER_CONFIG,
     ...(process.env.CORS_ORIGIN ? { corsOrigin: process.env.CORS_ORIGIN } : {}),
   };
-  const { storage, description, live } = buildStorage();
-  const liveRuntime = createLiveRuntime({ storage, live, server: config }); // live duels: docs/LIVE.md
-  const service = new MatchService({ storage: liveRuntime.storage, config });
-  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: liveRuntime.router(service) });
+  const { storage, description } = buildStorage();
+  const live = await wireLiveNode(storage, config, databaseUrlFromEnv()); // live duels: docs/LIVE.md
+  const service = new MatchService({ storage: live.storage, config });
+  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: live.router(service) });
 
   const port = options.port ?? Number(process.env.PORT ?? 8787);
   await new Promise<void>((resolve) => server.listen(port, resolve));

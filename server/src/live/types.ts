@@ -143,6 +143,6 @@ export interface LiveStore {
   challengesInvolving(playerId: string, since: number): Promise<Challenge[]>;
   /** Live-managed active matches whose deadline is past (for the sweeper). */
   dueMatchIds(now: number): Promise<string[]>;
-  /** Cheap pre-check before a write: is the deadline past on a live-managed match? */
+  /** Cheap pre-check: is a live decision due (deadline past, or finished while live-managed)? */
   needsTick(matchId: string, now: number): Promise<boolean>;
 }
