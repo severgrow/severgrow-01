@@ -195,14 +195,16 @@ const playTurn = async (page: Page) => {
   const hud = (await page.textContent('#turn')) ?? '';
   check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
   {
-    // UI overhaul: the hint line is always in the dock; the ? opens How to play
+    // UI overhaul: the hint line is always in the dock; the moves reference now lives in the
+    // in-game menu (the floating "?" corner tool was removed by owner direction).
     const hintText = ((await page.textContent('#hint')) ?? '').trim();
     const hintShown = await page.locator('#hint').isVisible();
-    await page.click('#hint-btn');
+    await page.click('#hud-menu');
+    await page.click('#gm-howto');
     await page.waitForTimeout(150);
     const howto = await page.locator('#sheet-howto').isVisible();
     await page.locator('#sheet-howto [data-close]').click().catch(() => {});
-    check('the hint line always says what to do next; the ? opens How to play', hintShown && hintText.length > 0 && howto, hintText.slice(0, 50));
+    check('the hint line always says what to do next; the in-game menu opens How to play', hintShown && hintText.length > 0 && howto, hintText.slice(0, 50));
   }
   await page.goto(BASE);
   await page.click('#menu-continue').catch(() => {});

@@ -27,7 +27,7 @@ export const GATE_WINDOW_SELECTORS = Object.freeze([
 
 /** Dead chrome the player must never reach mid-step. Never include #hud-menu. */
 export const GATE_BLOCKED_SELECTORS = Object.freeze([
-  '#hud-history', '#menu-settings', '#hint-btn',
+  '#hud-history', '#menu-settings',
   '#tool-undo', '#hand-sort', '#deck', '#discard',
   '#tool-weak', '#tool-targets', '#tool-replay', '#futa04-help-button',
 ] as const);

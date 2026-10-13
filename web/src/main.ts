@@ -64,6 +64,7 @@ import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, s
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
+import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallButton } from './logic/install.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { botSeed } from '../../src/bots/levels.js';
@@ -77,7 +78,7 @@ import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
   tutorialLesson, tutorialLessons, tutorialOpponentAction, tutorialStateAt,
-  TUTORIAL_CHAPTER_COUNT, TUTORIAL_CHAPTER_IDS, TUTORIAL_EXTRAS,
+  TUTORIAL_CHAPTER_COUNT,
 } from './logic/tutorial-script.js';
 import {
   GATE_MENU_SELECTORS, GATE_SHEET_SELECTORS, GATE_WINDOW_SELECTORS,
@@ -141,7 +142,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HOME, OPP, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, OPP, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -437,7 +438,12 @@ function drawLogo() {
 // ---------- screens and sheets ----------
 
 let openSheet: HTMLElement | null = null;
+/** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
+ *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
+let shownScreen: 'menu' | 'levels' | 'game' | null = null;
 function showScreen(name: 'menu' | 'levels' | 'game') {
+  const same = shownScreen === name;
+  shownScreen = name;
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('game').hidden = name !== 'game';
@@ -448,7 +454,7 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   if (name === 'levels') {
     renderLevelGrid();
   }
-  if (name === 'menu') {
+  if (name === 'menu' && !same) {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
     const canContinue = !!saved && saved.state.phase !== 'GAME_OVER';
     $('menu-continue').hidden = !canContinue;
@@ -462,7 +468,9 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
     }
     $('menu-tutorial').classList.remove('primary');
     $('menu-tutorial').classList.add('ghost');
-    syncTutorialMenu(false);
+    // Rename the one tutorial entry from src/strings.ts (single source).
+    $('menu-tutorial').textContent = HELP.tutorial;
+    $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
   }
   $('gameover').hidden = true;
   render();
@@ -524,52 +532,9 @@ function sheet(id: string | null) {
   }
 }
 
+/** Legacy channels (no glass surface) still show the reference in the old sheet. */
 function renderHowTo() {
-  const cfg = session?.state.config;
-  const sprout = (cfg?.sproutsPerTurn ?? 1) > 0;
-  const words = SPROUT;
-  const limit = cfg && cfg.maxTurnsPerPlayer > 0 ? ` or after ${cfg.maxTurnsPerPlayer} turns each` : '';
-  $('howto-body').innerHTML = [
-    `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
-    '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
-    `<p><b>Grow:</b>${BLOOM.howto}${sprout ? words.howto : ''}</p>`,
-    `<p><b>Painting a bloom:</b> ${TIPS.draw.text} For numbers in a row, the lowest goes on the first hex you paint; “Reverse” flips it. <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
-    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
-    ...(cfg?.allowStrengthen ?? true
-      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Fruit. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
-      : []),
-    ...((cfg?.fruitCardCount ?? 4) > 0
-      ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Fruit card on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]
-      : []),
-    '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
-    `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
-    `<p><b>The end:</b> when the deck runs out, both players finish with equal turns${limit}. Higher score wins; equal scores go to the stronger tiles, then a real draw.</p>`,
-    '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
-    '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',
-    '<p class="muted">Tap a card to see where it can go. Tap or hold a tile to see what it is worth.</p>',
-    `<p><button type="button" class="link" id="howto-replay-tutorial">${TUTORIAL.replayTutorial}</button> · <button type="button" class="link" data-tut-explainer="bloom">${TUTORIAL.bloomHow.title}</button> · <button type="button" class="link" data-tut-explainer="win">${TUTORIAL.winHow.title}</button> · <button type="button" class="link" data-tut-explainer="buttons">What are these buttons?</button></p>`,
-    `<p><b>More lessons:</b> ${TUTORIAL_EXTRAS.filter(e => e.id !== 'buttons').map(e => `<button type="button" class="link" data-tut-extra="${e.id}">${e.title}</button>`).join(' · ')}</p>`,
-    '<p class="muted"><b>Keyboard:</b> D draws from the deck, T takes the throw pile, 1-9 pick cards, Tab to the board then arrows and Enter to paint, Backspace removes the last hex, U undoes, Esc cancels.</p>',
-  ].join('');
-  $('howto-replay-tutorial')?.addEventListener('click', () => {
-    sheet(null);
-    if ($('menu-continue') && !$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
-    startTutorial(0);
-  }, { once: true });
-  document.querySelectorAll<HTMLButtonElement>('[data-tut-extra]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      sheet(null);
-      startExtraLesson(btn.dataset.tutExtra ?? '');
-    }, { once: true });
-  });
-  document.querySelectorAll<HTMLButtonElement>('[data-tut-explainer]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const kind = btn.dataset.tutExplainer;
-      // each link plays just its own lesson, then returns to the menu
-      if (kind === 'bloom' || kind === 'win' || kind === 'buttons') startTutorial(TUTORIAL_CHAPTER_IDS.indexOf(kind), kind);
-      sheet(null);
-    }, { once: true });
-  });
+  $('howto-body').innerHTML = howToReferenceHtml(session?.state.config);
 }
 
 /** New matches choose one of five named tiers; the exact engine level is saved with the match. */
@@ -1314,36 +1279,10 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   } catch { /* ignore */ }
 }
 
-/** The full tutorial ('core') or one extra lesson (TUTORIAL_EXTRAS), played on its own and back to the menu. */
-function startExtraLesson(id: string) {
-  if (!$('menu-continue').hidden && !window.confirm('Start this lesson? Your saved game will be replaced.')) return;
-  if (id === 'core') return startTutorial(0, 'core');
-  const extra = TUTORIAL_EXTRAS.find(e => e.id === id);
-  if (extra) startTutorial(TUTORIAL_CHAPTER_IDS.indexOf(extra.chapters[0]!), extra.id);
-}
-
-/**
- * The menu's "How to" button unfolds the full tutorial and the separate lessons. `open` unfolds
- * the list (also from the first game's game-over link).
- */
-function syncTutorialMenu(open = false) {
-  const btn = $('menu-tutorial');
-  const list = $('menu-lessons-list');
-  if (!list.childElementCount) {
-    const items = [{ id: 'core', title: 'Full tutorial' }, ...TUTORIAL_EXTRAS];
-    list.replaceChildren(...items.map((e, i) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      // the full tutorial gets its own row; so does a last lesson left alone in its row
-      b.className = `btn ghost${i === 0 || (i === items.length - 1 && TUTORIAL_EXTRAS.length % 2 === 1) ? ' wide' : ''}`;
-      b.dataset.lesson = e.id;
-      b.textContent = e.title;
-      b.addEventListener('click', () => startExtraLesson(e.id));
-      return b;
-    }));
-  }
-  list.hidden = !open;
-  btn.setAttribute('aria-expanded', String(open));
+/** The full tutorial ('core') — the one guided run the main menu starts from its top. */
+function startTutorialFromMenu() {
+  if (!$('menu-continue').hidden && !window.confirm('Start the tutorial? Your saved game will be replaced.')) return;
+  startTutorial(0, 'core');
 }
 
 function completeTutorial() {
@@ -2894,13 +2833,31 @@ function toggleMatchIntel() {
     noteFreePlayBulbInteraction();
     return;
   }
+  openIntel('intel');
+}
+
+/** Match Intel tab labels, kept in src/strings.ts for a one-line rename. */
+const INTEL_TABS = Object.freeze({ intel: HELP.intelTab, howto: HELP.howToTab });
+
+/** Open the Match Intel glass on a tab. Tab 1 is public match history, tab 2 the moves reference. */
+function openIntel(tab: 'intel' | 'howto'): void {
+  if (!glassSurface || !session) return;
   const model = matchIntel(session.view,session.state.history ?? [],openingPublicDiscard(session.state,session.base));
-  glassSurface.intel(model);
+  glassSurface.intel(model, { tab, labels: INTEL_TABS, howToHtml: howToReferenceHtml(session.state.config) });
   intelState=session.state;
   $('futa04-help-button').setAttribute('aria-expanded','true');
   document.querySelector<HTMLElement>('#futasaku-glass .intel-close')?.focus();
 }
 
+/** The pause menu's "How to play" opens the same moves reference: the Match Intel "How to" tab
+ *  where the glass exists, the legacy sheet during a guided tutorial step (the glass is the
+ *  tutorial window then) and on channels without the glass. */
+function openHowToReference(): void {
+  if (coach.tutorial && !tutorialFreePlayActive()) { sheet('sheet-howto'); return; }
+  if (!session || !glassSurface) { sheet('sheet-howto'); return; }
+  sheet(null);
+  openIntel('howto');
+}
 
 /** The coach's arrow: points at the one thing to tap next for the suggested move. */
 function renderGuide(advice: Advice | null) {
@@ -4386,8 +4343,6 @@ function renderGameOver() {
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   $('go-moves').hidden = !moves;
-  // after the first real game, point to the short extra lessons
-  $('go-lessons').hidden = !!coach.tutorial || stats.played !== 1;
   const part = (p: Player) => {
     const b = scoreBreakdown(st, p);
     return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
@@ -5160,7 +5115,6 @@ document.addEventListener(
   },
   { capture: true },
 );
-bind('hint-btn', () => sheet('sheet-howto'));
 bind('hand-sort', () => {
   settings = { ...settings, handSort: nextSort(settings.handSort) };
   saveSettings();
@@ -5242,11 +5196,10 @@ bind('menu-tutorial', () => {
     startGame(TUTORIAL_SEED,7);
     return;
   }
-  // How to: unfold (or fold) the full tutorial and the separate lessons
-  syncTutorialMenu($('menu-lessons-list').hidden !== false);
+  // One entry: start the guided run from its top.
+  startTutorialFromMenu();
 });
 bind('menu-settings', () => sheet('sheet-settings'));
-bind('go-lessons', () => { showScreen('menu'); syncTutorialMenu(true); });
 ($('settings-lab') as HTMLDetailsElement).addEventListener('toggle', () => {
   renderSettingsLab();
   const section = $('settings-lab') as HTMLDetailsElement;
@@ -5271,7 +5224,7 @@ bind('gm-new', () => {
   sheet(null);
   showScreen('levels');
 });
-bind('gm-howto', () => sheet('sheet-howto'));
+bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
 bind('gm-main', () => {
   sheet(null);
@@ -5792,6 +5745,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- start ----------
 
 /** Read-only hook for the automated browser test (nothing is sent anywhere). */
+let appReady = false;
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
@@ -5827,6 +5781,8 @@ document.addEventListener('keydown', (e) => {
   tutorial: () => coach.tutorial ? { ...coach.tutorial } : null,
   tutorialNext: () => tutorialNext(),
   exitTutorial: () => exitTutorial(),
+  /** Boot finished: every async UI mount is attached and the first screen is shown. */
+  ready: () => appReady,
 };
 
 await mountPlayerEnhancements();
@@ -6015,4 +5971,5 @@ window.addEventListener('pagehide', () => {
   tutorialGate?.clear();
 });
 
+appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

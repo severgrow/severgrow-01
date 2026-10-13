@@ -184,16 +184,18 @@ for (const v of [{ w: 390, h: 844, mouse: false, tag: 'phone' }, { w: 1280, h: 8
       await page.click(`#${id}`);
     }
     check(`${tag}: Replay holds its slot, dimmed until the opponent has moved`, (await page.locator('#tool-replay').isVisible()) && ((await page.getAttribute('#tool-replay', 'class')) ?? '').includes('off'));
-    const corners = await page.evaluate(() => ['#tool-weak', '#tool-targets', '#tool-replay', '#hint-btn'].map((s) => {
+    const corners = await page.evaluate(() => ['#tool-weak', '#tool-targets', '#tool-replay'].map((s) => {
       const b = document.querySelector(s)!.getBoundingClientRect();
       const w = document.querySelector('#board-wrap')!.getBoundingClientRect();
       return { l: b.left - w.left, r: w.right - b.right, t: b.top - w.top, b: w.bottom - b.bottom };
     }));
-    const [tl, tr, bl, br] = corners;
-    check(`${tag}: the four corner tools mirror each other (same insets)`, Math.abs(tl!.l - tr!.r) <= 0.5 && Math.abs(bl!.l - br!.r) <= 0.5 && Math.abs(tl!.t - tr!.t) <= 0.5 && Math.abs(bl!.b - br!.b) <= 0.5, JSON.stringify(corners.map((x) => Object.values(x).map((n) => Math.round(n)))));
-    await page.click('#hint-btn');
+    const [tl, tr, bl] = corners;
+    check(`${tag}: the corner tools mirror each other (same insets)`, Math.abs(tl!.l - tr!.r) <= 0.5 && Math.abs(tl!.l - bl!.l) <= 0.5 && Math.abs(tl!.t - tr!.t) <= 0.5 && Math.abs(tl!.t - bl!.t) <= 0.5, JSON.stringify(corners.map((x) => Object.values(x).map((n) => Math.round(n)))));
+    // The floating "?" was removed; the moves reference now opens from the in-game menu.
+    await page.click('#hud-menu');
+    await page.click('#gm-howto');
     await page.waitForTimeout(300);
-    check(`${tag}: "?" opens How to play`, await page.locator('#sheet-howto').isVisible());
+    check(`${tag}: the in-game menu opens the moves reference`, (await page.locator('#sheet-howto').isVisible()) || (await page.locator('#futasaku-glass[data-mode="intel"]').isVisible()));
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
     // Sort: the fan stays centred, nothing else moves

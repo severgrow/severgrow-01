@@ -92,8 +92,7 @@
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
-          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="How to play" aria-expanded="false" aria-controls="menu-lessons-list">How to play</button>
-          <div id="menu-lessons-list" class="menu-lessons" hidden></div>
+          <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
           <!-- install button: label and behaviour are set by src/logic/install.ts -->
           <button id="menu-install" class="btn ghost" type="button" aria-label="Add to Home Screen" hidden>Add to Home Screen</button>
@@ -241,7 +240,6 @@
             <button id="tool-targets" class="ctool tr" type="button" aria-pressed="false" aria-label="Their weak links" data-tip="Their weak links: where your opponent is easy to cut"><span class="i" data-icon="target"></span></button>
             <button id="tool-replay" class="ctool bl" type="button" aria-label="Replay your opponent's last turn" data-tip="Replay your opponent's last turn"><span class="i" data-icon="replay"></span></button>
             <button id="tool-skip" class="ctool bl" type="button" hidden aria-label="Skip the animation" data-tip="Skip the animation"><span class="i" data-icon="skip"></span></button>
-            <button id="hint-btn" class="ctool help" type="button" aria-label="How to play" aria-expanded="false" data-tip="How to play">?</button>
             <div id="ctool-tip" class="ctool-tip" role="tooltip" hidden></div>
           </div>
         </div>
@@ -429,7 +427,6 @@
         <p id="go-reason" class="muted"></p>
         <p id="go-break" class="muted small"></p>
         <p id="go-moves" class="muted small" hidden></p>
-        <button id="go-lessons" class="btn link" type="button" hidden>New here? See How to</button>
         <ul id="go-highlights" class="highlights"></ul>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>

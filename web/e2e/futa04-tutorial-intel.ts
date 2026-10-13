@@ -14,6 +14,9 @@ const errors:string[]=[];
 page.on('pageerror',error=>errors.push(error.message));
 const state=()=>page.evaluate(()=>(window as any).__severgrow.state() as State);
 const play=(action:Action,who:0|1=0)=>page.evaluate(([a,p])=>(window as any).__severgrow.playFor(a,p),[action,who] as const);
+/** Wait for the app to finish booting (async UI mounts + the first screen), never a fixed sleep.
+ *  The `severor-ready` event fires once, so poll the `ready` hook and fall back to the event. */
+const waitBoot=(p:import('playwright-core').Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
 const base='http://localhost:4197/';
 try {
   await page.addInitScript(reduced=>{
@@ -26,10 +29,14 @@ try {
     }
   });
   await page.reload();
+  await waitBoot(page);
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
-  // the menu's How to unfolds Full tutorial and the separate lessons
+  // The main menu has exactly one tutorial entry (src/strings.ts HELP.tutorial); it starts
+  // the guided run from its top — there is no lesson list or chapter picker anywhere.
+  assert.equal((await page.locator('#menu-tutorial').textContent())?.trim(), 'Tutorial', 'the single menu entry is named Tutorial');
+  assert.equal(await page.locator('#menu-lessons-list').count(), 0, 'the old How-to lessons list is gone');
+  assert.equal(await page.locator('#hint-btn').count(), 0, 'the floating in-match "?" tool is removed');
   await page.locator('#menu-tutorial').click();
-  await page.locator('#menu-lessons-list [data-lesson="core"]').click();
   await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===51000,undefined,{timeout:10000});
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'YOUR HOME');
   // Dual advance: tapping the highlighted home must work (not only NEXT).
@@ -136,6 +143,12 @@ try {
   await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='UNDO',undefined,{timeout:15000});
   for(let i=0;i<3;i++) {
     await page.waitForFunction(()=>!!(window as any).__severgrow.tutorial(),undefined,{timeout:8000}).catch(()=>{});
+    if(i===2) {
+      // The last guide line points at the reference that replaced the in-match "?".
+      const lastLine=await page.locator('#futasaku-glass .glass-why').textContent();
+      assert.match(lastLine??'',/Match Intel/i,`tutorial's final line points at Match Intel: ${lastLine}`);
+      assert.match(lastLine??'',/How to/i,`tutorial's final line names the How to reference: ${lastLine}`);
+    }
     await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
     await page.waitForTimeout(250);
   }
@@ -161,6 +174,24 @@ try {
   await page.locator('#futa04-help-button').evaluate(element=>(element as HTMLElement).click());
   assert.equal(await page.locator('#futasaku-glass[data-mode="intel"]').isVisible(),true);
   assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'public discarded card art is visible');
+  // Match Intel has two clearly separate tabs: what happened, and the moves reference.
+  assert.equal(await page.locator('#futasaku-glass .intel-tab').count(),2,'Match Intel shows exactly two tab headings');
+  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="intel"]').getAttribute('aria-selected'),'true','tab 1 (what happened) opens first');
+  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').click();
+  assert.equal(await page.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').getAttribute('aria-selected'),'true','the How to tab is selectable');
+  const howto=await page.locator('#futasaku-glass [data-intel-panel="howto"]').innerText();
+  for(const move of ['Grow','Bloom','Strengthen','Bomb','Blast','points'])
+    assert(howto.includes(move),`the moves reference explains ${move}`);
+  assert(!/seed/i.test(howto),'the reference shows no hidden seed');
+  assert.equal(await page.locator('#futasaku-glass .intel-card-wrap').count(),0,'the reference does not mix in the match log');
+  // The pause menu's How to play opens this same reference, not the old sheet.
+  await page.locator('#futasaku-glass .intel-close').click();
+  await page.locator('#hud-menu').click();
+  await page.locator('#gm-howto').click();
+  assert.equal(await page.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),true,'gm-howto opens the Match Intel How to reference');
+  assert.equal(await page.locator('#sheet-howto').isVisible(),false,'FUTASAKU no longer opens the legacy How-to sheet');
+  await page.locator('#futasaku-glass .intel-tab[data-intel-tab="intel"]').click();
+  assert((await page.locator('#futasaku-glass .intel-card-wrap').count())>=1,'back on tab 1 the public card art returns');
   for (const width of [360,390,430]) {
     await page.setViewportSize({width,height:844});
     await page.waitForFunction(w=>{
@@ -200,8 +231,8 @@ try {
   assert.match(await page.locator('#tool-undo').getAttribute('aria-label')??'',/Replay/);
   const desktop=await browser.newPage({viewport:{width:1440,height:900}});
   await desktop.goto(base);
+  await waitBoot(desktop);
   await desktop.locator('#menu-tutorial').click();
-  await desktop.locator('#menu-lessons-list [data-lesson="core"]').click();
   await desktop.locator('#game').waitFor({state:'visible'});
   await desktop.locator('#futasaku-glass').waitFor({state:'visible'});
   const desktopGlass=await desktop.locator('#futasaku-glass').boundingBox();
