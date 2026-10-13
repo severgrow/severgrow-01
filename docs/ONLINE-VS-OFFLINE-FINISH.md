@@ -161,13 +161,33 @@ by the e2e, which reopens the same duel after leaving through each route).
 | Offline finish screen, before → after | `offline-finish-before-390x844.jpg` / `offline-finish-after-390x844.jpg` and the `-1280x800` pair |
 | Online finish screen, after | `online-finish-after-390x844.jpg` / `online-finish-after-1280x800.jpg` (the before is `online-android-390x844-4-finish.jpg` / `online-desktop-chromium-1280x800-4-finish.jpg` from the audit at `f78689b`, where the reason read `Resigned.` and the breakdown/highlights were blank) |
 | Online deadline urgency, red | `online-finish-urgency-red-390x844.jpg` |
+| The **deployed** `/futa0.5/` finish screen, live | `online-finish-live-390x844.jpg` (measured at live `release.json` commit `419a613`) |
 
 The offline pair is captured by seeding the `endgame()` fixture (`web/e2e/positions.ts`) through
 `positionSave()` and playing the remaining turns; note `CHANNEL=futa04` served off `localhost` uses
 the `main2:` storage prefix. The before build is the previous commit `f78689b`.
 
-## 9. Deploy
+## 9. Deploy and live verification
 
 Pushing `futa0.5-online` runs `.github/workflows/futasaku04-preview.yml`, which rebuilds `/futa0.5/`
 alongside Main / futa0.4 / Test2 (their published SHAs are preserved) and writes
-`/futa0.5/release.json` with the new commit. No Edge function and no `pages.yml` change was needed.
+`/futa0.5/release.json` with the new commit. **No Edge function and no `pages.yml` change was
+needed** (no server change at all).
+
+- Deployed and confirmed: `https://severgrow.github.io/severgrow-01/futa0.5/release.json` →
+  `"commit": "419a61320e633452c567c2c7322044dc8c07d96b"` (the exact SHA of this work).
+- **Live end-to-end check** against the deployed build + the live Edge API (one duel, both players):
+  the score bar reads `You` / `Opponent`; the turn pill shows `30 turns left` with no `Level N`; the
+  urgency is hidden with a full day left; a resign gives the loser `You lost` / “You resigned.” and
+  the winner `You won` / “Your opponent resigned.”; the breakdown is filled in; the subtitle is
+  `vs <opponent>`; the highlights are present (3 rows); the offline record line is absent; and
+  Back to menu hides the duel strip. 14/14 pass.
+
+### CI
+
+`CI` on the pushed commit: the **`check` job (typecheck + the whole vitest suite) passed** on a clean
+runner, as did 10 of 11 browser suites (`painting`, `smoke`… see the run). This matters because a
+local `npm run check` at the height of several workers' load went red on **6 per-test timeouts in 4
+CPU-heavy suites** (`tests/bots/levels`, `tests/engine/core-adversarial`, `web/tests/guide`,
+`web/tests/onegame`) — those four pass **29/29 in isolation** on the same tree, so the local red was
+contention, not a defect. The clean-runner `check` job is the honest verdict.
