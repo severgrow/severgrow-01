@@ -246,6 +246,45 @@ suite('real database: schema and migration process', () => {
     );
     expect(rows).toEqual([]);
   });
+
+  it('revokes every write privilege, not only SELECT (P-21)', async () => {
+    const roles = (await pool.query(`select rolname from pg_roles where rolname in ('anon', 'authenticated')`)).rows.map((r) => String(r.rolname));
+    if (roles.length === 0) {
+      console.log('    no anon/authenticated roles — skipping');
+      return;
+    }
+    for (const role of roles) {
+      for (const table of ['matches', 'match_participants', 'match_moves', 'players', 'player_tokens', 'rate_limits', 'device_link_codes']) {
+        for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) {
+          const ok = (await pool.query('select has_table_privilege($1, $2, $3) as ok', [role, table, priv])).rows[0]?.ok;
+          expect(ok, `${role} must not have ${priv} on ${table}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('revokes client-role default privileges for future public objects (P-21 guard)', async () => {
+    // Objects our migrations create are owned by `postgres`, so that role's default ACL governs
+    // them. It must not grant anything to the Supabase client roles.
+    const { rows } = await pool.query(
+      `select case defaclobjtype when 'r' then 'table' when 'S' then 'sequence' when 'f' then 'function' else defaclobjtype::text end as objtype,
+              defaclacl::text as acl
+         from pg_default_acl where defaclnamespace = 'public'::regnamespace and defaclrole = 'postgres'::regrole`,
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    for (const row of rows) {
+      expect(String(row.acl), `${String(row.objtype)} default ACL must not grant anon`).not.toMatch(/\banon=/);
+      expect(String(row.acl), `${String(row.objtype)} default ACL must not grant authenticated`).not.toMatch(/\bauthenticated=/);
+    }
+  });
+
+  it('has the 0004 timeout-grace columns on matches', async () => {
+    const { rows } = await pool.query(
+      `select column_name from information_schema.columns
+        where table_schema = 'public' and table_name = 'matches' and column_name like 'grace%' order by column_name`,
+    );
+    expect(rows.map((r) => String(r.column_name))).toEqual(['grace_extension_ms', 'grace_periods', 'grace_used_seat0', 'grace_used_seat1']);
+  });
 });
 
 suite('real database: storage round-trips', () => {

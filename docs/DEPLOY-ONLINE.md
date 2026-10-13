@@ -216,17 +216,36 @@ The anon key is public by design. Never put the **service_role** key or `DATABAS
 
 Workflow: `.github/workflows/futa05-keepalive.yml` — every 2 days, and on **Run workflow**.
 
-It calls `GET $FUTA05_API_URL/v1/health?db=1` so a real database query runs (helps prevent the free project pausing after ~1 week idle).
+It calls `GET $FUTA05_API_URL/v1/health?db=1` so a real database query runs (helps prevent the free project pausing after ~1 week idle). It is a single job: fails loudly if the `FUTA05_API_URL` variable is missing, then asserts `ok`, `rulesVersion`, `serverNow` and `db.ok`.
+
+**Verified 2026-10-13:** the `FUTA05_API_URL` repository Variable is set to
+`https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel`, and the workflow's exact steps were
+run against the live API: HTTP 200, `db.ok=true` (real Postgres round-trip, ~160 ms), correct
+`rulesVersion`. The missing-variable path prints the clear message and exits 1 — both paths behave
+as designed.
+
+> **Blocker (must be fixed for the schedule to ever fire): the workflow only exists on the
+> `futa0.5-online` branch, not on the default branch (`main`).** GitHub runs `schedule` triggers —
+> and allows `workflow_dispatch` — **only for a workflow file that is present on the default
+> branch**. Until this file is on `main`, the 2-day schedule will never run and
+> `workflow_dispatch` returns 404 (confirmed: `POST …/actions/workflows/futa05-keepalive.yml/
+> dispatches` → `404 Not Found`). No keep-alive run has ever executed. Landing this workflow on the
+> default branch is the owner's/maintainer's call (this worker does not touch `main`).
 
 **If GitHub stops scheduled workflows** (~60 days with no repo activity):
 
 1. GitHub → **Actions** → **futa05-keepalive** → **Enable workflow** (or push any commit).
 2. Optionally click **Run workflow** once.
 
+**If the workflow is missing from Actions entirely** (most likely because it is still only on a
+side branch): copy `.github/workflows/futa05-keepalive.yml` onto the default branch, then
+**Actions → futa05-keepalive → Run workflow**. Verify the repo Variable `FUTA05_API_URL` is still
+set under **Settings → Secrets and variables → Actions → Variables**.
+
 **If the Supabase project is paused:**
 
 1. Dashboard → **FUTASAKU** → **Restore** / resume the project.
-2. Re-run the keep-alive workflow.
+2. Re-run the keep-alive workflow (or click **Run workflow**).
 3. Confirm `…/v1/health?db=1` returns `ok`.
 
 ## Read logs
