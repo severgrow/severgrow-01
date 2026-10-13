@@ -88,12 +88,13 @@ describe('perspective map/unmap', () => {
     expect(() => createPerspective({ me: 1, online: false })).toThrow(/seat 0/);
   });
 
-  it('online turns coach and hidden-deck hints off; Me/Opponent labels', () => {
+  it('online turns coach and hidden-deck hints off; You/Opponent labels', () => {
     for (const seat of [0, 1] as const) {
       const p = onlinePerspective(seat);
       expect(p.coachEnabled).toBe(false);
       expect(p.hiddenDeckHintsEnabled).toBe(false);
-      expect(p.labels.scoreMe).toBe('Me');
+      // The score bar reads the same two words offline does (You : Opponent), one source.
+      expect(p.labels.scoreMe).toBe('You');
       expect(p.labels.scoreOpponent).toBe('Opponent');
       expect(p.labels.captionWho(seat)).toBe('You');
       expect(p.labels.captionWho(seat === 0 ? 1 : 0)).toBe('Opponent');
@@ -324,7 +325,7 @@ describe('OnlineDriver exposes perspective', () => {
     expect(snap.perspective.rotated).toBe(true);
     expect(snap.perspective.coachEnabled).toBe(false);
     expect(snap.perspective.hiddenDeckHintsEnabled).toBe(false);
-    expect(snap.perspective.scoreMeLabel).toBe('Me');
+    expect(snap.perspective.scoreMeLabel).toBe('You');
     expect(snap.view.player).toBe(1);
     const engHome = coordKey(homeCoord(1, state.config));
     const screenHome = coordKey(mirror(parseKey(engHome)));

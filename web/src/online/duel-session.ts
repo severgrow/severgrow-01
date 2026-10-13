@@ -5,7 +5,11 @@ import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { buildSteps } from '../logic/anim.js';
 import type { Step } from '../logic/anim.js';
 import type { Played } from '../logic/session.js';
-import { ONLINE } from '../../../src/strings.js';
+import { breakdownPart } from '../logic/endgame.js';
+import { gameHighlights } from '../logic/highlights.js';
+import { moveSummary, resultReason, resultTitle } from '../logic/log.js';
+import type { Highlight } from '../logic/highlights.js';
+import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
 import { shadowFromView } from './shadow.js';
 import { stepsFromEvents, syncStep } from './steps-from-events.js';
@@ -13,6 +17,22 @@ import { stepsFromEvents, syncStep } from './steps-from-events.js';
 export type OnlinePlayResult =
   | { ok: true; played: Played | null; catchUp: Step[]; finished: boolean }
   | { ok: false; message: string };
+
+/**
+ * Everything the finish screen shows. Deliberately the SAME shape and the same sentences offline
+ * uses (`resultTitle` / `resultReason`), so the two screens cannot drift apart again.
+ */
+export type FinishInfo = {
+  title: string;
+  reason: string;
+  /** The small context line under the title — never a repeat of the reason. */
+  sub: string;
+  scores: [number, number];
+  breakdown: string;
+  /** Already mapped to display seats (0 = me), ready for the shared highlight list. */
+  highlights: Highlight[];
+  moves: string | null;
+};
 
 /**
  * Keeps a display Session-like surface (viewer always 0 / moss) in sync with OnlineDriver.
@@ -28,6 +48,13 @@ export class OnlineSession {
   state: State;
   readonly log: Action[] = [];
   readonly base: State | null = null;
+  /**
+   * The match's whole public event history, fetched once for the finish screen's highlights.
+   * Empty until `loadHistory()` resolves; the server keeps it, so one plain view fetches it all.
+   */
+  private historyEvents: readonly Event[] = [];
+  historyLoaded = false;
+  historyLoading = false;
   private lastCatchUp: Step[] = [];
   /**
    * True from the moment a catch-up replay (the opponent's finished turn) is handed to the page
@@ -119,7 +146,7 @@ export class OnlineSession {
     if (engine.t === 'Draw') {
       const before = this.buildEngineShadow();
       const res = await this.driver.draw(engine);
-      if (!res.ok) return { ok: false, message: res.message ?? 'Draw failed.' };
+      if (!res.ok) return { ok: false, message: res.message ?? ONLINE.errDrawFailed };
       this.refresh();
       const after = this.buildEngineShadow();
       const played: Played = {
@@ -138,7 +165,7 @@ export class OnlineSession {
       const res = await this.driver.throwTurn(engine);
       if (!res.ok) {
         this.refresh();
-        return { ok: false, message: res.message ?? "That turn didn't go through. Your cards are back." };
+        return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
       }
       this.refresh();
       this.log.push(engine);
@@ -150,7 +177,7 @@ export class OnlineSession {
     const beforeDisp = this.cloneState(this.state);
     const beforeEng = this.buildEngineShadow();
     if (!this.driver.draftPlay(engine)) {
-      return { ok: false, message: 'That move is not legal right now.' };
+      return { ok: false, message: ONLINE.errMoveIllegal };
     }
     this.driver.draft().persist();
     const afterEng = this.driver.draft().shadow() ?? beforeEng;
@@ -175,31 +202,50 @@ export class OnlineSession {
 
   async resign(): Promise<OnlinePlayResult> {
     const res = await this.driver.resign();
-    if (!res.ok) return { ok: false, message: res.message ?? 'Resign failed.' };
+    if (!res.ok) return { ok: false, message: res.message ?? ONLINE.errResignFailed };
     this.refresh();
     return { ok: true, played: null, catchUp: this.consumeCatchUp(), finished: true };
   }
 
-  /** Payload for finished screen. */
-  finishInfo(): { title: string; reason: string; scores: [number, number] } | null {
+  /**
+   * One fetch of the match's whole public event history (the server keeps every move). Used only
+   * by the finish screen, so the highlights match offline. Never replays or mutates the live view.
+   */
+  async loadHistory(): Promise<void> {
+    if (this.historyLoaded) return;
+    try {
+      this.historyEvents = await this.driver.history();
+      this.historyLoaded = true;
+    } catch {
+      // Offline / refused: leave the history empty; the screen hides the highlights rather than
+      // showing blank rows.
+      this.historyLoaded = true;
+    }
+  }
+
+  /** Payload for the finished screen — the same sentences and information as offline. */
+  finishInfo(): FinishInfo | null {
     const snap = this.driver.snapshot();
     if (!this.finished) return null;
-    const r = snap.result;
     const scores: [number, number] = [snap.view.score, snap.view.opponentScore];
-    if (!r) return { title: 'Finished', reason: '', scores };
-    const title =
-      r.winner === snap.seat ? 'You won' : r.winner === null ? 'Draw' : 'You lost';
-    const reason =
-      r.reason === 'timeout'
-        ? 'Time ran out.'
-        : r.reason === 'resigned'
-          ? 'Resigned.'
-          : r.reason === 'strangle' || r.reason === 'double_strangle'
-            ? 'Surround.'
-            : r.reason === 'deck_exhaustion' || r.reason === 'turn_limit' || r.reason === 'knock'
-              ? 'Final score.'
-              : '';
-    return { title, reason, scores };
+    const sub = snap.opponentName ? ONLINE.finishSubOpponent(snap.opponentName) : ONLINE.finishSubFallback;
+    const breakdown = RESULT.breakdown(breakdownPart(this.state, 0), breakdownPart(this.state, 1));
+    const r = snap.result;
+    if (!r) return { title: ONLINE.finishedFallback, reason: '', sub, scores, breakdown, highlights: [], moves: null };
+    const history = this.historyEvents;
+    const highlights = gameHighlights(history, snap.seat).map((h) => ({
+      ...h,
+      by: h.by === null ? null : ((h.by === snap.seat ? 0 : 1) as Player),
+    }));
+    return {
+      title: resultTitle(r, snap.seat),
+      reason: resultReason(r, snap.seat),
+      sub,
+      scores,
+      breakdown,
+      highlights,
+      moves: moveSummary(history, snap.seat),
+    };
   }
 
   private buildEngineShadow(): State {

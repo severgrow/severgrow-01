@@ -275,6 +275,11 @@ export const ONLINE_CSS = `
   .duel-hud .duel-opp {
     display: none;
   }
+  .duel-hud .duel-urgency {
+    /* Its own tidy line rather than a truncated word on a narrow phone. */
+    flex-basis: 100%;
+    order: 4;
+  }
   .duel-hud .duel-notice {
     flex-basis: 100%;
     text-align: left;
@@ -293,6 +298,30 @@ export const ONLINE_CSS = `
     order: 0;
   }
 }
+/* Mid-match deadline urgency (owner's choice: urgency only). Nothing is shown with a full day
+   left; amber under 2 hours, red under 15 minutes. It lives INSIDE this strip — the element whose
+   geometry is already proven never to cover the menu button, the brand or the board — and the word
+   itself carries the meaning, so it is never colour alone. It is a role="status" region, so it is
+   announced only when the tone crosses a threshold, never as a ticking clock. */
+.duel-hud .duel-urgency {
+  order: 3;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.duel-hud .duel-urgency[hidden] {
+  display: none;
+}
+.duel-hud .duel-urgency[data-tone='amber'] {
+  color: #d4a24a;
+}
+.duel-hud .duel-urgency[data-tone='red'] {
+  color: var(--c-danger, #e0735c);
+}
+
 /* Presence: a dot plus a word — never colour alone.
    Presence is NOT wired yet (the channel's track() is a deliberate no-op), so the state is always
    "unknown". Showing a dot plus the word "Unknown" is a fabricated, misleading signal — the owner

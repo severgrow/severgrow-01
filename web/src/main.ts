@@ -50,7 +50,7 @@ import {
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import { TIPS, TIPS_KEY, bloomHintGroups, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { finalTurns, scoreBreakdown, turnsLeft } from './logic/endgame.js';
+import { breakdownPart, finalTurns, turnsLeft } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
@@ -142,7 +142,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, OPP, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, ONLINE, OPP, RESULT, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -1756,10 +1756,11 @@ function paintOnlineHudFromSession() {
     const hud = document.getElementById('duel-hud');
     const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo, os.isRevealing);
     renderDuelHud(hud, ui);
+    // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
     const you = document.getElementById('score-you-label');
     const bot = document.getElementById('score-bot-label');
-    if (you) you.textContent = 'Me';
-    if (bot) bot.textContent = 'Opponent';
+    if (you) you.textContent = ONLINE.scoreYou;
+    if (bot) bot.textContent = ONLINE.scoreOpponent;
   });
 }
 
@@ -3066,9 +3067,13 @@ function renderHud() {
   const turnKey = over ? 'over' : `${st.turnPlayer}`;
   if (turnKey !== lastTurnKey && lastTurnKey !== '' && !settings.reduceMotion && settings.speed !== 'skip') anim(turn, [{ opacity: 0.25 }, { opacity: 1 }], { duration: 280 * Math.max(timeScale(), 0.35), easing: 'ease-out' });
   lastTurnKey = turnKey;
+  // Online the duel strip (directly above) already owns the turn word, and there is no bot level:
+  // the pill carries the turn clock only — never a "Level N" that does not exist online.
   turn.innerHTML = over
     ? '<b>Game over</b>'
-    : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
+    : isOnlineDuel()
+      ? `<b>${turnsLeftText(turnsLeft(session.view))}</b>`
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -4324,24 +4329,45 @@ function renderGameOver() {
     const os = getOnlineSession();
     const info = os?.finishInfo() ?? null;
     const show = !!info && !busy() && !gameOverDismissed && !$('game').hidden;
-    if (go.hidden === !show) {
-      /* continue to fill when newly shown */
-    }
     go.hidden = !show;
-    if (!show || !info) return;
-    const won = info.title === 'You won';
-    const draw = info.title === 'Draw';
+    if (!show || !info || !os) return;
+    // The match's whole public history is one fetch; when it lands, re-render so the highlights are
+    // the real ones (offline's are computed from the same event list). Fetched at most once.
+    if (!os.historyLoaded && !os.historyLoading) {
+      os.historyLoading = true;
+      void os.loadHistory().then(() => {
+        os.historyLoading = false;
+        if (isOnlineDuel()) render();
+      });
+    }
+    const won = info.title === RESULT.won;
+    const draw = info.title === RESULT.draw;
     $('go-title').textContent = info.title;
-    $('go-sub').textContent = info.reason || 'Online duel';
-    $('go-rematch').textContent = 'Back to matches';
+    // Context only — never a repeat of the reason (offline shows the level line here).
+    $('go-sub').textContent = info.sub;
+    $('go-reason').textContent = info.reason;
+    $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
+    $('go-break').textContent = info.breakdown;
+    $('go-moves').textContent = info.moves ?? '';
+    $('go-moves').hidden = !info.moves;
+    $('go-highlights').replaceChildren(
+      ...info.highlights.map((h) => {
+        const li = document.createElement('li');
+        li.className = h.by === HUMAN ? 'you' : h.by === BOT ? 'bot' : '';
+        li.innerHTML = `<span class="h-value num">${h.value}</span><span class="h-title">${h.title}</span><span class="h-text">${h.text}</span>`;
+        return li;
+      }),
+    );
+    // The record line counts offline games only — never leak it onto a server match.
+    $('go-stats').textContent = '';
+    $('go-stats').hidden = true;
+    $('go-cut').hidden = true;
+    $('go-rematch').textContent = ONLINE.backToMatches;
     const other = $('go-other');
     other.hidden = false;
-    other.textContent = 'Menu';
+    other.textContent = ONLINE.menuButton;
+    $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
-    $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
-    $('go-cut').hidden = true;
-    $('go-reason').textContent = info.reason;
-    $('go-moves').hidden = true;
     return;
   }
   const st = session?.state;
@@ -4351,11 +4377,10 @@ function renderGameOver() {
   if (!show || !st?.result) return;
   const r = st.result;
   const won = r.winner === HUMAN;
-  $('go-title').textContent = won ? `You beat Level ${gameLevel}!` : resultTitle(r, HUMAN);
-  // No world map yet: every game is practice.
-  $('go-sub').textContent = r.winner === null
-    ? `Draw · Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`
-    : won ? SPROUT.practice : `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+  $('go-title').textContent = won ? RESULT.beatLevel(gameLevel) : resultTitle(r, HUMAN);
+  // The subtitle is context only (which level this was), the same rule the online finish screen
+  // follows — so it never repeats the outcome or the reason below it.
+  $('go-sub').textContent = `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
   other.hidden = false;
@@ -4377,18 +4402,15 @@ function renderGameOver() {
     requestAnimationFrame(tick);
   }
   $('go-cut').hidden = !session?.biggestCut;
-  $('go-share').textContent = 'Share';
+  $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = resultReason(r, HUMAN);
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
   $('go-moves').hidden = !moves;
-  const part = (p: Player) => {
-    const b = scoreBreakdown(st, p);
-    return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
-  };
-  $('go-break').textContent = `You: ${part(HUMAN)} · ${OPP.label}: ${part(BOT)}`;
+  $('go-break').textContent = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
   $('go-stats').textContent = statsLine(stats);
+  $('go-stats').hidden = false;
   $('go-highlights').replaceChildren(
     ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
       const li = document.createElement('li');
@@ -5214,15 +5236,25 @@ $('hand').addEventListener('pointerout', (e) => {
   card?.style.removeProperty('--tilt-x');
   card?.style.removeProperty('--tilt-y');
 });
+/**
+ * The ONE way out of an online duel. Every exit route — the pause menu's Main menu and New game,
+ * the finish screen's Back to menu, Back to matches and Change difficulty, and the lobby's Back —
+ * stops the session through here, so no route can leave the client believing a duel is still open.
+ * The match itself stays on the server: leaving and returning is a resume, never a cancel.
+ */
+function tearDownOnlineDuel(): void {
+  getOnlineSession()?.driver.stop();
+  setOnlineSession(null);
+  onlineResign = null;
+  syncResignMenu();
+  const hud = document.getElementById('duel-hud');
+  if (hud) hud.hidden = true;
+}
+
 bind('go-other', () => {
   $('gameover').hidden = true;
   if (isOnlineDuel()) {
-    getOnlineSession()?.driver.stop();
-    setOnlineSession(null);
-    onlineResign = null;
-    syncResignMenu();
-    const hud = document.getElementById('duel-hud');
-    if (hud) hud.hidden = true;
+    tearDownOnlineDuel();
     showScreen('menu');
     return;
   }
@@ -5260,6 +5292,13 @@ bind('gm-exit-tutorial', () => {
 });
 bind('gm-resume', () => sheet(null));
 bind('gm-new', () => {
+  // Leaving a duel never loses it (the server keeps it and it resumes), so no warning is needed.
+  if (isOnlineDuel()) {
+    sheet(null);
+    tearDownOnlineDuel();
+    showScreen('levels');
+    return;
+  }
   if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
   sheet(null);
   showScreen('levels');
@@ -5269,13 +5308,14 @@ bind('gm-settings', () => sheet('sheet-settings'));
 bind('gm-resign', () => {
   const resign = onlineResign;
   if (!resign) return;
-  if (!window.confirm('Resign this duel?')) return;
+  if (!window.confirm(ONLINE.resignConfirm)) return;
   sheet(null);
   resign();
 });
 bind('gm-main', () => {
   sheet(null);
   fastForward();
+  if (isOnlineDuel()) tearDownOnlineDuel();
   showScreen('menu');
 });
 bind('restart-tutorial', () => {
@@ -5551,12 +5591,7 @@ bind('tool-undo', () => {
 });
 bind('go-rematch', () => {
   if (isOnlineDuel()) {
-    getOnlineSession()?.driver.stop();
-    setOnlineSession(null);
-    onlineResign = null;
-    syncResignMenu();
-    const hud = document.getElementById('duel-hud');
-    if (hud) hud.hidden = true;
+    tearDownOnlineDuel();
     $('gameover').hidden = true;
     void onlineLobbyCtl?.openHub();
     return;
@@ -5567,7 +5602,13 @@ bind('go-board', () => {
   gameOverDismissed = true;
   render();
 });
-bind('go-menu', () => showScreen('menu'));
+bind('go-menu', () => {
+  $('gameover').hidden = true;
+  // Leaving a duel must tear the session down, exactly like Back to matches (the match stays
+  // resumable on the server).
+  if (isOnlineDuel()) tearDownOnlineDuel();
+  showScreen('menu');
+});
 // Overhaul item 20: replay the game's biggest cut (from the board just before it), then come back here
 bind('go-cut', () => {
   const p = session?.biggestCut;
@@ -5586,8 +5627,30 @@ bind('go-cut', () => {
   render();
   void pump();
 });
-// Overhaul item 20: a picture of the result for the share sheet (or saved); nothing is uploaded
+// Overhaul item 20: a picture of the result for the share sheet (or saved); nothing is uploaded.
+// ONLINE builds the card from the online display state, so the button can never be a silent no-op.
 bind('go-share', () => {
+  const onSaved = (r: string) => {
+    if (r === 'saved') $('go-share').textContent = ONLINE.shareSaved;
+  };
+  const os = isOnlineDuel() ? getOnlineSession() : null;
+  if (os) {
+    const info = os.finishInfo();
+    if (!info) return;
+    const hl = info.highlights.filter((h) => h.value > 0).map((h) => `${h.title}: ${h.text}`);
+    void shareCard({
+      game: GAME_TITLE,
+      title: $('go-title').textContent ?? '',
+      sub: $('go-sub').textContent ?? '',
+      score: [info.scores[0], info.scores[1]],
+      highlights: hl,
+      board: os.state.board,
+      radius: os.state.config.boardRadius,
+      cells: os.state.config.board?.cells,
+      me: HUMAN,
+    }).then(onSaved);
+    return;
+  }
   const st = session?.state;
   if (!st?.result) return;
   const hl = gameHighlights(st.history ?? [], HUMAN).filter((h) => h.value > 0).map((h) => `${h.title}: ${h.text}`);
@@ -5601,9 +5664,7 @@ bind('go-share', () => {
     radius: st.config.boardRadius,
     cells: st.config.board?.cells,
     me: HUMAN,
-  }).then((r) => {
-    if (r === 'saved') $('go-share').textContent = 'Saved';
-  });
+  }).then(onSaved);
 });
 
 bind('coach-hide', () => {
@@ -5890,14 +5951,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
   const { DuelClient, browserStorage } = await import('../../server/src/client.js');
   const { duelApiUrl } = await import('./online/config.js');
 
-  const leaveOnline = () => {
-    getOnlineSession()?.driver.stop();
-    setOnlineSession(null);
-    const hud = document.getElementById('duel-hud');
-    if (hud) hud.hidden = true;
-    onlineResign = null;
-    syncResignMenu();
-  };
+  // The lobby's own exits use the same one teardown as every in-game exit route.
+  const leaveOnline = () => tearDownOnlineDuel();
 
   const lobby = m.installOnlineLobby({
     showMenu: () => {

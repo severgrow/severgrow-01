@@ -78,8 +78,8 @@ export type { LobbyUiHooks, OnlineLobbyController } from './lobby-ui.js';
 
 export { ONLINE_CSS } from './online-css.js';
 
-export { presenceWord, deadlineTone, turnWord, fillDuelHud } from './duel-hud.js';
-export type { DuelHudModel } from './duel-hud.js';
+export { presenceWord, deadlineTone, deadlineUrgency, turnWord, fillDuelHud } from './duel-hud.js';
+export type { DeadlineUrgency, DuelHudModel } from './duel-hud.js';
 
 export {
   STARTER_REVEAL_PREFIX,
@@ -94,7 +94,7 @@ export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-brid
 export type { DuelUiModel } from './duel-bridge.js';
 
 export { OnlineSession, onlineSessionFromPayload, catchUpStepsFromDriver } from './duel-session.js';
-export type { OnlinePlayResult } from './duel-session.js';
+export type { FinishInfo, OnlinePlayResult } from './duel-session.js';
 
 export { stepsFromEvent, stepsFromEvents, syncStep } from './steps-from-events.js';
 

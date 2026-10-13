@@ -63,8 +63,9 @@ export type MatchDriverSnapshot = {
     rotated: boolean;
     coachEnabled: boolean;
     hiddenDeckHintsEnabled: boolean;
-    scoreMeLabel: 'Me';
-    scoreOpponentLabel: 'Opponent';
+    /** Score-bar words — the same ones the offline bar uses (see `src/strings.ts`). */
+    scoreMeLabel: string;
+    scoreOpponentLabel: string;
   };
 };
 

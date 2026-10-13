@@ -15,12 +15,14 @@ export type DuelHudModel = {
   notice: string | null;
   finished: boolean;
   finishedTitle: string | null;
+  /** Mid-match deadline urgency. Nothing is shown until the last two hours (absent = nothing). */
+  urgency?: DeadlineUrgency;
 };
 
 export const presenceWord = (p: PresenceStatus): string => {
-  if (p === 'online') return 'Online';
-  if (p === 'away') return 'Away';
-  return 'Unknown';
+  if (p === 'online') return ONLINE.presenceOnline;
+  if (p === 'away') return ONLINE.presenceAway;
+  return ONLINE.presenceUnknown;
 };
 
 /**
@@ -35,6 +37,20 @@ export const deadlineTone = (remainingMs: number | null): 'ok' | 'amber' | 'red'
   return 'ok';
 };
 
+/**
+ * The urgency-only mid-match deadline (owner's choice, P-12): NOTHING with a full day left, amber
+ * under 2 hours, red under 15 minutes. `label` is the visible word (never colour alone); `sr` is
+ * the fuller sentence a screen reader announces, and only when the tone crosses a threshold.
+ */
+export type DeadlineUrgency = { tone: 'amber' | 'red' | null; label: string; sr: string };
+
+export const deadlineUrgency = (remainingMs: number | null): DeadlineUrgency => {
+  const tone = deadlineTone(remainingMs);
+  if (tone === 'amber') return { tone, label: ONLINE.urgencyAmber, sr: ONLINE.urgencyAmberSr };
+  if (tone === 'red') return { tone, label: ONLINE.urgencyRed, sr: ONLINE.urgencyRedSr };
+  return { tone: null, label: '', sr: '' };
+};
+
 export const turnWord = (myTurn: boolean, finished: boolean): string => {
   if (finished) return ONLINE.statusFinished;
   return myTurn ? ONLINE.statusYourTurn : ONLINE.statusTheirTurn;
@@ -45,6 +61,7 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
   const presence = root.querySelector('[data-duel-presence]');
   const turn = root.querySelector('[data-duel-turn]');
   const notice = root.querySelector('[data-duel-notice]');
+  const urgency = root.querySelector<HTMLElement>('[data-duel-urgency]');
   if (name) name.textContent = model.opponentName || ONLINE.opponentFallback;
   if (presence) {
     presence.textContent = presenceWord(model.presence);
@@ -54,5 +71,16 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
   if (notice) {
     notice.textContent = model.notice ?? '';
     (notice as HTMLElement).hidden = !model.notice;
+  }
+  if (urgency) {
+    const { tone, label, sr } = model.urgency ?? deadlineUrgency(null);
+    // Hidden unless the deadline actually matters. The text only changes when the tone crosses a
+    // threshold (hidden → amber → red), so role="status" announces it then, and never ticks.
+    urgency.hidden = tone === null;
+    urgency.textContent = label;
+    if (tone === null) urgency.removeAttribute('data-tone');
+    else urgency.setAttribute('data-tone', tone);
+    if (sr) urgency.setAttribute('aria-label', sr);
+    else urgency.removeAttribute('aria-label');
   }
 };

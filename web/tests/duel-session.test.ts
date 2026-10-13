@@ -270,7 +270,8 @@ describe('OnlineSession turn flow', () => {
     expect(os.finished).toBe(true);
     const info = os.finishInfo();
     expect(info?.title).toBe('You lost');
-    expect(info?.reason).toBe('Resigned.');
+    // Same sentence offline renders for the same result (perspective-aware, one source).
+    expect(info?.reason).toBe('You resigned.');
   });
 });
 

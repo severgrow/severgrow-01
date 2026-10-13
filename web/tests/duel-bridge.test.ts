@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { legalActions, newGame, viewFor, CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type { MatchViewPayload } from '../../server/src/protocol.js';
-import { createOnlineDriver, duelUiFromSnapshot, deadlineTone, presenceWord, turnWord } from '../src/online/index.js';
+import { createOnlineDriver, deadlineTone, deadlineUrgency, duelUiFromSnapshot, presenceWord, turnWord } from '../src/online/index.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
 
@@ -25,6 +25,20 @@ describe('duel HUD helpers', () => {
     expect(deadlineTone(10 * 60_000)).toBe('red');
     expect(turnWord(true, false)).toBe('Your turn');
     expect(turnWord(false, false)).toBe("Opponent's turn");
+  });
+
+  it('urgency is hidden with a full day left, amber under 2h, red under 15m (text, never colour alone)', () => {
+    expect(deadlineUrgency(null)).toEqual({ tone: null, label: '', sr: '' });
+    expect(deadlineUrgency(24 * 3_600_000).tone).toBeNull();
+    expect(deadlineUrgency(3 * 3_600_000).tone).toBeNull();
+    const amber = deadlineUrgency(90 * 60_000);
+    expect(amber.tone).toBe('amber');
+    expect(amber.label.length).toBeGreaterThan(0);
+    expect(amber.sr.length).toBeGreaterThan(0);
+    const red = deadlineUrgency(10 * 60_000);
+    expect(red.tone).toBe('red');
+    expect(red.label.length).toBeGreaterThan(0);
+    expect(red.label).not.toBe(amber.label);
   });
 });
 
@@ -68,7 +82,7 @@ describe('duelUiFromSnapshot', () => {
     const ui = duelUiFromSnapshot(driver.snapshot(), driver.draft().canUndo());
     expect(ui.coachOff).toBe(true);
     expect(ui.hiddenDeckHintsOff).toBe(true);
-    expect(ui.scoreLabel).toBe('Me:Opponent');
+    expect(ui.scoreLabel).toBe('You:Opponent');
     expect(ui.hud.opponentName).toBe('Ash');
     expect(ui.seat).toBe(1);
     expect(driver.perspective().rotated).toBe(true);

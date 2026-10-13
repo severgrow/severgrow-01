@@ -213,8 +213,9 @@
       </header>
       <div id="duel-hud" class="duel-hud" hidden>
         <span class="duel-opp"><b data-duel-opponent></b></span>
-        <span class="duel-turn-slot" data-duel-turn></span>
+        <span class="duel-turn-slot" data-duel-turn aria-live="polite"></span>
         <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
+        <span class="duel-urgency" data-duel-urgency role="status" hidden></span>
         <p class="duel-notice" data-duel-notice hidden></p>
       </div>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>

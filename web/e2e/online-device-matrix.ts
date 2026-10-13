@@ -228,7 +228,7 @@ const verifyCommon = async (
     !hudCreator.hasRemovedChips && !hudJoiner.hasRemovedChips,
     `creator=${hudCreator.hasRemovedChips} joiner=${hudJoiner.hasRemovedChips}`,
   );
-  addCheck(rec, 'perspective labels are Me / Opponent', hudCreator.scoreMeLabel === 'Me' && hudCreator.scoreOppLabel === 'Opponent', `${hudCreator.scoreMeLabel}/${hudCreator.scoreOppLabel}`);
+  addCheck(rec, 'score labels are You / Opponent (same words as offline)', hudCreator.scoreMeLabel === 'You' && hudCreator.scoreOppLabel === 'Opponent', `${hudCreator.scoreMeLabel}/${hudCreator.scoreOppLabel}`);
   addCheck(
     rec,
     'opponent name shown',

@@ -5,6 +5,7 @@ import type { Action, Event, Player, View } from '../../../src/engine/index.js';
 import { DuelClient } from '../../../server/src/client.js';
 import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
+import { ONLINE } from '../../../src/strings.js';
 import { remainingMs } from './clock.js';
 import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
@@ -56,6 +57,11 @@ export type OnlineDriver = {
   skipCatchUp(): void;
   /** Pending opponent events for the animation pipeline (catch-up at 2x in Phase 5). */
   pendingEvents(): readonly Event[];
+  /**
+   * The match's whole public event history, in one fetch (no `since`), for the finish screen's
+   * highlights. Never replays or changes the live view; the caller decides when to ask.
+   */
+  history(): Promise<readonly Event[]>;
   /** Map screen taps / draft hexes back to engine coords before send. */
   toEngineAction(screenAction: Action): Action;
   /** Perspective for this seat (Me=moss, Opponent=lava). */
@@ -201,9 +207,9 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     snapshot,
 
     async draw(action) {
-      if (!player || submitting) return { ok: false, message: 'Busy' };
+      if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
       if (action.t !== 'Draw') {
-        return { ok: false, message: 'Only a Draw commits immediately.' };
+        return { ok: false, message: ONLINE.errDrawOnly };
       }
       submitting = true;
       try {
@@ -255,11 +261,11 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     },
 
     async throwTurn(endAct) {
-      if (!player || submitting) return { ok: false, message: 'Busy' };
+      if (!player || submitting) return { ok: false, message: ONLINE.errBusy };
       // A turn ends with EndAct (Grow step done, or empty hand) and, when there is a card
       // left, the Discard that finishes it. Both are submitted as the same atomic batch.
       if (endAct.t !== 'EndAct' && endAct.t !== 'Discard') {
-        return { ok: false, message: 'Throw must be EndAct or Discard.' };
+        return { ok: false, message: ONLINE.errThrowShape };
       }
       submitting = true;
       const requestId = newRequestId();
@@ -279,7 +285,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
           if (!outcome.keepDraft) {
             draft.clear();
             if (outcome.player) applyView(outcome.player, outcome.player.serverNow);
-            notice = "That turn didn't go through. Your cards are back.";
+            notice = ONLINE.errTurnFailed;
           } else {
             notice = outcome.message;
           }
@@ -312,9 +318,15 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
         }
         return { ok: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Resign failed.';
+        const message = error instanceof Error ? error.message : ONLINE.errResignFailed;
         return { ok: false, message };
       }
+    },
+
+    /** One fetch of the whole public event history (no `since`) — used only by the finish screen. */
+    async history() {
+      const res = await options.client.getState(options.token, options.matchId);
+      return res.player.events;
     },
 
     skipCatchUp() {

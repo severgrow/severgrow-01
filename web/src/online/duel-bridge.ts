@@ -1,9 +1,9 @@
 // Phase 5 — bridge OnlineDriver snapshots to the shared board/hand UI (perspective applied).
 
 import type { Action, Event, View } from '../../../src/engine/index.js';
-import { ONLINE } from '../../../src/strings.js';
+import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
-import { fillDuelHud } from './duel-hud.js';
+import { deadlineUrgency, fillDuelHud } from './duel-hud.js';
 import type { DuelHudModel } from './duel-hud.js';
 import type { MatchDriverSnapshot } from './types.js';
 
@@ -58,11 +58,12 @@ export const duelUiFromSnapshot = (
       finished,
       finishedTitle: finished
         ? snap.result?.winner === snap.seat
-          ? 'You won'
+          ? RESULT.won
           : snap.result?.winner === null
-            ? 'Draw'
-            : 'You lost'
+            ? RESULT.draw
+            : RESULT.lost
         : null,
+      urgency: deadlineUrgency(snap.remainingMs),
     },
   };
 };
@@ -76,7 +77,7 @@ export const playScreenAction = async (
   if (engine.t === 'Draw') return driver.draw(engine);
   if (engine.t === 'EndAct' || engine.t === 'Discard') return driver.throwTurn(engine);
   const ok = driver.draftPlay(engine);
-  return ok ? { ok: true } : { ok: false, message: 'That move is not legal right now.' };
+  return ok ? { ok: true } : { ok: false, message: ONLINE.errMoveIllegal };
 };
 
 export const renderDuelHud = (root: HTMLElement | null, model: DuelUiModel): void => {

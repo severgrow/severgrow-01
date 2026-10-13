@@ -23,6 +23,7 @@ import type {
   Tile,
   View,
 } from '../../../src/engine/index.js';
+import { ONLINE } from '../../../src/strings.js';
 import { centerOf } from '../ui/geom.js';
 
 /** Fields both seats must see the same (public match facts). */
@@ -57,8 +58,8 @@ export type PerspectiveLabels = {
   opponent: 'Opponent';
   you: 'You';
   /** Score bar labels: Me left, Opponent right. */
-  scoreMe: 'Me';
-  scoreOpponent: 'Opponent';
+  scoreMe: string;
+  scoreOpponent: string;
   /** "12:8" style pair; captions use You / Opponent separately. */
   scorePair: (meScore: number, oppScore: number) => string;
   captionWho: (enginePlayer: Player) => 'You' | 'Opponent';
@@ -280,8 +281,8 @@ export const createPerspective = (options: PerspectiveOptions): Perspective => {
     me: 'Me',
     opponent: 'Opponent',
     you: 'You',
-    scoreMe: 'Me',
-    scoreOpponent: 'Opponent',
+    scoreMe: ONLINE.scoreYou,
+    scoreOpponent: ONLINE.scoreOpponent,
     scorePair: (meScore, oppScore) => `${meScore}:${oppScore}`,
     captionWho: (enginePlayer) => (enginePlayer === me ? 'You' : 'Opponent'),
     homeKind: (enginePlayer) => (enginePlayer === me ? 'tree' : 'volcano'),
