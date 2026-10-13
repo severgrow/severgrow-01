@@ -75,6 +75,11 @@ try {
     userAgent:
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
   });
+  // Wait until the app has booted (the invitation module is mounted), then ask for it.
+  await ios.page.waitForFunction(
+    () => (window as unknown as { __severgrow?: { ready?: () => boolean } }).__severgrow?.ready?.() === true,
+    { timeout: 40_000 },
+  );
   await ios.page.evaluate(() => (window as unknown as { __severgrow?: { showInstall?: () => void } }).__severgrow?.showInstall?.());
   await ios.page.waitForSelector(PROMPT, { timeout: 10_000 });
   check(await ios.page.locator('#install-steps').isVisible(), 'iOS: the two-step instruction is shown');
