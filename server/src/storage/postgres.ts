@@ -214,18 +214,11 @@ const runCommit = async (client: PgClient, input: {
   let match = rowToMatch(matchRow);
   const expiry = await applyExpiryOnLockedRow(client, match, input.now);
   match = expiry.match;
-  let expiryUpdated = expiry.updated;
+  const expiryUpdated = expiry.updated;
 
-  if (match.status === 'finished' && match.result?.reason === 'timeout') {
-    return await endCommitTx(client, true, { ok: false, code: 'TIMED_OUT', reason: 'This turn timed out.' });
-  }
-  if (match.status === 'finished') {
-    return await endCommitTx(client, expiryUpdated, { ok: false, code: 'MATCH_FINISHED', reason: 'This match is over.' });
-  }
-  if (match.status === 'waiting') {
-    return await endCommitTx(client, expiryUpdated, { ok: false, code: 'MATCH_NOT_ACTIVE', reason: 'Waiting for an opponent to join.' });
-  }
-
+  // Identity and idempotency come BEFORE the lifecycle checks: a client that retries the very
+  // request that ended the game (its requestId is stable) must get the stored outcome back, not a
+  // confusing MATCH_FINISHED. A *new* request on a finished match is still rejected below.
   const seatRow = await client.query('select * from match_participants where match_id = $1 and player_id = $2', [
     input.matchId,
     input.playerId,
@@ -260,6 +253,16 @@ const runCommit = async (client: PgClient, input: {
     return { ok: true, replayed: true, match: copy(match), move: copy(last), moves: copy(batchMoves) };
   }
 
+  if (match.status === 'finished' && match.result?.reason === 'timeout') {
+    return await endCommitTx(client, true, { ok: false, code: 'TIMED_OUT', reason: 'This turn timed out.' });
+  }
+  if (match.status === 'finished') {
+    return await endCommitTx(client, expiryUpdated, { ok: false, code: 'MATCH_FINISHED', reason: 'This match is over.' });
+  }
+  if (match.status === 'waiting') {
+    return await endCommitTx(client, expiryUpdated, { ok: false, code: 'MATCH_NOT_ACTIVE', reason: 'Waiting for an opponent to join.' });
+  }
+
   const conflictRows = await client.query(
     'select * from match_moves where match_id = $1 and (request_id = $2 or request_id like $3)',
     [input.matchId, input.requestId, `${input.requestId}#%`],
@@ -287,6 +290,11 @@ const runCommit = async (client: PgClient, input: {
   let current = match;
 
   for (let i = 0; i < input.steps; i++) {
+    // The game can end *inside* a batch: the browser sends [...draft, EndAct], and a
+    // Strangle-winning Bloom is a draft action. Apply the move that ended the game and drop the
+    // rest of the turn instead of rejecting the whole batch (which lost the winning move and left
+    // the match active forever). A batch that starts on a finished match is rejected before the loop.
+    if (current.status === 'finished') break;
     const decision = input.decideAt(copy(current), seat, i);
     if (decision.kind === 'reject') {
       return await endCommitTx(client, expiryUpdated, { ok: false, code: decision.code, reason: decision.reason });

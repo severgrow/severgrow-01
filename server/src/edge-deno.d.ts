@@ -17,6 +17,8 @@ declare module 'postgres' {
     prepare?: boolean;
     max?: number;
     idle_timeout?: number;
+    /** Recycle a connection after this many seconds (postgres.js `max_lifetime`). */
+    max_lifetime?: number;
     connect_timeout?: number;
     ssl?: 'require' | boolean | object;
   };

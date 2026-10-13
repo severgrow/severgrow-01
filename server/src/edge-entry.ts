@@ -33,8 +33,19 @@ const buildApp = async (): Promise<(req: Request) => Promise<Response>> => {
   }
   const sql = postgres(databaseUrl, {
     prepare: false,
-    max: 1,
-    idle_timeout: 20,
+    // Two connections. A single connection (max: 1) is shared by every query, so when the Edge
+    // runtime drops an invocation mid-transaction (`Shutdown … EarlyDrop`) the next query can run
+    // inside that leftover transaction and read a stale snapshot — which showed up as the two seats
+    // disagreeing about whose turn it was. But a large pool is not free either: every warm Edge
+    // isolate keeps `max` idle connections, and a burst of isolates exhausted the project's
+    // connection slots (Postgres "remaining connection slots are reserved for the SUPERUSER
+    // attribute"), which made the live API answer 500 for everyone. Two is the balance: a poisoned
+    // connection is not immediately reused, yet the footprint stays small. The durable fix is the
+    // Transaction pooler URI (port 6543) on the DATABASE_URL secret.
+    max: 2,
+    idle_timeout: 15,
+    // Recycle connections so a connection wedged by a dropped invocation cannot linger.
+    max_lifetime: 120,
     connect_timeout: 10,
     ssl: 'require',
   });

@@ -332,16 +332,10 @@ export class MemoryStorage implements Storage {
     // ONE expiry decision point inside the lock.
     stored = this.expiryDecision(stored, input.now);
     this.matches.set(input.matchId, copy(stored));
-    if (stored.status === 'finished' && stored.result?.reason === 'timeout') {
-      return { ok: false, code: 'TIMED_OUT', reason: 'This turn timed out.' };
-    }
-    if (stored.status === 'finished') {
-      return { ok: false, code: 'MATCH_FINISHED', reason: 'This match is over.' };
-    }
-    if (stored.status === 'waiting') {
-      return { ok: false, code: 'MATCH_NOT_ACTIVE', reason: 'Waiting for an opponent to join.' };
-    }
 
+    // Identity and idempotency come BEFORE the lifecycle checks: a client that retries the very
+    // request that ended the game (its requestId is stable) must get the stored outcome back, not a
+    // confusing MATCH_FINISHED. A *new* request on a finished match is still rejected below.
     const participants = this.participants.get(input.matchId) ?? [];
     const participant = participants.find((p) => p.playerId === input.playerId);
     if (!participant) return { ok: false, code: 'NOT_A_PARTICIPANT', reason: 'You are not in this match.' };
@@ -359,6 +353,16 @@ export class MemoryStorage implements Storage {
       return { ok: true, replayed: true, match: copy(stored), move: copy(last), moves: copy(batchMoves) };
     }
 
+    if (stored.status === 'finished' && stored.result?.reason === 'timeout') {
+      return { ok: false, code: 'TIMED_OUT', reason: 'This turn timed out.' };
+    }
+    if (stored.status === 'finished') {
+      return { ok: false, code: 'MATCH_FINISHED', reason: 'This match is over.' };
+    }
+    if (stored.status === 'waiting') {
+      return { ok: false, code: 'MATCH_NOT_ACTIVE', reason: 'Waiting for an opponent to join.' };
+    }
+
     for (const m of log) {
       if (m.requestId === input.requestId || m.requestId.startsWith(`${input.requestId}#`)) {
         if (m.seat !== seat) return { ok: false, code: 'REQUEST_ID_CONFLICT', reason: 'That request id belongs to another move.' };
@@ -373,6 +377,12 @@ export class MemoryStorage implements Storage {
     let current = stored;
 
     for (let i = 0; i < input.steps; i++) {
+      // The game can end *inside* a batch: the browser sends [...draft, EndAct], and a
+      // Strangle-winning Bloom is a draft action. Apply the move that ended the game and drop
+      // the rest of the turn instead of rejecting the whole batch (which lost the winning move
+      // and left the match active forever). A batch that starts on a finished match is still
+      // rejected above, before the loop.
+      if (current.status === 'finished') break;
       const decision = input.decideAt(copy(current), seat, i);
       if (decision.kind === 'reject') return { ok: false, code: decision.code, reason: decision.reason };
 
