@@ -118,7 +118,7 @@ suites (they use an in-memory `MatchService` or a stubbed `duel-stub.invalid` AP
 - `menu-*.png` — main menu with the single "Tutorial" entry
 - `online-hub-*.png` — the "Play online" submenu
 - `invite-*.png` — the created-duel invite screen
-- `duel-chip-*.png` — the live duel board with the who-starts chip
+- `duel-strip-*.png` — the live duel board with the trimmed status strip (no Resign / who-starts / deadline chips)
 - `match-intel-howto-*.png` — Match Intel on its "How to" tab
 - `cockpit-glow-*.png` — the cockpit panel with the reflected-light optics
 

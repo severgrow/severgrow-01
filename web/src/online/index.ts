@@ -86,10 +86,9 @@ export {
   starterRevealKey,
   hasStarterRevealed,
   markStarterRevealed,
-  starterChip,
   shouldPlayStarterLottery,
 } from './starter-reveal.js';
-export type { StarterChipModel, StarterRevealContext } from './starter-reveal.js';
+export type { StarterRevealContext } from './starter-reveal.js';
 
 export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-bridge.js';
 export type { DuelUiModel } from './duel-bridge.js';

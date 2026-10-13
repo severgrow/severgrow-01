@@ -848,15 +848,16 @@ export type Hud = {
   turn: string;
   opponent: string;
   presence: string;
-  deadline: string;
-  deadlineTone: string;
   scoreMe: string;
   scoreOpp: string;
   scoreMeLabel: string;
   scoreOppLabel: string;
   notice: string;
   hudVisible: boolean;
-  resignVisible: boolean;
+  /** Resign moved into the pause menu after the HUD trim; this is the live `#gm-resign` state. */
+  resignInMenu: boolean;
+  /** True when the trimmed strip still carries a deadline/who-starts chip it should not have. */
+  hasRemovedChips: boolean;
   revisionText: string;
 };
 
@@ -865,24 +866,48 @@ export const readHud = async (session: Session): Promise<Hud> =>
     // No named inner functions here on purpose: tsx/esbuild rewrites them with a `__name` helper
     // that does not exist in the page, which would break page.evaluate.
     const hud = document.getElementById('duel-hud');
-    const deadline = document.querySelector('[data-duel-deadline]');
-    const resign = document.getElementById('duel-resign') as HTMLButtonElement | null;
+    const resign = document.getElementById('gm-resign') as HTMLButtonElement | null;
     return {
       turn: (document.querySelector('#duel-hud [data-duel-turn]')?.textContent ?? '').trim(),
       opponent: (document.querySelector('#duel-hud [data-duel-opponent]')?.textContent ?? '').trim(),
       presence: (document.querySelector('#duel-hud [data-duel-presence]')?.textContent ?? '').trim(),
-      deadline: (document.querySelector('#duel-hud [data-duel-deadline]')?.textContent ?? '').trim(),
-      deadlineTone: deadline?.getAttribute('data-tone') ?? '',
       scoreMe: (document.querySelector('#score-you')?.textContent ?? '').trim(),
       scoreOpp: (document.querySelector('#score-bot')?.textContent ?? '').trim(),
       scoreMeLabel: (document.querySelector('#score-you-label')?.textContent ?? '').trim(),
       scoreOppLabel: (document.querySelector('#score-bot-label')?.textContent ?? '').trim(),
       notice: (document.querySelector('#duel-hud [data-duel-notice]')?.textContent ?? '').trim(),
       hudVisible: !!hud && !hud.hidden,
-      resignVisible: !!resign && !resign.hidden,
+      resignInMenu: !!resign && !resign.hidden,
+      hasRemovedChips: !!document.querySelector('#duel-hud [data-duel-deadline], #duel-hud [data-duel-starter], #duel-hud #duel-resign'),
       revisionText: (document.querySelector('#duel-hud [data-duel-revision]')?.textContent ?? '').trim(),
     };
   });
+
+/**
+ * The turn deadline now lives in the lobby match list (the duel strip no longer shows it). Reads
+ * the row in a separate tab so the running duel is untouched; returns the label plus whether the
+ * last-two-hours warning is present.
+ */
+export const readMatchListDeadline = async (
+  session: Session,
+  matchId: string,
+): Promise<{ time: string; warned: boolean }> => {
+  const page = await session.context.newPage();
+  try {
+    await page.goto(LIVE_APP, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await waitHidden(page, '#menu');
+    await waitHidden(page, '#menu-online', 30_000);
+    await page.click('#menu-online');
+    await waitHidden(page, '#online-hub', 30_000);
+    const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
+    await row.waitFor({ state: 'visible', timeout: 25_000 });
+    const time = ((await row.locator('.online-row-time').textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    const warned = (await row.locator('.online-row-time small').count()) > 0;
+    return { time, warned };
+  } finally {
+    await page.close().catch(() => undefined);
+  }
+};
 
 export const readDisplayState = async (
   session: Session,
@@ -1130,16 +1155,23 @@ export const hasDraft = async (session: Session): Promise<boolean> =>
   return found;
 })()`);
 
-/** Resign from a session's duel (the page's confirm() is stubbed at context creation). */
+/**
+ * Resign from a session's duel through the in-game pause menu (the page's confirm() is stubbed at
+ * context creation). The top-row Resign control was removed in the HUD trim.
+ */
 export const resign = async (session: Session, timeout = 30_000): Promise<boolean> => {
   const { page } = session;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await page.evaluate(`(() => {
-        const button = document.getElementById('duel-resign');
-        if (button) { button.hidden = false; button.click(); }
+      await page.click('#hud-menu');
+      await page.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
+      const clicked = await page.evaluate(`(() => {
+        const button = document.getElementById('gm-resign');
+        if (!button || button.hidden) return false;
+        button.click();
         return true;
       })()`);
+      if (!clicked) throw new Error('no Resign in the pause menu');
       await page.waitForFunction(
         () => {
           const go = document.getElementById('gameover');

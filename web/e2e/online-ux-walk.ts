@@ -223,13 +223,26 @@ try {
   check('duel: B HUD visible', await B.locator('#duel-hud:not([hidden])').isVisible());
   const oppName = ((await A.locator('[data-duel-opponent]').textContent().catch(() => '')) ?? '').trim();
   const presenceWord = ((await A.locator('[data-duel-presence]').textContent().catch(() => '')) ?? '').trim();
-  const deadline = ((await A.locator('[data-duel-deadline]').textContent().catch(() => '')) ?? '').trim();
   check('duel: opponent name shown', oppName.length > 0, oppName);
   check('duel: presence status shown', /online|away|unknown/i.test(presenceWord), presenceWord);
-  // The 24h turn clock is shown as a duration (never a wall-clock time — P-19).
-  check('duel: turn deadline shown as a duration', /\d+\s*(d|h|m)/i.test(deadline) && !/\d:\d\d/.test(deadline), deadline);
-  const hudClip = await clipped(A, '#duel-hud [data-duel-opponent], #duel-hud [data-duel-turn], #duel-hud [data-duel-deadline]');
+  // The strip was trimmed: Resign, who-starts and the deadline are gone from the duel screen.
+  check('duel: the removed chips are gone from the strip', (await A.locator('#duel-hud [data-duel-deadline], #duel-hud [data-duel-starter], #duel-hud #duel-resign').count()) === 0);
+  const hudClip = await clipped(A, '#duel-hud [data-duel-opponent], #duel-hud [data-duel-turn], #duel-hud [data-duel-presence]');
   if (hudClip.length) finding('FIX', `duel HUD text clipped: ${hudClip.join(' | ')}`);
+
+  // The deadline now lives only in the match list; open the pause menu -> Main menu -> matches and
+  // check the row still shows the time left (a duration, never a wall-clock time — P-19).
+  await A.click('#hud-menu');
+  await A.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
+  await A.click('#gm-main');
+  await A.waitForSelector('#menu:not([hidden])', { timeout: 15_000 });
+  await A.click('#menu-online');
+  await A.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
+  const rowTime = ((await A.locator('#online-matches .online-row-time').first().textContent().catch(() => '')) ?? '').trim();
+  check('lobby: the deadline is still in the match list as a duration', /\d+\s*(d|h|m)/i.test(rowTime) && !/\d:\d\d/.test(rowTime), rowTime);
+  await A.locator('#online-matches li').first().click();
+  await A.waitForSelector('#game:not([hidden])', { timeout: 25_000 });
+  await A.waitForSelector('#duel-hud:not([hidden])', { timeout: 20_000 });
 
   // --- play a full turn through the UI, both seats if needed ---
   const turnTextA = ((await hudTurn(A)) ?? '').trim();
@@ -255,11 +268,16 @@ try {
     await actor.bringToFront().catch(() => undefined);
   }
 
-  // --- resign -> finished ---
+  // --- resign from the pause menu -> finished (the top-row Resign control is gone) ---
   await A.evaluate(() => {
     (window as unknown as { confirm: () => boolean }).confirm = () => true;
   });
-  await A.evaluate(() => (document.getElementById('duel-resign') as HTMLButtonElement).click());
+  await A.click('#hud-menu');
+  await A.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
+  await A.evaluate(() => {
+    const btn = document.getElementById('gm-resign') as HTMLButtonElement | null;
+    if (btn && !btn.hidden) btn.click();
+  });
   await A.waitForFunction(() => {
     const go = document.getElementById('gameover');
     const title = document.getElementById('go-title')?.textContent ?? '';

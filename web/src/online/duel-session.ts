@@ -4,8 +4,6 @@ import type { Action, Event, Player, State, View } from '../../../src/engine/ind
 import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { buildSteps } from '../logic/anim.js';
 import type { Step } from '../logic/anim.js';
-import { EMPTY_SEL, pendingAction, tapCard, tapHex, tapKind } from '../logic/interaction.js';
-import type { Sel } from '../logic/interaction.js';
 import type { Played } from '../logic/session.js';
 import { ONLINE } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
@@ -19,15 +17,17 @@ export type OnlinePlayResult =
 /**
  * Keeps a display Session-like surface (viewer always 0 / moss) in sync with OnlineDriver.
  * UI taps use display coords; server always receives engine coords.
+ *
+ * Selection is NOT owned here. The page drives the shared offline `Session` (logic/session.ts)
+ * for taps, drag and preview, so online and offline run one interaction code path. This class only
+ * tracks the committed turn/draft and the replay gate.
  */
 export class OnlineSession {
   readonly kind = 'online' as const;
-  sel: Sel = EMPTY_SEL;
   /** Display-space state (Me = seat mapped to player 0). */
   state: State;
   readonly log: Action[] = [];
   readonly base: State | null = null;
-  private drawn: Action | null = null;
   private lastCatchUp: Step[] = [];
   /**
    * True from the moment a catch-up replay (the opponent's finished turn) is handed to the page
@@ -60,12 +60,6 @@ export class OnlineSession {
     return snap.legal.map((a) => this.driver.perspective().mapActionToScreen(a));
   }
 
-  get pending(): Action | null {
-    if (this.revealing) return null;
-    if (this.drawn && this.legal.some((a) => same(a, this.drawn!))) return this.drawn;
-    return this.legal.length ? pendingAction(this.view, this.legal, this.sel) : null;
-  }
-
   get canUndo(): boolean {
     return !this.revealing && this.driver.draft().canUndo();
   }
@@ -91,39 +85,9 @@ export class OnlineSession {
     return snap.status === 'finished' || snap.view.phase === 'GAME_OVER';
   }
 
-  preset(a: Action | null) {
-    if (this.revealing) return;
-    this.drawn = a && this.legal.some((x) => same(x, a)) ? a : null;
-  }
-  get presetMove(): Action | null {
-    return this.drawn;
-  }
-
-  tapCard(id: number) {
-    if (this.revealing) return;
-    this.drawn = null;
-    this.sel = tapCard(this.view, this.legal, this.sel, id);
-  }
-  tapHex(key: string) {
-    if (this.revealing) return;
-    this.drawn = null;
-    this.sel = tapHex(this.view, this.legal, this.sel, key);
-  }
-  tapKind(kind: string) {
-    if (this.revealing) return;
-    this.drawn = null;
-    this.sel = tapKind(this.sel, kind);
-  }
-  cancel() {
-    this.drawn = null;
-    this.sel = EMPTY_SEL;
-  }
-
-  /** Sync display board/hand from driver (after server view or draft change). */
+  /** Sync the display board/hand from the driver (after a server view or a draft change). */
   refresh() {
     this.state = this.buildDisplayState();
-    this.sel = EMPTY_SEL;
-    this.drawn = null;
   }
 
   /** Take catch-up steps since last consume (opponent / own committed turn). */
@@ -191,8 +155,6 @@ export class OnlineSession {
     this.driver.draft().persist();
     const afterEng = this.driver.draft().shadow() ?? beforeEng;
     this.state = this.driver.perspective().toDisplayState(afterEng);
-    this.sel = EMPTY_SEL;
-    this.drawn = null;
     this.log.push(engine);
     const played: Played = {
       before: beforeDisp,
@@ -216,12 +178,6 @@ export class OnlineSession {
     if (!res.ok) return { ok: false, message: res.message ?? 'Resign failed.' };
     this.refresh();
     return { ok: true, played: null, catchUp: this.consumeCatchUp(), finished: true };
-  }
-
-  confirm(): Promise<OnlinePlayResult> | null {
-    const a = this.pending;
-    if (!a) return null;
-    return this.play(a);
   }
 
   /** Payload for finished screen. */
@@ -259,8 +215,6 @@ export class OnlineSession {
     return JSON.parse(JSON.stringify(s)) as State;
   }
 }
-
-const same = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 
 const mapStepDisplay = (step: Step, driver: OnlineDriver): Step => {
   const p = driver.perspective();

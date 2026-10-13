@@ -489,6 +489,12 @@ function syncTutorialMenuExit() {
   }
 }
 
+/** The pause menu's Resign belongs to an open online duel only; it is reached with one confirm. */
+function syncResignMenu() {
+  const btn = document.getElementById('gm-resign') as HTMLButtonElement | null;
+  if (btn) btn.hidden = !(isOnlineDuel() && !!onlineResign);
+}
+
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
   const on = !!coach.tutorial;
@@ -507,6 +513,7 @@ function sheet(id: string | null) {
   if (id === 'sheet-menu') {
     setPaused(true);
     syncTutorialMenuExit();
+    syncResignMenu();
     if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
@@ -1701,12 +1708,14 @@ async function humanPlayOnline(a: Action) {
   if (!result.ok) {
     caption(result.message, null, 'info');
     os.refresh();
-    syncSessionFromOnline();
+    // The move did not land: drop the stale taps so the board and the picks agree again.
+    syncSessionFromOnline(true);
     paintOnlineHudFromSession();
     render();
     return;
   }
-  syncSessionFromOnline();
+  // A move landed: clear the selection, exactly as the offline Session.play() does.
+  syncSessionFromOnline(true);
   if (result.played) {
     // Mid-turn / Draw: animate locally; do not run the bot scheduler.
     let displayEvent = IS_FUTA04 ? displayEventForPlay(result.played.before, result.played.after, result.played.steps, HUMAN) : null;
@@ -1733,7 +1742,6 @@ async function humanPlayOnline(a: Action) {
     const next = session.legal.find((x) => x.t === 'PlayFruit');
     if (next) {
       session.tapCard(next.card);
-      getOnlineSession()?.tapCard(next.card);
       render();
     }
   }
@@ -2678,12 +2686,27 @@ const myTurn = () => {
   return !!session && session.state.actor === HUMAN && session.state.phase !== 'GAME_OVER';
 };
 
-/** Keep the shared Session board in sync with the online display state (Me = moss). */
-const syncSessionFromOnline = () => {
+/** The step a position is in: a new turn, phase or acting player means the step changed. */
+const stepKeyOf = (state: State | null | undefined): string =>
+  state ? `${state.turnNumber}|${state.phase}|${state.actor}|${state.turnPlayer}` : '';
+
+/**
+ * Keep the shared Session board in sync with the online display state (Me = moss).
+ *
+ * A poll or a ping re-sync must NOT throw away the taps the player has made: exactly like the
+ * offline game, the transient selection survives a re-render and is cleared only by a committed
+ * move or a step change. Pass `resetSelection` true after a move actually lands (or is taken back).
+ */
+const syncSessionFromOnline = (resetSelection = false) => {
   const os = getOnlineSession();
   if (!os) return;
+  const prev = session;
+  const keepSelection = !resetSelection && !!prev && stepKeyOf(prev.state) === stepKeyOf(os.state);
+  const keptSel = keepSelection ? { ...prev!.sel } : null;
+  const keptPreset = keepSelection ? prev!.presetMove : null;
   session = new Session(os.state, HUMAN, [...os.log], os.base);
-  session.sel = { ...os.sel };
+  if (keptSel) session.sel = keptSel;
+  if (keptPreset) session.preset(keptPreset);
 };
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
@@ -4405,7 +4428,7 @@ function undoMove() {
   if (isOnlineDuel()) {
     const os = getOnlineSession();
     if (!os || !os.undo()) return;
-    syncSessionFromOnline();
+    syncSessionFromOnline(true);
     paintOnlineHudFromSession();
   } else if (!session.undo()) return;
   // Overhaul item 9: the move runs backwards (its tiles sink away, cut tiles come back),
@@ -5196,8 +5219,8 @@ bind('go-other', () => {
   if (isOnlineDuel()) {
     getOnlineSession()?.driver.stop();
     setOnlineSession(null);
-    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
-    if (resignBtn) resignBtn.hidden = true;
+    onlineResign = null;
+    syncResignMenu();
     const hud = document.getElementById('duel-hud');
     if (hud) hud.hidden = true;
     showScreen('menu');
@@ -5243,6 +5266,13 @@ bind('gm-new', () => {
 });
 bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
+bind('gm-resign', () => {
+  const resign = onlineResign;
+  if (!resign) return;
+  if (!window.confirm('Resign this duel?')) return;
+  sheet(null);
+  resign();
+});
 bind('gm-main', () => {
   sheet(null);
   fastForward();
@@ -5523,8 +5553,8 @@ bind('go-rematch', () => {
   if (isOnlineDuel()) {
     getOnlineSession()?.driver.stop();
     setOnlineSession(null);
-    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
-    if (resignBtn) resignBtn.hidden = true;
+    onlineResign = null;
+    syncResignMenu();
     const hud = document.getElementById('duel-hud');
     if (hud) hud.hidden = true;
     $('gameover').hidden = true;
@@ -5766,6 +5796,10 @@ let appReady = false;
 (window as unknown as Record<string, unknown>).__severgrow = {
   state: () => session?.state ?? null,
   pending: () => session?.pending ?? null,
+  /** The live tap selection (the same object offline uses), for interaction tests. */
+  sel: () => (session?.sel ? { ...session.sel } : null),
+  /** The legal moves the page is offering right now (display coords), for interaction tests. */
+  legal: () => (session ? [...session.legal] : []),
   canUndo: () => !!session?.canUndo,
   /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
   pickKind: (kind: string) => {
@@ -5842,6 +5876,8 @@ else showScreen('menu');
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
 type OnlineLobbyCtl = { openHub(): Promise<void> };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
+/** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
+let onlineResign: (() => void) | null = null;
 void import('./online/lobby-ui.js').then(async (m) => {
   const {
     createOnlineDriver,
@@ -5859,8 +5895,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
     setOnlineSession(null);
     const hud = document.getElementById('duel-hud');
     if (hud) hud.hidden = true;
-    const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
-    if (resignBtn) resignBtn.hidden = true;
+    onlineResign = null;
+    syncResignMenu();
   };
 
   const lobby = m.installOnlineLobby({
@@ -5915,7 +5951,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
       });
       const os = new OnlineSession(driver);
       setOnlineSession(os);
-      syncSessionFromOnline();
+      syncSessionFromOnline(true);
       if (session) {
         board.setup(session.state.config, session.state.terrain, theme().style, look(), theme().id);
         queue = new AnimQueue(session.state.board);
@@ -5923,36 +5959,34 @@ void import('./online/lobby-ui.js').then(async (m) => {
       }
       void driver.start();
       client.saveSession({ token, matchId, seat: player.seat, revision: player.revision });
-      const resignBtn = document.getElementById('duel-resign') as HTMLButtonElement | null;
-      if (resignBtn) {
-        resignBtn.hidden = false;
-        resignBtn.onclick = () => {
-          if (!window.confirm('Resign this duel?')) return;
-          void (async () => {
-            const cur = getOnlineSession();
-            if (!cur) return;
-            const res = await cur.resign();
-            if (!res.ok) {
-              caption(res.message, null, 'info');
-              return;
-            }
-            syncSessionFromOnline();
-            // Resigning can carry aftermath steps (the opponent's cut, the end). Replay them
-            // through the same queue, and make sure the gate is always lifted.
-            if (res.catchUp.length) {
-              queue.push(res.catchUp);
-              void pump();
-            } else {
-              cur.endReveal();
-            }
-            paintOnlineHudFromSession();
-            gameOverDismissed = false;
-            render();
-          })();
-        };
-      }
-      // Board first: the duel board is already visible before any lottery. The chip (painted by
-      // paintOnlineHudFromSession) is the permanent, perspective-correct "who starts" indicator.
+      // Resign lives in the in-game pause menu (one confirm, exactly as before).
+      onlineResign = () => {
+        void (async () => {
+          const cur = getOnlineSession();
+          if (!cur || cur.driver !== driver) return;
+          const res = await cur.resign();
+          if (!res.ok) {
+            caption(res.message, null, 'info');
+            return;
+          }
+          syncSessionFromOnline(true);
+          // Resigning can carry aftermath steps (the opponent's cut, the end). Replay them
+          // through the same queue, and make sure the gate is always lifted.
+          if (res.catchUp.length) {
+            queue.push(res.catchUp);
+            void pump();
+          } else {
+            cur.endReveal();
+          }
+          paintOnlineHudFromSession();
+          gameOverDismissed = false;
+          render();
+        })();
+      };
+      // Resign now lives in the pause menu (the old top-row chip is gone); reveal it for the duel.
+      syncResignMenu();
+      // Board first: the duel board is already visible before the lottery. Who starts is said once
+      // by that reveal — there is no permanent chip any more.
       showScreen('game');
       // The lottery animation is a one-off courtesy. It plays exactly once per player per match,
       // and only at the live-join moment: the waiting creator when the friend joins, or the joiner

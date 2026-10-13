@@ -1,11 +1,11 @@
-// FUTASAKU 0.5 online duels — "who starts" chip + exactly-once lottery (two-context Playwright).
+// FUTASAKU 0.5 online duels — exactly-once "who starts" lottery + the trimmed strip.
 //
 // Builds CHANNEL=futa05 with a local duel API baked in, serves it with Vite preview, then proves:
 //   1. the friend joining LIVE plays the lottery at most once on each side;
 //   2. a page RELOAD mid-match does not replay it, and neither does returning later;
-//   3. the permanent HUD chip reads the correct, perspective-correct value for seat 0 AND seat 1;
-//   4. the chip is present in the async case (opponent joined while away / match already past
-//      turn 1), where the reveal does not play;
+//   3. the persistent who-starts HUD chip is GONE (the strip was trimmed after the playtest), so
+//      who starts is said once, by the reveal, and never again;
+//   4. the reveal stays silent in the async case (opponent joined while away / past turn 1);
 //   5. the offline (Play offline) lottery is untouched.
 //
 //   npx tsx web/e2e/online-starter-chip.ts
@@ -158,15 +158,16 @@ const waitPlays = async (page: Page, want: number, timeout = 12_000): Promise<nu
   return last;
 };
 
-const readChip = (page: Page) =>
-  page.evaluate(() => {
-    const el = document.querySelector<HTMLElement>('[data-duel-starter]');
-    return {
-      present: !!el && !el.hidden,
-      word: (document.querySelector('[data-duel-starter-word]')?.textContent ?? '').trim(),
-      sr: (document.querySelector('[data-duel-starter-sr]')?.textContent ?? '').trim(),
-    };
-  });
+// After the two-phone playtest the persistent "who-starts" chip left the strip; who starts is
+// said once, by the lottery reveal. These read the trimmed strip and the reveal count.
+const readStrip = (page: Page) =>
+  page.evaluate(() => ({
+    chipPresent: !!document.querySelector('[data-duel-starter]:not([hidden])'),
+    removed: !!document.querySelector(
+      '#duel-hud [data-duel-starter], #duel-hud [data-duel-deadline], #duel-hud #duel-resign',
+    ),
+    turn: (document.querySelector('#duel-hud [data-duel-turn]')?.textContent ?? '').trim(),
+  }));
 
 const readStored = (page: Page) =>
   page.evaluate(
@@ -192,9 +193,6 @@ const waitLotteryGone = async (page: Page, timeout = 12_000): Promise<void> => {
 const shot = async (page: Page, name: string): Promise<void> => {
   await page.screenshot({ path: `${OUT}${name}.png` });
 };
-
-const wordFor = (startingPlayer: number, seat: number): string =>
-  startingPlayer === seat ? 'You start' : 'Opponent starts';
 
 // ---------------------------------------------------------------------------- local duel API
 
@@ -287,19 +285,15 @@ try {
   const payload = await api.getState(stateA!.token, stateA!.matchId);
   const startingPlayer = payload.player.startingPlayer;
 
-  const chipA = await readChip(A);
-  const chipB = await readChip(B);
-  check('live: chip present for seat 0', chipA.present, JSON.stringify(chipA));
-  check('live: chip present for seat 1', chipB.present, JSON.stringify(chipB));
+  const stripA = await readStrip(A);
+  const stripB = await readStrip(B);
+  check('live: the persistent who-starts chip is gone (seat 0)', !stripA.chipPresent && !stripA.removed, JSON.stringify(stripA));
+  check('live: the persistent who-starts chip is gone (seat 1)', !stripB.chipPresent && !stripB.removed, JSON.stringify(stripB));
   check(
-    'live: chip is perspective-correct on both seats',
-    chipA.word === wordFor(startingPlayer, stateA!.seat) && chipB.word === wordFor(startingPlayer, stateB!.seat),
-    `start=${startingPlayer} A(seat ${stateA!.seat})="${chipA.word}" B(seat ${stateB!.seat})="${chipB.word}"`,
-  );
-  check(
-    'live: chip carries plain screen-reader text',
-    /first/i.test(chipA.sr) && /first/i.test(chipB.sr) && chipA.sr !== chipB.sr,
-    `${chipA.sr} | ${chipB.sr}`,
+    'live: the turn word is perspective-correct on both seats',
+    stripA.turn === (startingPlayer === stateA!.seat ? 'Your turn' : "Opponent's turn") &&
+      stripB.turn === (startingPlayer === stateB!.seat ? 'Your turn' : "Opponent's turn"),
+    `start=${startingPlayer} A(seat ${stateA!.seat})="${stripA.turn}" B(seat ${stateB!.seat})="${stripB.turn}"`,
   );
 
   // Screenshots: the board with the chip, seat 0 and seat 1, at 390x844 and 1280x800.
@@ -322,37 +316,15 @@ try {
     ]) {
       const { context, page } = await openApp(browser, origin, viewport, identity);
       await reopenFromList(page, stateA!.matchId);
-      await page.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 15_000 });
-      const chip = await readChip(page);
+      await page.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
+      const strip = await readStrip(page);
       check(
-        `shot: seat ${seat} chip at ${viewport.width}x${viewport.height}`,
-        chip.present && chip.word === wordFor(startingPlayer, seat),
-        chip.word,
-      );
-      // Legible, never colour-only (icon + word) and never clipped, even at 360x640.
-      const m = await page.evaluate(() => {
-        const el = document.querySelector<HTMLElement>('[data-duel-starter]');
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        const word = el.querySelector<HTMLElement>('[data-duel-starter-word]');
-        const hud = document.getElementById('duel-hud');
-        const hudR = hud?.getBoundingClientRect();
-        return {
-          w: r.width,
-          h: r.height,
-          inHud: !!hudR && r.left >= hudR.left - 1 && r.right <= hudR.right + 1,
-          wordClipped: !!word && word.scrollWidth > word.clientWidth + 1,
-          hasIcon: !!el.querySelector('svg'),
-          fontSize: parseFloat(getComputedStyle(el).fontSize),
-        };
-      });
-      check(
-        `chip legible at ${viewport.width}x${viewport.height}`,
-        !!m && m.w > 40 && m.h >= 18 && m.inHud && !m.wordClipped && m.hasIcon && m.fontSize >= 11,
-        JSON.stringify(m),
+        `shot: seat ${seat} trimmed strip at ${viewport.width}x${viewport.height}`,
+        !strip.chipPresent && !strip.removed && strip.turn.length > 0,
+        JSON.stringify(strip),
       );
       await page.waitForTimeout(600);
-      await shot(page, `starter-chip-seat${seat}-${viewport.width}x${viewport.height}`);
+      await shot(page, `starter-strip-seat${seat}-${viewport.width}x${viewport.height}`);
       check(`re-entry (seat ${seat} fresh page) never replays the lottery`, (await plays(page)) === 0);
       await context.close();
     }
@@ -362,16 +334,20 @@ try {
   await A.reload({ waitUntil: 'domcontentloaded' });
   await A.waitForSelector('#menu-online:not([hidden])', { timeout: 30_000 });
   await reopenFromList(A, stateA!.matchId);
-  await A.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 15_000 });
+  await A.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await A.waitForTimeout(1500); // give a replay a chance to happen before we judge
   check('refresh: the lottery does NOT replay after a reload', (await plays(A)) === 0, `plays=${await plays(A)}`);
-  const chipAfterReload = await readChip(A);
-  check('refresh: the chip still states who starts', chipAfterReload.present && chipAfterReload.word === wordFor(startingPlayer, stateA!.seat), chipAfterReload.word);
+  const stripAfterReload = await readStrip(A);
+  check(
+    'refresh: the strip is still trimmed (no who-starts chip)',
+    !stripAfterReload.chipPresent && !stripAfterReload.removed,
+    JSON.stringify(stripAfterReload),
+  );
 
   await B.reload({ waitUntil: 'domcontentloaded' });
   await B.waitForSelector('#menu-online:not([hidden])', { timeout: 30_000 });
   await reopenFromList(B, stateB!.matchId);
-  await B.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 15_000 });
+  await B.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await B.waitForTimeout(1500);
   check('refresh: the joiner sees no replay either', (await plays(B)) === 0, `plays=${await plays(B)}`);
 
@@ -392,32 +368,22 @@ try {
   const dIdentity = { token: dGuest.token, playerId: dGuest.player.id, displayName: dGuest.player.displayName };
   const { context: ctxC, page: C } = await openApp(browser, origin, { width: 1280, height: 800 }, cIdentity);
   await reopenFromList(C, created.match.matchId);
-  await C.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 15_000 });
+  await C.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await C.waitForTimeout(1500);
-  const chipC = await readChip(C);
-  check('async: chip present for the returning creator', chipC.present, JSON.stringify(chipC));
-  check(
-    'async: creator chip states who started (even after a turn)',
-    chipC.word === wordFor(joined.player.startingPlayer, 0),
-    `${chipC.word} (start=${joined.player.startingPlayer})`,
-  );
+  const stripC = await readStrip(C);
+  check('async: no who-starts chip for the returning creator', !stripC.chipPresent && !stripC.removed, JSON.stringify(stripC));
   check('async: no lottery plays when the opponent joined while away', (await plays(C)) === 0, `plays=${await plays(C)}`);
-  await shot(C, 'starter-chip-async-1280x800');
+  await shot(C, 'starter-strip-async-1280x800');
   await ctxC.close();
 
   const { context: ctxD, page: D } = await openApp(browser, origin, { width: 390, height: 844 }, dIdentity);
   await reopenFromList(D, created.match.matchId);
-  await D.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 15_000 });
+  await D.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await D.waitForTimeout(1200);
-  const chipD = await readChip(D);
-  check('async: chip present for the other seat', chipD.present);
-  check(
-    'async: both seats read the same starter from opposite sides',
-    chipC.word !== chipD.word && chipD.word === wordFor(joined.player.startingPlayer, 1),
-    `C="${chipC.word}" D="${chipD.word}"`,
-  );
+  const stripD = await readStrip(D);
+  check('async: no who-starts chip for the other seat', !stripD.chipPresent && !stripD.removed, JSON.stringify(stripD));
   check('async: no lottery plays on the second seat either', (await plays(D)) === 0, `plays=${await plays(D)}`);
-  await shot(D, 'starter-chip-async-390x844');
+  await shot(D, 'starter-strip-async-390x844');
   await ctxD.close();
 
   // ========================================================================== 4. OFFLINE UNCHANGED

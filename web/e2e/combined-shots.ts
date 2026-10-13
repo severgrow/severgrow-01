@@ -3,7 +3,7 @@
 //   menu            — the main menu with exactly one "Tutorial" entry,
 //   online-hub      — the "Play online" submenu screen,
 //   invite          — the created-duel invite screen,
-//   duel-chip       — the live duel board carrying the who-starts chip,
+//   duel-strip      — the live duel board carrying the trimmed status strip,
 //   match-intel     — Match Intel opened on its "How to" tab,
 //   cockpit-glow    — the cockpit panel showing the reflected-light optics.
 //
@@ -156,14 +156,15 @@ try {
     await b.page.waitForSelector('#game:not([hidden])', { timeout: 30_000 });
     await a.page.waitForSelector('#game:not([hidden])', { timeout: 30_000 });
     await a.page.waitForSelector('#starter-lottery[hidden]', { timeout: 15_000 }).catch(() => undefined);
-    await a.page.waitForSelector('[data-duel-starter]:not([hidden])', { timeout: 20_000 });
+    await a.page.waitForSelector('#duel-hud:not([hidden])', { timeout: 20_000 });
     await a.page.waitForTimeout(600);
-    const chip = await a.page.evaluate(() => {
-      const el = document.querySelector<HTMLElement>('[data-duel-starter]');
-      return el ? (document.querySelector('[data-duel-starter-word]')?.textContent ?? '').trim() : null;
+    const strip = await a.page.evaluate(() => {
+      const turn = (document.querySelector('#duel-hud [data-duel-turn]')?.textContent ?? '').trim();
+      const removed = !!document.querySelector('#duel-hud [data-duel-starter], #duel-hud [data-duel-deadline], #duel-hud #duel-resign');
+      return { turn, removed };
     });
-    check(`[${vp.tag}] duel board shows the who-starts chip`, !!chip && /start/i.test(chip), chip ?? 'missing');
-    await shoot(a.page, `duel-chip-${vp.tag}`);
+    check(`[${vp.tag}] duel strip shows the turn and none of the removed chips`, strip.turn.length > 0 && !strip.removed, JSON.stringify(strip));
+    await shoot(a.page, `duel-strip-${vp.tag}`);
 
     // --- Match Intel on the "How to" tab ---------------------------------------------------
     await a.page.click('#futa04-help-button');

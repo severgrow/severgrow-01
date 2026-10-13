@@ -1,13 +1,12 @@
-// Online duels — the permanent "who starts" chip plus the exactly-once lottery marker.
+// Online duels — the exactly-once "who starts" lottery reveal.
 //
-// The starting-player lottery is drawn by the shared engine and never changes after setup, so the
-// chip is always correct. The animation is a one-off courtesy: it plays once per player per match,
-// only at the live-join moment (the match turned ACTIVE while this player was on the screen). A
-// refresh, a later entry, an async catch-up or a waiting match never replays it — the chip is what
-// tells the player who started in those cases.
+// Who starts is drawn by the shared engine and never changes after setup. It is surfaced once, by
+// the lottery animation, at the live-join moment (the match turned ACTIVE while this player was on
+// the screen). A refresh, a later entry, an async catch-up or a waiting match never replays it.
+//
+// The persistent "who starts" HUD chip that used to live beside this marker was removed after the
+// two-phone playtest: the owner found it said too much, and the one-time reveal is enough.
 
-import { ONLINE } from '../../../src/strings.js';
-import type { Player } from '../../../src/engine/index.js';
 import type { MatchStatus } from '../../../server/src/protocol.js';
 import type { KeyValue } from '../../../server/src/client.js';
 
@@ -34,21 +33,6 @@ export const markStarterRevealed = (storage: KeyValue | null, matchId: string): 
   } catch {
     /* storage blocked: nothing to persist */
   }
-};
-
-export type StarterChipModel = { meStarts: boolean; word: string; srText: string };
-
-/**
- * The chip's words, from this seat's point of view. Uses the engine `startingPlayer` compared with
- * the local seat — never hard-coded to seat 0 — so both seats read it correctly.
- */
-export const starterChip = (startingPlayer: Player, seat: Player): StarterChipModel => {
-  const meStarts = startingPlayer === seat;
-  return {
-    meStarts,
-    word: meStarts ? ONLINE.starterYou : ONLINE.starterOpponent,
-    srText: meStarts ? ONLINE.starterYouSr : ONLINE.starterOpponentSr,
-  };
 };
 
 export type StarterRevealContext = {

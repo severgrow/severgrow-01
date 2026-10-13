@@ -47,13 +47,14 @@ type Measure = {
   hudOverflowsX: boolean;
   childOverflow: string[];
   children: { cls: string; w: number; x: number }[];
-  resign: Box | null;
   menuLogoGap: number | null;
   hudMenuOverlap: number;
   hudBrandOverlap: number;
   hudBoardOverlap: number;
   turnText: string;
-  starterText: string;
+  presenceText: string;
+  /** True if the strip still carries the removed Resign / who-starts / deadline chips. */
+  removedChips: boolean;
 };
 
 const MEASURE_SRC = `(() => {
@@ -106,13 +107,13 @@ const MEASURE_SRC = `(() => {
     hudOverflowsX,
     childOverflow,
     children,
-    resign: rect(document.getElementById('duel-resign')),
     menuLogoGap: menu && brand ? Math.round(brand.x - (menu.x + menu.width)) : null,
     hudMenuOverlap: overlap(hud, menu),
     hudBrandOverlap: overlap(hud, brand),
     hudBoardOverlap: tileBox ? overlap(hud, tileBox) : 0,
     turnText: (document.querySelector('[data-duel-turn]')?.textContent || '').trim(),
-    starterText: (document.querySelector('[data-duel-starter-word]')?.textContent || '').trim(),
+    presenceText: (document.querySelector('[data-duel-presence]')?.textContent || '').trim(),
+    removedChips: !!document.querySelector('#duel-hud [data-duel-deadline], #duel-hud [data-duel-starter], #duel-hud #duel-resign'),
   };
 })()`;
 
@@ -248,8 +249,19 @@ try {
         check(`[${tag}] status row stays on screen`, !m.hudOverflowsX, JSON.stringify(m.hud));
         check(`[${tag}] status row stays slim (one row on wide, two tidy rows on phones)`, m.hudHeight > 0 && m.hudHeight <= 60, `${Math.round(m.hudHeight)}px`);
         check(`[${tag}] no control spills out of the row`, m.childOverflow.length === 0, m.childOverflow.join(','));
-        check(`[${tag}] Resign keeps a >=44 tap target`, !!m.resign && m.resign.height >= 44 && m.resign.width >= 44, m.resign ? `${Math.round(m.resign.width)}x${Math.round(m.resign.height)}` : 'missing');
-        check(`[${tag}] status is not colour-only (turn word)`, m.turnText.length > 0, m.turnText);
+        check(`[${tag}] the trimmed strip carries no removed chips`, !m.removedChips);
+        check(`[${tag}] status is not colour-only (turn word + presence word)`, m.turnText.length > 0 && m.presenceText.length > 0, `${m.turnText} / ${m.presenceText}`);
+        // Resign now lives in the pause menu: open it and measure the real tap target there.
+        await page.click('#hud-menu');
+        await page.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
+        const resign = (await page.evaluate(`(() => {
+          const b = document.getElementById('gm-resign');
+          if (!b || b.hidden) return null;
+          const r = b.getBoundingClientRect();
+          return { width: Math.round(r.width), height: Math.round(r.height) };
+        })()`)) as { width: number; height: number } | null;
+        check(`[${tag}] pause-menu Resign keeps a >=44 tap target`, !!resign && resign.height >= 44 && resign.width >= 44, resign ? `${resign.width}x${resign.height}` : 'missing');
+        await page.click('#sheet-menu [data-close]').catch(() => undefined);
         if (vp.width === 390 || vp.width === 1280) {
           await page.screenshot({ path: `${OUT}hud-overlap-${PHASE}-${vpName}.png` });
         }

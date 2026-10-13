@@ -167,7 +167,19 @@ try {
   // HUD present; resign available
   check('A: duel HUD', await pageA.locator('#duel-hud:not([hidden])').isVisible().catch(() => false));
   check('B: duel HUD', await pageB.locator('#duel-hud:not([hidden])').isVisible().catch(() => false));
-  check('A: resign button', await pageA.locator('#duel-resign:not([hidden])').isVisible().catch(() => false));
+  check(
+    'A: the strip shows no removed chips (Resign / who-starts / deadline)',
+    await pageA.evaluate(
+      () => !document.querySelector('#duel-hud [data-duel-starter], #duel-hud [data-duel-deadline], #duel-hud #duel-resign'),
+    ),
+  );
+  check(
+    'A: resign is reachable in the pause menu',
+    await pageA.evaluate(() => {
+      const btn = document.getElementById('gm-resign') as HTMLButtonElement | null;
+      return !!btn && !btn.hidden;
+    }),
+  );
 
   // Score labels Me / Opponent (perspective)
   const youA = ((await pageA.locator('#score-you-label').textContent()) ?? '').trim();
@@ -190,17 +202,17 @@ try {
   await tryConfirm(pageA, 'A');
   await tryConfirm(pageB, 'B');
 
-  // Resign from B — stub confirm; verify handler is wired; force-click through board overlay.
-  const resignMeta = await pageB.evaluate(() => {
+  // Resign from B through the pause menu — stub confirm; verify the menu control is wired.
+  await pageB.evaluate(() => {
     (window as unknown as { confirm: (m?: string) => boolean }).confirm = () => true;
-    const btn = document.getElementById('duel-resign') as HTMLButtonElement | null;
-    return {
-      exists: !!btn,
-      hidden: !!btn?.hidden,
-      hasHandler: typeof btn?.onclick === 'function',
-    };
   });
-  check('B: resign wired', resignMeta.exists && !resignMeta.hidden && resignMeta.hasHandler, JSON.stringify(resignMeta));
+  await pageB.click('#hud-menu');
+  await pageB.waitForSelector('#sheet-menu:not([hidden])', { timeout: 8_000 });
+  const resignMeta = await pageB.evaluate(() => {
+    const btn = document.getElementById('gm-resign') as HTMLButtonElement | null;
+    return { exists: !!btn, hidden: !!btn?.hidden };
+  });
+  check('B: resign shown in the pause menu', resignMeta.exists && !resignMeta.hidden, JSON.stringify(resignMeta));
   const resignErrors: string[] = [];
   pageB.on('pageerror', (e) => resignErrors.push(e.message));
   pageB.on('console', (msg) => {
@@ -208,7 +220,8 @@ try {
   });
   await pageB.evaluate(() => {
     (window as unknown as { confirm: (m?: string) => boolean }).confirm = () => true;
-    (document.getElementById('duel-resign') as HTMLButtonElement).click();
+    const btn = document.getElementById('gm-resign') as HTMLButtonElement | null;
+    if (btn && !btn.hidden) btn.click();
   });
   try {
     await pageB.waitForFunction(

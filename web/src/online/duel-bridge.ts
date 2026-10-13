@@ -54,7 +54,6 @@ export const duelUiFromSnapshot = (
       opponentName: snap.opponentName ?? ONLINE.opponentFallback,
       presence: snap.presence,
       myTurn,
-      remainingMs: snap.remainingMs,
       notice: snap.notice,
       finished,
       finishedTitle: finished
@@ -64,8 +63,6 @@ export const duelUiFromSnapshot = (
             ? 'Draw'
             : 'You lost'
         : null,
-      // Perspective-correct: the shared engine's starting seat vs this seat (not seat 0).
-      starterMeStarts: snap.startingPlayer === snap.seat,
     },
   };
 };

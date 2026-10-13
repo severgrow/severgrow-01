@@ -41,6 +41,7 @@ import {
   openSession,
   parseRemainingMs,
   readHud,
+  readMatchListDeadline,
   serverErrorTally,
   resign,
   setVisibility,
@@ -214,7 +215,19 @@ const verifyCommon = async (
   );
 
   addCheck(rec, 'duel HUD visible both sides', hudCreator.hudVisible && hudJoiner.hudVisible);
-  addCheck(rec, 'resign available both sides', hudCreator.resignVisible && hudJoiner.resignVisible);
+  // Resign moved into the in-game pause menu; the deadline and who-starts chips left the strip.
+  addCheck(
+    rec,
+    'resign reachable in the pause menu (both sides)',
+    hudCreator.resignInMenu && hudJoiner.resignInMenu,
+    `creator=${hudCreator.resignInMenu} joiner=${hudJoiner.resignInMenu}`,
+  );
+  addCheck(
+    rec,
+    'the duel strip shows none of the removed chips',
+    !hudCreator.hasRemovedChips && !hudJoiner.hasRemovedChips,
+    `creator=${hudCreator.hasRemovedChips} joiner=${hudJoiner.hasRemovedChips}`,
+  );
   addCheck(rec, 'perspective labels are Me / Opponent', hudCreator.scoreMeLabel === 'Me' && hudCreator.scoreOppLabel === 'Opponent', `${hudCreator.scoreMeLabel}/${hudCreator.scoreOppLabel}`);
   addCheck(
     rec,
@@ -223,26 +236,27 @@ const verifyCommon = async (
     `${hudCreator.opponent} vs ${hudJoiner.opponent}`,
   );
 
-  // Timer correctness: the HUD countdown must match the server clock, not a local accumulator.
+  // Deadline correctness: it now lives in the match list, and must match the server clock.
   const deadlineAt = views.creator.turnDeadlineAt ?? views.joiner.turnDeadlineAt;
   const expected = deadlineAt === null ? null : deadlineAt - views.creator.serverNow;
-  const timerRows: string[] = [];
-  let timerOk = true;
-  for (const [name, hud] of [
-    ['creator', hudCreator],
-    ['joiner', hudJoiner],
-  ] as const) {
-    const shown = parseRemainingMs(hud.deadline);
-    if (expected === null || shown === null) {
-      timerRows.push(`${name}="${hud.deadline}"`);
-      continue;
-    }
-    const drift = Math.abs(shown - expected);
-    if (drift > 120_000) timerOk = false;
-    timerRows.push(`${name} ${hud.deadline} (drift ${Math.round(drift / 1000)}s)`);
-  }
+  const list = await readMatchListDeadline(creator, matchId).catch(() => null);
+  const shown = list ? parseRemainingMs(list.time) : null;
+  const drift = expected !== null && shown !== null ? Math.abs(shown - expected) : null;
+  const timerOk = list !== null && (drift === null || drift <= 120_000);
   rec.timerOk = timerOk;
-  addCheck(rec, 'turn clock matches the server clock', timerOk, timerRows.join('; '));
+  addCheck(
+    rec,
+    'match-list deadline matches the server clock',
+    timerOk,
+    list ? `"${list.time}"${drift === null ? '' : ` (drift ${Math.round(drift / 1000)}s)`}` : 'no match row found',
+  );
+  const nearDeadline = shown !== null && shown <= 2 * 3_600_000;
+  addCheck(
+    rec,
+    'match list warns inside the last two hours',
+    !nearDeadline || list!.warned,
+    `${list?.time ?? ''} warn=${list?.warned ?? false}`,
+  );
 
   // Layout at this device's real size: recorded as findings, not as scenario failures (a layout
   // problem is a bug to report once, not a reason to fail every game).
@@ -521,7 +535,7 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
     const views = await verifyCommon(env.rec, creator, joiner, tag, env.rec.screenshots);
     if (!views) return;
     const { actor, waiter, actorView } = actorPair(creator, joiner, views);
-    const startHud = await readHud(waiter);
+    const startList = await readMatchListDeadline(waiter, actorView.matchId).catch(() => null);
     await setVisibility(waiter.page, true);
     const hiddenPolls = await countPolls(waiter.page, 9_000);
     await setVisibility(waiter.page, false);
@@ -530,16 +544,16 @@ const variants: Record<VariantName, (env: Env) => Promise<void>> = {
 
     const fresh = await fetchView(waiter.guest.token, actorView.matchId);
     const expected = fresh.turnDeadlineAt === null ? null : fresh.turnDeadlineAt - fresh.serverNow;
-    const endHud = await readHud(waiter);
-    const shown = parseRemainingMs(endHud.deadline);
+    const endList = await readMatchListDeadline(waiter, actorView.matchId).catch(() => null);
+    const shown = endList ? parseRemainingMs(endList.time) : null;
     const drift = expected !== null && shown !== null ? Math.abs(shown - expected) : null;
     const timerStable = drift === null || drift <= 120_000;
     env.rec.timerOk = (env.rec.timerOk ?? true) && timerStable;
     addCheck(
       env.rec,
-      'clock does not drift across background/foreground',
+      'match-list clock does not drift across background/foreground',
       timerStable,
-      `${startHud.deadline} → ${endHud.deadline}${drift === null ? '' : ` (drift ${Math.round(drift / 1000)}s)`}`,
+      `${startList?.time ?? '(none)'} → ${endList?.time ?? '(none)'}${drift === null ? '' : ` (drift ${Math.round(drift / 1000)}s)`}`,
     );
 
     const drew = await drawViaDeck(actor, actor.device.hasTouch);

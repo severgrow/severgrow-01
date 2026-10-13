@@ -212,16 +212,10 @@
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
       <div id="duel-hud" class="duel-hud" hidden>
-        <span class="duel-opp"><b data-duel-opponent></b> <i data-duel-presence data-presence="unknown"></i></span>
-        <span data-duel-turn></span>
-        <span class="duel-starter" data-duel-starter data-starter="me" role="status" hidden>
-          <svg class="duel-starter-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V4"/><path d="M6 5h11l-2 3.5L17 12H6"/></svg>
-          <span data-duel-starter-word aria-hidden="true"></span>
-          <span class="sr-only" data-duel-starter-sr></span>
-        </span>
-        <span class="duel-deadline" data-duel-deadline data-tone="ok"></span>
+        <span class="duel-opp"><b data-duel-opponent></b></span>
+        <span class="duel-turn-slot" data-duel-turn></span>
+        <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
         <p class="duel-notice" data-duel-notice hidden></p>
-        <button id="duel-resign" class="btn ghost small" type="button" hidden>Resign</button>
       </div>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>
@@ -397,6 +391,7 @@
         <button id="gm-new" class="btn ghost" type="button" aria-label="New game">New game</button>
         <button id="gm-howto" class="btn ghost" type="button" aria-label="How to play">How to play</button>
         <button id="gm-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
+        <button id="gm-resign" class="btn ghost" type="button" aria-label="Resign the duel" hidden>Resign</button>
         <button id="gm-main" class="btn link" type="button" aria-label="Main menu">Main menu</button>
       </div>
     </section>
