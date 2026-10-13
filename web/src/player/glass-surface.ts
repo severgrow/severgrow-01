@@ -1155,3 +1155,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     },
   };
 };
+
+/** Live duels (web/src/online/live/): the challenge window wears this same glass under its own
+ *  selector, so the intel/tutorial modes above are never touched. Base rule only. */
+export const glassBaseCss = (selector: string): string => CSS.slice(0, CSS.indexOf('#futasaku-glass[hidden]')).split('#futasaku-glass').join(selector);
