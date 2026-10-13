@@ -202,42 +202,61 @@ export const ONLINE_CSS = `
   gap: 0.45rem;
   margin-top: 0.4rem;
 }
-/* The duel HUD is a slim strip shown only in online duels. The brand header is a fixed overlay at
-   the top of the game screen (z-index 7), so the strip is lifted above both it and the board and
-   starts after the header's 44px menu button. Everything stays on one line so the Resign control
-   never wraps out of the strip, and the strip's own box never intercepts the menu button. */
+/* The duel status row: a slim strip that sits IN the fixed header row, between the 44px menu
+   button (left) and the brand/logo (right). It is positioned, so it can never cover either, and it
+   is held above the board (its bottom stays in the header band). No frame or border contour — the
+   same dark glass as the rest of the product. The left/right insets reuse the header's 8px gap. */
 .duel-hud {
-  position: relative;
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: calc(58px + env(safe-area-inset-left, 0px));
+  /* 44px menu + 6px header padding + 8px gap, and the logo's max 90px + 6px padding + 8px gap. */
+  right: calc(104px + env(safe-area-inset-right, 0px));
   z-index: 8;
+  box-sizing: border-box;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem 0.5rem;
-  margin-left: 52px;
-  padding: 0 0.75rem;
-  font-size: 0.85rem;
+  align-content: center;
+  column-gap: 8px;
+  row-gap: 0;
+  padding: 0 2px;
+  font-size: 0.8rem;
+  line-height: 1.15;
   min-height: 48px;
   overflow: visible;
   background: color-mix(in srgb, #161a16 92%, #000);
-  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border: 0;
 }
 /* Only the strip's own controls take taps; the header's menu button underneath stays reachable. */
 .duel-hud > * {
   min-width: 0;
 }
 .duel-hud .duel-opp {
+  display: none; /* the phone is too narrow for a name; the board and score already say who is who */
+  order: 0;
+  flex: 0 1 auto;
+  max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.duel-hud [data-duel-turn],
+.duel-hud [data-duel-turn] {
+  order: 1;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .duel-hud .duel-deadline {
+  order: 2;
   flex: 0 0 auto;
+  margin-left: auto;
   white-space: nowrap;
 }
 .duel-hud .duel-notice {
-  flex: 1 1 auto;
   order: 9;
+  flex: 1 1 auto;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -248,8 +267,82 @@ export const ONLINE_CSS = `
   flex: 0 0 auto;
   order: 10;
   align-self: center;
-  min-height: 48px;
-  min-width: 48px;
+  min-height: 44px;
+  min-width: 44px;
+}
+/* Phones: exactly two tidy rows, no wrapping — turn + deadline above, who-starts + Resign below.
+   A grid keeps the height predictable (and slim) at any width. */
+@media (max-width: 600px) {
+  .duel-hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-content: center;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 0;
+    padding: 1px 2px;
+    line-height: 1;
+  }
+  .duel-hud .duel-opp {
+    display: none;
+  }
+  .duel-hud [data-duel-turn] {
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .duel-hud .duel-deadline {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+    margin-left: 0;
+  }
+  .duel-hud .duel-starter {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: start;
+  }
+  .duel-hud .duel-notice {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: start;
+    max-width: 100%;
+  }
+  .duel-hud #duel-resign {
+    grid-row: 2;
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+/* Wider screens have room for the opponent's name and a single, tidy row. */
+@media (min-width: 601px) {
+  .duel-hud {
+    flex-wrap: nowrap;
+    height: var(--hud-h, 48px);
+  }
+  .duel-hud .duel-opp {
+    display: inline-flex;
+    align-items: center;
+    order: 0;
+  }
+  .duel-hud .duel-starter {
+    order: 3;
+  }
+  .duel-hud .duel-deadline {
+    order: 4;
+    margin-left: 0;
+  }
+  .duel-hud .duel-notice {
+    order: 5;
+  }
+  .duel-hud #duel-resign {
+    order: 6;
+    margin-left: auto;
+  }
 }
 .duel-hud [data-duel-presence]::before {
   content: '';
@@ -271,13 +364,14 @@ export const ONLINE_CSS = `
    and it stays on one line so it cannot push the Resign control out of the strip. */
 .duel-hud .duel-starter {
   flex: 0 0 auto;
+  order: 3;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   line-height: 1.1;
   white-space: nowrap;
 }
