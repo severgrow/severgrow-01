@@ -152,12 +152,14 @@ try {
   // --- menu ---
   await A.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await A.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
+  await A.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
   await shoot(A, '01-menu-desktop-1280x800');
   check('menu: Play online visible', await A.locator('#menu-online:not([hidden])').isVisible());
   check('menu: no clipped text', (await clipped(A, '#menu .title, #menu-tagline, #menu-online, #menu-new')).length === 0);
 
   await B.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await B.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
+  await B.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
   await shoot(B, '02-menu-phone-390x844');
 
   // --- hub ---

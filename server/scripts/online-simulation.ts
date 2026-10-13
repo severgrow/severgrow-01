@@ -373,6 +373,7 @@ if (LIVE) {
       await sleep(500);
     } catch (error) {
       const rateLimited = error instanceof DuelError && error.code === 'RATE_LIMITED';
+      const detail = error instanceof DuelError ? `${error.code} (${error.status}) ${error.message}` : error instanceof Error ? error.message : String(error);
       liveResults.push({
         index: 100 + i,
         kind: 'live',
@@ -382,10 +383,11 @@ if (LIVE) {
         winner: null,
         pass: rateLimited,
         skipped: rateLimited,
-        failures: rateLimited ? [] : [error instanceof Error ? error.message : String(error)],
+        failures: rateLimited ? [] : [detail],
         hiddenChecks: 0,
       });
       if (rateLimited) console.log(`live game ${i + 1}: SKIPPED — the host IP is over the guest rate limit (30/hour). Re-run later.`);
+      else console.log(`live game ${i + 1}: FAILED — ${detail}`);
     }
   }
 }

@@ -91,43 +91,45 @@ Edge).
 
 | # | kind | started by | player-turns | ending | result |
 | --- | --- | --- | --- | --- | --- |
-| 0 | scenario | seat 1 | 26 | deck_exhaustion | PASS |
-| 1 | normal | seat 1 | 26 | deck_exhaustion | PASS |
-| 2 | normal | seat 0 | 24 | deck_exhaustion | PASS |
-| 3 | normal | seat 1 | 24 | deck_exhaustion | PASS |
-| 4 | normal | seat 1 | 20 | deck_exhaustion | PASS |
-| 5 | scenario | seat 0 | 24 | deck_exhaustion | PASS |
-| 6 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 7 | normal | seat 0 | 24 | deck_exhaustion | PASS |
-| 8 | normal | seat 0 | 22 | deck_exhaustion | PASS |
-| 9 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 10 | scenario | seat 1 | 26 | deck_exhaustion | PASS |
-| 11 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 12 | normal | seat 1 | 22 | deck_exhaustion | PASS |
-| 13 | normal | seat 0 | 24 | deck_exhaustion | PASS |
-| 14 | normal | seat 1 | 18 | deck_exhaustion | PASS |
+| 0 | scenario | seat 1 | 20 | deck_exhaustion | PASS |
+| 1 | normal | seat 1 | 22 | deck_exhaustion | PASS |
+| 2 | normal | seat 0 | 22 | deck_exhaustion | PASS |
+| 3 | normal | seat 0 | 22 | deck_exhaustion | PASS |
+| 4 | normal | seat 0 | 18 | deck_exhaustion | PASS |
+| 5 | scenario | seat 1 | 26 | deck_exhaustion | PASS |
+| 6 | normal | seat 1 | 24 | deck_exhaustion | PASS |
+| 7 | normal | seat 1 | 22 | deck_exhaustion | PASS |
+| 8 | normal | seat 1 | 20 | deck_exhaustion | PASS |
+| 9 | normal | seat 1 | 18 | deck_exhaustion | PASS |
+| 10 | scenario | seat 0 | 18 | deck_exhaustion | PASS |
+| 11 | normal | seat 1 | 22 | deck_exhaustion | PASS |
+| 12 | normal | seat 0 | 24 | deck_exhaustion | PASS |
+| 13 | normal | seat 1 | 20 | deck_exhaustion | PASS |
+| 14 | normal | seat 1 | 22 | deck_exhaustion | PASS |
 | 15 | scenario | seat 0 | 24 | deck_exhaustion | PASS |
-| 16 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 17 | normal | seat 1 | 24 | deck_exhaustion | PASS |
-| 18 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 19 | normal | seat 0 | 20 | deck_exhaustion | PASS |
+| 16 | normal | seat 1 | 18 | deck_exhaustion | PASS |
+| 17 | normal | seat 0 | 24 | deck_exhaustion | PASS |
+| 18 | normal | seat 1 | 26 | deck_exhaustion | PASS |
+| 19 | normal | seat 1 | 24 | deck_exhaustion | PASS |
 | 20 | scenario | seat 0 | 18 | deck_exhaustion | PASS |
-| 21 | normal | seat 0 | 20 | deck_exhaustion | PASS |
-| 22 | normal | seat 0 | 22 | deck_exhaustion | PASS |
-| 23 | normal | seat 1 | 24 | deck_exhaustion | PASS |
-| 24 | normal | seat 1 | 20 | deck_exhaustion | PASS |
-| 25 | scenario | seat 0 | 24 | deck_exhaustion | PASS |
-| 26 | normal | seat 0 | 22 | deck_exhaustion | PASS |
-| 27 | normal | seat 0 | 24 | deck_exhaustion | PASS |
-| 28 | normal | seat 0 | 30 | deck_exhaustion | PASS |
-| 29 | normal | seat 1 | 26 | deck_exhaustion | PASS |
+| 21 | normal | seat 0 | 22 | deck_exhaustion | PASS |
+| 22 | normal | seat 1 | 20 | deck_exhaustion | PASS |
+| 23 | normal | seat 1 | 26 | deck_exhaustion | PASS |
+| 24 | normal | seat 1 | 22 | deck_exhaustion | PASS |
+| 25 | scenario | seat 0 | 22 | deck_exhaustion | PASS |
+| 26 | normal | seat 1 | 22 | deck_exhaustion | PASS |
+| 27 | normal | seat 0 | 22 | deck_exhaustion | PASS |
+| 28 | normal | seat 0 | 22 | deck_exhaustion | PASS |
+| 29 | normal | seat 1 | 24 | deck_exhaustion | PASS |
 
-**30 / 30 pass.** Starting seat varied (seat 0 in 19 games, seat 1 in 11) — the lottery is live in
-the simulated path. Hidden-information audit: **678 payloads checked, 0 leaks** (see below).
+**30 / 30 pass.** Starting seat varied (seat 0 in 12 games, seat 1 in 18) — the lottery is live in
+the simulated path. Each match is dealt from a fresh server seed, so the rows differ between runs;
+the run above is the one that also ran the live Edge games. Hidden-information audit:
+**656 payloads checked, 0 leaks** (a second run: 678 payloads, 0 leaks).
 
 `END_REASON` here is `deck_exhaustion` for all 30 (bot play spends cards; the deck runs out before
-the 30-turns-each cap). The **Strangle / surround** ending is proved separately (below), and one
-earlier run recorded a natural strangle ending in play too.
+the 30-turns-each cap). A separate **Strangle / surround** ending is proved below, and it also shows
+up as a natural ending in some runs (28 deck + 2 strangle in one of them).
 
 ### Per-game checks
 
@@ -135,7 +137,7 @@ earlier run recorded a natural strangle ending in play too.
 | --- | --- | --- |
 | pass/fail | duel reaches a result without an illegal/rejected action | 30/30 |
 | rules handshake | every served payload `rulesVersion === futasaku0.4-strength-draw` | all |
-| hidden information | opponent hand ids + deck ids must never appear in a served payload (checked against the authoritative state after every view) | 678 payloads, 0 leaks |
+| hidden information | opponent hand ids + deck ids must never appear in a served payload (checked against the authoritative state after every view) | 656 payloads, 0 leaks |
 | deadline correctness | timeout scenario: the seat that must act loses, winner = opponent, `turnDeadlineAt` set | pass |
 | latency | wall p50/p95 of view + submit round trips | below |
 | Strangle / surround | targeted: a genuine bot-game position handed to the service, winning move submitted through `DuelClient` → `result.reason === 'strangle'` | pass (seed 2) |
@@ -173,19 +175,48 @@ server stayed in the `DISCARD` step and the board never handed over — both pla
 
 | Path | p50 | p95 | n |
 | --- | --- | --- | --- |
-| local view (GET) | 0.8 ms | 1.5 ms | 1425 |
-| local submit (POST) | 1.6 ms | 2.6 ms | 1997 |
+| local view (GET) | 0.6 ms | 1.2 ms | 1393 |
+| local submit (POST) | 1.2 ms | 2.1 ms | 1954 |
+| **live Edge view (GET)** | **559 ms** | **622 ms** | 52 |
+| **live Edge submit (POST)** | **632 ms** | **721 ms** | 72 |
 
-These are the service + client round trips with in-memory storage. Edge headroom is bounded by the
-Phase 0 measurements (worst CPU ≈ 7 ms vs Edge’s 2 s budget, ~0.3%). Live Edge p50/p95 numbers are
-recorded in the live section below.
+The local numbers are the service + client round trips with in-memory storage. The live numbers are
+real round trips to the deployed Edge (`eu-west`) from this machine — roughly one network RTT
+(~500 ms) plus ~60–120 ms of Edge + Postgres work, well inside any reasonable turn budget. Edge CPU
+headroom is bounded by the Phase 0 measurements (worst CPU ≈ 7 ms vs Edge’s 2 s budget, ~0.3%).
+
+### Live Edge games (deployed API)
+
+`--live` plays short games on the deployed API through the same `DuelClient`:
+
+| game | started by | turns played | ending | result |
+| --- | --- | --- | --- | --- |
+| 1 | seat 0 | 12 | resigned | PASS |
+| 2 | seat 1 | 12 | resigned | PASS |
+
+Both seats started a live game; guest creation, create/join, Draw, draft+Throw batches, Discard,
+view polling and resign all succeeded against the deployed Edge. A hand-probe
+(`/v1/guests → /v1/matches → join → view → actions`) confirmed the whole path returns `200`.
+
+**Infrastructure note (not a code defect).** During the first attempt the Edge returned
+`500 INTERNAL` for several requests with
+`PostgresError: remaining connection slots are reserved for roles with the SUPERUSER attribute` —
+i.e. the **database connection pool was momentarily exhausted** (a concurrent heavy soak was
+running against the same free-plan project; many match ids I never created appeared in the logs).
+`pg_stat_activity` showed 20/57 usable slots once the spike passed, and the live games then ran
+clean. If this recurs under real load, the follow-up is a connection-budget review (pooler mode /
+`max_lifetime`), not a rule or client change. The API currently surfaces it as a generic 500 with no
+retry.
+
 
 ---
 
 ## Phase D — two-browser UI/UX walk
 
-Script: `web/e2e/online-ux-walk.ts` (live) with a local runner `web/e2e/online-ux-local.ts`.
-Screenshots (390×844 phone + 1280×800 desktop) live in `docs/screens/online/`.
+Script: `web/e2e/online-ux-walk.ts` (live), with a local runner `web/e2e/online-ux-local.ts`.
+Screenshots (390×844 phone + 1280×800 desktop) live in `docs/screens/online/`. The final run below
+is against the **live** site `https://severgrow.github.io/severgrow-01/futa0.5/` (build
+`6e9b2dc`), desktop + phone in two real browser contexts.
 
 Flow walked: menu → hub → create → waiting (invite code) → join → duel → starter lottery → a full
 played turn → opponent catches the turn up → resign → finished, both viewports.
@@ -226,12 +257,20 @@ played turn → opponent catches the turn up → resign → finished, both viewp
 ## Deliverables / status
 
 - **Fixes committed** on `futa0.5-online`, pushed. **Edge redeployed** (CORS + `startingPlayer`).
-  `/futa0.5/` rebuilt by the Pages preview workflow on push.
-- **Phase A** proved live with two real browser contexts.
-- **Phase B** proved in the UI walk on both seats.
-- **Phase C** 30/30 games + 9 scenarios green; one turn-completion bug found and fixed with a
-  regression test.
-- **Phase D** walk green at both viewports; screenshots in `docs/screens/online/`.
+  `/futa0.5/` rebuilt by the Pages preview workflow on push; the live site now runs build `6e9b2dc`.
+- **Phase A** proved live with two real browser contexts (guest creation, create/join, both seats).
+- **Phase B** proved in the live UI walk on both seats ("You start" / "Opponent starts").
+- **Phase C** 30/30 games + 9 scenarios green (local), plus 2 clean live games on the deployed Edge;
+  one turn-completion bug found and fixed with a regression test.
+- **Phase D** walk green 16/16 against the live site at both viewports; screenshots in
+  `docs/screens/online/`.
+- `npm run check` green (151 files, 1488 passed, 1 expected fail).
 
 **Ask for you:** only U4 (presence while unknown) — pick option 1, 2, or 3. Everything else was
 decided and done.
+
+### Note on the working tree
+
+Another agent/run was writing online-soak files into the same checkout during this pass
+(`server/scripts/online-soak.ts`, `docs/ONLINE-SOAK-200.md`, `web/e2e/online-device-matrix.ts`, …).
+I did not touch or commit those; my commits contain only the fix files listed above.
