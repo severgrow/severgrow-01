@@ -1,35 +1,47 @@
 // Plain sentences for the history list and the result line. Never reveals the bot's
 // hidden cards (it only names cards the bot has already shown by playing them).
 import { coordKey, viewFor } from '../../../src/engine/index.js';
-import type { Action, Coord, Event, GameResult, Player, State } from '../../../src/engine/index.js';
+import type { Action, Coord, EndReason, Event, GameResult, Player, State } from '../../../src/engine/index.js';
 import { cardName, hexName, moveSentence } from '../../../src/playtest/names.js';
-import { BLAST, BLOOM, FRUIT, OPP, SPROUT } from '../../../src/strings.js';
+import { BLAST, BLOOM, FRUIT, OPP, RESULT, SPROUT } from '../../../src/strings.js';
 
 const other = (p: Player): Player => (p === 0 ? 1 : 0);
 
-export const resultTitle = (r: GameResult, me: Player): string =>
-  r.winner === null ? 'A draw' : r.winner === me ? 'You won' : 'You lost';
+/**
+ * The result the finish screen can be handed: the engine's end reasons plus the online-only
+ * `timeout` / `resigned` (see `server/src/protocol.ts`). Offline and online share the same
+ * title and reason sentences, so the two finish screens can never drift apart again.
+ */
+export type FinishReason = EndReason | 'timeout' | 'resigned';
+export type FinishResult = Omit<GameResult, 'reason'> & { reason: FinishReason };
 
-export const resultReason = (r: GameResult, me: Player): string => {
+export const resultTitle = (r: FinishResult, me: Player): string =>
+  r.winner === null ? RESULT.draw : r.winner === me ? RESULT.won : RESULT.lost;
+
+export const resultReason = (r: FinishResult, me: Player): string => {
   const won = r.winner === me;
   const strengthNote =
     r.winner === null && r.scores[0] === r.scores[1]
-      ? ' Scores and tile strengths matched — a true draw.'
+      ? RESULT.trueDraw
       : r.strengths && r.scores[0] === r.scores[1] && r.winner !== null
-        ? ' Scores were level; higher total tile strength decided it.'
+        ? RESULT.decidedByStrength
         : '';
   switch (r.reason) {
     case 'double_strangle':
-      return 'Both homes were surrounded at once.';
+      return RESULT.doubleStrangle;
     case 'strangle':
-      return won ? `You surrounded ${OPP.theirs} home.` : `${OPP.The} surrounded your home.`;
+      return won ? RESULT.strangleWon : RESULT.strangleLost;
     case 'knock':
-      if (!r.undercut) return won ? 'You knocked and stayed ahead.' : `${OPP.The} knocked and stayed ahead.`;
-      return other(r.winner!) === me ? 'You knocked but did not finish ahead.' : `${OPP.The} knocked and you held on.`;
+      if (!r.undercut) return won ? RESULT.knockAheadWon : RESULT.knockAheadLost;
+      return other(r.winner!) === me ? RESULT.knockUndercutWon : RESULT.knockUndercutLost;
     case 'turn_limit':
-      return `Time's up: 30 turns each. The higher score wins.${strengthNote}`;
+      return `${RESULT.turnLimit}${strengthNote}`;
     case 'deck_exhaustion':
-      return `The deck ran out. The higher score wins.${strengthNote}`;
+      return `${RESULT.deckEnd}${strengthNote}`;
+    case 'timeout':
+      return won ? RESULT.timeoutWon : RESULT.timeoutLost;
+    case 'resigned':
+      return won ? RESULT.resignedWon : RESULT.resignedLost;
   }
 };
 

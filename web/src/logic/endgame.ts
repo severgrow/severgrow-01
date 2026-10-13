@@ -43,3 +43,9 @@ export const scoreBreakdown = (ctx: BoardCtx, p: Player): { tiles: number; gold:
   }
   return { tiles, gold };
 };
+
+/** One side's part of the finish-screen breakdown: "12 tiles (3 on gold)". Shared offline/online. */
+export const breakdownPart = (ctx: BoardCtx, p: Player): string => {
+  const b = scoreBreakdown(ctx, p);
+  return `${b.tiles} tile${b.tiles === 1 ? '' : 's'}${b.gold ? ` (${b.gold} on gold)` : ''}`;
+};

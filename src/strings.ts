@@ -153,6 +153,73 @@ export const ONLINE = Object.freeze({
   errGeneric: 'Something went wrong. Try again.',
   errNoApi: 'Online play is not configured in this build.',
   errStorage: 'This browser blocked storage. Online matches cannot be kept here.',
+  /** Score bar: the same two words offline and online read (You : Opponent). */
+  scoreYou: 'You',
+  scoreOpponent: OPPONENT_LABEL,
+  /** Presence words — always beside the dot, never colour alone. */
+  presenceOnline: 'Online',
+  presenceAway: 'Away',
+  presenceUnknown: 'Unknown',
+  /** End-of-game screen: the small context line under the title (never a repeat of the reason). */
+  finishSubFallback: 'Online duel',
+  finishSubOpponent: (name: string) => `vs ${name}`,
+  backToMatches: 'Back to matches',
+  menuButton: 'Menu',
+  shareSaved: 'Saved',
+  /** The one confirm before resigning. */
+  resignConfirm: 'Resign this duel?',
+  /** A finished match whose reason the client does not know. */
+  finishedFallback: 'Finished',
+  /** Mid-match deadline urgency — shown only when it matters: amber ≤2h, red ≤15m. */
+  urgencyAmber: 'Less than 2 hours left',
+  urgencyRed: 'Less than 15 minutes left',
+  urgencyAmberSr: 'Less than 2 hours left on this turn.',
+  urgencyRedSr: 'Less than 15 minutes left on this turn.',
+  /** Driver / session messages the player can read (one home, like every other word). */
+  errBusy: 'Busy',
+  errDrawOnly: 'Only a Draw commits immediately.',
+  errThrowShape: 'Throw must be EndAct or Discard.',
+  errTurnFailed: "That turn didn't go through. Your cards are back.",
+  errMoveIllegal: 'That move is not legal right now.',
+  errDrawFailed: 'Draw failed.',
+  errResignFailed: 'Resign failed.',
+});
+
+/**
+ * The end-of-game screen in ONE place, so offline and online say the same thing. Reasons are
+ * perspective-aware: "you" is always the player reading the screen. The three outcome titles
+ * (`won` / `lost` / `draw`) are the product's fixed names and are never renamed.
+ */
+export const RESULT = Object.freeze({
+  /** Outcome titles — the same three offline and online. */
+  won: 'You won',
+  lost: 'You lost',
+  draw: 'A draw',
+  /** Offline win headline: "You beat Level 7!" */
+  beatLevel: (level: number) => `You beat Level ${level}!`,
+  /** Why the game ended. */
+  doubleStrangle: 'Both homes were surrounded at once.',
+  strangleWon: `You surrounded ${OPP.theirs} home.`,
+  strangleLost: `${OPP.The} surrounded your home.`,
+  knockAheadWon: 'You knocked and stayed ahead.',
+  knockAheadLost: `${OPP.The} knocked and stayed ahead.`,
+  knockUndercutWon: 'You knocked but did not finish ahead.',
+  knockUndercutLost: `${OPP.The} knocked and you held on.`,
+  turnLimit: "Time's up: 30 turns each. The higher score wins.",
+  deckEnd: 'The deck ran out. The higher score wins.',
+  /** Appended when the raw scores were level and tile strength decided it. */
+  decidedByStrength: ' Scores were level; higher total tile strength decided it.',
+  /** Appended when scores and tile strength both matched — a true draw. */
+  trueDraw: ' Scores and tile strengths matched — a true draw.',
+  /** Online-only endings, still from the reader's point of view. */
+  timeoutWon: `${OPP.The} ran out of time.`,
+  timeoutLost: 'You ran out of time.',
+  resignedWon: `${OPP.The} resigned.`,
+  resignedLost: 'You resigned.',
+  /** The breakdown line under the final score: "You: 12 tiles (3 on gold) · Opponent: 9 tiles". */
+  breakdown: (mine: string, theirs: string) => `You: ${mine} · ${OPP.label}: ${theirs}`,
+  /** The share button (offline and online alike). */
+  share: 'Share',
 });
 
 /** The words for the one-card Grow. Code still uses action `Sprout`; players read Grow. */
