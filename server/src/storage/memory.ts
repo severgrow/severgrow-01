@@ -322,7 +322,7 @@ export class MemoryStorage implements Storage {
   }
 
   private expiryDecision(match: MatchRecord, now: number): MatchRecord {
-    if (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
+    if (match.status === 'active' && !match.liveManaged && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
       // The single decision point: spare the seat its first timeout, or finish on a later one.
       const seat = match.state.actor;
       return hasGrace(match, seat) ? spendGrace(match, seat, now) : finishTimeout(match, now);
@@ -399,6 +399,13 @@ export class MemoryStorage implements Storage {
     if (!row || row.usedAt !== null || now > row.expiresAt) return null;
     this.linkCodes.set(codeHash, { ...row, usedAt: now });
     return { playerId: row.playerId };
+  }
+
+  /** Live duels (server/src/live/memory.ts): a synchronous read and clock write for its atomic step. */
+  livePeek = (id: string): MatchRecord | null => this.matches.get(id) ?? null;
+  liveSetClock(id: string, patch: Partial<Pick<MatchRecord, 'turnTimeoutMs' | 'turnDeadlineAt' | 'liveManaged'>>): void {
+    const m = this.matches.get(id);
+    if (m) this.matches.set(id, copy({ ...m, ...patch }));
   }
 
   // ---- the atomic commit pipeline (no awaits inside: one synchronous critical section) ----

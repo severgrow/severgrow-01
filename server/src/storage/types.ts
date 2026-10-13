@@ -58,6 +58,8 @@ export type MatchRecord = {
   expiresAt: number | null;
   /** Phase 7: waiting match is in the Find Opponent pool (not invite-only). */
   openQueue: boolean;
+  /** Live duels own this match's deadline (server/src/live/): the 24-hour grace/timeout rule skips it. */
+  liveManaged?: boolean;
 };
 
 export type Participant = {

@@ -85,6 +85,7 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
   graceUsed: [asNumber(row.grace_used_seat0 ?? 0), asNumber(row.grace_used_seat1 ?? 0)],
   gracePeriods: asNumber(row.grace_periods ?? 1),
   graceExtensionMs: asNumber(row.grace_extension_ms ?? row.turn_timeout_ms ?? 86_400_000),
+  liveManaged: row.live_since != null || row.live_tail_rev != null || row.live_autoplay_rev != null,
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
@@ -190,7 +191,7 @@ const finishExpiredWaiting = (match: MatchRecord, now: number): MatchRecord => (
 });
 
 const expiryDecision = (match: MatchRecord, now: number): MatchRecord => {
-  if (match.status === 'active' && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
+  if (match.status === 'active' && !match.liveManaged && match.turnDeadlineAt !== null && now > match.turnDeadlineAt) {
     // The single decision point: spare the seat its first timeout, or finish on a later one.
     const seat = match.state.actor;
     return hasGrace(match, seat) ? spendGrace(match, seat, now) : finishTimeout(match, now);

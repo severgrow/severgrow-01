@@ -14,6 +14,9 @@ import { MatchService } from './service.js';
 import { createSupabaseBroadcaster } from './broadcast-supabase.js';
 import type { MatchBroadcaster } from './broadcast.js';
 import { postgresStorage } from './storage/postgres.js';
+import { postgresLiveStore } from './live/postgres.js';
+import { createLiveRuntime } from './live/runtime.js';
+import { supabaseLiveNotifier } from './live/notifier.js';
 import type { PgPool } from './storage/postgres.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 import {
@@ -95,6 +98,9 @@ const broadcaster = ((): MatchBroadcaster | undefined => {
   return createSupabaseBroadcaster({ url, key, onError: (error) => log(`REALTIME_PING_ERROR ${safeErrorText(error)}`) });
 })();
 
+/** Live duels: per-player challenge pings (docs/LIVE.md). Missing keys = polling only. */
+const liveNotifier = Deno.env.get('SUPABASE_URL') && Deno.env.get('SUPABASE_ANON_KEY') ? supabaseLiveNotifier({ url: Deno.env.get('SUPABASE_URL')!, key: Deno.env.get('SUPABASE_ANON_KEY')! }) : undefined;
+
 const buildRuntime = async (): Promise<EdgeRuntime> => {
   const databaseUrl = Deno.env.get('DATABASE_URL') ?? '';
   if (!databaseUrl) {
@@ -108,14 +114,15 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     ssl: 'require',
   });
   const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
+  const liveRuntime = createLiveRuntime({ storage: postgresStorage(pool), live: postgresLiveStore(pool), server: edgeConfig, ...(broadcaster ? { broadcaster } : {}), ...(liveNotifier ? { notifier: liveNotifier } : {}) });
   const service = new MatchService({
-    storage: postgresStorage(pool),
+    storage: liveRuntime.storage,
     config: edgeConfig,
     // Live pings: the platform exposes SUPABASE_URL / SUPABASE_ANON_KEY to every function.
     // Missing values just mean the browser falls back to polling (P-11); no failure either way.
     ...(broadcaster ? { broadcaster } : {}),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: liveRuntime.router(service) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 
