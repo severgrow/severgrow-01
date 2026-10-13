@@ -95,9 +95,31 @@ suite ran concurrently), which is exactly the false-load condition the CI notes 
 
 ### After-run table
 
-_Filled from the post-fix deployed build by the same command (`DUELS=5 TURNS=3 TIMING=1`):_
+_Filled from the post-fix build by `web/e2e/online-turn-gate-repeat.ts` (two real contexts, one built
+`CHANNEL=futa05` site + local duel API, 12 consecutive turns crossing the boundary in each
+direction; both seats are sampled every 25 ms and the two pages' samples are matched on the shared
+wall clock):_
 
-<!-- AFTER_TABLE -->
+| Check | Result |
+| --- | --- |
+| Gate duration after each opponent turn (12 reveals) | **p50 707 ms, p95 2334 ms, max 2334 ms** (the 2334 ms is a 6-tile sequential Bloom; empty/draw-only turns hold ~700 ms) |
+| 10th reveal vs 1st (the `pumping` leak guard) | **722 ms vs 707 ms** — no degradation |
+| Turn word correct at every sample | **0 wrong** of 12 reveals |
+| Both phones said "Opponent's turn" at the same instant | **0 shared moments** |
+| Input opened only on the true final board | pass (every reveal) |
+| Board never updated without the animation | pass (every reveal) |
+| Safety net fired on a normal replay | **never** (0 `watch:release`) |
+| Injected hung step | caught at **5163 ms**; gate reopened; board = true final board (10 tiles = API) |
+| Frame deltas during live reveals | two runs: 2971 + 1231 frames, p50 **16.7–33.3 ms**, p95 18.1–34.6 ms, 7 frames > 50 ms total (the 33 ms run is host load ≈ 200 from other work, not the app) |
+
+**This suite bites the pre-fix code.** Run unchanged against HEAD before the fix (`68e0d05`, six
+turns): turn 1 read "Opponent's turn" at **29** sampled moments while replaying; turns 2, 4 and 6
+**never reopened the gate** (`revealing` stuck for 3777+ samples ≈ 75 s, `queued: 0`, word
+"Opponent's turn"); and the two phones said "Opponent's turn" at the same instant at **57** shared
+moments. `queued: 0` with the gate shut is the signature of the replay/render path throwing *before*
+the catch-up was enqueued (see §3), not of a leaked `pumping` holding unplayed steps — the pre-fix
+failure screenshots are `docs/screens/online/gate-stuck-turn-2.png` and `-12.png`.
+
 
 ## 6. Honest limits
 
