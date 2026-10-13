@@ -38,6 +38,18 @@ export type TutorialFocusOptions = {
   bloomDemo?: boolean;
 };
 
+/** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
+export type IntelTabId = 'intel' | 'howto';
+export type IntelTabLabels = { intel: string; howto: string };
+export type IntelOptions = {
+  /** Open on this tab; omitted keeps the tab already showing (so live re-renders don't jump). */
+  tab?: IntelTabId;
+  /** Tab headings (from src/strings.ts, passed by main.ts). */
+  labels?: IntelTabLabels;
+  /** The moves reference body for the How-to tab. */
+  howToHtml?: string;
+};
+
 const CSS = `
 #futasaku-glass { position:fixed; z-index:35; box-sizing:border-box; border:1px solid rgba(214,204,177,.14);
   border-radius:15px; overflow:hidden; color:#f0e9dc; background:rgba(8,10,10,.42);
@@ -191,6 +203,24 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass .intel-card .c-suit { display:none; }
 #futasaku-glass .intel-card-count { position:absolute; right:-3px; bottom:-3px; min-width:13px; height:13px; padding:0 2px; border-radius:5px; background:#24221e; border:1px solid #a99c81; font:700 9px/12px monospace; text-align:center; }
 #futasaku-glass .intel-observation { margin:0; color:#d3c4a3; font-size:10px; letter-spacing:.09em; }
+/* Two tab headings share the bar with the close control. Active state is word + cream
+   underline (never colour alone). No borders: the glass already frames the sheet. */
+#futasaku-glass .intel-tabs { display:flex; align-items:stretch; gap:2px; flex:1; min-width:0; }
+#futasaku-glass .intel-tab { position:relative; flex:1 1 0; min-width:0; min-height:44px; padding:0 8px; border:0;
+  background:transparent; color:#b7a98a; font:600 11px/1 monospace; letter-spacing:.14em; cursor:pointer;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#futasaku-glass .intel-tab[aria-selected='true'] { color:#f6ecd8; }
+#futasaku-glass .intel-tab[aria-selected='true']::after { content:''; position:absolute; left:10px; right:10px; bottom:5px;
+  height:2px; border-radius:1px; background:rgba(233,216,173,.8); }
+#futasaku-glass .intel-tab:focus-visible { outline:2px solid #e8ddc9; outline-offset:-2px; border-radius:8px; }
+.large-text #futasaku-glass .intel-tab { min-height:48px; font-size:12px; }
+/* The moves reference reads as prose in the same face as the tutorial glass copy. */
+#futasaku-glass .intel-howto p { margin:0 0 10px; font:400 13px/1.5 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  color:rgba(240,233,220,.82); letter-spacing:.012em; text-wrap:pretty; }
+#futasaku-glass .intel-howto p:last-child { margin-bottom:0; }
+#futasaku-glass .intel-howto b { color:#f6ecd8; font-weight:650; }
+#futasaku-glass .intel-howto i { color:#cbbfa0; }
+.large-text #futasaku-glass .intel-howto p { font-size:15px; }
 #futasaku-glass[data-mode='guidance'] { pointer-events:auto; display:flex; flex-direction:column; }
 #futasaku-glass[data-mode='guidance'] .glass-tutorial { display:flex; flex-direction:column; gap:8px; padding:12px 14px 12px; }
 #futasaku-glass[data-mode='guidance'] .glass-actions { display:flex; justify-content:flex-end; pointer-events:auto; }
@@ -500,6 +530,9 @@ export const mountGlassSurface = (onClose: () => void) => {
   let mode: 'tutorial' | 'intel' | 'guidance' | null = null;
   let moveCursor = -1;
   let lastMoveLen = -1;
+  let intelTab: IntelTabId = 'intel';
+  let intelLabels: IntelTabLabels = { intel: 'Match Intel', howto: 'How to' };
+  let howToHtml = '';
   let reduceMotion = false;
   let idleHard = false;
   let raf = 0;
@@ -1011,28 +1044,50 @@ export const mountGlassSurface = (onClose: () => void) => {
     } else if (total) {
       moveCursor = Math.max(0, Math.min(total - 1, moveCursor < 0 ? total - 1 : moveCursor));
     } else moveCursor = -1;
-    const move = total && moveCursor >= 0 ? data.moves[moveCursor]! : null;
-    const stepLabel = total ? `${pad(total - moveCursor)} / ${pad(total)}` : '00 / 00';
-    const groups = new Map<string, { card: Card; count: number }>();
-    for (const card of data.discarded) {
-      const key = `${card.suit}:${card.rank}`;
-      const group = groups.get(key);
-      if (group) group.count++;
-      else groups.set(key, { card, count: 1 });
+    const tabs = `<div class="intel-tabs" role="tablist" aria-label="Match help">`
+      + `<button type="button" class="intel-tab" role="tab" data-intel-tab="intel" aria-selected="${intelTab === 'intel'}">${safe(intelLabels.intel)}</button>`
+      + `<button type="button" class="intel-tab" role="tab" data-intel-tab="howto" aria-selected="${intelTab === 'howto'}">${safe(intelLabels.howto)}</button>`
+      + `</div>`;
+    const bar = `<div class="intel-bar">${tabs}<button class="intel-close" type="button" aria-label="Close">×</button></div>`;
+    if (intelTab === 'howto') {
+      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="howto"><div class="intel-howto">${howToHtml}</div></div>`;
+    } else {
+      const move = total && moveCursor >= 0 ? data.moves[moveCursor]! : null;
+      const stepLabel = total ? `${pad(total - moveCursor)} / ${pad(total)}` : '00 / 00';
+      const groups = new Map<string, { card: Card; count: number }>();
+      for (const card of data.discarded) {
+        const key = `${card.suit}:${card.rank}`;
+        const group = groups.get(key);
+        if (group) group.count++;
+        else groups.set(key, { card, count: 1 });
+      }
+      const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
+      const cards = sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` — seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
+      const who = move ? (move.who === 'you' ? 'YOU' : 'OPP') : 'MATCH';
+      const verb = move ? move.verb : (data.discarded.length ? 'FACE' : 'READY');
+      const detail = move?.detail ?? (data.discarded.length ? 'OPEN PILE' : 'NO MOVES YET');
+      panel.innerHTML = bar + `<div class="intel-body" role="tabpanel" data-intel-panel="intel"><div class="intel-step">${stepLabel}</div><div class="intel-readout"><span class="intel-who">${who}</span><span class="intel-verb">${safe(verb)}</span><span class="intel-detail">${safe(detail)}</span></div><div class="intel-nav"><button type="button" class="intel-newer" ${!total || moveCursor >= total - 1 ? 'disabled' : ''}>‹ NEWER</button><button type="button" class="intel-older" ${!total || moveCursor <= 0 ? 'disabled' : ''}>OLDER ›</button></div><div class="intel-meters"><label class="intel-meter"><span>SCORE</span><b>${data.score[0]}:${data.score[1]}</b></label><label class="intel-meter"><span>TILES</span><b>${data.territory[0]}:${data.territory[1]}</b></label><label class="intel-meter"><span>DECK</span><b>${data.deckCount}</b></label><label class="intel-meter"><span>OPP</span><b>${data.oppHand}</b></label><label class="intel-meter"><span>BOMBS</span><b>${data.fruitUnseen}</b></label><label class="intel-meter"><span>TURN</span><b>${data.turn}</b></label></div><div class="intel-cards">${cards || ''}</div>${data.observation ? `<p class="intel-observation">${safe(data.observation)}</p>` : ''}</div>`;
     }
-    const sorted = [...groups.values()].sort((a, b) => (a.card.suit ?? 4) - (b.card.suit ?? 4) || a.card.rank - b.card.rank);
-    const cards = sorted.map(({ card, count }) => `<span class="intel-card-wrap" title="${card.suit === null ? 'Bomb' : `Suit ${card.suit + 1}, ${card.rank}`}${count > 1 ? ` — seen ${count} times` : ''}"><span class="intel-card card ${suitClass(card)}">${cardFace(card)}</span>${count > 1 ? `<span class="intel-card-count">${count}</span>` : ''}</span>`).join('');
-    const who = move ? (move.who === 'you' ? 'YOU' : 'OPP') : 'MATCH';
-    const verb = move ? move.verb : (data.discarded.length ? 'FACE' : 'READY');
-    const detail = move?.detail ?? (data.discarded.length ? 'OPEN PILE' : 'NO MOVES YET');
-    panel.innerHTML = `<div class="intel-bar"><span class="intel-step" aria-live="polite">${stepLabel}</span><button class="intel-close" type="button" aria-label="Close">×</button></div><div class="intel-body"><div class="intel-readout"><span class="intel-who">${who}</span><span class="intel-verb">${safe(verb)}</span><span class="intel-detail">${safe(detail)}</span></div><div class="intel-nav"><button type="button" class="intel-newer" ${!total || moveCursor >= total - 1 ? 'disabled' : ''}>‹ NEWER</button><button type="button" class="intel-older" ${!total || moveCursor <= 0 ? 'disabled' : ''}>OLDER ›</button></div><div class="intel-meters"><label class="intel-meter"><span>SCORE</span><b>${data.score[0]}:${data.score[1]}</b></label><label class="intel-meter"><span>TILES</span><b>${data.territory[0]}:${data.territory[1]}</b></label><label class="intel-meter"><span>DECK</span><b>${data.deckCount}</b></label><label class="intel-meter"><span>OPP</span><b>${data.oppHand}</b></label><label class="intel-meter"><span>BOMBS</span><b>${data.fruitUnseen}</b></label><label class="intel-meter"><span>TURN</span><b>${data.turn}</b></label></div><div class="intel-cards">${cards || ''}</div>${data.observation ? `<p class="intel-observation">${safe(data.observation)}</p>` : ''}</div>`;
     panel.querySelector('.intel-close')?.addEventListener('click', close, { once: true });
-    panel.querySelector('.intel-newer')?.addEventListener('click', () => { if (moveCursor < lastMoveLen - 1) { moveCursor++; renderIntel(data); } });
-    panel.querySelector('.intel-older')?.addEventListener('click', () => { if (moveCursor > 0) { moveCursor--; renderIntel(data); } });
+    panel.querySelectorAll<HTMLButtonElement>('.intel-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const next: IntelTabId = tab.dataset.intelTab === 'howto' ? 'howto' : 'intel';
+        if (next === intelTab) return;
+        intelTab = next;
+        renderIntel(data);
+      });
+    });
+    if (intelTab === 'intel') {
+      panel.querySelector('.intel-newer')?.addEventListener('click', () => { if (moveCursor < lastMoveLen - 1) { moveCursor++; renderIntel(data); } });
+      panel.querySelector('.intel-older')?.addEventListener('click', () => { if (moveCursor > 0) { moveCursor--; renderIntel(data); } });
+    }
     requestAnimationFrame(place);
   };
 
-  const intel = (data: MatchIntel) => {
+  const intel = (data: MatchIntel, options: IntelOptions = {}) => {
+    if (options.labels) intelLabels = options.labels;
+    if (options.howToHtml !== undefined) howToHtml = options.howToHtml;
+    if (options.tab) intelTab = options.tab;
     mode = 'intel'; stopLoop(); smooth = null;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
@@ -1074,6 +1129,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     close,
     hide: () => {
       mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
+      intelTab = 'intel'; howToHtml = '';
       focusScene = null;
       setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },

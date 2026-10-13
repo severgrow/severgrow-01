@@ -260,6 +260,22 @@ export const STEP_CUE = Object.freeze({
   kickerOpp: 'Their turn',
 });
 
+/** FUTASAKU 0.5 menu + Match Intel labels. One place to rename the single tutorial entry
+ *  and the two Match Intel tabs. The moves reference text itself lives in SPROUT / BLOOM /
+ *  FRUIT / BLAST and HOME above (the same shared rule words the game uses). */
+export const HELP = Object.freeze({
+  /** the only tutorial entry on the main menu */
+  tutorial: 'Tutorial',
+  /** Match Intel tab 1 — what happened in this match */
+  intelTab: 'Match Intel',
+  /** Match Intel tab 2 — the moves reference */
+  howToTab: 'How to',
+  /** the reference heading (also the legacy sheet title) */
+  howToTitle: 'How to play',
+  /** the tutorial's closing pointer to the reference (its last line) */
+  tutorialFinal: 'Look up any move later in Match Intel › How to.',
+});
+
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */
 export const TUTORIAL = Object.freeze({
   showMe: 'Show me',

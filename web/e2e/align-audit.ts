@@ -127,7 +127,7 @@ const measure = (page: Page, viewport: string) =>
     const pairs: [string, string][] = [
       ['#hud-menu', '#hud-history'],
       ['#tool-weak', '#tool-targets'],
-      ['#tool-replay', '#hint-btn'],
+      ['#tool-replay', '#tool-skip'],
       ['#tool-undo', '#hand-sort'],
     ];
     const lone: string[] = [];

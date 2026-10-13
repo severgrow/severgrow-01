@@ -115,11 +115,9 @@ html[data-thumb] .dock > .hand-row,
 html[data-thumb] .dock .table-row > .piles {
   display: contents;
 }
-html[data-thumb] .dock .table-row > .hint-line,
-html[data-thumb] #hint-btn {
+html[data-thumb] .dock .table-row > .hint-line {
   display: none;
 }
-html.futa04-information #hint-btn { display:none; }
 html[data-thumb] .dock .table-row > .piles > .pile {
   position: absolute;
   left: var(--x);

@@ -40,7 +40,11 @@ try {
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
-    await menu.locator(`#howto-body [data-tip="${topic}"]`).click();
+    // FUTASAKU: the pause menu opens the Match Intel "How to" tab, not a separate sheet.
+    check(await menu.locator('#futasaku-glass[data-mode="intel"] [data-intel-tab="howto"][aria-selected="true"]').isVisible(),
+      `${topic}: the pause menu opens the Match Intel How to reference`);
+    check((await menu.locator('#futasaku-glass .intel-tab[data-intel-tab="howto"]').textContent())?.trim() === 'How to', `${topic}: the tab is named How to`);
+    await menu.locator(`#futasaku-glass .intel-howto [data-tip="${topic}"]`).click();
     check(await menu.locator('#sheet-futa04-help').isVisible(), `${topic}: explicit lesson opens during a game`);
     check(!/\bfruit(?:ed)?\b/i.test(await menu.locator('#sheet-futa04-help').innerText()), `${topic}: help uses Bomb terminology`);
     if (topic === 'fruit') check((await menu.locator('#first-tip-title').innerText()).includes('Bomb'), 'Bomb help title');

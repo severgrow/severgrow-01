@@ -4,7 +4,7 @@ import {
   apply, coordKey, createCards, homeCoord, legalActions, neighbors, newGame, viewFor,
 } from '../../../src/engine/index.js';
 import type { Action, Card, Coord, State, Suit, Tile } from '../../../src/engine/index.js';
-import { TUTORIAL } from '../../../src/strings.js';
+import { HELP, TUTORIAL } from '../../../src/strings.js';
 
 type CardSpec = readonly [Suit | null, number];
 type TileSpec = readonly [string, 0 | 1, number];
@@ -156,7 +156,8 @@ const lessons: TutorialLesson[][] = [
     L('btn-history', 'BULB', 'Past moves and the cards they threw.', 'button', 'Next', {
       button: 'intel', cta: 'NEXT',
     }),
-    L('btn-display', 'DISPLAY', 'Shows important info. Respect it.', 'button', 'Next', {
+    // The tutorial's last line points at the reference that replaces the old in-match "?".
+    L('btn-display', 'DISPLAY', `Shows important info. Respect it. ${HELP.tutorialFinal}`, 'button', 'Next', {
       button: 'display', cta: 'NEXT',
     }),
   ],
