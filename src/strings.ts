@@ -502,6 +502,8 @@ export const LIVE = Object.freeze({
   goLive: 'Go live',
   goLiveAria: (name: string, secs: number) => `Go live with ${name}: ${secs}-second turns in this match`,
   waiting: (name: string, secs: number) => `Waiting for ${name}... ${secs}s`,
+  waitingFor: (name: string) => `Waiting for ${name}...`,
+  waitingShort: 'Waiting',
   cancel: 'Cancel',
   inLiveGame: 'In a live game',
   notAvailable: 'Not available',

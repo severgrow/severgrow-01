@@ -42,6 +42,13 @@ ${glassBaseCss('.live-glass')}
 .live-pill[disabled] { opacity:.62; cursor:default; border-color:rgba(214,204,177,.18); }
 .live-pill[disabled] .dot { background:#b7a98a; box-shadow:none; }
 .live-pill[data-state='waiting'] .dot { animation:live-breathe 1.2s ease-in-out infinite; }
+.live-pill[data-state='waiting'] { flex:0 1 auto; min-width:0; max-width:100%; }
+.live-pill .label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.live-pill .label .full { display:none; }
+@media (min-width: 560px) { .live-pill .label .full { display:inline; } .live-pill .label .short { display:none; } }
+.live-pill .secs { flex:none; font-variant-numeric:tabular-nums; }
+.live-pill .secs:empty { display:none; }
+.live-on [data-duel-urgency] { display:none !important; } /* the 24-hour warning is meaningless on a live clock */
 .live-pill .cancel { margin-left:4px; padding:0 0 0 8px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
@@ -217,7 +224,7 @@ export type PillModel =
   | { kind: 'hidden' }
   | { kind: 'ready'; name: string; secs: number }
   | { kind: 'disabled'; label: string }
-  | { kind: 'waiting'; label: string };
+  | { kind: 'waiting'; label: string; name: string; secs: number };
 
 /** The quiet "● Go live" pill in the duel status strip (appended into #duel-hud). */
 export const createPill = (onTap: () => void, onCancel: () => void) => {
@@ -228,10 +235,11 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
   const dot = el('span', 'dot');
   dot.setAttribute('aria-hidden', 'true');
   const label = el('span', 'label');
+  const secs = el('span', 'secs');
   const cancel = el('span', 'cancel', LIVE.cancel);
   cancel.setAttribute('role', 'button');
   cancel.dataset.live = 'cancel';
-  pill.append(dot, label, cancel);
+  pill.append(dot, label, secs, cancel);
   let state: PillModel['kind'] = 'hidden';
   pill.addEventListener('click', (e) => {
     if (state === 'waiting') {
@@ -256,10 +264,15 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
       if (m.kind === 'ready') {
         label.textContent = LIVE.goLive;
         pill.setAttribute('aria-label', LIVE.goLiveAria(m.name, m.secs));
-      } else if (m.kind === 'disabled' || m.kind === 'waiting') {
+      } else if (m.kind === 'waiting') {
+        label.textContent = '';
+        label.append(el('span', 'full', LIVE.waitingFor(m.name)), el('span', 'short', LIVE.waitingShort));
+        pill.setAttribute('aria-label', `${m.label}. ${LIVE.cancel}`);
+      } else if (m.kind === 'disabled') {
         label.textContent = m.label;
-        pill.setAttribute('aria-label', m.kind === 'waiting' ? `${m.label}. ${LIVE.cancel}` : m.label);
+        pill.setAttribute('aria-label', m.label);
       }
+      secs.textContent = m.kind === 'waiting' ? `${m.secs}s` : '';
     },
   };
 };
@@ -342,6 +355,7 @@ export const createHud = () => {
       model = m;
       const on = !!m?.live;
       chip.hidden = !on;
+      document.documentElement.classList.toggle('live-on', on);
       if (!on) {
         ring.setAttribute('hidden', '');
         vignette.hidden = true;

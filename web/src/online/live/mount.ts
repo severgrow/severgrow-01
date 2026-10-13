@@ -278,7 +278,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (pending && pending.fromMe) {
       waiting = pending;
       const secs = Math.max(0, Math.ceil((toLocal(pending.expiresAt) - Date.now()) / 1000));
-      return { kind: 'waiting', label: LIVE.waiting(name, secs) };
+      return { kind: 'waiting', label: LIVE.waiting(name, secs), name, secs };
     }
     if (s.opponent.presence === 'offline') return { kind: 'hidden' };
     if (s.me.liveMatchId || s.opponent.inLive || s.block === 'BUSY_LIVE') return { kind: 'disabled', label: LIVE.inLiveGame };
