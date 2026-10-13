@@ -49,7 +49,7 @@ export type {
   PersonalSetting,
 } from './perspective.js';
 
-export { duelApiUrl, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin, parkedOfferMs } from './config.js';
+export { duelApiUrl, duelRegion, onlineBuildEnabled, findOpponentEnabled, publicAppOrigin, parkedOfferMs } from './config.js';
 
 export {
   FIRST_ONLINE_CARD_KEY,
@@ -79,7 +79,7 @@ export type { LobbyUiHooks, OnlineLobbyController } from './lobby-ui.js';
 export { ONLINE_CSS } from './online-css.js';
 
 export { presenceWord, deadlineTone, deadlineUrgency, turnWord, fillDuelHud } from './duel-hud.js';
-export type { DeadlineUrgency, DuelHudModel } from './duel-hud.js';
+export type { DeadlineUrgency, DuelHudModel, TurnState } from './duel-hud.js';
 
 export {
   STARTER_REVEAL_PREFIX,
@@ -90,7 +90,7 @@ export {
 } from './starter-reveal.js';
 export type { StarterRevealContext } from './starter-reveal.js';
 
-export { duelUiFromSnapshot, playScreenAction, renderDuelHud } from './duel-bridge.js';
+export { duelUiFromSnapshot, playScreenAction, renderDuelHud, turnStateFrom } from './duel-bridge.js';
 export type { DuelUiModel } from './duel-bridge.js';
 
 export { OnlineSession, onlineSessionFromPayload, catchUpStepsFromDriver } from './duel-session.js';

@@ -34,6 +34,29 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 
 ## Original waiting entries
 
+### Online duels: the turn word, the gate safety net, and smoothness
+- Date: 2026-10-13 · Branch `futa0.5-online` (test channel `/futa0.5/` only) · No engine/rule change
+- The two-phone playtest showed **"Opponent's turn" on both phones at once**, for as long as the enemy
+  turn was replaying. Cause: the HUD word was derived from the **animation gate** (`revealing`) rather
+  than the **server's actor**, so the phone whose turn it was read "Opponent's turn" for the whole
+  replay. Now `TurnState` comes from the server: `mine` / `theirs` / **`replaying`** ("Replaying their
+  turn", one new string in `src/strings.ts`) / `finished`. A replaying phone can never read
+  "Opponent's turn".
+- The input gate now has a **hard backstop**: it releases after `replay length + 3 s` (and after 6 s
+  of no progress), flushing the queue to the true final board and logging `watch:release`. The pump's
+  lost-wake-up is fixed (a call while pumping is a wake-up, never a drop; every exit runs `finally`
+  under a run token). A view-apply exception is no longer swallowed as a network error.
+- **Edge region pinned** to the database's region (`forceFunctionRegion=eu-west-1`): measured
+  `db.ms` median **162 → 83 ms**, total median **331 → 269 ms**.
+- Smoothness: per-tile redraws use the lighter reveal path; the two full-screen additive passes are
+  switched off while a move animates; a Draw now flips a card-back immediately so the server wait
+  reads as intentional.
+- Evidence: [`ONLINE-SMOOTHNESS.md`](./ONLINE-SMOOTHNESS.md). Checks: `npx tsx web/e2e/online-gate-safety.ts`
+  (13/13, includes an injected hung step), `online-turn-gate.ts`, `online-turn-gate-repeat.ts`
+  (12 turns, no stuck gate), `TIMING=1 npx tsx web/e2e/online-live-smoothness.ts` (two contexts, 4x CPU).
+- Check before locking in: two real phones on a slow connection; Reduce motion and Large text; the
+  turn word on both phones through a whole duel; a big Bloom replay; iOS Safari.
+
 ### Tutorial focus lock + pointer redo
 - Date: 2026-10-11 · Commits: `f9b90ac` … `bac1768` (+ lock e2e / screens) · In test / `futa-test` only — do not lock yet
 - Hard capture-phase input gate during every guided step: only the glowing target and the glass buttons (Next / Show me / Skip / Chapters / Exit) react. Menu, settings, history, Sort, Undo, piles, other cards/hexes, camera pan/zoom, long-press, and shortcuts are dead. Inert chrome + Exit tutorial + Back release the lock. Dim is ~70% black with grey backdrop-filter; cream ring + lift + hand pointer; wrong-tap soft tick / shake / rotating “Tap the glowing one.” lines (400ms rate limit). One target per step; look-and-tap for homes/buttons. Preview: `?tutorial=1` and `?tutorial=1&chapter=N`. Screens: `docs/screens/tutorial/` (chapter-01…13, lock-*, pointer-options.png).

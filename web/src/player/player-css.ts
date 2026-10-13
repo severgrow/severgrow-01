@@ -36,6 +36,13 @@ html.futa04-information #game .dock::before {
 }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #game::before { animation:none; opacity:.025; transform:none; } }
 html.futa04-information.reduce-motion #game::before { animation:none; opacity:.025; transform:none; }
+/* While a move is animating — including an online enemy turn replay — drop the two full-screen
+   additive passes (the animated warm wash and the LED spill). They are the phone's most expensive
+   composited layers (mix-blend-mode + mask + filter) and they add nothing while tiles are landing.
+   Nothing else changes: the board, the cards and the dimming are untouched, so the replay looks
+   identical at rest, only smoother. */
+html.futa04-information.futa04-move-active #game::before { animation:none; opacity:0; }
+html.futa04-information.futa04-move-active #smart-led-spill { opacity:0; }
 /* ---- desktop (side layout): the coach and first-time tips get the empty space above the
    piles, at full size, instead of a squeezed strip over the deck. Test copy only for now:
    on docs/LIST-TO-IMPLEMENT.md to bring to the main game. ---- */

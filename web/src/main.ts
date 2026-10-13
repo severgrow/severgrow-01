@@ -56,6 +56,7 @@ import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { perfStart, perfStep } from './logic/perf.js';
+import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
@@ -237,6 +238,8 @@ const BLOOM_STAGGER_MS = 80;
 let liveReveal = false;
 /** When the live reveal began, for the minimum readable hold (a turn with no grow must not blink). */
 let revealStartedAt = 0;
+/** Bumped by `settleStep`: the reveal watchdog treats any bump as proof the replay is progressing. */
+let revealProgress = 0;
 /**
  * The shortest the gate stays shut for a LIVE enemy turn. A turn that grew nothing (a hidden draw
  * and a discard) has almost no steps; without this it would swap the board in one frame.
@@ -252,6 +255,23 @@ const revealWaitNotice = () => {
   revealNoticeAt = now;
   caption(ONLINE.statusRevealWait, null, 'info');
 };
+
+/**
+ * Online Draw: the card is decided by the server, so the tap would otherwise wait with no feedback.
+ * A card-back flip started on the tap itself makes that wait read as intentional; the real card
+ * still arrives with the normal draw animation when the response lands. Skipped for Reduce motion
+ * and the Skip speed, like every other movement.
+ */
+function drawFlipCue(): void {
+  if (settings.reduceMotion || settings.speed === 'skip') return;
+  const back = $('deck').querySelector<HTMLElement>('.pile-card');
+  if (!back) return;
+  anim(back, [
+    { transform: 'rotateY(0deg)' },
+    { transform: 'rotateY(-180deg)' },
+    { transform: 'rotateY(-360deg)' },
+  ], { duration: 560, easing: 'cubic-bezier(.3,.7,.3,1)', transformOrigin: 'center' } as KeyframeAnimationOptions);
+}
 
 // ---------- game state ----------
 
@@ -299,6 +319,25 @@ let botBusy = false;
 let epoch = 0;
 let pumping = false;
 let cardRects = new Map<number, DOMRect>();
+
+/**
+ * A precise, bounded timeline of the animation pump and every reveal boundary, with a
+ * `performance.now()` stamp. It exists so a two-seat test can name the exact branch that leaked
+ * instead of guessing (read it with `__severgrow.animLog()`). It never drives the game.
+ */
+type AnimMark = { t: number; ev: string } & Record<string, number | string | boolean>;
+const animMarks: AnimMark[] = [];
+const ANIM_LOG_MAX = 4000;
+const animLog = (ev: string, data: Record<string, number | string | boolean> = {}): void => {
+  animMarks.push({ t: Math.round(performance.now() * 10) / 10, ev, ...data });
+  if (animMarks.length > ANIM_LOG_MAX) animMarks.splice(0, animMarks.length - ANIM_LOG_MAX);
+};
+// An exception anywhere in the pump (an animation target missing after a re-render, say) must be
+// visible, because in the old shape it left `pumping` true forever and the gate shut.
+window.addEventListener('error', (e) => animLog('window:error', { message: String((e as ErrorEvent).message ?? '').slice(0, 300) }));
+window.addEventListener('unhandledrejection', (e) =>
+  animLog('window:unhandledrejection', { reason: String((e as PromiseRejectionEvent).reason).slice(0, 300) }),
+);
 
 const sound = new Sound();
 const boardHandlers = { tap: (k: string) => onHexTap(k), inspect: (k: string | null) => onInspect(k), hold: (k: string) => pinCard(k) };
@@ -1726,6 +1765,11 @@ async function humanPlayOnline(a: Action) {
   // THE GATE. The enemy's finished turn is still being shown: nothing may be played, and — just
   // as important — nothing may fast-forward it away. Skipping is the Skip control's job alone.
   if (os.isRevealing) return revealWaitNotice();
+  markTiming(
+    a.t === 'Draw' ? 'draw:tap' : a.t === 'EndAct' || a.t === 'Discard' ? 'throw:tap' : 'move:tap',
+    { action: a.t },
+  );
+  if (a.t === 'Draw') drawFlipCue();
   fastForward();
   rememberCardRects();
   inspectKey = null;
@@ -1754,6 +1798,7 @@ async function humanPlayOnline(a: Action) {
     replaying = true;
     replaySpeed = 2;
     queue.push(result.catchUp);
+    armRevealWatchdog(result.catchUp);
   }
   if (result.finished) gameOverDismissed = false;
   paintOnlineHudFromSession();
@@ -1773,20 +1818,33 @@ async function humanPlayOnline(a: Action) {
   }
 }
 
+/**
+ * The duel HUD painter, cached after its first (bundled) import. A reveal ends by calling
+ * `paintOnlineHudFromSession()` from a synchronous path, and the turn word must be honest in that
+ * very frame — an `import().then()` repaint left the word one sample stale at the boundary.
+ */
+let duelHudPaint: ((os: NonNullable<ReturnType<typeof getOnlineSession>>) => void) | null = null;
 function paintOnlineHudFromSession() {
   const os = getOnlineSession();
   if (!os) return;
   // Waiting on the opponent? Poll faster so their finished turn replays almost at once.
   os.driver.sync().setWaiting(!os.myTurn);
+  if (duelHudPaint) {
+    duelHudPaint(os);
+    return;
+  }
   void import('./online/index.js').then(({ duelUiFromSnapshot, renderDuelHud }) => {
-    const hud = document.getElementById('duel-hud');
-    const ui = duelUiFromSnapshot(os.driver.snapshot(), os.canUndo, os.isRevealing);
-    renderDuelHud(hud, ui);
-    // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
-    const you = document.getElementById('score-you-label');
-    const bot = document.getElementById('score-bot-label');
-    if (you) you.textContent = ONLINE.scoreYou;
-    if (bot) bot.textContent = ONLINE.scoreOpponent;
+    duelHudPaint = (s) => {
+      const hud = document.getElementById('duel-hud');
+      const ui = duelUiFromSnapshot(s.driver.snapshot(), s.canUndo, s.isRevealing);
+      renderDuelHud(hud, ui);
+      // The same two words the offline bar reads (You : Opponent) — one source, src/strings.ts.
+      const you = document.getElementById('score-you-label');
+      const bot = document.getElementById('score-bot-label');
+      if (you) you.textContent = ONLINE.scoreYou;
+      if (bot) bot.textContent = ONLINE.scoreOpponent;
+    };
+    duelHudPaint(os);
   });
 }
 
@@ -1939,6 +1997,8 @@ const flushIdle = () => {
 /** Shows everything still queued at once and stops running effects. */
 function fastForward() {
   if (queue.pending === 0 && !pumping) return;
+  animLog('fast-forward', { pending: queue.pending, pumping, epoch });
+  disarmRevealWatchdog();
   epoch++;
   replaying = false;
   liveReveal = false;
@@ -1975,6 +2035,8 @@ function fastForward() {
 
 /** Book-keeping for a step that is shown (with or without animation). */
 function settleStep(s: Step, animated: boolean) {
+  revealProgress++; // one step really landed: the reveal watchdog must not treat this as a stall
+  markTiming('tile', { k: s.k, animated });
   const displayEvent = displaySteps.get(s);
   if (displayEvent && animated) smartCockpit?.event(displayEvent);
   displaySteps.delete(s);
@@ -2110,56 +2172,251 @@ function smootherMode() {
   $('smoother-keep').onclick = () => (note.hidden = true);
 }
 
+/**
+ * The animation pump.
+ *
+ * The guard below is a WAKE-UP, never a drop. A `pump()` call that arrives while a pump is running
+ * sets `pumpWanted`, so the owner loops once more instead of returning: a step pushed during the
+ * pump's tail (or its minimum-hold) can never be left in the queue with nobody to play it. That
+ * lost wake-up was the source of a gate that "could not progress".
+ *
+ * Ownership is a token (`pumpRun`), not a bare boolean. Every exit path — a normal drain, a Skip,
+ * a `timeScale()===0` fast-forward, an epoch change from a new game, or any future early return —
+ * runs the `finally`, so `pumping` can never be left `true`. A stale pump whose epoch moved on
+ * (and whose successor has already started) must not clear the successor's state, which the token
+ * guards against.
+ *
+ * `finally` is also the ONLY place a live reveal ends: whatever ended the pump, the gate is lifted
+ * and the HUD is repainted from the real session state, so the turn word can never be left saying
+ * "Opponent's turn" while the player is free to act.
+ */
+let pumpRun = 0;
+let pumpWanted = false;
 async function pump() {
-  if (pumping) return;
-  pumping = true;
-  watchFrames();
-  const my = epoch;
-  while (queue.pending > 0) {
-    if (my !== epoch) return;
-    await whilePaused();
-    if (my !== epoch) return;
-    if (timeScale() === 0) {
-      fastForward();
-      return;
-    }
-    await playStep(queue.peek()!, my);
-  }
-  if (my !== epoch) {
-    liveReveal = false;
-    if (getOnlineSession()) {
-      getOnlineSession()!.endReveal();
-      paintOnlineHudFromSession();
-    }
+  if (pumping) {
+    pumpWanted = true;
+    animLog('pump:wake', { pending: queue.pending, epoch });
     return;
   }
-  // A live enemy turn must be READABLE: even a turn that grew nothing (a hidden draw plus a
-  // discard) holds the gate for a beat, so the board never swaps in a single frame.
-  if (liveReveal && getOnlineSession()) {
-    const left = MIN_LIVE_REVEAL_MS - (performance.now() - revealStartedAt);
-    if (left > 0) {
-      await wait(left, my);
+  pumping = true;
+  const run = ++pumpRun;
+  const my = epoch;
+  animLog('pump:enter', { pending: queue.pending, epoch: my });
+  watchFrames();
+  try {
+    for (;;) {
+      pumpWanted = false;
+      while (queue.pending > 0) {
+        if (my !== epoch) return;
+        await whilePaused();
+        if (my !== epoch) return;
+        if (timeScale() === 0) {
+          animLog('pump:fast-forward', { epoch: my });
+          fastForward();
+          return;
+        }
+        await playStep(queue.peek()!, my);
+      }
       if (my !== epoch) return;
+      // A live enemy turn must be READABLE: even a turn that grew nothing (a hidden draw plus a
+      // discard) holds the gate for a beat, so the board never swaps in a single frame.
+      if (liveReveal && getOnlineSession()) {
+        const left = MIN_LIVE_REVEAL_MS - (performance.now() - revealStartedAt);
+        if (left > 0) {
+          await wait(left, my);
+          if (my !== epoch) return;
+        }
+      }
+      // A push that landed while we were finishing (during the hold, or between the loop and here)
+      // must still play. Without this the queue could hold steps and no pump would pick them up.
+      if (!pumpWanted && queue.pending === 0) break;
+    }
+  } catch (error) {
+    // A step failed mid-animation. Never leave the board half-applied and the gate shut: settle
+    // whatever is left to the TRUE final board, and make the failure loud so it is diagnosable.
+    animLog('pump:error', { message: String(error).slice(0, 300), pending: queue.pending, epoch: my });
+    console.error('[FUTASAKU] the animation pump threw; settling to the final board', error);
+    fastForward();
+  } finally {
+    if (pumpRun === run) {
+      pumping = false;
+      liveReveal = false;
+      replaying = false;
+      board.focus(null);
+      animLog('pump:leave', {
+        epoch: my,
+        now: epoch,
+        pending: queue.pending,
+        revealing: !!getOnlineSession()?.isRevealing,
+      });
+      // The opponent's turn has fully played out (or was skipped): the player may act now.
+      markTiming('replay:end', { queued: queue.pending });
+      if (getOnlineSession()) {
+        getOnlineSession()!.endReveal();
+        markTiming('input:open', { revealing: false });
+        paintOnlineHudFromSession();
+      }
+      if (reopenGameOver) {
+        reopenGameOver = false;
+        gameOverDismissed = false;
+      }
+      disarmRevealWatchdog();
+      render();
+      flushIdle();
+    } else {
+      animLog('pump:stale-return', { epoch: my, now: epoch, run, current: pumpRun });
     }
   }
+}
+
+// ---------- the reveal safety net ----------
+
+/**
+ * The reveal watchdog: a LAST RESORT, not a timer that opens the gate early.
+ *
+ * The owner's rule stands — input stays closed until the enemy's finished turn has fully animated.
+ * A normal turn progresses continuously (one step lands, then the next), so a watchdog that only
+ * fires after a period with NO progress can never cut a legitimate animation short, however long
+ * the turn or however slow the phone: a big Bloom, Reduce motion, the Slow speed setting, or a long
+ * away catch-up all keep landing steps, each of which resets the clock. It is parked while the game
+ * is paused or the tab is hidden, where "no progress" is expected rather than a fault.
+ *
+ * Two independent guards, because either alone can be defeated:
+ *  1. NO-PROGRESS (6s): catches a step that never settles (a thrown animation, a missing target).
+ *  2. ABSOLUTE BUDGET (the replay's own length + 3s): catches a replay that keeps PROGRESSING but
+ *     never ENDS — the class of bug the two-phone playtest hit (a queue that keeps refilling, so
+ *     every step resets the no-progress clock and the gate never opens). The budget is measured
+ *     from the moment the gate closed, so it cannot be reset by progress.
+ *
+ * When either fires, the queue is flushed to the TRUE final board (`fastForward`), the gate is
+ * lifted, the HUD is repainted from the real session state, and it is said loudly.
+ */
+let revealWatchdog = 0;
+let revealWatchSeen = -1;
+let revealWatchSince = 0;
+let revealDeadline = 0;
+/** When the watchdog was parked because the game is paused or the tab is hidden (0 = not parked). */
+let revealPausedAt = 0;
+const REVEAL_STALL_MS = 6_000;
+/** The absolute budget beyond the replay's own designed length (owner's rule). */
+const REVEAL_BUDGET_GRACE_MS = 3_000;
+/**
+ * A generous per-UNIT ceiling for the budget, above the Slow speed. A unit is one step, or one
+ * TILE of a multi-tile grow (the slowest single thing the replay does). Measuring a big Slow Bloom
+ * in tiles is what lets the budget be long enough that it can never cut a legitimate animation
+ * short, while still being far shorter than a real stall.
+ */
+const REVEAL_MAX_UNIT_MS = 1_000;
+
+/** The replay's own designed length (ms) from its work units, used for the absolute budget. */
+export const estimateReplayMs = (units: number): number =>
+  Math.max(1_500, Math.max(1, units) * REVEAL_MAX_UNIT_MS);
+
+/** One unit per step, but a multi-tile grow is one unit PER TILE: it is the slow sequential path. */
+const replayUnits = (steps: readonly Step[]): number =>
+  steps.reduce((n, s) => n + (s.k === 'grow' ? Math.max(1, s.tiles.length) : 1), 0);
+
+function armRevealWatchdog(steps: readonly Step[] = []): void {
+  disarmRevealWatchdog();
+  const now = performance.now();
+  const units = replayUnits(steps);
+  revealWatchSeen = revealProgress;
+  revealWatchSince = now;
+  revealDeadline = now + estimateReplayMs(units) + REVEAL_BUDGET_GRACE_MS;
+  revealWatchdog = window.setInterval(checkRevealStall, 1000);
+  animLog('watch:arm', { progress: revealProgress, steps: steps.length, units, budget: Math.round(revealDeadline - now) });
+  markTiming('gate:arm', { steps: steps.length, units, budget: Math.round(revealDeadline - now) });
+}
+function disarmRevealWatchdog(): void {
+  revealDeadline = 0;
+  revealPausedAt = 0;
+  if (!revealWatchdog) return;
+  clearInterval(revealWatchdog);
+  revealWatchdog = 0;
+}
+
+/** Flush to the true final board, lift the gate, repaint. Shared by both guards. */
+function releaseGate(reason: string, detail: Record<string, unknown>): void {
+  animLog('watch:release', { reason, ...detail });
+  markTiming('gate:safety', { reason, ...detail });
+  disarmRevealWatchdog();
+  // A pump that never settles (or a queue that keeps refilling) must not be left owning the gate:
+  // abandon it so a later reveal can pump at all, then flush the queue to the true board.
+  pumpRun++;
   pumping = false;
-  liveReveal = false;
-  replaying = false;
-  board.focus(null);
-  // The opponent's turn has fully played out (or was skipped): the player may act now.
-  if (getOnlineSession()) {
-    getOnlineSession()!.endReveal();
+  pumpWanted = false;
+  fastForward();
+  const os = getOnlineSession();
+  if (os?.isRevealing) {
+    os.endReveal();
     paintOnlineHudFromSession();
+    render();
   }
-  if (reopenGameOver) {
-    reopenGameOver = false;
-    gameOverDismissed = false;
+  animLog('watch:recovered', { queued: queue.pending, revealing: !!os?.isRevealing });
+  markTiming('input:open', { reason, recovering: true });
+}
+
+function checkRevealStall(): void {
+  const os = getOnlineSession();
+  if (!os || !os.isRevealing) {
+    disarmRevealWatchdog();
+    return;
   }
-  render();
-  flushIdle();
+  // Paused or hidden: the replay is deliberately not advancing. Park the clocks (not a fault). The
+  // paused time is ADDED BACK to the budget on resume, so a long pause cannot eat the real budget.
+  if (paused || document.hidden) {
+    const now = performance.now();
+    if (!revealPausedAt) revealPausedAt = now;
+    revealWatchSince = now;
+    return;
+  }
+  if (revealPausedAt) {
+    revealDeadline += performance.now() - revealPausedAt;
+    revealPausedAt = 0;
+    revealWatchSince = performance.now();
+  }
+  if (revealProgress !== revealWatchSeen) {
+    revealWatchSeen = revealProgress;
+    revealWatchSince = performance.now();
+  }
+  const stalledFor = Math.round(performance.now() - revealWatchSince);
+  if (stalledFor >= REVEAL_STALL_MS) {
+    const detail = { stalledFor, queued: queue.pending, pumping, epoch, progress: revealProgress };
+    console.warn('[FUTASAKU] enemy-turn replay stalled; settling to the true final board', detail);
+    releaseGate('no-progress', detail);
+    return;
+  }
+  // The absolute budget: progress is happening, but the replay has run past its own length + 3s.
+  const overrun = Math.round(performance.now() - revealDeadline);
+  if (revealDeadline > 0 && overrun >= 0) {
+    const detail = { overrun, queued: queue.pending, pumping, epoch, progress: revealProgress };
+    console.warn('[FUTASAKU] enemy-turn replay overran its budget; settling to the true final board', detail);
+    releaseGate('budget', detail);
+    return;
+  }
+}
+
+/**
+ * TEST-ONLY injection: make the NEXT pump wait on a promise that only `releaseStall()` resolves.
+ * It exists to prove the gate can never stay shut forever (the absolute budget releases it) and
+ * that the board ends on the TRUE final state — with a deliberately hung step, not a guess.
+ */
+let stallInject: Promise<void> | null = null;
+let stallRelease: (() => void) | null = null;
+function injectStall(): void {
+  stallInject = new Promise<void>((resolve) => {
+    stallRelease = resolve;
+  });
+  animLog('test:stall-injected');
 }
 
 async function playStep(step: Step, my: number) {
+  if (stallInject) {
+    const pending = stallInject;
+    stallInject = null;
+    await pending;
+    if (my !== epoch) return;
+  }
   const f = timeScale();
   const m = motion();
   // Overhaul item 19: the opponent's actions: the rest of the board dims a little, and the
@@ -2234,7 +2491,8 @@ async function playStep(step: Step, my: number) {
           if (my !== epoch) return;
           const t = step.tiles[i]!;
           queue.placeGrowTile(by, t);
-          render();
+          revealProgress++; // a tile really landed: the reveal watchdog must not treat this as a stall
+          renderRevealTile();
           if (bloom) sound.bloomTile(i);
           const d = hexDistance(home, parseKey(t.key));
           if (d < anchorDist) { anchorDist = d; anchor = t.key; }
@@ -2793,7 +3051,32 @@ function syncGlow() {
   board.setGlow(o);
 }
 
+/**
+ * The cost of the two redraw paths, for the smoothness evidence only (never drives anything).
+ * `full` = a whole-page `render()`, `tile` = `renderRevealTile()`. Read with `__severgrow.renderCosts()`.
+ */
+const renderCosts: { kind: 'full' | 'tile'; ms: number }[] = [];
+const noteRenderCost = (kind: 'full' | 'tile', ms: number): void => {
+  renderCosts.push({ kind, ms: Math.round(ms * 100) / 100 });
+  if (renderCosts.length > 600) renderCosts.splice(0, renderCosts.length - 600);
+};
+
+/**
+ * The per-tile redraw for a SEQUENTIAL (multi-tile) grow. Between two tiles of the same step only
+ * the board changes — the turn word, hand, piles, controls and camera do not — so a full-page
+ * `render()` per tile is wasted work that reads as a dropped frame on a phone. `show()` still runs
+ * the full `render()` at every step boundary, and the pump's end does one more.
+ */
+function renderRevealTile(): void {
+  if (!session || $('game').hidden) return;
+  const t0 = performance.now();
+  syncGlow();
+  renderBoard(session.view, null);
+  noteRenderCost('tile', performance.now() - t0);
+}
+
 function render() {
+  const t0 = performance.now();
   applyLayout();
   syncGlow();
   updateFuta04MoveActive();
@@ -2867,6 +3150,7 @@ function render() {
       autoAdvance();
     }, 250);
   }
+  noteRenderCost('full', performance.now() - t0);
 }
 let autoQueued = false;
 /** Optional teaching yields to the player's move and to other sheets. */
@@ -3389,6 +3673,9 @@ let freshTurn = -1;
 let freshBoard: State['board'] | null = null;
 function freshKeys(): string[] {
   if (!session || busy()) return [];
+  // Online the offline "grew last turn" highlight has no source: the duel keeps only this seat's
+  // own actions, not a replayable turn history. Reading it used to throw from a render path.
+  if (isOnlineDuel()) return [];
   const st = session.state;
   if (st.turnPlayer !== HUMAN || st.phase === 'GAME_OVER') return [];
   if (st.turnNumber !== freshTurn) {
@@ -5972,14 +6259,47 @@ let appReady = false;
   online: () => {
     const os = getOnlineSession();
     if (!os) return null;
+    const snap = os.driver.snapshot();
     return {
       revealing: os.isRevealing,
       live: os.revealIsLive,
       myTurn: os.myTurn,
+      /** The SERVER's actor/seat (never the gate): the test that both phones disagree. */
+      serverActor: snap.view.actor,
+      serverTurn: snap.status !== 'active' || snap.view.phase === 'GAME_OVER'
+        ? 'closed'
+        : snap.view.actor === snap.seat
+          ? 'mine'
+          : 'theirs',
       seat: os.seat,
       finished: os.finished,
       queued: queue.pending,
+      /** Diagnostics: the pump's own state, so a test can prove nothing was left running. */
+      pumping,
+      watchdog: revealWatchdog !== 0,
+      progress: revealProgress,
     };
+  },
+  /** Tests/diagnostics: the animation pump's timeline (see `animLog`). Never drives the game. */
+  animLog: () => animMarks.slice(),
+  clearAnimLog: () => {
+    animMarks.length = 0;
+  },
+  /** Diagnostics: how long each redraw path took (full page vs per-tile). */
+  renderCosts: () => renderCosts.slice(),
+  clearRenderCosts: () => {
+    renderCosts.length = 0;
+  },
+  /** Diagnostics: the `?debug=timing` segment trace (across two pages via `wall`). */
+  timing: () => timingLog(),
+  clearTiming: () => clearTiming(),
+  timingEnabled: () => timingEnabled(),
+  /** Test-only: make the NEXT pump wait on a promise that only `releaseStall()` resolves. */
+  injectStall: () => injectStall(),
+  releaseStall: () => {
+    const release = stallRelease;
+    stallRelease = null;
+    release?.();
   },
   /** Boot finished: every async UI mount is attached and the first screen is shown. */
   ready: () => appReady,
@@ -6037,7 +6357,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
     realtimeChannelFromEnv,
   } = await import('./online/index.js');
   const { DuelClient, browserStorage } = await import('../../server/src/client.js');
-  const { duelApiUrl } = await import('./online/config.js');
+  const { duelApiUrl, duelRegion } = await import('./online/config.js');
 
   // The lobby's own exits use the same one teardown as every in-game exit route.
   const leaveOnline = () => tearDownOnlineDuel();
@@ -6062,7 +6382,11 @@ void import('./online/lobby-ui.js').then(async (m) => {
       const api = duelApiUrl();
       if (!api) return;
       leaveOnline();
-      const client = new DuelClient({ baseUrl: api, storage: browserStorage() });
+      const client = new DuelClient({
+        baseUrl: api,
+        storage: browserStorage(),
+        ...(duelRegion() ? { region: duelRegion()! } : {}),
+      });
       const driver = createOnlineDriver({
         client,
         token,
@@ -6074,11 +6398,22 @@ void import('./online/lobby-ui.js').then(async (m) => {
           if (!os) return;
           os.refresh();
           syncSessionFromOnline();
-          const catchUp = os.consumeCatchUp();
+          let catchUp: Step[] = [];
+          try {
+            catchUp = os.consumeCatchUp();
+          } catch (error) {
+            // A replay that cannot be built must never leave the gate shut: the session has already
+            // closed it. Open it and say what happened, instead of a silent "Opponent's turn".
+            const stack = error instanceof Error ? String(error.stack ?? '') : '';
+            animLog('onchange:catchup-error', { message: String(error).slice(0, 300), stack: stack.slice(0, 500) });
+            console.error('[FUTASAKU] could not build the enemy-turn replay', error);
+            os.endReveal();
+          }
           if (catchUp.length) {
             // The enemy's finished turn is shown at the OFFLINE game's own pace (one tile at a
             // time, MOTION.move each) so the player can see what arrived. A catch-up after being
             // away keeps its 2x and its Skip.
+            markTiming('gate:closed', { steps: catchUp.length });
             liveReveal = os.revealIsLive;
             revealStartedAt = performance.now();
             if (liveReveal) {
@@ -6089,6 +6424,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
               replaySpeed = 2;
             }
             queue.push(catchUp);
+            markTiming('replay:start', { steps: catchUp.length, live: liveReveal, queued: queue.pending });
+            armRevealWatchdog(catchUp);
             void pump().then(() => {
               if (!liveReveal) {
                 replaying = false;
@@ -6129,6 +6466,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
           // through the same queue, and make sure the gate is always lifted.
           if (res.catchUp.length) {
             queue.push(res.catchUp);
+            armRevealWatchdog(res.catchUp);
             void pump();
           } else {
             cur.endReveal();
@@ -6189,6 +6527,27 @@ window.addEventListener('error', () => {
 window.addEventListener('pagehide', () => {
   tutorialGate?.clear();
 });
+
+// `?debug=timing`: a small on-screen readout of the same trace the harness reads from `window`.
+// It is the only UI the trace has; it never touches the game and never renders without the flag.
+if (timingEnabled()) {
+  const box = document.createElement('pre');
+  box.id = 'timing-readout';
+  box.style.cssText = [
+    'position:fixed', 'left:6px', 'bottom:6px', 'z-index:80', 'margin:0', 'padding:6px 8px',
+    'max-width:min(94vw,560px)', 'max-height:38vh', 'overflow:hidden', 'pointer-events:none',
+    'font:11px/1.35 ui-monospace,monospace', 'color:#d9f2c8', 'background:rgba(4,8,6,.82)',
+    'border-radius:8px', 'white-space:pre-wrap',
+  ].join(';');
+  document.body.appendChild(box);
+  const renderReadout = () => {
+    const all = timingLog();
+    const lines = all.slice(-16).map((m) => `${m.t.toFixed(0).padStart(7)}ms  ${m.ev}${m.d ? '  ' + JSON.stringify(m.d) : ''}`);
+    box.textContent = `timing (${all.length} marks)\n${lines.join('\n')}`;
+    window.setTimeout(renderReadout, 250);
+  };
+  renderReadout();
+}
 
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

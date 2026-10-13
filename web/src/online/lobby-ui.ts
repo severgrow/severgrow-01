@@ -5,7 +5,7 @@ import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../se
 import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
-import { duelApiUrl, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { createHudBrandMark } from '../player/branding.js';
 import {
   FIRST_ONLINE_CARD_KEY,
@@ -78,6 +78,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const client = new DuelClient({
     baseUrl: api,
     storage: browserStorage(),
+    ...(duelRegion() ? { region: duelRegion()! } : {}),
     onUnauthorized: async () => {
       if (!identityStore) return null;
       const status = await identityStore.recover();

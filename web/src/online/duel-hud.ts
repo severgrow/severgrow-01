@@ -11,13 +11,23 @@ import type { PresenceStatus } from './types.js';
 export type DuelHudModel = {
   opponentName: string;
   presence: PresenceStatus;
-  myTurn: boolean;
+  /** The server's real turn state (never the animation gate) — see `turnWord`. */
+  turn: TurnState;
   notice: string | null;
   finished: boolean;
   finishedTitle: string | null;
   /** Mid-match deadline urgency. Nothing is shown until the last two hours (absent = nothing). */
   urgency?: DeadlineUrgency;
 };
+
+/**
+ * Whose turn the SERVER says it is, plus the replay state:
+ * - 'mine' / 'theirs': straight from `view.actor` vs `seat` on an active match.
+ * - 'replaying': the opponent's finished turn is still animating (the gate is shut). This is a
+ *   distinct word, so the phone whose turn it now is never reads "Opponent's turn".
+ * - 'finished': the match is over.
+ */
+export type TurnState = 'mine' | 'theirs' | 'replaying' | 'finished';
 
 export const presenceWord = (p: PresenceStatus): string => {
   if (p === 'online') return ONLINE.presenceOnline;
@@ -51,9 +61,22 @@ export const deadlineUrgency = (remainingMs: number | null): DeadlineUrgency => 
   return { tone: null, label: '', sr: '' };
 };
 
-export const turnWord = (myTurn: boolean, finished: boolean): string => {
-  if (finished) return ONLINE.statusFinished;
-  return myTurn ? ONLINE.statusYourTurn : ONLINE.statusTheirTurn;
+/**
+ * The one turn word, sourced from `TurnState`. A replay is its own state — no pronoun guessing
+ * and, crucially, never "Opponent's turn" while the opponent's turn is animating (that was the
+ * two-phone bug: the acting player's phone read "Opponent's turn" for the whole replay).
+ */
+export const turnWord = (state: TurnState): string => {
+  switch (state) {
+    case 'finished':
+      return ONLINE.statusFinished;
+    case 'replaying':
+      return ONLINE.statusReplaying;
+    case 'mine':
+      return ONLINE.statusYourTurn;
+    default:
+      return ONLINE.statusTheirTurn;
+  }
 };
 
 export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
@@ -67,7 +90,7 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
     presence.textContent = presenceWord(model.presence);
     presence.setAttribute('data-presence', model.presence);
   }
-  if (turn) turn.textContent = turnWord(model.myTurn, model.finished);
+  if (turn) turn.textContent = turnWord(model.turn);
   if (notice) {
     notice.textContent = model.notice ?? '';
     (notice as HTMLElement).hidden = !model.notice;

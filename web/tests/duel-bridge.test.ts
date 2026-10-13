@@ -23,8 +23,12 @@ describe('duel HUD helpers', () => {
     expect(deadlineTone(3 * 3_600_000)).toBe('ok');
     expect(deadlineTone(90 * 60_000)).toBe('amber');
     expect(deadlineTone(10 * 60_000)).toBe('red');
-    expect(turnWord(true, false)).toBe('Your turn');
-    expect(turnWord(false, false)).toBe("Opponent's turn");
+    expect(turnWord('mine')).toBe('Your turn');
+    expect(turnWord('theirs')).toBe("Opponent's turn");
+    // A replay is its own word: the two-phone bug was this state reading "Opponent's turn".
+    expect(turnWord('replaying')).toBe('Replaying their turn');
+    expect(turnWord('replaying')).not.toBe("Opponent's turn");
+    expect(turnWord('finished')).toBe('Finished');
   });
 
   it('urgency is hidden with a full day left, amber under 2h, red under 15m (text, never colour alone)', () => {
@@ -131,9 +135,17 @@ describe('duelUiFromSnapshot', () => {
       clearTimer: () => undefined,
     });
     const snap = driver.snapshot();
-    expect(duelUiFromSnapshot(snap, false, false).hud.myTurn).toBe(true);
+    expect(duelUiFromSnapshot(snap, false, false).hud.turn).toBe('mine');
     const revealing = duelUiFromSnapshot(snap, false, true);
-    expect(revealing.hud.myTurn, 'mid-replay the HUD still shows the opponent turn').toBe(false);
-    expect(turnWord(revealing.hud.myTurn, revealing.hud.finished)).toBe("Opponent's turn");
+    // Mid-replay the HUD reads the REPLAY word, not "Opponent's turn": the server still says it is
+    // this seat's turn (snap.view.actor === seat), so calling it "Opponent's turn" was the bug the
+    // owner saw on BOTH phones at once. Input is still shut (myTurn is the gate).
+    expect(revealing.myTurn, 'the gate still refuses input mid-replay').toBe(false);
+    expect(revealing.hud.turn).toBe('replaying');
+    expect(turnWord(revealing.hud.turn)).toBe('Replaying their turn');
+    expect(
+      revealing.view.actor === revealing.seat,
+      'the server really does say it is this seat turn while the replay runs',
+    ).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import { DuelClient, DuelError } from '../../../server/src/client.js';
 import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { emptyClock, noteServerNow } from './clock.js';
 import type { ClockState } from './clock.js';
+import { mark } from '../logic/timing.js';
 import type { ConnectionStatus, MatchChannel, MatchPing, PresenceSnapshot, PresenceStatus } from './types.js';
 
 export const POLL_ACTIVE_MS = 2_000;
@@ -109,10 +110,10 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       return;
     }
     inFlight = (async () => {
+      let res: Awaited<ReturnType<typeof options.client.getState>>;
       try {
-        const res = await options.client.getState(options.token, options.matchId, revision);
-        applyPayload(res.player, res.serverNow, reason);
-        if (connection !== 'client_too_old') setConnection('online', null);
+        mark('view:sent', { reason, since: revision });
+        res = await options.client.getState(options.token, options.matchId, revision);
       } catch (error) {
         if (error instanceof DuelError && error.code === 'CLIENT_TOO_OLD') {
           setConnection('client_too_old', 'Reload to update FUTASAKU');
@@ -123,9 +124,16 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
         } else {
           setConnection('reconnecting', 'Reconnecting');
         }
+        return;
       } finally {
         inFlight = null;
       }
+      // Apply the payload OUTSIDE the network try/catch. An exception while applying a view (a
+      // render/replay bug) used to be caught here and reported as "Reconnecting" — which hid the
+      // real fault AND could leave the enemy-turn gate shut. It must surface, not be disguised.
+      mark('view:recv', { reason, revision: res.player.revision, events: res.player.events.length });
+      applyPayload(res.player, res.serverNow, reason);
+      if (connection !== 'client_too_old') setConnection('online', null);
     })();
     await inFlight;
   };
@@ -135,17 +143,31 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     return waiting ? POLL_WAITING_MS : POLL_ACTIVE_MS;
   };
 
+  /**
+   * An exception while APPLYING a view is a real bug and must be loud — but it must never stop the
+   * poll. Previously `schedule` was `fetchView('poll').then(schedule)`: a rejected fetch skipped
+   * `schedule`, so one bad frame killed the safety net for the rest of the match (a stale board with
+   * no recovery). Log it and keep the cadence alive instead.
+   */
+  const logApplyError = (error: unknown): void => {
+    console.error('[FUTASAKU] could not apply a match view; the poll keeps running', error);
+  };
+
   const schedule = () => {
     if (stopped) return;
     if (timer !== null) clearTimer(timer);
     timer = setTimer(() => {
       // A scheduled poll while the tab is visible is how the LIVE enemy turn arrives.
-      void fetchView('poll').then(schedule);
+      void fetchView('poll').then(schedule, (error) => {
+        logApplyError(error);
+        schedule();
+      });
     }, pollMs());
   };
 
-  const onPing = (_ping: MatchPing) => {
-    void fetchView('ping');
+  const onPing = (ping: MatchPing) => {
+    mark('ping:recv', { revision: ping.revision, status: ping.status });
+    void fetchView('ping').catch(logApplyError);
   };
 
   const onPresence = (snap: PresenceSnapshot) => {
@@ -187,7 +209,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     setVisible(next) {
       visible = next;
       // Coming back to the tab is a gap: the missed turns replay fast and stay skippable.
-      if (visible) void fetchView('visible');
+      if (visible) void fetchView('visible').catch(logApplyError);
       schedule();
     },
 
@@ -195,7 +217,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       networkOnline = next;
       if (next) {
         setConnection('reconnecting', 'Reconnecting');
-        void fetchView('online');
+        void fetchView('online').catch(logApplyError);
       } else {
         setConnection('offline', 'Reconnecting');
       }

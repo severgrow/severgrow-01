@@ -6,6 +6,7 @@ import { DuelClient } from '../../../server/src/client.js';
 import type { MatchViewPayload } from '../../../server/src/protocol.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
+import { mark } from '../logic/timing.js';
 import { remainingMs } from './clock.js';
 import type { ClockState } from './clock.js';
 import { createDraftEngine } from './draft.js';
@@ -230,6 +231,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       }
       submitting = true;
       try {
+        mark('req:sent', { kind: 'draw' });
         const outcome = await submitWithRetries({
           client: options.client,
           token: options.token,
@@ -252,6 +254,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
         } finally {
           catchUpMode = 'all';
         }
+        mark('res:got', { kind: 'draw', ok: true });
+        mark('server:commit', { kind: 'draw', serverNow: outcome.response.serverNow });
         return { ok: true };
       } finally {
         submitting = false;
@@ -288,6 +292,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       const requestId = newRequestId();
       const actions = [...draft.actions(), endAct];
       try {
+        mark('req:sent', { kind: 'throw', actions: actions.length });
         const outcome = await submitWithRetries({
           client: options.client,
           token: options.token,
@@ -316,6 +321,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
         } finally {
           catchUpMode = 'all';
         }
+        mark('res:got', { kind: 'throw', ok: true });
+        mark('server:commit', { kind: 'throw', serverNow: outcome.response.serverNow });
         notice = null;
         emit();
         return { ok: true };

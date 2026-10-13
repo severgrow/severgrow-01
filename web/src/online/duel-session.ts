@@ -148,9 +148,20 @@ export class OnlineSession {
     this.revealing = true;
     this.revealLive = this.driver.pendingOrigin() === 'live';
     this.driver.skipCatchUp();
-    const steps = stepsFromEvents(events, this.driver.perspective());
-    const v = this.view;
-    steps.push(syncStep(this.state.board, [v.score, v.opponentScore]));
+    let steps: Step[];
+    try {
+      steps = stepsFromEvents(events, this.driver.perspective());
+      const v = this.view;
+      steps.push(syncStep(this.state.board, [v.score, v.opponentScore]));
+    } catch (error) {
+      // The gate is already shut, so a replay that cannot be built would freeze the player on
+      // "Opponent's turn" forever (the sync engine swallows this throw as a fetch error). Reopen
+      // it here — the caller still reports the failure — so a broken step is a glitch, not a lock.
+      this.revealing = false;
+      this.revealLive = false;
+      this.lastCatchUp = [];
+      throw error;
+    }
     this.lastCatchUp = steps;
     // The page replays these through the shared AnimQueue; until it drains, input stays shut.
     return steps;

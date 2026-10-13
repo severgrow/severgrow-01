@@ -4,7 +4,7 @@ import type { Action, Event, View } from '../../../src/engine/index.js';
 import { ONLINE, RESULT } from '../../../src/strings.js';
 import type { OnlineDriver } from './driver.js';
 import { deadlineUrgency, fillDuelHud } from './duel-hud.js';
-import type { DuelHudModel } from './duel-hud.js';
+import type { DuelHudModel, TurnState } from './duel-hud.js';
 import type { MatchDriverSnapshot } from './types.js';
 
 export type DuelUiModel = {
@@ -17,6 +17,8 @@ export type DuelUiModel = {
   screenLegal: Action[];
   screenEvents: Event[];
   myTurn: boolean;
+  /** The server's real turn state (never the gate) — the one source of the HUD turn word. */
+  turn: TurnState;
   hasDraft: boolean;
   canUndo: boolean;
   coachOff: true;
@@ -27,14 +29,30 @@ export type DuelUiModel = {
   hud: DuelHudModel;
 };
 
+/**
+ * The server's real turn state for this seat. `revealing` only distinguishes the third state; it
+ * never turns a real "it is my turn" into "theirs" (which is what made both phones read the same
+ * words). `finished` wins over everything.
+ */
+export const turnStateFrom = (snap: MatchDriverSnapshot, revealing: boolean): TurnState => {
+  if (snap.status === 'finished' || snap.view.phase === 'GAME_OVER') return 'finished';
+  if (snap.status !== 'active') return 'theirs';
+  if (revealing) return 'replaying';
+  // Status is 'active' here, so a GAME_OVER phase cannot occur: the actor alone decides.
+  return snap.view.actor === snap.seat ? 'mine' : 'theirs';
+};
+
 export const duelUiFromSnapshot = (
   snap: MatchDriverSnapshot,
   canUndo: boolean,
   /** True while the opponent's finished turn is still replaying: it is NOT this seat's turn yet. */
   revealing = false,
 ): DuelUiModel => {
-  const myTurn = !revealing && snap.view.actor === snap.seat && snap.status === 'active';
-  const finished = snap.status === 'finished' || snap.view.phase === 'GAME_OVER';
+  const turn = turnStateFrom(snap, revealing);
+  // `myTurn` stays the GATE (input is refused while a replay drains). The HUD word does not: it
+  // reads `turn`, from the server's actor, so it is honest during a replay.
+  const myTurn = turn === 'mine';
+  const finished = turn === 'finished';
   return {
     seat: snap.seat,
     view: snap.view,
@@ -43,6 +61,7 @@ export const duelUiFromSnapshot = (
     screenLegal: snap.screenLegal,
     screenEvents: snap.screenEvents,
     myTurn,
+    turn,
     hasDraft: snap.hasDraft,
     canUndo,
     coachOff: true,
@@ -53,7 +72,7 @@ export const duelUiFromSnapshot = (
     hud: {
       opponentName: snap.opponentName ?? ONLINE.opponentFallback,
       presence: snap.presence,
-      myTurn,
+      turn,
       notice: snap.notice,
       finished,
       finishedTitle: finished

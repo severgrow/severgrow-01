@@ -114,6 +114,13 @@ export const ONLINE = Object.freeze({
   starterOpponentSr: 'Your opponent moves first in this match.',
   statusYourTurn: 'Your turn',
   statusTheirTurn: "Opponent's turn",
+  /**
+   * The turn word while the opponent's finished turn is being replayed. It is NOT "Opponent's
+   * turn": that is the exact confusion the two-phone playtest reported (both phones reading the
+   * same words, on the phone whose turn it already is). The state is derived from the server's
+   * real actor, never from the animation gate.
+   */
+  statusReplaying: 'Replaying their turn',
   /** Shown only if a move is attempted while the opponent's turn is still replaying. */
   statusRevealWait: 'Watching their turn play out',
   statusWaitingFriend: 'Waiting',

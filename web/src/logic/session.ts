@@ -161,13 +161,21 @@ export class Session {
     if (player === this.viewer || this.state.turnPlayer !== this.viewer) return [];
     if (this.restoredOpponentTurn) return this.restoredOpponentTurn;
     const wantedTurn = this.state.turnNumber - 1;
-    let before = this.base ?? newGame(this.state.seed, this.state.config);
     const plays: Played[] = [];
-    for (const action of this.log) {
-      const after = apply(before, action);
-      if (before.turnNumber === wantedTurn && before.turnPlayer === player)
-        plays.push({ before, action, after, steps: buildSteps(before, action, after, this.viewer) });
-      before = after;
+    try {
+      let before = this.base ?? newGame(this.state.seed, this.state.config);
+      for (const action of this.log) {
+        const after = apply(before, action);
+        if (before.turnNumber === wantedTurn && before.turnPlayer === player)
+          plays.push({ before, action, after, steps: buildSteps(before, action, after, this.viewer) });
+        before = after;
+      }
+    } catch {
+      // The log is not a replayable action list here (an online duel keeps only this seat's own
+      // actions and no base state): there is simply no previous turn to rebuild. Returning empty is
+      // correct — and, crucially, never throws into a render path, where the exception used to be
+      // swallowed as a fetch failure and left the enemy-turn gate shut ("Opponent's turn" stuck).
+      return [];
     }
     this.restoredOpponentTurn = plays;
     return plays;

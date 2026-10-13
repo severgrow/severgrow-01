@@ -89,6 +89,12 @@ export type DuelClientOptions = {
   clientVersion?: string;
   /** Override the rules version header (tests). Default: CURRENT_RULES_VERSION. */
   rulesVersion?: string;
+  /**
+   * Pin Edge Function execution to one AWS region with the `forceFunctionRegion` query parameter
+   * (e.g. `eu-west-1`, the region of the FUTASAKU database). Empty/omitted = let the platform pick
+   * the region closest to the caller. Only meaningful for a Supabase Edge Function URL.
+   */
+  region?: string;
   /** Self-heal hook for a rejected token. See `UnauthorizedHandler`. */
   onUnauthorized?: UnauthorizedHandler;
 };
@@ -102,6 +108,10 @@ export class DuelClient {
   private readonly sessionKey: string;
   private readonly clientVersion: string;
   private readonly rulesVersion: string;
+  /**
+   * The pinned Edge region, appended as `forceFunctionRegion`. See `DuelClientOptions.region`.
+   */
+  private readonly region: string | null;
   /**
    * Recovery hook for a rejected token. A public field (not just readonly options) so the owner of
    * this client can wire it after the identity store that the hook itself needs has been built.
@@ -122,6 +132,7 @@ export class DuelClient {
     this.sessionKey = options.sessionKey ?? DEFAULT_SESSION_KEY;
     this.clientVersion = options.clientVersion ?? DUEL_CLIENT_VERSION;
     this.rulesVersion = options.rulesVersion ?? CURRENT_RULES_VERSION;
+    this.region = options.region && options.region.trim() ? options.region.trim() : null;
     this.onUnauthorized = options.onUnauthorized;
   }
 
@@ -259,6 +270,18 @@ export class DuelClient {
    * body object re-serialised), so a mutation keeps its `requestId`; `mayRecover` is false on the
    * retry, so this can never loop.
    */
+  /**
+   * The full request URL: base + path, plus the region pin when configured. The region goes as a
+   * QUERY parameter (not a header) so it needs no CORS change: `x-region` would fail the preflight
+   * because the deployed API only allows its own known headers.
+   */
+  private urlFor(path: string): string {
+    const base = `${this.baseUrl}${path}`;
+    if (!this.region) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}forceFunctionRegion=${encodeURIComponent(this.region)}`;
+  }
+
   private async send<T>(
     method: string,
     path: string,
@@ -276,7 +299,7 @@ export class DuelClient {
       headers['content-type'] = 'application/json';
       init.body = JSON.stringify(options.body);
     }
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, init);
+    const response = await this.fetchImpl(this.urlFor(path), init);
     let data: unknown = null;
     try {
       data = await response.json();

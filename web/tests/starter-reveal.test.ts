@@ -117,7 +117,7 @@ const fakeHud = (): { root: HTMLElement; els: Record<string, FakeEl> } => {
 const baseModel = (over: Partial<DuelHudModel>): DuelHudModel => ({
   opponentName: 'Friend',
   presence: 'online',
-  myTurn: false,
+  turn: 'theirs',
   notice: null,
   finished: false,
   finishedTitle: null,
@@ -139,11 +139,18 @@ describe('fillDuelHud (trimmed duel strip)', () => {
 
   it('says "Your turn", shows a notice and hides it again when cleared', () => {
     const { root, els } = fakeHud();
-    fillDuelHud(root, baseModel({ myTurn: true, notice: 'Reconnecting' }));
+    fillDuelHud(root, baseModel({ turn: 'mine', notice: 'Reconnecting' }));
     expect(els['[data-duel-turn]']!.textContent).toBe('Your turn');
     expect(els['[data-duel-notice]']!.textContent).toBe('Reconnecting');
     expect(els['[data-duel-notice]']!.hidden).toBe(false);
-    fillDuelHud(root, baseModel({ myTurn: true, notice: null }));
+    fillDuelHud(root, baseModel({ turn: 'mine', notice: null }));
     expect(els['[data-duel-notice]']!.hidden).toBe(true);
+  });
+
+  it('reads "Replaying their turn" while the enemy turn animates — never "Opponent\'s turn"', () => {
+    const { root, els } = fakeHud();
+    fillDuelHud(root, baseModel({ turn: 'replaying' }));
+    expect(els['[data-duel-turn]']!.textContent).toBe('Replaying their turn');
+    expect(els['[data-duel-turn]']!.textContent).not.toBe("Opponent's turn");
   });
 });

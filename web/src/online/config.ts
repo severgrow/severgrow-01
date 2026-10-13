@@ -39,3 +39,24 @@ export const publicAppOrigin = (): string => {
   if (typeof location !== 'undefined' && location.origin) return location.origin + (location.pathname.replace(/\/+$/, '') || '');
   return 'https://severgrow.github.io/futa0.5';
 };
+
+/**
+ * The AWS region to pin the Edge Function to, or null to let the platform pick the region closest
+ * to the caller. The FUTASAKU database lives in `eu-west-1`, so pinning the function there removes
+ * a cross-region hop on EVERY database round trip (measured: db.ms 162 -> 83, total 331 -> 269ms).
+ * Only the project's own Supabase Edge URL is pinned; local/dev/test servers are left alone.
+ * Override with VITE_DUEL_REGION (an empty string disables the pin).
+ */
+export const duelRegion = (): string | null => {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env;
+  const override = env?.VITE_DUEL_REGION;
+  if (typeof override === 'string') return override.trim() || null;
+  const api = duelApiUrl();
+  if (!api) return null;
+  try {
+    const host = new URL(api).host;
+    return host.endsWith('.supabase.co') ? 'eu-west-1' : null;
+  } catch {
+    return null;
+  }
+};
