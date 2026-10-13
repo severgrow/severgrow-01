@@ -5937,6 +5937,14 @@ void import('./online/lobby-ui.js').then(async (m) => {
               return;
             }
             syncSessionFromOnline();
+            // Resigning can carry aftermath steps (the opponent's cut, the end). Replay them
+            // through the same queue, and make sure the gate is always lifted.
+            if (res.catchUp.length) {
+              queue.push(res.catchUp);
+              void pump();
+            } else {
+              cur.endReveal();
+            }
             paintOnlineHudFromSession();
             gameOverDismissed = false;
             render();
