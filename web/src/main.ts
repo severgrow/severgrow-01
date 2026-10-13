@@ -5743,6 +5743,14 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) fastForward();
 });
 
+// Online duels: a hidden or offline tab must not keep the 2s fast poll alive. Tell the sync engine
+// so it drops to the slow hidden cadence, and force a refresh when the tab or network comes back.
+document.addEventListener('visibilitychange', () => {
+  getOnlineSession()?.driver.sync().setVisible(!document.hidden);
+});
+window.addEventListener('online', () => getOnlineSession()?.driver.sync().setOnline(true));
+window.addEventListener('offline', () => getOnlineSession()?.driver.sync().setOnline(false));
+
 // Install as an app and play offline (the service worker caches the page's own files).
 // the test copy (/test/) works online only: no worker of its own (main's worker skips it too)
 if (!IS_TEST && 'serviceWorker' in navigator && location.protocol === 'https:') {

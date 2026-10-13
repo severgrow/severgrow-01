@@ -206,3 +206,69 @@ In the `DISCARD` step the app fills `#confirm` with `Discard <card> / Cancel / D
 
 - Raw data (every check, note, console/HTTP/CORS entry and screenshot path): `docs/screens/online/device-matrix/results.json`.
 - Harness (new files; no existing suite was modified): `web/e2e/online-device-matrix.ts` and `web/e2e/helpers/online-matrix.ts`.
+
+---
+
+# Update — the fixes this matrix identified (2026-10-13)
+
+All of these are online-only; no engine rule, tutorial file, `main` or locked futa04 build was touched.
+
+## G-1 · Resign is now fully tappable (fixed)
+
+The strip was a grid item in the game screen's first row, which the **fixed** brand header paints over
+(`z-index: 7`), and its `flex-wrap: wrap` pushed the Resign button onto a second line that fell under
+the board. Fix in `web/src/online/online-css.ts`:
+
+- `.duel-hud` is lifted above both the header and the board (`position: relative; z-index: 8`);
+- it starts after the header's 44px menu button (`margin-left: 52px`), so that button stays reachable;
+- its children lay out on **one** line (`flex-wrap: nowrap`), with the opponent name and the notice
+  allowed to ellipsize, and Resign pinned to the line (`order: 10; flex: 0 0 auto`).
+
+Measured on a real WebKit build with `document.elementFromPoint` at the button's centre:
+
+| Viewport | `#duel-resign` box | Centre hits |
+| --- | --- | --- |
+| 360x640 | 79 x 48 at x=269 | `#duel-resign` (was `HEADER`/`#board`) |
+| 390x844 | 79 x 48 at x=299 | `#duel-resign` |
+| 768x1024 | 79 x 48 at x=677 | `#duel-resign` |
+| 1280x800 | 79 x 48 at x=1189 | `#duel-resign` |
+
+The menu button (`#hud-menu`, centre) still hits its own icon at every size.
+
+## G-2 · Touch targets
+
+`#duel-resign` is now **79 x 48** (≥ 48px, the Android guideline, and ≥ 44px iOS), up from 79 x 36.
+The other duel controls (`#hud-menu`, `#smart-context`, `#tool-undo`, `#futa04-help-button`,
+`#hand-sort`) measure `44x44`: they meet the iOS minimum. Android's 48px advisory is recorded but not
+changed here, because those controls live in the shared futa04 header/dock whose row heights are
+computed by `logic/layout.ts`; growing them would move the locked futa04 layout. Recorded as a
+deliberate decision the owner can revisit.
+
+## G-4 · A hidden / offline tab stops fast polling (fixed)
+
+`web/src/main.ts` now wires the sync engine that was already present but unused:
+`visibilitychange` → `sync.setVisible(!document.hidden)`, and `online` / `offline` →
+`sync.setOnline(true|false)`. A hidden tab drops from the 2s poll to the 30s hidden cadence, and
+coming back (or regaining the network) forces a refresh. Re-measured by the volume pass below.
+
+## W-1 · the WebKit "CORS" console noise (fixed)
+
+**Root cause:** the small **Futasaku Numerals** font (2.3 KB) was inlined by Vite as a
+`data:font/woff2;base64,…` URI (Vite inlines assets under 4 KB). WebKit logs a spurious
+`Origin https://severgrow.github.io is not allowed by Access-Control-Allow-Origin. Status code: 200`
+for a font loaded from a `data:` URL. The API was never at fault — a direct preflight and the real
+responses all carry the correct CORS headers, and Chromium/Firefox are silent.
+
+**Fix:** on the `futa05` channel the build no longer inlines fonts (`web/vite.config.ts`), so the
+numerals font is served as a normal same-origin file. Verified by loading the rebuilt `/futa0.5/` in
+real WebKit: **0 console errors** (was 2 on every load).
+
+## G-5 / G-6 · the two "needs confirmation" items
+
+Re-checked in the follow-up device/browser volume pass (see the next section) — placed with two real
+browser contexts against the live site after this build was deployed.
+
+## G-3 · the hidden `#moves .end` node (not changed)
+
+It is `aria-hidden`-less and empty-labelled, but it is a hardware-control fallback owned by the
+futa04 presentation, not by the online worker. Left as-is, noted for the owner.

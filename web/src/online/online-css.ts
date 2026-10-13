@@ -142,16 +142,54 @@ export const ONLINE_CSS = `
   gap: 0.45rem;
   margin-top: 0.4rem;
 }
+/* The duel HUD is a slim strip shown only in online duels. The brand header is a fixed overlay at
+   the top of the game screen (z-index 7), so the strip is lifted above both it and the board and
+   starts after the header's 44px menu button. Everything stays on one line so the Resign control
+   never wraps out of the strip, and the strip's own box never intercepts the menu button. */
 .duel-hud {
+  position: relative;
+  z-index: 8;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.45rem 0.75rem;
-  padding: 0.35rem 0.75rem;
+  gap: 0.4rem 0.5rem;
+  margin-left: 52px;
+  padding: 0 0.75rem;
   font-size: 0.85rem;
-  min-height: 36px;
+  min-height: 48px;
+  overflow: visible;
   background: color-mix(in srgb, #161a16 92%, #000);
   border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+/* Only the strip's own controls take taps; the header's menu button underneath stays reachable. */
+.duel-hud > * {
+  min-width: 0;
+}
+.duel-hud .duel-opp {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.duel-hud [data-duel-turn],
+.duel-hud .duel-deadline {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.duel-hud .duel-notice {
+  flex: 1 1 auto;
+  order: 9;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.duel-hud #duel-resign {
+  flex: 0 0 auto;
+  order: 10;
+  align-self: center;
+  min-height: 48px;
+  min-width: 48px;
 }
 .duel-hud [data-duel-presence]::before {
   content: '';
@@ -167,8 +205,6 @@ export const ONLINE_CSS = `
 .duel-hud .duel-deadline[data-tone="amber"] { color: #d4a24a; }
 .duel-hud .duel-deadline[data-tone="red"] { color: #e07a5f; }
 .duel-hud .duel-notice {
-  margin: 0;
-  flex-basis: 100%;
   color: #e2c48a;
 }
 `;

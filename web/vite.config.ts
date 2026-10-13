@@ -49,5 +49,15 @@ export default defineConfig({
       for (const name of ['besley', 'fragment-mono']) cpSync(fileURLToPath(new URL(`./src/fonts/v2/LICENSE-${name}.txt`, import.meta.url)), resolve(output, `licenses/LICENSE-${name}.txt`));
     }
   } }],
-  build: { outDir: 'dist', emptyOutDir: true },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    // WebKit (Safari) logs a spurious "Origin … is not allowed by Access-Control-Allow-Origin"
+    // console error for a font loaded from a data: URI. Vite inlines assets under 4KB, and the
+    // small Futasaku Numerals font (2.3KB) was being inlined. Keep fonts as real files on the
+    // futa05 channel so the console stays honest; other channels keep the default inlining.
+    ...(process.env.CHANNEL === 'futa05'
+      ? { assetsInlineLimit: (filePath: string): boolean | undefined => (filePath.endsWith('.woff2') ? false : undefined) }
+      : {}),
+  },
 });
