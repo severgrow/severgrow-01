@@ -184,8 +184,8 @@ const makeTx = (client: PgClient): LiveTx => ({
   },
   async saveChallenge(c) {
     await client.query(
-      `update live_challenges set status = $7, responded_at = $10, new_match_id = $11 where id = $1`,
-      challengeValues(c),
+      'update live_challenges set status = $2, responded_at = $3, new_match_id = $4 where id = $1',
+      [c.id, c.status, c.respondedAt, c.newMatchId],
     );
   },
 });
