@@ -130,6 +130,11 @@ export const ONLINE = Object.freeze({
   firstCardOk: 'Got it',
   storageNote:
     'Your online matches live on this device until accounts exist.',
+  /**
+   * Shown once when a rejected token forced a fresh guest on this device. Honest, not alarming:
+   * the old identity (and its matches) is gone, so the player knows why their list is empty.
+   */
+  identityReset: 'Your sign-in was reset. Earlier matches are gone.',
   linkCodeTitle: 'Use my matches on another browser',
   linkCodeHelp: linkCodeHelpText(),
   linkCodeMake: 'Make a link code',

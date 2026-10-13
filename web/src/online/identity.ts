@@ -5,8 +5,18 @@ import type { OnlineIdentityRecord } from './types.js';
 
 export const IDENTITY_STORAGE_KEY = 'severgrow.duel.identity.v1';
 
+const STORAGE_BLOCKED_MESSAGE =
+  'This browser blocked storage. Online matches cannot be kept on this device.';
+const CREATE_FAILED_MESSAGE =
+  'Could not create a FUTASAKU guest. Check your connection and try again.';
+
 export type IdentityStatus =
-  | { ok: true; identity: OnlineIdentityRecord }
+  | {
+      ok: true;
+      identity: OnlineIdentityRecord;
+      /** True only when a rejected/malformed identity was discarded and replaced with a fresh guest. */
+      replaced?: true;
+    }
   | { ok: false; reason: 'storage_blocked' | 'storage_cleared' | 'create_failed'; message: string };
 
 export type IdentityStore = {
@@ -16,6 +26,13 @@ export type IdentityStore = {
   peek(): OnlineIdentityRecord | null;
   /** Replace the stored token after a link-code redeem (never moves an existing token). */
   adopt(identity: OnlineIdentityRecord): IdentityStatus;
+  /**
+   * Discard a rejected identity and mint a fresh guest on this device. Called when the server
+   * answers 401 UNAUTHORIZED for the stored token. Removes the dead record FIRST, so a failed
+   * create can never leave `ensure()` returning the unusable token again. Concurrent callers share
+   * one guest — a burst of 401s can never create a pile of guests.
+   */
+  recover(): Promise<IdentityStatus>;
   /** Issue a one-time link code for another browser. */
   createLinkCode(): Promise<{ code: string; expiresAt: number }>;
   /** Redeem a link code → new token for the same player on this device. */
@@ -44,6 +61,8 @@ const parseIdentity = (raw: string | null): OnlineIdentityRecord | null => {
 export const createIdentityStore = (options: {
   client: DuelClient;
   storage?: KeyValue | null;
+  /** Notified once each time a rejected identity is replaced with a fresh guest. */
+  onReplaced?: (identity: OnlineIdentityRecord) => void;
 }): IdentityStore => {
   const storage = options.storage === undefined ? browserStorage() : options.storage;
   const client = options.client;
@@ -53,7 +72,7 @@ export const createIdentityStore = (options: {
       return {
         ok: false,
         reason: 'storage_blocked',
-        message: 'This browser blocked storage. Online matches cannot be kept on this device.',
+        message: STORAGE_BLOCKED_MESSAGE,
       };
     }
     try {
@@ -62,7 +81,7 @@ export const createIdentityStore = (options: {
       return {
         ok: false,
         reason: 'storage_blocked',
-        message: 'This browser blocked storage. Online matches cannot be kept on this device.',
+        message: STORAGE_BLOCKED_MESSAGE,
       };
     }
     return { ok: true, identity };
@@ -75,6 +94,52 @@ export const createIdentityStore = (options: {
     } catch {
       return null;
     }
+  };
+
+  const createGuest = async (): Promise<IdentityStatus> => {
+    try {
+      const created = await client.createGuest();
+      return write({
+        token: created.token,
+        playerId: created.player.id,
+        displayName: created.player.displayName,
+        kind: created.player.kind,
+      });
+    } catch (error) {
+      const message = error instanceof DuelError ? error.message : CREATE_FAILED_MESSAGE;
+      return { ok: false, reason: 'create_failed', message };
+    }
+  };
+
+  const doRecover = async (): Promise<IdentityStatus> => {
+    if (!storage) {
+      return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
+    }
+    // Drop the rejected record first: if minting a guest then fails, `ensure()` starts over
+    // (creating a guest) instead of handing back the token the server just refused.
+    try {
+      storage.remove(IDENTITY_STORAGE_KEY);
+    } catch {
+      return { ok: false, reason: 'storage_blocked', message: STORAGE_BLOCKED_MESSAGE };
+    }
+    const status = await createGuest();
+    if (status.ok) {
+      options.onReplaced?.(status.identity);
+      return { ...status, replaced: true };
+    }
+    return status;
+  };
+
+  let recovering: Promise<IdentityStatus> | null = null;
+
+  const recover = (): Promise<IdentityStatus> => {
+    if (recovering) return recovering;
+    const inFlight = doRecover();
+    recovering = inFlight;
+    void inFlight.finally(() => {
+      if (recovering === inFlight) recovering = null;
+    });
+    return inFlight;
   };
 
   return {
@@ -91,25 +156,13 @@ export const createIdentityStore = (options: {
         return {
           ok: false,
           reason: 'storage_blocked',
-          message: 'This browser blocked storage. Online matches cannot be kept on this device.',
+          message: STORAGE_BLOCKED_MESSAGE,
         };
       }
-      try {
-        const created = await client.createGuest();
-        return write({
-          token: created.token,
-          playerId: created.player.id,
-          displayName: created.player.displayName,
-          kind: created.player.kind,
-        });
-      } catch (error) {
-        const message =
-          error instanceof DuelError
-            ? error.message
-            : 'Could not create a FUTASAKU guest. Check your connection and try again.';
-        return { ok: false, reason: 'create_failed', message };
-      }
+      return createGuest();
     },
+
+    recover,
 
     async createLinkCode() {
       const identity = peek();

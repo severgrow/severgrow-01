@@ -85,10 +85,12 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
-          test -n "$VITE_DUEL_API_URL" || { echo "Set Actions Variable VITE_DUEL_API_URL or FUTA05_API_URL"; exit 1; }
+          for v in VITE_DUEL_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            test -n "${!v}" || { echo "Missing Actions Variable $v (VITE_DUEL_API_URL may fall back to FUTA05_API_URL)"; exit 1; }
+          done
           npm ci
           npm run web:build
-          node scripts/check-channel-assets.mjs || true
+          node scripts/check-channel-assets.mjs
           echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
       - name: Rebuild current published versions at their exact SHAs
         run: |

@@ -22,4 +22,23 @@ if (channel === 'futa-test') {
   assert(html.includes('<title>Futasaku</title>'), 'channel browser title');
 }
 if (product) for (const prefix of ['besley-', 'fragment-mono-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-', 'atmosphere-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
+
+// Regression guard for the /futa0.5/ live build (the exact class of silent failure that shipped a
+// bundle with no online config, so create-duel / find-opponent showed "Something went wrong.
+// Try again."). The online layer is code-split into LAZY chunks that index.html never references,
+// so this MUST scan every emitted JS file (the `js` blob above does), never just the entry HTML.
+if (channel === 'futa05') {
+  const apiUrl = (process.env.VITE_DUEL_API_URL ?? '').trim();
+  const supabaseUrl = (process.env.VITE_SUPABASE_URL ?? '').trim();
+  const anonKey = (process.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+  assert(apiUrl, 'CHANNEL=futa05 build requires VITE_DUEL_API_URL (the duel API base URL)');
+  assert(supabaseUrl, 'CHANNEL=futa05 build requires VITE_SUPABASE_URL');
+  assert(anonKey, 'CHANNEL=futa05 build requires VITE_SUPABASE_ANON_KEY');
+  let host = '';
+  try { host = new URL(supabaseUrl).hostname; } catch { assert.fail(`VITE_SUPABASE_URL is not a valid URL: ${supabaseUrl}`); }
+  for (const marker of ['functions/v1/duel', 'realtime/v1/websocket', host]) {
+    assert(js.includes(marker), `futa05 build is missing "${marker}" — the online config did not reach the bundle`);
+  }
+}
+
 console.log(`${channel}: asset isolation passed (${names.length} files)`);

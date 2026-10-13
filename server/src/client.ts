@@ -69,6 +69,17 @@ export class DuelError extends Error {
 /** What a client keeps between reloads to resume its match ("refresh" / reconnect). */
 export type DuelSession = { token: string; matchId: string; seat: Player; revision?: number };
 
+/** Where an authenticated request was rejected, so a recovery hook can decide what to do. */
+export type UnauthorizedInfo = { method: string; path: string; hasBody: boolean };
+
+/**
+ * Called ONCE when an authenticated request is rejected with 401 UNAUTHORIZED. Return a
+ * replacement token to retry the exact same request once (the body is resent byte-for-byte, so a
+ * mutation keeps its `requestId` and idempotency holds); return null/undefined to surface the
+ * error unchanged. Never called for a request that carried no token, and never for a non-401.
+ */
+export type UnauthorizedHandler = (info: UnauthorizedInfo) => Promise<string | null> | string | null;
+
 export type DuelClientOptions = {
   baseUrl: string;
   fetch?: FetchLike;
@@ -78,6 +89,8 @@ export type DuelClientOptions = {
   clientVersion?: string;
   /** Override the rules version header (tests). Default: CURRENT_RULES_VERSION. */
   rulesVersion?: string;
+  /** Self-heal hook for a rejected token. See `UnauthorizedHandler`. */
+  onUnauthorized?: UnauthorizedHandler;
 };
 
 export const DEFAULT_SESSION_KEY = 'severgrow.duel.session.v1';
@@ -89,6 +102,11 @@ export class DuelClient {
   private readonly sessionKey: string;
   private readonly clientVersion: string;
   private readonly rulesVersion: string;
+  /**
+   * Recovery hook for a rejected token. A public field (not just readonly options) so the owner of
+   * this client can wire it after the identity store that the hook itself needs has been built.
+   */
+  onUnauthorized: UnauthorizedHandler | undefined;
 
   constructor(options: DuelClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -104,6 +122,7 @@ export class DuelClient {
     this.sessionKey = options.sessionKey ?? DEFAULT_SESSION_KEY;
     this.clientVersion = options.clientVersion ?? DUEL_CLIENT_VERSION;
     this.rulesVersion = options.rulesVersion ?? CURRENT_RULES_VERSION;
+    this.onUnauthorized = options.onUnauthorized;
   }
 
   // ---- identity ----
@@ -230,7 +249,22 @@ export class DuelClient {
 
   // ---- transport ----
 
-  private async request<T>(method: string, path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
+  private request<T>(method: string, path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
+    return this.send<T>(method, path, options, true);
+  }
+
+  /**
+   * One transport attempt, with a single recovery retry when an authenticated request is rejected
+   * with 401 UNAUTHORIZED and a handler is installed. The retry resends the identical bytes (same
+   * body object re-serialised), so a mutation keeps its `requestId`; `mayRecover` is false on the
+   * retry, so this can never loop.
+   */
+  private async send<T>(
+    method: string,
+    path: string,
+    options: { token?: string; body?: unknown },
+    mayRecover: boolean,
+  ): Promise<T> {
     const headers: Record<string, string> = {
       accept: 'application/json',
       'x-futasaku-client-version': this.clientVersion,
@@ -253,7 +287,19 @@ export class DuelClient {
     if (!ok || isFailure(data)) {
       const code = isFailure(data) ? data.code : 'HTTP_ERROR';
       const message = isFailure(data) ? data.message : `Request failed with status ${response.status}.`;
-      throw new DuelError(code, message, response.status);
+      const error = new DuelError(code, message, response.status);
+      const rejectedToken = error.status === 401 || error.code === 'UNAUTHORIZED';
+      if (mayRecover && rejectedToken && options.token !== undefined && this.onUnauthorized) {
+        const replacement = await this.onUnauthorized({
+          method,
+          path,
+          hasBody: options.body !== undefined,
+        });
+        if (typeof replacement === 'string' && replacement.length > 0) {
+          return this.send<T>(method, path, { ...options, token: replacement }, false);
+        }
+      }
+      throw error;
     }
     return data as T;
   }

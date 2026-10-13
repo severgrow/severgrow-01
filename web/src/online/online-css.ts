@@ -293,7 +293,14 @@ export const ONLINE_CSS = `
     order: 0;
   }
 }
-/* Presence: a dot plus a word — never colour alone. */
+/* Presence: a dot plus a word — never colour alone.
+   Presence is NOT wired yet (the channel's track() is a deliberate no-op), so the state is always
+   "unknown". Showing a dot plus the word "Unknown" is a fabricated, misleading signal — the owner
+   saw it as a "small green box" — so nothing is drawn until a real state is reported. The dot only
+   appears for a genuinely known state, and its colour is never the only cue (the word travels too). */
+.duel-hud [data-duel-presence][data-presence="unknown"] {
+  display: none;
+}
 .duel-hud [data-duel-presence]::before {
   content: '';
   display: inline-block;
@@ -301,7 +308,8 @@ export const ONLINE_CSS = `
   height: 0.55rem;
   border-radius: 50%;
   margin-right: 0.3rem;
-  background: #6a7468;
+  flex: 0 0 auto;
+  background: currentColor;
 }
 .duel-hud [data-duel-presence][data-presence="online"]::before { background: #8fbf6a; }
 .duel-hud [data-duel-presence][data-presence="away"]::before { background: #c9a35a; }

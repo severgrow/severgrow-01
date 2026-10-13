@@ -69,8 +69,27 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     };
   }
 
-  const client = new DuelClient({ baseUrl: api, storage: browserStorage() });
-  const identity: IdentityStore = createIdentityStore({ client });
+  // Self-healing identity: the lobby client owns the 401 recovery hook. Any authenticated lobby
+  // call (create, find, join, list, open a match, link code) rejected because the stored token is
+  // stale silently mints a fresh guest and retries the SAME request once. The live duel has its own
+  // client (web/src/main.ts) with NO hook, so a token rejected mid-match surfaces an honest error
+  // instead of swapping identity and abandoning the duel.
+  let identityStore: IdentityStore | null = null;
+  const client = new DuelClient({
+    baseUrl: api,
+    storage: browserStorage(),
+    onUnauthorized: async () => {
+      if (!identityStore) return null;
+      const status = await identityStore.recover();
+      return status.ok ? status.identity.token : null;
+    },
+  });
+  const identity: IdentityStore = createIdentityStore({
+    client,
+    onReplaced: () => onIdentityReplaced(),
+  });
+  identityStore = identity;
+  let identityReplaced = false;
   const now = hooks.now ?? (() => Date.now());
 
   let matches: MatchListEntry[] = [];
@@ -89,6 +108,33 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let searchTimer: ReturnType<typeof setInterval> | null = null;
   let computerGameActive = false;
   let pendingMatched: { token: string; payload: MatchViewPayload } | null = null;
+
+  /**
+   * A rejected token was replaced with a fresh guest. The old token's matches are unreachable (the
+   * server no longer knows it), so stop polling any waiting/search state tied to it and remember to
+   * tell the player with ONE line. A live duel is untouched — it runs on its own client and never
+   * calls this hook.
+   */
+  const onIdentityReplaced = () => {
+    identityReplaced = true;
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    stopSearchTimer();
+    search = null;
+    waiting = null;
+  };
+
+  /** Show the one honest line for a replaced identity in whichever online screen is open. */
+  const flashIdentityReplaced = () => {
+    if (!identityReplaced) return;
+    identityReplaced = false;
+    const line = ONLINE.identityReset;
+    if (!hub.hidden) notice('online-hub-notice', line);
+    else if (!waitingEl.hidden) notice('online-waiting-notice', line);
+    else if (!joinEl.hidden) notice('online-join-notice', line);
+  };
 
   const hub = $('online-hub');
   const waitingEl = $('online-waiting');
@@ -232,6 +278,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       matches = res.matches;
       renderMatches();
       notice('online-hub-notice', '');
+      flashIdentityReplaced();
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
     }
@@ -278,6 +325,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     $('online-invite-code').textContent = match.inviteCode;
     $('online-invite-code').setAttribute('aria-label', `${match.inviteCode}. ${ONLINE.codeTapCopy}.`);
     notice('online-waiting-notice', '');
+    flashIdentityReplaced();
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => void pollWaiting(), 2000);
   };
@@ -425,6 +473,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     setWaitingMode('search');
     renderSearch();
     notice('online-waiting-notice', ONLINE.searchStatusSr);
+    flashIdentityReplaced();
     stopSearchTimer();
     searchTimer = setInterval(() => void pollSearch(), 2000);
   };
