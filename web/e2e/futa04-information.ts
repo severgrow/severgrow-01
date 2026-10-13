@@ -36,7 +36,10 @@ try {
     'Android icons decode at the declared sizes with a separate mask-safe icon and Futa04-local launch scope');
   // Seeded match (not Tutorial): focus lock keeps #hud-menu inert mid-step.
   await menu.goto(`${base}?seed=219682080`);
-  await menu.waitForFunction(() => !!(window as any).__severgrow.state() && !(window as any).__severgrow.busy());
+  // The reload is still booting when this runs: the app installs __severgrow partway through its
+  // module, so a bare `.state()` can throw inside the predicate and fail the wait at once instead
+  // of retrying. Guard the hook so the wait is on the app's own state, not on a boot transient.
+  await menu.waitForFunction(() => !!(window as any).__severgrow?.state() && !(window as any).__severgrow.busy());
   for (const topic of ['fruit', 'strengthen', 'draw']) {
     await menu.click('#hud-menu');
     await menu.click('#gm-howto');
