@@ -1,16 +1,20 @@
-// Phase 9 regression — the online lobby must be a real full-screen VIEW, never a see-through
-// layer stacked on the main menu.
+// Phase 9 regression — "Play online" must open a real SUBMENU screen, never a see-through layer
+// stacked on the main menu.
 //
-// Bug (live /futa0.5/): the "Waiting for a friend" screen rendered transparently on top of the
-// main menu (the huge FUTASAKU title, tagline and the menu buttons painted straight through the
-// invite panel) and the main menu was never hidden. This test fails on that build:
-//   1. the menu must be hidden while an online screen is open,
-//   2. the online screen must be opaque, cover the viewport, and sit above the menu in z-order,
-//   3. the screen title, invite code, Share / Copy link / Cancel and the expiry text must not
-//      overlap each other (bounding-box intersection = 0),
-//   4. the invite code must be the element on top at its own centre (nothing painted over it),
-//   5. the key controls must stay >= 44px (iOS) at 360x640 and 390x844,
-//   6. the screen must scroll internally so its bottom controls stay reachable.
+// Bug (live /futa0.5/): the online screens rendered transparently on top of the main menu (the huge
+// FUTASAKU wordmark, the tagline and the menu buttons painted straight through the invite panel) and
+// the main menu was never hidden. Two independent browser contexts drive the creator and the joiner.
+//
+// For each of the three online submenu screens (#online-hub, #online-waiting, #online-join) and at
+// four viewports this spec asserts:
+//   1. the main menu is hidden and no menu element is the hit target over the screen,
+//   2. the screen is opaque, covers the viewport and sits above the menu in z-order,
+//   3. exactly one online screen is a visible view at a time (a distinct view, not a layer),
+//   4. the header carries the small in-game wordmark (#online-brand, the #hud-brand asset) at the
+//      top-right — not a big wordmark — at the same small size the game HUD uses,
+//   5. the screen title, back button, brand and the screen's controls never overlap each other,
+//   6. the online column matches #menu .menu-inner (same width, padding, rhythm and heading scale),
+//   7. every back button is >= 44px and returns where it should (join/waiting → hub, hub → menu).
 //
 // Runs against the live site by default. Two other modes:
 //   BASE_URL=http://localhost:4207 npx tsx web/e2e/online-lobby-overlay.ts       # any build
@@ -19,7 +23,7 @@
 // so the layout can be checked with no network at all.
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import type { Browser, Page } from 'playwright-core';
+import type { Browser, BrowserContext, Page } from 'playwright-core';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
@@ -44,16 +48,16 @@ const overlapArea = (a: Box, b: Box): number => {
   return w > 0.5 && h > 0.5 ? w * h : 0;
 };
 const box = async (page: Page, selector: string): Promise<Box | null> =>
-  page.locator(selector).boundingBox().catch(() => null);
-const shoot = async (page: Page, name: string, tag: string) => {
-  await page.screenshot({ path: `${OUT}${name}-${PHASE}-${tag}.png` });
+  page.locator(selector).first().boundingBox().catch(() => null);
+const shoot = async (page: Page, screen: string, tag: string) => {
+  await page.screenshot({ path: `${OUT}lobby-overlay-${screen}-${PHASE}-${tag}.png` });
 };
 
 /** Minimal, deterministic duel API so the layout can be exercised without the network. */
 const installStubApi = async (page: Page): Promise<void> => {
   const now = Date.now();
   const matchId = 'stub-match-0001';
-  const inviteCode = 'XFVND7Y4P';
+  const inviteCode = 'XFVND7Y4';
   const summary = {
     matchId,
     inviteCode,
@@ -104,11 +108,29 @@ const viewports: { tag: string; width: number; height: number; touch: boolean }[
   { tag: '360x640', width: 360, height: 640, touch: true },
 ];
 
-const openWaiting = async (page: Page): Promise<boolean> => {
+const newPage = async (browser: Browser, vp: (typeof viewports)[number]): Promise<{ ctx: BrowserContext; page: Page }> => {
+  const ctx = await browser.newContext({
+    viewport: { width: vp.width, height: vp.height },
+    hasTouch: vp.touch,
+    isMobile: vp.touch,
+    deviceScaleFactor: 1,
+  });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => localStorage.clear());
+  if (STUB) await installStubApi(page);
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+  return { ctx, page };
+};
+
+const openHub = async (page: Page): Promise<boolean> => {
   await page.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
   await page.click('#menu-online');
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
+  return page.locator('#online-hub:not([hidden])').isVisible().catch(() => false);
+};
+
+const openWaiting = async (page: Page): Promise<boolean> => {
   await page.click('#online-create');
   await page.waitForSelector('#online-waiting:not([hidden])', { timeout: 25_000 });
   await page
@@ -120,151 +142,198 @@ const openWaiting = async (page: Page): Promise<boolean> => {
   return page.locator('#online-waiting:not([hidden])').isVisible().catch(() => false);
 };
 
+const openJoin = async (page: Page): Promise<boolean> => {
+  await page.click('#online-join-open');
+  await page.waitForSelector('#online-join:not([hidden])', { timeout: 15_000 });
+  return page.locator('#online-join:not([hidden])').isVisible().catch(() => false);
+};
+
+const SCREENS = ['online-hub', 'online-waiting', 'online-join'] as const;
+
+/** The shared per-screen assertions: a distinct, opaque, menu-free view with the HUD brand mark. */
+const assertScreen = async (page: Page, screen: (typeof SCREENS)[number], vp: (typeof viewports)[number]) => {
+  const tag = vp.tag;
+  const shell = await page.evaluate((id) => {
+    const menu = document.getElementById('menu') as HTMLElement | null;
+    const el = document.getElementById(id) as HTMLElement | null;
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    const menuCs = menu ? getComputedStyle(menu) : null;
+    const visibleScreens = ['online-hub', 'online-waiting', 'online-join'].filter((s) => {
+      const e = document.getElementById(s) as HTMLElement | null;
+      return !!e && !e.hidden && getComputedStyle(e).display !== 'none';
+    });
+    // Sample a grid of points over the screen: if any resolves to a #menu node, the menu is painted
+    // over the online view (the original bug).
+    let leaks = 0;
+    for (let i = 1; i < 6; i++) {
+      for (let j = 1; j < 6; j++) {
+        const x = rect.left + (rect.width * i) / 6;
+        const y = rect.top + (rect.height * j) / 6;
+        const top = document.elementFromPoint(x, y) as HTMLElement | null;
+        if (top && menu && menu.contains(top) && top !== el) leaks++;
+      }
+    }
+    return {
+      menuHidden: !!menu && (menu.hasAttribute('hidden') || menuCs?.display === 'none'),
+      menuZ: menuCs ? Number(menuCs.zIndex) || 0 : 0,
+      leaks,
+      visibleScreens,
+      bg: cs.backgroundColor,
+      opacity: Number(cs.opacity),
+      z: Number(cs.zIndex) || 0,
+      w: rect.width,
+      h: rect.height,
+    };
+  }, screen);
+
+  check(`[${tag}] ${screen} is open`, !!shell);
+  if (!shell) return;
+  check(`[${tag}] ${screen}: main menu hidden`, shell.menuHidden, `hidden=${shell.menuHidden}`);
+  check(`[${tag}] ${screen}: no menu pixels painted over the view`, shell.leaks === 0, `${shell.leaks} leak point(s)`);
+  check(`[${tag}] ${screen}: exactly one online screen visible`, shell.visibleScreens.length === 1 && shell.visibleScreens[0] === screen, shell.visibleScreens.join(','));
+  const opaque = /^rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*1\s*)?\)$/.test(shell.bg) && shell.opacity === 1;
+  check(`[${tag}] ${screen}: background is opaque`, opaque, `${shell.bg} opacity=${shell.opacity}`);
+  check(`[${tag}] ${screen}: covers the viewport`, shell.w >= vp.width - 1 && shell.h >= vp.height - 1, `${Math.round(shell.w)}x${Math.round(shell.h)}`);
+  check(`[${tag}] ${screen}: sits above the menu (z-order)`, shell.z > shell.menuZ, `screen z=${shell.z} menu z=${shell.menuZ}`);
+
+  // The header shows the small in-game wordmark (#hud-brand asset), top-right.
+  const brand = await page.evaluate(
+    (id) => {
+      const el = document.getElementById('online-brand') as unknown as SVGSVGElement | null;
+      const screen = document.getElementById(id) as HTMLElement | null;
+      if (!el || !screen) return null;
+      const r = el.getBoundingClientRect();
+      const head = el.closest('.online-head') as HTMLElement | null;
+      const hr = head?.getBoundingClientRect();
+      return {
+        visible: r.width > 0 && r.height > 0,
+        w: r.width,
+        h: r.height,
+        cx: r.x + r.width / 2,
+        inHead: !!head && !!screen.contains(head),
+        headRight: hr ? hr.right : 0,
+        headTop: hr ? hr.top : 0,
+        top: r.top,
+        src: el.querySelector('image')?.getAttribute('href') ?? '',
+      };
+    },
+    screen,
+  );
+  check(`[${tag}] ${screen}: in-game brand mark present`, !!brand?.visible, brand ? `${Math.round(brand.w)}x${Math.round(brand.h)}` : 'missing');
+  check(`[${tag}] ${screen}: brand is the small HUD-sized wordmark`, !!brand && brand.h >= 14 && brand.h <= 30, brand ? `h=${brand.h.toFixed(1)}` : 'missing');
+  check(`[${tag}] ${screen}: brand sits top-right of the header`, !!brand && brand.inHead && brand.cx > vp.width / 2 && brand.top <= brand.headTop + 44, brand ? `cx=${Math.round(brand.cx)} top=${Math.round(brand.top)}` : 'missing');
+  check(`[${tag}] ${screen}: no big wordmark in the header`, !(await page.locator(`#${screen} .title, #${screen} .logo`).count()), 'found .title/.logo');
+
+  // The online column matches #menu .menu-inner: same width, padding, rhythm and heading scale.
+  const col = await page.evaluate((id) => {
+    const inner = document.querySelector(`#${id} .online-inner`) as HTMLElement | null;
+    const h2 = document.querySelector(`#${id} .online-head h2`) as HTMLElement | null;
+    if (!inner || !h2) return null;
+    const ics = getComputedStyle(inner);
+    const hcs = getComputedStyle(h2);
+    return { width: inner.getBoundingClientRect().width, paddingTop: parseFloat(ics.paddingTop), gap: parseFloat(ics.rowGap || ics.gap || '0'), h2: parseFloat(hcs.fontSize) };
+  }, screen);
+  const expectWidth = Math.min(420, vp.width - 32);
+  check(`[${tag}] ${screen}: column width matches the menu`, !!col && Math.abs(col.width - expectWidth) <= 2, col ? `${col.width.toFixed(1)} vs ${expectWidth}` : 'missing');
+  check(`[${tag}] ${screen}: column padding matches the menu`, !!col && Math.abs(col.paddingTop - 32) <= 1, col ? `padding-top=${col.paddingTop}` : 'missing');
+  check(`[${tag}] ${screen}: column rhythm matches the menu`, !!col && Math.abs(col.gap - 14) <= 1, col ? `gap=${col.gap}` : 'missing');
+  check(`[${tag}] ${screen}: heading uses the menu type scale`, !!col && Math.abs(col.h2 - 22.4) <= 1.2, col ? `h2=${col.h2}px` : 'missing');
+};
+
+/** All pairs of the given selectors must not overlap (bounding-box intersection = 0). */
+const assertNoOverlap = async (page: Page, tag: string, screen: string, selectors: readonly string[]) => {
+  const boxes: Record<string, Box | null> = {};
+  for (const sel of selectors) boxes[sel] = await box(page, sel);
+  const present = selectors.filter((s) => boxes[s]);
+  for (let i = 0; i < present.length; i++) {
+    for (let j = i + 1; j < present.length; j++) {
+      const a = boxes[present[i]!]!;
+      const b = boxes[present[j]!]!;
+      const area = overlapArea(a, b);
+      check(`[${tag}] ${screen}: ${present[i]} / ${present[j]} do not overlap`, area === 0, area ? `overlap ${Math.round(area)}px²` : '');
+    }
+  }
+};
+
+const assertBack = async (page: Page, tag: string, sel: string) => {
+  const b = await box(page, sel);
+  check(`[${tag}] back button ${sel} is >= 44x44`, !!b && b.height >= 44 && b.width >= 44, b ? `${Math.round(b.width)}x${Math.round(b.height)}` : 'missing');
+};
+
+const visibleOnline = (page: Page) =>
+  page.evaluate(() => ['online-hub', 'online-waiting', 'online-join'].find((s) => !(document.getElementById(s) as HTMLElement)?.hidden) ?? 'none');
+
 const browser: Browser = await chromium.launch({ executablePath: CHROME });
 try {
-  console.log(`Lobby overlay regression against ${BASE_URL} (phase=${PHASE}${STUB ? ', stubbed API' : ''})`);
+  console.log(`Lobby submenu regression against ${BASE_URL} (phase=${PHASE}${STUB ? ', stubbed API' : ''})`);
   for (const vp of viewports) {
-    const ctx = await browser.newContext({
-      viewport: { width: vp.width, height: vp.height },
-      hasTouch: vp.touch,
-      isMobile: vp.touch,
-      deviceScaleFactor: 1,
-    });
-    const page = await ctx.newPage();
-    await page.addInitScript(() => localStorage.clear());
-    if (STUB) await installStubApi(page);
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-    const opened = await openWaiting(page).catch(() => false);
-    check(`[${vp.tag}] waiting screen opens`, opened);
-    if (!opened) {
-      await shoot(page, 'lobby-overlay-waiting', vp.tag);
-      await ctx.close();
-      continue;
-    }
-    await page.waitForTimeout(600); // let the first-card / toast states settle
-    await shoot(page, 'lobby-overlay-waiting', vp.tag);
-
-    // 1 + 2. The online screen is a view, not a layer: menu hidden, screen opaque, above the menu.
-    const shell = await page.evaluate(() => {
-      const menu = document.getElementById('menu') as HTMLElement | null;
-      const el = document.getElementById('online-waiting') as HTMLElement | null;
-      if (!el) return null;
-      const cs = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      const menuCs = menu ? getComputedStyle(menu) : null;
-      const menuRect = menu?.getBoundingClientRect();
-      const menuTitle = menu?.querySelector('.title') as HTMLElement | null;
-      const t = menuTitle?.getBoundingClientRect();
-      // When a menu element is painted over the online screen, elementFromPoint returns it.
-      const points: [number, number][] = t && t.width > 0
-        ? [
-            [t.x + t.width / 2, t.y + t.height / 2],
-            [t.x + 2, t.y + 2],
-          ]
-        : [];
-      const leaks = points.filter(([x, y]) => {
-        const top = document.elementFromPoint(Math.max(1, x), Math.max(1, y));
-        return !!top && !!menu && top !== el && menu.contains(top);
-      }).length;
-      return {
-        menuHidden: !!menu && (menu.hasAttribute('hidden') || menuCs?.display === 'none'),
-        menuZ: menuCs ? Number(menuCs.zIndex) || 0 : 0,
-        menuVisible: !!menuRect && menuRect.width > 0 && menuRect.height > 0 && menuCs?.display !== 'none',
-        leaks,
-        bg: cs.backgroundColor,
-        opacity: Number(cs.opacity),
-        z: Number(cs.zIndex) || 0,
-        overflowY: cs.overflowY,
-        w: rect.width,
-        h: rect.height,
-      };
-    });
-    check(`[${vp.tag}] menu hidden while online screen is open`, !!shell?.menuHidden, shell ? `hidden=${shell.menuHidden}` : 'missing');
-    check(`[${vp.tag}] no menu pixels painted over the online screen`, shell?.leaks === 0, `${shell?.leaks ?? '?'} leak point(s)`);
-    const opaque = !!shell && /^rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*1\s*)?\)$/.test(shell.bg) && shell.opacity === 1;
-    check(`[${vp.tag}] online screen background is opaque`, opaque, shell ? `${shell.bg} opacity=${shell.opacity}` : 'missing');
-    check(
-      `[${vp.tag}] online screen covers the viewport`,
-      !!shell && shell.w >= vp.width - 1 && shell.h >= vp.height - 1,
-      shell ? `${Math.round(shell.w)}x${Math.round(shell.h)}` : 'missing',
-    );
-    check(`[${vp.tag}] online screen sits above the menu (z-order)`, !!shell && shell.z > shell.menuZ, shell ? `online z=${shell.z} menu z=${shell.menuZ}` : 'missing');
-
-    // 3. Key controls must not overlap each other or the screen title.
-    const labelled = [
-      ['title', '#online-waiting-title'],
-      ['invite code', '#online-invite-code'],
-      ['Share', '#online-share'],
-      ['Copy link', '#online-copy'],
-      ['Cancel', '#online-cancel-match'],
-      ['expiry', '#online-waiting-expiry'],
-    ] as const;
-    const boxes: Record<string, Box | null> = {};
-    for (const [label, sel] of labelled) boxes[label] = await box(page, sel);
-    const pairs: [string, string][] = [];
-    for (let i = 0; i < labelled.length; i++) {
-      for (let j = i + 1; j < labelled.length; j++) pairs.push([labelled[i]![0], labelled[j]![0]]);
-    }
-    for (const [aLabel, bLabel] of pairs) {
-      const a = boxes[aLabel] ?? null;
-      const b = boxes[bLabel] ?? null;
-      const area = a && b ? overlapArea(a, b) : 0;
-      check(`[${vp.tag}] ${aLabel} / ${bLabel} do not overlap`, area === 0, area ? `overlap ${Math.round(area)}px²` : '');
+    // --- Context A: the creator (hub + waiting) -------------------------------------------------
+    const a = await newPage(browser, vp);
+    try {
+      const hubOpen = await openHub(a.page).catch(() => false);
+      check(`[${vp.tag}] hub opens from the menu`, hubOpen && (await visibleOnline(a.page)) === 'online-hub');
+      if (hubOpen) {
+        await a.page.waitForTimeout(400);
+        await shoot(a.page, 'hub', vp.tag);
+        await assertScreen(a.page, 'online-hub', vp);
+        await assertNoOverlap(a.page, vp.tag, 'hub', ['#online-back', '#online-brand', '#online-hub-title', '#online-create', '#online-find', '#online-join-open', '#online-matches-title']);
+        await assertBack(a.page, vp.tag, '#online-back');
+      }
+      const waitingOpen = hubOpen && (await openWaiting(a.page).catch(() => false));
+      check(`[${vp.tag}] waiting opens from the hub`, waitingOpen && (await visibleOnline(a.page)) === 'online-waiting');
+      if (waitingOpen) {
+        await a.page.waitForTimeout(400);
+        await shoot(a.page, 'waiting', vp.tag);
+        await assertScreen(a.page, 'online-waiting', vp);
+        await assertNoOverlap(a.page, vp.tag, 'waiting', ['#online-waiting-back', '#online-brand', '#online-waiting-title', '#online-invite-code', '#online-share', '#online-copy', '#online-cancel-match', '#online-waiting-expiry']);
+        await assertBack(a.page, vp.tag, '#online-waiting-back');
+        // waiting → hub
+        await a.page.click('#online-waiting-back');
+        await a.page.waitForTimeout(200);
+        check(`[${vp.tag}] waiting back returns to the hub`, (await visibleOnline(a.page)) === 'online-hub');
+      }
+      // hub → menu
+      if (hubOpen) {
+        await a.page.click('#online-back');
+        await a.page.waitForTimeout(300);
+        const menuBack = await a.page.evaluate(() => {
+          const menu = document.getElementById('menu') as HTMLElement | null;
+          return { online: ['online-hub', 'online-waiting', 'online-join'].some((s) => !(document.getElementById(s) as HTMLElement)?.hidden), menuVisible: !!menu && !menu.hidden };
+        });
+        check(`[${vp.tag}] hub back returns to the main menu`, !menuBack.online && menuBack.menuVisible);
+      }
+    } finally {
+      await a.ctx.close();
     }
 
-    // 4. Nothing may be painted over the invite code.
-    const codeTop = await page.evaluate(() => {
-      const code = document.getElementById('online-invite-code') as HTMLElement | null;
-      if (!code) return '';
-      const r = code.getBoundingClientRect();
-      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) as HTMLElement | null;
-      return top ? `${top.id || top.className || top.tagName}` : '';
-    });
-    check(`[${vp.tag}] invite code is on top at its centre`, /online-invite-code/.test(codeTop), codeTop);
-
-    // 5. Tap targets and clipped text.
-    for (const [label, sel] of [
-      ['Back', '#online-waiting-back'],
-      ['Share', '#online-share'],
-      ['Copy link', '#online-copy'],
-      ['Cancel', '#online-cancel-match'],
-    ] as const) {
-      const b = await box(page, sel);
-      check(`[${vp.tag}] ${label} tap target >= 44px`, !!b && b.height >= 44 && b.width >= 44, b ? `${Math.round(b.width)}x${Math.round(b.height)}` : 'missing');
+    // --- Context B: the joiner (join screen) ----------------------------------------------------
+    const b = await newPage(browser, vp);
+    try {
+      const hubOpen = await openHub(b.page).catch(() => false);
+      const joinOpen = hubOpen && (await openJoin(b.page).catch(() => false));
+      check(`[${vp.tag}] join opens from the hub`, joinOpen && (await visibleOnline(b.page)) === 'online-join');
+      if (joinOpen) {
+        await b.page.waitForTimeout(400);
+        await shoot(b.page, 'join', vp.tag);
+        await assertScreen(b.page, 'online-join', vp);
+        await assertNoOverlap(b.page, vp.tag, 'join', ['#online-join-back', '#online-brand', '#online-join-title', '#online-join-prompt', '#online-join-code', '#online-join-submit']);
+        await assertBack(b.page, vp.tag, '#online-join-back');
+        await b.page.click('#online-join-back');
+        await b.page.waitForTimeout(200);
+        check(`[${vp.tag}] join back returns to the hub`, (await visibleOnline(b.page)) === 'online-hub');
+      }
+    } finally {
+      await b.ctx.close();
     }
-    const clippedText = await page
-      .locator('#online-waiting-title, #online-invite-code, #online-waiting-expiry, #online-waiting-body')
-      .evaluateAll((els) =>
-        els
-          .filter((el) => el instanceof HTMLElement && el.offsetParent !== null && el.scrollWidth > el.clientWidth + 1)
-          .map((el) => (el.textContent ?? '').trim().slice(0, 30)),
-      )
-      .catch(() => [] as string[]);
-    check(`[${vp.tag}] no clipped text on the waiting screen`, clippedText.length === 0, clippedText.join(' | '));
-
-    // 6. The bottom of the screen must be reachable (own scroll container when content is tall).
-    const scrollable = await page.evaluate(() => {
-      const el = document.getElementById('online-waiting') as HTMLElement | null;
-      const last = document.getElementById('online-waiting-notice') as HTMLElement | null;
-      if (!el) return null;
-      const cs = getComputedStyle(el);
-      return { overflowY: cs.overflowY, lastBottom: last ? last.getBoundingClientRect().bottom : 0, viewport: window.innerHeight, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
-    });
-    if (scrollable) {
-      const scrolls = scrollable.overflowY === 'auto' || scrollable.overflowY === 'scroll';
-      const reachable = scrollable.lastBottom <= scrollable.viewport + 1 || scrolls;
-      check(`[${vp.tag}] bottom controls reachable`, reachable, `lastBottom=${Math.round(scrollable.lastBottom)} viewport=${scrollable.viewport} overflow=${scrollable.overflowY}`);
-      check(`[${vp.tag}] online screen is its own scroll container`, scrolls, `overflowY=${scrollable.overflowY}`);
-    }
-
-    await ctx.close();
   }
 } finally {
   await browser.close();
 }
 
 if (failed) {
-  console.error(`\n${failed} lobby overlay checks failed`);
+  console.error(`\n${failed} lobby submenu checks failed`);
   process.exit(1);
 }
-console.log('\nLobby overlay checks passed.');
+console.log('\nLobby submenu checks passed.');
