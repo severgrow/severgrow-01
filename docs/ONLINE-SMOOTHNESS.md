@@ -154,6 +154,12 @@ Deployed build **`69ae63a`** (`release.json` confirmed moved from `68e0d05`),
 - "Input open" = detection + replay: the +0.5 s budget over the replay would need detection to be
   nearly free; it is instead bounded by the 1.5 s detection target, which is met.
 
+**Confirmation on the current live build (`95b4190`, which adds the unrelated install-invitation
+feature; its duel code is byte-identical to the measured build).** `DUELS=2 TURNS=2`, 4/4 reveals:
+turn visible **median 828 ms** (p95 1081 ms), gate median 3400 ms with real 3–4 tile grows,
+**1 Realtime ping per reveal**, **0 label violations**, 15 of 1155 frames over 50 ms. All four
+live checks pass.
+
 ## 6. Honest limits
 
 - The residual window where **both** phones read "Opponent's turn" while **neither** is replaying
