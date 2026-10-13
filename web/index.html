@@ -132,12 +132,15 @@
           <h2 id="online-waiting-title">Waiting for a friend</h2>
         </header>
         <p id="online-waiting-body" class="muted"></p>
-        <p id="online-invite-code" class="online-code" aria-label="Invite code"></p>
+        <!-- The LINK is the primary action; the code is a smaller, tappable fallback (in-app
+             browsers, mangled links, reading a code aloud). No new visual language. -->
         <div class="online-actions menu-buttons">
           <button id="online-share" class="btn primary big" type="button">Share invite</button>
           <button id="online-copy" class="btn ghost" type="button">Copy link</button>
           <button id="online-cancel-match" class="btn ghost" type="button">Cancel match</button>
         </div>
+        <p id="online-invite-code" class="online-code" role="button" tabindex="0" aria-label="Invite code"></p>
+        <p id="online-code-hint" class="online-code-hint muted small"></p>
         <p id="online-waiting-expiry" class="muted small"></p>
         <!-- Parked-search offer (shown after a while waiting). Three separate, honest choices. -->
         <div id="online-search-options" class="online-actions menu-buttons" hidden>
@@ -161,6 +164,7 @@
         <p id="online-join-confirm" class="online-confirm" hidden></p>
         <div class="online-actions menu-buttons">
           <button id="online-join-submit" class="btn primary big" type="button">Join</button>
+          <button id="online-join-cancel" class="btn ghost big" type="button" hidden>Cancel</button>
         </div>
         <p id="online-join-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>

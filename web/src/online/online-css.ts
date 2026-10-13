@@ -118,12 +118,35 @@ export const ONLINE_CSS = `
   max-width: 7.5rem;
 }
 .online-code {
-  font-size: 2rem;
-  letter-spacing: 0.28em;
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
   text-align: center;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  margin: 0.75rem 0;
+  margin: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 1rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, #1c221c 88%, #3a4a32);
+  cursor: pointer;
+  user-select: all;
+  -webkit-user-select: all;
 }
+.online-code:focus-visible {
+  outline: 2px solid #c9e4a8;
+  outline-offset: 2px;
+}
+/* inline-flex would otherwise beat the [hidden] attribute (setWaitingMode hides the code). */
+.online-code[hidden] { display: none; }
+.online-code-hint {
+  margin: 0;
+  text-align: center;
+}
+.online-code-hint[hidden] { display: none; }
 .online-card {
   padding: 0.9rem 1rem;
   border-radius: 12px;

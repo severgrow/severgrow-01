@@ -5,7 +5,9 @@ import {
   friendlyJoinError,
   inviteLink,
   isSearchParked,
+  isWellFormedInviteCode,
   lobbyBucket,
+  normalizeInviteCodeInput,
   PARKED_OFFER_MS,
   pageTitleForLobby,
   parseJoinHash,
@@ -38,6 +40,27 @@ describe('parseJoinHash', () => {
     expect(parseJoinHash('#/join/ab12cd34')).toBe('AB12CD34');
     expect(parseJoinHash('#/join/')).toBeNull();
     expect(parseJoinHash('#/other/AB12')).toBeNull();
+  });
+});
+
+describe('typed-code hardening', () => {
+  it('trims, uppercases and strips spaces/dashes from pasted input', () => {
+    expect(normalizeInviteCodeInput('  ab12 cd34 ')).toBe('AB12CD34');
+    expect(normalizeInviteCodeInput('AB12-CD34')).toBe('AB12CD34');
+  });
+
+  it('keeps just the code when a whole invite link is pasted', () => {
+    expect(normalizeInviteCodeInput('https://severgrow.github.io/severgrow-01/futa0.5/#/join/AB12CD34')).toBe(
+      'AB12CD34',
+    );
+  });
+
+  it('rejects malformed codes instead of silently accepting them', () => {
+    expect(isWellFormedInviteCode('AB12CD34')).toBe(true);
+    expect(isWellFormedInviteCode('')).toBe(false);
+    expect(isWellFormedInviteCode('AB')).toBe(false);
+    expect(isWellFormedInviteCode('!!!!')).toBe(false);
+    expect(isWellFormedInviteCode('ABCDEFGHIJKLMNOPQ')).toBe(false);
   });
 });
 

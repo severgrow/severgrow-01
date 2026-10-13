@@ -41,6 +41,23 @@ export const parseJoinHash = (hash: string): string | null => {
   return m ? m[1]!.toUpperCase() : null;
 };
 
+/** The only shapes a code may take (matches parseJoinHash and the server's invite alphabet). */
+export const INVITE_CODE_SHAPE = /^[A-Z0-9]{4,16}$/;
+
+export const isWellFormedInviteCode = (code: string): boolean => INVITE_CODE_SHAPE.test(code);
+
+/**
+ * Turn whatever the player typed or pasted into a candidate code. Trims, keeps just the code when a
+ * whole invite link was pasted, drops spaces and dashes (people read codes in groups; links wrap),
+ * and uppercases. Callers still validate the result with `isWellFormedInviteCode`.
+ */
+export const normalizeInviteCodeInput = (raw: string): string => {
+  const trimmed = raw.trim();
+  const fromLink = /#\/join\/([A-Za-z0-9]{4,16})/.exec(trimmed);
+  const base = fromLink ? fromLink[1]! : trimmed;
+  return base.replace(/[\s-]+/g, '').toUpperCase();
+};
+
 export const inviteLink = (code: string, origin = publicAppOrigin()): string =>
   `${origin.replace(/\/+$/, '')}/#/join/${code.toUpperCase()}`;
 

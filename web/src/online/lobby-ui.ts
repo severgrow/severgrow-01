@@ -12,6 +12,8 @@ import {
   friendlyJoinError,
   inviteLink,
   isSearchParked,
+  isWellFormedInviteCode,
+  normalizeInviteCodeInput,
   pageTitleForLobby,
   parseJoinHash,
   shareInviteText,
@@ -76,6 +78,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let serverOffset = 0;
 
+  // How the join screen was reached. A typed code joins straight away; a link arrival confirms
+  // first (an intentional asymmetry — a forwarded link may reach the wrong person).
+  let joinMode: 'typed' | 'link' = 'typed';
+  let linkCode: string | null = null;
+
   // Phase 7.5: the parked Find-opponent search. It is independent of the invite `waiting` screen
   // and keeps running (its own timer) while the player is on the board playing the computer.
   let search: { token: string; matchId: string; startedAt: number } | null = null;
@@ -139,10 +146,14 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     $('online-waiting-expiry').textContent = ONLINE.waitingExpiry;
     $('online-share').textContent = ONLINE.share;
     $('online-copy').textContent = ONLINE.copyLink;
+    const codeHint = document.getElementById('online-code-hint');
+    if (codeHint) codeHint.textContent = ONLINE.codeTapCopy;
     $('online-cancel-match').textContent = ONLINE.cancelMatch;
     $('online-join-title').textContent = ONLINE.joinTitle;
     $('online-join-prompt').textContent = ONLINE.joinPrompt;
     $('online-join-submit').textContent = ONLINE.joinSubmit;
+    const joinCancel = document.getElementById('online-join-cancel');
+    if (joinCancel) joinCancel.textContent = ONLINE.cancel;
     const storageNote = document.getElementById('online-storage-note');
     if (storageNote) storageNote.textContent = ONLINE.storageNote;
     const linkHelp = document.getElementById('online-link-help');
@@ -265,6 +276,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     show('waiting');
     setWaitingMode('invite');
     $('online-invite-code').textContent = match.inviteCode;
+    $('online-invite-code').setAttribute('aria-label', `${match.inviteCode}. ${ONLINE.codeTapCopy}.`);
     notice('online-waiting-notice', '');
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(() => void pollWaiting(), 2000);
@@ -307,7 +319,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const setWaitingMode = (mode: 'invite' | 'search') => {
     waitingEl.dataset.mode = mode;
     waitingEl.setAttribute('aria-label', mode === 'search' ? ONLINE.searchTitle : ONLINE.waitingTitle);
-    for (const id of ['online-invite-code', 'online-share', 'online-copy', 'online-waiting-expiry']) {
+    for (const id of ['online-invite-code', 'online-code-hint', 'online-share', 'online-copy', 'online-waiting-expiry']) {
       const el = document.getElementById(id);
       if (el) el.hidden = mode === 'search';
     }
@@ -472,14 +484,20 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
-  const joinWithCode = async (code: string) => {
-    const id = await ensureIdentity();
-    if (!id) return;
-    const cleaned = code.trim().toUpperCase();
+  const joinWithCode = async (raw: string) => {
+    // Normalise first: a pasted whole link, or a code read aloud in groups, must still land.
+    const cleaned = normalizeInviteCodeInput(raw);
     if (!cleaned) {
       notice('online-join-notice', ONLINE.joinPrompt);
       return;
     }
+    if (!isWellFormedInviteCode(cleaned)) {
+      // Never silently accept a malformed code: say what a code looks like.
+      notice('online-join-notice', ONLINE.errCodeFormat);
+      return;
+    }
+    const id = await ensureIdentity();
+    if (!id) return;
     try {
       const res = await client.joinMatch(id.token, cleaned);
       serverOffset = res.serverNow - now();
@@ -493,6 +511,27 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       }
       notice('online-join-notice', error instanceof DuelError ? friendlyJoinError(error.code) : errorMessage(error));
     }
+  };
+
+  /**
+   * The join screen has two honest modes. `typed` (arrived from the hub) shows the code field and
+   * joins straight away. `link` (arrived via #/join/CODE) hides the field and shows the confirm
+   * with Join / Cancel, so a forwarded link gives a graceful exit. Reuses #online-join-confirm.
+   */
+  const setJoinMode = (mode: 'typed' | 'link', code = '') => {
+    joinMode = mode;
+    linkCode = mode === 'link' ? code : null;
+    const input = $('online-join-code') as HTMLInputElement;
+    const field = input.closest('.online-field') as HTMLElement | null;
+    const confirm = $('online-join-confirm') as HTMLElement;
+    const cancel = document.getElementById('online-join-cancel') as HTMLButtonElement | null;
+    const viaLink = mode === 'link';
+    if (field) field.hidden = viaLink;
+    confirm.hidden = !viaLink;
+    if (viaLink) confirm.textContent = ONLINE.joinConfirmUnknown;
+    if (cancel) cancel.hidden = !viaLink;
+    input.value = viaLink ? code : '';
+    notice('online-join-notice', '');
   };
 
   const shareInvite = async () => {
@@ -526,6 +565,22 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  /**
+   * The code is the escape hatch: in-app browsers keep separate storage, links get truncated, and
+   * people read codes aloud. Tapping the code itself copies just the code.
+   */
+  const copyInviteCode = async () => {
+    if (!waiting) return;
+    const code = waiting.inviteCode;
+    try {
+      await navigator.clipboard.writeText(code);
+      notice('online-waiting-notice', ONLINE.codeCopied);
+    } catch {
+      // Clipboard blocked: show the code so it can still be read out.
+      notice('online-waiting-notice', code);
+    }
+  };
+
   // ---- wire buttons ----
   fillCopy();
   menuOnline?.addEventListener('click', () => void openHub());
@@ -541,15 +596,27 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   $('online-join-open').addEventListener('click', () => {
     fillCopy();
     show('join');
-    notice('online-join-notice', '');
-    $('online-join-confirm').hidden = true;
-    ($('online-join-code') as HTMLInputElement).value = '';
+    setJoinMode('typed');
   });
-  $('online-join-submit').addEventListener('click', () =>
-    void joinWithCode(($('online-join-code') as HTMLInputElement).value),
-  );
+  $('online-join-submit').addEventListener('click', () => {
+    const input = $('online-join-code') as HTMLInputElement;
+    void joinWithCode(joinMode === 'link' && linkCode ? linkCode : input.value);
+  });
+  document.getElementById('online-join-cancel')?.addEventListener('click', () => {
+    // Cancel a link arrival: leave without joining. The shared hub is the graceful exit.
+    setJoinMode('typed');
+    void openHub();
+  });
   $('online-share').addEventListener('click', () => void shareInvite());
   $('online-copy').addEventListener('click', () => void copyInvite());
+  // The code is tappable (or Enter/Space when focused) so a blocked link still has a way through.
+  $('online-invite-code').addEventListener('click', () => void copyInviteCode());
+  $('online-invite-code').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      void copyInviteCode();
+    }
+  });
   // One button, two honest jobs: stop a parked search (search screen), or leave an invite screen.
   $('online-cancel-match').addEventListener('click', () => {
     if (search && waitingEl.dataset.mode === 'search') {
@@ -618,15 +685,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   });
 
   const handleBootHash = async () => {
-    const code = parseJoinHash(typeof location !== 'undefined' ? location.hash : '');
-    if (!code) return;
+    const hash = typeof location !== 'undefined' ? location.hash : '';
+    // Only a join link brings us here. Anything else (no hash, the tutorial, the menu) is ignored.
+    if (!hash.startsWith('#/join')) return;
+    const code = parseJoinHash(hash);
     fillCopy();
     show('join');
-    ($('online-join-code') as HTMLInputElement).value = code;
-    $('online-join-confirm').hidden = false;
-    $('online-join-confirm').textContent = ONLINE.joinConfirmUnknown;
     // Clear hash so refresh does not re-prompt forever.
     history.replaceState(null, '', location.pathname + location.search);
+    if (code) {
+      setJoinMode('link', code);
+      return;
+    }
+    // A join link that is malformed or truncated: land on the join screen and say why. Never a
+    // blank screen or a silent no-op.
+    setJoinMode('typed');
+    notice('online-join-notice', ONLINE.errLinkBroken);
+    ($('online-join-code') as HTMLInputElement).focus();
   };
 
   return { enabled: true, openHub, handleBootHash, refreshTitle };
