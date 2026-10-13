@@ -301,8 +301,10 @@ caveat; **Not handled** = not done.
   4 characters (`src/invite-code.ts` → `INVITE_CODE_LENGTH = 4`, wired through `server/src/config.ts`)
   while `server/tests/service.test.ts:100` still asserts an 8-character code
   (`expected "5DF4" to match /^[0-9A-HJKMNP-TV-Z]{8}$/`). That file and those sources are outside this
-  worker's scope and were left untouched. Everything this worker changed is green: typecheck passes,
-  and `npm run server:db-test` is 24/24 (below).
+  worker's scope and were left untouched. **The concurrent worker has since finished that change:
+  `server/tests/service.test.ts` now passes 20/20**, so no failure remains attributable to the tree.
+  Everything this worker changed is green: typecheck passes, and `npm run server:db-test` is 24/24
+  (below).
   _An earlier full run, executed concurrently with the 50-match load test, additionally timed out 7
   engine/bot simulation tests (`tests/bots/*`, `tests/engine/*`) — pure CPU starvation from the
   self-inflicted contention; the clean run above has none._
