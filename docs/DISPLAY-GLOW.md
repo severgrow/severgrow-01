@@ -134,7 +134,7 @@ change when the display blinks.
 | --- | --- | --- |
 | LED window (the display) | **10.9** | 10.7 |
 | key frame, full | 4.1–5.5 | **0.0–0.3** |
-| key top band | 6.4–7.9 | 0.2–0.9 |
+| key top band | 6.4–7.9 | 0.0–1.3 |
 | key face | 1.4–1.6 | **0.0–0.1** |
 | right-hand column (col 3) | 5.2 | **0.0** |
 
@@ -142,8 +142,10 @@ So the display still breathes (unchanged), while the keys now barely move at all
 
 **Where the light actually lands** (idle, luminance per 1 px row/column):
 
-- vertical, mid-key: `y48:79 → y49:61 → y50:49 → y52:21 → y68:19` — a thin catch at
-  the key's top edge (y49) decaying to nothing within ~3 px, faces untouched.
+- vertical, across a key's face (slot0, x12–34): `y48:59 → y49:51 → y50:41 →
+  y52:19 → y66:24` — a thin catch at the key's top edge (y49–50) decaying to the
+  face's resting level within ~3 px; further down the face stays at the frame art's
+  own values (19–25), i.e. untouched.
 - horizontal at the catch line (y49): key tops `50–66`, the **seams** at x44–48
   `32–35` and (fainter, at the display's right edge) x92–94 `20–17`, and the
   right-hand column essentially unlit — vertical falloff dominates, little horizontal
