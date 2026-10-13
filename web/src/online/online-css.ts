@@ -203,10 +203,14 @@ export const ONLINE_CSS = `
   margin-top: 0.4rem;
 }
 /* The duel status row: a slim strip that sits IN the fixed header row, between the 44px menu
-   button (left) and the brand/logo (right), so it can never cover either. No frame or border
-   contour — the same dark glass as the rest of the product. Trimmed after the two-phone playtest:
-   the opponent's name, the turn word and the presence indicator only. Resign lives in the pause
-   menu; who-starts is said once by the lottery reveal; the deadline lives in the match list. */
+   button (left) and the brand/logo (right), so it can never cover either. Trimmed after the
+   two-phone playtest: the opponent's name, the turn word and the presence indicator only. Resign
+   lives in the pause menu; who-starts is said once by the lottery reveal; the deadline lives in
+   the match list.
+   NO BOX: the strip carries no background, border, radius or shadow of its own, so it reads as
+   the header's own text. It used to paint a green-tinted dark panel behind itself, which the owner
+   saw as a "greenish frame" across the top of the screen; the words simply sit on the header now,
+   exactly like the menu button and the brand beside them. */
 .duel-hud {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
@@ -225,8 +229,9 @@ export const ONLINE_CSS = `
   line-height: 1.15;
   min-height: 44px;
   overflow: visible;
-  background: color-mix(in srgb, #161a16 92%, #000);
+  background: none; /* see above: no frame, no fill — the header's own surface shows through */
   border: 0;
+  box-shadow: none;
 }
 .duel-hud > * {
   min-width: 0;
