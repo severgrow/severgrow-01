@@ -6,6 +6,22 @@ import { defineConfig } from 'vite';
 // The playable web version. Builds to web/dist with relative paths so it works
 // from any GitHub Pages URL.
 let output = fileURLToPath(new URL('./dist', import.meta.url));
+
+// `/futa0.5/` (the online preview) MUST ship its public online config, or the client cannot reach
+// the duel API and every online tap shows a generic error. Enforce this in the BUILD itself — not
+// only in the post-build `check-channel-assets.mjs` — because a stale workflow copy on another ref
+// (e.g. `futa0.4`) runs that checker with `|| true` and would swallow a failure. `npm run web:build`
+// is never `|| true`-guarded, so a throw here always fails the deploy.
+if ((process.env.CHANNEL ?? '') === 'futa05') {
+  const required = ['VITE_DUEL_API_URL', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const;
+  const missing = required.filter((key) => !(process.env[key] ?? '').trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `CHANNEL=futa05 build requires ${missing.join(', ')} — without it the built bundle would carry no online config.`,
+    );
+  }
+}
+
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: './',
