@@ -463,3 +463,33 @@ export const TUTORIAL = Object.freeze({
     badGap: 'Not a run: a gap in the numbers.',
   }),
 });
+
+/**
+ * The install invitation — the timed prompt that replaced the old always-on menu button. It is
+ * offered after a game the player actually finished (the exact rule lives in
+ * `web/src/logic/install-prompt.ts`), in the game's own voice. `install` is the button that opens
+ * the browser's own install dialog; `done` is what the instruction face uses to close (there is
+ * nothing to press there); the two step lists are the fallback when a button cannot install
+ * (iOS Safari especially). Promise only what is true today — no notifications, nothing about
+ * accounts — so these words still read correctly once sign-in ships.
+ */
+export const INSTALL = Object.freeze({
+  title: 'Grow FUTASAKU on your home screen',
+  why: Object.freeze([
+    'Opens full-screen — straight in, no browser bars',
+    'Works offline, even with no signal',
+    'One tap from your home screen — no typing the address',
+  ] as const),
+  install: 'Add to home screen',
+  done: 'Got it',
+  notNow: 'Not now',
+  never: "Don't show again",
+  iosSteps: Object.freeze([
+    'Tap the Share button — the square with the arrow pointing up.',
+    'Choose Add to Home Screen, then tap Add.',
+  ] as const),
+  manualSteps: Object.freeze([
+    'Open your browser menu (the three dots).',
+    'Choose Install app or Add to Home Screen.',
+  ] as const),
+});

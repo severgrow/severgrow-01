@@ -66,7 +66,7 @@ import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { howToReferenceHtml } from './logic/howto-reference.js';
-import { mountInstallButton } from './logic/install.js';
+import { mountInstallPrompt } from './logic/install.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
@@ -143,7 +143,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, ONLINE, OPP, RESULT, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -315,6 +315,8 @@ let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
 let gameOverDismissed = false;
+/** The online match whose result has already been counted for the install invitation (once each). */
+let onlineResultNoted: string | null = null;
 let botBusy = false;
 let epoch = 0;
 let pumping = false;
@@ -1694,6 +1696,9 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
+      // The install invitation counts EVERY finished game — offline here, online at the finish
+      // screen — and never a tutorial step (the guard above already excludes the tutorial).
+      installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
     }
   }
   log = log.slice(0, 300);
@@ -4669,6 +4674,13 @@ function renderGameOver() {
     }
     const won = info.title === RESULT.won;
     const draw = info.title === RESULT.draw;
+    // Count this ONLINE finish for the install invitation too — an online-only player must reach
+    // the trigger. Once per match: the finish screen re-renders, so the match id is the guard.
+    const matchId = os.driver.snapshot().matchId;
+    if (onlineResultNoted !== matchId) {
+      onlineResultNoted = matchId;
+      installPrompt.noteFinished(won ? 'won' : draw ? 'draw' : 'lost');
+    }
     $('go-title').textContent = info.title;
     // Context only — never a repeat of the reason (offline shows the level line here).
     $('go-sub').textContent = info.sub;
@@ -6303,11 +6315,16 @@ let appReady = false;
   },
   /** Boot finished: every async UI mount is attached and the first screen is shown. */
   ready: () => appReady,
+  /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
+  install: () => installPrompt.memory(),
+  showInstall: () => installPrompt.showNow(),
 };
 
 await mountPlayerEnhancements();
 fillIcons();
-mountInstallButton();
+// The install invitation: a timed prompt after a played game (no menu button any more). The words
+// live in src/strings.ts; the counting rule lives in logic/install-prompt.ts.
+const installPrompt = mountInstallPrompt({ copy: INSTALL, storage: store });
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 if (!IS_FUTA04) onPhotosReady(() => {
   lastBoard = null;
