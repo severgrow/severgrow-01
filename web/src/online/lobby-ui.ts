@@ -71,6 +71,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const hub = $('online-hub');
   const waitingEl = $('online-waiting');
   const joinEl = $('online-join');
+  const menuEl = document.getElementById('menu');
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -80,6 +81,10 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     hub.hidden = next !== 'hub';
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
+    // The online screens are their own full-screen view: keep the main menu fully out of the
+    // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
+    // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
+    if (menuEl) menuEl.hidden = next !== null;
     if (next !== 'waiting' && pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;

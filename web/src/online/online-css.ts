@@ -1,5 +1,19 @@
 /** Compact online lobby styles (Phase 4). Injected once beside player CSS. */
 export const ONLINE_CSS = `
+/* The online lobby is a real full-screen VIEW, not a layer on the menu. The base .screen rule
+   already makes it fixed/inset:0, but with no background of its own the menu's big title and
+   buttons painted straight through the invite panel. Give each online screen the theme
+   background (opaque, so nothing shows through), lift it above the menu in z-order as a second
+   safety net, and make the screen itself the scroll container so tall content is reachable. */
+.online-hub,
+.online-waiting,
+.online-join {
+  z-index: 3;
+  background: var(--c-bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 .online-hub .online-inner,
 .online-waiting .online-inner,
 .online-join .online-inner {
