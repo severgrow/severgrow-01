@@ -15,7 +15,7 @@ import { onlinePerspective } from './perspective.js';
 import type { Perspective } from './perspective.js';
 import { newRequestId, submitWithRetries } from './retries.js';
 import { createSyncEngine } from './sync.js';
-import type { SyncEngine } from './sync.js';
+import type { SyncEngine, ViewReason } from './sync.js';
 import type {
   ConnectionStatus,
   MatchChannel,
@@ -58,6 +58,12 @@ export type OnlineDriver = {
   /** Pending opponent events for the animation pipeline (catch-up at 2x in Phase 5). */
   pendingEvents(): readonly Event[];
   /**
+   * Where the pending events came from: 'live' = the enemy turn this device was waiting for
+   * (a poll/ping while visible), 'gap' = turns missed while away (a resume/return), null = none.
+   * Only a live reveal gets the full, readable pace; a gap keeps its 2x + Skip.
+   */
+  pendingOrigin(): 'live' | 'gap' | null;
+  /**
    * The match's whole public event history, in one fetch (no `since`), for the finish screen's
    * highlights. Never replays or changes the live view; the caller decides when to ask.
    */
@@ -80,6 +86,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   let presence: PresenceStatus = 'unknown';
   let notice: string | null = null;
   let pendingEvents: Event[] = [];
+  /** See `pendingOrigin()`: how the buffered events arrived. */
+  let pendingOrigin: 'live' | 'gap' | null = null;
   let submitting = false;
   /** When set, applyView does not buffer events (own Draw) or only buffers aftermath (own Throw). */
   let catchUpMode: 'all' | 'none' | 'aftermath' = 'all';
@@ -95,15 +103,20 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   const isAftermath = (e: Event): boolean =>
     e.t === 'Sever' || e.t === 'Rot' || e.t === 'Strangle' || e.t === 'GameEnd' || e.t === 'Discard';
 
-  const applyView = (next: MatchViewPayload, _serverNow: number) => {
+  const applyView = (next: MatchViewPayload, _serverNow: number, reason: ViewReason = 'refresh') => {
     if (player && next.revision > player.revision && next.events.length > 0) {
       // Opponent turns: buffer all public events for catch-up replay.
       // Own Draw: skip (local buildSteps already animates).
       // Own Throw: only sever/rot/end aftermath — draft grows were already shown.
+      // A ping/poll while the tab is visible is the live enemy turn; anything else is a gap
+      // (a resume, a return to the tab, a network comeback) and keeps the 2x catch-up.
+      const origin = reason === 'poll' || reason === 'ping' ? 'live' : 'gap';
       if (catchUpMode === 'all') {
         pendingEvents = [...pendingEvents, ...next.events];
+        pendingOrigin = origin;
       } else if (catchUpMode === 'aftermath') {
         pendingEvents = [...pendingEvents, ...next.events.filter(isAftermath)];
+        pendingOrigin = origin;
       }
     }
     player = next;
@@ -116,8 +129,11 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
   if (player) {
     draft.syncFromServer(player.view, player.revision);
     // A reconnect/resume payload carries only the turns missed while away. Buffer them so the
-    // page replays them (at 2x) through the same AnimQueue as a live opponent turn.
-    if (player.events.length > 0) pendingEvents = [...player.events];
+    // page replays them (at 2x, skippable) through the same AnimQueue as a live opponent turn.
+    if (player.events.length > 0) {
+      pendingEvents = [...player.events];
+      pendingOrigin = 'gap';
+    }
   }
 
   const sync = createSyncEngine({
@@ -130,7 +146,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
     ...(options.isOnline ? { isOnline: options.isOnline } : {}),
     ...(options.setTimer ? { setTimer: options.setTimer } : {}),
     ...(options.clearTimer ? { clearTimer: options.clearTimer } : {}),
-    onView: (p, serverNow) => applyView(p, serverNow),
+    onView: (p, serverNow, reason) => applyView(p, serverNow, reason),
     onConnection: (status, nextNotice) => {
       connection = status;
       notice = nextNotice;
@@ -188,7 +204,8 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
 
   const refetch = async () => {
     const res = await options.client.getState(options.token, options.matchId);
-    applyView(res.player, res.serverNow);
+    // A recovery re-sync: treat whatever it carries as a gap (fast, skippable), never the live turn.
+    applyView(res.player, res.serverNow, 'refresh');
     return res;
   };
 
@@ -331,10 +348,13 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
 
     skipCatchUp() {
       pendingEvents = [];
+      pendingOrigin = null;
       emit();
     },
 
     pendingEvents: () => pendingEvents,
+
+    pendingOrigin: () => pendingOrigin,
 
     toEngineAction: (screenAction) => perspective.mapActionToEngine(screenAction),
 

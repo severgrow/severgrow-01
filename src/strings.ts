@@ -323,6 +323,12 @@ export const BLOOM = Object.freeze({
   suggest: (n: number, hexes: string) => `Bloom ${n} tiles at ${hexes}`,
   youDid: (n: number) => `You bloomed ${n} tiles`,
   oppDid: (n: number) => `${OPP.The} bloomed ${n} tiles`,
+  /**
+   * A tap on a hex that cannot be painted next: the shape does not change, so say WHY (the same
+   * words the desktop paint machine already uses) instead of leaving the finger with no answer.
+   * The two-phone playtest read that silence as "Bloom does not work on this phone".
+   */
+  nextHint: 'Choose a glowing hex',
 });
 
 /** Player-facing Bomb words. Engine actions stay `PlayFruit` for compatibility. */

@@ -38,7 +38,16 @@ const check = (name: string, ok: boolean, note = '') => {
 const buildWithApi = async (apiBase: string): Promise<void> =>
   new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['./node_modules/vite/bin/vite.js', 'build', '--config', 'web/vite.config.ts'], {
-      env: { ...process.env, PATH: process.env.PATH, CHANNEL: 'futa05', VITE_DUEL_API_URL: apiBase },
+      env: {
+        ...process.env,
+        PATH: process.env.PATH,
+        CHANNEL: 'futa05',
+        VITE_DUEL_API_URL: apiBase,
+        // The futa05 build guard requires the public online config to be present; this suite only
+        // needs the page to boot and poll, so placeholders keep it runnable without secrets.
+        VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || 'http://127.0.0.1:9',
+        VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || 'local-e2e-anon-key',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let err = '';

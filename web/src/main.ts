@@ -229,6 +229,29 @@ const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpe
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
 /** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
 const BLOOM_STAGGER_MS = 80;
+/**
+ * True while the LIVE enemy turn is being replayed (not a catch-up after being away). The player
+ * must be able to SEE which tiles arrived, so it plays at the offline game's own pace — one tile
+ * at a time — even with Reduce motion (nothing moves; the tiles simply appear one after another).
+ */
+let liveReveal = false;
+/** When the live reveal began, for the minimum readable hold (a turn with no grow must not blink). */
+let revealStartedAt = 0;
+/**
+ * The shortest the gate stays shut for a LIVE enemy turn. A turn that grew nothing (a hidden draw
+ * and a discard) has almost no steps; without this it would swap the board in one frame.
+ */
+const MIN_LIVE_REVEAL_MS = 700;
+/** An enemy turn is on screen right now: every input entry point must refuse until it drains. */
+const onlineReveal = (): boolean => isOnlineDuel() && getOnlineSession()?.isRevealing === true;
+/** Says, calmly and at most once every 1.5s, why a tap did nothing while the enemy turn plays. */
+let revealNoticeAt = 0;
+const revealWaitNotice = () => {
+  const now = Date.now();
+  if (now - revealNoticeAt < 1500) return;
+  revealNoticeAt = now;
+  caption(ONLINE.statusRevealWait, null, 'info');
+};
 
 // ---------- game state ----------
 
@@ -1700,6 +1723,9 @@ async function humanPlayOnline(a: Action) {
   const os = getOnlineSession();
   if (!os || !session) return;
   if (os.finished) return;
+  // THE GATE. The enemy's finished turn is still being shown: nothing may be played, and — just
+  // as important — nothing may fast-forward it away. Skipping is the Skip control's job alone.
+  if (os.isRevealing) return revealWaitNotice();
   fastForward();
   rememberCardRects();
   inspectKey = null;
@@ -1915,6 +1941,7 @@ function fastForward() {
   if (queue.pending === 0 && !pumping) return;
   epoch++;
   replaying = false;
+  liveReveal = false;
   quietAmbient(false);
   board.focus(null);
   for (const w of [...waiters]) w();
@@ -2099,13 +2126,24 @@ async function pump() {
     await playStep(queue.peek()!, my);
   }
   if (my !== epoch) {
+    liveReveal = false;
     if (getOnlineSession()) {
       getOnlineSession()!.endReveal();
       paintOnlineHudFromSession();
     }
     return;
   }
+  // A live enemy turn must be READABLE: even a turn that grew nothing (a hidden draw plus a
+  // discard) holds the gate for a beat, so the board never swaps in a single frame.
+  if (liveReveal && getOnlineSession()) {
+    const left = MIN_LIVE_REVEAL_MS - (performance.now() - revealStartedAt);
+    if (left > 0) {
+      await wait(left, my);
+      if (my !== epoch) return;
+    }
+  }
   pumping = false;
+  liveReveal = false;
   replaying = false;
   board.focus(null);
   // The opponent's turn has fully played out (or was skipped): the player may act now.
@@ -2169,7 +2207,9 @@ async function playStep(step: Step, my: number) {
         await wait((IS_FUTA04 ? 396 : 240) * f, my);
       } else {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        await wait(quickShow ? quickShow.show.draw : 120 * f, my);
+        // The enemy's hidden draw: their card is private, so the deck flyer is the only cue.
+        // A live reveal gives it a beat of its own instead of a blink.
+        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : 120 * f, my);
       }
       return;
     }
@@ -4517,6 +4557,8 @@ function asksConfirm(a: Action): boolean {
 function onCardTap(id: number) {
   sound.unlock();
   if (!session) return;
+  // Mid-reveal a tap must not skip the enemy's turn (and must not start mine early).
+  if (onlineReveal()) return revealWaitNotice();
   if (busy()) fastForward();
   if (!myTurn()) return;
   if (IS_FUTA04 && session.view.phase === 'ACT') {
@@ -4802,7 +4844,13 @@ function drawTap(c: Combo, key: string, type: string) {
   }
   const next = paintTap(c, draw.shape, key, draw.reverse);
   if (next.length > draw.shape.length) drawTick(next.length - 1);
-  else if (next.length === draw.shape.length && !draw.shape.includes(key)) draw = { ...draw, msg: unavailable(v, c, draw.shape, draw.reverse).get(key) ?? null };
+  else if (next.length === draw.shape.length && !draw.shape.includes(key)) {
+    // The shape did not change. Say why (or at least that this hex cannot come next) — a finger
+    // that gets no answer reads as "painting is broken", which is exactly what the two-phone
+    // playtest reported. Never leave it silent.
+    draw = { ...draw, msg: unavailable(v, c, draw.shape, draw.reverse).get(key) ?? BLOOM.nextHint };
+    board.shake(settings.reduceMotion);
+  }
   draw = {
     ...draw,
     shape: next,
@@ -4825,6 +4873,21 @@ function drawTap(c: Combo, key: string, type: string) {
   render();
 }
 
+/**
+ * The hex a FINGER is actually over, read from what is drawn (the cell under the touch), rather
+ * than re-derived from the lattice maths. A finger lands on a hex — never in a gap — and on a
+ * rotated (seat 1) board the maths can round an edge tap to the neighbour, which silently painted
+ * the wrong tile (the dead end the two-phone playtest hit). A mouse keeps the maths, so the
+ * desktop paint machine (and its gap tolerance) is untouched.
+ */
+const hexUnderFinger = (e: PointerEvent): string | null => {
+  if (e.pointerType === 'mouse') return null;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const cell = el?.closest?.('.hex-cell');
+  const key = cell instanceof HTMLElement ? cell.dataset.key : undefined;
+  return key && board.boardKeys.includes(key) ? key : null;
+};
+
 const drawHandlers = {
   down(p: Pt, e: PointerEvent) {
     const c = drawCombo();
@@ -4833,7 +4896,7 @@ const drawHandlers = {
     // a second finger (a pinch, a scroll) cancels the painting
     if (draw.ptr && draw.ptr.id !== e.pointerId) return cancelDraw();
     const keys = new Set(board.boardKeys);
-    const key = hexAtPoint(p.x, p.y, keys);
+    const key = hexUnderFinger(e) ?? hexAtPoint(p.x, p.y, keys);
     if (!IS_FUTA04 && session.presetMove && !draw.suggested) {
       // painting again over a waiting preview: the preview goes (and the one-placement shortcut
       // does not bring it straight back while this painting is on)
@@ -4990,6 +5053,8 @@ function bloomStepBack(): boolean {
 function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
+  // Mid-reveal a tap must not skip the enemy's turn: the board is still changing under it.
+  if (onlineReveal()) return revealWaitNotice();
   if (busy()) fastForward();
   // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
   // first→last endpoint shortcut used by Futa04 Bloom).
@@ -5355,11 +5420,14 @@ bind('first-tip-ok', () => {
   render();
 });
 bind('deck', () => {
+  // The gate first: a tap on the deck mid-reveal used to skip the replay AND commit a Draw.
+  if (onlineReveal()) return revealWaitNotice();
   if (busy()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'deck') : undefined;
   if (a) humanPlay(a);
 });
 bind('discard', () => {
+  if (onlineReveal()) return revealWaitNotice();
   if (busy()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
@@ -5741,6 +5809,8 @@ const ARROWS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRigh
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (openSheet) sheet(null);
+    // Esc skips an animation, but never the enemy's turn: that is the Skip control's job alone.
+    else if (onlineReveal()) revealWaitNotice();
     else if (busy()) fastForward();
     // Esc first stops the shape being painted; again, it cancels the bloom
     else if (drawCombo() && (draw.shape.length || draw.desk.phase === 'live' || draw.ptr)) cancelDraw();
@@ -5799,9 +5869,11 @@ function describeHex(key: string) {
   return `${name}, ${t.owner === HUMAN ? 'your' : OPP.noun} ${t.root ? 'root' : `tile, strength ${t.strength}`}`;
 }
 
-// In the background, finish animations at once: on return the board is simply current.
+// In the background, finish animations at once: on return the board is simply current. The
+// enemy's turn is the exception — hiding the tab (a lock, a switch to the other phone) must not
+// silently swap the board in, or the player never sees what happened; it resumes on return.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) fastForward();
+  if (document.hidden && !onlineReveal()) fastForward();
 });
 
 // Online duels: a hidden or offline tab must not keep the 2s fast poll alive. Tell the sync engine
@@ -5893,6 +5965,22 @@ let appReady = false;
   tutorial: () => coach.tutorial ? { ...coach.tutorial } : null,
   tutorialNext: () => tutorialNext(),
   exitTutorial: () => exitTutorial(),
+  /**
+   * ONLINE tests: the enemy-turn gate, read-only. `revealing` is true from the moment a completed
+   * enemy turn is detected until its animation has drained; `queued` is how much is still to play.
+   */
+  online: () => {
+    const os = getOnlineSession();
+    if (!os) return null;
+    return {
+      revealing: os.isRevealing,
+      live: os.revealIsLive,
+      myTurn: os.myTurn,
+      seat: os.seat,
+      finished: os.finished,
+      queued: queue.pending,
+    };
+  },
   /** Boot finished: every async UI mount is attached and the first screen is shown. */
   ready: () => appReady,
 };
@@ -5988,12 +6076,24 @@ void import('./online/lobby-ui.js').then(async (m) => {
           syncSessionFromOnline();
           const catchUp = os.consumeCatchUp();
           if (catchUp.length) {
-            replaying = true;
-            replaySpeed = 2;
-            queue.push(catchUp);
-            void pump().then(() => {
+            // The enemy's finished turn is shown at the OFFLINE game's own pace (one tile at a
+            // time, MOTION.move each) so the player can see what arrived. A catch-up after being
+            // away keeps its 2x and its Skip.
+            liveReveal = os.revealIsLive;
+            revealStartedAt = performance.now();
+            if (liveReveal) {
               replaying = false;
               replaySpeed = REPLAY_SPEED;
+            } else {
+              replaying = true;
+              replaySpeed = 2;
+            }
+            queue.push(catchUp);
+            void pump().then(() => {
+              if (!liveReveal) {
+                replaying = false;
+                replaySpeed = REPLAY_SPEED;
+              }
             });
           }
           paintOnlineHudFromSession();

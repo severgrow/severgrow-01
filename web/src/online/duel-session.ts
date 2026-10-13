@@ -62,6 +62,12 @@ export class OnlineSession {
    * offered: the player must see the true board before they can act.
    */
   private revealing = false;
+  /**
+   * True when the replay now in flight is the LIVE enemy turn this device was waiting for, false
+   * for a catch-up after being away. Only the live reveal gets the full, readable pace; an away
+   * catch-up keeps its 2x (and its Skip).
+   */
+  private revealLive = false;
 
   constructor(readonly driver: OnlineDriver) {
     this.state = this.buildDisplayState();
@@ -79,8 +85,17 @@ export class OnlineSession {
     return viewFor(this.state, 0);
   }
 
+  /**
+   * True while nothing may be played: an enemy turn has been detected and is waiting to be
+   * animated, or its replay is still draining. `pendingEvents` is included so the gate is shut the
+   * instant the completed turn lands — not one render later.
+   */
+  private get boardBlocked(): boolean {
+    return this.revealing || this.driver.pendingEvents().length > 0;
+  }
+
   get legal(): Action[] {
-    if (this.revealing) return []; // never act on a board that is still replaying
+    if (this.boardBlocked) return []; // never act on a board that is still replaying
     const snap = this.driver.snapshot();
     if (snap.view.actor !== snap.seat || snap.status !== 'active') return [];
     // Legal in engine space → map to display (screen) coords for the UI.
@@ -88,21 +103,27 @@ export class OnlineSession {
   }
 
   get canUndo(): boolean {
-    return !this.revealing && this.driver.draft().canUndo();
+    return !this.boardBlocked && this.driver.draft().canUndo();
   }
 
   /** True while the opponent's finished turn is still replaying; input is closed. */
   get isRevealing(): boolean {
-    return this.revealing;
+    return this.boardBlocked;
+  }
+
+  /** True when the reveal now in flight is the live enemy turn (not a catch-up after being away). */
+  get revealIsLive(): boolean {
+    return this.revealLive;
   }
 
   /** Called by the page the moment a catch-up replay drains (or is skipped). */
   endReveal(): void {
     this.revealing = false;
+    this.revealLive = false;
   }
 
   get myTurn(): boolean {
-    if (this.revealing) return false;
+    if (this.boardBlocked) return false;
     const snap = this.driver.snapshot();
     return snap.status === 'active' && snap.view.actor === snap.seat && snap.view.phase !== 'GAME_OVER';
   }
@@ -121,13 +142,17 @@ export class OnlineSession {
   consumeCatchUp(): Step[] {
     const events = [...this.driver.pendingEvents()];
     if (!events.length) return [];
+    // Close the gate BEFORE anything else. `skipCatchUp()` fires `emit()`, which runs a full
+    // render inside this very call: if the flag were set after it, that render would see an open
+    // gate (the enemy board already swapped in) — the exact window the owner reported.
+    this.revealing = true;
+    this.revealLive = this.driver.pendingOrigin() === 'live';
     this.driver.skipCatchUp();
     const steps = stepsFromEvents(events, this.driver.perspective());
     const v = this.view;
     steps.push(syncStep(this.state.board, [v.score, v.opponentScore]));
     this.lastCatchUp = steps;
-    // The page will replay these through the shared AnimQueue; until it drains, input stays shut.
-    if (steps.length > 0) this.revealing = true;
+    // The page replays these through the shared AnimQueue; until it drains, input stays shut.
     return steps;
   }
 
@@ -193,6 +218,8 @@ export class OnlineSession {
   }
 
   undo(): boolean {
+    // Undo is an input like any other: it stays shut until the enemy turn has been shown.
+    if (this.boardBlocked) return false;
     if (!this.driver.draftUndo()) return false;
     this.driver.draft().persist();
     this.refresh();

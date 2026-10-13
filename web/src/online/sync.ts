@@ -16,6 +16,13 @@ export const POLL_HIDDEN_MS = 30_000;
  */
 export const POLL_WAITING_MS = 900;
 
+/**
+ * Why a view was fetched. The driver uses this to tell the LIVE enemy turn (a poll or ping while
+ * the tab is visible, which must animate slowly and clearly) from turns missed while away (a
+ * resume or a return to the tab, which keep the fast, skippable catch-up).
+ */
+export type ViewReason = 'initial' | 'poll' | 'ping' | 'visible' | 'online' | 'refresh';
+
 export type SyncEngineOptions = {
   client: DuelClient;
   token: string;
@@ -30,7 +37,7 @@ export type SyncEngineOptions = {
   /** Schedule a timer; tests inject a fake. */
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (id: unknown) => void;
-  onView?: (player: MatchViewPayload, serverNow: number) => void;
+  onView?: (player: MatchViewPayload, serverNow: number, reason: ViewReason) => void;
   onConnection?: (status: ConnectionStatus, notice: string | null) => void;
   onPresence?: (presence: PresenceStatus) => void;
 };
@@ -89,13 +96,13 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     options.onConnection?.(status, notice);
   };
 
-  const applyPayload = (player: MatchViewPayload, serverNow: number) => {
+  const applyPayload = (player: MatchViewPayload, serverNow: number, reason: ViewReason) => {
     revision = player.revision;
     clock = noteServerNow(clock, serverNow, now());
-    options.onView?.(player, serverNow);
+    options.onView?.(player, serverNow, reason);
   };
 
-  const fetchView = async (): Promise<void> => {
+  const fetchView = async (reason: ViewReason): Promise<void> => {
     if (stopped) return;
     if (inFlight) {
       await inFlight;
@@ -104,7 +111,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     inFlight = (async () => {
       try {
         const res = await options.client.getState(options.token, options.matchId, revision);
-        applyPayload(res.player, res.serverNow);
+        applyPayload(res.player, res.serverNow, reason);
         if (connection !== 'client_too_old') setConnection('online', null);
       } catch (error) {
         if (error instanceof DuelError && error.code === 'CLIENT_TOO_OLD') {
@@ -132,12 +139,13 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
     if (stopped) return;
     if (timer !== null) clearTimer(timer);
     timer = setTimer(() => {
-      void fetchView().then(schedule);
+      // A scheduled poll while the tab is visible is how the LIVE enemy turn arrives.
+      void fetchView('poll').then(schedule);
     }, pollMs());
   };
 
   const onPing = (_ping: MatchPing) => {
-    void fetchView();
+    void fetchView('ping');
   };
 
   const onPresence = (snap: PresenceSnapshot) => {
@@ -151,7 +159,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       stopped = false;
       unsub = options.channel.subscribe(options.matchId, { onPing, onPresence });
       options.channel.track?.(options.matchId, true);
-      await fetchView();
+      await fetchView('initial');
       schedule();
     },
 
@@ -166,7 +174,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       }
     },
 
-    refresh: () => fetchView(),
+    refresh: () => fetchView('refresh'),
 
     revision: () => revision,
 
@@ -178,7 +186,8 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
 
     setVisible(next) {
       visible = next;
-      if (visible) void fetchView();
+      // Coming back to the tab is a gap: the missed turns replay fast and stay skippable.
+      if (visible) void fetchView('visible');
       schedule();
     },
 
@@ -186,7 +195,7 @@ export const createSyncEngine = (options: SyncEngineOptions): SyncEngine => {
       networkOnline = next;
       if (next) {
         setConnection('reconnecting', 'Reconnecting');
-        void fetchView();
+        void fetchView('online');
       } else {
         setConnection('offline', 'Reconnecting');
       }
