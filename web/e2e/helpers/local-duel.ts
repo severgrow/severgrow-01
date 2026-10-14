@@ -18,6 +18,9 @@ import { createHttpServer } from '../../../server/src/http.js';
 import { MatchService } from '../../../server/src/service.js';
 import { MemoryStorage } from '../../../server/src/storage/memory.js';
 import { DuelClient } from '../../../server/src/client.js';
+import { DEFAULT_LIVE_CONFIG } from '../../../server/src/live/config.js';
+import { MemoryLiveStore } from '../../../server/src/live/memory.js';
+import { createLiveRuntime } from '../../../server/src/live/runtime.js';
 import type { FetchLike } from '../../../server/src/client.js';
 
 /** The Chromium the other e2e suites use; override with PW_CHROMIUM. */
@@ -89,11 +92,20 @@ const buildWithApi = (apiBase: string): Promise<void> =>
 
 /** Boot the API + the built page. Call `close()` in a finally block. */
 export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDuel> => {
-  const service = new MatchService({
-    storage: new MemoryStorage(),
-    config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: options.turnTimeoutMs ?? 24 * 3_600_000 },
+  const memory = new MemoryStorage();
+  const server = { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: options.turnTimeoutMs ?? 24 * 3_600_000 };
+  // The CHANNEL=futa05 build now ships live duels (see web/src/online/live/flag.ts), so the harness
+  // serves the live routes too — otherwise the live listener would log 404s and its challenge
+  // inbox could never answer. These suites still exercise the online duel itself (live duels have
+  // their own proof in web/e2e/live-duels.ts); this just keeps the build under test faithful.
+  const live = createLiveRuntime({
+    storage: memory,
+    live: new MemoryLiveStore(memory),
+    server,
+    config: { ...DEFAULT_LIVE_CONFIG },
   });
-  const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' } });
+  const service = new MatchService({ storage: live.storage, config: server });
+  const apiServer = createHttpServer({ service, config: server, live: live.router(service) });
   await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
   const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 

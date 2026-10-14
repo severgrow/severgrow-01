@@ -106,6 +106,29 @@ const attachRequestLog = (page: SeatSession['page'], apiBase: string, pageIndex:
 const requestsSince = (t0: number): RequestLog[] => apiLog.filter((r) => r.t >= t0);
 const viewResponsesSince = (t0: number): typeof viewResponses => viewResponses.filter((r) => r.t >= t0);
 
+// The live challenger listener is an APP-LEVEL component: on the futa05 build it mounts whenever an
+// identity exists (web/src/online/live/mount.ts) because a challenge must be heard anywhere in the
+// app, not only inside a duel. It therefore arms ONE 250 ms ticker and polls the challenge inbox and
+// its own presence every few seconds — deliberately, whether or not a duel is open. Those are not
+// per-duel resources, so the boot baseline is taken AFTER it is up, and its inbox/presence polls are
+// excluded from "polling stopped after leaving" (which guards the DUEL session's own polling). Live
+// duels themselves are proved by web/e2e/live-duels.ts.
+const LIVE_LISTENER_PATHS = ['/v1/players/me/challenges', '/v1/players/me/presence'] as const;
+const isLiveListenerRequest = (path: string): boolean => LIVE_LISTENER_PATHS.some((p) => path.startsWith(p));
+
+/** Wait until the app-level live listener has mounted (so the boot baseline includes it). */
+const waitLiveListener = async (s: SeatSession, timeout = 20_000): Promise<boolean> => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const up = (await s.page
+      .evaluate(() => typeof (window as unknown as { __futasakuLive?: unknown }).__futasakuLive === 'function')
+      .catch(() => false)) as boolean;
+    if (up) return true;
+    await sleep(250);
+  }
+  return false;
+};
+
 // ------------------------------------------------------------------ page helpers
 
 const drawViaDeck = async (s: SeatSession): Promise<boolean> => {
@@ -468,6 +491,10 @@ try {
 
   await toMenu(seat0);
   await toMenu(seat1);
+  // Let the app-level live listener finish mounting before this baseline, so its one ticker and its
+  // inbox poll are part of "boot" rather than looking like a per-duel leak later.
+  const liveUp = [await waitLiveListener(seat0), await waitLiveListener(seat1)];
+  console.log(`live listener mounted at boot: seat0=${liveUp[0]} seat1=${liveUp[1]}`);
   await sleep(400);
   const boot0 = await readResources(seat0.page);
   const boot1 = await readResources(seat1.page);
@@ -673,12 +700,14 @@ try {
 
     const quiet0 = Date.now();
     await sleep(QUIET_WATCH_MS);
-    const afterLeaving = requestsSince(quiet0);
+    const afterLeavingAll = requestsSince(quiet0);
+    const afterLeaving = afterLeavingAll.filter((r) => !isLiveListenerRequest(r.path));
+    const listenerPolls = afterLeavingAll.length - afterLeaving.length;
     const requestsAfterLeave = afterLeaving.length;
     check(
       `match ${m} (${exit}): polling stopped after leaving`,
       requestsAfterLeave === 0,
-      `${requestsAfterLeave} request(s) in ${QUIET_WATCH_MS}ms${afterLeaving[0] ? ` (first ${afterLeaving[0].path})` : ''}`,
+      `${requestsAfterLeave} duel request(s) in ${QUIET_WATCH_MS}ms${listenerPolls ? ` (+${listenerPolls} app-level live-listener poll(s) ignored)` : ''}${afterLeaving[0] ? ` (first ${afterLeaving[0].path})` : ''}`,
     );
 
     const s0 = await readResources(seat0.page);
@@ -686,7 +715,13 @@ try {
     if (exitFailed) console.log(`    match ${m}: excluded from the drift baseline (the exit route failed)`);
     if (!exitFailed) postTeardown.push({ match: m, exit, s0, s1 });
     check(`match ${m} (${exit}): no WebSocket left open`, s0.socketsLive === 0 && s1.socketsLive === 0, `seat0 ${s0.socketsLive}, seat1 ${s1.socketsLive}`);
-    check(`match ${m} (${exit}): no interval left armed`, s0.intervals === 0 && s1.intervals === 0, `seat0 ${s0.intervals}, seat1 ${s1.intervals}`);
+    // The count must not GROW above the boot baseline: the app-level live listener may hold its one
+    // ticker (present at boot), but a duel must never leave an extra timer armed behind it.
+    check(
+      `match ${m} (${exit}): no interval left armed`,
+      s0.intervals <= boot0.intervals && s1.intervals <= boot1.intervals,
+      `seat0 ${s0.intervals} (boot ${boot0.intervals}), seat1 ${s1.intervals} (boot ${boot1.intervals})`,
+    );
     check(`match ${m} (${exit}): the gate/watchdog state is not leaked`, s0.rafs <= 1 && s1.rafs <= 1, `raf ${s0.rafs}/${s1.rafs}`);
 
     const heap0 = await retainedHeap(cdp0);
@@ -784,7 +819,10 @@ try {
     worst.listeners = Math.max(worst.listeners, p.s0.listenersLive);
   }
   console.log(`worst across all ${postTeardown.length} teardowns: intervals ${worst.intervals}, rafs ${worst.rafs}, sockets ${worst.sockets}, live listeners ${worst.listeners}`);
-  check('teardown leaves ZERO live intervals on every exit route', worst.intervals === 0, `worst ${worst.intervals}`);
+  // Compare to the boot baseline, not absolute zero: the futa05 build's app-level live listener
+  // holds one ticker from boot (see the note at LIVE_LISTENER_PATHS). A duel must not ADD one.
+  const bootIntervals = Math.max(boot0.intervals, boot1.intervals);
+  check('teardown leaves no extra live interval on any exit route', worst.intervals <= bootIntervals, `worst ${worst.intervals} (boot ${bootIntervals})`);
   check('teardown leaves no WebSocket open on every exit route', worst.sockets === 0, `worst ${worst.sockets}`);
   check('teardown leaves no extra rAF loop running on any route', worst.rafs <= 1, `worst ${worst.rafs}`);
 
