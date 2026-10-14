@@ -3416,6 +3416,14 @@ svg.usable .hex-cell {
   grid-row: 1;
   height: var(--hud-h, 48px);
   padding-block: 0;
+  /* CLICK-THROUGH. The header row is text over the top edge of the board, and on a short phone the
+     board's top tiles rise under it (owner, 2026-10-14: "it still should be okay to tap the board
+     even if some of the text is on top of it"). Its words and scores are not controls, so a tap
+     there must reach the board beneath; every real control in the row takes its taps back below. */
+  pointer-events: none;
+}
+.game > .hud > button {
+  pointer-events: auto;
 }
 .game > .race {
   grid-row: 2;

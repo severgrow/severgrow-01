@@ -232,7 +232,14 @@ export const ONLINE_CSS = `
   background: none; /* see above: no frame, no fill — the header's own surface shows through */
   border: 0;
   box-shadow: none;
+  /* CLICK-THROUGH. The strip is text over the top edge of the screen — and, on a small phone, over
+     the map. Its words are not controls, so a tap on them must reach the board underneath instead
+     of being swallowed by the strip's box. Only a real control inside it (the live pill) takes a
+     tap of its own; pointer-events: auto is put back on that one below. */
+  pointer-events: none;
 }
+/* The ONLY interactive thing in the strip (it lives in live/ui.ts and shows "Go live"). */
+.duel-hud .live-pill { pointer-events: auto; }
 .duel-hud > * {
   min-width: 0;
 }

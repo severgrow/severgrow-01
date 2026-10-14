@@ -36,7 +36,7 @@ ${glassBaseCss('.live-glass')}
 .live-pill { order:3; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:0 10px; margin:6px 0;
   border-radius:999px; border:1px solid rgba(143,191,106,.45); background:rgba(8,10,10,.42); color:${CREAM};
   font:600 12px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; white-space:nowrap; cursor:pointer;
-  position:relative; }
+  position:relative; pointer-events:auto; } /* the strip is click-through; the pill is a real control */
 .live-pill::after { content:''; position:absolute; inset:-6px 0; } /* 44px touch target */
 .live-pill .dot { width:7px; height:7px; border-radius:50%; background:${MOSS}; box-shadow:0 0 6px ${MOSS}; }
 .live-pill[disabled] { opacity:.62; cursor:default; border-color:rgba(214,204,177,.18); }
@@ -48,7 +48,7 @@ ${glassBaseCss('.live-glass')}
 @media (min-width: 560px) { .live-pill .label .full { display:inline; } .live-pill .label .short { display:none; } }
 .live-pill .secs { flex:none; font-variant-numeric:tabular-nums; }
 .live-pill .secs:empty { display:none; }
-.live-on [data-duel-urgency] { display:none !important; } /* the 24-hour warning is meaningless on a live clock */
+.live-on [data-duel-urgency][data-live-clock] { display:inline-flex !important; } /* the live clock owns this slot */
 .live-pill .cancel { margin-left:4px; padding:0 0 0 8px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
@@ -60,12 +60,28 @@ ${glassBaseCss('.live-glass')}
 .live-chip .strikes i.on { background:${LAVA}; border-color:${LAVA}; }
 .live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
 .live-chip.lighting { animation:live-light 600ms ease-out 1; }
+/* The live clock in the duel strip (the header's own "invisible box" between the menu button and
+   the logo). Always visible during live play, slim, on the header's surface: no frame, no fill,
+   no border of its own — just the words, in the material of whose turn it is. Never colour alone
+   (the time is the words); the ambient screen reader line stays silent and the thresholds are
+   announced by the live module's own announcer. */
+.duel-hud [data-live-clock] { order:2; flex:0 0 auto; display:inline-flex; align-items:center; gap:5px;
+  font-variant-numeric:tabular-nums; letter-spacing:.04em; color:#8fbf6a; background:none; border:0; }
+.duel-hud [data-live-clock][data-side='opp'] { color:#e0735c; }
+.duel-hud [data-live-clock][data-urgent='1'] { color:#f6d3c8; }
+.duel-hud [data-live-clock][data-side='me'][data-urgent='1'] { color:#d9efc2; }
+.duel-hud [data-live-clock] .live-clock-dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
+.large-text .duel-hud [data-live-clock] { font-size:15px; }
 .live-ring { position:fixed; z-index:7; pointer-events:none; }
-.live-ring circle { fill:none; stroke-width:2.5; }
-.live-ring .bg { stroke:rgba(240,233,220,.12); }
-.live-ring .fg { stroke:${MOSS}; stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%; filter:drop-shadow(0 0 3px rgba(143,191,106,.6)); }
-.live-ring[data-side='opp'] .fg { stroke:${LAVA}; filter:drop-shadow(0 0 3px rgba(224,115,92,.6)); }
-.live-ring[data-urgent='1'] .fg { stroke:${LAVA}; }
+/* The home timeout ring: a thin, tight arc in the turn-owner's own material, inset from the tile
+   so it reads as one ornamental line rather than a hoop around it. Subtle at rest; it thickens and
+   brightens as the clock runs low (shape + weight, so Reduce motion still shows urgency). */
+.live-ring circle { fill:none; }
+.live-ring .bg { stroke:rgba(240,233,220,.10); stroke-width:1.4; }
+.live-ring .fg { stroke:${MOSS}; stroke-width:1.6; stroke-linecap:butt; transform:rotate(-90deg); transform-origin:50% 50%; opacity:.9; }
+.live-ring[data-side='opp'] .fg { stroke:${LAVA}; }
+.live-ring[data-urgent='1'] .bg { stroke:rgba(240,233,220,.16); stroke-width:1.6; }
+.live-ring[data-urgent='1'] .fg { stroke:${LAVA}; stroke-width:2.2; opacity:1; filter:drop-shadow(0 0 2px rgba(224,115,92,.5)); }
 .live-ring.pulse { animation:live-pulse 600ms ease-out 1; }
 .live-vignette { position:fixed; inset:0; z-index:6; pointer-events:none; box-shadow:inset 0 0 70px rgba(224,115,92,.0); transition:box-shadow .3s ease; }
 .live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); }
@@ -301,7 +317,9 @@ export const createHud = () => {
   const dots = [el('i'), el('i')];
   strikes.append(...dots);
   chip.append(lamp, text, strikes);
-  const { svg: ring, fg, length } = ringSvg('live-ring', 100, 46);
+  // The arc is inset from the tile's own edge (radius 42 of a 100 box, not 46): it reads as a thin
+  // ornamental line around the home rather than a hoop pressed against it.
+  const { svg: ring, fg, length } = ringSvg('live-ring', 100, 42);
   ring.setAttribute('hidden', '');
   ring.dataset.live = 'ring';
   const vignette = el('div', 'live-vignette');
@@ -309,6 +327,13 @@ export const createHud = () => {
   document.body.append(ring, vignette);
   let model: HudModel | null = null;
   let raf = 0;
+
+  /** The header's own "invisible box": the live clock is written into the strip's time slot. */
+  const clockEl = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>('#duel-hud [data-duel-urgency]');
+  const clockDot = el('span', 'live-clock-dot');
+  clockDot.setAttribute('aria-hidden', 'true');
+  const clockWords = el('span', 'live-clock-words');
 
   const attach = () => {
     const hud = document.getElementById('duel-hud');
@@ -322,11 +347,18 @@ export const createHud = () => {
     if (!hex || !game || game.hidden) return false;
     const r = hex.getBoundingClientRect();
     if (r.width === 0) return false;
-    const size = Math.max(r.width, r.height) * 1.5;
+    // 1.42×: the inset arc still clears the tile's corners, without the old wide halo.
+    const size = Math.max(r.width, r.height) * 1.42;
     ring.style.left = `${r.left + r.width / 2 - size / 2}px`;
     ring.style.top = `${r.top + r.height / 2 - size / 2}px`;
     ring.style.width = ring.style.height = `${size}px`;
     return true;
+  };
+
+  /** mm:ss of the remaining time — the words, so the clock is never colour alone. */
+  const clockText = (left: number): string => {
+    const secs = Math.max(0, Math.ceil(left / 1000));
+    return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
   };
 
   const frame = () => {
@@ -340,6 +372,23 @@ export const createHud = () => {
     chip.dataset.urgent = urgent ? '1' : '0';
     ring.dataset.urgent = urgent ? '1' : '0';
     text.textContent = urgent ? `${LIVE.live.toUpperCase()} ${secs}s` : LIVE.chip(Math.round(model.limitMs / 1000));
+    // The strip clock, written only when the words change (not once per frame).
+    const clock = clockEl();
+    if (clock) {
+      if (clock.dataset.liveClock !== '1') {
+        clock.dataset.liveClock = '1';
+        // Not a live region: the words change every second and must never be announced each time.
+        // The live module's own announcer keeps the threshold lines (10, 8, 6, 4, 2, time's up).
+        clock.removeAttribute('role');
+        clock.setAttribute('aria-live', 'off');
+        clock.replaceChildren(clockDot, clockWords);
+      }
+      const label = clockText(left);
+      if (clockWords.textContent !== label) clockWords.textContent = label;
+      clock.dataset.side = model.side;
+      clock.dataset.urgent = urgent ? '1' : '0';
+      clock.hidden = false;
+    }
     if (place()) ring.removeAttribute('hidden');
     else ring.setAttribute('hidden', '');
     vignette.hidden = model.reduceMotion;
@@ -359,6 +408,18 @@ export const createHud = () => {
       if (!on) {
         ring.setAttribute('hidden', '');
         vignette.hidden = true;
+        // Leaving live: hand the strip's time slot back to the 24-hour urgency rule.
+        const clock = clockEl();
+        if (clock && clock.dataset.liveClock === '1') {
+          delete clock.dataset.liveClock;
+          delete clock.dataset.side;
+          delete clock.dataset.urgent;
+          clock.replaceChildren();
+          clock.textContent = '';
+          clock.hidden = true;
+          clock.setAttribute('role', 'status');
+          clock.removeAttribute('aria-live');
+        }
         cancelAnimationFrame(raf);
         raf = 0;
         return;
@@ -378,8 +439,8 @@ export const createHud = () => {
         const hex = document.querySelector<SVGGElement>(`#board .hex-cell[data-key="${key}"]`);
         if (!hex) continue;
         const r = hex.getBoundingClientRect();
-        const { svg } = ringSvg('live-ring pulse', 100, 46);
-        const size = Math.max(r.width, r.height) * 1.5;
+        const { svg } = ringSvg('live-ring pulse', 100, 42);
+        const size = Math.max(r.width, r.height) * 1.42;
         Object.assign(svg.style, { left: `${r.left + r.width / 2 - size / 2}px`, top: `${r.top + r.height / 2 - size / 2}px`, width: `${size}px`, height: `${size}px` });
         svg.dataset.side = key === homeKeys[0] ? 'me' : 'opp';
         document.body.append(svg);
