@@ -47,6 +47,18 @@ untouched.
 - **Presence (Online / Away) is not wired** — the indicator is deliberately hidden rather than faked.
 - A slow **retained-heap drift** (~270 KB per match in a long-lived tab; only a reload releases it).
 - An intermittent **seat-1 Bloom painting stall** (~1 run in 3, cause unidentified).
+- **A standard online duel has no rematch / "play again"** (verified 2026-10-14 against the code).
+  The finish screen's primary slot is relabelled **Back to matches** (`web/src/main.ts`:
+  `#go-rematch` → `ONLINE.backToMatches`, then opens the hub). A rematch exists **only** for live
+  duels (`LIVE.rematch`, `web/src/online/live/`). The plan's "a fresh invite to the same friend" is
+  **not** implemented. Note: the `rematch` / `rematchWaiting` / `wantsRematch` strings in
+  `src/strings.ts` live in the **`LIVE`** object, not `ONLINE`.
+- **The opponent's replayed turn carries less cockpit personality online than offline** (verified
+  2026-10-14 against the code). The catch-up steps are queued for the shared `AnimQueue` **without**
+  `markMoment()` / `displayEventForPlay()`, so the smart-cockpit LED announcements and the "big
+  moment" banners/anticipation do **not** fire for an opponent's turn online — while a player's OWN
+  move still gets them (`web/src/main.ts`, the online branch of `afterPlay` vs `humanPlayOnline` /
+  the driver `onChange`). Drag, cut animations and sounds DO run (same `AnimQueue` / `playStep`).
 
 ## Dated reports (accurate for their run; kept for the audit trail)
 
