@@ -50,7 +50,7 @@ import {
 import type { Combo, Desk, Ghost as DrawGhost, Meld, Pt } from './logic/draw.js';
 import { TIPS, TIPS_KEY, bloomHintGroups, markTip, parseTips } from './logic/tips.js';
 import type { TipId as FirstTip } from './logic/tips.js';
-import { breakdownPart, finalTurns, turnsLeft } from './logic/endgame.js';
+import { breakdownPart, finalTurns } from './logic/endgame.js';
 import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
@@ -143,7 +143,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -3408,7 +3408,7 @@ function renderHud() {
   sound.setCalm(finalOn);
   if (finalOn && !finalSoundOn && settings.sound) sound.finalTurns();
   finalSoundOn = finalOn;
-  if (finalOn && !st.deckFinal && !finalShown && !busy() && st.actor === HUMAN && ft.banner) {
+  if (finalOn && !st.deckFinal && !finalShown && !busy() && st.actor === HUMAN && ft.banner && ft.reason === 'deck') {
     finalShown = true;
     banner(ft.banner, 'calm');
   }
@@ -3419,11 +3419,15 @@ function renderHud() {
   lastTurnKey = turnKey;
   // Online the duel strip (directly above) already owns the turn word, and there is no bot level:
   // the pill carries the turn clock only — never a "Level N" that does not exist online.
+  // Owner's cleanup (2026-10-14): no "N turns left" / "Last turn" words anywhere the player reads
+  // (the turn pill here, and the pause sheet that copies this markup). Online the duel lane owns
+  // the turn word; offline the pill says whose turn it is, and nothing else. The count was a
+  // misleading upper bound (a match can end earlier by KO, an empty deck or a timeout).
   turn.innerHTML = over
     ? '<b>Game over</b>'
     : isOnlineDuel()
-      ? `<b>${turnsLeftText(turnsLeft(session.view))}</b>`
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel} · ${turnsLeftText(turnsLeft(session.view))}</small>`;
+      ? ''
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
