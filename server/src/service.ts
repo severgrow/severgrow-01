@@ -476,8 +476,14 @@ export class MatchService {
     const bucket = options.internal === true ? 'sweep:internal' : `sweep:ip:${clientIp ?? 'unknown'}`;
     await this.rateLimit(bucket, HOUR_MS, this.config.rateLimits.sweepPerIpPerHour);
     const result = await this.storage.sweep(this.now(), GUEST_MAX_AGE_MS);
-    // A sweeper-spent grace is the same visible state change as a lazily-spent one.
+    // A sweeper-spent grace is the same visible state change as a lazily-spent one, and a match the
+    // sweeper just finished by timeout is a TERMINAL change the other device must be woken for —
+    // exactly like a completed turn. Both ride the same ping path.
     for (const matchId of result.graceExtendedIds) {
+      const match = await this.storage.matchById(matchId);
+      if (match) await safePublish(this.broadcaster, matchId, { revision: match.revision, status: match.status });
+    }
+    for (const matchId of result.timedOutIds) {
       const match = await this.storage.matchById(matchId);
       if (match) await safePublish(this.broadcaster, matchId, { revision: match.revision, status: match.status });
     }
@@ -683,13 +689,19 @@ export class MatchService {
     const participant = await this.storage.participantOf(matchId, player.id);
     if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
     await this.publishGraceChange(before, fresh);
+    // A poll that discovers a deadline the match already passed must ANNOUNCE the finish on the same
+    // ping path a completed turn uses, so the other device learns at once instead of waiting for its
+    // own next fetch. (A committing finish is announced by `submitAction`, never twice.)
+    if (before.status !== 'finished' && fresh.status === 'finished') {
+      await safePublish(this.broadcaster, fresh.id, { revision: fresh.revision, status: fresh.status });
+    }
     return fresh;
   }
 
   /**
    * A spent grace is a state change both players must be able to see (it is never a secret), so it
-   * goes out on the existing status-change ping path. Never fired for a mid-turn action: the move
-   * itself does not touch the grace flags.
+   * goes out on the existing status-change ping path — exactly the path a completed turn uses.
+   * Never fired for a mid-turn action: the move itself does not touch the grace flags.
    */
   private async publishGraceChange(before: MatchRecord | null, after: MatchRecord): Promise<void> {
     if (!graceSpentBetween(before, after)) return;

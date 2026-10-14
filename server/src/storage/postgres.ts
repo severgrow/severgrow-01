@@ -841,6 +841,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     let timedOut = 0;
     let expiredWaiting = 0;
     const graceExtendedIds: string[] = [];
+    const timedOutIds: string[] = [];
     const { rows: expiring } = await pool.query(
       `select * from matches
         where (status = 'active' and turn_deadline_at is not null and turn_deadline_at < $1)
@@ -853,9 +854,13 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       const graceMoved = next.graceUsed[0] !== match.graceUsed[0] || next.graceUsed[1] !== match.graceUsed[1];
       if (next.status === match.status && next.finishedAt === match.finishedAt && !graceMoved) continue;
       await persistMatch(pool, next);
-      if (next.status === 'finished' && match.status === 'active') timedOut += 1;
-      else if (next.status === 'finished' && match.status === 'waiting') expiredWaiting += 1;
-      else if (graceMoved) graceExtendedIds.push(match.id);
+      if (next.status === 'finished' && match.status === 'active') {
+        timedOut += 1;
+        timedOutIds.push(match.id);
+      } else if (next.status === 'finished' && match.status === 'waiting') {
+        expiredWaiting += 1;
+        timedOutIds.push(match.id);
+      } else if (graceMoved) graceExtendedIds.push(match.id);
     }
 
     let deletedGuests = 0;
@@ -868,7 +873,7 @@ export const postgresStorage = (pool: PgPool): Storage => ({
       await pool.query('delete from players where id = $1', [asString(row.id)]);
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds };
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
   },
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

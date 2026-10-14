@@ -358,13 +358,18 @@ export class MemoryStorage implements Storage {
     let timedOut = 0;
     let expiredWaiting = 0;
     const graceExtendedIds: string[] = [];
+    const timedOutIds: string[] = [];
     for (const [id, match] of this.matches) {
       const next = this.expiryDecision(match, now);
       if (next === match) continue;
       this.matches.set(id, copy(next));
-      if (next.status === 'finished' && match.status === 'active') timedOut += 1;
-      else if (next.status === 'finished' && match.status === 'waiting') expiredWaiting += 1;
-      else if (match.status === 'active' && next.graceUsed[0] !== match.graceUsed[0]) graceExtendedIds.push(id);
+      if (next.status === 'finished' && match.status === 'active') {
+        timedOut += 1;
+        timedOutIds.push(id);
+      } else if (next.status === 'finished' && match.status === 'waiting') {
+        expiredWaiting += 1;
+        timedOutIds.push(id);
+      } else if (match.status === 'active' && next.graceUsed[0] !== match.graceUsed[0]) graceExtendedIds.push(id);
       else if (match.status === 'active' && next.graceUsed[1] !== match.graceUsed[1]) graceExtendedIds.push(id);
     }
     let deletedGuests = 0;
@@ -379,7 +384,7 @@ export class MemoryStorage implements Storage {
       }
       deletedGuests += 1;
     }
-    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds };
+    return { timedOut, expiredWaiting, deletedGuests, graceExtended: graceExtendedIds.length, graceExtendedIds, timedOutIds };
   }
 
   async hitRateLimit(bucket: string, windowStart: number, max: number): Promise<{ ok: boolean; count: number }> {

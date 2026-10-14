@@ -156,6 +156,12 @@ export type SweepResult = {
   graceExtended: number;
   /** The ids of those matches, so the caller can publish the state change. */
   graceExtendedIds: string[];
+  /**
+   * The ids of the matches this sweep just FINISHED by timeout, so the caller publishes the terminal
+   * status on the same ping path a completed turn uses. Without it a timeout is only discovered by
+   * each device's own poll, so a device could sit on a stale board until its next fetch.
+   */
+  timedOutIds: string[];
 };
 
 export type MatchListRow = {
