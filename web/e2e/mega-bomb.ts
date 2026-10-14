@@ -26,8 +26,15 @@ try {
     const errors:string[]=[]; page.on('pageerror',e=>errors.push(e.message));
     await page.addInitScript(saved=>{
       (window as any).__name=(f:unknown)=>f;
-      localStorage.setItem('main2:severgrow.save.v7',saved);
-      localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,speed:'skip',reduceMotion:true,coach:false}));
+      // The channel chooses the storage prefix (`main2:` for futa04, `futa05:` for the online
+      // preview). Seed BOTH so this suite runs against either build — the tap-to-play path is
+      // shared, and the f24fdc8 note ("cannot run: fails at its own #menu-continue fixture") was
+      // only this prefix mismatch when it was run against a futa05 build.
+      const settings = JSON.stringify({sound:false,music:false,speed:'skip',reduceMotion:true,coach:false});
+      for (const prefix of ['main2:', 'futa04:', 'futa05:']) {
+        localStorage.setItem(`${prefix}severgrow.save.v7`, saved);
+        localStorage.setItem(`${prefix}severgrow.settings.v1`, settings);
+      }
     },positionSave({state:game}));
     await page.goto('http://localhost:4199/');
     await page.click('#menu-continue');

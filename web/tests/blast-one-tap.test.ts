@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { allNeighbors, apply, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Event, Player, State } from '../../src/engine/index.js';
 import { buildSteps } from '../src/logic/anim.js';
-import { futa04OneTap } from '../src/logic/interaction.js';
+import { EMPTY_SEL, futa04OneTap, kindOf, playNow, playNowBlast, tapHex, tapKind, targetHexes } from '../src/logic/interaction.js';
 import { createDraftEngine } from '../src/online/draft.js';
 import { stepsFromEvents } from '../src/online/steps-from-events.js';
 import { onlinePerspective } from '../src/online/perspective.js';
@@ -48,6 +48,46 @@ describe('the Blast is a single tap', () => {
     // The Throw still asks (its Discard ends the turn), and so does a plain end of step.
     expect(futa04OneTap({ t: 'Discard', card: 3 })).toBe(false);
     expect(futa04OneTap({ t: 'EndAct' })).toBe(false);
+  });
+
+  // The regression that f24fdc8's intent hit: `maybeAutoPlay` called `playNow`, and `playNow`
+  // returns null without a picked CARD — but a Blast is a recipe (`sel.card` stays null), so the
+  // tap only previewed and the board waited for the old "tap the tile again". These assertions go
+  // through the exact recipe selection the UI builds (tapKind → tapHex), so they catch that.
+  it('OFFLINE (the tap-to-play path): a Blast recipe on a legal target is the whole move', () => {
+    const { state, target } = blastPosition();
+    const view = viewFor(state, 0);
+    const legal = legalActions(view);
+    const key = coordKey(target);
+    const kind = kindOf({ t: 'MegaBomb', cards: [1000, 1001], target })!;
+    expect(kind).toBe('bloom-mega-1000.1001');
+    const expected = legal.find((a) => a.t === 'MegaBomb' && coordKey(a.target) === key);
+    expect(expected, 'the position offers the Blast on the target').toBeTruthy();
+
+    // The recipe is picked, no card: exactly what the cockpit's Blast control leaves behind.
+    const picked = tapKind(EMPTY_SEL, kind);
+    expect(picked.card, 'a Blast recipe picks no single card (the root cause)').toBeNull();
+    // `playNow` — what `maybeAutoPlay` used to call alone — cannot play it: the tile only previews.
+    expect(playNow(view, legal, picked)).toBeNull();
+
+    // The tap on the legal target: ONE tap. `playNowBlast` is the recipe path `maybeAutoPlay` now uses.
+    expect([...targetHexes(view, legal, picked)]).toContain(key);
+    const tapped = tapHex(view, legal, picked, key);
+    expect(playNowBlast(view, legal, tapped)).toEqual(expected);
+  });
+
+  it('nothing plays without a target tap, and a non-Blast kind never uses the Blast path', () => {
+    const { state, target } = blastPosition();
+    const view = viewFor(state, 0);
+    const legal = legalActions(view);
+    const kind = kindOf({ t: 'MegaBomb', cards: [1000, 1001], target })!;
+    // recipe picked but no spot yet: a preview, not a move
+    expect(playNowBlast(view, legal, tapKind(EMPTY_SEL, kind))).toBeNull();
+    // a tile tapped with nothing picked stays the adversarial "no stray play" rule (kind is null)
+    expect(playNowBlast(view, legal, { ...EMPTY_SEL, hex: coordKey(target) })).toBeNull();
+    // even with a spot and a legal move, a non-recipe kind never reaches the Blast path
+    const spare = legal.find((a) => a.t === 'Sprout');
+    if (spare) expect(playNowBlast(view, legal, { ...EMPTY_SEL, hex: coordKey(spare.coord), kind: 'sprout' })).toBeNull();
   });
 
   it('ONLINE: one tap adds the Blast to the local draft batch — it is not sent to the server', () => {

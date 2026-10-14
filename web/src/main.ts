@@ -19,7 +19,7 @@ import type { DisplayEvent } from './player/display-readout.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import {
@@ -4368,9 +4368,9 @@ function renderTutorial() {
   let cta = lesson.cta ?? (lesson.action === 'Next' ? 'NEXT' : undefined);
   if (lesson.action === 'Discard' && session.pending?.t === 'Discard') {
     cta = 'TAP IT AGAIN';
-  } else if (lesson.action === 'MegaBomb' && session.pending?.t === 'MegaBomb') {
-    cta = 'TAP AGAIN';
   } else if (lesson.action === 'MegaBomb' && (selectingBloom || selected !== null)) {
+    // The Blast plays on this one tap (like Grow/Bloom), so there is no "TAP AGAIN": after the tap
+    // the step advances. A second tap is never asked for.
     cta = 'TAP TILE';
   } else if ((lesson.focus === 'hand' || lesson.focus === 'tile') && selected !== null && lesson.tile) {
     cta = 'TAP TILE';
@@ -4894,7 +4894,11 @@ function maybeAutoPlay() {
   // through the drawing path (a painted shape of any size), so an inferred placement never spends
   // a partly chosen group. A Blast is a whole move at a target like a Sprout: it plays on the tap.
   const sprout = IS_FUTA04 && (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
-  const a = sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
+  // A Blast has no single card (it is a recipe), so it needs its own one-tap path: the tap on a
+  // legal target is the whole move, exactly like Grow. Without this the recipe fell through to
+  // the old "tap the tile again" confirmation (f24fdc8's intent, which never reached the board).
+  const blast = IS_FUTA04 ? playNowBlast(session.view, session.legal, session.sel) : null;
+  const a = blast ?? sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
   if (a && (!IS_FUTA04 || a.t !== 'Bloom') && !asksConfirm(a)) humanPlay(a);
 }
 

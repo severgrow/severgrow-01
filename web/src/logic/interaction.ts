@@ -280,6 +280,20 @@ export const playNow = (v: View, legal: readonly Action[], sel: Sel): Action | n
   return opts.length === 1 && sproutKind(v, opts[0]!) !== 'strengthen' ? opts[0]! : null;
 };
 
+/**
+ * The Blast's one-tap path, or null. A Blast is entered as a RECIPE (`sel.kind`
+ * "bloom-mega-<ids>") with no single card, so `playNow`'s card-and-spot gate can never open for
+ * it. When the picked spot offers exactly one Blast for that recipe it is the whole move and plays
+ * on the tap, exactly like a one-card Grow (owner's rule, 2026-10-14: "the Blast is a single tap,
+ * like Grow and Bloom"); Undo is the safety net. Anything else (no spot yet, or more than one
+ * move on the spot) stays a preview: the player chooses.
+ */
+export const playNowBlast = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
+  if (sel.hex === null || !sel.kind?.startsWith('bloom-mega-')) return null;
+  const opts = options(v, legal, sel);
+  return opts.length === 1 ? opts[0]! : null;
+};
+
 /** The one move on the picked card and spot (a Strengthen included), or null (overhaul item 8: "Confirm moves: Never"). */
 export const onlyChoice = (v: View, legal: readonly Action[], sel: Sel): Action | null => {
   if (sel.hex === null || sel.card === null) return null;
