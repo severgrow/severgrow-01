@@ -685,10 +685,15 @@ async function bloomFlow(width: number, height: number) {
       const deck = document.querySelector<HTMLElement>('#deck .pile-card')!.getBoundingClientRect();
       const meter = document.querySelector<HTMLElement>('#deck .pile-meter')!.getBoundingClientRect();
       const box = document.querySelector<HTMLElement>('#futa04-box')!.getBoundingClientRect();
+      // The pile's own bottom edge. The meta strip is pinned to the pile's bottom, so its bottom
+      // IS where the pile meets (or dips past) the cockpit baseline. The counter chip used to be
+      // the strip's only occupant; now that each pile shows its short name ("Draw" / "Throw") the
+      // chip is the upper of the strip's two lines, so the strip is what defines the pile's bottom.
+      const meta = document.querySelector<HTMLElement>('#deck .pile-meta')!.getBoundingClientRect();
       // The cockpit tools are now the smart panel (#futa04-actions is display:contents and reports
       // a 0×0 rect); measure the visible panel edge the piles must stay clear of.
       const tools = document.querySelector<HTMLElement>('#smart-panel')!.getBoundingClientRect();
-      return { first: first.left, deck: deck.left, meter: meter.left, centreGap: Math.abs(deck.left + deck.width/2 - meter.left - meter.width/2), meterBottom: meter.bottom, boxBottom: box.bottom,
+      return { first: first.left, deck: deck.left, meter: meter.left, centreGap: Math.abs(deck.left + deck.width/2 - meter.left - meter.width/2), meterBottom: meter.bottom, pileBottom: meta.bottom, boxBottom: box.bottom,
         right: piles.getBoundingClientRect().right,
         tools: tools.left, scale: deck.width / 50, shift: parseFloat(getComputedStyle(piles).getPropertyValue('--futa04-draw-shift')) || 0 };
     });
@@ -696,7 +701,7 @@ async function bloomFlow(width: number, height: number) {
       `${label}: Draw smoothly enlarges the whole pile and its attached counter (${JSON.stringify(drawPiles)})`);
     if (width <= 600) check(drawPiles.shift > 0 && drawPiles.right <= drawPiles.tools - 6,
       `${label}: Draw piles move toward the hand without covering the cockpit tools (${JSON.stringify(drawPiles)})`);
-    if (width <= 600) check(drawPiles.meterBottom >= drawPiles.boxBottom + 4 && drawPiles.meterBottom <= drawPiles.boxBottom + 12,
+    if (width <= 600) check(drawPiles.pileBottom >= drawPiles.boxBottom + 4 && drawPiles.pileBottom <= drawPiles.boxBottom + 12,
       `${label}: enlarged Draw piles sit just below the cockpit baseline (${JSON.stringify(drawPiles)})`);
     if (width === 390 && height === 844) await page.screenshot({ path: `${dir}/390x844-draw-piles.png` });
     await page.click('#deck'); await idle(page);
