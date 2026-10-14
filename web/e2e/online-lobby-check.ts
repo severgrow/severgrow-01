@@ -2,6 +2,7 @@
 //   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/online-lobby-check.ts
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
+import { ONLINE } from '../../src/strings.js';
 
 const server = await preview({
   configFile: 'web/vite.config.ts',
@@ -34,8 +35,33 @@ try {
   });
   await page.goto('http://localhost:4201/');
   await page.waitForSelector('#menu:not([hidden])');
-  const tagline = await page.locator('#menu-tagline').textContent();
-  check('tagline is GROW · CONNECT · CONQUER', (tagline ?? '').includes('GROW') && (tagline ?? '').includes('CONQUER'));
+  // The owner removed the menu tagline on 2026-10-14 (it read as clutter under the wordmark). The
+  // words are deliberately KEPT and the element is rebuilt on demand, so this asserts every half of
+  // that decision: the string is still available, the menu carries NO tagline element (removed, not
+  // a hidden placeholder), nothing sits in its old slot, and its removal left no empty gap. (This
+  // replaced the old `check('tagline is GROW · CONNECT · CONQUER', ...)` which only asserted the
+  // text was present.)
+  check('the tagline string is still available to re-enable', ONLINE.tagline === 'GROW · CONNECT · CONQUER', ONLINE.tagline);
+  check('the menu has no tagline element (removed, not hidden)', (await page.locator('#menu .tagline, #menu-tagline').count()) === 0);
+  const menuColumn = await page.evaluate(() => {
+    const inner = document.querySelector('#menu .menu-inner')!;
+    const kids = [...inner.children];
+    const between = kids
+      .slice(
+        kids.findIndex((k) => k.classList.contains('title')) + 1,
+        kids.findIndex((k) => k.classList.contains('menu-buttons')),
+      )
+      .map((k) => k.id || k.className);
+    const title = document.querySelector('#menu .title')!;
+    const buttons = document.querySelector('#menu .menu-buttons')!;
+    return {
+      between,
+      gap: Math.round(buttons.getBoundingClientRect().top - title.getBoundingClientRect().bottom),
+      columnGap: Math.round(Number.parseFloat(getComputedStyle(inner).rowGap)),
+    };
+  });
+  check('nothing sits between the wordmark and the buttons (no tagline, no empty row)', menuColumn.between.length === 0, JSON.stringify(menuColumn.between));
+  check('no empty gap where the tagline was (wordmark→buttons = the column gap)', menuColumn.gap === menuColumn.columnGap, `gap ${menuColumn.gap}px vs column ${menuColumn.columnGap}px`);
   check('title is FUTASAKU', ((await page.locator('#menu .title').textContent()) ?? '').toUpperCase().includes('FUTASAKU'));
   check('Play online hidden without API URL', await page.locator('#menu-online').isHidden());
   check('Play offline still present', await page.locator('#menu-new').isVisible());

@@ -302,7 +302,10 @@ button {
   line-height: 1;
 }
 .tagline {
-  /* 14px here plus the column's 14px gap = 28px between the tagline and the buttons */
+  /* Only used when SHOW_MENU_TAGLINE is true (`src/strings.ts`): main.ts re-inserts the element in
+     the menu column, in its old slot between the wordmark and the buttons. 14px here plus the
+     column's 14px gap = 28px between the tagline and the buttons. The menu ships no tagline
+     element, so this rule costs nothing (and leaves no gap) while the tagline is off. */
   margin: 0 0 14px;
   color: var(--fu-cream-62);
   font-family: var(--font-ui);

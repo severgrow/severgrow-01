@@ -16,7 +16,7 @@ While you are mid-turn the opponent sees **nothing** change. When you Throw your
 
 **Build order:** Play with a friend + hybrid system first. Find Opponent last (Phase 7), behind a flag.
 
-Menu (later phases): FUTASAKU, tagline **GROW · CONNECT · CONQUER** (one line in `src/strings.ts`), then PLAY ONLINE / PLAY OFFLINE. Offline stays exactly as today.
+Menu: FUTASAKU, then PLAY ONLINE / PLAY OFFLINE. Offline stays exactly as today. (The tagline **GROW · CONNECT · CONQUER** was shown here in the first phases and was **removed from the menu on 2026-10-14**; the words survive in `src/strings.ts` (`ONLINE.tagline`) and `main.ts` re-inserts the element behind the one-line `SHOW_MENU_TAGLINE` switch — see `docs/DECISIONS.md`.)
 
 ---
 

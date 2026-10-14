@@ -156,7 +156,9 @@ try {
   await A.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
   await shoot(A, '01-menu-desktop-1280x800');
   check('menu: Play online visible', await A.locator('#menu-online:not([hidden])').isVisible());
-  check('menu: no clipped text', (await clipped(A, '#menu .title, #menu-tagline, #menu-online, #menu-new')).length === 0);
+  // `#menu-tagline` was in this list; the owner removed the tagline from the menu on 2026-10-14, so
+  // there is no such element to clip-check any more (asserting a hidden one would be hollow).
+  check('menu: no clipped text', (await clipped(A, '#menu .title, #menu-online, #menu-new')).length === 0);
 
   await B.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await B.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });

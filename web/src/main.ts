@@ -143,7 +143,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL, turnsLeftText } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -6363,6 +6363,22 @@ else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {
   startTutorial(chapter);
 } else if (Number.isSafeInteger(urlSeed) && urlSeed > 0) startGame(urlSeed);
 else showScreen('menu');
+
+// The main-menu tagline ("GROW · CONNECT · CONQUER") is NOT on the menu — the owner had it removed
+// on 2026-10-14 (it read as clutter under the wordmark). It is not in `web/index.html` at all, so
+// there is no hidden placeholder and the menu column cannot gain an empty row. Restoring it is a
+// ONE-LINE change: flip SHOW_MENU_TAGLINE to true in `src/strings.ts` and this rebuilds the element
+// in its old slot (between the wordmark and the buttons) with the existing `.tagline` styling.
+if (SHOW_MENU_TAGLINE) {
+  const buttons = document.querySelector('#menu .menu-buttons');
+  if (buttons) {
+    const tagline = document.createElement('p');
+    tagline.id = 'menu-tagline';
+    tagline.className = 'tagline';
+    tagline.textContent = ONLINE.tagline;
+    buttons.before(tagline);
+  }
+}
 
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
 type OnlineLobbyCtl = { openHub(): Promise<void> };

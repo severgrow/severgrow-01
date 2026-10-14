@@ -244,3 +244,34 @@ the same branch (no `main`/`dev`/`futa0.4` touch):
   revoked proved live; advisors reviewed; keep-alive cron untouched).
 - **Edge function** rebuilt and redeployed, so the live-duel routes answer instead of 404.
 Details and the exact channel gate: `docs/LIVE.md`.
+
+### 2026-10-14 — the main-menu tagline is removed from the menu (reversible)
+The owner asked for the menu tagline `GROW · CONNECT · CONQUER` to come off the main menu. It lived in
+two places: the static `<p class="tagline" id="menu-tagline">` in `web/index.html`, and
+`src/strings.ts` (`ONLINE.tagline`, which `web/src/online/lobby-ui.ts` also wrote into that element on
+the online build). Decision: **remove the element from the menu, keep the words and the styling**, so
+the owner can restore it with one line and no visual fallout.
+
+- `web/index.html`: the `<p class="tagline" id="menu-tagline">` is **gone** — it is not shipped
+  `hidden`. A hidden placeholder is exactly the kind of leftover that reads as "unfinished" later, and
+  removing it is the only way to be sure the menu column cannot gain an empty row.
+- One-line restore: `SHOW_MENU_TAGLINE = true` in `src/strings.ts`. `web/src/main.ts` then rebuilds the
+  element (`class="tagline" id="menu-tagline"`, text `ONLINE.tagline`) in its old slot between the
+  wordmark and `.menu-buttons`. The `.tagline` styling stays in place for that
+  (`web/src/style.css`, `web/src/fonts-futa04.css`, `web/src/player/fonts.ts`), and the words stay in
+  `ONLINE.tagline`.
+- No empty gap: with the element absent the column is `wordmark → (14px gap) → buttons`. `.menu` is a
+  centred grid, so the column simply re-centres — nothing shifts sideways and no margin is left behind.
+  `web/src/style.css` `.tagline` keeps its `margin: 0 0 14px` only for the restored state.
+- `web/e2e/online-lobby-check.ts`: the old `tagline is GROW · CONNECT · CONQUER` assertion is replaced
+  by four: the string is still available (`ONLINE.tagline`); the menu carries **no** tagline element;
+  nothing sits between the wordmark and the buttons; and the wordmark→buttons distance equals the
+  column's own gap (so a leftover margin would fail). Not weakened — the new checks cover the new
+  decision and still guard the words.
+- `web/e2e/online-ux-walk.ts`: `#menu-tagline` removed from the "no clipped text" selector list (there
+  is no such element to clip-check any more).
+- `web/e2e/typography-audit.ts` keeps `.tagline` in its selector list on purpose: the element no longer
+  exists so it simply matches nothing, and it audits the tagline again the moment it is restored.
+- Evidence: `web/e2e/menu-tagline-shots.ts` writes `docs/screens/menu-tagline-after-*.png` at 360x640,
+  390x844, 768x1024 and 1280x800, paired with the `menu-tagline-before-*.png` captured before the
+  removal; it also prints the logo/title/buttons boxes so a spacing regression is a number.

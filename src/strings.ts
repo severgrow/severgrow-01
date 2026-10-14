@@ -29,6 +29,16 @@ export const OPP = Object.freeze({
 export const GAME_TITLE = 'Futasaku';
 
 /**
+ * The main-menu tagline ("GROW · CONNECT · CONQUER"). The owner removed it from the menu on
+ * 2026-10-14: it read as clutter under the wordmark. The words (`ONLINE.tagline`, below) and the
+ * `.tagline` styling are kept, so bringing it back is a ONE-LINE change — flip this to `true`.
+ * Nothing else needs to change: the menu markup carries no tagline and no hidden placeholder, and
+ * `web/src/main.ts` rebuilds the element in its old slot (wordmark → buttons) when this is true.
+ * See `docs/DECISIONS.md`.
+ */
+export const SHOW_MENU_TAGLINE = false;
+
+/**
  * The hint shown when a typed invite code is malformed. Built from the ONE invite-code length
  * (`src/invite-code.ts`, re-exported by the server as `inviteCodeLength`), so the copy can never
  * drift from the codes the server actually generates. The parameter defaults to the real length;
