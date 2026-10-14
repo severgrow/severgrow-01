@@ -89,7 +89,7 @@ const L = (
 const lessons: TutorialLesson[][] = [
   // 1 GOAL
   [
-    L('goal-mine', 'YOUR HOME', 'Grow out from here. Every tile must stay joined to your home, or it withers.', 'home', 'Next', {
+    L('goal-mine', 'YOUR HOME', 'Grow out from here. Every tile must stay joined, or it withers.', 'home', 'Next', {
       tile: { q: -2, r: 2 }, cta: 'NEXT',
     }),
     L('goal-turn-rhythm', 'EACH TURN', 'DRAW 1 card → GROW 1 tile → THROW 1 card.', 'explainer', 'Next', {
@@ -101,10 +101,10 @@ const lessons: TutorialLesson[][] = [
     L('draw', 'DRAW', 'Start your turn: take 1 card from the Draw pile.', 'deck', 'Draw', {
       cta: 'DRAW 1 CARD',
     }),
-    L('grow', 'GROW', 'Tap a card, then a lit tile. The card number becomes the tile strength.', 'hand', 'Sprout', {
+    L('grow', 'GROW', 'Tap a card, then a lit tile: the number becomes its strength.', 'hand', 'Sprout', {
       tile: { q: -1, r: 1 }, cta: 'TAP A CARD',
     }),
-    L('rock-gold', 'ROCK AND GOLD', 'Nothing grows on rock. A gold tile scores 2 points, others 1. Most points wins.', 'explainer', 'Next', {
+    L('rock-gold', 'ROCK AND GOLD', 'Gold: 2 points, others 1. Nothing grows on rock. Most points wins.', 'explainer', 'Next', {
       cta: 'NEXT', closesGrow: true,
     }),
     L('throw', 'THROW', 'End your turn: tap a card twice, or drag it to the Throw pile.', 'hand', 'Discard', {
@@ -113,7 +113,7 @@ const lessons: TutorialLesson[][] = [
   ],
   // 3 BLOOM (How to play: "What can bloom?")
   [
-    L('bloom-explain', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row in one suit.', 'explainer', 'Next', {
+    L('bloom-explain', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row.', 'explainer', 'Next', {
       cta: 'NEXT', bloomDemo: true,
     }),
     L('bloom-set', 'BLOOM', 'Three 3s, the same number. Tap Bloom, then tap or draw the tiles.', 'bloom', 'Bloom', {
@@ -129,13 +129,13 @@ const lessons: TutorialLesson[][] = [
   ],
   // 4 STRENGTHEN (a way to use your Grow)
   [
-    L('strength', 'STRENGTHEN', 'Another way to use your Grow: a higher card on your own tile makes it stronger.', 'tile', 'Sprout', {
+    L('strength', 'STRENGTHEN', 'Another way to use Grow: a higher card makes your tile stronger.', 'tile', 'Sprout', {
       card: [0, 8], tile: { q: -1, r: 1 }, cta: 'TAP THE 8',
     }),
   ],
   // 5 CUT (a way to use your Grow)
   [
-    L('cut', 'CUT IT OFF', 'Or play a higher card on their tile to cut it off. Their tiles behind it wither.', 'tile', 'Sprout', {
+    L('cut', 'CUT IT OFF', 'Or a higher card on their tile cuts it off. Their tiles wither.', 'tile', 'Sprout', {
       card: [0, 8], tile: { q: 1, r: -1 }, cta: 'TAP THE 8',
     }),
   ],
@@ -157,25 +157,25 @@ const lessons: TutorialLesson[][] = [
       button: 'intel', cta: 'NEXT',
     }),
     // The tutorial's last line points at the reference that replaces the old in-match "?".
-    L('btn-display', 'DISPLAY', `Shows important info. Respect it. ${HELP.tutorialFinal}`, 'button', 'Next', {
+    L('btn-display', 'DISPLAY', `Important info. ${HELP.tutorialFinal}`, 'button', 'Next', {
       button: 'display', cta: 'NEXT',
     }),
   ],
   // 8 BOMB (a way to use your Grow)
   [
-    L('bomb', 'BOMB', 'A Bomb uses your Grow to destroy one of their tiles. Homes are safe.', 'tile', 'PlayFruit', {
+    L('bomb', 'BOMB', 'A Bomb: your Grow destroys one of their tiles. Homes are safe.', 'tile', 'PlayFruit', {
       tile: { q: 0, r: 0 }, cta: 'TAP BOMB',
     }),
   ],
   // 9 BLAST (an extra move, like Bloom)
   [
-    L('mega', 'BLAST', 'Two Bombs together: an extra move, like Bloom. It clears a tile and all its neighbours.', 'bloom', 'MegaBomb', {
+    L('mega', 'BLAST', 'Two Bombs: extra move, like Bloom. Clears a tile and its neighbours.', 'bloom', 'MegaBomb', {
       tile: { q: 1, r: -1 }, cta: 'TAP BLAST',
     }),
   ],
   // 10 BLOOM WITH THE THROW PILE (on a Draw)
   [
-    L('bloom-intro', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row in one suit.', 'explainer', 'Next', {
+    L('bloom-intro', 'BLOOM', 'Extra move on Grow: 3–6 cards at once. Same number, or in a row.', 'explainer', 'Next', {
       cta: 'NEXT', bloomDemo: true,
     }),
     L('discard-draw', 'THROW PILE', 'If the Throw pile glows gold, its top card completes your Bloom.', 'discard', 'Draw', {
@@ -196,7 +196,7 @@ const lessons: TutorialLesson[][] = [
   ],
   // 12 LAST ROUND (separate lesson)
   [
-    L('final', 'LAST ROUND', 'The Draw pile is empty. Each player gets one last turn, starting at Grow.', 'context', 'EndAct', {
+    L('final', 'LAST ROUND', 'The Draw pile is empty. One last turn each, starting at Grow.', 'context', 'EndAct', {
       cta: 'SKIP »',
     }),
     L('final-throw', 'LAST THROW', 'Throw your last card. Then most points wins.', 'hand', 'Discard', {
