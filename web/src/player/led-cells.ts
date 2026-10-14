@@ -147,9 +147,6 @@ export function ledToken(message: string): string | null {
   if (m === 'LAST TURN' || m === 'DRAW PILE OUT: LAST TURN') return 'LAST';
   if (m === 'DRAW PILE RUNNING LOW') return 'LOW';
   if (m.startsWith('REPLAY:')) return 'REPLAY';
-  // The map a joined online duel is played on (the JOINER's line when it is not what they picked).
-  if (m === "OPPONENT'S GAME: SMALL MAP") return 'SMALL MAP';
-  if (m === "OPPONENT'S GAME: CLASSIC MAP") return 'CLASSIC MAP';
   return null;
 }
 

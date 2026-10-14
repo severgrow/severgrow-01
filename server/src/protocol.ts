@@ -1,7 +1,7 @@
 // The wire format shared by the server and its TypeScript client. These are the ONLY shapes
 // that cross the network: a match summary and a player-specific view. The authoritative engine
 // `State` (deck order, both hands, seed) is never part of any payload.
-import type { Action, BoardChoice, EndReason, Event, GameResult, Player, View } from '../../src/engine/index.js';
+import type { Action, EndReason, Event, GameResult, Player, View } from '../../src/engine/index.js';
 
 export type MatchStatus = 'waiting' | 'active' | 'finished';
 
@@ -97,9 +97,6 @@ export type MatchListEntry = {
   result: OnlineGameResult | null;
 };
 
-/** The optional map choice when creating a duel, or when a Find-opponent search has to park. */
-export type CreateMatchRequest = { board?: BoardChoice };
-export type FindOpponentRequest = { board?: BoardChoice };
 export type CreateMatchResponse = { ok: true; match: MatchSummary; player: MatchViewPayload; serverNow: number };
 
 export type JoinMatchRequest = { inviteCode: string };

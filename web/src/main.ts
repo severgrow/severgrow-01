@@ -72,10 +72,7 @@ import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
-import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, difficultyConfig,
-  parseDifficultyStep, stepAfterGame, stepLevelFor,
-} from './logic/difficulty.js';
+import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
@@ -379,15 +376,7 @@ function beatHome(p: Player, my: number) {
 
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
-  if (session) store.set(SAVE_KEY, encodeSave({
-    seed: session.state.seed,
-    actions: session.log,
-    coach,
-    level: gameLevel,
-    base: session.base,
-    // The map the game plays on, so a reload replays the same board (the small map is radius 2).
-    ...(gameDifficulty ? { overrides: difficultyConfig(gameDifficulty), difficulty: gameDifficulty } : {}),
-  }));
+  if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
 };
 
 // ---------- the look ----------
@@ -628,17 +617,6 @@ document.addEventListener('click', (e) => {
   if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || (IS_FUTA04 && t.dataset.tip === 'draw'))) showTip(t.dataset.tip);
 });
 
-/**
- * The pending one-game carry-over (Hard: lose at 8 → 7 next). It lives in the browser, is read by
- * the ONE tier that earned it, and is cleared the moment that tier's next game starts.
- */
-const readDifficultyStep = () => parseDifficultyStep(store.get(DIFFICULTY_STEP_KEY));
-/** Records the level a finished game earned, or clears THIS tier's pending step when it earned none. */
-const writeDifficultyStep = (id: DifficultyId, level: Level | null) => {
-  if (level !== null) store.set(DIFFICULTY_STEP_KEY, JSON.stringify({ id, level }));
-  else if (readDifficultyStep()?.id === id) store.remove(DIFFICULTY_STEP_KEY);
-};
-
 function renderLevelGrid() {
   $('level-grid').replaceChildren(
     ...DIFFICULTIES.map((tier) => {
@@ -649,21 +627,16 @@ function renderLevelGrid() {
       b.dataset.difficulty = tier.id;
       // Visible label is CAPS via CSS; keep the spoken name title-case.
       const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
-      // The spoken name carries the map, so the choice is legible without a new visual row.
-      b.setAttribute('aria-label', `${spoken}. ${tier.map === 'small' ? ONLINE.mapSmall : ONLINE.mapClassic}. Start a new game at this difficulty.`);
+      b.setAttribute('aria-label', `${spoken}. Start a new game at this difficulty.`);
       b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();
         const seed = randomSeed();
-        // The carry-over is spent here: this game uses it, the next one is back to the tier's own
-        // level. A step earned by ANOTHER tier stays put (Hard's 7 is not eaten by a Medium game).
-        const pending = readDifficultyStep();
-        const level = stepLevelFor(pending, tier.id) ?? tier.level;
-        if (pending?.id === tier.id) writeDifficultyStep(tier.id, null);
+        const level = chooseDifficultyLevel(tier.id as DifficultyId, seed);
         store.set('severgrow.difficulty', tier.id);
         settings = { ...settings, level };
         saveSettings();
-        startGame(seed, level, null, tier.id);
+        startGame(seed, level);
       });
       return b;
     }),
@@ -877,16 +850,6 @@ function dealIn() {
 let placeTeachingPanel: typeof import('./player/overlay-placement.js').placeTeachingPanel | null = null;
 let futa04Help: ReturnType<typeof import('./player/help.js').mountHelp> | null = null;
 let smartCockpit: ReturnType<typeof import('./player/smart-cockpit.js').mountSmartCockpit> | null = null;
-
-/**
- * One short, transient line about the MATCH itself (never about a move): the map a joined duel is
- * played on. Futa04 and up show it on the existing cockpit display; the legacy channels keep the
- * floating caption. Both surfaces already exist, so this adds no new element or styling.
- */
-function matchNotice(text: string) {
-  caption(text, null, 'info');
-  smartCockpit?.event({ message: text, priority: 60, duration: 2600, mode: 'amber' });
-}
 let outcomeLight: OutcomeLight | null = null;
 let guideMod: ReturnType<typeof import('./player/guide.js').mountGuide> | null = null;
 let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t: string | null, thumbOn: boolean) => void } | null = null;
@@ -1159,12 +1122,7 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   delete panel.dataset.winner;
 }
 
-async function startGame(
-  seed: number,
-  level: Level = settings.level,
-  watch: { level: Level; pause: number } | null = null,
-  difficulty: DifficultyId | null = null,
-) {
+async function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
@@ -1175,11 +1133,8 @@ async function startGame(
   }
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  // The tier's map (the small-map preset, or nothing for the classic board), plus the test copy's
-  // Lab experiment last so an active Lab override still wins there.
-  gameDifficulty = difficulty;
-  const mapOverrides = difficulty ? difficultyConfig(difficulty) : {};
-  const overrides = { ...mapOverrides, ...(IS_TEST && lab ? lab.overrides() : {}) };
+  // the test copy: the Lab's active experiment (none: the classic game)
+  const overrides = IS_TEST && lab ? lab.overrides() : {};
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
   const opening = IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
@@ -1350,8 +1305,6 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   const state = tutorialChapter(chapter);
   log = ['A small match, played to learn.'];
   gameLevel = 7;
-  // The tutorial is its own match (its own chapter state), never one of the five tiers.
-  gameDifficulty = null;
   tipOpen = null;
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
   save();
@@ -1666,7 +1619,6 @@ function continueGame() {
     lab?.watchingChanged(null);
   }
   gameLevel = saved.level;
-  gameDifficulty = saved.difficulty ?? null;
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
 
@@ -1712,13 +1664,6 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
-      // The one-game carry-over, earned by this finished game: Hard steps down to 7 after a loss,
-      // Beginner steps up to 3 after a win. Anything else clears the tier's pending step.
-      if (gameDifficulty) {
-        const winner = p.after.result.winner;
-        const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
-        writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, gameLevel, outcome));
-      }
     }
   }
   log = log.slice(0, 300);
@@ -1985,12 +1930,6 @@ let lastTurnKey = '';
 /** Whether the ? tip is open. */
 /** The bot level of the game being played (kept with the saved game). */
 let gameLevel: Level = 7;
-/**
- * The difficulty tier the current OFFLINE game came from (null: a computer game started outside
- * the tiers — the boot `?seed=` path, the online fallback — which is a classic board). It is what
- * the one-game carry-over is recorded against when the game ends.
- */
-let gameDifficulty: DifficultyId | null = null;
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -6483,7 +6422,7 @@ void import('./online/lobby-ui.js').then(async (m) => {
       if (saved && saved.state.phase !== 'GAME_OVER') continueGame();
       else void startGame(randomSeed(), settings.level);
     },
-    openDuel: ({ matchId, token, view: player, liveJoin, mapNotice }) => {
+    openDuel: ({ matchId, token, view: player, liveJoin }) => {
       const api = duelApiUrl();
       if (!api) return;
       leaveOnline();
@@ -6590,9 +6529,6 @@ void import('./online/lobby-ui.js').then(async (m) => {
       // Board first: the duel board is already visible before the lottery. Who starts is said once
       // by that reveal — there is no permanent chip any more.
       showScreen('game');
-      // A live join: if the game that was waiting is not the map this player picked, say so now —
-      // before they have to wonder why the board is smaller (Find opponent never filters by map).
-      if (mapNotice) matchNotice(mapNotice);
       // The lottery animation is a one-off courtesy. It plays exactly once per player per match,
       // and only at the live-join moment: the waiting creator when the friend joins, or the joiner
       // itself. The per-match marker means a refresh, a return later, an async catch-up, or a

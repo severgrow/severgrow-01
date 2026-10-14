@@ -1,7 +1,7 @@
 // The autosave keeps a seed, action list and rules version. Test2 saves migrate to the
 // unlimited Strengthen default; unknown versions and illegal logs still start fresh.
 import { describe, expect, it } from 'vitest';
-import { CURRENT_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, SMALL_MAP_CONFIG, legalActions, newGame, rulesConfig, viewFor } from '../../src/engine/index.js';
+import { CURRENT_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, legalActions, newGame, rulesConfig, viewFor } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { SAVE_KEY, decodeSave, encodeSave } from '../src/logic/persist.js';
 import { Session } from '../src/logic/session.js';
@@ -110,31 +110,5 @@ describe('autosave from a set position (tests, the lab)', () => {
   it('an ordinary game never writes a position', () => {
     const s = played(18, 6);
     expect(JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7, base: s.base }))).not.toHaveProperty('base');
-  });
-});
-
-describe('autosave keeps the map a game is played on (small map)', () => {
-  it('replays a small-map game on the SAME board after a reload', () => {
-    const overrides = { ...SMALL_MAP_CONFIG };
-    const s = new Session(newGame(31, overrides), 0);
-    for (let i = 0; i < 24 && s.state.phase !== 'GAME_OVER'; i++) {
-      const who = s.state.actor;
-      s.play(GreedyBot.chooseAction(viewFor(s.state, who)), who);
-    }
-    const raw = encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 5, overrides, difficulty: 'easy' });
-    const back = decodeSave(raw)!;
-    expect(back.state.config.boardRadius).toBe(2);
-    expect(back.difficulty).toBe('easy');
-    expect(JSON.stringify(back.state)).toBe(JSON.stringify(s.state));
-  });
-
-  it('a classic game writes neither field, and junk overrides are refused', () => {
-    const s = played(32, 6);
-    const classic = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 9 }));
-    expect(classic).not.toHaveProperty('overrides');
-    expect(classic).not.toHaveProperty('difficulty');
-    // A stored map config the engine cannot resolve is discarded with the save, never half-applied.
-    expect(decodeSave(JSON.stringify({ ...classic, overrides: { boardRadius: -4 } }))).toBeNull();
-    expect(decodeSave(JSON.stringify({ ...classic, difficulty: 'legendary' }))!.difficulty).toBeUndefined();
   });
 });

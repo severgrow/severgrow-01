@@ -175,19 +175,6 @@ export const ONLINE_CSS = `
   min-height: 1.2em;
   margin: 0;
 }
-/* The map choice on the hub: the same segmented control the Settings sheet uses (no new frame,
-   radius or colour), with its own label word above it and a full 44px touch height. */
-.online-map {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.online-map > span {
-  font-size: 0.85rem;
-  opacity: 0.8;
-}
-.online-map .seg { width: 100%; }
-.online-map .seg-btn { flex: 1 1 50%; min-height: 44px; }
 .online-field {
   display: flex;
   flex-direction: column;

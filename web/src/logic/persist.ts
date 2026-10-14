@@ -4,49 +4,21 @@
 // save is small. A game started from a set position (the browser tests, the lab) also keeps
 // that position as its `base`; the game itself never writes one for an ordinary game.
 import { CURRENT_RULES_VERSION, PREVIOUS_03_RULES_VERSION, PREVIOUS_BLOOM_RULES_VERSION, PREVIOUS_MEGA_RULES_VERSION, PREVIOUS_RULES_VERSION, apply, replay, rulesConfig } from '../../../src/engine/index.js';
-import type { Action, RulesConfig, State } from '../../../src/engine/index.js';
+import type { Action, State } from '../../../src/engine/index.js';
 import { LEVELS } from '../../../src/bots/levels.js';
 import type { Level } from '../../../src/bots/levels.js';
-import { difficultyById } from './difficulty.js';
-import type { DifficultyId } from './difficulty.js';
 
 export const SAVE_KEY = 'severgrow.save.v7';
-/**
- * `overrides` carries the game's map config (the small-map preset) and `difficulty` the tier that
- * produced it, so a reload replays the SAME board. Both are optional: a save without them is a
- * classic game (every save made before the small map existed).
- */
-export type Saved<C> = {
-  seed: number;
-  actions: readonly Action[];
-  coach: C | null;
-  level: Level;
-  base?: State | null;
-  overrides?: Partial<RulesConfig>;
-  difficulty?: DifficultyId;
-};
+export type Saved<C> = { seed: number; actions: readonly Action[]; coach: C | null; level: Level; base?: State | null };
 export type Loaded<C> = Saved<C> & { state: State };
 
-export const encodeSave = <C>(s: Saved<C>): string => JSON.stringify({
-  v: 7,
-  rules: CURRENT_RULES_VERSION,
-  seed: s.seed,
-  actions: s.actions,
-  coach: s.coach,
-  level: s.level,
-  ...(s.base ? { base: s.base } : {}),
-  ...(s.overrides && Object.keys(s.overrides).length ? { overrides: s.overrides } : {}),
-  ...(s.difficulty ? { difficulty: s.difficulty } : {}),
-});
+export const encodeSave = <C>(s: Saved<C>): string => JSON.stringify({ v: 7, rules: CURRENT_RULES_VERSION, seed: s.seed, actions: s.actions, coach: s.coach, level: s.level, ...(s.base ? { base: s.base } : {}) });
 
 /** Replay older saves under their recorded rules, then snapshot active matches before
  * continuing with current Futasaku 0.4 rules. Their board, hands, and event history are preserved. */
 export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
   try {
-    const s = JSON.parse(raw ?? '') as {
-      v?: number; rules?: string; seed?: number; actions?: Action[]; coach?: C | null; level?: number;
-      base?: State; overrides?: Partial<RulesConfig>; difficulty?: DifficultyId;
-    };
+    const s = JSON.parse(raw ?? '') as { v?: number; rules?: string; seed?: number; actions?: Action[]; coach?: C | null; level?: number; base?: State };
     const legacy = s?.rules === PREVIOUS_RULES_VERSION;
     const older03 = s?.rules === PREVIOUS_03_RULES_VERSION;
     const oldMega = s?.rules === PREVIOUS_MEGA_RULES_VERSION;
@@ -55,12 +27,8 @@ export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
     const originalBase = s.base ?? null;
     if (originalBase && (!originalBase.board || !originalBase.hands || !originalBase.config || typeof originalBase.phase !== 'string' || !Array.isArray(originalBase.fruitKnown))) return null;
     const oldConfig = legacy || older03 || oldMega || oldBloom ? rulesConfig(s.rules!)! : null;
-    // The saved map config (the small-map preset). A save without it is a classic game; a save
-    // whose overrides are junk fails `resolveConfig` below and is discarded like any other bad save.
-    const savedOverrides = s.overrides && typeof s.overrides === 'object' && !Array.isArray(s.overrides) ? s.overrides : {};
-    const savedDifficulty = typeof s.difficulty === 'string' && difficultyById(s.difficulty) ? s.difficulty : undefined;
     const base = originalBase && oldConfig ? { ...originalBase, config:{...originalBase.config,deckFinalTurns:oldConfig.deckFinalTurns,expandedBloom:oldConfig.expandedBloom !== false,strengthTiebreak:false} } : originalBase;
-    const restored = base ? s.actions.reduce<State>((st, a) => apply(st, a), base) : replay(s.seed!, s.actions, oldConfig ?? savedOverrides);
+    const restored = base ? s.actions.reduce<State>((st, a) => apply(st, a), base) : replay(s.seed!, s.actions, oldConfig ?? {});
     const state = oldConfig && restored.phase !== 'GAME_OVER'
       ? { ...restored,config:{...restored.config,deckFinalTurns:true,strengthenLimitPerGame:-1,expandedBloom:true,strengthTiebreak:true},startingPlayer:restored.startingPlayer ?? (restored.turnNumber % 2 ? restored.turnPlayer : (1-restored.turnPlayer) as 0|1),deckFinal:null }
       : restored;
@@ -68,9 +36,8 @@ export const decodeSave = <C>(raw: string | null): Loaded<C> | null => {
     // A migrated match continues from one exact snapshot. Its earlier actions were
     // replayed under the recorded rules; replaying them under the new rules later
     // could otherwise change a deck-end position on the next reload.
-    const step = savedDifficulty ? { difficulty: savedDifficulty } : {};
-    if (oldConfig && state.phase !== 'GAME_OVER') return { seed:s.seed!,actions:[],coach:s.coach ?? null,level,base:state,state, ...step };
-    return { seed: s.seed!, actions: s.actions, coach: s.coach ?? null, level, base, state, overrides: savedOverrides, ...step };
+    if (oldConfig && state.phase !== 'GAME_OVER') return { seed:s.seed!,actions:[],coach:s.coach ?? null,level,base:state,state };
+    return { seed: s.seed!, actions: s.actions, coach: s.coach ?? null, level, base, state };
   } catch {
     return null;
   }

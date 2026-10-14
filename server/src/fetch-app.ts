@@ -1,6 +1,5 @@
 // Fetch-API request handler shared by the Node HTTP server and the Deno Edge entry.
 // Same routes, same MatchService — no rules live here.
-import type { BoardChoice } from '../../src/engine/index.js';
 import { pickClientIp } from './client-ip.js';
 import { PRODUCTION_CORS_ORIGIN, type ServerConfig } from './config.js';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
@@ -36,17 +35,6 @@ const requireInteger = (value: unknown, name: string): number => {
 const requireString = (value: unknown, name: string): string => {
   if (typeof value !== 'string' || value.length === 0) throw new ApiError('INVALID_REQUEST', `${name} is required.`);
   return value;
-};
-
-/**
- * The optional map choice on a create / find-opponent request. Absent or 'classic' is the classic
- * board; 'small' asks for the small-map preset. Anything else is rejected rather than ignored, so a
- * typo can never silently hand a player the other map.
- */
-const optionalBoard = (value: unknown): BoardChoice => {
-  if (value === undefined || value === 'classic') return 'classic';
-  if (value === 'small') return 'small';
-  throw new ApiError('INVALID_REQUEST', 'board must be "small" or "classic".');
 };
 
 const readJson = async (req: Request, maxBytes: number): Promise<unknown> => {
@@ -143,8 +131,8 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/matches') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
-      const body = asRecord(await readJson(req, config.maxBodyBytes));
-      const created = await service.createMatch(player, { board: optionalBoard(body.board) });
+      await readJson(req, config.maxBodyBytes);
+      const created = await service.createMatch(player);
       return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 
@@ -157,10 +145,8 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (method === 'POST' && path === '/v1/matchmaking/find') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
-      const body = asRecord(await readJson(req, config.maxBodyBytes));
-      // The board is only used if this search has to PARK. It never narrows the queue: a searcher
-      // joins whatever waiting game is oldest, whatever map that game was created with.
-      const found = await service.findOpponent(player, clientIpOf(req), { board: optionalBoard(body.board) });
+      await readJson(req, config.maxBodyBytes);
+      const found = await service.findOpponent(player, clientIpOf(req));
       return { status: 200, body: { ok: true, ...found, serverNow: service.serverNow() } };
     }
 
