@@ -356,12 +356,25 @@ export const SPROUT: Readonly<MoveWords> = Object.freeze({
 /** The turn pill's clock: "12 turns left", "Last turn". */
 export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns left`);
 
+/**
+ * The two piles on the board, named the way the tutorial names them: "Draw pile", "Throw pile"
+ * (the recorded word list in docs/DECISIONS.md). One source of truth for the pile's label and its
+ * accessible name; the pre-render labels in web/index.html mirror `draw`/`discard`.
+ * In the Futa04 skin the visible label is hidden, so `draw` is mostly what a screen reader and a
+ * long-press tooltip say. `lastCard` is the deck's own clock label, not a pile name.
+ */
+export const PILES = Object.freeze({
+  draw: 'Draw pile',
+  discard: 'Throw pile',
+  lastCard: 'Last card',
+});
+
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
 /** Step 7: the first-run welcome card on the main menu. */
 export const WELCOME = Object.freeze({
   title: `Welcome to ${GAME_TITLE}`,
   steps: Object.freeze([
-    Object.freeze({ icon: 'deck', name: 'Draw', text: 'Take a card from the deck or the throw pile.' }),
+    Object.freeze({ icon: 'deck', name: 'Draw', text: 'Take a card from the Draw pile or the Throw pile.' }),
     Object.freeze({ icon: 'sprout', name: 'Grow', text: 'Play cards to grow tiles. Matching cards bloom into several.' }),
     Object.freeze({ icon: 'throw', name: 'Throw', text: 'Throw one card to end your turn.' }),
   ]),

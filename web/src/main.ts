@@ -143,7 +143,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -4644,7 +4644,7 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
   $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
-  $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? 'Last card' : 'Deck';
+  $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
     b.disabled = !look.enabled;
@@ -4661,8 +4661,8 @@ function renderPiles(v: View, advice: Advice | null) {
     const createsBloom = !!before && !!top && bloomGroups([...v.hand, top]).some(g => !before.has(key(g.cards)));
     $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom);
   }
-  $('deck').setAttribute('aria-label', `Deck: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
-  $('discard').setAttribute('aria-label', top ? `Throw pile: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : 'Throw pile: empty');
+  $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
+  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : `${PILES.discard}: empty`);
 }
 
 function renderCoach(advice: Advice | null) {
