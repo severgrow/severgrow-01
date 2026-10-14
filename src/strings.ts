@@ -68,7 +68,8 @@ export const ONLINE = Object.freeze({
   hubBack: 'Back',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',
-  findOpponentLooking: 'Searching…',
+  // No baked-in dots: the UI appends the SHARED animated ellipsis (web/src/online/live/wait-dots.ts).
+  findOpponentLooking: 'Searching',
   findOpponentHint: 'Matched with the next player who taps Find opponent.',
   /** Find-opponent states (punchy copy standard). */
   searchTitle: 'Finding an opponent',
@@ -115,6 +116,7 @@ export const ONLINE = Object.freeze({
   waitingExpiry: 'Invite expires in 48 hours.',
   waitingInviteHint: 'Waiting for a friend to join',
   cancelMatch: 'Cancel match',
+  cancelMatchConfirm: 'Cancel this duel? The invite link stops working.',
   shareInvite: (link: string) => `Join my FUTASAKU duel: ${link}`,
   opponentFallback: 'Friend',
   /** Who-starts chip in the online duel HUD (perspective-correct, icon + word, never colour only). */

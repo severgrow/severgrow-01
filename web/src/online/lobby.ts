@@ -81,6 +81,14 @@ export const sortLobbyEntries = (entries: readonly MatchListEntry[]): MatchListE
   });
 };
 
+/** A waiting match's AGE (not a countdown): "3d", "5h", "12m" — so an open duel explains itself. */
+export const formatWaitingAge = (ms: number): string => {
+  const totalMin = Math.max(0, Math.floor(ms / 60_000));
+  if (totalMin >= 24 * 60) return `${Math.floor(totalMin / (24 * 60))}d`;
+  if (totalMin >= 60) return `${Math.floor(totalMin / 60)}h`;
+  return `${Math.max(1, totalMin)}m`;
+};
+
 export const toLobbyRow = (
   entry: MatchListEntry,
   now: number,
@@ -91,6 +99,17 @@ export const toLobbyRow = (
     entry.turnDeadlineAt === null
       ? null
       : Math.max(0, entry.turnDeadlineAt - (now + serverOffsetMs));
+  // A WAITING match has no countdown, so the row shows how long it has been open instead — that is
+  // what explains why the duel is still in the list (and that it will expire on its own).
+  const waitingAge = formatWaitingAge(Math.max(0, now + serverOffsetMs - entry.lastActivityAt));
+  const timeText =
+    bucket === 'finished'
+      ? null
+      : entry.status === 'waiting'
+        ? waitingAge
+        : remaining === null
+          ? null
+          : formatRemaining(remaining);
   const status =
     bucket === 'finished'
       ? { word: ONLINE.statusFinished, icon: 'check' as const }
@@ -117,7 +136,7 @@ export const toLobbyRow = (
     opponentName: entry.opponentName?.trim() || ONLINE.opponentFallback,
     statusWord: status.word,
     statusIcon: status.icon,
-    timeLeft: remaining === null || bucket === 'finished' ? null : formatRemaining(remaining),
+    timeLeft: timeText,
     warnLastTwoHours: remaining !== null && remaining > 0 && remaining <= WARN_LAST_MS && bucket !== 'finished',
     graceWord,
     atRisk: graceWord === ONLINE.graceYouUsed,
@@ -152,7 +171,11 @@ export const friendlyJoinError = (code: string): string => {
       return ONLINE.errFull;
     case 'ALREADY_JOINED':
       return ONLINE.errAlreadyJoined;
-    case 'TOO_MANY_OPEN':
+    case 'TOO_MANY_MATCHES':
+      // The code the server ACTUALLY emits when a player is at the open-match cap
+      // (`server/src/service.ts`, `TOO_MANY_MATCHES`). It used to be spelled `TOO_MANY_OPEN` here
+      // — a code no server path emits — so the specific line was dead and a capped player got the
+      // generic one. `web/tests/lobby.test.ts` pins that this stays aligned with the server.
       return ONLINE.errTooMany;
     case 'RATE_LIMITED':
       return ONLINE.errRateLimited;

@@ -6,6 +6,7 @@ import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
+import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
 import {
   FIRST_ONLINE_CARD_KEY,
@@ -149,6 +150,29 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const waitingEl = $('online-waiting');
   const joinEl = $('online-join');
   const menuEl = document.getElementById('menu');
+
+  // The SHARED wait-dots stylesheet (web/src/online/live/wait-dots.ts). The lobby can be the first
+  // online surface a player sees, before any live UI is installed, so inject it here once. Guarded
+  // so a second install (or the live UI) never adds a duplicate.
+  if (typeof document !== 'undefined' && !document.getElementById('futasaku-wait-dots-css')) {
+    const style = document.createElement('style');
+    style.id = 'futasaku-wait-dots-css';
+    style.textContent = WAIT_DOTS_CSS;
+    document.head.append(style);
+  }
+
+  // The waiting headline is ONE stable text node plus ONE persistent dots node: the search screen
+  // re-renders every 2s, and rebuilding the dots each time would restart the CSS animation before
+  // it could cycle (the same reason the live pill builds its dots once).
+  const waitingTitleText = document.createTextNode('');
+  const waitingTitleDots = waitDots();
+  waitingTitleDots.hidden = true;
+  $('online-waiting-title').replaceChildren(waitingTitleText, waitingTitleDots);
+  const setWaitingTitle = (text: string, dotsVisible: boolean) => {
+    waitingTitleText.data = text;
+    waitingTitleDots.hidden = !dotsVisible;
+  };
+
   // The small, treeless Futasaku wordmark the game HUD shows top-right (#hud-brand). Built once
   // and moved into whichever online submenu header is open, so every screen carries the same mark
   // at the same size instead of a big wordmark. Failure here just leaves the header bare.
@@ -164,6 +188,16 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
+  };
+  /**
+   * The same notice line, but ending in the SHARED animated ellipsis. The dots node is rebuilt
+   * here on purpose: these lines are written once when a screen opens (never on a timer), so a
+   * fresh node cannot restart an animation that is already running.
+   */
+  const noticeWithDots = (id: string, text: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.replaceChildren(document.createTextNode(text), waitDots());
   };
 
   const show = (next: OnlineScreen) => {
@@ -196,7 +230,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     $('online-join-open').textContent = ONLINE.join;
     $('online-matches-title').textContent = ONLINE.yourMatches;
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
-    $('online-waiting-title').textContent = ONLINE.waitingTitle;
+    // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it
+    // is deliberately not written here — writing textContent would drop the persistent dots node.
     $('online-waiting-body').textContent = ONLINE.waitingBody;
     $('online-waiting-expiry').textContent = ONLINE.waitingExpiry;
     $('online-share').textContent = ONLINE.share;
@@ -331,6 +366,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     fillCopy();
     show('waiting');
     setWaitingMode('invite');
+    setWaitingTitle(ONLINE.waitingTitle, true);
     $('online-invite-code').textContent = match.inviteCode;
     $('online-invite-code').setAttribute('aria-label', `${match.inviteCode}. ${ONLINE.codeTapCopy}.`);
     notice('online-waiting-notice', '');
@@ -389,7 +425,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const renderSearch = () => {
     if (!search) return;
     const parked = isSearchParked(now() - search.startedAt, parkedOfferMs());
-    $('online-waiting-title').textContent = parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle;
+    // Active search shows the animated dots; the parked "Nobody yet" offer is a still state.
+    setWaitingTitle(parked ? ONLINE.searchParkedTitle : ONLINE.searchTitle, !parked);
     $('online-waiting-body').textContent = parked ? ONLINE.searchParkedBody : ONLINE.searchBody;
     const options = document.getElementById('online-search-options');
     if (options) options.hidden = !parked;
@@ -538,7 +575,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (!findOpponentEnabled()) return;
     const id = await ensureIdentity();
     if (!id) return;
-    notice('online-hub-notice', ONLINE.findOpponentLooking);
+    noticeWithDots('online-hub-notice', ONLINE.findOpponentLooking);
     try {
       const res = await client.findOpponent(id.token);
       serverOffset = res.serverNow - now();
@@ -687,7 +724,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       void copyInviteCode();
     }
   });
-  // One button, two honest jobs: stop a parked search (search screen), or leave an invite screen.
+  // One button, two honest jobs: stop a parked search (search screen), or cancel the waiting match
+  // (invite screen).
   $('online-cancel-match').addEventListener('click', () => {
     if (search && waitingEl.dataset.mode === 'search') {
       void (async () => {
@@ -697,7 +735,25 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       })();
       return;
     }
-    void openHub();
+    // Invite waiting screen: retire the match ON THE SERVER so it stops lingering as an "open"
+    // duel until the 48h window runs out. Owner-only and idempotent server-side; confirmed here so
+    // a stray tap cannot silently kill a shared invite.
+    const current = waiting;
+    if (!current) {
+      void openHub();
+      return;
+    }
+    if (typeof window !== 'undefined' && !window.confirm(ONLINE.cancelMatchConfirm)) return;
+    void (async () => {
+      const id = identity.peek();
+      try {
+        if (id) await client.cancelMatch(id.token, current.matchId);
+      } catch {
+        /* calm: the match may already be gone (expired, or cancelled on another device) */
+      }
+      if (waiting?.matchId === current.matchId) waiting = null;
+      await openHub();
+    })();
   });
   // Play the computer: the offline game starts and the search KEEPS RUNNING in the background.
   document.getElementById('online-search-computer')?.addEventListener('click', () => {
