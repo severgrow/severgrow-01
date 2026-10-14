@@ -133,9 +133,9 @@ const lessons: TutorialLesson[][] = [
       card: [0, 8], tile: { q: -1, r: 1 }, cta: 'TAP THE 8',
     }),
   ],
-  // 5 TAKE OVER (a way to use your Grow)
+  // 5 CUT (a way to use your Grow)
   [
-    L('cut', 'TAKE OVER', 'Or play a higher card on their tile to take it. Their tiles cut off behind it wither.', 'tile', 'Sprout', {
+    L('cut', 'CUT IT OFF', 'Or play a higher card on their tile to cut it off. Their tiles behind it wither.', 'tile', 'Sprout', {
       card: [0, 8], tile: { q: 1, r: -1 }, cta: 'TAP THE 8',
     }),
   ],
@@ -211,7 +211,7 @@ const lessons: TutorialLesson[][] = [
 ];
 
 /**
- * The tutorial: Grow and its other uses (Strengthen, take over, Bomb), then Bloom on a Throw
+ * The tutorial: Grow and its other uses (Strengthen, cut, Bomb), then Bloom on a Throw
  * pile Draw and Blast, the win, a free turn and the buttons. Skip and the last round are
  * separate lessons only.
  */

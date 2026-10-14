@@ -145,10 +145,10 @@ describe('tutorial words', () => {
     expect(lesson('grow').why).toMatch(/strength/i);
   });
 
-  it('Strengthen, take over and Bomb are all ways to use your Grow', () => {
+  it('Strengthen, cut and Bomb are all ways to use your Grow', () => {
     expect(lesson('strength').why).toMatch(/higher/i);
     expect(lesson('cut').why).toMatch(/higher/i);
-    expect(lesson('cut').why).toMatch(/take/i);
+    expect(lesson('cut').why).toMatch(/cut/i);
     expect(lesson('bomb').why).toMatch(/Grow/);
   });
 
