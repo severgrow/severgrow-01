@@ -18,7 +18,7 @@ import type { DisplayEvent } from './player/display-readout.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
-import { EMPTY_SEL, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
+import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import {
@@ -247,6 +247,15 @@ let revealProgress = 0;
 const MIN_LIVE_REVEAL_MS = 700;
 /** An enemy turn is on screen right now: every input entry point must refuse until it drains. */
 const onlineReveal = (): boolean => isOnlineDuel() && getOnlineSession()?.isRevealing === true;
+/**
+ * The match is over on the server. A TERMINAL status outranks the reveal gate everywhere: an
+ * animation may never withhold the end screen or refuse a tap once the duel has been decided
+ * (that is how the losing device used to sit on the board while the winner already had their
+ * screen).
+ */
+const onlineTerminal = (): boolean => isOnlineDuel() && getOnlineSession()?.finished === true;
+/** The one gate every input entry point reads: shut for a live enemy turn, open once decided. */
+const onlineGateShut = (): boolean => onlineReveal() && !onlineTerminal();
 /** Says, calmly and at most once every 1.5s, why a tap did nothing while the enemy turn plays. */
 let revealNoticeAt = 0;
 const revealWaitNotice = () => {
@@ -1781,7 +1790,19 @@ async function humanPlayOnline(a: Action) {
   guideGoal = null;
   const result = await os.play(a);
   if (!result.ok) {
+    // A refused move must never be silent: the two-phone playtest read an unexplained refusal as
+    // "painting is broken". Keep the painted shape on screen and say why it could not be placed
+    // (the shared info line above the board), with the same shake a refused tap gets. Committing
+    // gestures (Throw / Draw) still resync the board, because their failure means the board moved.
     caption(result.message, null, 'info');
+    if (a.t === 'Bloom' || a.t === 'MegaBomb' || a.t === 'Sprout') {
+      draw = { ...draw, msg: result.message };
+      board.shake(settings.reduceMotion);
+      if (settings.sound) sound.illegal();
+      paintDraw();
+      render();
+      return;
+    }
     os.refresh();
     // The move did not land: drop the stale taps so the board and the picks agree again.
     syncSessionFromOnline(true);
@@ -4660,7 +4681,10 @@ function renderGameOver() {
   if (isOnlineDuel()) {
     const os = getOnlineSession();
     const info = os?.finishInfo() ?? null;
-    const show = !!info && !busy() && !gameOverDismissed && !$('game').hidden;
+    // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
+    // both devices get the end screen as soon as the finished view lands, one as winner and one as
+    // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
+    const show = !!info && !gameOverDismissed && !$('game').hidden;
     go.hidden = !show;
     if (!show || !info || !os) return;
     // The match's whole public history is one fetch; when it lands, re-render so the highlights are
@@ -4840,16 +4864,19 @@ function cancelSel() {
 function maybeAutoPlay() {
   if (!session || !myTurn() || busy()) return;
   // Futa04 commits a complete card-and-target Sprout, including Strengthen. Blooms finish
-  // through the drawing path, so an inferred placement never spends a partly chosen group.
+  // through the drawing path (a painted shape of any size), so an inferred placement never spends
+  // a partly chosen group. A Blast is a whole move at a target like a Sprout: it plays on the tap.
   const sprout = IS_FUTA04 && (session.sel.kind === null || session.sel.kind === 'sprout') ? onlyChoice(session.view, session.legal, { ...session.sel, kind: 'sprout' }) : null;
   const a = sprout ?? playNow(session.view, session.legal, session.sel) ?? (settings.confirmPolicy === 'never' ? onlyChoice(session.view, session.legal, session.sel) : null);
-  if (a && (!IS_FUTA04 || (a.t !== 'Bloom' && a.t !== 'MegaBomb')) && !asksConfirm(a)) humanPlay(a);
+  if (a && (!IS_FUTA04 || a.t !== 'Bloom') && !asksConfirm(a)) humanPlay(a);
 }
 
 /** Overhaul item 8: does this move wait for Confirm? (the "Confirm moves" setting and the forecast) */
 function asksConfirm(a: Action): boolean {
   if (IS_FUTA04 && a.t === 'Discard') return true;
-  if (IS_FUTA04 && (a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit')) return false;
+  // Futa04's board moves are all one tap: Grow, Bloom, a Fruit card and now Blast place at once,
+  // and Undo is the safety net (owner's rule, 2026-10-14: Blast no longer asks for a second tap).
+  if (IS_FUTA04 && futa04OneTap(a)) return false;
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
@@ -4857,7 +4884,7 @@ function onCardTap(id: number) {
   sound.unlock();
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn (and must not start mine early).
-  if (onlineReveal()) return revealWaitNotice();
+  if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   if (!myTurn()) return;
   if (IS_FUTA04 && session.view.phase === 'ACT') {
@@ -5187,8 +5214,7 @@ const hexUnderFinger = (e: PointerEvent): string | null => {
   return key && board.boardKeys.includes(key) ? key : null;
 };
 
-const drawHandlers = {
-  down(p: Pt, e: PointerEvent) {
+const drawHandlers = {  down(p: Pt, e: PointerEvent) {
     const c = drawCombo();
     if (!c || !session) return;
     if (e.button === 2) return cancelDraw();
@@ -5353,7 +5379,7 @@ function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
   // Mid-reveal a tap must not skip the enemy's turn: the board is still changing under it.
-  if (onlineReveal()) return revealWaitNotice();
+  if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
   // first→last endpoint shortcut used by Futa04 Bloom).
@@ -5720,13 +5746,13 @@ bind('first-tip-ok', () => {
 });
 bind('deck', () => {
   // The gate first: a tap on the deck mid-reveal used to skip the replay AND commit a Draw.
-  if (onlineReveal()) return revealWaitNotice();
+  if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'deck') : undefined;
   if (a) humanPlay(a);
 });
 bind('discard', () => {
-  if (onlineReveal()) return revealWaitNotice();
+  if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
@@ -6471,6 +6497,10 @@ void import('./online/lobby-ui.js').then(async (m) => {
               }
             });
           }
+          // Invariant: while the gate is shut, the watchdog is armed. A reveal whose arm was
+          // missed (or that produced no steps to push) must never wedge the gate — that is how a
+          // decided match could sit on the board with nothing left to animate.
+          if (os.isRevealing && !revealWatchdog) armRevealWatchdog(catchUp);
           paintOnlineHudFromSession();
           if (os.finished) gameOverDismissed = false;
           // Remember how far this device has seen, so a later resume replays only the gap.

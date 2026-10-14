@@ -55,9 +55,12 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('#board .blast-affected').length>0);
     assert.equal(await page.locator('#board .blast-affected').count(),5,'hover previews the five other enemy tiles affected by this blast');
     await page.mouse.click(centre.x,centre.y);
-    assert.equal(await page.locator('#board .blast-affected').count(),5,'blast footprint remains visible while confirmation is pending');
-    await page.mouse.click(centre.x,centre.y);
+    // Owner's rule (2026-10-14): a Blast is ONE tap, exactly like Grow and Bloom — the move is
+    // played on the tap and Undo is the safety net. There is no second confirmation click.
     await page.waitForFunction(() => (window as any).__severgrow.state().board['-1,2'] === null);
+    assert.equal(await page.evaluate(() => (window as any).__severgrow.pending()),null,'the Blast is not left waiting for a confirmation');
+    assert.equal(await page.locator('#board .blast-affected').count(),0,'the hover footprint is gone once the Blast is played');
+    assert.equal(await page.evaluate(() => (window as any).__severgrow.canUndo()),true,'Undo can take the Blast back');
     const after=await page.evaluate(() => (window as any).__severgrow.state() as State);
     // Futa04: cut/blast tiles leave no scar / last-round remnant — empty hexes only.
     await page.waitForFunction(() => document.querySelectorAll('#board .last-round-art, #board .scar-g, #board .fx-scar').length === 0);
