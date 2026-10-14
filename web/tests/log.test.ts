@@ -25,7 +25,7 @@ group('history lines', () => {
     const r = { winner: 0 as const, reason: 'deck_exhaustion' as const, scores: [9, 7] as [number, number] };
     expect(resultTitle(r, 0)).toBe('You won');
     expect(resultTitle({ ...r, winner: 1 }, 0)).toBe('You lost');
-    expect(resultReason(r, 0)).toBe('The deck ran out. The higher score wins.');
+    expect(resultReason(r, 0)).toBe('The Draw pile ran out. The higher score wins.');
   });
 });
 
