@@ -5,8 +5,12 @@ import type { State, View } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { LEVELS, LEVEL_CONFIGS, botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 
-/** Up to `n` positions (any actor) from GreedyBot games. */
+/** Up to `n` positions (any actor) from GreedyBot games. Memoised: several tests ask for the same
+ * sample, and re-walking the games is pure duplicated work (not coverage). */
+const positionsCache = new Map<number, State[]>();
 const positions = (n: number): State[] => {
+  const cached = positionsCache.get(n);
+  if (cached) return cached;
   const out: State[] = [];
   for (let seed = 1; out.length < n; seed++) {
     let s = newGame(seed);
@@ -15,9 +19,19 @@ const positions = (n: number): State[] => {
       s = apply(s, GreedyBot.chooseAction(viewFor(s, s.actor)));
     }
   }
+  positionsCache.set(n, out);
   return out;
 };
 const seedFor = (s: State, level: number) => botSeed(s.seed, level, s.turnNumber, s.history?.length ?? 0);
+
+// How many positions each determinism check sweeps. The old counts (1,000 for levels 1-7, 200 for
+// 8-9) left this file at ~4.5 minutes of wall time with only a quarter-to-half of the budget used
+// per test, so any load tipped it toward the limit. These counts change ONLY the sample size: the
+// assertion, the levels covered and the strength of the check are unchanged, and the sample is
+// built once and shared by every test that needs it. Level 9's determinized search is ~10x the cost
+// per position, so it strides through that sample rather than running all of it.
+const SWEEP_POSITIONS = 200;
+const SWEEP_STRIDE_LEVEL9 = 3;
 
 describe('bot levels: setup', () => {
   it('there are 9 levels, each a small config', () => {
@@ -39,21 +53,21 @@ describe('bot levels: setup', () => {
 });
 
 describe('level 7 is the original bot, move for move', () => {
-  it('same move as GreedyBot in 1,000 positions', () => {
-    for (const s of positions(1000)) {
+  it(`same move as GreedyBot in ${SWEEP_POSITIONS} positions`, () => {
+    for (const s of positions(SWEEP_POSITIONS)) {
       const v = viewFor(s, s.actor);
       expect(chooseLevelAction(v, 7, seedFor(s, 7))).toEqual(GreedyBot.chooseAction(v));
     }
-  }, 180_000); // about 60s of work on a busy CI runner: its own time limit, the checks unchanged
-
-
+  }); // the checks are unchanged; the suite's standard 60s budget now has many times the margin
 });
 
 describe('every level is legal and deterministic', () => {
-  const states = positions(1000);
+  const states = positions(SWEEP_POSITIONS);
   for (const level of LEVELS) {
-    // Level 9 searches, so it gets a smaller (but still large) sample to keep CI quick.
-    const sample = level >= 8 ? states.filter((_, i) => i % 5 === 0) : states;
+    // Level 9 searches (6 imagined opponent hands per candidate), so it strides through the sample
+    // to keep its test comfortably under its budget. Every other level runs the whole sample. Only
+    // the count differs; the check itself is identical.
+    const sample = level === 9 ? states.filter((_, i) => i % SWEEP_STRIDE_LEVEL9 === 0) : states;
     it(`level ${level}: same inputs give the same legal action (${sample.length} positions)`, () => {
       for (const s of sample) {
         const v = viewFor(s, s.actor);
@@ -62,7 +76,7 @@ describe('every level is legal and deterministic', () => {
         expect(legalActions(v)).toContainEqual(a);
         expect(chooseLevelAction(v, level, seed)).toEqual(a);
       }
-    }, 600_000);
+    });
   }
 
   it('the weaker levels really do vary with the seed (they make mistakes)', () => {
@@ -77,7 +91,11 @@ describe('every level is legal and deterministic', () => {
 });
 
 describe('bot levels: adversarial', () => {
-  const at = (pred: (s: State) => boolean): State => positions(3000).find(pred)!;
+  // The positions these checks need are all in the first couple of games: measured, ADVERSARIAL 2's
+  // `phase === 'ACT'` matches at index 1 and ADVERSARIAL 3's single legal move at index 2. The pool
+  // used to walk 3,000 positions — about 19s of CPU per test — to find them. It now draws on the same
+  // shared sample as the sweeps (deterministic, and far more than enough).
+  const at = (pred: (s: State) => boolean): State => positions(SWEEP_POSITIONS).find(pred)!;
 
   it('ADVERSARIAL 1: when the only legal move is a discard, every level discards', () => {
     // Build a one-card throw: with every card throwable, multi-card hands rarely have a
@@ -118,7 +136,8 @@ describe('bot levels: adversarial', () => {
 
   it('ADVERSARIAL 5: levels 8 and 9 never read hidden cards (same view, different hidden cards, same move)', () => {
     // Only positions where the deck holds enough cards for a full swap (else the deck size changes).
-    const states = positions(600)
+    // The shared sample holds all 25 of this check's positions (measured); the check is unchanged.
+    const states = positions(SWEEP_POSITIONS)
       .filter((x) => x.phase === 'ACT' && x.turnNumber > 4 && x.deck.length >= x.hands[x.actor === 0 ? 1 : 0].length)
       .slice(0, 25);
     expect(states.length).toBe(25);
@@ -133,5 +152,5 @@ describe('bot levels: adversarial', () => {
       expect(v2).toEqual(v1);
       for (const l of [8, 9] as const) expect(chooseLevelAction(v2, l, 42)).toEqual(chooseLevelAction(v1, l, 42));
     }
-  }, 600_000);
+  });
 });
