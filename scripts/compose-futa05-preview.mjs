@@ -29,6 +29,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -131,8 +132,10 @@ const release = JSON.parse(readFileSync(join(site, 'release.json'), 'utf8'));
 assert(/^[0-9a-f]{40}$/.test(release.main ?? ''), 'the composed root release.json must name Main');
 
 // 3. Move the previous root — Main, the Severor build — to /firststep/, byte for byte. Everything
-//    that is not a sibling route is Main's: the composed root holds nothing else.
+//    that is not a sibling route is Main's: the composed root holds nothing else. Start from an empty
+//    /firststep/ so the move is a plain rename and never depends on what a previous tree left behind.
 const firststep = join(site, 'firststep');
+rmSync(firststep, { recursive: true, force: true });
 mkdirSync(firststep, { recursive: true });
 const moved = [];
 for (const entry of readdirSync(site)) {

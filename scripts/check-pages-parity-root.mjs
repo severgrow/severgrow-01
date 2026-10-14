@@ -36,38 +36,44 @@ const status = (file) =>
     { encoding: 'utf8' },
   ).trim();
 
-/** The build entry files (hashed, so their names are stable only while the build is). */
-const entryAssets = (prefix) => {
+/**
+ * The build's entry file names under `<prefix>assets/` — hashed, so their names are stable only
+ * while the build is.
+ *
+ * These are bare file names, never paths: every caller joins its own prefix on. The first version of
+ * this guard returned a prefixed path and then prefixed it again, which is how a deploy died on
+ * `site/firststep/firststep/assets/…` instead of finding Main at `site/firststep/assets/…`.
+ */
+const entryNames = (prefix) => {
   const dir = join(site, prefix, 'assets');
   assert(existsSync(dir), `composed site is missing ${prefix}assets/`);
-  return readdirSync(dir)
-    .filter((name) => /^index-.+\.(?:js|css)$/.test(name))
-    .map((name) => `${prefix}assets/${name}`);
+  return readdirSync(dir).filter((name) => /^index-.+\.(?:js|css)$/.test(name));
 };
 
-const identical = (file, publishedFile = file) => {
-  const candidate = readFileSync(join(site, file));
-  assert(candidate.equals(get(publishedFile)), `Preview would alter published ${publishedFile}`);
-  console.log(`Published ${publishedFile}: identical`);
+/** `file` is relative to the composed site on disk and to the published base URL. */
+const identical = (onDisk, published = onDisk) => {
+  const candidate = readFileSync(join(site, onDisk));
+  assert(candidate.equals(get(published)), `Preview would alter published ${published}`);
+  console.log(`Published ${published}: identical`);
 };
 
 // /test/ and /test2/ are rebuilt from their published SHAs and must not move by a single byte.
-for (const file of [
-  'test/index.html',
-  'test2/index.html',
-  'release.json',
-  'test2/release.json',
-  ...entryAssets('test/'),
-  ...entryAssets('test2/'),
-])
-  identical(file);
+for (const file of ['test/index.html', 'test2/index.html', 'release.json', 'test2/release.json']) identical(file);
+for (const prefix of ['test', 'test2'])
+  for (const name of entryNames(`${prefix}/`)) identical(`${prefix}/assets/${name}`);
 
-// Main: compare where Main is actually published. On the one run that performs the move it is still
-// at the root; from then on it is at /firststep/. One layout, one check, no bootstrap deadlock.
+// Main: it is always on disk at /firststep/ (the composer puts it there), but where it is *published*
+// depends on whether the move has happened yet. On the one run that performs the move it is still at
+// the root; from then on it is at /firststep/. One layout, one check, no bootstrap deadlock.
+//
+// Main is the only route whose two addresses differ, so it is the only one built from an explicit
+// prefix. `publishedMain` is always a *prefix* ('' or 'firststep/'), prepended to a bare file name —
+// never joined to an already-prefixed path.
 const publishedMain = status('firststep/index.html') === '200' ? 'firststep/' : '';
 console.log(
   publishedMain
     ? 'Main is published at /firststep/ — comparing there'
     : 'Main is still published at the root — comparing before the first move',
 );
-for (const file of ['index.html', ...entryAssets('firststep/')]) identical(`firststep/${file}`, `${publishedMain}${file}`);
+identical('firststep/index.html', `${publishedMain}index.html`);
+for (const name of entryNames('firststep/')) identical(`firststep/assets/${name}`, `${publishedMain}assets/${name}`);
