@@ -57,18 +57,58 @@ const displayActions = (view: View, seat: Player): { display: Action; mapped: Ac
 
 const ranksOf = (v: View, a: Extract<Action, { t: 'Bloom' }>) => a.cards.map((id) => v.hand.find((c) => c.id === id)?.rank ?? 0);
 
+// How much of each seat's Bloom sweep the test replays.
+//
+// Seat 1 (the mirrored seat — the one the two-device playtest actually broke) holds 1,005 legal
+// Blooms across its 6 positions and stays EXHAUSTIVE: every one is replayed, so the mirrored-order
+// and multi-card shapes are all covered. 1,005 is cheap (~3s of the budget), and the reversed
+// enumeration order only exists here (seat 0's mapping is identity), so this is where that case
+// must live.
+//
+// Seat 0 holds 5,232, and one position (seed 7) holds 4,488 of them. Every Bloom is replayed
+// against a FRESH draft (which re-derives the shadow and re-enumerates the whole legal list), so an
+// exhaustive seat-0 sweep costs ~54s of CPU against the 60s test budget: a latent flake that
+// reports a FALSE failure under any load, which is how a real failure gets missed. Seat 0 is
+// therefore swept REPRESENTATIVELY — a bounded, deterministic sample per position (no randomness;
+// the engine is deterministic and so are the tests). The cap is 256 per position: seat 0 then runs
+// about as many replays as the seat we refuse to cut, and the whole file lands at ~6s against 60s.
+// Seat 0 is also the seat the bug never touched, so this is where the cost can safely be bounded.
+// The sample still spans every shape: evenly spaced entries with the first and last always
+// included, plus the awkward shapes pinned below.
+const SEAT_BLOOM_CAP: Record<Player, number> = { 0: 256, 1: Number.POSITIVE_INFINITY };
+
+/**
+ * A bounded, deterministic sample of an enumerated list. Returns the list unchanged when it fits
+ * inside `cap` (so the mirrored seat stays exhaustive). Otherwise: `cap` entries evenly spaced
+ * across the list, first and last always included, so the sample still spans early and late boards
+ * and wide and narrow Blooms. Entries in `landmarks` are always added, so the awkward shapes (a
+ * multi-card Bloom) can never be sampled away. No randomness.
+ */
+const boundedSample = <T>(items: readonly T[], cap: number, landmarks: readonly T[] = []): T[] => {
+  if (items.length <= cap) return [...items];
+  const out: T[] = Array.from({ length: cap }, (_, i) => items[Math.round((i * (items.length - 1)) / (cap - 1))]!);
+  for (const l of landmarks) if (!out.includes(l)) out.push(l);
+  return out;
+};
+
 describe('a painted Bloom from the online viewer is a move the draft accepts', () => {
   for (const seat of [0, 1] as const) {
-    it(`seat ${seat}: every legal Bloom of every position is accepted by the draft`, () => {
+    it(`seat ${seat}: every swept legal Bloom of every position is accepted by the draft`, () => {
       const positions = positionsWithBloom(seat);
       expect(positions.length).toBeGreaterThan(0);
+      let swept = 0;
+      let multiCard = 0;
+      let fromSeed7 = 0;
       for (const { seed, state } of positions) {
         const view = viewFor(state, seat);
         const draft = createDraftEngine({ matchId: `seat-${seat}-${seed}`, storage: null });
         draft.syncFromServer(view, 1);
         const blooms = displayActions(view, seat).filter(({ mapped }) => mapped.t === 'Bloom');
         expect(blooms.length).toBeGreaterThan(0);
-        for (const { display, mapped } of blooms) {
+        // One multi-card Bloom is always swept deliberately: it is the shape the mirrored bug was
+        // about, and pinning it means a future sampler cannot quietly drop the awkward case.
+        const awkward = blooms.filter(({ mapped }) => mapped.t === 'Bloom' && mapped.cards.length > 1).slice(0, 1);
+        for (const { display, mapped } of boundedSample(blooms, SEAT_BLOOM_CAP[seat], awkward)) {
           expect(mapped.t).toBe('Bloom');
           // A fresh draft per action: `play` refuses a second action once the turn has moved on.
           const d = createDraftEngine({ matchId: `seat-${seat}-${seed}-one`, storage: null });
@@ -78,9 +118,24 @@ describe('a painted Bloom from the online viewer is a move the draft accepts', (
           // pass on one form and a fail on the other is precisely the bug.
           const label = `${JSON.stringify(display)} -> ${JSON.stringify(mapped)}`;
           expect(accepted, `${label}`).toBe(true);
-          expect(draft.actions().length >= 0).toBe(true);
+          // The accepted Bloom is recorded exactly once: the draft really TOOK the move, rather
+          // than merely returning true. (`play` pushes the action before it returns true, on the
+          // fresh, empty draft this just synced.)
+          expect(d.actions()).toHaveLength(1);
           d.clear();
+          swept++;
+          if (mapped.t === 'Bloom' && mapped.cards.length > 1) multiCard++;
+          if (seed === 7) fromSeed7++;
         }
+      }
+      expect(swept).toBeGreaterThan(0);
+      expect(multiCard).toBeGreaterThan(0);
+      if (seat === 0) {
+        // The pathological seed-7 position is still swept, but only a bounded sample of it: never
+        // all 4,488. If an engine change ever moves it out of the first six positions, revisit.
+        expect(positions.some((p) => p.seed === 7)).toBe(true);
+        expect(fromSeed7).toBeGreaterThan(0);
+        expect(fromSeed7).toBeLessThanOrEqual(SEAT_BLOOM_CAP[0] + 1);
       }
     });
 
