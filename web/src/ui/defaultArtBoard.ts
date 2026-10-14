@@ -22,12 +22,48 @@ import rock5 from '../assets/board/rock_hex_05.webp';
 const artSize = (index: number) => index >= 18 ? 68 : index < 9 ? 80 : 76;
 const rockUrls = [rock1, rock2, rock3, rock4, rock5];
 
+/**
+ * Board pictures that could not be loaded, so the board never asks for them again.
+ *
+ * WebKit (iPhone Safari) paints its OWN "broken image" placeholder over an `<image>` whose file
+ * failed to load: a light-blue tile with a white question mark, drawn at the image's box — so a
+ * dropped connection, a 404 or a stale cache put a row of blue "?" tiles on the board, rotated
+ * with the tile they replaced (owner's iPhone screenshot, 2026-10-14: three of them).
+ *
+ * This loader follows the same rule as the skin loader in `ui/skin/assets.ts`: a file that fails
+ * to load is dropped and the renderer falls back. Here the fallback is the look the board already
+ * has before its art arrives — the tile keeps its flat territory colour, the home keeps its
+ * landmark, the rock simply is not there — so no browser placeholder can ever be painted.
+ */
+const missingArt = new Set<string>();
+
+/** True when this picture failed to load and must not be drawn (unknown URLs may still arrive). */
+export const artUnavailable = (url: string | undefined): boolean => !!url && missingArt.has(url);
+
+/** Take `<image>`s for this URL back out of the board: a picture that failed must not be shown. */
+const dropArt = (url: string): void => {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return;
+  for (const node of Array.from(document.querySelectorAll('svg image'))) {
+    if (node.getAttribute('href') === url) node.remove();
+  }
+};
+
+/** One picture failed: remember it, and remove it if a cell already drew it. */
+const noteArtFailure = (url: string): void => {
+  if (missingArt.has(url)) return;
+  missingArt.add(url);
+  dropArt(url);
+};
+
 // The small home and tile images start downloading while the menu is visible.
 // Once decoded, every repeat of a variant shares the browser's image cache.
 if (typeof Image !== 'undefined') {
   for (const url of [...DEFAULT_ART_SPRITES, groundUrl, ...rockUrls]) {
     const img = new Image();
     img.decoding = 'async';
+    // The `error` event is the failure signal (a rejected `decode()` alone is not: it can reject
+    // for an intact file too, and dropping good art would be worse than the placeholder).
+    img.addEventListener('error', () => noteArtFailure(url));
     img.src = url;
     void img.decode().catch(() => undefined);
   }
@@ -45,8 +81,11 @@ export class DefaultArtBoardView extends BoardView {
   protected override usesWorldLayer() { return false; }
 
   private artCell(parent: SVGGElement, index: number) {
+    const url = DEFAULT_ART_SPRITES[index];
+    // A picture that failed to load is never drawn: the browser would paint its own placeholder.
+    if (!url || artUnavailable(url)) return;
     const size = artSize(index);
-    el('image', { href: DEFAULT_ART_SPRITES[index]!, x: -size / 2, y: -size / 2,
+    el('image', { href: url, x: -size / 2, y: -size / 2,
       width: size, height: size, class: 'default-art-sprite' }, parent);
   }
 
@@ -65,16 +104,21 @@ export class DefaultArtBoardView extends BoardView {
   protected override drawCell(g: SVGGElement, key: string, terrain: Terrain) {
     const defs = this.svg.querySelector('defs')!;
     const id = this.id('default-ground');
-    if (!defs.querySelector(`#${id}`)) {
-      const pattern = el('pattern', { id, x: 0, y: 0, width: 360, height: 360, patternUnits: 'userSpaceOnUse' }, defs);
-      el('image', { href: groundUrl, x: 0, y: 0, width: 360, height: 360 }, pattern);
+    // A failed ground picture is dropped: the cell keeps the flat look and no placeholder is drawn.
+    if (!artUnavailable(groundUrl)) {
+      if (!defs.querySelector(`#${id}`)) {
+        const pattern = el('pattern', { id, x: 0, y: 0, width: 360, height: 360, patternUnits: 'userSpaceOnUse' }, defs);
+        el('image', { href: groundUrl, x: 0, y: 0, width: 360, height: 360 }, pattern);
+      }
+      el('path', { d: hexPath(key, S * 1.015, 'flat'), fill: this.url('default-ground'), class: 'default-ground-art' }, g);
     }
-    el('path', { d: hexPath(key, S * 1.015, 'flat'), fill: this.url('default-ground'), class: 'default-ground-art' }, g);
     el('path', { d: hexPath(key, S - 1.1, 'flat'), fill: 'none',
       stroke: 'rgba(178,174,163,0.18)', 'stroke-width': 0.75, class: 'default-cell-rim' }, g);
     if (terrain === 'rock') {
       const { x, y } = centerOf(key);
       const rock = rockUrls[Math.floor(hash(`${key}:v3-rock`) * rockUrls.length)]!;
+      // A rock picture that failed to load leaves the cell bare, never a broken-image placeholder.
+      if (artUnavailable(rock)) return;
       el('ellipse', { cx: x, cy: y + 7, rx: 22, ry: 13, fill: 'rgba(0,0,0,.17)', class: 'default-rock-shadow' }, g);
       // The five source clusters have point-up silhouettes. A half hex turn
       // brings their broad faces onto this flat-top lattice; the small inset
