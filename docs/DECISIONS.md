@@ -275,3 +275,25 @@ the owner can restore it with one line and no visual fallout.
 - Evidence: `web/e2e/menu-tagline-shots.ts` writes `docs/screens/menu-tagline-after-*.png` at 360x640,
   390x844, 768x1024 and 1280x800, paired with the `menu-tagline-before-*.png` captured before the
   removal; it also prints the logo/title/buttons boxes so a spacing regression is a number.
+
+### 2026-10-14 — Accounts: recovery path (PROPOSAL — awaiting the owner's sign-off)
+
+> **This is a proposal, not a decision the owner made.** Nothing was built or deployed; no
+> application code, `server/`, `web/` or `src/` file changed, no database write, no Edge deploy.
+> Full reasoning: [`ACCOUNTS.md`](ACCOUNTS.md); sharing verdict: [`SHARE-READINESS.md`](SHARE-READINESS.md).
+
+What a code-reading pass found: there is **no account system** (no email/password/OAuth; the Edge
+function verifies its own bearer tokens with the JWT gate off), and the **only** move-device path is
+the Settings 8-character **link code** — single-use, **10-minute** life, made on the device that
+still has the identity. It is a *transfer*, not a *recovery*: a guest whose storage is cleared
+cannot reclaim their identity, and a `401` silently mints a fresh guest.
+
+**Proposed (for sign-off):** build a **provider-free durable recovery code** (Option 1) now — it
+needs no dashboard, sends no email, collects no personal data, and reuses the existing link-code
+machinery — and keep **"Recover with Google"** (Option 2) as the owner's previously-stated
+post-playtest destination, done together with real names. If the owner prefers one system only,
+Option 2 (Google) is the one, at a higher cost (Supabase Auth + Google Cloud setup + privacy policy).
+Whichever is chosen, a recovery must **attach to the existing `players` row** (never create a second
+player) so matches and history survive. Names are also flagged: only **400** auto-generated nature
+names exist, so collisions/impersonation are certain — recommend a stable discriminator when names
+and accounts are done together.
