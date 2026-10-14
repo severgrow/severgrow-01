@@ -105,7 +105,11 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 .large-text #futasaku-glass[data-mode='tutorial'] { --glass-head-h: 48px; }
 #futasaku-glass[data-mode='tutorial'] .glass-head {
   display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1fr);
-  align-items:stretch; gap:6px; width:100%; pointer-events:none;
+  /* The side slots carry the CTAs, one of which is "DRAW 1 CARD": 11 monospace characters at
+     11px inside the left/right third of a 360px glass, which left only ~2px of slack. A 4px gap
+     and 6px button padding buy the CTA ~5px of headroom, so it cannot ellipsise if the webfont is
+     substituted or not yet applied. */
+  align-items:stretch; gap:4px; width:100%; pointer-events:none;
 }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot {
   display:flex; align-items:stretch; min-width:0; min-height:0; height: var(--glass-head-h);
@@ -114,7 +118,7 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-title { justify-content:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-next { justify-content:stretch; }
 #futasaku-glass[data-mode='tutorial'] .glass-head-slot > button {
-  width:100%; height:100%; min-height:0; min-width:0; padding:0 8px; box-sizing:border-box;
+  width:100%; height:100%; min-height:0; min-width:0; padding:0 6px; box-sizing:border-box;
   border:1px solid rgba(214,204,177,.22); border-radius:8px;
   background:rgba(255,255,255,.05); color:#f0e9dc;
   font:400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);

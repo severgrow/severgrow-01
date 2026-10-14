@@ -310,6 +310,9 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     await openTutorial(page, 2);
     await page.evaluate(() => document.documentElement.classList.add('large-text'));
+    // Measure only once the bundled webfonts have settled: text widths (and so an ellipsis) depend
+    // on the font actually in use, and a cold CI runner used to be caught mid-swap.
+    await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(350);
     const m = await page.evaluate(() => {
       const glass = document.getElementById('futasaku-glass')!;
@@ -319,6 +322,8 @@ try {
       return {
         why: why ? parseFloat(getComputedStyle(why).fontSize) : 0,
         clipped: btns.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => (b.textContent || '').trim()),
+        // widths make a future failure self-diagnosing instead of just naming the button
+        widths: btns.map(b => `${(b.textContent || '').trim()} ${b.scrollWidth}/${b.clientWidth}`).join(', '),
         right: rect.right,
         bottom: rect.bottom,
         dockTop: document.getElementById('dock')!.getBoundingClientRect().top,
@@ -326,7 +331,7 @@ try {
       };
     });
     assert.ok(m.why >= 14, `${vp.width}x${vp.height}: Large text grows the tutorial copy (${m.why}px)`);
-    assert.equal(m.clipped.length, 0, `${vp.width}x${vp.height}: Large text clips no head button (${m.clipped.join(', ')})`);
+    assert.equal(m.clipped.length, 0, `${vp.width}x${vp.height}: Large text clips no head button (${m.clipped.join(', ')}) [${m.widths}]`);
     assert.ok(m.right <= m.vw + 1, `${vp.width}x${vp.height}: the large-text glass still fits the screen`);
     assert.ok(m.bottom < m.dockTop, `${vp.width}x${vp.height}: the large-text glass stays above the dock`);
     await page.close();
