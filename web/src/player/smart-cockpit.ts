@@ -91,6 +91,13 @@ html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[ari
   color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
 }
 html.futa04-information #futa04-box #smart-context:active:not(:disabled) { transform:translateY(1px) scale(.98); }
+/* The Skip key reads lit whenever Skip is the move in this slot. It reuses the key's own
+   ready glow plus the accent ring the coach already draws on a recommended control, so the
+   state is a ring and a brighter face — not a hue change alone. Static: nothing animates,
+   so Reduce motion and Large text are untouched and the 44px target never moves. */
+html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled) {
+  color:#fff1cf; box-shadow:0 0 0 2px var(--c-accent), 0 0 9px rgba(196,150,88,.30);
+}
 html.futa04-information #futa04-box #smart-context:disabled { opacity:.68; cursor:default; }
 html.futa04-information #futa04-box #smart-context:disabled svg { opacity:.45; }
 html.futa04-information #futa04-box #futa04-actions > .hand-slot:disabled { opacity:.72; }
@@ -807,6 +814,8 @@ export function mountSmartCockpit() {
     if (lastPhase !== phase && phase === 'opp') machine.event({message:'WAIT',priority:20,duration:1050,mode:'red',pulse:true});
     lastPhase = phase; lastAction = first?.key ?? '';
     context.innerHTML = svg(first?.icon ?? 'neutral'); context.disabled = !first;
+    // The slot's current action, so CSS can light a key that is the move (e.g. Skip).
+    context.dataset.action = first?.icon ?? '';
     context.setAttribute('aria-haspopup',current.length > 1 ? 'menu' : 'false');
     context.setAttribute('aria-label',first ? current.length > 1 ? `${first.label}. ${current.length} actions available` : first.label : 'No action available');
     context.title = context.getAttribute('aria-label') ?? '';

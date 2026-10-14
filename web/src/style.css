@@ -1261,6 +1261,11 @@ svg.usable .hex-cell {
 .coach-glow {
   box-shadow: 0 0 0 2px var(--c-accent);
 }
+/* The moves-row Skip is lit whenever it is on offer; the cockpit's #smart-context mirrors
+   this with its own key-glow ring. The tutorial's Next wears the same class but is not a Skip. */
+.moves :is(.futa04-skip, .end.skip):not(.tutorial-next) {
+  box-shadow: 0 0 0 2px var(--c-accent);
+}
 
 /* ---------- confirm bar, moves, piles ---------- */
 .confirm {
