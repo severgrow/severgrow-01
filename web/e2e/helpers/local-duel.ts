@@ -265,6 +265,8 @@ export type OnlineHook = {
   myTurn: boolean;
   seat: 0 | 1;
   finished: boolean;
+  /** True when the local draft can be taken back (the OnlineSession's own answer). */
+  canUndo: boolean;
   queued: number;
 };
 

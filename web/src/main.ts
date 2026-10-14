@@ -5953,8 +5953,12 @@ bind('tool-undo', () => {
     cancelDraw();
     return;
   }
-  if (session.canUndo) undoMove();
-  else if (session.canReplayOpponent) replayBotTurn();
+  // The SAME question the enable line above asks. Online the offline `session` is rebuilt after
+  // every move, so its undo stack is always empty: the draft that can be taken back lives on the
+  // OnlineSession. Reading `session.canUndo` here lit the button but never reached `undoMove()`.
+  const canUndo = isOnlineDuel() ? !!getOnlineSession()?.canUndo : session.canUndo;
+  if (canUndo) undoMove();
+  else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
   if (isOnlineDuel()) {
@@ -6238,7 +6242,9 @@ let appReady = false;
   sel: () => (session?.sel ? { ...session.sel } : null),
   /** The legal moves the page is offering right now (display coords), for interaction tests. */
   legal: () => (session ? [...session.legal] : []),
-  canUndo: () => !!session?.canUndo,
+  // Online the source of truth is the OnlineSession's draft, not the offline Session the page
+  // rebuilds after every move (which never sees the online draft, so it always read false).
+  canUndo: () => (isOnlineDuel() ? !!getOnlineSession()?.canUndo : !!session?.canUndo),
   /** tests only: pick this exact Bloom card group (the button picks its family's usual one) */
   pickKind: (kind: string) => {
     if (!session) return;
@@ -6291,6 +6297,8 @@ let appReady = false;
           : 'theirs',
       seat: os.seat,
       finished: os.finished,
+      /** True when the local draft can be taken back (the source the Undo button's enable reads). */
+      canUndo: os.canUndo,
       queued: queue.pending,
       /** Diagnostics: the revision the page has applied, and the sync engine's link state. */
       revision: snap.revision,
