@@ -7,7 +7,7 @@
 //
 // The persistent "who starts" HUD chip was removed after the two-phone playtest (the one-time
 // reveal is enough), so the old chip tests are replaced by a check that the trimmed strip draws
-// the opponent, the turn word and the presence only.
+// ONE short message (the turn word) plus the presence — never the opponent's name or a notice box.
 import { describe, expect, it } from 'vitest';
 import type { KeyValue } from '../../server/src/client.js';
 import {
@@ -122,10 +122,10 @@ const fakeEl = (hidden = false): FakeEl => {
 /** Minimal stand-in for the trimmed strip: only the selectors fillDuelHud asks for. */
 const fakeHud = (): { root: HTMLElement; els: Record<string, FakeEl> } => {
   const els: Record<string, FakeEl> = {
-    '[data-duel-opponent]': fakeEl(),
+    '[data-duel-opponent]': fakeEl(true),
     '[data-duel-presence]': fakeEl(),
-    '[data-duel-turn]': fakeEl(),
     '[data-duel-notice]': fakeEl(true),
+    '[data-duel-turn]': fakeEl(),
   };
   const root = {
     querySelector: (sel: string) => els[sel] ?? null,
@@ -144,26 +144,32 @@ const baseModel = (over: Partial<DuelHudModel>): DuelHudModel => ({
 });
 
 describe('fillDuelHud (trimmed duel strip)', () => {
-  it('draws the opponent, the turn word and the presence — and nothing else', () => {
+  it('draws ONE short message — the turn word — plus the presence, and nothing visible else', () => {
     const { root, els } = fakeHud();
     fillDuelHud(root, baseModel({}));
-    expect(els['[data-duel-opponent]']!.textContent).toBe('Friend');
     expect(els['[data-duel-turn]']!.textContent).toBe("Opponent's turn");
     expect(els['[data-duel-presence]']!.textContent).toBe('Online');
     expect(els['[data-duel-presence]']!.attrs['data-presence']).toBe('online');
-    // The strip has no Resign, no deadline and no who-starts chip any more.
+    // The opponent name and the notice stay as HIDDEN state hooks (never painted), so the page's
+    // own tests can still read them; the visible lane carries the one message above.
+    expect(els['[data-duel-opponent]']!.textContent).toBe('Friend');
+    expect(els['[data-duel-opponent]']!.hidden).toBe(true);
+    // The strip carries no Resign, no deadline and no who-starts chip.
     expect(els['[data-duel-deadline]']).toBeUndefined();
     expect(els['[data-duel-starter]']).toBeUndefined();
   });
 
-  it('says "Your turn", shows a notice and hides it again when cleared', () => {
+  it('says "Your turn", and a notice temporarily takes the lane instead', () => {
     const { root, els } = fakeHud();
-    fillDuelHud(root, baseModel({ turn: 'mine', notice: 'Reconnecting' }));
+    fillDuelHud(root, baseModel({ turn: 'mine' }));
     expect(els['[data-duel-turn]']!.textContent).toBe('Your turn');
+    // A notice is a danger message: it outranks the turn word, then hands the lane back.
+    fillDuelHud(root, baseModel({ turn: 'mine', notice: 'Reconnecting' }));
+    expect(els['[data-duel-turn]']!.textContent).toBe('Reconnecting');
     expect(els['[data-duel-notice]']!.textContent).toBe('Reconnecting');
-    expect(els['[data-duel-notice]']!.hidden).toBe(false);
     fillDuelHud(root, baseModel({ turn: 'mine', notice: null }));
-    expect(els['[data-duel-notice]']!.hidden).toBe(true);
+    expect(els['[data-duel-turn]']!.textContent).toBe('Your turn');
+    expect(els['[data-duel-notice]']!.textContent).toBe('');
   });
 
   it('reads "Replaying their turn" while the enemy turn animates — never "Opponent\'s turn"', () => {

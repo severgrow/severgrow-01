@@ -212,11 +212,15 @@
         <button id="hud-history" class="icon-only" type="button" aria-label="History"><span class="i" data-icon="history"></span></button>
       </header>
       <div id="duel-hud" class="duel-hud" hidden>
-        <span class="duel-opp"><b data-duel-opponent></b></span>
-        <span class="duel-turn-slot" data-duel-turn aria-live="polite"></span>
-        <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
-        <span class="duel-urgency" data-duel-urgency role="status" hidden></span>
-        <p class="duel-notice" data-duel-notice hidden></p>
+        <!-- Hidden state hooks only (never painted): the trimmed strip shows ONE short message, but
+             the opponent name and the current notice stay readable to the page's own tests. -->
+        <span class="duel-opp" data-duel-opponent hidden></span>
+        <span class="duel-notice" data-duel-notice hidden></span>
+        <span class="duel-lane" data-duel-lane>
+          <span class="duel-msg" data-duel-turn aria-live="polite"><span class="duel-track" data-duel-track></span></span>
+          <span class="duel-urgency" data-duel-urgency role="status" hidden></span>
+          <span class="duel-presence" data-duel-presence data-presence="unknown"></span>
+        </span>
       </div>
       <div id="race" class="race" role="img" aria-label="Level at 0"><i class="race-fill"></i></div>
       <div id="score-pop" class="score-pop" role="status" hidden></div>

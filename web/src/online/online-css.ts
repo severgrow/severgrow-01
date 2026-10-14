@@ -202,15 +202,15 @@ export const ONLINE_CSS = `
   gap: 0.45rem;
   margin-top: 0.4rem;
 }
-/* The duel status row: a slim strip that sits IN the fixed header row, between the 44px menu
-   button (left) and the brand/logo (right), so it can never cover either. Trimmed after the
-   two-phone playtest: the opponent's name, the turn word and the presence indicator only. Resign
-   lives in the pause menu; who-starts is said once by the lottery reveal; the deadline lives in
-   the match list.
-   NO BOX: the strip carries no background, border, radius or shadow of its own, so it reads as
-   the header's own text. It used to paint a green-tinted dark panel behind itself, which the owner
-   saw as a "greenish frame" across the top of the screen; the words simply sit on the header now,
-   exactly like the menu button and the brand beside them. */
+/* The duel status row: the ONE fixed-height lane that sits IN the fixed header row, between the
+   44px menu button (left) and the brand/logo (right), so it can never cover either. Owner's
+   cleanup (2026-10-14): ONE short message at a time, never a second line, never a frame, and never
+   a single pixel over the board.
+   NO BOX: no background, border, radius or shadow on the lane or its words, so it reads as the
+   header's own text, exactly like the menu button and the brand beside them.
+   CLIPPED: overflow:hidden plus contain:paint mean nothing inside can draw outside its own box.
+   CLICK-THROUGH: the words are not controls, so a tap on them reaches the board (or the header)
+   underneath; only a real control (the live pill) takes a tap of its own. */
 .duel-hud {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
@@ -220,128 +220,90 @@ export const ONLINE_CSS = `
   z-index: 8;
   box-sizing: border-box;
   display: flex;
+  flex-wrap: nowrap;          /* the lane NEVER wraps */
+  align-items: center;
+  column-gap: 8px;
+  padding: 0 2px;
+  font-size: 0.8rem;
+  line-height: 1;
+  /* ONE fixed row, the same height as the menu button: it never grows or shrinks. */
+  height: var(--hud-h, 44px);
+  min-height: var(--hud-h, 44px);
+  max-height: var(--hud-h, 44px);
+  overflow: hidden;
+  contain: paint;
+  background: none; /* no frame, no fill — the header's own surface shows through */
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+/* The lane's own clipping box: one row of text inside the fixed lane. */
+.duel-hud .duel-lane {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
   flex-wrap: nowrap;
   align-items: center;
   column-gap: 8px;
-  row-gap: 2px;
-  padding: 0 2px;
-  font-size: 0.8rem;
-  line-height: 1.15;
-  min-height: 44px;
-  overflow: visible;
-  background: none; /* see above: no frame, no fill — the header's own surface shows through */
+  overflow: hidden;
+  contain: paint;
+}
+/* The text viewport: one line, clipped. The soft fade appears only while the words ticker. */
+.duel-hud .duel-msg {
+  order: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  color: inherit;
+  background: none;
   border: 0;
   box-shadow: none;
-  /* CLICK-THROUGH. The strip is text over the top edge of the screen — and, on a small phone, over
-     the map. Its words are not controls, so a tap on them must reach the board underneath instead
-     of being swallowed by the strip's box. Only a real control inside it (the live pill) takes a
-     tap of its own; pointer-events: auto is put back on that one below. */
-  pointer-events: none;
+  outline: none;
 }
-/* The ONLY interactive thing in the strip (it lives in live/ui.ts and shows "Go live"). */
-.duel-hud .live-pill { pointer-events: auto; }
-.duel-hud > * {
-  min-width: 0;
+.duel-hud .duel-msg[hidden] { display: none; }
+.duel-hud .duel-msg[data-scroll='1'] {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
-.duel-hud .duel-opp {
-  display: none; /* the phone is too narrow for a name; the board and score already say who is who */
-  order: 0;
-  flex: 0 1 auto;
-  max-width: 8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The track the ticker moves. A transform animation the browser drives — never per-frame JS. */
+.duel-hud .duel-track { display: inline-block; white-space: nowrap; will-change: transform; }
+/* Reduce motion: nothing scrolls — the words ellipsise cleanly instead. */
+.reduce-motion .duel-hud .duel-track { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) {
+  .duel-hud .duel-track { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 }
-.duel-hud [data-duel-turn] {
-  order: 1;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.duel-hud .duel-presence {
+.duel-hud .duel-msg[data-tone='amber'] { color: #d4a24a; }
+.duel-hud .duel-msg[data-tone='red'], .duel-hud .duel-msg[data-tone='danger'] { color: var(--c-danger, #e0735c); }
+
+/* The live clock: the ONLY number in the lane. Plain text on the header — no chip, no dot. */
+.duel-hud .duel-urgency {
   order: 2;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: none;
+  border: 0;
+}
+.duel-hud .duel-urgency[hidden] { display: none; }
+
+/* Hidden state hooks (never painted): the lane shows ONE message, but the opponent name and the
+   current notice stay readable to the page's own tests and the frame audit. */
+.duel-hud .duel-opp,
+.duel-hud .duel-notice { display: none; }
+/* Presence: a small dot plus a word — never colour alone, never a boxed badge. Nothing is drawn
+   until a real state is reported (presence is not wired yet), so "unknown" is hidden. */
+.duel-hud [data-duel-presence] {
+  order: 3;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
 }
-.duel-hud .duel-notice {
-  order: 9;
-  flex: 1 1 auto;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: right;
-}
-/* Phones: one slim row — the turn word (flexes, ellipsises) then the presence dot + word.
-   A transient notice wraps onto its own line underneath, so the strip stays tidy at 360x640. */
-@media (max-width: 600px) {
-  .duel-hud {
-    flex-wrap: wrap;
-    align-content: center;
-    padding: 1px 2px;
-    line-height: 1.1;
-  }
-  .duel-hud .duel-opp {
-    display: none;
-  }
-  .duel-hud .duel-urgency {
-    /* Its own tidy line rather than a truncated word on a narrow phone. */
-    flex-basis: 100%;
-    order: 4;
-  }
-  .duel-hud .duel-notice {
-    flex-basis: 100%;
-    text-align: left;
-    max-width: 100%;
-  }
-}
-/* Wider screens have room for the opponent's name and a single, tidy row. */
-@media (min-width: 601px) {
-  .duel-hud {
-    flex-wrap: nowrap;
-    height: var(--hud-h, 44px);
-  }
-  .duel-hud .duel-opp {
-    display: inline-flex;
-    align-items: center;
-    order: 0;
-  }
-}
-/* Mid-match deadline urgency (owner's choice: urgency only). Nothing is shown with a full day
-   left; amber under 2 hours, red under 15 minutes. It lives INSIDE this strip — the element whose
-   geometry is already proven never to cover the menu button, the brand or the board — and the word
-   itself carries the meaning, so it is never colour alone. It is a role="status" region, so it is
-   announced only when the tone crosses a threshold, never as a ticking clock. */
-.duel-hud .duel-urgency {
-  order: 3;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.duel-hud .duel-urgency[hidden] {
-  display: none;
-}
-.duel-hud .duel-urgency[data-tone='amber'] {
-  color: #d4a24a;
-}
-.duel-hud .duel-urgency[data-tone='red'] {
-  color: var(--c-danger, #e0735c);
-}
-
-/* Presence: a dot plus a word — never colour alone.
-   Presence is NOT wired yet (the channel's track() is a deliberate no-op), so the state is always
-   "unknown". Showing a dot plus the word "Unknown" is a fabricated, misleading signal — the owner
-   saw it as a "small green box" — so nothing is drawn until a real state is reported. The dot only
-   appears for a genuinely known state, and its colour is never the only cue (the word travels too). */
-.duel-hud [data-duel-presence][data-presence="unknown"] {
-  display: none;
-}
+.duel-hud [data-duel-presence][data-presence="unknown"] { display: none; }
 .duel-hud [data-duel-presence]::before {
   content: '';
   display: inline-block;
@@ -354,7 +316,30 @@ export const ONLINE_CSS = `
 }
 .duel-hud [data-duel-presence][data-presence="online"]::before { background: #8fbf6a; }
 .duel-hud [data-duel-presence][data-presence="away"]::before { background: #c9a35a; }
-.duel-hud .duel-notice {
-  color: #e2c48a;
+
+/* The nodes the live module injects into this lane. Raising the specificity with #duel-hud means
+   these neutralisations win no matter which stylesheet is injected last.
+   - the old timed chip and its lamp circle are GONE (owner's cleanup): the plain m:ss
+     clock is the only number, so hide both the chip and any second circle outright;
+   - the "Real time" pill is a control, not a chip: it keeps its 44px tap target but loses every
+     frame (no border, background, radius or shadow) so it reads as plain header text;
+   - the two small circles beside the old chip were the chip's lamp and the clock's dot. */
+#duel-hud .live-chip,
+#duel-hud .live-clock-dot { display: none !important; }
+#duel-hud .live-pill {
+  order: 3;
+  pointer-events: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0 2px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
 }
+#duel-hud .live-pill::after { inset: -6px 0; } /* keep the 44px touch target without a frame */
+#duel-hud .live-pill[disabled] { border: 0; opacity: .62; }
+#duel-hud .live-pill .dot { display: none; }
+
 `;
