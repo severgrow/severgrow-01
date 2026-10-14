@@ -137,7 +137,7 @@ export const RING_FIT = 0.96;
 export const RING_STROKE_PX = 2;
 
 /** The ring's elements: a black under-stroke (`sh`), the time track (`bg`) and the arc (`fg`). */
-type RingParts = { svg: SVGSVGElement; fg: SVGCircleElement; sh: SVGCircleElement; length: number };
+type RingParts = { svg: SVGSVGElement; fg: SVGCircleElement; sh: SVGCircleElement };
 
 /**
  * Build the ring in a `size`-px box. The viewBox is the pixel box, so every stroke width below is a
@@ -166,7 +166,7 @@ const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: num
     svg.append(node);
     return node;
   });
-  const [sh, bg, fg] = nodes as [SVGCircleElement, SVGCircleElement, SVGCircleElement];
+  const [sh, , fg] = nodes as [SVGCircleElement, SVGCircleElement, SVGCircleElement];
   const length = 2 * Math.PI * Number(fg.getAttribute('r'));
   for (const node of nodes) node.style.strokeDasharray = `${length}`;
   return { svg, fg, sh };
@@ -220,7 +220,8 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   panel.setAttribute('aria-modal', 'true');
   // The challenge window's countdown keeps its own compact ring (a 44 px box, 22 px outer radius) —
   // this is NOT the home ring and its look is unchanged.
-  const { svg, fg, length } = ringSvg('lg-ring', 22, { fg: 3, track: 3, shadow: 3 });
+  const { svg, fg } = ringSvg('lg-ring', 22, { fg: 3, track: 3, shadow: 3 });
+  const length = 2 * Math.PI * Number(fg.getAttribute('r'));
   const name = el('div', 'lg-name');
   const what = el('div', 'lg-what');
   const terms = el('div', 'lg-terms');
