@@ -28,7 +28,7 @@ export const finalTurns = (v: Pick<View, 'config' | 'turnNumber' | 'deckCount'>)
   const max = v.config.maxTurnsPerPlayer;
   const left = max > 0 ? max - Math.ceil(v.turnNumber / 2) + 1 : null; // this turn included
   if (left !== null && left <= FINAL_TURNS) return { final: true, turnsLeft: left, reason: 'limit', banner: left <= 1 ? 'Last turn' : `Last ${left} turns` };
-  if (!v.config.reshuffleDiscard && v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Deck empty: last turn' : 'The deck is running low' };
+  if (!v.config.reshuffleDiscard && v.deckCount <= FINAL_DECK) return { final: true, turnsLeft: null, reason: 'deck', banner: v.deckCount === 0 ? 'Draw pile out: last turn' : 'Draw pile running low' };
   return { final: false, turnsLeft: left, reason: null, banner: null };
 };
 

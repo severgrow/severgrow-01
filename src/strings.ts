@@ -290,7 +290,7 @@ export const RESULT = Object.freeze({
   knockUndercutWon: 'You knocked but did not finish ahead.',
   knockUndercutLost: `${OPP.The} knocked and you held on.`,
   turnLimit: "Time's up: 30 turns each. The higher score wins.",
-  deckEnd: 'The deck ran out. The higher score wins.',
+  deckEnd: 'The Draw pile ran out. The higher score wins.',
   /** Appended when the raw scores were level and tile strength decided it. */
   decidedByStrength: ' Scores were level; higher total tile strength decided it.',
   /** Appended when scores and tile strength both matched — a true draw. */
@@ -358,15 +358,20 @@ export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns 
 
 /**
  * The two piles on the board, named the way the tutorial names them: "Draw pile", "Throw pile"
- * (the recorded word list in docs/DECISIONS.md). One source of truth for the pile's label and its
- * accessible name; the pre-render labels in web/index.html mirror `draw`/`discard`.
- * In the Futa04 skin the visible label is hidden, so `draw` is mostly what a screen reader and a
- * long-press tooltip say. `lastCard` is the deck's own clock label, not a pile name.
+ * (the recorded word list in docs/DECISIONS.md). One source of truth for the names: the board
+ * shows the short forms, the accessible label uses the full ones. The pre-render labels in
+ * web/index.html mirror `drawShort`/`discardShort`. `lastCard` is the deck's own clock label.
  */
 export const PILES = Object.freeze({
   draw: 'Draw pile',
   discard: 'Throw pile',
-  lastCard: 'Last card',
+  /** The short forms the pile shows on the board; the full names stay the accessible label. */
+  drawShort: 'Draw',
+  discardShort: 'Throw',
+  /** The Draw pile's own clock label when one card is left. "Last" is the longest form the pile
+   *  fits: "Last card" (≈66px) overflows the ≈50px pile and clips, so the amber count carries the
+   *  rest. The word stays, so the state is never signalled by colour alone. */
+  lastCard: 'Last',
 });
 
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */
@@ -439,7 +444,7 @@ export const FRUIT = Object.freeze({
   /** the one-time tip (re-openable from How to play) */
   tip: `Bombs: play one on an ${lower} tile that touches yours to remove it, even a 9.`,
   /** How to play (HTML) */
-  howto: ` <b>Bombs</b> (4 in the deck) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. A Bomb uses your Grow for the turn (one Grow or one Bomb per turn; Bloom and Blast are still fine). It never makes a numbered combo; you can throw it, and then ${OPP.the} can take it.`,
+  howto: ` <b>Bombs</b> (4 in the Draw pile) have no number. In your Grow step, play one on an ${lower} tile that touches yours (your home counts): that tile is removed, even a 9, and anything that hung on it is cut off. A Bomb uses your Grow for the turn (one Grow or one Bomb per turn; Bloom and Blast are still fine). It never makes a numbered combo; you can throw it, and then ${OPP.the} can take it.`,
   /** first time a Bomb is picked */
   anyStrength: 'Any strength, even a 9',
   /** the hint while a Bomb is picked */
@@ -541,7 +546,7 @@ export const TUTORIAL = Object.freeze({
     lines: Object.freeze([
       'Surround their home to win at once.',
       'Or have the most points when the Draw pile runs out.',
-      'Thirty turns each; the deck end gives each side a fair last turn.',
+      'Thirty turns each; when the Draw pile runs out, each side gets a fair last turn.',
       'Ties go to the stronger tiles.',
     ]),
   }),

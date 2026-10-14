@@ -30,7 +30,7 @@ describe('long game copy is shortened for the physical window', () => {
     expect(ledToken('Your tree is surrounded!')).toBe('CAUGHT');
     expect(ledToken('Home in danger')).toBe('WARN');
     expect(ledToken('Last turn')).toBe('LAST');
-    expect(ledToken('The deck is running low')).toBe('LOW');
+    expect(ledToken('Draw pile running low')).toBe('LOW');
   });
 
   it('leaves unknown copy alone so it keeps its scroll/shorthand path', () => {

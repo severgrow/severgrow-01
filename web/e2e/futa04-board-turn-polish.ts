@@ -917,7 +917,7 @@ async function drawGlow() {
       equal(await state(page),game,`${label}: exact real position resumes`);
       equal(await page.locator('#discard').evaluate(el=>el.classList.contains('futa04-bloom-draw')),wanted,`${label}: only a new Bloom combination changes the throw-pile highlight`);
       equal(await page.locator('#deck.coach-glow').count(),0,`${label}: no square Deck recommendation`);
-      equal(await page.locator('.pile-label:visible').count(),0,`${label}: pile labels are hidden`);
+      equal((await page.locator('.pile-label:visible').allInnerTexts()).map((s)=>s.trim()).sort().join(','),'Draw,Throw',`${label}: the piles show their short name`);
       check((await page.locator('#discard').getAttribute('aria-label'))?.startsWith('Throw pile:'),`${label}: accessible pile name remains`);
       equal(await state(page),game,`${label}: highlighting changes no game state`);
     } finally { await page.close(); }

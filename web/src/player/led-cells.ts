@@ -144,8 +144,8 @@ export function ledToken(message: string): string | null {
   if ((n = num(/^CUT OFF (\d+)!$/))) return `CUT-${n}`;
   if ((n = num(/^LOST (\d+) TILES$/))) return `LOST${n}`;
   if ((n = num(/^LAST (\d+) TURNS$/))) return `LAST${n}`;
-  if (m === 'LAST TURN' || m === 'DECK EMPTY: LAST TURN') return 'LAST';
-  if (m === 'THE DECK IS RUNNING LOW') return 'LOW';
+  if (m === 'LAST TURN' || m === 'DRAW PILE OUT: LAST TURN') return 'LAST';
+  if (m === 'DRAW PILE RUNNING LOW') return 'LOW';
   if (m.startsWith('REPLAY:')) return 'REPLAY';
   // The map a joined online duel is played on (the JOINER's line when it is not what they picked).
   if (m === "OPPONENT'S GAME: SMALL MAP") return 'SMALL MAP';
