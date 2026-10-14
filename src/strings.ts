@@ -280,7 +280,7 @@ export const RESULT = Object.freeze({
   knockUndercutWon: 'You knocked but did not finish ahead.',
   knockUndercutLost: `${OPP.The} knocked and you held on.`,
   turnLimit: "Time's up: 30 turns each. The higher score wins.",
-  deckEnd: 'The Draw pile ran out. The higher score wins.',
+  deckEnd: 'The cards ran out. The higher score wins.',
   /** Appended when the raw scores were level and tile strength decided it. */
   decidedByStrength: ' Scores were level; higher total tile strength decided it.',
   /** Appended when scores and tile strength both matched — a true draw. */

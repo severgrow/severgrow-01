@@ -35,21 +35,21 @@ describe('finish copy: reasons are full sentences, from the reader seat', () => 
   });
 
   it('keeps the whole deck-end / turn-limit sentence (never a bare "Final score.")', () => {
-    expect(resultReason(res(0, 'deck_exhaustion'), 0)).toBe('The Draw pile ran out. The higher score wins.');
+    expect(resultReason(res(0, 'deck_exhaustion'), 0)).toBe('The cards ran out. The higher score wins.');
     expect(resultReason(res(0, 'turn_limit'), 0)).toBe("Time's up: 30 turns each. The higher score wins.");
   });
 
   it('explains a score decided by tile strength', () => {
     const r = res(0, 'deck_exhaustion', { scores: [9, 9], strengths: [30, 24] });
     expect(resultReason(r, 0)).toBe(
-      'The Draw pile ran out. The higher score wins. Scores were level; higher total tile strength decided it.',
+      'The cards ran out. The higher score wins. Scores were level; higher total tile strength decided it.',
     );
   });
 
   it('calls a level-score, level-strength finish a true draw', () => {
     const r = res(null, 'deck_exhaustion', { scores: [8, 8], strengths: [24, 24] });
     expect(resultReason(r, 0)).toBe(
-      'The Draw pile ran out. The higher score wins. Scores and tile strengths matched \u2014 a true draw.',
+      'The cards ran out. The higher score wins. Scores and tile strengths matched \u2014 a true draw.',
     );
     expect(resultReason(res(null, 'double_strangle'), 0)).toBe('Both homes were surrounded at once.');
   });
