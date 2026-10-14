@@ -23,6 +23,28 @@ if (channel === 'futa-test') {
 }
 if (product) for (const prefix of ['besley-', 'fragment-mono-', 'guide-', 'thumb-', 'camera-', 'information-', 'help-', 'atmosphere-']) assert(names.some(n=>n.startsWith(prefix)), `missing ${prefix}`);
 
+// --- Icon contract ---------------------------------------------------------------------------
+// Add-to-Home-Screen breaks silently: a missing icon, a wrong-size PNG or an apple-touch-icon with
+// an alpha channel (iOS paints transparency solid black) never fails the build, only the phone. Pin
+// the contract here so the manifest, the index.html links and the real files can never drift apart.
+function pngInfo(file) {
+  const buf = readFileSync(file);
+  assert(buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), `${file} is not a PNG`);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), colorType: buf[25] };
+}
+for (const icon of manifest.icons ?? []) {
+  const file = `${dir}/${icon.src}`;
+  assert(existsSync(file), `manifest icon missing from the build: ${icon.src}`);
+  const info = pngInfo(file);
+  const [w, h] = String(icon.sizes ?? '').split('x').map(Number);
+  assert(info.width === w && info.height === h, `${icon.src} is ${info.width}x${info.height}, manifest declares ${icon.sizes}`);
+}
+const apple = /<link rel="apple-touch-icon" href="\.\/([^"]+)"/.exec(html);
+assert(apple, 'index.html is missing its apple-touch-icon link');
+assert(existsSync(`${dir}/${apple[1]}`), `apple-touch-icon missing from the build: ${apple[1]}`);
+const appleType = pngInfo(`${dir}/${apple[1]}`).colorType;
+assert(appleType === 2 || appleType === 3, `apple-touch-icon ${apple[1]} carries an alpha channel (PNG colour type ${appleType}) — iOS renders transparent pixels black`);
+
 // Regression guard for the /futa0.5/ live build (the exact class of silent failure that shipped a
 // bundle with no online config, so create-duel / find-opponent showed "Something went wrong.
 // Try again."). The online layer is code-split into LAZY chunks that index.html never references,
