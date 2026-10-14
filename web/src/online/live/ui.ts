@@ -124,64 +124,58 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''):
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 /**
- * The home timeout ring's geometry, as fractions of the HOME TILE's width on screen.
+ * The home timeout ring's geometry.
  *
- * A pointy-top hex of radius S has width √3·S and height 2·S, so its incircle's diameter IS the
- * width: anything with a diameter ≤ 0.866·width fits inside the silhouette with room to spare, and
- * the inner 74% of the width sits inside the incircle for every rotation the board may take.
- * `RADIUS_FRAC` (0.43 → diameter 0.86 of the width) is that fit, chosen so the arc, its 1 px track
- * and its 1.6 px shadow all remain inside the hex — the numbers are asserted by the e2e.
+ * The tile is a hexagon, so the bound that can never leak is its INNER radius, and for a regular
+ * hexagon that is `min(width, height) / 2` whichever way the board is turned (flat-top: the width is
+ * corner to corner; pointy-top: the height is). The ring's whole outer edge — the black under-stroke
+ * included — is fitted inside 96% of that, so the arc reads as drawn ON the tile and never crosses
+ * its borders. The e2e measures every sample of the outer edge against the real hexagon.
  */
-export const RING_RADIUS_FRAC = 0.43;
-/** The arc's stroke width in px at a 30 px tile, scaled with the tile so it stays proportional. */
+export const RING_FIT = 0.96;
+/** The arc's stroke width at a 60 px tile, scaled with the tile so it stays proportional. */
 export const RING_STROKE_PX = 2;
-const RING_TRACK_EXTRA_PX = 1.5;
-const RING_SHADOW_EXTRA_PX = 3;
 
 /** The ring's elements: a black under-stroke (`sh`), the time track (`bg`) and the arc (`fg`). */
 type RingParts = { svg: SVGSVGElement; fg: SVGCircleElement; sh: SVGCircleElement; length: number };
 
 /**
- * Build the ring for a tile of `size` px. The viewBox is the pixel box, so every stroke width below
- * is a literal px and the geometry can be measured against the tile directly.
+ * Build the ring in a `size`-px box. The viewBox is the pixel box, so every stroke width below is a
+ * literal px and the geometry can be measured against the tile directly. `outerPx` is the radius the
+ * widest stroke's OUTER edge reaches; each circle is pulled in by its own half-stroke so no stroke
+ * can cross that bound.
  */
-const ringSvg = (cls: string, size: number): RingParts => {
+const ringSvg = (cls: string, outerPx: number, strokes: { fg: number; track: number; shadow: number }): RingParts => {
+  const size = outerPx * 2;
   const svg = document.createElementNS(SVGNS, 'svg');
   svg.setAttribute('class', cls);
   svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
   svg.setAttribute('aria-hidden', 'true');
-  const parts: { node: SVGCircleElement; cls: string; stroke: number }[] = [
-    { node: document.createElementNS(SVGNS, 'circle'), cls: 'sh', stroke: RING_STROKE_PX + RING_SHADOW_EXTRA_PX },
-    { node: document.createElementNS(SVGNS, 'circle'), cls: 'bg', stroke: RING_TRACK_EXTRA_PX },
-    { node: document.createElementNS(SVGNS, 'circle'), cls: 'fg', stroke: RING_STROKE_PX },
+  const order: { cls: string; stroke: number }[] = [
+    { cls: 'sh', stroke: strokes.shadow },
+    { cls: 'bg', stroke: strokes.track },
+    { cls: 'fg', stroke: strokes.fg },
   ];
-  for (const p of parts) {
-    p.node.setAttribute('class', p.cls);
-    p.node.setAttribute('stroke-width', String(p.stroke));
-    svg.append(p.node);
-  }
-  const sh = parts[0]!.node;
-  const bg = parts[1]!.node;
-  const fg = parts[2]!.node;
-  const length = setRingSize(svg, size);
-  fg.style.strokeDasharray = `${length}`;
-  bg.style.strokeDasharray = `${length}`;
-  sh.style.strokeDasharray = `${length}`;
-  return { svg, fg, sh, length };
+  const nodes = order.map((spec) => {
+    const node = document.createElementNS(SVGNS, 'circle');
+    node.setAttribute('class', spec.cls);
+    node.setAttribute('stroke-width', String(spec.stroke));
+    node.setAttribute('cx', String(size / 2));
+    node.setAttribute('cy', String(size / 2));
+    node.setAttribute('r', String(Math.max(1, outerPx - spec.stroke / 2)));
+    svg.append(node);
+    return node;
+  });
+  const [sh, bg, fg] = nodes as [SVGCircleElement, SVGCircleElement, SVGCircleElement];
+  const length = 2 * Math.PI * Number(fg.getAttribute('r'));
+  for (const node of nodes) node.style.strokeDasharray = `${length}`;
+  return { svg, fg, sh };
 };
 
-/** Size the ring's circles to a tile of `size` px; returns the arc's circumference. */
-const setRingSize = (svg: SVGSVGElement, size: number): number => {
-  const r = size * RING_RADIUS_FRAC;
-  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
-  const stroke = (node: Element | null): number => Number(node?.getAttribute('stroke-width') ?? RING_STROKE_PX);
-  svg.querySelectorAll('circle').forEach((circle) => {
-    circle.setAttribute('cx', String(size / 2));
-    circle.setAttribute('cy', String(size / 2));
-    // The outer edge of each stroke (not its centre line) is what must stay inside the hex.
-    circle.setAttribute('r', String(Math.max(1, r - (stroke(circle) - RING_STROKE_PX) / 2)));
-  });
-  return 2 * Math.PI * Math.max(1, r);
+/** The stroke widths for a tile of `tilePx` (the arc, the hairlines, the under-shadow). */
+export const ringStrokes = (tilePx: number): { fg: number; track: number; shadow: number } => {
+  const fg = Math.max(1.4, Math.min(2.4, (RING_STROKE_PX * tilePx) / 60));
+  return { fg, track: Math.max(1, fg - 0.6), shadow: fg + 2 };
 };
 
 /**
@@ -224,16 +218,9 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   panel.hidden = true;
   panel.setAttribute('role', 'alertdialog');
   panel.setAttribute('aria-modal', 'true');
-  // The challenge window's countdown keeps its own compact ring (44 px box, radius 19, in the
-  // 0-100 viewBox the window was measured with) — this is not the home ring.
-  const { svg, fg, length } = ringSvg('lg-ring', 44);
-  const lgR = 19;
-  for (const c of svg.querySelectorAll('circle')) {
-    c.setAttribute('cx', '22');
-    c.setAttribute('cy', '22');
-    c.setAttribute('r', String(lgR));
-  }
-  for (const c of svg.querySelectorAll('circle')) c.style.strokeDasharray = String(2 * Math.PI * lgR);
+  // The challenge window's countdown keeps its own compact ring (a 44 px box, 22 px outer radius) —
+  // this is NOT the home ring and its look is unchanged.
+  const { svg, fg, length } = ringSvg('lg-ring', 22, { fg: 3, track: 3, shadow: 3 });
   const name = el('div', 'lg-name');
   const what = el('div', 'lg-what');
   const terms = el('div', 'lg-terms');
@@ -393,10 +380,9 @@ export const createHud = () => {
   const lamp = el('span', 'lamp');
   const text = el('span', 'text');
   chip.append(lamp, text);
-  // The arc is inset from the tile's own edge (radius 42 of a 100 box, not 46): it reads as a thin
-  // ornamental line around the home rather than a hoop pressed against it.
-  // The ring is sized to the HOME TILE at run time (see `place`), so the SVG starts empty-sized.
-  const { svg: ring, fg, sh } = ringSvg('live-ring', 100);
+  // Sized to the HOME TILE's inner radius at run time (see `place`), so this starting box is only a
+  // placeholder that is replaced before the ring is ever shown.
+  const { svg: ring, fg, sh } = ringSvg('live-ring', 14, { fg: 2, track: 1.4, shadow: 4 });
   const track = ring.querySelector<SVGCircleElement>('.bg')!;
   let ringLength = 0;
   ring.setAttribute('hidden', '');
@@ -421,23 +407,42 @@ export const createHud = () => {
 
   const place = (): boolean => {
     if (!model?.homeKey) return false;
+    // Exposed so the ring can be measured against the exact tile it belongs to (the e2e does this).
+    ring.dataset.homeKey = model.homeKey;
     const hex = document.querySelector<SVGGElement>(`#board .hex-cell[data-key="${model.homeKey}"]`);
     const game = document.getElementById('game');
     if (!hex || !game || game.hidden) return false;
     const r = hex.getBoundingClientRect();
     if (r.width === 0) return false;
-    // The ring is the TILE's own width: a pointy-top hex's incircle diameter IS its width, and the
-    // arc is drawn at 43% of that, so the arc, its track and its black under-stroke all sit inside
-    // the hex silhouette — it can never leak past the tile's borders.
-    const size = r.width;
-    if (Math.abs(Number(ring.dataset.size ?? 0) - size) > 0.5) {
-      ring.dataset.size = String(size);
-      const stroke = RING_STROKE_PX * Math.max(0.75, Math.min(1.6, size / 30));
-      for (const node of [sh, fg]) node.setAttribute('stroke-width', String(stroke + (node === sh ? RING_SHADOW_EXTRA_PX : 0)));
-      track.setAttribute('stroke-width', String(Math.max(1, stroke - 0.5)));
-      ringLength = setRingSize(ring, size);
+    // The tile's inner radius, taken from the hexagon that is actually DRAWN (a cell's bounding box
+    // includes its stroke and its corners, so a box-based guess overshoots and crosses the flats).
+    // A regular hexagon's side length IS its circumradius, so `pathLength / 6` gives R and the inner
+    // radius is R·cos 30°. The whole ring — the black under-stroke included — is fitted inside 96%
+    // of that, so no part of it can cross the tile's borders.
+    const path = hex.querySelector<SVGPathElement>('path.hex');
+    const drawnR = path && path.getTotalLength() > 0 ? path.getTotalLength() / 6 : Math.min(r.width, r.height) / 2;
+    const innerR = drawnR * Math.cos(Math.PI / 6);
+    const tilePx = innerR * 2;
+    const outerPx = innerR * RING_FIT;
+    if (Math.abs(Number(ring.dataset.outer ?? 0) - outerPx) > 0.5) {
+      ring.dataset.outer = String(outerPx);
+      ring.dataset.size = String(tilePx);
+      const strokes = ringStrokes(tilePx);
+      for (const node of [sh, track, fg]) {
+        const w = node === sh ? strokes.shadow : node === track ? strokes.track : strokes.fg;
+        node.setAttribute('stroke-width', String(w));
+        node.setAttribute('r', String(Math.max(1, outerPx - w / 2)));
+      }
+      const size = outerPx * 2;
+      ring.setAttribute('viewBox', `0 0 ${size} ${size}`);
+      for (const node of [sh, track, fg]) {
+        node.setAttribute('cx', String(size / 2));
+        node.setAttribute('cy', String(size / 2));
+      }
+      ringLength = 2 * Math.PI * Number(fg.getAttribute('r'));
       for (const node of [sh, track, fg]) node.style.strokeDasharray = `${ringLength}`;
     }
+    const size = outerPx * 2;
     ring.style.left = `${r.left + r.width / 2 - size / 2}px`;
     ring.style.top = `${r.top + r.height / 2 - size / 2}px`;
     ring.style.width = ring.style.height = `${size}px`;
@@ -466,8 +471,17 @@ export const createHud = () => {
     // little weight and full opacity as the turn runs out.
     const emphasis = urgent ? 1 : 0;
     fg.setAttribute('opacity', emphasis ? '1' : '0.94');
-    const base = RING_STROKE_PX * Math.max(0.75, Math.min(1.6, Number(ring.dataset.size ?? 30) / 30));
-    fg.setAttribute('stroke-width', String(base + emphasis * 0.6));
+    // The late emphasis: the arc gains a little weight without ever reaching past the tile's edge
+    // (its outer bound is fixed by `place`, so a heavier centre line only moves its inner side).
+    const strokes = ringStrokes(Number(ring.dataset.size ?? 60));
+    const outerPx = Number(ring.dataset.outer ?? 0);
+    const fgWidth = strokes.fg + emphasis * 0.4;
+    fg.setAttribute('stroke-width', String(fgWidth));
+    // The heavier arc grows INWARD: its outer edge stays on the bound `place` set, so the late
+    // emphasis can never poke past the tile either.
+    if (outerPx > 0) fg.setAttribute('r', String(Math.max(1, outerPx - fgWidth / 2)));
+    ringLength = 2 * Math.PI * Number(fg.getAttribute('r'));
+    fg.style.strokeDasharray = `${ringLength}`;
     chip.dataset.urgent = urgent ? '1' : '0';
     ring.dataset.urgent = urgent ? '1' : '0';
     text.textContent = urgent ? `${LIVE.live.toUpperCase()} ${secs}s` : LIVE.chip(Math.round(model.limitMs / 1000));
@@ -507,6 +521,8 @@ export const createHud = () => {
       if (!on) {
         ring.setAttribute('hidden', '');
         vignette.hidden = true;
+        // No leftover arc: a go-live pulse that is still on screen when the session ends goes too.
+        document.querySelectorAll('.live-ring[data-live="pulse"]').forEach((node) => node.remove());
         // Leaving live: hand the strip's time slot back to the 24-hour urgency rule.
         const clock = clockEl();
         if (clock && clock.dataset.liveClock === '1') {
@@ -537,8 +553,9 @@ export const createHud = () => {
         const hex = document.querySelector<SVGGElement>(`#board .hex-cell[data-key="${key}"]`);
         if (!hex) continue;
         const r = hex.getBoundingClientRect();
-        const { svg } = ringSvg('live-ring pulse', 100);
-        const size = r.width;
+        const size = ((Math.min(r.width, r.height) / 2) * RING_FIT) * 2;
+        const { svg } = ringSvg('live-ring pulse', size / 2, ringStrokes(size));
+        svg.dataset.live = 'pulse';
         Object.assign(svg.style, { left: `${r.left + r.width / 2 - size / 2}px`, top: `${r.top + r.height / 2 - size / 2}px`, width: `${size}px`, height: `${size}px` });
         svg.dataset.side = key === homeKeys[0] ? 'me' : 'opp';
         document.body.append(svg);
