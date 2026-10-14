@@ -88,8 +88,13 @@ const openHub = async (page: Page, label: string): Promise<void> => {
 };
 
 const inviteCodeOf = async (page: Page): Promise<string> => {
+  // The predicate runs IN THE PAGE: it must not close over Node symbols. Pass the expected length in.
   await page.waitForFunction(
-    () => new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test((document.getElementById('online-invite-code')?.textContent ?? '').trim()),
+    (len: number) =>
+      new RegExp(`^[0-9A-HJKMNP-TV-Z]{${len}}$`).test(
+        (document.getElementById('online-invite-code')?.textContent ?? '').trim(),
+      ),
+    DEFAULT_SERVER_CONFIG.inviteCodeLength,
     { timeout: 20_000 },
   );
   return ((await page.locator('#online-invite-code').textContent()) ?? '').trim();
