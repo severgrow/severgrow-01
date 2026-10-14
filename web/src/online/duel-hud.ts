@@ -96,14 +96,18 @@ export const fillDuelHud = (root: HTMLElement, model: DuelHudModel): void => {
     (notice as HTMLElement).hidden = !model.notice;
   }
   if (urgency) {
-    const { tone, label, sr } = model.urgency ?? deadlineUrgency(null);
-    // Hidden unless the deadline actually matters. The text only changes when the tone crosses a
-    // threshold (hidden → amber → red), so role="status" announces it then, and never ticks.
-    urgency.hidden = tone === null;
-    urgency.textContent = label;
-    if (tone === null) urgency.removeAttribute('data-tone');
-    else urgency.setAttribute('data-tone', tone);
-    if (sr) urgency.setAttribute('aria-label', sr);
-    else urgency.removeAttribute('aria-label');
+    // The live clock owns this slot while a live duel is running (it writes the seconds there);
+    // `fillDuelHud` must not overwrite it with the 24-hour urgency words.
+    if (!(urgency as HTMLElement).dataset.liveClock) {
+      const { tone, label, sr } = model.urgency ?? deadlineUrgency(null);
+      // Hidden unless the deadline actually matters. The text only changes when the tone crosses a
+      // threshold (hidden → amber → red), so role="status" announces it then, and never ticks.
+      urgency.hidden = tone === null;
+      urgency.textContent = label;
+      if (tone === null) urgency.removeAttribute('data-tone');
+      else urgency.setAttribute('data-tone', tone);
+      if (sr) urgency.setAttribute('aria-label', sr);
+      else urgency.removeAttribute('aria-label');
+    }
   }
 };

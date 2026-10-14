@@ -91,6 +91,9 @@ export class OnlineSession {
    * instant the completed turn lands — not one render later.
    */
   private get boardBlocked(): boolean {
+    // A finished match is never gated: once the server says the duel is over, the reveal gate
+    // stops mattering (nothing can be played, and the end screen must not wait on an animation).
+    if (this.finished) return false;
     return this.revealing || this.driver.pendingEvents().length > 0;
   }
 

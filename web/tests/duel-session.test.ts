@@ -286,3 +286,54 @@ describe('catch-up steps from events', () => {
     expect(steps.some((s) => s.k === 'sever')).toBe(true);
   });
 });
+
+describe('a finished match is never gated by an animation', () => {
+  /**
+   * The owner's report: the WINNER's device showed the end screen at once, while the LOSING device
+   * sat on the board (it looked like it was waiting for the turn to time out). A terminal status
+   * has to outrank the reveal gate: nothing can be played once the duel is decided, so an enemy
+   * turn still queued for replay must never keep the gate shut or withhold the end screen.
+   */
+  it('is not revealing, and has a finish screen, even with a queued enemy turn', async () => {
+    const serverState = toActSeat0(21);
+    const base = payloadFor(serverState, 0, 1);
+    // The finishing payload: the match is over AND the last turn's events are still queued.
+    const finishView: State = { ...serverState, phase: 'GAME_OVER', result: { winner: 1, reason: 'strangle', scores: [4, 9] } };
+    const finished = payloadFor(serverState, 0, 2, {
+      status: 'finished',
+      result: { winner: 1, reason: 'strangle', scores: [4, 9] },
+      events: [
+        { t: 'Sprout', player: 1, card: 5, coord: { q: 1, r: -1 } },
+        { t: 'GameEnd', result: { winner: 1, reason: 'strangle', scores: [4, 9] } },
+      ],
+    });
+    finished.view = viewFor(finishView, 0);
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname;
+      if (init.method === 'GET' && path.includes('/view')) {
+        return { status: 200, ok: true, json: async () => ({ ok: true, player: finished, serverNow: Date.now() }) };
+      }
+      return { status: 404, ok: false, json: async () => ({ ok: false, code: 'NOT_FOUND', message: 'no' }) };
+    };
+    const driver = createOnlineDriver({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 'tok',
+      matchId: 'm1',
+      initial: base,
+      setTimer: () => 1,
+      clearTimer: () => undefined,
+    });
+    const os = new OnlineSession(driver);
+    setOnlineSession(os);
+    // Force the finished view through the same path the first poll uses.
+    await driver.start();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(os.finished).toBe(true);
+    expect(driver.pendingEvents().length).toBeGreaterThan(0);
+    expect(os.isRevealing, 'the gate must be open once the duel is decided').toBe(false);
+    expect(os.myTurn).toBe(false);
+    expect(os.legal).toEqual([]);
+    expect(os.finishInfo()?.title).toBe('You lost');
+    setOnlineSession(null);
+  });
+});
