@@ -28,11 +28,32 @@ const url = (file) => {
   return target.href;
 };
 const get = (file) =>
-  execFileSync('curl', ['-fsSL', '--retry', '3', '-H', 'Cache-Control: no-cache', url(file)]);
+  execFileSync('curl', [
+    '-fsSL',
+    '--retry',
+    '3',
+    // A transient 5xx from the Pages/CDN edge must not be read as "the bytes changed".
+    '--retry-all-errors',
+    '-H',
+    'Cache-Control: no-cache',
+    url(file),
+  ]);
 const status = (file) =>
   execFileSync(
     'curl',
-    ['-sSL', '-o', '/dev/null', '-w', '%{http_code}', '--retry', '3', '-H', 'Cache-Control: no-cache', url(file)],
+    [
+      '-sSL',
+      '--retry',
+      '3',
+      '--retry-all-errors',
+      '-o',
+      '/dev/null',
+      '-w',
+      '%{http_code}',
+      '-H',
+      'Cache-Control: no-cache',
+      url(file),
+    ],
     { encoding: 'utf8' },
   ).trim();
 
