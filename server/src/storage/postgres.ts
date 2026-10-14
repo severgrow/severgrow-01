@@ -669,6 +669,23 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     }
   },
 
+  async cancelWaitingMatch(playerId: string, matchId: string): Promise<boolean> {
+    // One guarded statement: the match must be WAITING, the caller must be a participant AND its
+    // only participant, so an active/finished match or somebody else's match is never retired.
+    // Deleting cascades to participants and moves, and removes the invite code with it, so no
+    // later join can resolve the code. A repeat call simply matches no row (calm, idempotent).
+    const { rows } = await pool.query(
+      `delete from matches m
+        where m.id = $1
+          and m.status = 'waiting'
+          and exists (select 1 from match_participants p where p.match_id = m.id and p.player_id = $2)
+          and (select count(*)::int from match_participants p2 where p2.match_id = m.id) = 1
+        returning m.id`,
+      [matchId, playerId],
+    );
+    return rows.length > 0;
+  },
+
   async matchById(id: string): Promise<MatchRecord | null> {
     const { rows } = await pool.query('select * from matches where id = $1', [id]);
     return rows[0] ? rowToMatch(rows[0]) : null;

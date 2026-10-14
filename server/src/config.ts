@@ -77,6 +77,10 @@ export type ServerConfig = {
     guestPerIpPerHour: number;
     joinPerPlayerPerHour: number;
     joinPerIpPerHour: number;
+    /** New matches a single player may CREATE per hour (guards create/cancel loops). */
+    createPerPlayerPerHour: number;
+    /** New matches from a single IP per hour (a bounded, NAT-friendly anti-abuse cap). */
+    createPerIpPerHour: number;
     linkCodePerPlayerPerHour: number;
     linkRedeemPerIpPerHour: number;
     actionsPerPlayerPerMinute: number;
@@ -230,6 +234,12 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
     guestPerIpPerHour: envInt('RATE_GUEST_PER_IP_PER_HOUR', 200),
     joinPerPlayerPerHour: envInt('RATE_JOIN_PER_PLAYER_PER_HOUR', 60),
     joinPerIpPerHour: envInt('RATE_JOIN_PER_IP_PER_HOUR', 400),
+    // Match creation is the one lifecycle write that had NO limit; a create/cancel loop could mint
+    // rows (and burn permanent invite codes) without bound. Both a per-player and a per-IP cap are
+    // Postgres-backed, so they hold across Edge isolates. Generous enough that a real player never
+    // feels them.
+    createPerPlayerPerHour: envInt('RATE_CREATE_PER_PLAYER_PER_HOUR', 30),
+    createPerIpPerHour: envInt('RATE_CREATE_PER_IP_PER_HOUR', 120),
     linkCodePerPlayerPerHour: envInt('RATE_LINK_CODE_PER_PLAYER_PER_HOUR', 10),
     linkRedeemPerIpPerHour: envInt('RATE_LINK_REDEEM_PER_IP_PER_HOUR', 20),
     actionsPerPlayerPerMinute: envInt('RATE_ACTIONS_PER_PLAYER_PER_MINUTE', 120),

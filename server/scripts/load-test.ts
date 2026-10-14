@@ -346,6 +346,8 @@ const main = async (): Promise<void> => {
       guestPerIpPerHour: 10_000_000,
       joinPerPlayerPerHour: 10_000_000,
       joinPerIpPerHour: 10_000_000,
+      createPerPlayerPerHour: 10_000_000,
+      createPerIpPerHour: 10_000_000,
       linkCodePerPlayerPerHour: 10_000_000,
       linkRedeemPerIpPerHour: 10_000_000,
       actionsPerPlayerPerMinute: 10_000_000,

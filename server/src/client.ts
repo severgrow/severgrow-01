@@ -5,6 +5,7 @@
 import type { Player } from '../../src/engine/index.js';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type {
+  CancelMatchResponse,
   CancelSearchResponse,
   CreateGuestResponse,
   CreateMatchResponse,
@@ -182,6 +183,14 @@ export class DuelClient {
   /** Stop a parked Find Opponent search (retires the waiting open-queue match). */
   cancelSearch(token: string): Promise<CancelSearchResponse> {
     return this.request<CancelSearchResponse>('POST', '/v1/matchmaking/cancel', { token, body: {} });
+  }
+
+  /** Cancel (retire) a WAITING match you own — the invite screen's "Cancel match". */
+  cancelMatch(token: string, matchId: string): Promise<CancelMatchResponse> {
+    return this.request<CancelMatchResponse>('POST', `/v1/matches/${encodeURIComponent(matchId)}/cancel`, {
+      token,
+      body: {},
+    });
   }
 
   getMatch(token: string, matchId: string): Promise<MatchSummaryResponse> {

@@ -96,6 +96,32 @@ describe('NAT: abuse protection is unchanged', () => {
     expect(error.message).toBe('Too many requests. Try again in a moment.');
   });
 
+  it('bounds match CREATION per player and per IP with the friendly 429', async () => {
+    // Creation is the one lifecycle write that had no limit; a create/cancel loop could mint rows
+    // (and burn permanent invite codes) without bound. Both caps are Postgres-backed.
+    const perPlayer = new MatchService({
+      storage: new MemoryStorage(),
+      config: config({ createPerPlayerPerHour: 2, createPerIpPerHour: 1_000 }),
+    });
+    const a = await perPlayer.createGuest();
+    const pa = await perPlayer.authenticate(a.token);
+    await perPlayer.createMatch(pa);
+    await perPlayer.createMatch(pa);
+    const error = await expectCode(perPlayer.createMatch(pa), 'RATE_LIMITED');
+    expect(error.status).toBe(429);
+    expect(error.message).toBe('Too many requests. Try again in a moment.');
+
+    const perIp = new MatchService({
+      storage: new MemoryStorage(),
+      config: config({ createPerPlayerPerHour: 1_000, createPerIpPerHour: 2 }),
+    });
+    const b = await perIp.createGuest(null, '9.9.9.9');
+    const pb = await perIp.authenticate(b.token);
+    await perIp.createMatch(pb, {}, '9.9.9.9');
+    await perIp.createMatch(pb, {}, '9.9.9.9');
+    await expectCode(perIp.createMatch(pb, {}, '9.9.9.9'), 'RATE_LIMITED');
+  });
+
   it('still caps actions per player per minute', async () => {
     const service = new MatchService({
       storage: new MemoryStorage(),

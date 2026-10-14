@@ -57,6 +57,8 @@ const HIGH_LIMITS: ServerConfig['rateLimits'] = {
   guestPerIpPerHour: 1_000_000,
   joinPerPlayerPerHour: 1_000_000,
   joinPerIpPerHour: 1_000_000,
+  createPerPlayerPerHour: 1_000_000,
+  createPerIpPerHour: 1_000_000,
   linkCodePerPlayerPerHour: 1_000_000,
   linkRedeemPerIpPerHour: 1_000_000,
   actionsPerPlayerPerMinute: 10_000_000,

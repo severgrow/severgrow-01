@@ -246,7 +246,14 @@ export class MatchService {
   async createMatch(
     player: PlayerRecord,
     options: { openQueue?: boolean } = {},
+    clientIp: string | null = null,
   ): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
+    // Creation is the one lifecycle write with no natural cap besides the open-match limit, so it
+    // carries a bounded per-player AND per-IP rate limit (a create/cancel loop is the abuse it
+    // stops). Both buckets are Postgres-backed, so the limit holds across Edge isolates.
+    await this.rateLimit(`create:player:${player.id}`, HOUR_MS, this.config.rateLimits.createPerPlayerPerHour);
+    await this.rateLimit(`create:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.createPerIpPerHour);
+
     const existing = await this.storage.matchesOfPlayer(player.id);
     if (existing.filter((m) => m.status !== 'finished').length >= this.config.maxOpenMatchesPerPlayer) {
       throw new ApiError('TOO_MANY_MATCHES', 'Finish or leave a match before starting another.');
@@ -334,6 +341,20 @@ export class MatchService {
   async cancelSearch(player: PlayerRecord): Promise<{ cancelled: boolean }> {
     await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
     return { cancelled: await this.storage.cancelOpenQueueMatch(player.id, this.now()) };
+  }
+
+  /**
+   * Cancel the caller's own WAITING match (the invite screen's "Cancel match" — an invite nobody
+   * ever joined, or a parked search). Only the owner may cancel; the match must be `waiting` with
+   * the caller as its sole participant. Idempotent, and a cancelled match can no longer be joined
+   * (its code resolves to nothing). Reuses the join budget so it cannot be hammered.
+   */
+  async cancelWaitingMatch(player: PlayerRecord, matchId: string): Promise<{ cancelled: boolean }> {
+    await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
+    if (typeof matchId !== 'string' || matchId.length === 0) {
+      throw new ApiError('INVALID_REQUEST', 'A match id is required.');
+    }
+    return { cancelled: await this.storage.cancelWaitingMatch(player.id, matchId) };
   }
 
   async joinMatch(

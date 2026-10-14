@@ -29,6 +29,8 @@ const soakConfig = (): ServerConfig => ({
     guestPerIpPerHour: 1_000,
     joinPerPlayerPerHour: 1_000,
     joinPerIpPerHour: 1_000,
+    createPerPlayerPerHour: 1_000,
+    createPerIpPerHour: 1_000,
     linkCodePerPlayerPerHour: 1_000,
     linkRedeemPerIpPerHour: 1_000,
     actionsPerPlayerPerMinute: 10_000,

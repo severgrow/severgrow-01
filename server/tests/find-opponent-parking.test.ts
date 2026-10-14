@@ -283,6 +283,32 @@ describe('cancel a parked search', () => {
   });
 });
 
+describe('the sweeper reaps abandoned searches and unjoined invites', () => {
+  it('retires a parked open-queue search past its window (via the sweeper, not only a lazy read)', async () => {
+    const h = harness(testConfig({ waitingExpireMs: 60_000 }));
+    const a = await guest(h, 'A');
+    const parked = await h.service.findOpponent(a.player);
+    expect(parked.match.status).toBe('waiting');
+
+    h.advance(60_001);
+    const result = await h.service.sweep();
+    expect(result.expiredWaiting).toBe(1);
+    expect((await h.storage.matchById(parked.match.matchId))?.status).toBe('finished');
+  });
+
+  it('retires an invite match nobody ever joined at the 48h-window expiry', async () => {
+    const h = harness(testConfig({ waitingExpireMs: 60_000 }));
+    const a = await guest(h, 'A');
+    const created = await h.service.createMatch(a.player);
+    expect(created.match.status).toBe('waiting');
+
+    h.advance(60_001);
+    const result = await h.service.sweep();
+    expect(result.expiredWaiting).toBe(1);
+    expect((await h.storage.matchById(created.match.matchId))?.status).toBe('finished');
+  });
+});
+
 describe('rate limits (gap 11)', () => {
   it('rate-limits repeated Find-opponent calls', async () => {
     const h = harness(testConfig({ rateLimits: { ...testConfig().rateLimits, joinPerPlayerPerHour: 3 } }));

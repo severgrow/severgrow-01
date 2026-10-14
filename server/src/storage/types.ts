@@ -219,6 +219,16 @@ export interface Storage {
    * match. Returns true when a parked search was retired.
    */
   cancelOpenQueueMatch(playerId: string, now: number): Promise<boolean>;
+
+  /**
+   * Cancel (retire) ONE of the player's own `waiting` matches by id — the invite screen's
+   * "Cancel match" (an invite nobody ever joined, or a parked search). Only the owner may cancel,
+   * and only while the match is `waiting` with that player as its SOLE participant, so an `active`
+   * or `finished` match (or someone else's match) is never touched. The match row is deleted, so
+   * its invite code no longer resolves and a later join cannot land in it. Idempotent: a repeat
+   * call — or a match that already activated — is a calm `false` and changes nothing.
+   */
+  cancelWaitingMatch(playerId: string, matchId: string): Promise<boolean>;
   matchById(id: string): Promise<MatchRecord | null>;
   matchByInviteCode(code: string): Promise<MatchRecord | null>;
   /** Every match the player is a participant of (any status). */

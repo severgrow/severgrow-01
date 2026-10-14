@@ -114,6 +114,9 @@ export type FindOpponentResponse = {
 /** Phase 7 Find Opponent — stop a parked search (retires the waiting open-queue match). */
 export type CancelSearchResponse = { ok: true; cancelled: boolean; serverNow: number };
 
+/** Cancel a WAITING match you own (the invite screen's "Cancel match"; owner-only, idempotent). */
+export type CancelMatchResponse = { ok: true; cancelled: boolean; serverNow: number };
+
 export type SubmitActionRequest = {
   expectedRevision: number;
   requestId: string;

@@ -219,6 +219,21 @@ export class MemoryStorage implements Storage {
     return true;
   }
 
+  async cancelWaitingMatch(playerId: string, matchId: string): Promise<boolean> {
+    const match = this.matches.get(matchId);
+    // Only a WAITING match the caller is the sole participant of: never an active/finished match
+    // and never somebody else's. Retiring also drops the invite-code index entry, so no later join
+    // can resolve the code.
+    if (!match || match.status !== 'waiting') return false;
+    const parts = this.participants.get(matchId) ?? [];
+    if (parts.length !== 1 || parts[0]?.playerId !== playerId) return false;
+    this.matches.delete(matchId);
+    this.inviteIndex.delete(match.inviteCode);
+    this.participants.delete(matchId);
+    this.moves.delete(matchId);
+    return true;
+  }
+
   async matchById(id: string): Promise<MatchRecord | null> {
     const match = this.matches.get(id);
     return match ? copy(match) : null;

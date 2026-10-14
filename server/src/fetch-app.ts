@@ -132,7 +132,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
     if (method === 'POST' && path === '/v1/matches') {
       const player = await service.authenticate(bearer(req.headers.get('authorization')));
       await readJson(req, config.maxBodyBytes);
-      const created = await service.createMatch(player);
+      const created = await service.createMatch(player, {}, clientIpOf(req));
       return { status: 201, body: { ok: true, ...created, serverNow: service.serverNow() } };
     }
 
@@ -168,7 +168,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...result, serverNow: service.serverNow() } };
     }
 
-    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign)?$/.exec(path);
+    const matchRoute = /^\/v1\/matches\/([^/]+)(\/view|\/reconnect|\/actions|\/resign|\/cancel)?$/.exec(path);
     if (matchRoute) {
       const matchId = decodeURIComponent(matchRoute[1]!);
       const sub = matchRoute[2] ?? '';
@@ -176,6 +176,14 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       if (method === 'GET' && sub === '') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));
         return { status: 200, body: { ok: true, match: await service.getMatch(player, matchId), serverNow: service.serverNow() } };
+      }
+      if (method === 'POST' && sub === '/cancel') {
+        // Retire the caller's own WAITING match (the invite screen's "Cancel match"). Owner-only
+        // and idempotent; a calm `{ cancelled: false }` when there is nothing to cancel.
+        const player = await service.authenticate(bearer(req.headers.get('authorization')));
+        await readJson(req, config.maxBodyBytes);
+        const cancelled = await service.cancelWaitingMatch(player, matchId);
+        return { status: 200, body: { ok: true, ...cancelled, serverNow: service.serverNow() } };
       }
       if (method === 'GET' && sub === '/view') {
         const player = await service.authenticate(bearer(req.headers.get('authorization')));

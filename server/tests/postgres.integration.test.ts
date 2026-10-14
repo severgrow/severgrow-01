@@ -82,6 +82,8 @@ const INTEGRATION_CONFIG = {
     guestPerIpPerHour: 100_000,
     joinPerPlayerPerHour: 100_000,
     joinPerIpPerHour: 100_000,
+    createPerPlayerPerHour: 100_000,
+    createPerIpPerHour: 100_000,
     linkCodePerPlayerPerHour: 100_000,
     linkRedeemPerIpPerHour: 100_000,
     actionsPerPlayerPerMinute: 100_000,
@@ -534,6 +536,29 @@ suite('real database: Find-Opponent queue', () => {
     expect(await postgresStorage(pool).matchById(parked.match.matchId)).toBeNull();
     // Idempotent calm no-op afterwards.
     expect(await service.cancelSearch(pa)).toEqual({ cancelled: false });
+  });
+});
+
+suite('real database: cancel a waiting match you own', () => {
+  it('retires the row (owner-only, idempotent) so the invite code no longer joins', async () => {
+    const a = await guest('CancelInvite-A');
+    const pa = await service.authenticate(a.token);
+    const created = await service.createMatch(pa);
+    MATCHES.push(created.match.matchId);
+
+    // A stranger cannot cancel it, and it is left untouched.
+    const b = await guest('CancelInvite-B');
+    const pb = await service.authenticate(b.token);
+    expect(await service.cancelWaitingMatch(pb, created.match.matchId)).toEqual({ cancelled: false });
+    expect(await postgresStorage(pool).matchById(created.match.matchId)).not.toBeNull();
+
+    // The owner can, and a repeat call is a calm no-op.
+    expect(await service.cancelWaitingMatch(pa, created.match.matchId)).toEqual({ cancelled: true });
+    expect(await postgresStorage(pool).matchById(created.match.matchId)).toBeNull();
+    expect(await service.cancelWaitingMatch(pa, created.match.matchId)).toEqual({ cancelled: false });
+
+    // The cancelled code can no longer be joined.
+    await expect(service.joinMatch(pb, created.match.inviteCode)).rejects.toMatchObject({ code: 'MATCH_NOT_FOUND' });
   });
 });
 
