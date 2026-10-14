@@ -12,7 +12,7 @@
 //     time" pill is text, not a chip.
 import { mkdirSync } from 'node:fs';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
-import { endTurnViaPage, openDuel, openSeat, readOnline, sleep, startLocalDuel } from './helpers/local-duel.js';
+import { endTurnViaPage, openDuel, openSeat, readOnline, sleep, startLocalDuel, tapExposed } from './helpers/local-duel.js';
 
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PORT = Number(process.env.PREVIEW_PORT ?? 4236);
@@ -105,6 +105,73 @@ const isFrameless = (f: Frame): boolean =>
   (f.background === 'rgba(0, 0, 0, 0)' || f.background === 'transparent') &&
   f.bgImage === 'none';
 
+/** The waiting pill, as the narrow-phone proof needs it: the WORDS, the controls and the lane. */
+type WaitSnap = {
+  state: string | null;
+  board: Box | null;
+  lane: Box | null;
+  laneH: number | null;
+  rows: boolean | null;
+  word: string | null;
+  wordRendered: number;
+  wordNatural: number;
+  labelClipped: boolean | null;
+  cancelVisible: boolean;
+  dotsVisible: boolean;
+  overlap: number;
+};
+
+/** Snapshot the waiting pill (before and after forcing a long lane message). */
+const WAIT_PROBE = (long: string) => `(() => {
+  const q = (s) => document.querySelector(s);
+  const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }; };
+  const hud = document.getElementById('duel-hud');
+  const lane = q('#duel-hud [data-duel-lane]');
+  const msg = q('#duel-hud [data-duel-turn]');
+  const board = document.getElementById('board-wrap');
+  const pill = q('#duel-hud .live-pill');
+  const label = q('#duel-hud .live-pill .label');
+  const spans = ['.full', '.short', '.tiny'].map((c) => q('#duel-hud .live-pill .label ' + c));
+  const vis = spans.find((s) => s && getComputedStyle(s).display !== 'none') || null;
+  const wordW = (() => { if (!vis) return 0; const range = document.createRange(); range.selectNodeContents(vis); return range.getBoundingClientRect().width; })();
+  const cancel = q('#duel-hud .live-pill .cancel');
+  const dots = q('#duel-hud .live-pill .futasaku-wait-dots');
+  const tiles = [...document.querySelectorAll('.l-tiles .tile[data-key]')].map((e) => e.getBoundingClientRect());
+  const union = () => { if (!tiles.length) return null;
+    return { x: Math.min(...tiles.map((r) => r.left)), y: Math.min(...tiles.map((r) => r.top)),
+      width: Math.max(...tiles.map((r) => r.right)) - Math.min(...tiles.map((r) => r.left)),
+      height: Math.max(...tiles.map((r) => r.bottom)) - Math.min(...tiles.map((r) => r.top)) }; };
+  const overlap = (a, b) => { if (!a || !b) return 0;
+    const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return w > 0.5 && h > 0.5 ? w * h : 0; };
+  const snap = () => ({
+    state: pill ? pill.dataset.state : null,
+    board: rect(board), lane: rect(lane),
+    laneH: lane ? Math.round(lane.getBoundingClientRect().height) : null,
+    rows: lane ? (lane.scrollHeight === lane.clientHeight && msg.scrollHeight === msg.clientHeight) : null,
+    word: vis ? vis.textContent : null,
+    wordRendered: vis ? Math.round(vis.getBoundingClientRect().width * 10) / 10 : 0,
+    wordNatural: Math.round(wordW * 10) / 10,
+    labelClipped: label ? label.scrollWidth > label.clientWidth : null,
+    cancelVisible: !!cancel && cancel.offsetWidth > 0 && getComputedStyle(cancel).display !== 'none',
+    dotsVisible: !!dots && !dots.hidden && getComputedStyle(dots).display !== 'none',
+    overlap: overlap(rect(hud), union()) + overlap(rect(lane), union()),
+  });
+  const before = snap();
+  window.__futasakuHeader.set(${JSON.stringify(long)});
+  const after = snap();
+  return { before, after };
+})()`;
+
+/** The word is fully shown: its rendered box is at least its natural text width, never ellipsised. */
+const wordUnclipped = (w: WaitSnap): boolean =>
+  w.wordNatural > 0 && w.labelClipped === false && w.wordRendered >= w.wordNatural - 0.5;
+
+const pillState = (s: SeatSession): Promise<string | null> =>
+  ev(s, `(() => { const p = document.querySelector('#duel-hud .live-pill'); return p ? p.dataset.state : null; })()`);
+
 /** The live-clock dot only exists while the live module has created it; either way it must be gone. */
 const circleGone = (display: string): boolean => display === 'none' || display === 'none-found';
 
@@ -128,6 +195,16 @@ const goLive = async (duel: LocalDuel, match: LocalMatch): Promise<void> => {
     body: '{}',
   });
   if (!acc.ok) throw new Error(`accept failed: ${acc.status} ${await acc.text()}`);
+};
+
+/** Put the match into the pill's WAITING state: A challenges, and nobody accepts. */
+const challengeOnly = async (duel: LocalDuel, match: LocalMatch): Promise<void> => {
+  const res = await fetch(`${duel.apiBase}/v1/matches/${match.matchId}/live/challenge`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${match.guests[0].token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: 'live' }),
+  });
+  if (!res.ok) throw new Error(`challenge failed: ${res.status} ${await res.text()}`);
 };
 
 const clockOn = (s: SeatSession): Promise<boolean> =>
@@ -154,7 +231,7 @@ const SIZES = [
   { w: 390, h: 640 }, // a short phone with a browser bar
 ] as const;
 
-const duel: LocalDuel = await startLocalDuel({ port: PORT, liveConfig: { turnMs: 60_000, challengeTtlMs: 20_000 } });
+const duel: LocalDuel = await startLocalDuel({ port: PORT, liveConfig: { turnMs: 60_000, challengeTtlMs: 120_000 } });
 try {
   const match = await duel.newMatch();
   const phone = await openSeat(duel, match, 0, { hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
@@ -237,6 +314,57 @@ try {
     } else {
       console.log('    [standalone] CDP display-mode emulation is unavailable here; skipped');
     }
+
+    // ---- the waiting pill is READABLE on the narrowest phone --------------------------------
+    // A pending challenge puts the pill into its waiting state. The strip gives the pill only
+    // ~115 px at 360 px, and the word shares that with the shared animated ellipsis AND the Cancel
+    // control — so the word itself must be one that FITS: never cut mid-word, never dropped, and
+    // never at the cost of the lane's whole contract (one fixed row, off the board, board identical).
+    await challengeOnly(duel, match);
+    let pillWaited = false;
+    for (let i = 0; i < 80; i++) {
+      if ((await pillState(phone)) === 'waiting') {
+        pillWaited = true;
+        break;
+      }
+      await sleep(200);
+    }
+    check('[waiting] a pending challenge puts the pill into its waiting state', pillWaited);
+
+    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }] as const) {
+      await phone.page.setViewportSize({ width: size.w, height: size.h });
+      await sleep(700);
+      const p = await ev<{ before: WaitSnap; after: WaitSnap }>(phone, WAIT_PROBE(LONG));
+      const tag = `waiting ${size.w}px`;
+      check(`[${tag}] the pill shows its waiting state`, p.before.state === 'waiting', String(p.before.state));
+      check(`[${tag}] the state word is NOT clipped`, wordUnclipped(p.before), `"${p.before.word}" rendered ${p.before.wordRendered}px of ${p.before.wordNatural}px`);
+      check(`[${tag}] the animated dots and the Cancel control are both still present`, p.before.dotsVisible && p.before.cancelVisible, `dots=${p.before.dotsVisible} cancel=${p.before.cancelVisible}`);
+      check(`[${tag}] the lane stays ONE fixed-height row`, p.before.rows === true && p.before.laneH === p.after.laneH && (p.after.lane?.height ?? 0) <= 46, `${p.before.laneH}px -> ${p.after.laneH}px`);
+      check(`[${tag}] neither the lane nor the strip reaches the board's tiles`, p.before.overlap === 0 && p.after.overlap === 0, `${Math.round(p.before.overlap)}px² / ${Math.round(p.after.overlap)}px²`);
+      check(`[${tag}] the board rectangle is IDENTICAL with and without a long message`, JSON.stringify(p.before.board) === JSON.stringify(p.after.board), JSON.stringify(p.before.board));
+      await shot(phone, `waiting-${size.w}`);
+    }
+
+    // Cancel is the way out — and leaving the waiting state never moves the board.
+    await phone.page.setViewportSize({ width: 360, height: 640 });
+    await sleep(600);
+    const boardWaiting = await ev<string>(phone, `(() => { const r = document.getElementById('board-wrap').getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); })()`);
+    await ev(phone, `(() => { window.__futasakuHeader.set('Your turn'); return true; })()`);
+    await sleep(250);
+    // A real FINGER tap (not a synthetic mouse click): the pill's 44px extender must not swallow it.
+    const cancelTapped = await tapExposed(phone, '#duel-hud .live-pill .cancel');
+    check('[waiting] the Cancel control is reachable by a finger', cancelTapped);
+    let cancelled = false;
+    for (let i = 0; i < 40; i++) {
+      if ((await pillState(phone)) !== 'waiting') {
+        cancelled = true;
+        break;
+      }
+      await sleep(200);
+    }
+    check('[waiting] tapping Cancel leaves the waiting state (the player can always back out)', cancelled);
+    const boardAfterCancel = await ev<string>(phone, `(() => { const r = document.getElementById('board-wrap').getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); })()`);
+    check('[waiting] the board rectangle survives the waiting state and its Cancel', boardAfterCancel === boardWaiting, `${boardAfterCancel} vs ${boardWaiting}`);
 
     // ---- real time: the plain counter owns the lane -----------------------------------------
     await goLive(duel, match);

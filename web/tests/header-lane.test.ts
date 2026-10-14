@@ -70,6 +70,7 @@ describe('the mode is "Real time" everywhere a player can read it', () => {
       LIVE.waiting('Fern', 60),
       LIVE.waitingFor('Fern'),
       LIVE.waitingShort,
+      LIVE.waitingTiny,
       LIVE.inLiveGame,
       LIVE.rateLimited,
       LIVE.wantsToGoLive,
@@ -89,5 +90,20 @@ describe('the mode is "Real time" everywhere a player can read it', () => {
 
   it('the ONLINE first card no longer says "Play live"', () => {
     for (const line of ONLINE.firstCardLines) expect(line, line).not.toMatch(OLD);
+  });
+});
+
+describe('the waiting copy has a form for the narrowest phones', () => {
+  it('the tiny form is one short word that still says waiting, with no baked-in dots', () => {
+    // Measured in the header-lane e2e: on a 360 px phone the pill cannot share its width between
+    // "Waiting", the animated ellipsis and Cancel, so the word drops to its short form rather than
+    // being clipped to "Waiti…". It is still the word for waiting — one word, no cut.
+    expect(LIVE.waitingTiny).toBe('Wait');
+    expect(LIVE.waitingShort).toBe('Waiting');
+    expect(LIVE.waitingTiny.length).toBeLessThan(LIVE.waitingShort.length);
+    expect(LIVE.waitingTiny.length).toBeLessThanOrEqual(HEADER_MAX);
+    // The animated ellipsis is the UI's (`wait-dots`), never characters in the copy.
+    expect(LIVE.waitingTiny).not.toMatch(/[.\u2026]/);
+    expect(LIVE.waitingShort).not.toMatch(/[.\u2026]/);
   });
 });

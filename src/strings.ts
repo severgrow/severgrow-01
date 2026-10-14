@@ -576,6 +576,11 @@ export const LIVE = Object.freeze({
   // The waiting words carry no dots: the UI appends the SHARED animated ellipsis (see wait-dots).
   waitingFor: (name: string) => `Waiting for ${name}`,
   waitingShort: 'Waiting',
+  // The narrowest phones (360 px) give the pill only ~110 px, and the state word shares it with the
+  // shared animated ellipsis AND the Cancel control. Measured in the header-lane e2e, "Waiting"
+  // cannot fit there, so the word drops to its one-word short form rather than clipping to
+  // "Waiti…". It is still the word for waiting — never a cut-off word, never a dropped control.
+  waitingTiny: 'Wait',
   cancel: 'Cancel',
   inLiveGame: 'In real time',
   notAvailable: 'Not available',

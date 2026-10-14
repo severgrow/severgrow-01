@@ -87,3 +87,36 @@ describe('the dead header circles are gone for good', () => {
     expect(uiSource).not.toContain('.live-chip .lamp');
   });
 });
+
+// The lane's own stylesheet. A rule is only dead when the NODE it styles is gone, so the two rules
+// the deleted circles left behind were removed while the two live ones stayed.
+const cssSource = readFileSync(new URL('../src/online/online-css.ts', import.meta.url), 'utf8');
+
+describe('the lane hides only nodes that still exist', () => {
+  it('no rule references the deleted clock dot', () => {
+    // The `live-clock-dot` node was deleted with the chip's lamp, so its rule was styling nothing.
+    expect(cssSource).not.toContain('live-clock-dot');
+  });
+
+  it('the chip rule stays: the chip NODE is still created for the go-live light', () => {
+    // `createHud` still builds the chip and prepends it into the lane, so this rule is the only
+    // thing keeping it out of the header — deleting it would paint a chip in the strip.
+    expect(uiSource).toContain("el('span', 'live-chip')");
+    expect(cssSource).toContain('#duel-hud .live-chip');
+  });
+
+  it('the pill dot rule stays: the pill still creates its own dot node', () => {
+    // `createPill` still builds the dot and appends it to the pill, so its rule is live too.
+    expect(uiSource).toContain("el('span', 'dot')");
+    expect(cssSource).toContain('#duel-hud .live-pill .dot');
+  });
+});
+
+describe('a waiting finger reaches the Cancel control', () => {
+  it('the Cancel control stacks above the pill tap extender', () => {
+    // The pill's transparent ::after (its 44px tap extender) is a positioned descendant painted
+    // above the pill's inline content, so without a stacking step it swallows every tap and the
+    // delegated click handler never sees the cancel target — the player could not back out.
+    expect(uiSource).toMatch(/\.live-pill \.cancel \{[^}]*position:\s*relative[^}]*z-index:\s*1/s);
+  });
+});

@@ -40,7 +40,7 @@ ${WAIT_DOTS_CSS}
   letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
 .live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
-.live-pill { order:3; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:0 10px; margin:6px 0;
+.live-pill { order:3; flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; min-height:32px; padding:0 10px; margin:6px 0;
   border-radius:999px; border:1px solid rgba(143,191,106,.45); background:rgba(8,10,10,.42); color:${CREAM};
   font:600 12px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; white-space:nowrap; cursor:pointer;
   position:relative; pointer-events:auto; } /* the strip is click-through; the pill is a real control */
@@ -49,12 +49,20 @@ ${WAIT_DOTS_CSS}
 .live-pill[disabled] { opacity:.62; cursor:default; border-color:rgba(214,204,177,.18); }
 .live-pill[disabled] .dot { background:#b7a98a; box-shadow:none; }
 .live-pill[data-state='waiting'] .dot { animation:live-breathe 1.2s ease-in-out infinite; }
-.live-pill[data-state='waiting'] { flex:0 1 auto; min-width:0; max-width:100%; }
+/* The waiting pill keeps its CONTENT width (never shrinks): the word is the whole point of the
+   state, and a shrinking flex item made the label the only thing that could give — it collapsed to
+   a few px at 360 px, so the player could not read that they were waiting. The lane is built to
+   ticker its own message, so it absorbs whatever the pill does not take. */
+.live-pill[data-state='waiting'] { flex:0 0 auto; max-width:100%; }
 .live-pill .label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-/* The waiting state's SHARED animated dots: the pill's own 6px gap already spaces them, so the
+/* The waiting state's SHARED animated dots: the pill's own gap already spaces them, so the
    component's default 2px left margin is dropped here (one treatment, local spacing). */
 .live-pill .${WAIT_DOTS_CLASS} { margin-left:0; }
 .live-pill .label .full { display:none; }
+.live-pill .label .short { display:none; }
+/* The state word by width: the narrowest phones show the one-word tiny form, a normal phone the
+   short "Waiting", and a wide enough strip the full "Waiting for <name>". Exactly one shows. */
+@media (min-width: 375px) { .live-pill .label .tiny { display:none; } .live-pill .label .short { display:inline; } }
 @media (min-width: 560px) { .live-pill .label .full { display:inline; } .live-pill .label .short { display:none; } }
 .live-pill .secs { flex:none; font-variant-numeric:tabular-nums; display:none; }
 .live-pill .secs:empty { display:none; }
@@ -63,7 +71,10 @@ ${WAIT_DOTS_CSS}
    full/short name already uses. The word and the animated dots always win; the seconds are a bonus. */
 @media (min-width: 560px) { .live-pill .secs:not(:empty) { display:inline; } }
 .live-on [data-duel-urgency][data-live-clock] { display:inline-flex !important; } /* the live clock owns this slot */
-.live-pill .cancel { margin-left:4px; padding:0 0 0 8px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
+/* The Cancel control must actually be REACHABLE by a finger: the pill's transparent ::after (the
+   44px tap extender) is a positioned descendant painted above the pill's inline content, so without
+   a stacking step it swallows every tap and the delegated handler never sees the cancel target. */
+.live-pill .cancel { position:relative; z-index:1; margin-left:3px; padding:0 0 0 6px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
@@ -374,7 +385,7 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
         pill.setAttribute('aria-label', LIVE.goLiveAria(m.name, m.secs));
       } else if (m.kind === 'waiting') {
         label.textContent = '';
-        label.append(el('span', 'full', LIVE.waitingFor(m.name)), el('span', 'short', LIVE.waitingShort));
+        label.append(el('span', 'full', LIVE.waitingFor(m.name)), el('span', 'short', LIVE.waitingShort), el('span', 'tiny', LIVE.waitingTiny));
         pill.setAttribute('aria-label', `${m.label}. ${LIVE.cancel}`);
       } else if (m.kind === 'disabled') {
         label.textContent = m.label;
