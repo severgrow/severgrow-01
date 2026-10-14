@@ -12,7 +12,7 @@
 //     time" pill is text, not a chip.
 import { mkdirSync } from 'node:fs';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
-import { endTurnViaPage, openDuel, openSeat, readOnline, sleep, startLocalDuel, tapExposed } from './helpers/local-duel.js';
+import { endTurnViaPage, openDuel, openSeat, readOnline, sleep, startLocalDuel, touchTap } from './helpers/local-duel.js';
 
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PORT = Number(process.env.PREVIEW_PORT ?? 4236);
@@ -171,6 +171,74 @@ const wordUnclipped = (w: WaitSnap): boolean =>
 
 const pillState = (s: SeatSession): Promise<string | null> =>
   ev(s, `(() => { const p = document.querySelector('#duel-hud .live-pill'); return p ? p.dataset.state : null; })()`);
+
+/**
+ * The Cancel control's REAL hit box, found by walking `elementFromPoint` outward from its centre
+ * until the topmost element is no longer the control. The word's own box is only ~55x13 px, so this
+ * is the honest measure of what a finger can hit — `offsetWidth` would miss a transparent overlay.
+ */
+const CANCEL_BOX = `(() => {
+  const cancel = document.querySelector('#duel-hud .live-pill .cancel');
+  if (!cancel) return null;
+  const own = (x, y) => { const el = document.elementFromPoint(x, y); return !!el && (el === cancel || cancel.contains(el)); };
+  const r = cancel.getBoundingClientRect();
+  const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+  let left = cx, right = cx, top = cy, bottom = cy;
+  for (let i = 1; i <= 40; i++) { if (own(cx - i, cy)) left = cx - i; else break; }
+  for (let i = 1; i <= 40; i++) { if (own(cx + i, cy)) right = cx + i; else break; }
+  for (let i = 1; i <= 40; i++) { if (own(cx, cy - i)) top = cy - i; else break; }
+  for (let i = 1; i <= 40; i++) { if (own(cx, cy + i)) bottom = cy + i; else break; }
+  return { left, right, top, bottom, width: right - left + 1, height: bottom - top + 1, cx, cy,
+    word: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } };
+})()`;
+
+type CancelBox = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+  cx: number;
+  cy: number;
+  word: { left: number; right: number; top: number; bottom: number; width: number; height: number };
+};
+
+/** Which control owns a pixel (its class name): proves the tap cannot land on the wrong thing. */
+const ownerAt = (s: SeatSession, x: number, y: number): Promise<string | null> =>
+  ev(s, `(() => { const el = document.elementFromPoint(${x}, ${y}); return el ? el.className : null; })()`);
+
+/** A point on the pill's OWN body, clear of the Cancel control (the ready-state tap point). */
+const PILL_TAP = `(() => {
+  const pill = document.querySelector('#duel-hud .live-pill'); if (!pill) return null;
+  const r = pill.getBoundingClientRect();
+  const x = Math.round(r.left + 10), y = Math.round(r.top + r.height / 2);
+  const el = document.elementFromPoint(x, y);
+  return { x, y, owner: el ? el.className : null };
+})()`;
+
+/** Put the pill back into its waiting state (challenge again if it is currently ready). */
+const ensureWaiting = async (duel: LocalDuel, match: LocalMatch, s: SeatSession): Promise<boolean> => {
+  for (let i = 0; i < 30; i++) {
+    if ((await pillState(s)) === 'waiting') return true;
+    await sleep(200);
+  }
+  await challengeOnly(duel, match);
+  for (let i = 0; i < 60; i++) {
+    if ((await pillState(s)) === 'waiting') return true;
+    await sleep(200);
+  }
+  return false;
+};
+
+/** Wait until the pill has left the waiting state (a cancel landed). */
+const waitLeftWaiting = async (s: SeatSession): Promise<boolean> => {
+  for (let i = 0; i < 25; i++) {
+    if ((await pillState(s)) !== 'waiting') return true;
+    await sleep(200);
+  }
+  return false;
+};
 
 /** The live-clock dot only exists while the live module has created it; either way it must be gone. */
 const circleGone = (display: string): boolean => display === 'none' || display === 'none-found';
@@ -342,29 +410,80 @@ try {
       check(`[${tag}] the lane stays ONE fixed-height row`, p.before.rows === true && p.before.laneH === p.after.laneH && (p.after.lane?.height ?? 0) <= 46, `${p.before.laneH}px -> ${p.after.laneH}px`);
       check(`[${tag}] neither the lane nor the strip reaches the board's tiles`, p.before.overlap === 0 && p.after.overlap === 0, `${Math.round(p.before.overlap)}px² / ${Math.round(p.after.overlap)}px²`);
       check(`[${tag}] the board rectangle is IDENTICAL with and without a long message`, JSON.stringify(p.before.board) === JSON.stringify(p.after.board), JSON.stringify(p.before.board));
-      await shot(phone, `waiting-${size.w}`);
     }
 
-    // Cancel is the way out — and leaving the waiting state never moves the board.
-    await phone.page.setViewportSize({ width: 360, height: 640 });
+    // ---- Cancel is a REAL 44x44 target, not just the word -----------------------------------
+    // The earlier defect here was invisible to screenshots: the pill's own 44px tap extender sat
+    // above the Cancel WORD, so a tap on the word did nothing. The stacking step fixed the word;
+    // this proves the control is a real target (its hit box is measured, not its glyphs) and that
+    // its extra area genuinely works — by tapping the EDGES of the box with a real finger.
+    for (const size of [{ w: 360, h: 640 }, { w: 390, h: 844 }] as const) {
+      await phone.page.setViewportSize({ width: size.w, height: size.h });
+      await sleep(700);
+      await ensureWaiting(duel, match, phone);
+      const tag = `cancel ${size.w}px`;
+      const box = await ev<CancelBox | null>(phone, CANCEL_BOX);
+      check(`[${tag}] the Cancel hit box is at least 44x44 CSS px`, !!box && box.width >= 44 && box.height >= 44, box ? `${box.width}x${box.height}` : 'no box');
+      // The box must cover the word (the word may not stick out of its own target). The walk is
+      // integer-precise, so a 1px tolerance is the honest bound: it is the pixel row/column where
+      // the point stops landing on the control.
+      check(
+        `[${tag}] the hit box contains the whole word`,
+        !!box && box.left <= box.word.left + 1 && box.right >= box.word.right - 1,
+        box ? `box ${box.left}..${box.right} vs word ${box.word.left.toFixed(1)}..${box.word.right.toFixed(1)}` : '',
+      );
+      // The lane's whole contract still holds with this bigger target on screen.
+      const lane = await ev<{ before: WaitSnap; after: WaitSnap }>(phone, WAIT_PROBE(LONG));
+      check(`[${tag}] the lane stays ONE fixed-height row`, lane.before.rows === true && lane.before.laneH === lane.after.laneH && (lane.after.lane?.height ?? 0) <= 46, `${lane.before.laneH}px -> ${lane.after.laneH}px`);
+      check(`[${tag}] nothing reaches the board and the board rectangle is identical`, lane.before.overlap === 0 && lane.after.overlap === 0 && JSON.stringify(lane.before.board) === JSON.stringify(lane.after.board), `${Math.round(lane.before.overlap)}px² / ${JSON.stringify(lane.before.board)}`);
+      const boardWhileWaiting = JSON.stringify(lane.before.board);
+      await shot(phone, `waiting-${size.w}`);
+
+      // A real FINGER a few px inside each EDGE of the box must cancel: the extra area is real.
+      const midX = Math.round((box!.left + box!.right) / 2);
+      const midY = Math.round((box!.top + box!.bottom) / 2);
+      const edges = [
+        { name: 'top', x: midX, y: box!.top + 2 },
+        { name: 'bottom', x: midX, y: box!.bottom - 2 },
+        { name: 'left', x: box!.left + 2, y: midY },
+        { name: 'right', x: box!.right - 2, y: midY },
+      ];
+      for (const e of edges) {
+        const waitingNow = await ensureWaiting(duel, match, phone);
+        const owner = await ownerAt(phone, e.x, e.y);
+        await touchTap(phone, { x: e.x, y: e.y });
+        const left = await waitLeftWaiting(phone);
+        check(`[${tag}] a finger on the ${e.name} edge of the box cancels`, waitingNow && left, `(${e.x},${e.y}) owner=${owner}`);
+      }
+      const boardAfterTaps = await ev<string>(phone, `(() => { const r = document.getElementById('board-wrap').getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); })()`);
+      check(`[${tag}] the board rectangle survives the whole cancel experience`, boardAfterTaps === boardWhileWaiting, `${boardAfterTaps} vs ${boardWhileWaiting}`);
+    }
+
+    // ---- the pill's OWN tap target still works (the two must not steal each other's taps) ----
+    await phone.page.setViewportSize({ width: 390, height: 844 });
     await sleep(600);
-    const boardWaiting = await ev<string>(phone, `(() => { const r = document.getElementById('board-wrap').getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); })()`);
-    await ev(phone, `(() => { window.__futasakuHeader.set('Your turn'); return true; })()`);
-    await sleep(250);
-    // A real FINGER tap (not a synthetic mouse click): the pill's 44px extender must not swallow it.
-    const cancelTapped = await tapExposed(phone, '#duel-hud .live-pill .cancel');
-    check('[waiting] the Cancel control is reachable by a finger', cancelTapped);
-    let cancelled = false;
-    for (let i = 0; i < 40; i++) {
-      if ((await pillState(phone)) !== 'waiting') {
-        cancelled = true;
+    const centreBox = await ev<CancelBox | null>(phone, CANCEL_BOX);
+    if (centreBox) await touchTap(phone, { x: centreBox.cx, y: centreBox.cy });
+    const backToReady = await waitLeftWaiting(phone);
+    check('[pill] a tap on the word returns the pill to its ready state', backToReady && (await pillState(phone)) === 'ready', String(await pillState(phone)));
+    const pillTap = await ev<{ x: number; y: number; owner: string | null } | null>(phone, PILL_TAP);
+    check('[pill] the pill body owns its own tap point (not the Cancel control)', !!pillTap && !/cancel/i.test(pillTap.owner ?? ''), JSON.stringify(pillTap));
+    if (pillTap) await touchTap(phone, { x: pillTap.x, y: pillTap.y });
+    let challengeStarted = false;
+    for (let i = 0; i < 30; i++) {
+      if ((await pillState(phone)) === 'waiting') {
+        challengeStarted = true;
         break;
       }
       await sleep(200);
     }
-    check('[waiting] tapping Cancel leaves the waiting state (the player can always back out)', cancelled);
-    const boardAfterCancel = await ev<string>(phone, `(() => { const r = document.getElementById('board-wrap').getBoundingClientRect(); return JSON.stringify({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); })()`);
-    check('[waiting] the board rectangle survives the waiting state and its Cancel', boardAfterCancel === boardWaiting, `${boardAfterCancel} vs ${boardWaiting}`);
+    check('[pill] tapping the pill body starts a challenge again', challengeStarted);
+    // Leave no pending challenge behind for the real-time section.
+    if (challengeStarted) {
+      const box2 = await ev<CancelBox | null>(phone, CANCEL_BOX);
+      if (box2) await touchTap(phone, { x: box2.cx, y: box2.cy });
+      await waitLeftWaiting(phone);
+    }
 
     // ---- real time: the plain counter owns the lane -----------------------------------------
     await goLive(duel, match);

@@ -75,6 +75,14 @@ ${WAIT_DOTS_CSS}
    44px tap extender) is a positioned descendant painted above the pill's inline content, so without
    a stacking step it swallows every tap and the delegated handler never sees the cancel target. */
 .live-pill .cancel { position:relative; z-index:1; margin-left:3px; padding:0 0 0 6px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
+/* ...and it must be a REAL target, not just its glyphs: the word's own box is only ~55x13 px, far
+   below the 44px minimum every other control meets, and Cancel is the escape hatch out of a state
+   the player may be stuck in. This transparent overlay gives it a full-height, full-width hit box
+   (measured 55x44 px; the lane's own 44 px is the ceiling) WITHOUT moving the word, its type or its
+   colour — the box is purely additive. It is a child of the Cancel span, whose z-index:1 stacking
+   context keeps the whole thing above the pill's own ::after, so where the two hit areas overlap the
+   Cancel wins; everywhere else the pill's extender still owns the tap (see the header-lane e2e). */
+.live-pill .cancel::after { content:''; position:absolute; inset:-16px 0; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;

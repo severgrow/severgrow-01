@@ -119,4 +119,16 @@ describe('a waiting finger reaches the Cancel control', () => {
     // delegated click handler never sees the cancel target — the player could not back out.
     expect(uiSource).toMatch(/\.live-pill \.cancel \{[^}]*position:\s*relative[^}]*z-index:\s*1/s);
   });
+
+  it('the Cancel control is a REAL full-height target, not just its glyphs', () => {
+    // The word's own box is ~55x13 px — far under the 44px minimum every other control meets — and
+    // Cancel is the escape hatch out of a state the player may be stuck in. The transparent ::after
+    // overlay gives it a full-height hit box without moving the word. Measured in the header-lane
+    // e2e: 55x44 px at both 360 and 390 px (the lane's own 44 px is the ceiling).
+    expect(uiSource).toMatch(/\.live-pill \.cancel::after \{[^}]*content:''[^}]*position:absolute[^}]*inset:-16px 0/s);
+    // A purely additive overlay: it adds no background, border or shadow of its own.
+    expect(uiSource).toMatch(/\.live-pill \.cancel::after \{[^}]*\}/s);
+    const overlay = uiSource.match(/\.live-pill \.cancel::after \{([^}]*)\}/s)?.[1] ?? '';
+    expect(overlay).not.toMatch(/background|border(?!-radius)|box-shadow|outline/);
+  });
 });
