@@ -7,6 +7,7 @@ import { allNeighbors, coordKey, legalActions, newGame, viewFor } from '../../sr
 import type { Action, Card, Player, State } from '../../src/engine/index.js';
 import { cutPosition } from './cut-positions.js';
 import { positionSave } from './position.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM ? {executablePath:process.env.PW_CHROMIUM} : {}),args:['--no-sandbox']});
@@ -74,6 +75,7 @@ try {
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify(g));
     }, [save, cfg] as const);
     await p.goto('http://localhost:4199/');
+    await assertDistChannel(p);   // loud if the served dist was built for another channel
     await p.waitForSelector('#menu-continue');
     await p.click('#menu-continue');
     await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30000 });

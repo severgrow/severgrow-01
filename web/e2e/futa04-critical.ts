@@ -8,6 +8,7 @@ import type { Page } from 'playwright-core';
 import { preview } from 'vite';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 // Run the focused sort/pile regression after the board-turn suite, before this
 // script opens its own preview server on the same port.
 await import('./futa04-sort-layout.js');
@@ -48,6 +49,7 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
   });
   await page.goto(BASE+'?seed=219682080&lab=1&design=1&tools=1');
+  await assertDistChannel(page);   // loud if the served dist was built for another channel
   await idle(page); await page.waitForTimeout(600);
   check(await page.locator('#board g.hex-cell').count() === 37, `${w}: Classic geometry`);
   check(await page.locator('#menu-lab,#menu-design,#sheet-lab,.design-v2-board').count() === 0, `${w}: tools cannot open`);

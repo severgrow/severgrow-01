@@ -5,6 +5,7 @@ import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { TUTORIAL_CHAPTER_COUNT, tutorialAccepts, tutorialLesson, tutorialLessons } from '../src/logic/tutorial-script.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const server=await preview({configFile:'web/vite.config.ts',preview:{port:4197,strictPort:true},logLevel:'silent'});
 const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
@@ -30,6 +31,7 @@ try {
   });
   await page.reload();
   await waitBoot(page);
+  await assertDistChannel(page);   // loud if the served dist was built for another channel
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   // The main menu has exactly one tutorial entry (src/strings.ts HELP.tutorial); it starts
   // the guided run from its top — there is no lesson list or chapter picker anywhere.

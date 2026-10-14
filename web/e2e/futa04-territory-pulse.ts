@@ -5,6 +5,7 @@ import { chromium } from 'playwright-core';
 import { preview } from 'vite';
 import { positionSave } from './position.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const port = 4197;
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port, strictPort: true }, logLevel: 'silent' });
@@ -21,6 +22,7 @@ try {
     localStorage.setItem('main2:severgrow.look.v3','1');
   },positionSave({state:game}));
   await page.goto(`http://localhost:${port}/`);
+  await assertDistChannel(page);   // loud if the served dist was built for another channel
   await page.locator('#menu-continue').click({timeout:30000});
   await page.waitForFunction(() => document.querySelectorAll('#board .territory-pulse').length === 2,undefined,{timeout:10000}).catch(async error => {
     const detail = await page.evaluate(() => ({ count:document.querySelectorAll('#board .territory-pulse').length, sway:document.querySelector('#board')?.classList.contains('sway'), game:document.querySelector('#game')?.className, menu:document.querySelector('#menu')?.className, actor:(window as any).__severgrow?.state()?.actor, settings:localStorage.getItem('main2:severgrow.settings.v1'), keys:Object.keys(localStorage), url:location.href }));

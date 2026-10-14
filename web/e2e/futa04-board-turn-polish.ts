@@ -13,6 +13,7 @@ import { botSeed, chooseLevelAction } from '../../src/bots/levels.js';
 import { decodeSave } from '../src/logic/persist.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { fixture } from '../../tests/helpers.js';
 
@@ -102,9 +103,11 @@ async function open(width: number, height: number, seed: number, humanFirst = fa
     // that position instead of silently running on a bot-opened board.
     await page.addInitScript(save => localStorage.setItem('main2:severgrow.save.v7', save), positionSave({ state: newGame(seed) }));
     await page.goto(base);
+    await assertDistChannel(page);   // loud if the served dist was built for another channel
     await page.locator('#menu-continue').click();
   } else {
     await page.goto(`${base}?seed=${seed}`);
+    await assertDistChannel(page);   // loud if the served dist was built for another channel
   }
   await idle(page);
   await page.locator('#game').waitFor({state:'visible'});

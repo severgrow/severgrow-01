@@ -4,6 +4,7 @@ import { preview } from 'vite';
 import { PREVIOUS_RULES_VERSION, apply, coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import { fruitPosition, NINE_CHAIN } from './fruitcards-pos.js';
 import { positionSave } from './position.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const port = 4199;
 const server = await preview({ configFile: 'web/vite.config.ts', preview: { port, strictPort: true }, logLevel: 'silent' });
@@ -23,6 +24,7 @@ try {
     localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound:false,music:false,coach:false,reduceMotion:false,autoSkip:false }));
   },JSON.stringify(oldSave));
   await page.goto(`http://localhost:${port}/`);
+  await assertDistChannel(page);   // loud if the served dist was built for another channel
   await page.locator('#menu-continue').click();
   await page.waitForFunction(() => !(window as any).__severgrow.busy());
   assert.deepEqual(await page.evaluate(() => (window as any).__severgrow.state()), before);

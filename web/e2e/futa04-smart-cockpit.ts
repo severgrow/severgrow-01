@@ -8,6 +8,7 @@ import { hexDistance, legalActions, newGame, viewFor } from '../../src/engine/in
 import type { State, Tile } from '../../src/engine/index.js';
 import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const BASE = process.env.FUTA04_URL ?? 'http://localhost:4198/';
 const server = process.env.FUTA04_URL ? null : await preview({ configFile:'web/vite.config.ts', preview:{ port:4198, strictPort:true }, logLevel:'silent' });
@@ -47,6 +48,7 @@ try {
       localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:true}));
     },side);
     await page.goto(`${BASE}?seed=2`); await page.waitForSelector('#deck.ready');
+    await assertDistChannel(page);   // loud if the served dist was built for another channel
     await page.waitForFunction(()=>document.getElementById('smart-panel') && document.querySelector('#hand .card'));
     // DRAW! holds ~1.2s under Reduce Motion, then score rests until the 4s idle re-prompt.
     await page.waitForFunction(()=>document.getElementById('smart-led-text')?.textContent?.trim()==='0:0',undefined,{timeout:4000});
