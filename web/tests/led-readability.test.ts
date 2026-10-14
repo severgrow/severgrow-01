@@ -22,7 +22,8 @@ describe('long game copy is shortened for the physical window', () => {
   it('maps known captions and banners to short tokens', () => {
     expect(ledToken('You cut off 3 opponent tiles!')).toBe('CUT+3');
     expect(ledToken('Your opponent cut off 4 of your tiles')).toBe('CUT-4');
-    expect(ledToken('Your opponent grew 2 tiles, taking 2 of yours')).toBe('-2');
+    expect(ledToken('You overgrew 2 opponent spots')).toBe('+2');
+    expect(ledToken('Your opponent overgrew 2 of your spots')).toBe('-2');
     expect(ledToken('Your opponent grew 3 tiles')).toBe('OPP+3');
     expect(ledToken('Strengthened 5 → 9')).toBe('UP9');
     expect(ledToken('Blast cleared 5 tiles')).toBe('BOOM5');

@@ -62,8 +62,8 @@ describe('move preview', () => {
     expect(previewMove(v, { t: 'Draw', from: 'deck' })).toBeNull();
   });
 
-  it('the result chip reads like "+3 tiles, replaces 1, cuts 4"', () => {
-    expect(chipText({ placed: 3, replaced: 1, cuts: 4, wins: false })).toBe('+3 tiles, replaces 1, cuts 4');
+  it('the result chip reads like "+3 tiles, overgrows 1, cuts 4"', () => {
+    expect(chipText({ placed: 3, replaced: 1, cuts: 4, wins: false })).toBe('+3 tiles, overgrows 1, cuts 4');
     expect(chipText({ placed: 1, replaced: 0, cuts: 0, wins: false })).toBe('+1 tile');
     expect(chipText({ placed: 2, replaced: 0, cuts: 1, wins: false })).toBe('+2 tiles, cuts 1');
     expect(chipText({ placed: 2, replaced: 0, cuts: 0, wins: true })).toBe('+2 tiles, wins the game');
@@ -72,7 +72,7 @@ describe('move preview', () => {
 
 describe('points in the preview', () => {
   it('the chip ends with the points the move gains', () => {
-    expect(chipText({ placed: 3, replaced: 1, cuts: 4, wins: false, points: 7 })).toBe('+3 tiles, replaces 1, cuts 4 · +7 points');
+    expect(chipText({ placed: 3, replaced: 1, cuts: 4, wins: false, points: 7 })).toBe('+3 tiles, overgrows 1, cuts 4 · +7 points');
     expect(chipText({ placed: 1, replaced: 0, cuts: 0, wins: false, points: 1 })).toBe('+1 tile · +1 point');
     expect(chipText({ placed: 1, replaced: 0, cuts: 0, wins: false, points: 0 })).toBe('+1 tile · +0 points');
   });

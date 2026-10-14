@@ -22,7 +22,7 @@ export const bloomHintGroups = (_view: View, legal: readonly Action[]): number[]
 export const TIPS: Record<TipId, { title: string; text: string }> = {
   strengthen: {
     title: 'Strengthen',
-    text: `A higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your Grow for the turn, and it doesn’t stop a cut or a Bomb.`,
+    text: `A higher card can strengthen your own tile. It doesn’t score points, but it’s harder for ${OPP.the} to overgrow. It uses your Grow for the turn, and it doesn’t stop a cut or a Bomb.`,
   },
   draw: {
     // shown the first time painting a Bloom starts, with a small animated finger painting a cluster

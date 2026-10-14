@@ -366,7 +366,7 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   const chipRep = await chipFor(s, (a) => (previewMove(viewFor(s, 0), a)?.ghosts ?? []).some((g) => g.replaces));
   const cutState = stateWith({ '0,1': [1, 2], '1,1': [1, 2], '2,0': [1, 2], '0,0': [1, 2] }, RUN);
   const chipCut = await chipFor(cutState, (a) => (previewMove(viewFor(cutState, 0), a)?.cuts ?? 0) > 0);
-  check('ADVERSARIAL 10: the chip says "replaces" for a takeover and "cuts" for a cut', /replac/i.test(chipRep) && /cuts/i.test(chipCut), `${chipRep} | ${chipCut}`);
+  check('ADVERSARIAL 10: the chip says "overgrows" for a takeover and "cuts" for a cut', /overgrow/i.test(chipRep) && /cuts/i.test(chipCut), `${chipRep} | ${chipCut}`);
 }
 {
   // rotating the phone and switching the palette mid-drag keep a correct state
@@ -506,7 +506,7 @@ const ghostKeys = (page: Page) => page.evaluate(() => [...document.querySelector
   await page.click('#confirm-play');
   await page.waitForFunction(() => !(window as unknown as { __severgrow: { busy: () => boolean } }).__severgrow.busy(), undefined, { timeout: 15000 }).catch(() => {});
   const gone = (await st(page)).board[top.target] === null;
-  check('Bomb from the tile card: the note, "Use Bomb", Confirm, the 9 is gone', /No combo can replace this\. A Bomb can\./.test(card) && asks && gone && errors.length === 0, card.slice(0, 80));
+  check('Bomb from the tile card: the note, "Use Bomb", Confirm, the 9 is gone', /No combo can overgrow this\. A Bomb can\./.test(card) && asks && gone && errors.length === 0, card.slice(0, 80));
   await page.close();
 }
 {

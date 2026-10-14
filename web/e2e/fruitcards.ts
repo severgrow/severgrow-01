@@ -125,7 +125,7 @@ console.log(`[2] v0.8: one Fruit card per turn, then the throw`);
   check('after the draw the hint offers Grow or Bomb', hint0.includes('Grow, or play a Bomb'), hint0);
   await tap(page, '1,-1');
   const card = (await page.textContent('#tooltip')) ?? '';
-  check('the tile card on a 9: "No combo can replace this. A Bomb can." and "Use Bomb"', card.includes('No combo can replace this. A Bomb can.') && card.includes('Use Bomb'));
+  check('the tile card on a 9: "No combo can overgrow this. A Bomb can." and "Use Bomb"', card.includes('No combo can overgrow this. A Bomb can.') && card.includes('Use Bomb'));
   await shot(page, '06-tile-card-shortcut');
   await page.click('#tooltip .tc-fruit');
   await idle(page);

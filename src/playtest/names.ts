@@ -15,7 +15,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const effects = (sim: Simulation): string => {
   const parts: string[] = [];
-  if (sim.taken > 0) parts.push(`taking ${plural(sim.taken, `${OPP.noun} tile`)}`);
+  if (sim.taken > 0) parts.push(`overgrowing ${plural(sim.taken, `${OPP.noun} spot`)}`);
   if (sim.botCut > 0) parts.push(sim.taken > 0 ? `cutting off ${sim.botCut} more` : `cutting off ${plural(sim.botCut, `${OPP.noun} tile`)}`);
   return parts.length ? `, ${parts.join(' and ')}` : '';
 };

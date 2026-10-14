@@ -126,8 +126,8 @@ export function ledToken(message: string): string | null {
   let n: string | null;
   if ((n = num(/^YOU CUT OFF (\d+) (?:OPPONENT )?TILES?!?$/))) return `CUT+${n}`;
   if ((n = num(/^YOUR OPPONENT CUT OFF (\d+) OF YOUR TILES$/))) return `CUT-${n}`;
-  if ((n = num(/^YOU TOOK OVER (\d+) (?:OPPONENT )?TILES?!?$/))) return `+${n}`;
-  if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?, TAKING (\d+) OF YOURS$/, 2))) return `-${n}`;
+  if ((n = num(/^YOU OVERGREW (\d+) (?:OPPONENT )?SPOTS?!?$/))) return `+${n}`;
+  if ((n = num(/^YOUR OPPONENT OVERGREW (\d+) OF YOUR SPOTS?$/))) return `-${n}`;
   if ((n = num(/^YOUR OPPONENT GREW (\d+) TILES?$/))) return `OPP+${n}`;
   if (m === 'YOUR TREE IS SURROUNDED!' || m === "OPPONENT'S VOLCANO IS SURROUNDED!") return 'CAUGHT';
   if ((n = num(/^STRENGTHENED (\d+) . (\d+)$/, 2))) return `UP${n}`;

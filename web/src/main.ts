@@ -3922,7 +3922,7 @@ function renderTooltip(v: View) {
     }
     else {
       const loss = cutLoss(v, key).length;
-      const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be replaced' : '';
+      const top = t.strength >= v.config.maxRank ? ' · top strength, can’t be overgrown' : '';
       const lose = loss > 1 ? `If lost, ${mine ? 'you lose' : `${OPP.the} loses`} ${loss} tiles.` : 'Losing it cuts nothing else.';
       html = `<b>${name} · ${who} tile</b><span>Strength ${t.strength}${top}${gold ? ' · gold: scores 2' : ''}</span><span>Joined to ${mine ? 'your' : 'their'} home. ${lose}</span>`;
       // the test copy: the opponent's weak link (was the "their weak links" toggle), on their card only

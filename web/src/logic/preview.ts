@@ -26,7 +26,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 export const chipText = (p: { placed: number; replaced: number; cuts: number; wins: boolean; points?: number }): string => {
   const parts = [`+${plural(p.placed, 'tile')}`];
-  if (p.replaced > 0) parts.push(`replaces ${p.replaced}`);
+  if (p.replaced > 0) parts.push(`overgrows ${p.replaced}`);
   if (p.cuts > 0) parts.push(`cuts ${p.cuts}`);
   if (p.wins) parts.push('wins the game');
   const text = parts.join(', ');
@@ -51,7 +51,7 @@ export const previewMove = (v: View, a: Action): Preview | null => {
       points: 0,
       chip: `Strengthen ${plan.strengthen.from} → ${t.strength}`,
       warning: null,
-      note: 'No points; harder to replace (not to cut)',
+      note: 'No points; harder to overgrow (not to cut)',
     };
   }
   const ghosts = plan.tiles.map((t) => {

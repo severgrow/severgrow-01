@@ -171,7 +171,7 @@ until its first move appears, and only while it is really still choosing.
 
 - **Tap a card:** every hex it can grow on glows; the rest dims. **Tap a glowing
   hex:** ghost tiles show exactly where the tiles will grow, with a result chip like
-  "+3 tiles, replaces 1, cuts 4". **No Confirm for a clear choice:** when the spot allows
+  "+3 tiles, overgrows 1, cuts 4". **No Confirm for a clear choice:** when the spot allows
   just one move it plays at once (Undo takes it back until you draw or throw).
 - **A card with only one place to grow** shows its preview straight away (no hex tap).
 - **Tap a hex first:** the cards that can use it glow, and the best move there is
@@ -219,13 +219,13 @@ says what it does by its shape and a symbol, not by colour alone:
 | Target | Looks like | Means |
 | --- | --- | --- |
 | Grow on an empty hex | a plain ring | a new tile with the card's number |
-| Replace an enemy tile | a dashed ring with a small ⇆ badge | the opponent's weaker tile becomes mine |
+| Overgrow an enemy tile | a dashed ring with a small ⇆ badge | the opponent's weaker tile is overgrown: the hex becomes mine |
 | Strengthen my tile | a thick ring with a small + badge | my own weaker tile takes the card's number |
 
-The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, replace an
-opponent tile (⇆), strengthen your tile (+)"). Growing and replacing still play at once (Undo takes them
+The hint line names the kinds on offer ("Tap a glowing hex: grow on an empty hex, overgrow an
+opponent tile (⇆), strengthen your tile (+)"). Growing and overgrowing still play at once (Undo takes them
 back). A **Strengthen** always shows its preview first: "Strengthen 5 → 9", a note ("No points,
-but harder for your opponent to replace. It does not stop a cut or Fruit."), Confirm and Cancel.
+but harder for your opponent to overgrow. It does not stop a cut or Fruit."), Confirm and Cancel.
 
 *(Retired in v0.6: the 3-tile Fruit and its flow below were replaced by Fruit cards; see "Step 4: Fruit cards on the page" at the end.)*
 
@@ -233,12 +233,12 @@ but harder for your opponent to replace. It does not stop a cut or Fruit."), Con
 row any more: the row only shows what you can do right now). In your Grow step, while your Fruit
 is unused, the tile card of any opponent tile except their root shows:
 - **"Fruit this tile"** when you have a legal set of tiles to give up for it (Fruit ignores
-  strength); on a top-rank tile it adds "No card can replace this. Fruit can."
+  strength); on a top-rank tile it adds "No combo can overgrow this. A Bomb can."
 - an information line when it is not possible yet: "Fruit could remove this. You need 3 connected
   tiles next to it." (no button);
 - nothing at all once your Fruit is used, or when Fruit is off.
 
-A tap on an opponent tile that the picked card can take previews the Sprout as before; one it
+A tap on an opponent tile that the picked card can overgrow previews the Sprout as before; one it
 cannot take (an opponent 9, say) opens the tile card instead, keeping the card picked. While a
 Sprout onto an opponent tile is previewed, a small **i** button (or holding the tile) opens its
 tile card, so Fruit is always reachable.
@@ -295,7 +295,7 @@ share one code path (pointer events).
 - **A hex that can't take its number** shows why under the counter: "1/3 · Needs a 6 or higher"
   (an opponent tile as strong or stronger), never a silent refusal.
 - **One tap suggestion**: the first tap on a legal hex fills in the best-ranked Bloom through it
-  (most tiles gained, then the most opponent tiles replaced or cut, then the fewest of your tiles left open to a cut) as a
+  (most tiles gained, then the most opponent tiles overgrown or cut, then the fewest of your tiles left open to a cut) as a
   ready preview; keep painting to change it.
 - **Paint** by dragging over touching hexes, or tap them one by one; moving back onto the previous
   hex removes it; a counter shows "2/3". Lifting early keeps the shape with a Clear button.
@@ -384,7 +384,7 @@ engine events.
 | Size | When | Effects |
 | --- | --- | --- |
 | Small | a Sprout, 1-2 tiles | a quick squash-and-stretch pop, a soft note, one small spark |
-| Medium | 3-4 tiles, a gold hex, replacing a bot tile, a cut of 1-3 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
+| Medium | 3-4 tiles, a gold hex, overgrowing a bot tile, a cut of 1-3 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
 | Big | 5+ tiles, a cut of 4+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
 
 | Moment | What you see and hear |
@@ -539,7 +539,7 @@ One set of rules for every screen:
 9. **Undo:** in the toolbar, lit with a dot while a move can be taken back (until you throw).
    The move runs backwards with a falling sound and a light double tap. The state after Undo is
    exactly the state before the move.
-10. **Previews in real materials:** translucent moss (lava glowing through when replacing),
+10. **Previews in real materials:** translucent moss (lava glowing through when overgrowing),
     the real number, breathing gently; the veins it would grow draw on; a dashed red "−N" on your
     tile that becomes cuttable, a gold "−N" on the opponent tiles it would cut. Computed on copies.
 11. **The design system** (above).
@@ -653,7 +653,7 @@ piece stops with Reduce motion. Decisions are pure and tested (`web/src/logic/ca
   Never plays at once. Undo works until the throw. With another Fruit card in hand, it stays
   picked after the first, its targets lit.
 - **Shortcut**: the tile card of an opponent tile a Fruit card can remove offers "Use Fruit
-  card"; on a top-rank tile it adds "No combo can replace this. A Fruit card can."
+  card"; on a top-rank tile it adds "No combo can overgrow this. A Bomb can."
 - **Chip** near the deck: "Fruit cards unseen: 2" (public information only).
 - **One-time tip**: "Fruit cards: play one on an opponent tile that touches yours to remove it,
   even a 9." (re-openable from How to play). Not part of the coach's 3-line summary.

@@ -66,8 +66,8 @@ export const hintFor = (c: HintCtx): Hint => {
         const { grow, replace, strengthen } = c.card;
         if (!grow && !replace && !strengthen) return h("That card can't grow now");
         if (!c.card.single) return h('Tap a glowing hex', 'up');
-        if (replace && strengthen) return h('Tap: ⇆ replace, + strengthen', 'up');
-        if (replace) return h('Tap a hex · ⇆ replaces', 'up');
+        if (replace && strengthen) return h('Tap: ⇆ overgrow + strengthen', 'up');
+        if (replace) return h('Tap a hex · ⇆ overgrows', 'up');
         if (strengthen) return h('Tap a hex · + strengthens', 'up');
         return h('Tap a glowing hex', 'up');
       }

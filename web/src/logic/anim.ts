@@ -195,8 +195,8 @@ export const captionFor = (s: Step, viewer: Player): string | null => {
       return s.player !== viewer ? `You cut off ${s.keys.length} ${OPP.noun} tile${s.keys.length === 1 ? '' : 's'}!` : `${OPP.The} cut off ${s.keys.length} of your tiles`;
     case 'grow': {
       const taken = s.tiles.filter((t) => t.replaced).length;
-      if (s.player === viewer) return taken > 0 ? `You took over ${taken} ${OPP.noun} tile${taken === 1 ? '' : 's'}` : null;
-      return taken > 0 ? `${OPP.The} grew ${tiles(s.tiles.length)}, taking ${taken} of yours` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
+      if (s.player === viewer) return taken > 0 ? `You overgrew ${taken} ${OPP.noun} spot${taken === 1 ? '' : 's'}` : null;
+      return taken > 0 ? `${OPP.The} overgrew ${taken} of your spot${taken === 1 ? '' : 's'}` : `${OPP.The} grew ${tiles(s.tiles.length)}`;
     }
     case 'strangle':
       return s.loser === viewer ? HOME.mineSurrounded : HOME.theirsSurrounded;

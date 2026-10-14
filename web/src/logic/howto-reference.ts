@@ -16,9 +16,9 @@ export const howToReferenceHtml = (config?: RulesConfig): string => {
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b>${BLOOM.howto}${sprout ? words.howto : ''}</p>`,
     `<p><b>Painting a bloom:</b> ${TIPS.draw.text} For numbers in a row, the lowest goes on the first hex you paint; “Reverse” flips it. <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
-    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can replace a weaker ${OPP.noun} tile.</p>`,
+    `<p><b>Strength:</b> a tile is as strong as its card. A stronger tile can overgrow a weaker ${OPP.noun} tile.</p>`,
     ...(config?.allowStrengthen ?? true
-      ? [`<p><b>Strengthen:</b> a higher card can replace your own tile to make it stronger. It doesn’t score points, but it’s harder for ${OPP.the} to replace. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Bomb. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
+      ? [`<p><b>Strengthen:</b> a higher card can strengthen your own tile. It doesn’t score points, but it’s harder for ${OPP.the} to overgrow. It uses your ${words.name} for the turn, and it doesn’t stop a cut or Bomb. ${words.strengthenExample} <button type="button" class="link" data-tip="strengthen">Show tip</button></p>`]
       : []),
     ...((config?.fruitCardCount ?? 4) > 0
       ? [`<p>${FRUIT.howto.trim()} <i>Example: an ${OPP.noun} 9 blocks your way; play a Bomb on it and the 9 is gone, with everything that hung on it.</i> <button type="button" class="link" data-tip="fruit">Show tip</button></p>`]

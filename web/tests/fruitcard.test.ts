@@ -61,7 +61,7 @@ describe('the tile card shortcut: "Use Fruit card"', () => {
     expect(fruitOffer(v, l, '1,-1')).toEqual({ label: FRUIT.use, note: FRUIT.topRank, action: { t: 'PlayFruit', card: 72, target: { q: 1, r: -1 } } });
     expect(fruitOffer(v, l, '1,0')).toEqual({ label: FRUIT.use, note: null, action: { t: 'PlayFruit', card: 72, target: { q: 1, r: 0 } } });
     expect(FRUIT.use).toBe('Use Bomb');
-    expect(FRUIT.topRank).toBe('No combo can replace this. A Bomb can.');
+    expect(FRUIT.topRank).toBe('No combo can overgrow this. A Bomb can.');
   });
 
   it('not on a tile it cannot reach, my own tile, a root, or without a Fruit card', () => {

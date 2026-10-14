@@ -15,5 +15,5 @@ export const dangerWarning = (v: View, a: Action): string | null => {
   const before = threats(v, v.player)[0]?.loss ?? 0;
   const worst = threats({ config: v.config, terrain: v.terrain, board: sim.board }, v.player)[0];
   if (!worst || worst.loss <= before) return null;
-  return `Careful: ${OPP.the} could cut off ${worst.loss} of your tiles by taking ${hexName(parseKey(worst.key), v.config.boardRadius)}.`;
+  return `Careful: ${OPP.the} could cut off ${worst.loss} of your tiles by overgrowing ${hexName(parseKey(worst.key), v.config.boardRadius)}.`;
 };

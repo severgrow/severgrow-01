@@ -39,7 +39,7 @@ describe('moveSentence: one plain sentence per move', () => {
     const v = viewWith(set, { tiles: { '0,1': [1, 2], '0,2': [1, 2], '1,0': [1, 2], '1,-1': [1, 2] } });
     expect(
       moveSentence(v, { t: 'Bloom', cards: [1, 2, 3], hexes: [{ q: -1, r: 1 }, { q: 0, r: 1 }, { q: -1, r: 2 }] }),
-    ).toBe('Bloom 3 tiles at E3, E4, F3, taking 1 opponent tile and cutting off 1 more (+3 points)');
+    ).toBe('Bloom 3 tiles at E3, E4, F3, overgrowing 1 opponent spot and cutting off 1 more (+3 points)');
   });
 
   it('simple moves', () => {

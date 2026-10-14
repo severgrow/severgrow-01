@@ -49,7 +49,7 @@ const resolution = (s: State, me: Player): string => {
   const r = s.lastResolution;
   if (!r) return '';
   const parts: string[] = [];
-  if (r.overgrown.length) parts.push(`took over ${r.overgrown.length} tile${r.overgrown.length > 1 ? 's' : ''}`);
+  if (r.overgrown.length) parts.push(`overgrew ${r.overgrown.length} spot${r.overgrown.length > 1 ? 's' : ''}`);
   for (const cut of r.severed) parts.push(`${cut.coords.length} of ${cut.player === me ? 'your' : OPP.theirs} tiles were cut off`);
   return parts.length ? ` — ${parts.join(', ')}` : '';
 };

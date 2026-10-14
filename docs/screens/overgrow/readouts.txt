@@ -1,0 +1,21 @@
+Overgrow wording pass — sampled product strings (futa05 build, offline, 2026-10-14)
+
+hint line (same at 360x640, 390x844, 768x1024, 1280x800):
+  "Tap: ⇆ overgrow + strengthen"
+
+"What happened" line (after the overgrow):
+  "You grew one tile at F4 — overgrew 1 spot"
+
+Screenshots: hint-<WxH>.jpg, what-happened-<WxH>.jpg
+
+Note on the two surfaces that are NOT drawn in the Futa04/futa05 skin:
+- The floating caption is disabled there (web/src/ui/effects.ts `caption()` returns early for
+  IS_FUTA04), so the sentence never appears on screen. On the classic skin it reads
+  "You overgrew N opponent spots" / "Your opponent overgrew N of your spots".
+- A one-tile Grow plays on the tap (no Confirm), so the chip only appears for a painted Bloom;
+  the chip text is checked by exact-string unit tests instead.
+Covered by exact-string tests:
+  web/tests/preview.test.ts        chip: "+3 tiles, overgrows 1, cuts 4"
+  web/tests/names.test.ts          sentence: "... overgrowing 1 opponent spot and cutting off 1 more"
+  web/tests/led-readability.test.ts  LED tokens: "+2" / "-2"
+  web/tests/fruitcard.test.ts      Bomb note: "No combo can overgrow this. A Bomb can."

@@ -145,7 +145,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   strength: {
     active: () => true,
     fits: ({ ranked }) => boardFacts(ranked).some((m) => m.taken > 0),
-    text: ({ say }) => `A higher ${say('strength')} replaces a weaker ${OPP.noun} tile. Equal can't.`,
+    text: ({ say }) => `A higher ${say('strength')} overgrows a weaker ${OPP.noun} tile. Equal can't.`,
   },
   gold: {
     active: () => true,
@@ -183,7 +183,7 @@ const TIPS: Record<TipId, { active: (c: Ctx) => boolean; fits: (c: Ctx) => boole
   strengthen: {
     active: ({ v }) => v.config.allowStrengthen && v.config.sproutsPerTurn > 0,
     fits: ({ ranked }) => ranked.slice(0, 3).some((r) => r.facts.kind === 'strengthen' && r.score > 0),
-    text: () => 'Strengthen: a higher card on your own tile makes it harder to replace (no points).',
+    text: () => 'Strengthen: a higher card on your own tile makes it harder to overgrow (no points).',
   },
   strangle: {
     active: () => true,
@@ -215,7 +215,7 @@ const whyBoard = (c: Ctx, m: MoveFacts, isFruit: boolean): string[] => {
   if (isFruit) reasons.push(`A Fruit card removes an ${OPP.noun} tile, whatever its number.`);
   if (m.botCut > 0) reasons.push(`This cuts ${OPP.theirs} link and removes ${m.taken + m.botCut} of their tiles.`);
   if (m.exposureAfter < m.exposureBefore) reasons.push(`This fixes a ${say('weak spot')} in your network.`);
-  if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This replaces ${plural(m.taken, `a weaker ${OPP.noun} tile`, `weaker ${OPP.noun} tiles`)}.`);
+  if (m.taken > 0 && m.botCut === 0 && !isFruit) reasons.push(`This overgrows ${plural(m.taken, `a weaker ${OPP.noun} tile`, `weaker ${OPP.noun} tiles`)}.`);
   if (m.onRich > 0) {
     reasons.push(m.onRich === 1 ? `This ${say('gold hex')} is worth 2 points.` : `These ${m.onRich} gold hexes are worth 2 points each.`);
   }
@@ -241,7 +241,7 @@ const whyFor = (c: Ctx, best: Scored): string[] => {
         ? [SPROUT.coachWhy(say('combo')), ...whyBoard(c, f.move, false).slice(1)]
         : whyBoard(c, f.move, false);
     case 'strengthen':
-      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can replace it. It scores no points and does not stop a cut${v.config.fruitCardCount > 0 ? ' or a Fruit card' : ''}.`];
+      return [`Strengthen your ${f.from} to a ${f.to}: ${OPP.the} is much less likely to hold a card that can overgrow it. It scores no points and does not stop a cut${v.config.fruitCardCount > 0 ? ' or a Fruit card' : ''}.`];
     case 'draw': {
       const top = v.discard.at(-1);
       if (f.from === 'discard' && top && f.completesCombo) {
@@ -326,13 +326,13 @@ const BULLETS: Record<TipId, string> = {
   draw: 'Take from the throw pile only if it makes a combo.',
   combos: 'Cards that match or follow on can bloom.',
   sprout: 'No combo? Sprout one card as one tile.',
-  strength: `A stronger tile can replace a weaker ${OPP.noun} tile.`,
+  strength: `A stronger tile can overgrow a weaker ${OPP.noun} tile.`,
   gold: 'Gold hexes are worth 2 points.',
   connection: 'Protect weak spots that hold up many tiles.',
   cutting: `Cut ${OPP.theirs} weak spots to make their tiles wither.`,
   leftovers: 'Keep your leftover cards low to avoid rot.',
   knock: 'Knock only when you are clearly ahead.',
-  fruit: `Save Fruit cards for an ${OPP.noun} tile you cannot replace.`,
+  fruit: `Save Fruit cards for an ${OPP.noun} tile you cannot overgrow.`,
   strengthen: 'Strengthen the tile that holds many others up.',
   strangle: `Surround ${OPP.theirs} home to win at once.`,
   planning: `Before a big move, check what ${OPP.the} could cut.`,

@@ -111,7 +111,7 @@ const matching = (v: View, legal: readonly Action[], sel: Sel, skip: Skip = null
 export type TargetKind = 'grow' | 'replace' | 'strengthen' | 'fruit';
 export const TARGET_LABEL: Record<TargetKind, string> = {
   grow: 'Grow on an empty hex',
-  replace: 'Replace an enemy tile',
+  replace: 'Overgrow an enemy tile',
   strengthen: 'Strengthen my tile',
   fruit: 'Remove with a Bomb',
 };

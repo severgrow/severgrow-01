@@ -452,7 +452,7 @@ export const FRUIT = Object.freeze({
   /** the shortcut on an opponent tile's card */
   use: 'Use Bomb',
   /** the shortcut's note on a top-rank tile */
-  topRank: 'No combo can replace this. A Bomb can.',
+  topRank: 'No combo can overgrow this. A Bomb can.',
   /** why a held Bomb has nothing to do */
   noTarget: `No ${lower} tile by yours`,
   notNow: 'Play it in your Grow step.',
