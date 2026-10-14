@@ -7,6 +7,7 @@ import {
   IllegalActionError,
   RULES_VERSIONS,
   applyAs,
+  boardChoiceConfig,
   eventsOf,
   hidePrivateEvents,
   legalActions,
@@ -15,7 +16,8 @@ import {
   stateFromSetup,
   viewFor,
 } from '../../src/engine/index.js';
-import type { Action, Event, Player, State } from '../../src/engine/index.js';
+import type { Action, Event, Player, RulesConfig, State } from '../../src/engine/index.js';
+import type { BoardChoice } from '../../src/engine/index.js';
 import { safePublish } from './broadcast.js';
 import type { MatchBroadcaster } from './broadcast.js';
 import { DEFAULT_SERVER_CONFIG, clientVersionOk } from './config.js';
@@ -215,8 +217,8 @@ export class MatchService {
    * window (`waitingExpireMs`, 48h in production) — the same window a parked search reuses, since
    * a parked search is exactly a waiting open-queue match.
    */
-  private buildWaitingMatch(now: number, openQueue: boolean): MatchRecord {
-    const setup = matchSetup(newSeed(), this.config.rulesVersion);
+  private buildWaitingMatch(now: number, openQueue: boolean, config: Partial<RulesConfig> = {}): MatchRecord {
+    const setup = matchSetup(newSeed(), this.config.rulesVersion, config);
     return {
       id: newId(),
       inviteCode: newInviteCode(this.config.inviteCodeLength),
@@ -245,7 +247,7 @@ export class MatchService {
 
   async createMatch(
     player: PlayerRecord,
-    options: { openQueue?: boolean } = {},
+    options: { openQueue?: boolean; board?: BoardChoice } = {},
   ): Promise<{ match: MatchSummary; player: MatchViewPayload }> {
     const existing = await this.storage.matchesOfPlayer(player.id);
     if (existing.filter((m) => m.status !== 'finished').length >= this.config.maxOpenMatchesPerPlayer) {
@@ -254,10 +256,13 @@ export class MatchService {
 
     const now = this.now();
     const openQueue = !!options.openQueue;
+    // The map is fixed at creation and lives in the match record (seed, config and state), so the
+    // joiner always adopts THIS board — matchmaking never re-decides it.
+    const boardConfig = boardChoiceConfig(options.board ?? 'classic');
 
     let created: MatchRecord | null = null;
     for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS && created === null; attempt++) {
-      const candidate = this.buildWaitingMatch(now, openQueue);
+      const candidate = this.buildWaitingMatch(now, openQueue, boardConfig);
       const result = await this.storage.createMatch(candidate);
       if (result.ok) created = candidate;
       else if (result.code === 'DUPLICATE_INVITE_CODE') {
@@ -290,15 +295,20 @@ export class MatchService {
   async findOpponent(
     player: PlayerRecord,
     clientIp: string | null = null,
+    options: { board?: BoardChoice } = {},
   ): Promise<{ match: MatchSummary; player: MatchViewPayload; paired: boolean }> {
     await this.rateLimit(`join:player:${player.id}`, HOUR_MS, this.config.rateLimits.joinPerPlayerPerHour);
     await this.rateLimit(`join:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.joinPerIpPerHour);
 
     const now = this.now();
+    // The map choice applies ONLY to the record this player parks. Joining an existing waiting match
+    // above it in `claimOpenQueueOrPark` always adopts that match's own board, so there is no map
+    // filter anywhere in matchmaking.
+    const parkedConfig = boardChoiceConfig(options.board ?? 'classic');
     for (let attempt = 0; attempt < MAX_INVITE_CODE_ATTEMPTS; attempt++) {
       const result = await this.storage.claimOpenQueueOrPark({
         playerId: player.id,
-        parked: this.buildWaitingMatch(now, true),
+        parked: this.buildWaitingMatch(now, true, parkedConfig),
         now,
         turnTimeoutMs: this.config.turnTimeoutMs,
         maxOpenMatches: this.config.maxOpenMatchesPerPlayer,
