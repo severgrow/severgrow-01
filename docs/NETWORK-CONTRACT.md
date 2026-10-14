@@ -1,12 +1,14 @@
 # Futasaku PvP network contract
 
-> **Status:** implemented for the vertical slice. See [`BACKEND.md`](BACKEND.md) for the actual
+> **Status:** implemented and shipped (online duels and live duels). See
+> [`ONLINE.md`](ONLINE.md) for the current status and [`BACKEND.md`](BACKEND.md) for the actual
 > endpoints, the storage schema, the security model and what is still unfinished. This document
 > remains the contract the implementation follows.
 
-This is the minimum contract the future server-authoritative PvP layer will use. It defines the
-boundary now so the backend can be built without re-litigating the game underneath it. **No
-networking is implemented in this pass.**
+This is the minimum contract the server-authoritative PvP layer uses. It defines the boundary so the
+backend could be built without re-litigating the game underneath it. **The network layer is now
+implemented and live** (online duels on `/futa0.5/`, plus live duels) — this document is the contract
+it follows, not a future plan.
 
 ## Principles
 
@@ -111,11 +113,13 @@ Rate limiting is part of the contract because it shapes what a legitimate player
 - Exact defaults, bucket names and the `RATE_*` / `SWEEP_CRON_TOKEN` environment variables are
   documented in [`BACKEND.md`](BACKEND.md#rate-limits-nat-friendly).
 
-## What this pass does NOT do
+## What is still out of scope
 
-No accounts, database, matchmaking, WebSockets/realtime, world-map UI, clans or progression.
-Sections 9 and 10 keep the existing `server-core` groundwork and the reward/world boundary
-documented in `docs/SERVER-CORE.md`.
+No accounts with credentials/OAuth, no ranking / matchmaking skill, no world-map UI, clans or
+progression. Realtime **is** used, but only for transient **broadcast pings** (polling is always the
+truth, so a failed publish never fails the request) — no authoritative table is in the
+`supabase_realtime` publication. Sections 9 and 10 keep the existing `server-core` groundwork and the
+reward/world boundary documented in `docs/SERVER-CORE.md`.
 
 ## Live duels (preview channels; `docs/LIVE.md`)
 

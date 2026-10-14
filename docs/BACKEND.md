@@ -1,9 +1,14 @@
 # Futasaku 0.5 — backend foundation
 
-Status: **Phase 3 client layer ready** (`web/src/online/`: identity, sync, draft, OnlineDriver).
-Phase 2 live against Supabase (deadlines, turn-gated views, batch submit, resign, match list,
-link codes, Postgres rate limits, sweeper). Edge API from Phase 1. No duel screens yet (Phase 4+).
-See [`ONLINE-PLAN.md`](ONLINE-PLAN.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
+> **Status pointer:** start at [`ONLINE.md`](ONLINE.md) for the current online-duels status. This
+> document describes the backend as built; the dated verification snapshots are
+> [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).
+
+Status: **built and shipped** — the online duel screens and backend are live on `/futa0.5/`.
+`web/src/online/` holds the client layer (identity, sync, draft, OnlineDriver); the backend runs
+against Supabase (deadlines, turn-gated views, batch submit, resign, match list, link codes,
+Postgres rate limits, sweeper, Realtime turn pings). Live duels (challenge → 45-second turns) also
+ship on `/futa0.5/` — see [`LIVE.md`](LIVE.md). The plan is [`ONLINE-PLAN.md`](ONLINE-PLAN.md).
 
 This document says exactly what works, what is unfinished, and what must happen before real
 players are invited. The design follows [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) (the wire
@@ -345,36 +350,51 @@ The rest of the project's suite is unchanged and must stay green (see the final 
 
 ## What is NOT built (on purpose or unfinished)
 
-Deliberately out of scope, per the brief: accounts with credentials/OAuth, matchmaking, clans, XP,
-world-map functionality, ranked play, and any game-mechanic change.
+Deliberately out of scope, per the brief: accounts with credentials/OAuth, matchmaking skill /
+ranking, clans, XP, world-map functionality, ranked play, and any game-mechanic change.
 
-Unfinished / next:
+Built since the original phases (so no longer "unfinished"):
 
-1. **Live database run.** See the "Supabase setup" section and `docs/DATABASE-VERIFICATION.md`
-   for exactly what has been verified against the real project.
-2. **No push transport.** Clients poll (`/view?since=`). The contract's realtime step needs SSE or
-   WebSocket on top of the same pipeline.
-3. **No client UI wiring.** `server/src/client.ts` is ready and tested, but the game screen does not
-   yet create/join a duel. Solo play is untouched.
-4. **Rate limits are in Postgres** (guest/join/actions/link/sweep), now NAT-friendly and
-   env-tunable — see [Rate limits (NAT-friendly)](#rate-limits-nat-friendly). Defaults are safe;
-   adjust with the `RATE_*` environment variables if a deployment needs different caps.
-5. **CORS is `*` by default** for local development. Production must set `CORS_ORIGIN`.
-6. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
-7. **No observability** beyond one line per request (method, path, status, duration). No metrics,
+- **Live database run** — verified against the real project; see
+  [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md) and
+  [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md).
+- **Live transport** — a Supabase Realtime **broadcast ping** on turn completion, with polling as
+  the safety net (below).
+- **Client UI** — the lobby and duel screen (and the live-duel pop-up) are wired to `DuelClient`;
+  solo play is unchanged.
+- **Rate limits** — Postgres-backed, NAT-friendly and `RATE_*`-tunable (see the section above).
+- **Sweeper** — runs itself from the `futasaku-keepalive` pg_cron job (see
+  [Keep-alive](#keep-alive-pgcron--pgnet)).
+
+Still open / deliberately unfinished:
+
+1. **No push while the tab is closed.** An open tab receives the Realtime ping; a closed tab is only
+   updated on the next visit (no web-push notifications). Polling is unchanged as the safety net.
+2. **No TLS termination** here (a deployment concern). Tokens are bearer tokens: HTTPS is required.
+3. **No observability** beyond one line per request (method, path, status, duration). No metrics,
    tracing or alerting; logs never contain bodies or tokens.
-8. **Sweeper exists and now runs itself** (`POST /v1/sweep`): timeouts, waiting expiry, stale
-   guests. Migration `0005_keepalive_cron.sql` schedules it from inside the database (pg_cron every
-   2 days, together with a `GET /v1/health?db=1` round trip that keeps the free project awake) — see
-   [Keep-alive](#keep-alive-pgcron--pgnet). Make it more frequent with `cron.alter_job` if wanted.
-9. **Reconnect returns only the view + events**, not a replay of the opponent's last turn visuals.
+4. **Presence (Online / Away) is not wired.** The API has a presence heartbeat, but the client
+   deliberately **hides** the indicator rather than faking it. This is a known open item.
+5. **Retained-heap drift (open, frontend).** A long-lived tab retains ~270 KB per match
+   (~100–500 KB/match measured end to end), released only by a reload — see
+   [`ONLINE-POLISH.md`](ONLINE-POLISH.md#retained-heap--a-real-slow-drift-reported-not-hidden).
+6. **Intermittent seat-1 Bloom painting stall (open, frontend).** Roughly 1 run in 3; the cause is
+   not yet identified. Not a server issue.
 
-## Before inviting real players
+## Before inviting real players (status)
 
-1. Postgres (Supabase) with the migration applied; the adapter exercised against it in CI.
-2. TLS + a locked-down `CORS_ORIGIN`; rotate the service-role key.
-3. Rate limits on `/v1/guests`, `/v1/matches/join` and `/v1/matches/:id/actions` (per-IP plus the
-   per-player limits that are the real abuse control).
-4. A decision on the live transport (SSE/WebSocket) and reconnect behaviour under it.
-5. The client duel screen wired to `DuelClient` behind a feature flag, with solo play unchanged.
-6. Monitoring (error rate, revision conflicts, match completion) and a cleanup job.
+1. **Done** — Postgres (Supabase) with migrations `0001`–`0006` applied; the adapter is exercised
+   against the real project (`npm run server:db-test`).
+2. **Done** — TLS on managed hosts and CORS **locked** to `PRODUCTION_CORS_ORIGIN`
+   (`server/src/config.ts`: `https://severgrow.github.io`) on the deployed Edge function. The `*`
+   value is only the local/dev default, so a browser on another origin is blocked (an `OPTIONS`
+   preflight answers with the production origin, never an echo of the caller's). Rotate the
+   service-role key as routine hygiene.
+3. **Done** — rate limits on guest creation, join and actions: NAT-friendly per-IP caps plus the
+   per-player limits that are the real abuse control.
+4. **Done** — the live transport is the Realtime broadcast ping with polling as the safety net;
+   reconnect replays the missed turns (see [What is NOT built](#what-is-not-built-on-purpose-or-unfinished)).
+5. **Done** — the duel screen (and the live-duel pop-up) is wired to `DuelClient`; solo play is
+   unchanged.
+6. **Partly** — the sweeper runs from the `futasaku-keepalive` pg_cron job; monitoring is still just
+   one log line per request (no metrics, tracing or alerting).
