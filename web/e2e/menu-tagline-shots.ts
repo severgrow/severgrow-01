@@ -45,6 +45,7 @@ const METRICS = `(() => {
       .map((k) => k.id || k.className),
     titleToButtons: title && buttons ? Math.round(buttons.getBoundingClientRect().top - title.getBoundingClientRect().bottom) : null,
     columnGap: inner ? Math.round(Number.parseFloat(getComputedStyle(inner).rowGap)) : null,
+    headGap: inner ? getComputedStyle(inner).getPropertyValue('--menu-head-gap').trim() : null,
     overflowY: inner ? Math.round(inner.scrollHeight - inner.clientHeight) : null,
     viewportH: window.innerHeight,
   };
@@ -75,7 +76,14 @@ for (const vp of VIEWPORTS) {
   if (LABEL === 'after') {
     check(`${vp.key}: no tagline element in the menu`, m.taglineCount === 0 && m.tagline === null);
     check(`${vp.key}: nothing sits between the wordmark and the buttons`, m.betweenTitleAndButtons.length === 0, JSON.stringify(m.betweenTitleAndButtons));
-    check(`${vp.key}: wordmark→buttons equals the column gap (no empty gap)`, m.titleToButtons === m.columnGap, `${m.titleToButtons}px vs ${m.columnGap}px`);
+    // The tagline is gone since 2026-10-14; the wordmark now stands a deliberate two-step head gap
+    // (28px) above the buttons instead of the bare 14px column rhythm. This used to assert the gap
+    // EQUALS the column rhythm (proving no leftover tagline gap) — that value is 14px only while the
+    // head gap is absent. Assert the deliberate floor plus the token so the spacing cannot silently
+    // collapse back into the wordmark.
+    // `m.headGap` is the USED token value; Chrome resolves `calc(2 * var(--menu-rhythm))` to
+    // `calc(2 * 14px)`, so the check ties the head gap to the 14px rhythm rather than a magic number.
+    check(`${vp.key}: wordmark→buttons is the deliberate head gap (28px)`, m.titleToButtons === 28 && String(m.headGap).includes('14px'), `${m.titleToButtons}px, token ${m.headGap}`);
     check(`${vp.key}: the menu column does not scroll`, m.overflowY === 0, `overflow ${m.overflowY}px`);
   }
   await page.close();
