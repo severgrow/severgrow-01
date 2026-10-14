@@ -41,7 +41,7 @@ Each turn is **Draw → Grow → Throw**.
 2. **Grow** — place tiles. You get **one** ordinary Grow (or Strengthen, or single Bomb). **Bloom** and **Blast** are **extra** and do not use that one Grow. You may Bloom / Blast any number of times in any order with the Grow.
 3. **Throw** — discard one card. Any card in hand may be thrown, including a card just taken from the throw pile. The turn then ends (Rot / Knock are off by default).
 
-**Grow (one tile):** spend one numbered card to claim an empty hex next to your network, or replace a weaker enemy non-home tile, or Strengthen one of your own non-root tiles with a strictly higher card. Strengthening uses the same one-Grow allowance.
+**Grow (one tile):** spend one numbered card to claim an empty hex next to your network, or overgrow a weaker enemy non-home tile, or Strengthen one of your own non-root tiles with a strictly higher card. Strengthening uses the same one-Grow allowance.
 
 **Bloom:** 3–6 cards that form a set (same rank) or a run (one suit, consecutive ranks, no wrap). Place that many connected hexes touching your network; each card supplies its own strength. Extra — does not use Grow.
 
