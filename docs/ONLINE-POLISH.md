@@ -128,7 +128,25 @@ matches; "requests" counts `GET /v1/matches/<id>/view` from **both** pages unles
 
 The `/futa0.5/` bundle pins the Edge function to the database's region. Verified in the **built**
 bundle, not in the source: `client-*.js` contains `forceFunctionRegion=` and `config-*.js` contains
-`eu-west-1`. The pin is a query parameter (not a header), so it needs no CORS change.
+`eu-west-1`. The pin is a query parameter (not a header), so it needs no CORS change. The live
+`/v1/health?db=1` confirms the same project is on the Transaction pooler in `eu-west-1`
+(`"pooler":"transaction-pooler","port":"6543"`).
+
+### Live Edge latency (p50/p95)
+
+A bounded probe (2 real HTTPS duels, 252 requests, 0 errors, no 429/500/503) through the same
+`DuelClient` the browser uses, against the deployed Edge function:
+
+| Call | p50 | p95 |
+| --- | --- | --- |
+| View fetch | **549 ms** | 635 ms |
+| Submit action | **640 ms** | 717 ms |
+
+For contrast, the same client against the local server on the same real database measured view p50
+269 ms / p95 277 ms and submit p50 342 ms / p95 391 ms — the difference is the Edge hop plus the
+network, not the game. The numbers match the previous verification (`docs/ONLINE-SHIP-STATUS.md`
+recorded edge view p50 565 / p95 633, submit p50 644 / p95 749), so this pass did not regress
+latency.
 
 ### Initial load of `/futa0.5/`
 
