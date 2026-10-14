@@ -111,11 +111,30 @@ All responses are JSON. Authenticated routes require `Authorization: Bearer <tok
 | GET | `/v1/matches/:id/view?since=N` | the caller's player view (+ events after revision N) |
 | POST | `/v1/matches/:id/reconnect` | same, by `{ sinceRevision }` — used after a refresh |
 | POST | `/v1/matches/:id/actions` | submit `{ expectedRevision, requestId, action }` |
+| POST | `/v1/matches/:id/cancel` | retire the caller's own **waiting** match → `{ cancelled }` |
 
 A **player view** contains: the engine `View` (`viewFor(state, seat)`), the seat, the public turn
 and status, the legal actions (only when it is that seat's turn), and the public-safe events. It
 never contains the seed, the deck, either full hand, `fruitKnown`, the event history internals, or
 the authoritative `State`.
+
+**Cancelling a waiting duel (new).** `POST /v1/matches/:id/cancel` retires the caller's own match
+while it is still `waiting` (an invite nobody ever joined, or a parked Find-Opponent search). It is
+**owner-only** (the caller must be the match's sole participant), **idempotent** (a repeat is a calm
+`{ cancelled: false }`), and it **deletes** the row, so the invite code no longer resolves and a
+later join cannot land in it. An `active` or `finished` match is never touched. The invite screen's
+**Cancel match** button calls it (with a confirm). Before this, an unjoined invite could only be
+cleared by waiting out the 48-hour window, so abandoned invites lingered as "open" duels; a player
+sitting at the 10-open-duel cap saw the generic error because the client mapped the wrong code (see
+below).
+
+**Find-opponent error codes (one spelling).** The service emits `TOO_MANY_MATCHES` (409) when a
+player is at the open-duel cap. The client maps error codes to player lines in
+`web/src/online/lobby.ts` (`friendlyJoinError`); it used to key on `TOO_MANY_OPEN`, a code **no
+server path emits**, so the specific "too many open duels" line was dead code and a capped player
+saw the generic "Something went wrong". It now maps `TOO_MANY_MATCHES` → `ONLINE.errTooMany`, and
+`web/tests/lobby.test.ts` drives the real service to the cap and asserts that exact code maps to
+that line — so the two sides can never silently diverge again.
 
 ## Rate limits (NAT-friendly)
 
@@ -146,9 +165,16 @@ shares one public address. The **per-player** limits are the real anti-abuse con
 by the player's own token, so players cannot share or pool them. The 10-open-matches-per-player cap
 is unchanged. Invite codes are now **4 characters** (see [Invite codes](#invite-codes)).
 
+**Every limit is Postgres-backed** (`hitRateLimit` in `server/src/storage/postgres.ts`), so it holds
+across Edge isolates — this is NOT an in-memory per-instance counter, which on Supabase Edge would
+be per warm isolate and could be multiplied by concurrency. The memory adapter is used only in
+tests and local dev, where a single process is the whole world.
+
 | Bucket (default window) | Default | Environment variable |
 | --- | --- | --- |
 | Guest creation, per IP per hour | `200` | `RATE_GUEST_PER_IP_PER_HOUR` |
+| Match **creation**, per **player** per hour | `30` | `RATE_CREATE_PER_PLAYER_PER_HOUR` |
+| Match **creation**, per IP per hour | `120` | `RATE_CREATE_PER_IP_PER_HOUR` |
 | Match join, per **player** per hour | `60` | `RATE_JOIN_PER_PLAYER_PER_HOUR` |
 | Match join, per IP per hour | `400` | `RATE_JOIN_PER_IP_PER_HOUR` |
 | Link-code creation, per player per hour | `10` | `RATE_LINK_CODE_PER_PLAYER_PER_HOUR` |
@@ -156,6 +182,14 @@ is unchanged. Invite codes are now **4 characters** (see [Invite codes](#invite-
 | Actions, per player per minute | `120` | `RATE_ACTIONS_PER_PLAYER_PER_MINUTE` |
 | Sweep, per IP per hour | `120` | `RATE_SWEEP_PER_IP_PER_HOUR` |
 | Cron sweep token (`x-futasaku-cron`) | unset | `SWEEP_CRON_TOKEN` |
+
+The **Find-opponent** call (`POST /v1/matchmaking/find`) and **join** (`POST /v1/matches/join`) share
+the `join:*` budgets above; **cancel** (`/v1/matchmaking/cancel` and `/v1/matches/:id/cancel`) reuses
+the per-player join budget. **Match creation** is the one lifecycle write that historically had no
+limit — a create/cancel loop could mint rows and burn permanent invite codes without bound — so it
+now carries both a per-player and a per-IP cap. Every over-limit path returns HTTP **429** with a
+player-readable line (`ONLINE.errRateLimited`, "Too many tries. Wait a moment and try again."), never
+a raw error.
 
 Every limit is overridable at runtime by the environment variable above (read through
 `readEnv` in `server/src/config.ts`, which checks `process.env` then `Deno.env`), so the live Edge
@@ -166,6 +200,22 @@ function can be tuned without a code change. Defaults are the safe values above.
 sweep uses the dedicated `sweep:internal` bucket, so a player's per-IP budget (or a shared
 `unknown` bucket) can never starve routine housekeeping. It is still rate limited. Without the token
 the ordinary `sweep:ip:<ip>` bucket applies.
+
+**What the sweep reaps (all three categories are covered).** One shared expiry decision
+(`expiryDecision`) is used by BOTH the sweeper and every lazy read (`listMyMatches`, `viewPayload`,
+`joinMatch`, `claimOpenQueueOrPark`, `applyExpiry`), so an expired-but-unvisited match is cleaned up
+the moment either player looks, and the daily `futasaku-keepalive` cron is the backstop for matches
+nobody ever revisits:
+
+1. **Active matches past their turn deadline** — the acting seat spends its grace or the match
+   finishes by `timeout`.
+2. **Waiting matches past `waitingExpireMs` (48h)** — this covers BOTH an invite nobody ever joined
+   AND a parked Find-Opponent search, because a parked search *is* a waiting open-queue match with
+   the same `expiresAt` (`buildWaitingMatch`). Both become `finished`.
+3. **Stale guest accounts** (no matches, older than 30 days) are deleted.
+
+`server/tests/find-opponent-parking.test.ts` proves categories 1–2 with the real service and
+sweeper; `server/tests/phase2.test.ts` proves the lazy read and the sweeper share one outcome.
 
 ## Invite codes
 
@@ -346,7 +396,9 @@ tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-d
 | `web/e2e/online-duel-two-browser.ts` | Phase 6: two Chromium contexts, local API + preview, create/join, Me/Opponent HUD, resign → finished on both |
 | `server/tests/phase7-matchmaking.test.ts` | Phase 7: open-queue create + pair; invite matches stay out of the pool |
 | `server/tests/client-ip.test.ts` | client-IP derivation: `cf-connecting-ip` precedence, `x-real-ip`, `x-forwarded-for` leftmost public pick, private-hop skipping, malformed/`unknown` fallbacks, private-range classification |
-| `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket |
+| `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket; the new **create** cap per player and per IP |
+| `server/tests/cancel-waiting-match.test.ts` | cancel a waiting invite: owner-only, waiting-only, idempotent, and the cancelled code no longer joins (service + real HTTP) |
+| `web/tests/lobby.test.ts` | lobby helpers; a **regression** drives the real service to the open-duel cap and asserts `TOO_MANY_MATCHES` maps to the specific `ONLINE.errTooMany` line (so the client mapping can never silently diverge from the server code again) |
 | `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
 `vitest.config.ts` loads `.env` when it exists, so the real-database suites **run** locally; in CI
