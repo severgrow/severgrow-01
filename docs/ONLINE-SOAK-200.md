@@ -3,6 +3,11 @@
 **Run:** 2026-10-13, clean campaign 04:34–06:04 UTC (9 resumable slices) · **plan:** 200 duels (20 live Edge, 180 in-process) · **wall time:** 90.0 min
 **Branch:** `futa0.5-online` · **rules:** `futasaku0.4-strength-draw` · **Edge base:** `https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel`
 
+> **Update (note added 2026-10-14) — history kept below.** Dated 2026-10-13 soak; the run, the
+> hidden-information audit, the deadline audit and the three fixed bugs all stand. One constant has
+> changed: the per-IP guest cap is now **200/hour** (the body's "30/IP/hour" was the value at the
+> time, and it is `RATE_*`-tunable). Current status: [`ONLINE.md`](ONLINE.md).
+
 ## How the 200 were run
 
 | Batch | Mode | Games | What it exercises |

@@ -1,5 +1,7 @@
 # Find opponent — parked search, honest computer fallback, timeout grace
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work.
+
 Branch `futa0.5-online`. This document records (a) the queue design that is actually in the tree,
 (b) the parked-search expiry and why, (c) the timeout-grace rule, and (d) the copy table for the
 whole online flow so any line is a one-line change in `src/strings.ts`.

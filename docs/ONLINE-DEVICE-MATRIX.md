@@ -7,6 +7,14 @@
 Re-run: `npx tsx web/e2e/online-device-matrix.ts [--games=30] [--concurrency=1] [--variant=<name>] [--only=<device-id>]`
 Guest identities are cached in the OS temp dir, so a re-run does not spend the live API's 30-guests/hour budget.
 
+> **Update (note added 2026-10-14) — history kept below.** Dated 2026-10-13 matrix run (20/30 at the
+> time). Its five findings were fixed and re-verified in the follow-up recorded at the end of
+> [`ONLINE-SIMULATION.md`](ONLINE-SIMULATION.md): Resign is reachable (79×48, kept on one line),
+> hidden/offline tabs stop the fast poll (30 s cadence), the WebKit spurious-CORS console error is
+> gone (fonts are no longer inlined on `futa05`), and the "placed Grow left no draft" / "no fresh
+> identity" items were harness artefacts. The invite code is now **4 characters**, not 8.
+> Current status: [`ONLINE.md`](ONLINE.md).
+
 ## Headline
 
 **20 / 30 duels passed.** Ten failures cluster in five places, and only one of them is engine-specific:

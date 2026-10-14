@@ -4,6 +4,20 @@
 **Date:** 2026-10-12  
 **Game name:** FUTASAKU  
 
+> **Superseded (note added 2026-10-14) — history kept below.** This is the dated final report for the
+> 2026-10-12 pass; some items have moved on since:
+> - **Keep-alive (P-2):** no longer a GitHub Actions workflow — that workflow never ran (GitHub only
+>   fires schedules from the default branch) and was **deleted**. The keep-alive is now the
+>   Supabase-native `pg_cron` job `futasaku-keepalive` (every 2 days: `GET /v1/health?db=1` then
+>   `POST /v1/sweep`). See [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
+> - **P-12 "no grace":** the one-grace-per-player rule now exists (migration `0004_timeout_grace.sql`).
+> - **Owner follow-ups #2 and #4** are done/obsolete: `/futa0.5/` is published, and there is no GitHub
+>   keep-alive schedule left to re-enable.
+> - The live transport is now the Realtime broadcast **ping** (polling is the safety net), and a
+>   reconnect **replays** the missed turns (2× with Skip). See [`ONLINE-SMOOTHNESS.md`](ONLINE-SMOOTHNESS.md).
+>
+> Current status: [`ONLINE.md`](ONLINE.md).
+
 ## What shipped
 
 Online duels are live on Supabase Edge (`duel`) with the shared `src/engine/` (no rule changes). Players create/join friend matches, play Draw → local draft → Throw on the shared board with seat perspective (Me=moss), resign, and see finished screens. Catch-up replay runs at 2×. Find Opponent is behind a flag (on for `CHANNEL=futa05` / `VITE_FIND_OPPONENT=1`).

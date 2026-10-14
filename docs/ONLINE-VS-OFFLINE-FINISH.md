@@ -1,5 +1,7 @@
 # Finishing the finish screen — offline is the reference, online matches it
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work; this pass made online match offline on the finish screen.
+
 **Branch:** `futa0.5-online` · **Date:** 2026-10-13 · **Game:** FUTASAKU
 **Drives:** the finish-screen / wording / exit divergences found by
 [`ONLINE-VS-OFFLINE.md`](ONLINE-VS-OFFLINE.md) (commit `cd5479b`). The owner's decision: **offline is

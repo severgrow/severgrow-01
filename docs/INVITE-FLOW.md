@@ -1,5 +1,7 @@
 # Link-first invites (FUTASAKU 0.5)
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work.
+
 Owner-approved change to the duel invite flow, on branch `futa0.5-online`. The **link is the
 primary action**; the code (now **4 characters** — see `INVITE_CODE_LENGTH` in `src/invite-code.ts`)
 stays as a fallback (in-app browsers keep separate storage, links get truncated, people read codes

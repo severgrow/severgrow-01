@@ -1,5 +1,7 @@
 # FUTASAKU 0.5 online — smoothness & turn-word evidence
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work.
+
 Two-phone playtest follow-up (owner: *"the other phone shows Opponent's turn for far too long,
 sometimes ~20s; both phones can show Opponent's turn at the same time; the replay is laggy"*).
 

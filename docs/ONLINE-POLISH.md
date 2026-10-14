@@ -1,5 +1,7 @@
 # FUTASAKU 0.5 online — polish, debugging and optimisation pass
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work; this is the latest polish/verification pass.
+
 **Branch:** `futa0.5-online` · **Channel:** `CHANNEL=futa05` (`/futa0.5/`) · **Date:** 2026-10-14
 **Scope:** the online-duels addition only. No `src/engine/` rule change, no tutorial change, no
 `futa0.4` build or `pages.yml` change, nothing on `main`.

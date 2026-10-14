@@ -1,5 +1,7 @@
 # FUTASAKU 0.5 consolidation — online + tutorial + display glow
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work. This is a dated consolidation record; live duels landed afterwards.
+
 One combined best version on `futa0.5-online`, verified green as a whole and shipped to the
 live `/futa0.5/` preview. `/futa0.4/`, `main` and `dev` are untouched.
 

@@ -10,6 +10,18 @@ This is the deliverable report for the online-duels pass: the live failure, the 
 30-game simulation, and the UI/UX walk. Everything below was reproduced and fixed on
 `futa0.5-online`; secrets are never printed.
 
+> **Update (note added 2026-10-14) — history kept below.** Dated deliverable report for the
+> 2026-10-13 pass. Changed since:
+> - **U4 / presence:** the "Realtime channel is a no-op stub" claim is **wrong** — the realtime
+>   broadcast **pings work** (see [`ONLINE-SMOOTHNESS.md`](ONLINE-SMOOTHNESS.md)). The **presence
+>   indicator is deliberately hidden**, not reading "Unknown".
+> - **U5 / rate limit:** the per-IP guest cap is now **200/hour** (it was 30 at the time); every limit
+>   is `RATE_*`-tunable.
+> - **Invite codes** are now **4 characters** (the Phase D walk recorded an 8-char code).
+> - A hidden tab now polls at the **30 s hidden cadence** (the matrix note in §Phase D said "2 s").
+>
+> Current status: [`ONLINE.md`](ONLINE.md).
+
 ---
 
 ## Phase A — the live guest-creation failure (fixed)

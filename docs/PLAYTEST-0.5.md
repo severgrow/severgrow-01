@@ -1,5 +1,7 @@
 # FUTASAKU 0.5 — two-phone playtest script
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work.
+
 **What you are testing:** online duels in FUTASAKU 0.5 — starting a match with a friend, playing live
 and over time, the Find opponent queue, resigning, and the help screens.
 

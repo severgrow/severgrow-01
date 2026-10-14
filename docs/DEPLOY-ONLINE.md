@@ -1,5 +1,7 @@
 # Deploy FUTASAKU online (`/futa0.5/` preview)
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index for the online-duels work; this is the live reference for deploying it.
+
 Plain-English guide for the live duel API on the one Supabase project **FUTASAKU**
 (`wbfrbeedlvjercrukngn`, eu-west-1).
 

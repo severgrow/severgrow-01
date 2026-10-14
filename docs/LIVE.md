@@ -1,5 +1,7 @@
 # FUTASAKU live duels (futa-test and the `/futa0.5/` preview)
 
+> **Status pointer:** [`ONLINE.md`](ONLINE.md) is the index; this is the reference for live duels.
+
 Branch `futa0.5-online` (merged; the live work came from `futa0.5-live`). Not in the locked build, not
 in `main`, `dev` or `futa0.4`. The product build (`CHANNEL=futa04`) never shows any of this.
 

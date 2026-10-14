@@ -7,6 +7,14 @@ FUTASAKU development database. See "Results" for the evidence.
 Unit-level proofs live in `server/tests/`; the adapter and the API are documented in
 [`BACKEND.md`](BACKEND.md).
 
+> **Update (note added 2026-10-14) — history kept below.** This is the dated 2026-10-12 verification
+> of the database layer; its facts, results, the two faults and the security note stay accurate for
+> that run. Since then migrations `0002`–`0006` were applied (deadlines/lists/rate limits, open queue,
+> timeout grace, keep-alive cron, live duels), so the project now has **9 public tables, not 5**, and
+> the "Outstanding after this step" list is now **done** — the live transport (Realtime ping + poll),
+> the duel screen, the CORS lock-down, rate limits and the sweeper all exist.
+> Current status: [`ONLINE.md`](ONLINE.md); live-duel schema: [`LIVE.md`](LIVE.md).
+
 ## Project facts (confirmed)
 
 | Fact | Value |

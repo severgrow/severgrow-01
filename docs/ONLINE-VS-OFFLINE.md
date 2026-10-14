@@ -5,7 +5,16 @@
 **Online measured:** LIVE `https://severgrow.github.io/severgrow-01/futa0.5/` — `release.json` commit **`d7453e3`** (3 commits behind local HEAD; the live build still has the HUD deadline chip and the strip Resign, i.e. **before** the in-flight HUD trim below).
 **Also spot-checked:** live `/futa0.4/` (`release.json` commit `304f891`) for the shipped offline menu.
 
-The owner's instinct is right: the serious bugs so far have all been online/offline *divergences*. This audit drives both games with the same sequences and records what a player would see. It does **not** touch the selection/interaction fix that is being done concurrently (`web/src/online/driver.ts`, `duel-session.ts`, `duel-bridge.ts`, `duel-runtime.ts`, `duel-hud.ts`, `online-css.ts`, `web/src/main.ts`, `player/glass-surface.ts`, `online-*.ts`, `web/tests/*`).
+The owner's instinct is right: the serious bugs so far have all been online/offline *divergences*. This audit drives both games with the same sequences and records what a player would see.
+
+> **Update (note added 2026-10-14) — history kept below.** Dated 2026-10-13 differential audit. Every
+> "accidental" divergence and every owner decision it lists was addressed in
+> [`ONLINE-VS-OFFLINE-FINISH.md`](ONLINE-VS-OFFLINE-FINISH.md): the score bar reads **You**; the finish
+> screen shows the full reason sentence, score, tiles/gold breakdown and highlights with
+> `vs <opponent>`; every exit route tears the session down; the turn pill no longer shows a level; and
+> the deadline is an **urgency-only** indicator in the duel strip (hidden, amber under 2 h, red under
+> 15 min). One correction: the §3.8 presence reading was **not** a realtime artefact — presence is
+> simply **not wired** and is hidden on purpose. Current status: [`ONLINE.md`](ONLINE.md). It does **not** touch the selection/interaction fix that is being done concurrently (`web/src/online/driver.ts`, `duel-session.ts`, `duel-bridge.ts`, `duel-runtime.ts`, `duel-hud.ts`, `online-css.ts`, `web/src/main.ts`, `player/glass-surface.ts`, `online-*.ts`, `web/tests/*`).
 
 ---
 
