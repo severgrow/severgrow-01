@@ -1,6 +1,7 @@
 // first: the release channel (the test copy keeps its own storage)
 import { IS_TEST, IS_FUTA04, FEATURES } from './channel.js';
 import { getOnlineSession, isOnlineDuel, setOnlineSession } from './online/duel-runtime.js';
+import { runRematch } from './online/rematch.js';
 // Futasaku in the browser. You (player 1) against the computer. All rules come from the
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
@@ -4688,6 +4689,7 @@ function renderGameOver() {
     // A decided match never waits on an animation. This is the symmetry rule the owner asked for:
     // both devices get the end screen as soon as the finished view lands, one as winner and one as
     // loser. (The last move's steps may still finish behind the overlay; the board is correct.)
+    const wasHidden = go.hidden;
     const show = !!info && !gameOverDismissed && !$('game').hidden;
     go.hidden = !show;
     if (!show || !info || !os) return;
@@ -4729,12 +4731,17 @@ function renderGameOver() {
     $('go-stats').textContent = '';
     $('go-stats').hidden = true;
     $('go-cut').hidden = true;
-    $('go-rematch').textContent = ONLINE.backToMatches;
+    // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
+    // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
+    // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
+    $('go-rematch').textContent = ONLINE.rematch;
     const other = $('go-other');
     other.hidden = false;
-    other.textContent = ONLINE.menuButton;
+    other.textContent = ONLINE.backToMatches;
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
+    // The primary action takes focus the moment the screen appears, exactly as offline does.
+    if (wasHidden) $('go-rematch').focus();
     return;
   }
   const st = session?.state;
@@ -5648,8 +5655,11 @@ function tearDownOnlineDuel(): void {
 bind('go-other', () => {
   $('gameover').hidden = true;
   if (isOnlineDuel()) {
+    // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
+    // rematch uses — a stray resize render must never paint the finished board's overlay here.
     tearDownOnlineDuel();
-    showScreen('menu');
+    $('game').hidden = true;
+    void onlineLobbyCtl?.openHub();
     return;
   }
   showScreen('levels');
@@ -5988,9 +5998,15 @@ bind('tool-undo', () => {
 });
 bind('go-rematch', () => {
   if (isOnlineDuel()) {
-    tearDownOnlineDuel();
+    // Rematch: the finished session is torn down FIRST (nothing leaks into the new match), then a
+    // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
+    // stray resize render from painting the finished board's overlay over the opaque invite screen.
     $('gameover').hidden = true;
-    void onlineLobbyCtl?.openHub();
+    $('game').hidden = true;
+    void runRematch({
+      tearDown: tearDownOnlineDuel,
+      createMatch: () => onlineLobbyCtl?.rematch() ?? Promise.resolve(),
+    });
     return;
   }
   startGame(randomSeed(), gameLevel);
@@ -6411,7 +6427,7 @@ if (SHOW_MENU_TAGLINE) {
 }
 
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
-type OnlineLobbyCtl = { openHub(): Promise<void> };
+type OnlineLobbyCtl = { openHub(): Promise<void>; rematch(): Promise<void> };
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
 let onlineResign: (() => void) | null = null;

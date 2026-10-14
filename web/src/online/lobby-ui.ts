@@ -55,6 +55,11 @@ export type OnlineLobbyController = {
   refreshTitle(): void;
   /** Live duels: open one of my matches by id (web/src/online/live/). */
   openMatch?(matchId: string): Promise<void>;
+  /**
+   * A rematch from a finished standard duel: create a fresh match and show the existing
+   * invite/share screen (the same one `createMatch` / "Create a duel" opens).
+   */
+  rematch(): Promise<void>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -68,6 +73,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       openHub: async () => undefined,
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
+      rematch: async () => undefined,
     };
   }
 
@@ -504,16 +510,28 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
-  const createMatch = async () => {
+  /** Creates a fresh match and opens the invite/share screen. `false` when it could not. */
+  const createMatch = async (): Promise<boolean> => {
     const id = await ensureIdentity();
-    if (!id) return;
+    if (!id) return false;
     try {
       const res = await client.createMatch(id.token);
       serverOffset = res.serverNow - now();
       openWaiting(res.match);
+      return true;
     } catch (error) {
       notice('online-hub-notice', errorMessage(error));
+      return false;
     }
+  };
+
+  /**
+   * A rematch from a finished standard duel. Identical to "Create a duel" from the hub — a fresh
+   * match with a fresh invite code, shown on the same waiting/share screen. On failure, land on the
+   * hub, which is where "Create a duel" reports its error line.
+   */
+  const rematch = async (): Promise<void> => {
+    if (!(await createMatch())) await openHub();
   };
 
   const findOpponent = async () => {
@@ -756,7 +774,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, handleBootHash, refreshTitle, openMatch };
+  return { enabled: true, openHub, handleBootHash, refreshTitle, openMatch, rematch };
 };
 
 const escapeHtml = (s: string) =>

@@ -180,6 +180,12 @@ export const ONLINE = Object.freeze({
   /** End-of-game screen: the small context line under the title (never a repeat of the reason). */
   finishSubFallback: 'Online duel',
   finishSubOpponent: (name: string) => `vs ${name}`,
+  /**
+   * The standard (async) finish screen's FIRST, primary action: a fresh invite to the same friend
+   * on the existing invite/share screen. Same word as the live end window's rematch (`LIVE.rematch`)
+   * so the two flows read the same from the player's seat.
+   */
+  rematch: 'Rematch',
   backToMatches: 'Back to matches',
   menuButton: 'Menu',
   shareSaved: 'Saved',
