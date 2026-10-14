@@ -33,6 +33,7 @@
     "server:verify": "node --env-file-if-exists=.env --import tsx server/scripts/verify.ts",
     "server:build-edge": "node server/scripts/build-edge.mjs",
     "e2e:online": "tsx web/e2e/online-lobby-check.ts && tsx web/e2e/online-duel-two-browser.ts",
+    "e2e:live": "tsx web/e2e/live-duels.ts",
     "skin:manifest": "tsx web/skin-manifest.ts"
   },
   "devDependencies": {

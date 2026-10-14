@@ -53,6 +53,8 @@ export type OnlineLobbyController = {
   openHub(): Promise<void>;
   handleBootHash(): Promise<void>;
   refreshTitle(): void;
+  /** Live duels: open one of my matches by id (web/src/online/live/). */
+  openMatch?(matchId: string): Promise<void>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -754,7 +756,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, handleBootHash, refreshTitle };
+  return { enabled: true, openHub, handleBootHash, refreshTitle, openMatch };
 };
 
 const escapeHtml = (s: string) =>

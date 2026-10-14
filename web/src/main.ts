@@ -6538,6 +6538,12 @@ void import('./online/lobby-ui.js').then(async (m) => {
   });
   onlineLobbyCtl = lobby;
   void lobby.handleBootHash();
+  // Live duels (test channel; docs/LIVE.md): its own module, mounted with three ways back.
+  void import('./online/live/flag.js').then((f) => { if (f.liveDuelsEnabled()) void import('./online/live/mount.js').then((live) => live.mountLive({
+    openMatch: (id) => lobby.openMatch?.(id),
+    continueBotGame: () => { leaveOnline(); continueGame(); },
+    showMenu: () => { leaveOnline(); showScreen('menu'); },
+  })); });
 });
 
 window.addEventListener('popstate', () => {

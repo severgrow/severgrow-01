@@ -11,6 +11,8 @@ export type FetchAppDeps = {
   service: MatchService;
   config?: ServerConfig;
   logger?: (line: string) => void;
+  /** Live duels router (server/src/live/router.ts); returns null for paths it does not own. */
+  live?: (req: Request, path: string) => Promise<Outcome | null>;
 };
 
 type Outcome = { status: number; body: unknown };
@@ -60,6 +62,8 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
   const handle = async (req: Request, path: string, url: URL): Promise<Outcome> => {
     const method = req.method;
     service.assertClientVersion(req.headers.get('x-futasaku-client-version'));
+    const liveOutcome = deps.live ? await deps.live(req, path) : null;
+    if (liveOutcome) return liveOutcome;
 
     if (method === 'GET' && path === '/v1/health') {
       const serverNow = service.serverNow();
