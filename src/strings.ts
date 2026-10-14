@@ -518,7 +518,6 @@ export const LIVE = Object.freeze({
   inLiveGame: 'In a live game',
   notAvailable: 'Not available',
   busy: 'Busy',
-  cooldown: 'Live again soon',
   rateLimited: 'Try live again later',
   wantsToGoLive: 'wants to go live',
   wantsRematch: 'wants a rematch',
@@ -532,13 +531,18 @@ export const LIVE = Object.freeze({
   chipAria: (secs: number) => `Live game, ${secs}-second turns`,
   timeLeftSr: (secs: number) => `${secs} seconds left`,
   timesUp: "Time's up",
-  strikeSr: (n: number) => (n === 1 ? 'One strike. One more and the match goes back to 24-hour turns.' : `${n} strikes`),
   leaveLive: 'Leave live',
-  leaveConfirm: 'Leave live play? Your current turn keeps its clock plus 60 seconds, then the match goes back to 24-hour turns.',
+  // Owner's ruling, 2026-10-14: leaving real-time FORFEITS the match, so the confirm states the
+  // consequence outright. The warning lives in the confirm itself — there is no way to leave real
+  // time that does not acknowledge the loss.
+  leaveConfirm: 'Leave and lose this real-time duel?',
+  // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
+  leaveWarning: 'Leaving real time loses',
+  // ...plus the fuller explanation in the same glass window, never a wall of text.
+  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. Normal 24-hour games are unaffected.',
   endedTitle: 'Live ended',
   endedFinished: 'Match over',
   endedLeft: 'Back to 24-hour turns',
-  endedStrikes: "Time's up twice — back to 24-hour turns",
   backToYourGame: 'Back to your game',
   backTo: (what: string) => `Back to ${what}`,
   targetBot: 'your game',

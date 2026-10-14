@@ -61,7 +61,6 @@ const live = createLiveRuntime({
     turnMs: LIVE_TURN_MS,
     replayAllowanceMs: 3_000,
     entryAllowanceMs: 4_000,
-    leaveGraceMs: 4_000,
     challengeTtlMs: 12_000,
     challengesPerPlayerPerHour: 1000,
     presencePerPlayerPerMinute: 1000,
@@ -112,7 +111,7 @@ const duel = { origin, browser } as unknown as LocalDuel;
 // ---------------------------------------------------------------- page helpers
 
 type LiveDebug = {
-  status: null | { live: boolean; matchId: string; mySeat: 0 | 1; actor: 0 | 1; strikes: [number, number]; endedReason: string | null; turnDeadlineAt: number | null; opponent: { presence: string } };
+  status: null | { live: boolean; matchId: string; mySeat: 0 | 1; actor: 0 | 1; endedReason: string | null; turnDeadlineAt: number | null; opponent: { presence: string } };
   target: null | { kind: string; matchId?: string };
   popup: boolean;
 };
@@ -230,7 +229,7 @@ try {
     const after = (await api.getState(m.guests[0].token, m.matchId)).player.view.turnNumber;
     check('1: three live turns advanced the match', after === before + 3, `${before} -> ${after}`);
     const s1 = (await dbg(a))!.status!;
-    check('1: still live, no strikes', s1.live && s1.strikes.every((n) => n === 0), JSON.stringify({ live: s1.live, strikes: s1.strikes, ended: s1.endedReason }));
+    check('1: still live after three turns (no strikes, nothing ended)', s1.live && s1.endedReason === null, JSON.stringify({ live: s1.live, ended: s1.endedReason }));
     await api.resign(m.guests[0].token, m.matchId);
     check('1: finish → end-of-live window (both)', await waitFor(async () => (await vis(a.page, '[data-live="end"]')) && (await vis(b.page, '[data-live="end"]')), 15_000));
     check('1: Rematch offered after a finish', await vis(b.page, '[data-live="rematch"]'));
@@ -358,7 +357,7 @@ try {
     await closeAll(a, b, s2.a, s2.b);
   });
 
-  await run('6-strikes', async () => {
+  await run('6-timeout', async () => {
     const m = await newMatch();
     const { a, b } = await openBoth(m);
     await challengeAndAccept(a, b, '6');
@@ -366,33 +365,41 @@ try {
     const sleeper = st.actor === st.mySeat ? a : b;
     const other = sleeper === a ? b : a;
     const seat = st.actor;
-    check('6: first timeout → auto-played, one strike', await waitFor(async () => (await dbg(other))?.status?.strikes[seat] === 1, 40_000));
-    await shot(sleeper, '07-strike-dot');
-    check('6: the match continues (nobody lost)', (await api.getState(m.guests[0].token, m.matchId)).player.status === 'active');
-    check('6: the other player plays their live turn', await playTurn(other));
-    check('6: second consecutive timeout → back to 24-hour turns', await waitFor(async () => (await dbg(other))?.status?.endedReason === 'strikes', 40_000));
-    const view = (await api.getState(m.guests[0].token, m.matchId)).player;
-    check('6: next deadline is a normal 24-hour one', (view.turnDeadlineAt ?? 0) - Date.now() > 23 * 3_600_000);
-    check('6: end window says why', await waitFor(async () => (await text(other.page, '[data-live="end"] .lg-what')).includes('24-hour'), 10_000));
+    // The actor lets the whole real-time clock run out. That now LOSES the match outright.
+    check('6: a real-time timeout ends live for both', await waitFor(async () => (await dbg(other))?.status?.endedReason === 'finished' && (await dbg(sleeper))?.status?.live === false, 40_000));
+    await shot(sleeper, '07-timeout-end');
+    const ended = (await api.getState(m.guests[0].token, m.matchId)).player;
+    check('6: the match is finished on the server', ended.status === 'finished');
+    check('6: the runner-out is the loser, reason timeout', ended.result?.reason === 'timeout' && ended.result?.winner === (seat === 0 ? 1 : 0));
+    // Never a hand-back to 24-hour turns: the strict real-time rule replaced the old escape hatch.
+    check('6: NOT returned to a 24-hour clock', (ended.turnDeadlineAt ?? null) === null);
+    // The winner must not sit on the board: the end screen arrives without a poll or a deadline.
+    check('6: the winner reaches the end screen promptly', await waitFor(() => vis(other.page, '[data-live="end"]'), 20_000));
     await closeAll(a, b);
   });
 
-  await run('7-leave', async () => {
+  await run('7-leave-forfeit', async () => {
     const m = await newMatch();
     const { a, b } = await openBoth(m);
     await challengeAndAccept(a, b, '7');
     const st = (await dbg(a))!.status!;
     const leaver = st.actor === st.mySeat ? a : b;
     const other = leaver === a ? b : a;
-    const deadline = st.turnDeadlineAt!;
-    leaver.page.once('dialog', (d) => void d.accept());
+    const leaverSeat = st.actor;
+    const dialogs: string[] = [];
+    leaver.page.once('dialog', (d) => {
+      dialogs.push(d.message());
+      void d.accept();
+    });
     await leaver.page.evaluate(() => document.getElementById('hud-menu')?.click());
     await leaver.page.locator('[data-live="leave"]').click();
-    check('7: live ended for both', await waitFor(async () => (await dbg(other))?.status?.endedReason === 'left' && (await dbg(leaver))?.status?.live === false, 10_000));
-    const after = (await api.getState(m.guests[0].token, m.matchId)).player.turnDeadlineAt!;
-    check('7: leaving gives only the grace (old deadline + 4 s test grace)', after === deadline + 4_000, `${after - deadline}`);
-    check('7: the leaver is in cooldown', await waitFor(async () => (await pillState(leaver)) === 'disabled:Live again soon', 10_000), await pillState(leaver));
-    check('7: after the grace the turn is auto-played', await waitFor(async () => (await dbg(other))?.status?.actor !== st.actor, 40_000));
+    check('7: the confirm states the forfeit outright', dialogs.some((msg) => /lose/i.test(msg)), dialogs.join(' | '));
+    check('7: live ends for both', await waitFor(async () => (await dbg(other))?.status?.live === false && (await dbg(leaver))?.status?.live === false, 10_000));
+    const ended = (await api.getState(m.guests[0].token, m.matchId)).player;
+    check('7: the match is FINISHED (not handed back to 24-hour turns)', ended.status === 'finished' && (ended.turnDeadlineAt ?? null) === null);
+    check('7: the leaver loses, reason resigned', ended.result?.reason === 'resigned' && ended.result?.winner === (leaverSeat === 0 ? 1 : 0));
+    // The winner must not be left on the board.
+    check('7: the winner reaches the end screen promptly', await waitFor(() => vis(other.page, '[data-live="end"]'), 15_000));
     await closeAll(a, b);
   });
 

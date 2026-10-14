@@ -28,6 +28,11 @@ ${glassBaseCss('.live-glass')}
 .live-glass .lg-name { font:700 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:${CREAM}; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .live-glass .lg-what { color:#e2d4b4; letter-spacing:.05em; }
 .live-glass .lg-terms { color:#b7a98a; font-size:12px; letter-spacing:.08em; }
+/* The real-time forfeit rule, said BEFORE it matters: one short line, then the fuller explanation
+   in the same glass window (never a wall of text). */
+.live-glass .lg-warn { grid-column:1 / -1; margin-top:2px; color:#e2d4b4; font-size:12px; letter-spacing:.04em; line-height:1.35; }
+.live-glass .lg-warn .lg-warn-short { display:block; color:#f6d3c8; font-weight:700; letter-spacing:.06em; }
+.live-glass .lg-warn small { display:block; color:#b7a98a; font-size:11px; letter-spacing:.03em; }
 .live-glass .lg-actions { grid-column:1 / -1; display:flex; gap:8px; margin-top:10px; }
 .live-glass .lg-actions button { flex:1; min-height:44px; min-width:44px; border-radius:10px; font:700 14px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
@@ -55,9 +60,6 @@ ${glassBaseCss('.live-glass')}
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
   font:800 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .live-chip .lamp { width:6px; height:6px; border-radius:50%; background:${LAVA}; box-shadow:0 0 8px ${LAVA}; }
-.live-chip .strikes { display:inline-flex; gap:3px; margin-left:2px; }
-.live-chip .strikes i { width:5px; height:5px; border-radius:50%; border:1px solid rgba(246,211,200,.6); }
-.live-chip .strikes i.on { background:${LAVA}; border-color:${LAVA}; }
 .live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
 .live-chip.lighting { animation:live-light 600ms ease-out 1; }
 /* The live clock in the duel strip (the header's own "invisible box" between the menu button and
@@ -73,15 +75,22 @@ ${glassBaseCss('.live-glass')}
 .duel-hud [data-live-clock] .live-clock-dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
 .large-text .duel-hud [data-live-clock] { font-size:15px; }
 .live-ring { position:fixed; z-index:7; pointer-events:none; }
-/* The home timeout ring: a thin, tight arc in the turn-owner's own material, inset from the tile
-   so it reads as one ornamental line rather than a hoop around it. Subtle at rest; it thickens and
-   brightens as the clock runs low (shape + weight, so Reduce motion still shows urgency). */
+/* The home timeout ring. IDENTICAL on both homes: the colour means TIME, never the side, and which
+   home carries it is what says whose turn is timed (owner's rule). It is fitted INSIDE the home
+   tile's hex (the arc's diameter is 86% of the tile's width, i.e. ~86% of the hex's incircle, so
+   even the stroke and its shadow stay inside the silhouette) and it never becomes a frame: no
+   radius, no fill, no border on the tile.
+   Three strokes, no frame:
+   - .sh is the small black under-stroke: a wider, soft dark arc beneath the coloured one, so the
+     ring reads over moss, lava, rock, snow or any future palette, light or dark.
+   - .bg is the faint remaining-time track (a hairline, dark, so it also survives a bright tile).
+   - .fg is the coloured arc: its LENGTH is the time left (a length cue, never colour alone) and its
+     colour travels green -> orange -> red across the turn. */
 .live-ring circle { fill:none; }
-.live-ring .bg { stroke:rgba(240,233,220,.10); stroke-width:1.4; }
-.live-ring .fg { stroke:${MOSS}; stroke-width:1.6; stroke-linecap:butt; transform:rotate(-90deg); transform-origin:50% 50%; opacity:.9; }
-.live-ring[data-side='opp'] .fg { stroke:${LAVA}; }
-.live-ring[data-urgent='1'] .bg { stroke:rgba(240,233,220,.16); stroke-width:1.6; }
-.live-ring[data-urgent='1'] .fg { stroke:${LAVA}; stroke-width:2.2; opacity:1; filter:drop-shadow(0 0 2px rgba(224,115,92,.5)); }
+.live-ring .sh { stroke:rgba(0,0,0,.42); stroke-linecap:butt; }
+.live-ring .bg { stroke:rgba(0,0,0,.26); stroke-linecap:butt; }
+.live-ring .fg { stroke-linecap:butt; transform:rotate(-90deg); transform-origin:50% 50%; }
+.live-ring[data-urgent='1'] .sh { stroke:rgba(0,0,0,.5); }
 .live-ring.pulse { animation:live-pulse 600ms ease-out 1; }
 .live-vignette { position:fixed; inset:0; z-index:6; pointer-events:none; box-shadow:inset 0 0 70px rgba(224,115,92,.0); transition:box-shadow .3s ease; }
 .live-vignette[data-on='1'] { box-shadow:inset 0 0 70px rgba(224,115,92,.22); }
@@ -113,24 +122,85 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''):
 };
 
 const SVGNS = 'http://www.w3.org/2000/svg';
-const ringSvg = (cls: string, size: number, r: number): { svg: SVGSVGElement; fg: SVGCircleElement; length: number } => {
+
+/**
+ * The home timeout ring's geometry, as fractions of the HOME TILE's width on screen.
+ *
+ * A pointy-top hex of radius S has width √3·S and height 2·S, so its incircle's diameter IS the
+ * width: anything with a diameter ≤ 0.866·width fits inside the silhouette with room to spare, and
+ * the inner 74% of the width sits inside the incircle for every rotation the board may take.
+ * `RADIUS_FRAC` (0.43 → diameter 0.86 of the width) is that fit, chosen so the arc, its 1 px track
+ * and its 1.6 px shadow all remain inside the hex — the numbers are asserted by the e2e.
+ */
+export const RING_RADIUS_FRAC = 0.43;
+/** The arc's stroke width in px at a 30 px tile, scaled with the tile so it stays proportional. */
+export const RING_STROKE_PX = 2;
+const RING_TRACK_EXTRA_PX = 1.5;
+const RING_SHADOW_EXTRA_PX = 3;
+
+/** The ring's elements: a black under-stroke (`sh`), the time track (`bg`) and the arc (`fg`). */
+type RingParts = { svg: SVGSVGElement; fg: SVGCircleElement; sh: SVGCircleElement; length: number };
+
+/**
+ * Build the ring for a tile of `size` px. The viewBox is the pixel box, so every stroke width below
+ * is a literal px and the geometry can be measured against the tile directly.
+ */
+const ringSvg = (cls: string, size: number): RingParts => {
   const svg = document.createElementNS(SVGNS, 'svg');
   svg.setAttribute('class', cls);
   svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
   svg.setAttribute('aria-hidden', 'true');
-  const bg = document.createElementNS(SVGNS, 'circle');
-  const fg = document.createElementNS(SVGNS, 'circle');
-  for (const c of [bg, fg]) {
-    c.setAttribute('cx', String(size / 2));
-    c.setAttribute('cy', String(size / 2));
-    c.setAttribute('r', String(r));
+  const parts: { node: SVGCircleElement; cls: string; stroke: number }[] = [
+    { node: document.createElementNS(SVGNS, 'circle'), cls: 'sh', stroke: RING_STROKE_PX + RING_SHADOW_EXTRA_PX },
+    { node: document.createElementNS(SVGNS, 'circle'), cls: 'bg', stroke: RING_TRACK_EXTRA_PX },
+    { node: document.createElementNS(SVGNS, 'circle'), cls: 'fg', stroke: RING_STROKE_PX },
+  ];
+  for (const p of parts) {
+    p.node.setAttribute('class', p.cls);
+    p.node.setAttribute('stroke-width', String(p.stroke));
+    svg.append(p.node);
   }
-  bg.setAttribute('class', 'bg');
-  fg.setAttribute('class', 'fg');
-  const length = 2 * Math.PI * r;
+  const sh = parts[0]!.node;
+  const bg = parts[1]!.node;
+  const fg = parts[2]!.node;
+  const length = setRingSize(svg, size);
   fg.style.strokeDasharray = `${length}`;
-  svg.append(bg, fg);
-  return { svg, fg, length };
+  bg.style.strokeDasharray = `${length}`;
+  sh.style.strokeDasharray = `${length}`;
+  return { svg, fg, sh, length };
+};
+
+/** Size the ring's circles to a tile of `size` px; returns the arc's circumference. */
+const setRingSize = (svg: SVGSVGElement, size: number): number => {
+  const r = size * RING_RADIUS_FRAC;
+  svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+  const stroke = (node: Element | null): number => Number(node?.getAttribute('stroke-width') ?? RING_STROKE_PX);
+  svg.querySelectorAll('circle').forEach((circle) => {
+    circle.setAttribute('cx', String(size / 2));
+    circle.setAttribute('cy', String(size / 2));
+    // The outer edge of each stroke (not its centre line) is what must stay inside the hex.
+    circle.setAttribute('r', String(Math.max(1, r - (stroke(circle) - RING_STROKE_PX) / 2)));
+  });
+  return 2 * Math.PI * Math.max(1, r);
+};
+
+/**
+ * The ring's colour, interpolated over the turn: green at the start, orange at the half, red at the
+ * end (owner's rule: the ring's colour means TIME only, identically on both homes).
+ * Exact stops: t=0 `#8fbf6a` (FUTASAKU moss-green), t=0.5 `#e0a35c` (amber-orange), t=1 `#e0735c`
+ * (FUTASAKU lava-red) — a linear sRGB ramp between each pair, so the journey is green -> orange ->
+ * red and never passes through a colour outside that family.
+ */
+export const RING_GREEN = [143, 191, 106] as const;
+export const RING_ORANGE = [224, 163, 92] as const;
+export const RING_RED = [224, 115, 92] as const;
+
+export const ringColour = (fracLeft: number): string => {
+  const t = Math.min(1, Math.max(0, 1 - fracLeft));
+  const mix = (a: readonly [number, number, number], b: readonly [number, number, number], k: number): string =>
+    `rgb(${Math.round(a[0] + (b[0] - a[0]) * k)},${Math.round(a[1] + (b[1] - a[1]) * k)},${Math.round(a[2] + (b[2] - a[2]) * k)})`;
+  if (t <= 0.5) return mix(RING_GREEN, RING_ORANGE, t / 0.5);
+  return mix(RING_ORANGE, RING_RED, (t - 0.5) / 0.5);
 };
 
 /** A screen-reader line (polite). Only ever written at thresholds. */
@@ -154,10 +224,21 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   panel.hidden = true;
   panel.setAttribute('role', 'alertdialog');
   panel.setAttribute('aria-modal', 'true');
-  const { svg, fg, length } = ringSvg('lg-ring', 44, 19);
+  // The challenge window's countdown keeps its own compact ring (44 px box, radius 19, in the
+  // 0-100 viewBox the window was measured with) — this is not the home ring.
+  const { svg, fg, length } = ringSvg('lg-ring', 44);
+  const lgR = 19;
+  for (const c of svg.querySelectorAll('circle')) {
+    c.setAttribute('cx', '22');
+    c.setAttribute('cy', '22');
+    c.setAttribute('r', String(lgR));
+  }
+  for (const c of svg.querySelectorAll('circle')) c.style.strokeDasharray = String(2 * Math.PI * lgR);
   const name = el('div', 'lg-name');
   const what = el('div', 'lg-what');
   const terms = el('div', 'lg-terms');
+  const warn = el('div', 'lg-warn');
+  warn.append(el('span', 'lg-warn-short', LIVE.leaveWarning), el('small', '', LIVE.leaveWarningHelp));
   const actions = el('div', 'lg-actions');
   const accept = el('button', 'primary', LIVE.accept);
   const decline = el('button', '', LIVE.notNow);
@@ -165,7 +246,7 @@ export const createChallengePopup = (opts: { localDeadline: (c: ChallengeWire) =
   accept.dataset.live = 'accept';
   decline.dataset.live = 'decline';
   actions.append(decline, accept);
-  panel.append(svg, name, what, terms, actions);
+  panel.append(svg, name, what, terms, warn, actions);
   const titleId = 'live-challenge-title';
   name.id = titleId;
   panel.setAttribute('aria-labelledby', titleId);
@@ -301,25 +382,23 @@ export type HudModel = {
   /** Which home: my own (moss, bottom) or the opponent's (lava, top). */
   side: 'me' | 'opp';
   homeKey: string | null;
-  myStrikes: number;
   reduceMotion: boolean;
 };
 
-/** The live HUD: the LIVE chip (with strike dots) in the status strip, the draining home ring, the vignette. */
+/** The live HUD: the LIVE chip in the status strip, the draining home ring, the vignette. */
 export const createHud = () => {
   const chip = el('span', 'live-chip');
   chip.hidden = true;
   chip.dataset.live = 'chip';
   const lamp = el('span', 'lamp');
   const text = el('span', 'text');
-  const strikes = el('span', 'strikes');
-  strikes.setAttribute('aria-hidden', 'true');
-  const dots = [el('i'), el('i')];
-  strikes.append(...dots);
-  chip.append(lamp, text, strikes);
+  chip.append(lamp, text);
   // The arc is inset from the tile's own edge (radius 42 of a 100 box, not 46): it reads as a thin
   // ornamental line around the home rather than a hoop pressed against it.
-  const { svg: ring, fg, length } = ringSvg('live-ring', 100, 42);
+  // The ring is sized to the HOME TILE at run time (see `place`), so the SVG starts empty-sized.
+  const { svg: ring, fg, sh } = ringSvg('live-ring', 100);
+  const track = ring.querySelector<SVGCircleElement>('.bg')!;
+  let ringLength = 0;
   ring.setAttribute('hidden', '');
   ring.dataset.live = 'ring';
   const vignette = el('div', 'live-vignette');
@@ -347,8 +426,18 @@ export const createHud = () => {
     if (!hex || !game || game.hidden) return false;
     const r = hex.getBoundingClientRect();
     if (r.width === 0) return false;
-    // 1.42×: the inset arc still clears the tile's corners, without the old wide halo.
-    const size = Math.max(r.width, r.height) * 1.42;
+    // The ring is the TILE's own width: a pointy-top hex's incircle diameter IS its width, and the
+    // arc is drawn at 43% of that, so the arc, its track and its black under-stroke all sit inside
+    // the hex silhouette — it can never leak past the tile's borders.
+    const size = r.width;
+    if (Math.abs(Number(ring.dataset.size ?? 0) - size) > 0.5) {
+      ring.dataset.size = String(size);
+      const stroke = RING_STROKE_PX * Math.max(0.75, Math.min(1.6, size / 30));
+      for (const node of [sh, fg]) node.setAttribute('stroke-width', String(stroke + (node === sh ? RING_SHADOW_EXTRA_PX : 0)));
+      track.setAttribute('stroke-width', String(Math.max(1, stroke - 0.5)));
+      ringLength = setRingSize(ring, size);
+      for (const node of [sh, track, fg]) node.style.strokeDasharray = `${ringLength}`;
+    }
     ring.style.left = `${r.left + r.width / 2 - size / 2}px`;
     ring.style.top = `${r.top + r.height / 2 - size / 2}px`;
     ring.style.width = ring.style.height = `${size}px`;
@@ -366,9 +455,19 @@ export const createHud = () => {
     if (!model || !model.live) return;
     const left = model.deadline === null ? model.limitMs : Math.max(0, model.deadline - Date.now());
     const frac = Math.min(1, left / model.limitMs);
-    fg.style.strokeDashoffset = `${length * (1 - frac)}`;
+    // The ARC's length is the time left (a length cue), the COLOUR is the same journey on both
+    // homes: green -> orange -> red. Nothing on this ring says whose turn it is; the home it sits
+    // on already does (owner's rule).
+    fg.style.strokeDashoffset = `${ringLength * (1 - frac)}`;
+    fg.style.stroke = ringColour(frac);
     const secs = Math.ceil(left / 1000);
     const urgent = model.deadline !== null && left <= 10_000;
+    // A late emphasis, kept as a secondary readable cue (it survives Reduce motion): the arc gains a
+    // little weight and full opacity as the turn runs out.
+    const emphasis = urgent ? 1 : 0;
+    fg.setAttribute('opacity', emphasis ? '1' : '0.94');
+    const base = RING_STROKE_PX * Math.max(0.75, Math.min(1.6, Number(ring.dataset.size ?? 30) / 30));
+    fg.setAttribute('stroke-width', String(base + emphasis * 0.6));
     chip.dataset.urgent = urgent ? '1' : '0';
     ring.dataset.urgent = urgent ? '1' : '0';
     text.textContent = urgent ? `${LIVE.live.toUpperCase()} ${secs}s` : LIVE.chip(Math.round(model.limitMs / 1000));
@@ -425,7 +524,6 @@ export const createHud = () => {
         return;
       }
       ring.dataset.side = m!.side;
-      dots.forEach((d, i) => d.classList.toggle('on', i < m!.myStrikes));
       chip.setAttribute('aria-label', LIVE.chipAria(Math.round(m!.limitMs / 1000)));
       if (!raf) raf = requestAnimationFrame(frame);
     },
@@ -439,8 +537,8 @@ export const createHud = () => {
         const hex = document.querySelector<SVGGElement>(`#board .hex-cell[data-key="${key}"]`);
         if (!hex) continue;
         const r = hex.getBoundingClientRect();
-        const { svg } = ringSvg('live-ring pulse', 100, 42);
-        const size = Math.max(r.width, r.height) * 1.42;
+        const { svg } = ringSvg('live-ring pulse', 100);
+        const size = r.width;
         Object.assign(svg.style, { left: `${r.left + r.width / 2 - size / 2}px`, top: `${r.top + r.height / 2 - size / 2}px`, width: `${size}px`, height: `${size}px` });
         svg.dataset.side = key === homeKeys[0] ? 'me' : 'opp';
         document.body.append(svg);

@@ -252,8 +252,11 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     hud.lightUp(keys, reduceMotion());
   };
 
+  // The ONLY reason a live session ends now is that the MATCH ended (a resignation, a real-time
+  // timeout or a natural finish), so the end window says "Match over". `endedLeft` stays as the
+  // fallback for a row written by the older lenient leave.
   const endReason = (s: LiveStatusWire): string =>
-    s.endedReason === 'finished' ? LIVE.endedFinished : s.endedReason === 'strikes' ? LIVE.endedStrikes : LIVE.endedLeft;
+    s.endedReason === 'finished' ? LIVE.endedFinished : LIVE.endedLeft;
 
   const showEnd = (s: LiveStatusWire) => {
     const target = returns.get();
@@ -290,7 +293,6 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (s.me.liveMatchId || s.opponent.inLive || s.block === 'BUSY_LIVE') return { kind: 'disabled', label: LIVE.inLiveGame };
     if (s.block === 'NOT_AVAILABLE') return { kind: 'disabled', label: LIVE.notAvailable };
     if (s.block === 'BUSY' || s.opponent.presence === 'busy') return { kind: 'disabled', label: LIVE.busy };
-    if (s.block === 'COOLDOWN') return { kind: 'disabled', label: LIVE.cooldown };
     if (s.block === 'RATE_LIMITED') return { kind: 'disabled', label: LIVE.rateLimited };
     if (s.block === 'OFFLINE') return { kind: 'hidden' };
     if (pending) return { kind: 'hidden' }; // their challenge is on its way to my pop-up
@@ -313,7 +315,6 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       deadline: s.turnDeadlineAt === null ? null : toLocal(s.turnDeadlineAt),
       side: actor === s.mySeat ? 'me' : 'opp',
       homeKey: homeKey(actor),
-      myStrikes: s.strikes[s.mySeat],
       reduceMotion: reduceMotion(),
     });
   };
@@ -364,9 +365,6 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       } else if (prev && !prev.live && next.live) {
         center?.noteLive(m);
       }
-      if (prev && next.live && prev.live && next.strikes[next.mySeat] > prev.strikes[next.mySeat]) {
-        announce(LIVE.strikeSr(next.strikes[next.mySeat]));
-      }
     } catch {
       /* quiet: the next poll tries again */
     } finally {
@@ -398,8 +396,6 @@ const errorWord = (code: string | undefined): string | null => {
       return LIVE.notAvailable;
     case 'BUSY':
       return LIVE.busy;
-    case 'COOLDOWN':
-      return LIVE.cooldown;
     case 'RATE_LIMITED':
     case 'TOO_MANY_PENDING':
       return LIVE.rateLimited;
