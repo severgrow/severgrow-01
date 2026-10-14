@@ -495,7 +495,7 @@ export const HELP = Object.freeze({
   /** the reference heading (also the legacy sheet title) */
   howToTitle: 'How to play',
   /** the tutorial's closing pointer to the reference (its last line) */
-  tutorialFinal: 'Look up any move later in Match Intel › How to.',
+  tutorialFinal: 'Look up any move: Match Intel › How to.',
 });
 
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */

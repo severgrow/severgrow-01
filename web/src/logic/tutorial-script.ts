@@ -157,7 +157,7 @@ const lessons: TutorialLesson[][] = [
       button: 'intel', cta: 'NEXT',
     }),
     // The tutorial's last line points at the reference that replaces the old in-match "?".
-    L('btn-display', 'DISPLAY', `Important info. ${HELP.tutorialFinal}`, 'button', 'Next', {
+    L('btn-display', 'DISPLAY', `Important info. Respect it. ${HELP.tutorialFinal}`, 'button', 'Next', {
       button: 'display', cta: 'NEXT',
     }),
   ],
