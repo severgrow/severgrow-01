@@ -83,6 +83,8 @@ export type { DeadlineUrgency, DuelHudModel, TurnState } from './duel-hud.js';
 
 export {
   STARTER_REVEAL_PREFIX,
+  STARTER_REVEAL_INDEX_KEY,
+  STARTER_REVEAL_KEEP,
   starterRevealKey,
   hasStarterRevealed,
   markStarterRevealed,
