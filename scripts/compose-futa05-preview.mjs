@@ -1,36 +1,187 @@
-// Phase 8 — add /futa0.5/ into an already-composed Pages site tree (does not rebuild Main).
+// Compose the FUTASAKU 0.5 route AND the site root map into an already-composed Pages tree.
+//
 //   node scripts/compose-futa05-preview.mjs site web/dist <full-commit-sha>
+//
+// Owner decision (2026-10-14): `https://www.futasaku.com/` serves FUTASAKU 0.5, and the build that
+// used to be the root (Main — the original "Severor" release) moves, byte for byte, to `/firststep/`.
+// `/futa0.4/`, `/futa-test/`, `/test/` and `/test2/` keep serving exactly what they served before.
+//
+// WHY THIS FILE OWNS THE ROOT — and why nothing else had to change to make that stick
+// ---------------------------------------------------------------------------------
+// Two workflows publish this Pages site and both use concurrency group `pages`:
+//   * pages.yml               — main + /test/ + /test2/ (last ran 2026-10-06; dormant since)
+//   * futasaku04-preview.yml  — the same three, rebuilt from their published SHAs, plus the
+//                               futa routes. This one has published the site since 2026-10-06.
+// Whichever deploy lands last decides the bytes, so both had to agree on the root or the site would
+// flip between two states.
+//
+// This script is the futa0.5-online copy, and futasaku04-preview.yml runs it as
+// `futa05/scripts/compose-futa05-preview.mjs` — i.e. it always executes the futa0.5-online version,
+// whether the workflow was triggered by a push to futa0.5-online (`futa05` = that push) or to
+// futa0.4 (`futa05` = futa0.5-online HEAD). So the root map below is applied identically for both
+// trigger refs, and the workflow file itself needs no edit on either branch. That is the only
+// arrangement here that cannot produce two different roots.
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const [site, dist, commit] = process.argv.slice(2);
 assert(site && dist && /^[0-9a-f]{40}$/.test(commit ?? ''), 'Usage: site dist fullCommitSha');
 assert(existsSync(join(dist, 'index.html')), `missing ${dist}/index.html`);
+assert(
+  readFileSync(join(dist, 'index.html'), 'utf8').includes('./assets/'),
+  'the FUTASAKU 0.5 build must use relative asset paths to work at the root',
+);
 
-const route = 'futa0.5';
-cpSync(dist, join(site, route), { recursive: true });
-writeFileSync(join(site, route, 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit }, null, 2) + '\n');
-assert(readFileSync(join(site, route, 'index.html'), 'utf8').includes('./assets/'), `${route} must use relative asset paths`);
+/** Routes that live beside the root and must never be swept into /firststep/. */
+const SIBLING_ROUTES = ['firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5'];
 
-// Main's root-scope worker must not cache /futa0.5/ as Main's offline index.
-const workerPath = join(site, 'sw.js');
-if (existsSync(workerPath)) {
-  const worker = readFileSync(workerPath, 'utf8');
-  const with05 = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test)(\\/|$)/';
-  const withTest = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
-  const fromPreview = '/\\/(?:test2?|futa0[.]4)(\\/|$)/';
-  const prior = '/\\/test2?(\\/|$)/';
-  if (worker.includes(with05) || worker.includes('futa0[.]5') || worker.includes('futa0.5')) {
-    // already excluded
-  } else if (worker.includes(withTest)) {
-    writeFileSync(workerPath, worker.replace(withTest, with05));
-  } else if (worker.includes(fromPreview)) {
-    writeFileSync(workerPath, worker.replace(fromPreview, with05));
-  } else {
-    assert(worker.includes(prior), 'Review changed Main worker before publication');
-    writeFileSync(workerPath, worker.replace(prior, with05));
+/**
+ * Main's own worker must not treat a sibling route as its offline index. compose-pages.mjs and
+ * compose-futasaku-preview.mjs already exclude these; repeated here so this script is correct on its
+ * own, whichever older copy of them runs first.
+ */
+const patchMainWorker = (path) => {
+  if (!existsSync(path)) return;
+  const worker = readFileSync(path, 'utf8');
+  const excludedNow = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test)(\\/|$)/';
+  const excludedBefore = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
+  const excludedFirst = '/\\/(?:test2?|futa0[.]4)(\\/|$)/';
+  const original = '/\\/test2?(\\/|$)/';
+  if (worker.includes(excludedNow) || worker.includes('futa0[.]5')) return;
+  // Replacer functions, not strings: these patterns contain `$`, which a replacement string mangles.
+  if (worker.includes(excludedBefore)) writeFileSync(path, worker.replace(excludedBefore, () => excludedNow));
+  else if (worker.includes(excludedFirst)) writeFileSync(path, worker.replace(excludedFirst, () => excludedNow));
+  else {
+    assert(worker.includes(original), 'Review the changed Main worker before publication');
+    writeFileSync(path, worker.replace(original, () => excludedNow));
   }
+};
+
+/**
+ * FUTASAKU 0.5 owns scope "/" from the root. Its worker may only answer for its own routes: the
+ * navigate handler caches whatever page it served under the root index, so without this a visit to
+ * /firststep/ would leave Main's page as the offline copy of the root.
+ */
+const patchRootWorker = (path) => {
+  assert(existsSync(path), `missing ${path}`);
+  const worker = readFileSync(path, 'utf8');
+  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test)(\/|$)/.test(url.pathname)) return; // a sibling channel is never this worker's page`;
+  if (worker.includes(guard)) return;
+  const anchor = String.raw`  if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;`;
+  assert(worker.includes(anchor), 'Review the changed FUTASAKU 0.5 worker before publishing it at the root');
+  // A replacer function, not a string: the guard contains `$`, which a replacement string mangles.
+  writeFileSync(path, worker.replace(anchor, () => `${anchor}\n${guard}`));
+};
+
+/**
+ * The build that just left the root registered its worker from `/sw.js` with scope "/". Two
+ * registrations at one scope would fight over it, and the old one could answer an offline navigation
+ * with the Main page. This worker handles no request — it only removes itself. It deliberately
+ * leaves every cache alone: Main's own cache is reused by Main at /firststep/.
+ */
+const LEGACY_ROOT_WORKER = `// Legacy cleanup for a visitor who opened the site root before FUTASAKU 0.5 moved there.
+//
+// This address used to serve Main's offline worker, registered over the whole site. The root is now
+// the FUTASAKU 0.5 app, which registers ./futa04-sw.js, so that old worker must go: two registrations
+// at scope "/" would fight over it, and the old one could answer an offline navigation with the
+// Main (Severor) page. This worker never handles a request; it only removes itself.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.registration.unregister());
+});
+`;
+
+/** Shared /futa0.5/ links keep working: the app moved to the root, so this is a forwarding page. */
+const REDIRECT_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FUTASAKU</title>
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://www.futasaku.com/" />
+    <script>
+      // Invite links look like /futa0.5/#/join/CODE: keep the query string and the hash.
+      location.replace('/' + location.search + location.hash);
+    </script>
+    <!-- No JavaScript (or a blocked redirect): the app is at the root either way. -->
+    <meta http-equiv="refresh" content="0; url=/" />
+  </head>
+  <body>
+    <p>FUTASAKU is at <a href="/">www.futasaku.com</a>.</p>
+  </body>
+</html>
+`;
+
+// 1. Make Main's worker safe while it is still at the root.
+patchMainWorker(join(site, 'sw.js'));
+
+// 2. The published Main/Test/Test2 SHAs live in the root release.json and stay there: the preview
+//    workflow reads them from that exact address to know what to rebuild on the next run.
+const release = JSON.parse(readFileSync(join(site, 'release.json'), 'utf8'));
+assert(/^[0-9a-f]{40}$/.test(release.main ?? ''), 'the composed root release.json must name Main');
+
+// 3. Move the previous root — Main, the Severor build — to /firststep/, byte for byte. Everything
+//    that is not a sibling route is Main's: the composed root holds nothing else.
+const firststep = join(site, 'firststep');
+mkdirSync(firststep, { recursive: true });
+const moved = [];
+for (const entry of readdirSync(site)) {
+  if (entry === 'firststep' || entry === 'release.json' || entry === '.nojekyll') continue;
+  if (SIBLING_ROUTES.includes(entry)) continue;
+  renameSync(join(site, entry), join(firststep, entry));
+  moved.push(entry);
+}
+assert(moved.includes('index.html'), 'no Main build found at the composed root to move to /firststep/');
+assert(existsSync(join(firststep, 'assets')), 'no Main assets found at the composed root to move to /firststep/');
+
+// 4. Promote the FUTASAKU 0.5 build to the root: it is the product at https://www.futasaku.com/.
+cpSync(dist, site, { recursive: true });
+assert(
+  readFileSync(join(site, 'index.html')).equals(readFileSync(join(dist, 'index.html'))),
+  'the site root must be exactly the FUTASAKU 0.5 build',
+);
+// What this build is, beside the files it is: the same note each other route carries.
+writeFileSync(
+  join(firststep, 'release.json'),
+  JSON.stringify({ channel: 'Severor (Main, moved off the root to /firststep/)', commit: release.main }, null, 2) + '\n',
+);
+
+// 5. The root now belongs to FUTASAKU 0.5: retire the old root worker, and keep the new one inside
+//    its own routes.
+writeFileSync(join(site, 'sw.js'), LEGACY_ROOT_WORKER);
+patchRootWorker(join(site, 'futa04-sw.js'));
+
+// 6. /futa0.5/ forwards to the root so every shared link keeps working.
+mkdirSync(join(site, 'futa0.5'), { recursive: true });
+writeFileSync(join(site, 'futa0.5', 'index.html'), REDIRECT_HTML);
+writeFileSync(join(site, 'futa0.5', 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit, movedTo: '/' }, null, 2) + '\n');
+
+// 7. The workflow's parity guard still expects Main at the root. Install the guard that knows where
+//    Main went — the workflow line itself is untouched, so a push to futa0.4 (which runs its own
+//    copy of the workflow) compares exactly the same way as a push to futa0.5-online.
+const guardSource = readFileSync(fileURLToPath(new URL('./check-pages-parity-root.mjs', import.meta.url)), 'utf8');
+const guardTarget = resolve('preview/scripts/check-pages-parity.mjs');
+assert(
+  existsSync(guardTarget),
+  'expected the futa0.4 checkout at preview/scripts/check-pages-parity.mjs (this script runs inside the preview workflow)',
+);
+const installed = readFileSync(guardTarget, 'utf8');
+if (installed !== guardSource) {
+  assert(
+    installed.includes("const files = ['index.html', 'test/index.html', 'test2/index.html', 'release.json', 'test2/release.json'];"),
+    'preview/scripts/check-pages-parity.mjs was changed on its branch: port the change into scripts/check-pages-parity-root.mjs before publishing',
+  );
+  writeFileSync(guardTarget, guardSource);
 }
 
-console.log(`Added /${route}/ at ${commit}`);
+console.log(`Root = FUTASAKU 0.5 ${commit}; /firststep/ = Main ${release.main}; /futa0.5/ -> /`);

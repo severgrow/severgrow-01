@@ -13,7 +13,7 @@
 
 | Piece | Where it lives | Does it move? |
 | --- | --- | --- |
-| The website (Main, `/futa0.4/`, `/futa0.5/`, `/test/`, `/test2/`) | GitHub Pages | **No.** Still GitHub Pages. Only the address players type changes. |
+| The website (`/` = FUTASAKU 0.5, `/firststep/` = Main/"Severor", `/futa0.4/`, `/futa-test/`, `/test/`, `/test2/`) | GitHub Pages | **No.** Still GitHub Pages. Only the address players type changes. |
 | The duel API | Supabase Edge Function `duel` | **No.** Untouched. |
 | The database | Supabase Postgres | **No.** Untouched. |
 | The name in front of the website | Cloudflare DNS | **New.** A DNS record + proxy in front of GitHub Pages. |
@@ -21,6 +21,31 @@
 So the only thing that genuinely moves is the **front-end origin** — the scheme + host part of the
 address the browser shows. That single fact drives everything below: the browser only allows the API
 to be called from origins the API itself lists, and until today that list held exactly one value.
+
+## 0. What each address serves (the published map, after the 2026-10-14 root move)
+
+The site ROOT used to be Main — the original build, titled **Severor**. The owner moved it: the root
+is now **FUTASAKU 0.5**, and Main moved to `/firststep/` with its build unchanged.
+
+| Address | Serves | Notes |
+| --- | --- | --- |
+| `/` | **FUTASAKU 0.5** (the `futa05` channel) | The product. Title/manifest say FUTASAKU. |
+| `/firststep/` | **Main** — the original "Severor" build | Same build, same code, same saves; only its path moved. `base: './'`, so its assets travel with it. |
+| `/futa0.5/` | a forwarding page to `/` | Shared links keep working; the query string and `#/join/CODE` hash are preserved. |
+| `/futa0.4/`, `/futa-test/`, `/test/`, `/test2/` | unchanged | Byte-for-byte what they served before. |
+| `/release.json` | the published Main/Test/Test2 SHAs | Stays at the root: the preview workflow reads it there. |
+
+**Why this is deterministic when TWO workflows publish the same Pages site.** Both
+`pages.yml` (main + `/test/` + `/test2/`) and `futasaku04-preview.yml` (the same three, rebuilt from
+their published SHAs, plus the futa routes) deploy with concurrency group `pages`, so whichever lands
+last decides the bytes. Only `futasaku04-preview.yml` has actually published since 2026-10-06, and it
+is the one that composes the futa routes. The root map therefore lives entirely in
+`scripts/compose-futa05-preview.mjs`, which that workflow runs **as `futa05/scripts/…`, i.e. always
+from the `futa0.5-online` checkout** — so a push to `futa0.4` and a push to `futa0.5-online` compose
+the identical root. Nothing in the map depends on which branch the workflow was triggered by, and no
+workflow file had to be edited. (A push to `main` would still run `pages.yml` and reset the root to
+Main — that has been true of every futa route since 2026-10-06 and `main` has not moved since
+2026-10-05.)
 
 ## 1. The one code change that made this possible: the CORS allow-list
 
@@ -80,9 +105,10 @@ This repo publishes Pages **from a GitHub Actions workflow**, not from a branch,
 **composes one `site/` directory** out of several channels:
 
 - `.github/workflows/pages.yml` — Main + `/test/` + `/test2/`
-- `.github/workflows/futasaku04-preview.yml` — the above, plus `/futa0.4/`, `/futa-test/` and
-  `/futa0.5/`; **this is the workflow that publishes the online channel**
-- `.github/workflows/futa05-preview.yml` — builds the `/futa0.5/` dist only (artifact, no deploy)
+- `.github/workflows/futasaku04-preview.yml` — the above, plus `/futa0.4/`, `/futa-test/`, the
+  **site root map** (FUTASAKU 0.5 at `/`, Main at `/firststep/`, a forwarding `/futa0.5/`);
+  **this is the workflow that publishes the online channel**
+- `.github/workflows/futa05-preview.yml` — builds the FUTASAKU 0.5 dist only (artifact, no deploy)
 
 **Verified against GitHub's own documentation, and it is good news:** for a site published from a
 **custom GitHub Actions workflow**, GitHub keeps the custom domain in the repository settings and
@@ -149,50 +175,52 @@ So:
 ## 4. The exact URL to open — and how the project path maps
 
 This is a **project site** (`severgrow-01` in the account `severgrow`), currently served at
-`https://severgrow.github.io/severgrow-01/futa0.5/`. GitHub's rule for custom domains is that a
+`https://severgrow.github.io/severgrow-01/`. GitHub's rule for custom domains is that a
 user/organisation site's custom domain is **inherited by every project site**, which keeps the
 repository path segment. So:
 
-| Where the custom domain is configured | The online game ends up at |
+| Where the custom domain is configured | The game ends up at |
 | --- | --- |
-| **A `severgrow.github.io` user/organisation site** (or nothing configured for this repo) | `https://www.futasaku.com/severgrow-01/futa0.5/` — **the `severgrow-01` part stays** |
-| **This repository** (`severgrow/severgrow-01`), as in §2 | `https://www.futasaku.com/futa0.5/` — the shorter URL |
+| **A `severgrow.github.io` user/organisation site** (or nothing configured for this repo) | `https://www.futasaku.com/severgrow-01/` — **the `severgrow-01` part stays** |
+| **This repository** (`severgrow/severgrow-01`), as in §2 | `https://www.futasaku.com/` — the shorter URL |
 
 **If you want the short URL, set the custom domain on this repository** (§2 step 3 does exactly
 that). Tradeoff, stated plainly: with a custom domain on this repository, GitHub's own
 `severgrow.github.io/severgrow-01/…` address may redirect to the custom domain instead of serving
 the site. That is harmless here — both origins are in the CORS allow-list, and a redirect lands the
 visitor on an origin that is allowed — but it is the one behaviour to be aware of.
-**If you do nothing about the project path, the app is at
-`https://www.futasaku.com/severgrow-01/futa0.5/` and that is perfectly fine.**
 
 > **The CORS value is the same either way**, because an origin is scheme + host + port only, never a
-> path: `https://www.futasaku.com`. The `/severgrow-01/futa0.5/` part must **not** appear in
-> `CORS_ORIGINS`.
+> path: `https://www.futasaku.com`. The `/severgrow-01/` part must **not** appear in
+> `CORS_ORIGINS` — and moving a build from `/` to `/firststep/` needs no CORS change at all.
 
 What the app itself does — all **already correct, nothing to change**:
 
 - **Invite links adapt by themselves.** `publicAppOrigin()` (`web/src/online/config.ts`) builds the
-  invite base at runtime from `location.origin` + the page path, so a link shared from
-  `https://www.futasaku.com/severgrow-01/futa0.5/` reads
-  `https://www.futasaku.com/severgrow-01/futa0.5/#/join/CODE`, and from the short URL reads
-  `https://www.futasaku.com/futa0.5/#/join/CODE`. Either way the invitee lands on the right page —
-  **no invite-link bug**. Its hardcoded last-resort fallback
-  `https://severgrow.github.io/futa0.5` is used only when there is no `location` at all (unit tests).
+  invite base at runtime from `location.origin` + the page path, so at the root a link reads
+  `https://www.futasaku.com/#/join/CODE`. The older `…/futa0.5/#/join/CODE` links keep working: that
+  address forwards to the root and carries the hash across — **no invite-link bug**. Its hardcoded
+  last-resort fallback `https://severgrow.github.io/futa0.5` is used only when there is no `location`
+  at all (unit tests).
 - **`base: './'` still holds.** `web/vite.config.ts` builds with relative asset paths, so the bundle
   works at any host and any path with no rebuild.
 - **The service worker still works.** It registers `./futa04-sw.js` (relative) and derives its scope
-  from `self.registration.scope`; it chooses the `futa05-` cache purely from `/futa0.5/` being in the
-  path — still true at the new domain.
+  from `self.registration.scope`, so it follows the build to whatever address it is served from. Its
+  cache namespace is picked from that same scope, and at the root it shares the `severor-main2-`
+  namespace with `/futa-test/`; cache keys are full URLs, so the two never collide.
+- **The root's previous worker is retired.** A visitor who opened the root before the move has Main's
+  worker registered at scope `/`. The composed root replaces `/sw.js` with a worker that unregisters
+  itself (and handles no request), so it cannot answer an offline root visit with the Main page.
 - **No `_headers` / `_redirects` / SPA fallback is needed.** Those files are a *Cloudflare Pages*
   feature and do nothing on GitHub Pages — and the app does not need a rewrite anyway: it routes in
-  the URL **hash** (`#/join/CODE`), so every route really is `…/futa0.5/index.html`. That is also why
-  it works on GitHub Pages today without any 404 fallback.
+  the URL **hash** (`#/join/CODE`), so every route really is `…/index.html`. That is also why
+  it works on GitHub Pages today without any 404 fallback. The one forwarding page the move does
+  need (`/futa0.5/`) is a plain `index.html` with a `location.replace` — static, no server rules.
 
 ## 5. Verify it worked (from a normal browser)
 
-1. Open **`https://www.futasaku.com/futa0.5/`** (or `…/severgrow-01/futa0.5/` — whichever applies,
-   see §4). The game loads, padlock shown, no redirect loop.
+1. Open **`https://www.futasaku.com/`** (or `…/severgrow-01/` — whichever applies, see §4). The game
+   loads, padlock shown, no redirect loop.
 2. Open **DevTools → Network**, then tap **Create a duel** (or **Find Opponent**).
 3. Find the request to `…supabase.co/functions/v1/duel/…`:
    - **Status `201`/`200`** with response header `access-control-allow-origin: https://www.futasaku.com`
@@ -202,8 +230,9 @@ What the app itself does — all **already correct, nothing to change**:
      and the function redeployed after any secret change.
 4. **Invite round-trip:** create a duel → **Share invite** → the link starts with the new domain →
    open it in a second browser → the friend joins.
-5. **The old address still works:** `https://severgrow.github.io/severgrow-01/futa0.5/` still plays.
-   Fully quit the tab first (the app caches), and clear site data if you have played there before.
+5. **The old address still works:** `https://severgrow.github.io/severgrow-01/` still plays (it
+   redirects to the custom domain). `/futa0.5/` forwards to the root. Fully quit the tab first (the
+   app caches), and clear site data if you have played there before.
 
 From the terminal (origins are public, never secrets):
 
