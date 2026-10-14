@@ -9,6 +9,7 @@ import type { State } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { onlinePerspective } from '../src/online/perspective.js';
 import { positionSave } from './position.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 
 const dir = 'docs/screens/online';
 mkdirSync(dir, { recursive: true });
@@ -51,6 +52,7 @@ const openSeat = async (
     localStorage.setItem('main2:severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
   }, save);
   await page.goto('http://localhost:4199/');
+  await assertDistChannel(page);   // loud if the served dist was built for another channel
   await page.click('#menu-continue');
   await page.waitForTimeout(1600);
   const path = `${dir}/perspective-seat-${label}.png`;
