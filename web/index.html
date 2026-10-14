@@ -87,10 +87,10 @@
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">FUTASAKU</h1>
-        <!-- The menu tagline ("GROW · CONNECT · CONQUER") was removed from the menu on 2026-10-14.
-             It is deliberately NOT in this markup — no hidden placeholder, no leftover gap. Restore
-             it with ONE line, SHOW_MENU_TAGLINE = true in src/strings.ts, and main.ts re-inserts the
-             element in this slot. See docs/DECISIONS.md. -->
+        <!-- The main-menu tagline was removed from the menu on 2026-10-14. It is deliberately NOT in
+             this markup — no hidden placeholder, no leftover gap. Restore it with ONE line,
+             SHOW_MENU_TAGLINE = true in src/strings.ts, and main.ts re-inserts the element in this
+             slot (the words live in ONLINE.tagline). See docs/DECISIONS.md. -->
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
