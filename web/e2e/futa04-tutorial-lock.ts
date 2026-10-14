@@ -303,6 +303,35 @@ try {
     await page.close();
   }
 
+  // Large text: the tutorial window's copy scales like every other Futasaku surface
+  // (the Match Intel reference already steps 13px → 15px), and nothing clips.
+  for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }] as const) {
+    const page = await browser.newPage({ viewport: vp, hasTouch: true, isMobile: true });
+    page.on('pageerror', e => errors.push(e.message));
+    await openTutorial(page, 2);
+    await page.evaluate(() => document.documentElement.classList.add('large-text'));
+    await page.waitForTimeout(350);
+    const m = await page.evaluate(() => {
+      const glass = document.getElementById('futasaku-glass')!;
+      const why = document.querySelector('#futasaku-glass .glass-why');
+      const btns = [...glass.querySelectorAll<HTMLButtonElement>('.glass-head-slot > button')];
+      const rect = glass.getBoundingClientRect();
+      return {
+        why: why ? parseFloat(getComputedStyle(why).fontSize) : 0,
+        clipped: btns.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => (b.textContent || '').trim()),
+        right: rect.right,
+        bottom: rect.bottom,
+        dockTop: document.getElementById('dock')!.getBoundingClientRect().top,
+        vw: innerWidth,
+      };
+    });
+    assert.ok(m.why >= 14, `${vp.width}x${vp.height}: Large text grows the tutorial copy (${m.why}px)`);
+    assert.equal(m.clipped.length, 0, `${vp.width}x${vp.height}: Large text clips no head button (${m.clipped.join(', ')})`);
+    assert.ok(m.right <= m.vw + 1, `${vp.width}x${vp.height}: the large-text glass still fits the screen`);
+    assert.ok(m.bottom < m.dockTop, `${vp.width}x${vp.height}: the large-text glass stays above the dock`);
+    await page.close();
+  }
+
   console.log('futa04-tutorial-lock: ok');
 } finally {
   await browser.close();

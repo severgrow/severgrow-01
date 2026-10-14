@@ -160,6 +160,11 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
+/* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
+   (the Match Intel reference already goes 13px → 15px). The head buttons keep their 11px so the
+   longest CTA ("DRAW 1 CARD") can never ellipsise inside a 360px glass. */
+.large-text #futasaku-glass[data-mode='tutorial'] .glass-why,
+.large-text #futasaku-glass[data-mode='tutorial'] .glass-status { font-size:15px; line-height:1.45; }
 #futasaku-glass[data-mode='tutorial'] .glass-icons { display:flex; gap:10px; justify-content:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-icons span { font:400 11px/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#cbbfa0; letter-spacing:.05em; }
 /* Soft settle on the inner column when the lesson step changes (panel transform stays JS-owned). */
