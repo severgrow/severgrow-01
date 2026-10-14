@@ -17,12 +17,13 @@ import type { ServerConfig } from '../config.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
 import type { OnlineGameResult } from '../protocol.js';
 import type { PlayerRecord, MatchRecord, Storage } from '../storage/types.js';
+import { autoDecision, autoPlayTurn, drawnCardFrom } from './autoplay.js';
 import type { LiveConfig } from './config.js';
 import { ApiError } from '../errors.js';
 import { LiveError } from './errors.js';
 import type { LiveErrorCode } from './errors.js';
 import type { LiveNotifier } from './notifier.js';
-import { challengeBlock, effectiveStatus, endLive, presenceWord, startLive } from './rules.js';
+import { challengeBlock, effectiveStatus, endLive, presenceFresh, presenceWord, startLive } from './rules.js';
 import type { Challenge, ChallengeKind, LiveMatch, LivePlayer, LiveStore, LiveTx, LockedMatch, PresenceStatus } from './types.js';
 import { PRESENCE_STATUSES, liveManaged } from './types.js';
 
@@ -60,7 +61,7 @@ export type LiveStatusWire = {
   endedAt: number | null;
   endedBySeat: Player | null;
   leftBy: Player | null;
-  opponent: { name: string | null; presence: 'online' | 'busy' | 'offline'; inLive: boolean; available: boolean };
+  opponent: { name: string | null; presence: 'online' | 'busy' | 'offline'; inLive: boolean; available: boolean; reconnecting: boolean };
   me: { liveMatchId: string | null; challengesEnabled: boolean };
   /** Why a real-time tap would be refused right now (null = allowed). */
   block: LiveErrorCode | null;
@@ -77,8 +78,19 @@ export type MyChallengesWire = {
   serverNow: number;
 };
 
-/** What one live tick decided: stored state changed, or nothing was due. */
-type TickPlan = { kind: 'changed' } | null;
+/** What one live tick decided: commit an auto-played turn, stored state changed, or nothing due. */
+type TickPlan = { kind: 'autoplay'; rev: number; deadline: number; seat: Player } | { kind: 'changed' } | null;
+
+/**
+ * How often the both-offline HOLD re-checks itself. The hold itself lasts `bothOfflineHoldMs`; this
+ * short step only exists so that the moment ONE player comes back, the other's reconnect ladder
+ * starts within a poll (the ladder is triggered by the turn deadline passing, and the deadline has
+ * to actually pass for the single decision point to run). Internal granularity, not owner-tunable.
+ */
+const HOLD_RECHECK_MS = 5_000;
+
+/** A per-seat pair with one seat replaced (kept tiny and pure, used by the reconnect ladder). */
+const withSeat = <T>(pair: [T, T], seat: Player, value: T): [T, T] => (seat === 0 ? [value, pair[1]] : [pair[0], value]);
 
 export type LiveServiceOptions = {
   /** The UNWRAPPED base storage (the live layer must never re-enter its own wrapper). */
@@ -502,6 +514,9 @@ export class LiveService {
         presence: opp ? presenceWord(opp, now, this.config) : 'offline',
         inLive: !!opp?.liveMatchId,
         available: opp?.challengesEnabled ?? false,
+        // The reconnect grace is exactly "the opponent dropped while the duel is live": the ladder
+        // only ever starts for a player whose heartbeat has gone stale.
+        reconnecting: match.status === 'active' && live.liveSince !== null && !!opp && !presenceFresh(opp, now, this.config),
       },
       me: {
         liveMatchId: me.liveMatchId,
@@ -522,7 +537,12 @@ export class LiveService {
     try {
       // Cheap unlocked check first: the row lock is only taken when a decision is actually due.
       if (!(await this.live.needsTick(matchId, now))) return false;
-      changed = (await this.planTick(matchId, now)) !== null;
+      for (let i = 0; i < 6; i++) {
+        const plan = await this.planTick(matchId, now);
+        if (!plan) break;
+        changed = true;
+        if (plan.kind === 'autoplay') await this.autoplay(matchId, plan);
+      }
     } catch (error) {
       console.warn(`live tick failed for a match: ${String(error).slice(0, 200)}`);
     }
@@ -541,15 +561,24 @@ export class LiveService {
   }
 
   /**
-   * ONE row-locked decision for a live match. Returns what changed, if anything. There are exactly
-   * two things a tick does now:
+   * ONE row-locked decision for a live match — the ONLY place a live match changes on its own.
    *
-   *   1. a match that FINISHED while live-managed (any ending) — drop the live columns and free both
-   *      players, so nothing is left half-live (this is the natural-strangle / resign cleanup);
-   *   2. a REAL-TIME TIMEOUT — the seat that ran out LOSES the match (`timeout`), immediately.
+   *   1. a match that FINISHED while live-managed (any ending) drops its live columns and frees both
+   *      players, so nothing is ever left half-live;
+   *   2. a REAL-TIME RECONNECT LADDER: when the turn clock expires for a player whose heartbeat has
+   *      gone stale, the grace ladder runs (see below) instead of an instant loss;
+   *   3. BOTH-OFFLINE HOLD: a simultaneous drop holds the match instead of starting a ladder;
+   *   4. otherwise the clock simply expiring ends the duel (`timeout`) — the strict real-time rule.
    *
-   * Nothing here auto-plays a turn and nothing strikes: a real-time timeout ends the duel exactly
-   * like the 24-hour timeout does.
+   * The ladder, per seat, per ABSENCE (migration 0008's `live_reconnect_*` columns):
+   *   stage 0 → the deadline is pushed to now + `reconnectGraceMs` (10 s): the grace is ADDED to the
+   *             turn clock, it never burns the player's turn;
+   *   stage 1 → that ONE turn is auto-played by the existing autoplayer, and the match continues;
+   *   stage 2 → the deadline is pushed to now + `reconnectShortMs` (5 s);
+   *   stage 3 → the match is LOST by the disconnected player, reason `timeout`.
+   * A successful reconnect changes `players.presence_at`, which differs from `reconnectSince`, so the
+   * stage resets to 0 automatically: the forgiving 10 s applies to every FRESH drop, never
+   * cumulatively within one absence, and no extra write path is needed to notice a reconnect.
    */
   private planTick(matchId: string, now: number): Promise<TickPlan> {
     return this.live.transact(async (tx): Promise<TickPlan> => {
@@ -570,14 +599,95 @@ export class LiveService {
       if (match.status !== 'active') return null;
       const deadline = match.turnDeadlineAt;
       if (deadline === null || now <= deadline) return null;
+      const seat = match.state.actor;
+      // The auto-play was already decided for this revision: commit it (never decide it twice).
+      if (live.liveSince !== null && live.autoplayRev === match.revision) {
+        return { kind: 'autoplay', rev: match.revision, deadline, seat };
+      }
       if (live.liveSince !== null) {
-        // A real-time timeout loses the match, the same single row-locked decision point the async
-        // clock uses. The finish, the live columns and the player rows land together or not at all.
-        const seat = match.state.actor;
+        const ids = lm.participants.map((p) => p.playerId);
+        const rows = await tx.players(ids);
+        const byId = new Map(rows.map((p) => [p.playerId, p]));
+        const actorId = lm.participants.find((p) => p.seat === seat)?.playerId;
+        const oppId = lm.participants.find((p) => p.seat !== seat)?.playerId;
+        const actor = actorId ? byId.get(actorId) ?? null : null;
+        const opp = oppId ? byId.get(oppId) ?? null : null;
+        const gone = (p: LivePlayer | null): boolean => !p || !presenceFresh(p, now, this.config);
+        // RULE 2 — both players dark at once: hold the match instead of ladders racing each other.
+        const simultaneous =
+          gone(actor) &&
+          gone(opp) &&
+          actor?.presenceAt != null &&
+          opp?.presenceAt != null &&
+          Math.abs(actor.presenceAt - opp.presenceAt) <= this.config.bothOfflineWindowMs;
+        if (simultaneous && actor?.presenceAt != null && opp?.presenceAt != null) {
+          // The hold is measured from when the drop was DETECTED (a heartbeat is only "stale" once it
+          // is older than `presenceStaleMs`), plus the owner's one minute. Both inputs are fixed
+          // while the players are away, so the bound is idempotent: every tick computes the same one.
+          const detectedAt = Math.max(actor.presenceAt, opp.presenceAt) + this.config.presenceStaleMs;
+          const holdUntil = detectedAt + this.config.bothOfflineHoldMs;
+          if (now < holdUntil) {
+            // Hold, re-checking in short steps so a returning player starts the other's ladder fast.
+            await tx.saveClock(matchId, {
+              turnTimeoutMs: match.turnTimeoutMs,
+              turnDeadlineAt: Math.min(now + HOLD_RECHECK_MS, holdUntil),
+            });
+            return { kind: 'changed' };
+          }
+          // The hold elapsed and NEITHER came back: the normal dropout outcome — the actor was on
+          // the clock, so the actor times out and loses. Deterministic, no new rule.
+        } else if (gone(actor)) {
+          // RULE 1 — the per-seat reconnect ladder for a single absent player.
+          let stage = live.reconnectStage[seat];
+          let since = live.reconnectSince[seat];
+          const pa = actor?.presenceAt ?? null;
+          if (since !== pa) {
+            // A new absence (first drop ever, a reconnect that changed presence, or a fresh drop
+            // after one): the forgiving 10 s starts again.
+            stage = 0;
+            since = pa;
+          }
+          if (stage === 0) {
+            await tx.saveLive({ ...live, reconnectStage: withSeat(live.reconnectStage, seat, 1), reconnectSince: withSeat(live.reconnectSince, seat, since) });
+            await tx.saveClock(matchId, {
+              turnTimeoutMs: match.turnTimeoutMs,
+              turnDeadlineAt: now + this.config.reconnectGraceMs,
+            });
+            return { kind: 'changed' };
+          }
+          if (stage === 1) {
+            // Still gone after the long grace: play that ONE turn (the existing autoplayer) and let
+            // the match continue; the next absence step is the short grace.
+            await tx.saveLive({
+              ...live,
+              reconnectStage: withSeat(live.reconnectStage, seat, 2),
+              reconnectSince: withSeat(live.reconnectSince, seat, since),
+              autoplayRev: match.revision,
+            });
+            return { kind: 'autoplay', rev: match.revision, deadline, seat };
+          }
+          if (stage === 2) {
+            await tx.saveLive({ ...live, reconnectStage: withSeat(live.reconnectStage, seat, 3), reconnectSince: withSeat(live.reconnectSince, seat, since) });
+            await tx.saveClock(matchId, {
+              turnTimeoutMs: match.turnTimeoutMs,
+              turnDeadlineAt: now + this.config.reconnectShortMs,
+            });
+            return { kind: 'changed' };
+          }
+          // stage 3: still gone after the short grace → the disconnected player LOSES.
+        }
+        // Either the player was connected and let the clock run out, or the ladder is exhausted, or
+        // a simultaneous drop outlasted the hold. In every case: the seat on the clock loses.
         const loser = lm.participants.find((p) => p.seat === seat);
         const winner: Player = seat === 0 ? 1 : 0;
         const result: OnlineGameResult = { winner, reason: 'timeout', scores: scores(match.state) };
-        await tx.saveLive({ ...endLive(live, now, 'finished', seat), tailRev: null, autoplayRev: null });
+        await tx.saveLive({
+          ...endLive(live, now, 'finished', seat),
+          tailRev: null,
+          autoplayRev: null,
+          reconnectStage: [0, 0],
+          reconnectSince: [null, null],
+        });
         await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
         if (loser) await tx.finishMatch(matchId, loser.playerId, result, now);
         return { kind: 'changed' };
@@ -594,5 +704,68 @@ export class LiveService {
       }
       return null;
     });
+  }
+
+  /**
+   * Commit the auto-played remainder of a disconnected player's turn through the normal move
+   * pipeline (the SAME `commitBatch` a real player uses), measured from the missed deadline so a
+   * late check never gifts time. If nothing can be committed the match is LOST (`timeout`) rather
+   * than continued: an absent player must not hold a real-time duel open.
+   */
+  private async autoplay(matchId: string, plan: { rev: number; deadline: number; seat: Player }): Promise<void> {
+    /** Drop the auto-play marker once the turn it belongs to is no longer the current revision. */
+    const clearMarker = async (): Promise<void> => {
+      await this.live.transact(async (tx) => {
+        const lm = await tx.match(matchId);
+        if (!lm || lm.live.autoplayRev !== plan.rev || lm.match.revision === plan.rev) return;
+        await tx.saveLive({ ...lm.live, autoplayRev: null });
+      });
+    };
+    const match = await this.storage.matchById(matchId);
+    if (match && match.revision === plan.rev && match.status === 'active') {
+      const parts = await this.storage.participantsOf(matchId);
+      const who = parts.find((p) => p.seat === plan.seat);
+      const moves = await this.storage.movesOf(matchId, match.turnStartRevision);
+      const drawn = drawnCardFrom(moves.flatMap((m) => m.events), plan.seat);
+      const actions = who && match.state.actor === plan.seat ? autoPlayTurn(match.state, plan.seat, drawn) : [];
+      if (who && actions.length > 0) {
+        const res = await this.storage.commitBatch({
+          matchId,
+          playerId: who.playerId,
+          expectedRevision: plan.rev,
+          requestId: `live-auto-${plan.rev}`,
+          // "At the deadline": the next deadline is measured from it, so a late check never gifts time.
+          now: plan.deadline,
+          actions,
+          decideOne: ({ match: m, seat, action }) => autoDecision(m.state, seat, action),
+        });
+        if (res.ok) {
+          await clearMarker();
+          return;
+        }
+      }
+      if (match.revision === plan.rev) {
+        // Nothing could be auto-played (should not happen): the disconnected player loses, exactly as
+        // an exhausted ladder does — never a silent hand-back to 24-hour play.
+        await this.live.transact(async (tx) => {
+          const lm = await tx.match(matchId);
+          if (!lm || lm.match.revision !== plan.rev || lm.match.status !== 'active') return;
+          const loser = lm.participants.find((p) => p.seat === plan.seat);
+          const winner: Player = plan.seat === 0 ? 1 : 0;
+          const result: OnlineGameResult = { winner, reason: 'timeout', scores: scores(lm.match.state) };
+          await tx.saveLive({
+            ...endLive(lm.live, this.now(), 'finished', plan.seat),
+            autoplayRev: null,
+            tailRev: null,
+            reconnectStage: [0, 0],
+            reconnectSince: [null, null],
+          });
+          await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
+          if (loser) await tx.finishMatch(matchId, loser.playerId, result, this.now());
+        });
+        return;
+      }
+    }
+    await clearMarker();
   }
 }

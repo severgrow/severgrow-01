@@ -1,8 +1,9 @@
 // FUTASAKU live duels — every server rule, on a fake clock (memory adapter).
 import { describe, expect, it } from 'vitest';
 import { scores } from '../../src/engine/index.js';
+import type { PlayerRecord } from '../src/storage/types.js';
 import { isLiveError } from '../src/live/errors.js';
-import { DAY, ENTRY, LIMIT, REPLAY, makeLiveHarness } from './live-harness.js';
+import { DAY, ENTRY, GRACE, LIMIT, REPLAY, makeLiveHarness } from './live-harness.js';
 import type { LiveHarness } from './live-harness.js';
 
 const code = async (p: Promise<unknown>): Promise<string> => {
@@ -15,6 +16,19 @@ const code = async (p: Promise<unknown>): Promise<string> => {
 };
 
 const match = async (h: LiveHarness, id: string) => (await h.memory.matchById(id))!;
+
+/**
+ * Reach the turn deadline while EVERY listed player keeps heartbeating: a player who is PRESENT when
+ * the clock runs out loses outright (`timeout`). A player who has dropped gets the reconnect ladder
+ * instead, which `live-reconnect.test.ts` covers.
+ */
+const runToDeadlineConnected = async (h: LiveHarness, matchId: string, players: readonly PlayerRecord[]): Promise<void> => {
+  const deadline = (await match(h, matchId)).turnDeadlineAt!;
+  while (h.now() <= deadline) {
+    h.advance(Math.min(20_000, deadline + 1 - h.now()));
+    for (const p of players) await h.presence(p, 'in_live');
+  }
+};
 
 describe('go live', () => {
   it('challenge + accept switches the SAME match to the live clock with the entry allowance', async () => {
@@ -90,7 +104,7 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     await h.goLive(a, b, matchId);
     const before = await match(h, matchId);
     const seat = before.state.actor;
-    h.advance(LIMIT + ENTRY + 1);
+    await runToDeadlineConnected(h, matchId, [a, b]);
     h.broadcaster.published.length = 0;
     const s = await h.live.status(a, matchId); // a poll is the lazy decision point
     const after = await match(h, matchId);
@@ -116,7 +130,7 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const movesBefore = await h.memory.movesOf(matchId, 0);
-    h.advance(LIMIT + ENTRY + 1);
+    await runToDeadlineConnected(h, matchId, [a, b]);
     const s = await h.live.status(a, matchId);
     const after = await match(h, matchId);
     expect(after.status).toBe('finished'); // NOT 'active'
@@ -128,31 +142,38 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     void b;
   });
 
-  it('a player who goes quiet does NOT forfeit: only the clock ends a real-time duel', async () => {
+  it('a player who goes quiet is not forfeited instantly: the reconnect ladder gives them grace', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
+    const actor = await h.actorOf(matchId, a, b);
+    const other = actor.id === a.id ? b : a;
     // The tab is closed / the app is backgrounded: presence goes stale well before the turn clock.
     h.advance(46_001);
-    const s = await h.live.status(a, matchId);
+    await h.presence(other, 'in_live'); // the OPPONENT is still here
+    const s = await h.live.status(other, matchId);
     expect(s.opponent.presence).toBe('offline');
+    // The strip says so as soon as they are genuinely gone — before their clock even expires.
+    expect(s.opponent.reconnecting).toBe(true);
     expect((await match(h, matchId)).status).toBe('active'); // going quiet is NOT a forfeit event
-    // ...but the server clock keeps running, and it is what ends the duel.
-    h.advance(LIMIT + ENTRY + 1);
-    const ended = await h.live.status(a, matchId);
-    expect(ended.status).toBe('finished');
-    expect((await match(h, matchId)).result?.reason).toBe('timeout');
-    void b;
+    // ...and when their clock DOES run out, the ladder (not an instant loss) applies.
+    const deadline = (await match(h, matchId)).turnDeadlineAt!;
+    h.advance(deadline - h.now() + 1);
+    await h.presence(other, 'in_live');
+    const ended = await h.live.status(other, matchId);
+    expect(ended.status).toBe('active');
+    expect(ended.opponent.reconnecting).toBe(true);
+    expect((await match(h, matchId)).turnDeadlineAt).toBe(h.now() + GRACE);
   });
 
-  it('a timeout and an explicit leave racing produce exactly ONE finish', async () => {
+  it('a real-time timeout and an explicit leave racing produce exactly ONE finish', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const before = await match(h, matchId);
     const leaver = await h.actorOf(matchId, a, b); // the actor will time out; it also presses Leave
     const other = leaver.id === a.id ? b : a;
-    h.advance(LIMIT + ENTRY + 1);
+    await runToDeadlineConnected(h, matchId, [a, b]);
     const results = await Promise.allSettled([h.live.leave(leaver, matchId), h.live.status(other, matchId)]);
     expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
     const after = await match(h, matchId);
@@ -174,7 +195,7 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     await h.goLive(a, b, matchId);
     const actor = await h.actorOf(matchId, a, b);
     const v = await h.service.viewPayload(actor, matchId);
-    h.advance(LIMIT + ENTRY + 1);
+    await runToDeadlineConnected(h, matchId, [a, b]);
     const res = await code(
       h.service.submitAction(actor, matchId, { expectedRevision: v.revision, requestId: 'late-1', action: v.legalActions[0]! }),
     );
@@ -190,7 +211,7 @@ describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-ho
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const before = await match(h, matchId);
-    h.advance(LIMIT + ENTRY + 1);
+    await runToDeadlineConnected(h, matchId, [a, b]);
     await h.service.sweep('127.0.0.1');
     const after = await match(h, matchId);
     expect(after.status).toBe('finished');

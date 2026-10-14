@@ -18,6 +18,12 @@ export const DAY = 24 * 60 * 60 * 1000;
 export const LIMIT = 45_000;
 export const REPLAY = 6_000;
 export const ENTRY = 15_000;
+/** The real-time reconnect ladder, as `live-duels.test.ts` reasons about it. */
+export const GRACE = 10_000;
+export const GRACE_SHORT = 5_000;
+export const STALE = 45_000;
+export const BOTH_WINDOW = 3_000;
+export const HOLD = 60_000;
 
 export const liveTestConfig = (o: Partial<LiveConfig> = {}): LiveConfig => ({
   ...DEFAULT_LIVE_CONFIG,
@@ -25,7 +31,11 @@ export const liveTestConfig = (o: Partial<LiveConfig> = {}): LiveConfig => ({
   replayAllowanceMs: REPLAY,
   entryAllowanceMs: ENTRY,
   challengeTtlMs: 45_000,
-  presenceStaleMs: 45_000,
+  presenceStaleMs: STALE,
+  reconnectGraceMs: GRACE,
+  reconnectShortMs: GRACE_SHORT,
+  bothOfflineWindowMs: BOTH_WINDOW,
+  bothOfflineHoldMs: HOLD,
   notNowCooldownMs: 120_000,
   declineLimit: 3,
   declineWindowMs: 30 * 60_000,

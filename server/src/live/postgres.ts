@@ -28,6 +28,8 @@ export const rowToLive = (row: PgRow): LiveMatch => ({
   liveSince: numOrNull(row.live_since),
   limitMs: numOrNull(row.live_limit_ms),
   leftBy: seatOrNull(row.live_left_by),
+  reconnectStage: [num(row.live_reconnect_stage_seat0 ?? 0), num(row.live_reconnect_stage_seat1 ?? 0)],
+  reconnectSince: [numOrNull(row.live_reconnect_since_seat0), numOrNull(row.live_reconnect_since_seat1)],
   tailRev: numOrNull(row.live_tail_rev),
   autoplayRev: numOrNull(row.live_autoplay_rev),
   normalTimeoutMs: numOrNull(row.live_normal_timeout_ms),
@@ -61,11 +63,14 @@ const rowToChallenge = (row: PgRow): Challenge => ({
 
 // The strikes / cooldown columns (migration 0006) are deliberately NOT written any more: the
 // strike escape hatch and the leaver cooldown are gone. The columns stay in the schema so no risky
-// migration is needed; existing values simply stop being read or updated.
+// migration is needed; existing values simply stop being read or updated. The RECONNECT columns
+// (migration 0008) are the live per-seat ladder and are written here.
 const LIVE_UPDATE = `update matches set
   live_since = $2, live_limit_ms = $3, live_left_by = $4,
-  live_tail_rev = $5, live_autoplay_rev = $6, live_normal_timeout_ms = $7,
-  live_ended_reason = $8, live_ended_at = $9, live_ended_by_seat = $10
+  live_reconnect_stage_seat0 = $5, live_reconnect_stage_seat1 = $6,
+  live_reconnect_since_seat0 = $7, live_reconnect_since_seat1 = $8,
+  live_tail_rev = $9, live_autoplay_rev = $10, live_normal_timeout_ms = $11,
+  live_ended_reason = $12, live_ended_at = $13, live_ended_by_seat = $14
  where id = $1`;
 
 const liveValues = (l: LiveMatch): unknown[] => [
@@ -73,6 +78,10 @@ const liveValues = (l: LiveMatch): unknown[] => [
   l.liveSince,
   l.limitMs,
   l.leftBy,
+  l.reconnectStage[0],
+  l.reconnectStage[1],
+  l.reconnectSince[0],
+  l.reconnectSince[1],
   l.tailRev,
   l.autoplayRev,
   l.normalTimeoutMs,

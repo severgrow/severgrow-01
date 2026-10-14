@@ -1,8 +1,9 @@
 // The live turn length has ONE source of truth: the server's `LIVE_TURN_MS` default.
 //
-// Owner's change (2026-10-14): the live round is 60 seconds, not 45. Everything the client shows
-// (the "Go live" pill, the challenge window's terms, the live chip, the new header clock) reads the
-// server's `limitMs`, so this one constant is the whole change — plus the player words that name it.
+// Owner's change (2026-10-14): the live round is 60 seconds, not 45. The clock itself reads the
+// server's `limitMs`, so this one constant is the whole change. The COPY no longer spells the
+// duration anywhere (owner's later cleanup: no "LIVE 60s", no "60-second turns") — the only number
+// a player reads is the live clock's own m:ss, which the UI builds from `limitMs`.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_LIVE_CONFIG, LIVE_TURN_MS_DEFAULT, liveConfigFromEnv } from '../src/live/config.js';
 import { LIVE } from '../../src/strings.js';
@@ -39,13 +40,23 @@ describe('the live turn length', () => {
     }
   });
 
-  it('every player-facing sentence takes its number from the wire, not from a fixed word', () => {
-    // The copy does not spell a duration anywhere: it is always built from the seconds it is given,
-    // so changing the constant above changes what the players read.
-    expect(LIVE.terms(60)).toContain('60-second');
-    expect(LIVE.chip(60)).toContain('60');
-    expect(LIVE.chipAria(60)).toContain('60-second');
-    expect(LIVE.goLiveAria('Fern', 60)).toContain('60-second');
-    expect(LIVE.terms(60)).not.toContain('45');
+  it('no player-facing sentence spells a duration (the live clock is the only number)', () => {
+    // Owner's cleanup, 2026-10-14: the rule-stating number of seconds is gone from every short
+    // label (it was "LIVE 60s" / "60-second turns"). The single number a player reads is the live
+    // clock's own m:ss, which the UI builds from `limitMs` — never words in this table.
+    const words = [
+      LIVE.goLive,
+      LIVE.goLiveAria('Fern', 60),
+      LIVE.terms(60),
+      LIVE.chip(60),
+      LIVE.chipAria(60),
+      LIVE.waiting('Fern', 60),
+      LIVE.waitingFor('Fern'),
+      LIVE.rematchWaiting('Fern', 60),
+      LIVE.leaveLive,
+      LIVE.inLiveGame,
+      LIVE.wantsToGoLive,
+    ];
+    for (const text of words) expect(text).not.toMatch(/\d+\s*(?:s\b|sec)/i);
   });
 });

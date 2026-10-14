@@ -75,17 +75,34 @@ leaving them is free, and their first missed turn only warns and extends.
 - **Time's up:** the server plays the rest of that turn — Draw from the deck (the throw pile only if
   the deck is empty), skip Grow, throw the card just drawn — always choosing from the engine's own
   legal moves, using only that player's own view. That player gets a **strike**.
-- **Time's up = you lose.** If the clock runs out on your turn the match is finished immediately: you
-  lose, reason `timeout`. The server does not play the turn for you, there is no strike, and there is
-  **no return to 24-hour play**. The winner is told at once (the same status-change ping every ending
-  publishes), so they never sit on a finished board.
+- **Time's up while you are CONNECTED = you lose.** If the clock runs out on your turn and your
+  heartbeat is fresh, the match is finished immediately: you lose, reason `timeout`. There is no
+  strike and no return to 24-hour play. The winner is told at once (the same status-change ping every
+  ending publishes), so they never sit on a finished board.
+- **Dropping out gets a grace ladder** (real-time only). A player whose heartbeat has gone stale is
+  *reconnecting*, and the OPPONENT sees **Opponent reconnecting** with the shared animated ellipsis in
+  the header strip. When the absent player's turn clock would expire the ladder runs — one step per
+  decision, all inside the same row-locked tick:
+  | step | what happens |
+  | --- | --- |
+  | 1 | the turn clock is **extended by 10 s** (`LIVE_RECONNECT_GRACE_MS`) — the grace is ADDED, it never burns the player's turn |
+  | 2 | still gone: that ONE turn is **auto-played** by the server (draw, skip the Grow, throw the drawn card) and the match continues |
+  | 3 | the absent player's **next** turn gets only **5 s** (`LIVE_RECONNECT_SHORT_MS`) |
+  | 4 | still gone: the match is **LOST** by the disconnected player, reason `timeout` |
+  The ladder is per ABSENCE: a successful reconnect resets it, so every fresh drop gets the full 10 s
+  again. It never accumulates inside one absence.
+- **Both players drop at once** (within `LIVE_BOTH_OFFLINE_WINDOW_MS`, 3 s): no ladder starts.
+  Instead the match is **held for up to a minute** (`LIVE_BOTH_OFFLINE_HOLD_MS`, counted from the
+  moment the simultaneous drop is detected). If ONE player comes back inside that minute, the other
+  gets the ordinary 10 s ladder. If NEITHER comes back, the normal dropout outcome applies: the seat
+  that was on the clock times out and loses (`timeout`) — deterministic, no new rule.
 - **Leave real time = you resign.** The pause-menu **Leave live** item asks **"Leave and lose this
   real-time duel?"** and, on confirm, finishes the match with the leaver as the loser, reason
   `resigned`. Cancelling does nothing. There is no cooldown and no grace: the match is simply over for
   both players.
-- **Walking away is not an escape.** Only the explicit leave button forfeits. Closing the tab,
-  switching apps, or a brief network blip does **not** itself end the match — but the clock keeps
-  running on the server, so a player who has gone quiet times out and loses.
+- **Walking away is not an escape.** Only the explicit leave button forfeits outright. Closing the tab
+  or switching apps does **not** itself end the match — but the clock keeps running on the server, so a
+  player who has gone quiet runs the ladder and loses.
 
 ## Limits
 
@@ -104,7 +121,11 @@ are milliseconds unless noted.
 | `LIVE_REPLAY_ALLOWANCE_MS` | `6000` | Time to watch the previous turn before the clock runs |
 | `LIVE_ENTRY_ALLOWANCE_MS` | `15000` | Extra time for the current player when both go live |
 | `LIVE_CHALLENGE_TTL_MS` | `45000` | How long a challenge waits for an answer |
-| `LIVE_PRESENCE_STALE_MS` | `45000` | No heartbeat for this long = offline |
+| `LIVE_PRESENCE_STALE_MS` | `45000` | No heartbeat for this long = offline (and therefore "dropped") |
+| `LIVE_RECONNECT_GRACE_MS` | `10000` | First drop: the turn clock is extended by this, then the turn is auto-played |
+| `LIVE_RECONNECT_SHORT_MS` | `5000` | The absent player's NEXT turn: this much grace, then the match is lost |
+| `LIVE_BOTH_OFFLINE_WINDOW_MS` | `3000` | Two presences going stale this close together = a simultaneous drop |
+| `LIVE_BOTH_OFFLINE_HOLD_MS` | `60000` | How long a simultaneous drop holds the match before the normal outcome |
 | `LIVE_NOT_NOW_COOLDOWN_MS` | `120000` | Wait after a "Not now" |
 | `LIVE_DECLINE_LIMIT` (count) / `LIVE_DECLINE_WINDOW_MS` | `3` / `1800000` | Declines per match before the long wait |
 | `LIVE_CHALLENGES_PER_PLAYER_PER_HOUR` (count) | `30` | Abuse cap |
@@ -115,6 +136,21 @@ timeout now loses, so there is no grace, no cooldown and no strike escape hatch.
 `live_strikes_*` / `live_cooldown_*` columns stay in the schema (no risky migration); nothing reads or
 writes them.
 
+## Where the shared waiting animation lives (for the header/strip lane)
+
+The animated ellipsis the strip shows for a connecting or waiting state is implemented ONCE, in
+`web/src/online/live/wait-dots.ts`, and exported:
+
+```ts
+import { WAIT_DOTS_CSS, WAIT_DOTS_CLASS, waitDots } from './online/live/wait-dots.js';
+```
+
+`WAIT_DOTS_CLASS` (`futasaku-wait-dots`) + `WAIT_DOTS_CSS` are the CSS-only treatment (three dots
+revealed in sequence; steady under `.reduce-motion` and `prefers-reduced-motion`), and `waitDots()`
+builds the markup. It is used by the real-time strip's **Opponent reconnecting** notice
+(`[data-live="reconnect"]`, 20 characters — the dots are the animation, never part of the string).
+**Do not add a second dots animation**: import this one so every waiting state looks the same.
+
 **Exact clicks to change the turn length on Supabase:** open the Supabase dashboard → your
 FUTASAKU project → **Edge Functions** (left menu) → **Secrets** (sometimes under *Manage secrets*)
 → **Add new secret** → Name `LIVE_TURN_MS`, Value e.g. `30000` → **Save**. The next request uses
@@ -123,11 +159,15 @@ it (no redeploy needed for a secret change on current Supabase; if it does not a
 
 ## Where the code is
 
-- Server: `server/src/live/` (rules, service, router, memory + Postgres stores, wiring),
-  migration `server/migrations/0006_live_duels.sql` (the brief said "0003"; 0003–0005 were taken).
-- Client: `web/src/online/live/` (listener, pop-up, pill, HUD, end window, return targets, channel).
-- Tests: `server/tests/live-*.ts`, `web/tests/live-center.test.ts`, `web/e2e/live-duels.ts`
-  (`npm run e2e:live`). Screenshots: `docs/screens/live/` (+ `e2e-run.txt`, the last full run).
+- Server: `server/src/live/` (rules, autoplay, service, router, memory + Postgres stores, wiring),
+  migration `server/migrations/0006_live_duels.sql` (the brief said "0003"; 0003–0005 were taken) and
+  `0008_live_reconnect.sql` (the reconnect ladder columns).
+- Client: `web/src/online/live/` (listener, pop-up, pill, HUD, end window, return targets, channel,
+  `wait-dots.ts` — the shared animated ellipsis).
+- Tests: `server/tests/live-*.ts`, `web/tests/live-center.test.ts`,
+  `web/tests/live-reconnect-copy.test.ts`, `web/e2e/live-duels.ts` (`npm run e2e:live`) and
+  `web/e2e/live-reconnect.ts` (`npx tsx web/e2e/live-reconnect.ts` — the reconnect ladder in two real
+  browsers). Screenshots: `docs/screens/live/` (+ `e2e-run.txt`, the last full run).
 
 ## Every touch outside the new folders
 

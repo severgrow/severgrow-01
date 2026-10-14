@@ -45,15 +45,28 @@ export type LiveMatch = {
   limitMs: number | null;
   /** Seat that last pressed Leave live (a record only; leaving now forfeits the match). */
   leftBy: Player | null;
+  /**
+   * RECONNECT ladder per seat, for a real-time absence (see `docs/LIVE.md` and migration 0008):
+   * 0 = nothing spent (the turn clock gets `reconnectGraceMs`), 1 = the long grace was spent (the
+   * turn is auto-played once), 2 = the turn was auto-played (the clock gets `reconnectShortMs`),
+   * 3 = the short grace was spent (the match is LOST). Reset to 0 on a successful reconnect: the
+   * ladder is per absence, never cumulative.
+   */
+  reconnectStage: [number, number];
+  /**
+   * The seat's `presenceAt` when its ladder started. A different `presenceAt` means the absence is
+   * NEW (a reconnect, or a fresh drop), so the stage is reset — no extra write path needed.
+   */
+  reconnectSince: [number | null, number | null];
   /** LEGACY (never set now): the turn (turnStartRevision) an old leave would have auto-played. */
   tailRev: number | null;
-  /** LEGACY (never set now): the revision an old timeout was decided for. */
+  /** The revision whose deadline was decided (the auto-play marker), so a late check never repeats it. */
   autoplayRev: number | null;
   /** The match's normal (24-hour) turn timeout, restored when live ends. */
   normalTimeoutMs: number | null;
   endedReason: LiveEndReason | null;
   endedAt: number | null;
-  /** Seat whose timeout or strikes ended the last session (for the end window), null otherwise. */
+  /** Seat whose timeout or forfeit ended the last session (for the end window), null otherwise. */
   endedBySeat: Player | null;
 };
 
@@ -62,6 +75,8 @@ export const defaultLiveMatch = (matchId: string): LiveMatch => ({
   liveSince: null,
   limitMs: null,
   leftBy: null,
+  reconnectStage: [0, 0],
+  reconnectSince: [null, null],
   tailRev: null,
   autoplayRev: null,
   normalTimeoutMs: null,

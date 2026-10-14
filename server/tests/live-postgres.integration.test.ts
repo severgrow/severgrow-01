@@ -19,7 +19,7 @@ import { postgresLiveStore } from '../src/live/postgres.js';
 import { createLiveRuntime } from '../src/live/runtime.js';
 import type { LiveService } from '../src/live/service.js';
 import { migrate } from '../scripts/migrate.js';
-import { ENTRY, LIMIT, liveTestConfig, serverTestConfig } from './live-harness.js';
+import { ENTRY, LIMIT, STALE, liveTestConfig, serverTestConfig } from './live-harness.js';
 
 const URL_ = (process.env.LIVE_DATABASE_URL ?? '').trim();
 const suite = describe.skipIf(URL_.length === 0);
@@ -52,8 +52,7 @@ const code = async (p: Promise<unknown>): Promise<string> => {
   }
 };
 
-const pair = async () => {
-  const ga = await service.createGuest();
+const pair = async () => {  const ga = await service.createGuest();
   const gb = await service.createGuest();
   const a = await service.authenticate(ga.token);
   const b = await service.authenticate(gb.token);
@@ -66,8 +65,19 @@ const pair = async () => {
   return { a, b, matchId: m.match.matchId };
 };
 
-const denied = async (role: string, sql: string): Promise<string> => {
-  const client = await pool.connect();
+/**
+ * Advance the fake clock to `to` while `players` keep heartbeating, so they count as PRESENT. A
+ * player who is present when the clock runs out loses outright; a player whose heartbeat has gone
+ * stale gets the reconnect ladder instead (that is `live-reconnect.test.ts`, on the memory store).
+ */
+const advanceConnected = async (to: number, ...players: { id: string }[]): Promise<void> => {
+  while (clock < to) {
+    clock = Math.min(to, clock + 20_000);
+    for (const p of players) await live.presence(p as never, 'in_live', null);
+  }
+};
+
+const denied = async (role: string, sql: string): Promise<string> => {  const client = await pool.connect();
   try {
     await client.query('begin');
     await client.query(`set local role ${role}`);
@@ -147,7 +157,7 @@ suite('live duels on real Postgres', () => {
     const mid = await service.viewPayload(a, matchId);
     expect(mid.view).toEqual(before.view);
     expect(mid.turnDeadlineAt).toBe(clock + LIMIT + ENTRY);
-    clock += LIMIT + ENTRY + 1;
+    await advanceConnected(clock + LIMIT + ENTRY + 1, a, b);
     const s = await live.status(a, matchId);
     expect(s.live).toBe(false);
     expect(s.status).toBe('finished');
@@ -185,6 +195,35 @@ suite('live duels on real Postgres', () => {
     expect(out.sort()).toEqual(['CHALLENGE_CLOSED', 'OK']);
   });
 
+  it('the reconnect ladder round-trips through the real database (migration 0008 columns)', async () => {
+    const { a, b, matchId } = await pair();
+    const c = await live.challenge(a, matchId, 'live');
+    await live.accept(b, c.challenge.id);
+    const v0 = await service.viewPayload(a, matchId);
+    const actor = v0.actor === v0.seat ? a : b;
+    const other = actor.id === a.id ? b : a;
+    const seat = v0.actor;
+    const row = async () =>
+      (await pool.query('select turn_deadline_at, live_reconnect_stage_seat0, live_reconnect_stage_seat1, live_reconnect_since_seat0, live_reconnect_since_seat1 from matches where id = $1', [matchId])).rows[0]!;
+    const deadline = Number((await row()).turn_deadline_at);
+    // Drop the actor (no more heartbeats) while the other keeps beating, then reach the deadline.
+    clock += STALE + 1;
+    await live.presence(other, 'in_live', null);
+    if (clock <= deadline) clock = deadline + 1;
+    await live.presence(other, 'in_live', null);
+    const s = await live.status(other, matchId);
+    // The grace was ADDED to the turn clock and recorded per seat: only the absent seat is on it.
+    const after = await row();
+    expect(Number(after.turn_deadline_at)).toBe(clock + 10_000);
+    expect([Number(after.live_reconnect_stage_seat0), Number(after.live_reconnect_stage_seat1)][seat]).toBe(1);
+    expect([Number(after.live_reconnect_stage_seat0), Number(after.live_reconnect_stage_seat1)][seat === 0 ? 1 : 0]).toBe(0);
+    const since = seat === 0 ? after.live_reconnect_since_seat0 : after.live_reconnect_since_seat1;
+    expect(since).not.toBeNull();
+    expect(s.opponent.reconnecting).toBe(true);
+    // Never a hand-back to the 24-hour clock, and the match is still open.
+    expect((s as unknown as { status: string }).status).toBe('active');
+  });
+
   it('a racing late move and the real-time timeout: exactly ONE finish, and no turn is applied', async () => {
     const { a, b, matchId } = await pair();
     const c = await live.challenge(a, matchId, 'live');
@@ -192,7 +231,7 @@ suite('live duels on real Postgres', () => {
     const v0 = await service.viewPayload(a, matchId);
     const actor = v0.actor === v0.seat ? a : b;
     const v = await service.viewPayload(actor, matchId);
-    clock += LIMIT + ENTRY + 1;
+    await advanceConnected(clock + LIMIT + ENTRY + 1, a, b);
     const draw = v.legalActions.find((x) => x.t === 'Draw')!;
     await Promise.all([
       code(service.submitAction(actor, matchId, { expectedRevision: v.revision, requestId: 'late-race', action: draw })),

@@ -33,3 +33,31 @@ describe('migration 0006_live_duels', () => {
     expect(code).toMatch(/create unique index if not exists live_challenges_one_pending_idx on live_challenges \(match_id\) where status = 'pending'/i);
   });
 });
+
+// Migration 0008 (real-time reconnect) is the same additive, locked-down shape as 0006.
+const reconnectSql = readFileSync(new URL('../migrations/0008_live_reconnect.sql', import.meta.url), 'utf8');
+const reconnectCode = reconnectSql.replace(/--.*$/gm, '');
+
+describe('migration 0008_live_reconnect', () => {
+  it('is additive and idempotent (every column guarded, nothing dropped)', () => {
+    expect(reconnectCode).not.toMatch(/drop\s+table|drop\s+column|truncate|delete\s+from/i);
+    const adds = reconnectCode.split('\n').filter((l) => /add column/i.test(l));
+    expect(adds).toHaveLength(4);
+    for (const line of adds) expect(line).toMatch(/if not exists/i);
+    // It adds ONLY the reconnect columns: no new table, nothing else touched.
+    expect(reconnectCode).not.toMatch(/create table/i);
+    for (const col of ['live_reconnect_stage_seat0', 'live_reconnect_stage_seat1', 'live_reconnect_since_seat0', 'live_reconnect_since_seat1']) {
+      expect(reconnectCode).toContain(col);
+    }
+  });
+
+  it('re-issues the P-21 revokes and never opens a grant or a policy', () => {
+    for (const kind of ['tables', 'sequences', 'functions']) {
+      expect(reconnectCode).toMatch(new RegExp(`revoke all on all ${kind} in schema public from %I`, 'i'));
+      expect(reconnectCode).toMatch(new RegExp(`alter default privileges in schema public revoke all on ${kind} from %I`, 'i'));
+    }
+    expect(reconnectCode).not.toMatch(/create policy/i);
+    expect(reconnectCode).not.toMatch(/grant\s/i);
+    expect(reconnectCode).not.toMatch(/publication\s+supabase_realtime\s+add/i);
+  });
+});

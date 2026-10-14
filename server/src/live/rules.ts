@@ -63,6 +63,8 @@ export const startLive = (live: LiveMatch, now: number, limitMs: number, normalT
   liveSince: now,
   limitMs,
   leftBy: null,
+  reconnectStage: [0, 0],
+  reconnectSince: [null, null],
   tailRev: null,
   autoplayRev: null,
   normalTimeoutMs,
