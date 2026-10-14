@@ -1,7 +1,20 @@
-# FUTASAKU live duels (test channel only)
+# FUTASAKU live duels (futa-test and the `/futa0.5/` preview)
 
-Branch `futa0.5-live`. Built on top of `futa0.5-online`. Not in the locked build, not in `main`,
-`dev` or `futa0.4`. The product build (`CHANNEL=futa04`) never shows any of this.
+Branch `futa0.5-online` (merged; the live work came from `futa0.5-live`). Not in the locked build, not
+in `main`, `dev` or `futa0.4`. The product build (`CHANNEL=futa04`) never shows any of this.
+
+## Which builds carry it (reversible)
+
+`liveDuelsEnabled()` (`web/src/online/live/flag.ts`) turns live duels on for:
+
+- `CHANNEL=futa-test` (the experiment copy), and
+- `CHANNEL=futa05` (the `/futa0.5/` online preview), and
+- any build made with `VITE_LIVE_DUELS=1` (the browser tests).
+
+The owner asked for `/futa0.5/` to carry everything ("0.5 should be the main one with everything"),
+so `futa05` was ADDED to that list on 2026-10-14. This reverses the other session's deliberate
+test-only gate. **It is a one-line revert:** remove `'futa05'` from `CHANNELS_WITH_LIVE_DUELS` in
+`web/src/online/live/flag.ts`. The product `futa04` build stays off either way.
 
 ## What it is, in plain words
 
@@ -120,15 +133,16 @@ steps-from-events, the perspective layer, the render path, `src/engine/`. The li
 reads the page through the existing read-only `window.__severgrow` test hooks and the online
 session handle. Ring placement uses the existing perspective helper (`mapKey`) for both seats.
 
-## Deploying to the test API (what a person must do)
+## Deploying to the API (what a person must do)
 
-1. Apply the migration: `npm run server:migrate` with the **test** project's `DATABASE_URL` in `.env`
-   (it is additive and safe to re-run).
+1. Apply the migration: `npm run server:migrate` with the project's `DATABASE_URL` in `.env`
+   (it is additive and safe to re-run). Applied on the FUTASAKU project on 2026-10-14.
 2. Rebuild and deploy the Edge bundle: `npm run server:build-edge`, then deploy the `duel` function
-   (`supabase functions deploy duel`). The bundle in git was deliberately **not** regenerated on this
-   branch, to avoid clashing with the server-speed work on `futa0.5-online`.
-3. Build the client in the test channel: `CHANNEL=futa-test npm run web:build` (or any build with
-   `VITE_LIVE_DUELS=1`).
+   (`supabase functions deploy duel`). Rebuilt and deployed on 2026-10-14 (the live routes now
+   answer `401`, not `404`).
+3. Build the client in one of the live channels: `CHANNEL=futa05 npm run web:build` (the `/futa0.5/`
+   preview) or `CHANNEL=futa-test npm run web:build` (the experiment copy), or any build with
+   `VITE_LIVE_DUELS=1`.
 4. Security advisors: Supabase dashboard → **Advisors** → **Security Advisor** → **Refresh**. Expect
    only the known informational `rls_enabled_no_policy` lines (intended: no client may read these
    tables at all).

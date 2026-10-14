@@ -41,7 +41,7 @@ Neither is a correctness or security problem.
 
 ### 1.1 Anon / authenticated are DENIED on the new tables (proved, not assumed)
 
-All five migrations are applied (`schema_migrations`: `0001_init.sql` … `0005_keepalive_cron.sql`).
+All six migrations are applied (`schema_migrations`: `0001_init.sql` … `0006_live_duels.sql`).
 
 - `has_table_privilege` for `anon` and `authenticated` returns **false for SELECT/INSERT/UPDATE/
   DELETE on all 8 public tables** (checked at the SQL level, 8 tables × 8 privileges).

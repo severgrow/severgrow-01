@@ -1,4 +1,4 @@
-# Deploy FUTASAKU online (test channel)
+# Deploy FUTASAKU online (`/futa0.5/` preview)
 
 Plain-English guide for the live duel API on the one Supabase project **FUTASAKU**
 (`wbfrbeedlvjercrukngn`, eu-west-1).

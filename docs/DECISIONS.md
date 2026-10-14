@@ -230,3 +230,17 @@ Owner reviewed the display→keys optics and approved them: "lock it in for now;
 
 ### 2026-10-13 — Live duels (test channel, branch futa0.5-live)
 Where the brief left room: migration numbered 0006 (0003–0005 taken). The replay allowance is a fixed 6 s (`LIVE_REPLAY_ALLOWANCE_MS`): the client has no replay-length acknowledgement today. The pop-up waits without limit for a drag/Bloom paint but at most 10 s for an animation/replay. "3 of their turns or 10 minutes" = whichever comes first. Strikes count consecutive timeouts of the SAME player. Leaving on the opponent's turn turns that turn into a normal 24-hour turn (the opponent did not choose to leave). The tutorial blocks challenges with its own code `BUSY` (shown as "Busy"). Expiry = 45 s, the same as the ring; the waiting pill counts the real remaining seconds. On phones the waiting pill reads "Waiting 40s · Cancel" (the full "Waiting for <name>..." does not fit at 360–430 px; screen readers get the full sentence). A rematch match opens without the starter-lottery animation (the server lottery still decides). The LIVE chip lives in the header's status strip (`#duel-hud`). The 24-hour "less than 15 minutes" warning is hidden while a match is live. Feature flag: `CHANNEL=futa-test` or `VITE_LIVE_DUELS=1`.
+
+### 2026-10-14 — FUTASAKU 0.5 becomes the single merged build (`/futa0.5/` carries everything)
+The owner asked for one 0.5 build with "everything we worked on 0.5-online and 0.5-live and all else".
+`origin/futa0.5-online` already contained the live-duels merge on top of the online polish pass, so the
+work was to make the deployed `/futa0.5/` carry the live feature too. Three things were needed, all on
+the same branch (no `main`/`dev`/`futa0.4` touch):
+- **Gate (reversible).** `liveDuelsEnabled()` now returns true for `futa05` as well as `futa-test`
+  (and any `VITE_LIVE_DUELS=1` build). This reverses the previous session's deliberate test-only gate
+  at the owner's request. One-line revert: drop `'futa05'` from `CHANNELS_WITH_LIVE_DUELS` in
+  `web/src/online/live/flag.ts`. The product `futa04` build stays off. Pinned by `web/tests/live-flag.test.ts`.
+- **Migration 0006** applied to the FUTASAKU project (additive/idempotent; RLS + anon/authenticated
+  revoked proved live; advisors reviewed; keep-alive cron untouched).
+- **Edge function** rebuilt and redeployed, so the live-duel routes answer instead of 404.
+Details and the exact channel gate: `docs/LIVE.md`.

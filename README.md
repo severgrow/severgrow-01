@@ -11,9 +11,11 @@ npm run check
 npm run web:build                    # CHANNEL=futa04 by default
 CHANNEL=futa04 npm run web:dev
 CHANNEL=futa-test npm run web:build  # experiment copy → /futa-test/
+CHANNEL=futa05 npm run web:build     # /futa0.5/ preview: online duels + live duels
 ```
 
-Live preview: `https://severgrow.github.io/severgrow-01/futa0.4/`  
+Live preview: `https://severgrow.github.io/severgrow-01/futa0.5/` (the merged FUTASAKU 0.5 build:
+online duels, the polish pass, and live duels) · `…/futa0.4/` (the locked product build)  
 Pre-cleanup archive branch: `archive/futa0.4-before-cleanup`
 
 | Area | Home |

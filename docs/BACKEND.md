@@ -41,7 +41,7 @@ server/src/index.ts              entry point (DATABASE_URL → postgres, else me
 server/migrations/0001_init.sql  the schema, with Row Level Security
 server/migrations/0005_keepalive_cron.sql  Supabase-native keep-alive + sweeper (pg_cron + pg_net)
 server/migrations/0006_live_duels.sql  live duels: challenges, live clock columns, presence (RLS, revoked)
-server/src/live/                  live duels (test channel) — see docs/LIVE.md
+server/src/live/                  live duels (futa-test + /futa0.5/ preview) — see docs/LIVE.md
 server/scripts/migrate.ts         versioned, checksummed migration runner
 server/scripts/smoke.ts          manual end-to-end smoke against a running server
 server/tests/                    the test suite for all of the above
@@ -305,7 +305,7 @@ must not reach it.
   (`POST /rest/v1/rpc/http_get` → `PGRST202`, `GET /rest/v1/_http_response` → `PGRST205`).
 - The job sends no auth header, so its request queue holds only the public URL and an empty body.
 
-## Live duels (test channel)
+## Live duels (preview channels)
 
 `server/src/live/` adds challenges, presence and a short per-turn clock on the SAME match. It wraps
 the Storage port (`liveAwareStorage`) so the live clock is decided at the same lazy points as the
@@ -313,7 +313,7 @@ the Storage port (`liveAwareStorage`) so the live clock is decided at the same l
 `0006_live_duels.sql` follows the 0002 lock-down: RLS on, anon/authenticated revoked (proved with a
 real `set role` in `server/tests/live-postgres.integration.test.ts`), nothing in the realtime
 publication, one pending challenge per match enforced by a unique partial index. Endpoints and
-tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-duels-test-channel-docslivemd).
+tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-duels-preview-channels-docslivemd).
 
 ## Test results
 

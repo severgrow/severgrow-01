@@ -117,7 +117,7 @@ No accounts, database, matchmaking, WebSockets/realtime, world-map UI, clans or 
 Sections 9 and 10 keep the existing `server-core` groundwork and the reward/world boundary
 documented in `docs/SERVER-CORE.md`.
 
-## Live duels (test channel; `docs/LIVE.md`)
+## Live duels (preview channels; `docs/LIVE.md`)
 
 Same bearer auth, headers, error shape (`{ ok:false, code, message }`) and rate-limit rules as above.
 Routes live in their own router (`server/src/live/router.ts`).

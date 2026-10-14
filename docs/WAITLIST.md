@@ -304,7 +304,7 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
   `docs/LAB-KNOWN-BREAKAGE.md` fixed.
 
 ### Live duels (FUTASAKU live, 45-second turns)
-- Date: 2026-10-13 · Branch: `futa0.5-live` · **Test channel only** (`CHANNEL=futa-test` or `VITE_LIVE_DUELS=1`)
+- Date: 2026-10-13 · Branch: `futa0.5-online` · Channels: `/futa0.5/` preview and `futa-test` (also `VITE_LIVE_DUELS=1`)
 - Two players who share an online match switch it to a 45-second clock; pop-up challenge from anywhere,
   auto-played timeouts with strikes, leave/cooldown, rematch, "Back to your game". Details: `docs/LIVE.md`.
 - Check before locking in: migration 0006 applied on the real project, Edge bundle rebuilt and
