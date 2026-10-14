@@ -38,6 +38,32 @@ export const DEFAULT_CONFIG: Readonly<RulesConfig> = Object.freeze({
   expandedBloom: true,
 });
 
+/**
+ * The small-map preset (owner request, 2026-10-14). It is a CONFIG preset only — not a rule
+ * change: the small map is one ring smaller (19 hexes, the tutorial's radius), the deck keeps
+ * ONE copy of every (suit, number) instead of two, only TWO Bombs (Fruit cards) are dealt, and
+ * the turn limit is half the classic one. Every value derives from DEFAULT_CONFIG so the small
+ * map and the classic board can never drift apart. Generated terrain is used (no Lab `board`):
+ * radius 2 has 5 eligible mirrored terrain pairs and this preset needs 4, so it validates.
+ */
+export const SMALL_MAP_CONFIG: Readonly<Partial<RulesConfig>> = Object.freeze({
+  boardRadius: 2,
+  copiesPerCard: 1,
+  fruitCardCount: 2,
+  maxTurnsPerPlayer: DEFAULT_CONFIG.maxTurnsPerPlayer / 2,
+});
+
+/** The two duel maps the player can choose between. */
+export type BoardChoice = 'small' | 'classic';
+
+/** The config overrides for a chosen map: 'small' is the preset, 'classic' is the untouched game. */
+export const boardChoiceConfig = (choice: BoardChoice): Partial<RulesConfig> =>
+  choice === 'small' ? { ...SMALL_MAP_CONFIG } : {};
+
+/** Which map a config plays on. A smaller-than-classic board is the small map. */
+export const boardChoiceOf = (config: Pick<RulesConfig, 'boardRadius'>): BoardChoice =>
+  config.boardRadius < DEFAULT_CONFIG.boardRadius ? 'small' : 'classic';
+
 /** Lowest allowed maxRank (v0.4). */
 const MIN_MAX_RANK = 5;
 

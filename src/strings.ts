@@ -88,6 +88,16 @@ export const ONLINE = Object.freeze({
   matchedLater: 'Later',
   matchedNotice: 'Opponent found.',
   computerVs: 'vs the computer',
+  /** The map choice when creating a duel or parking a Find-opponent search (owner request). */
+  mapLabel: 'Map size',
+  mapSmall: 'Small map',
+  mapClassic: 'Classic map',
+  /**
+   * Told to the JOINER when the waiting game's map is not the one they picked. Find opponent
+   * never filters on the map, so the joiner adopts whatever was waiting — and must know it.
+   */
+  opponentGameSmall: "Opponent's game: small map",
+  opponentGameClassic: "Opponent's game: classic map",
   /** Timeout grace (owner rule: one grace per player per match). */
   graceYourWarning: 'Time ran out — one more chance',
   graceYouUsed: 'Grace used',

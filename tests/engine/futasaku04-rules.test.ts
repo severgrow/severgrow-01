@@ -13,7 +13,7 @@ import {
   viewFor,
 } from '../../src/engine/index.js';
 import type { Action, Player, State } from '../../src/engine/index.js';
-import { DIFFICULTIES, chooseDifficultyLevel } from '../../web/src/logic/difficulty.js';
+import { DIFFICULTIES, stepAfterGame, stepLevelFor } from '../../web/src/logic/difficulty.js';
 
 const bomb = (id: number) => ({ id, suit: null, rank: 0 } as const);
 const card = (id: number, rank = 3) => ({ id, suit: 0 as const, rank });
@@ -122,34 +122,31 @@ describe('Futasaku 0.4 end-of-game strength tie-break', () => {
 });
 
 describe('Futasaku 0.4 difficulty and starter lottery', () => {
-  it('Beginner uses levels 1–2 and Easy uses 3–4', () => {
-    expect(DIFFICULTIES.map((c) => [c.id, c.levels])).toEqual([
-      ['beginner', [1, 2]],
-      ['easy', [3, 4]],
-      ['medium', [5, 6, 7]],
-      ['hard', [8]],
-      ['pro', [9]],
+  it('each tier keeps its name and plays one fixed level (the small map is Beginner/Easy/Medium)', () => {
+    expect(DIFFICULTIES.map((c) => [c.id, c.map, c.level, c.levels])).toEqual([
+      ['beginner', 'small', 2, [2, 3]],
+      ['easy', 'small', 5, [5]],
+      ['medium', 'small', 8, [8]],
+      ['hard', 'classic', 8, [8, 7]],
+      ['pro', 'classic', 9, [9]],
     ]);
   });
 
-  it('starter lottery is deterministic and independent of difficulty level choice', () => {
+  it('starter lottery is deterministic and independent of the difficulty level', () => {
     let bothSides = false;
-    let mixedWithLevel = false;
     for (let seed = 0; seed < 64; seed++) {
       const starts = startingPlayerFor(seed) === 1;
-      const level = chooseDifficultyLevel('beginner', seed);
+      // The tier's level is fixed, so it cannot correlate with the lottery; the carry-over only
+      // ever moves AFTER a finished game, never at the moment a match starts.
+      expect(stepAfterGame('beginner', 2, 'win')).toBe(3);
+      expect(stepLevelFor({ id: 'beginner', level: 3 }, 'beginner')).toBe(3);
       expect(typeof starts).toBe('boolean');
       expect(startingPlayerFor(seed) === 1).toBe(starts);
       if (starts) bothSides = true;
-      if (!starts) bothSides = bothSides || false;
-      if (starts && level === 1) mixedWithLevel = true;
-      if (!starts && level === 2) mixedWithLevel = true;
     }
     expect(bothSides || startingPlayerFor(1) !== startingPlayerFor(2)).toBe(true);
-    // Across seeds, harder Beginner level is not locked to opponent-first.
-    expect(mixedWithLevel || chooseDifficultyLevel('beginner', 0) !== chooseDifficultyLevel('beginner', 1)).toBe(true);
-    const pairs = Array.from({ length: 32 }, (_, seed) => [startingPlayerFor(seed) === 1, chooseDifficultyLevel('beginner', seed)] as const);
-    expect(new Set(pairs.map(([a, b]) => `${a}:${b}`)).size).toBeGreaterThan(2);
+    const pairs = Array.from({ length: 32 }, (_, seed) => [startingPlayerFor(seed) === 1, DIFFICULTIES[0]!.level] as const);
+    expect(new Set(pairs.map(([a, b]) => `${a}:${b}`)).size).toBe(2);
   });
 
   it('homes are never destroyed by Blast', () => {

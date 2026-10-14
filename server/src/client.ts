@@ -7,7 +7,9 @@ import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type {
   CancelSearchResponse,
   CreateGuestResponse,
+  CreateMatchRequest,
   CreateMatchResponse,
+  FindOpponentRequest,
   FindOpponentResponse,
   GetViewResponse,
   JoinMatchResponse,
@@ -166,17 +168,21 @@ export class DuelClient {
 
   // ---- match lifecycle ----
 
-  createMatch(token: string): Promise<CreateMatchResponse> {
-    return this.request<CreateMatchResponse>('POST', '/v1/matches', { token, body: {} });
+  /** `body.board` picks the map ('small' | 'classic'); omitted means the classic board. */
+  createMatch(token: string, body: CreateMatchRequest = {}): Promise<CreateMatchResponse> {
+    return this.request<CreateMatchResponse>('POST', '/v1/matches', { token, body });
   }
 
   joinMatch(token: string, inviteCode: string): Promise<JoinMatchResponse> {
     return this.request<JoinMatchResponse>('POST', '/v1/matches/join', { token, body: { inviteCode } });
   }
 
-  /** Phase 7 Find Opponent (server pairs or creates an open-queue waiting match). */
-  findOpponent(token: string): Promise<FindOpponentResponse> {
-    return this.request<FindOpponentResponse>('POST', '/v1/matchmaking/find', { token, body: {} });
+  /**
+   * Phase 7 Find Opponent (server pairs or creates an open-queue waiting match). `body.board` is
+   * the map used ONLY if this search has to park; it never filters the queue.
+   */
+  findOpponent(token: string, body: FindOpponentRequest = {}): Promise<FindOpponentResponse> {
+    return this.request<FindOpponentResponse>('POST', '/v1/matchmaking/find', { token, body });
   }
 
   /** Stop a parked Find Opponent search (retires the waiting open-queue match). */

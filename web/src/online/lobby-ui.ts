@@ -2,6 +2,8 @@
 
 import { DuelClient, DuelError, browserStorage } from '../../../server/src/client.js';
 import type { MatchListEntry, MatchSummary, MatchViewPayload } from '../../../server/src/protocol.js';
+import { boardChoiceOf } from '../../../src/engine/index.js';
+import type { BoardChoice } from '../../../src/engine/index.js';
 import { ONLINE } from '../../../src/strings.js';
 import { createIdentityStore } from './identity.js';
 import type { IdentityStore } from './identity.js';
@@ -34,6 +36,11 @@ export type LobbyUiHooks = {
     view: MatchViewPayload;
     token: string;
     liveJoin: boolean;
+    /**
+     * The one line the JOINER reads when the game waiting for them is not the map they picked
+     * (e.g. "Opponent's game: small map"). Null when the map is the one they asked for.
+     */
+    mapNotice?: string | null;
   }) => void;
   /**
    * Start a local game against the computer (the existing offline game). Offered from a long
@@ -184,8 +191,41 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
+  // ---- the map choice (owner request): Small map / Classic, for the duel you create ----
+  // It is also the map your parked Find-opponent search waits with. It NEVER filters matchmaking:
+  // a searcher joins the oldest waiting game whatever board that game was created with.
+  const MAP_KEY = 'severgrow.onlinemap';
+  const MAPS: readonly BoardChoice[] = ['small', 'classic'];
+  const readMapChoice = (): BoardChoice => (browserStorage()?.get(MAP_KEY) === 'small' ? 'small' : 'classic');
+  const writeMapChoice = (map: BoardChoice) => browserStorage()?.set(MAP_KEY, map);
+  const mapWord = (map: BoardChoice) => (map === 'small' ? ONLINE.mapSmall : ONLINE.mapClassic);
+  const renderMapPicker = () => {
+    const seg = document.getElementById('online-map-seg');
+    if (!seg) return;
+    const current = readMapChoice();
+    seg.replaceChildren(
+      ...MAPS.map((map) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `seg-btn${map === current ? ' on' : ''}`;
+        b.dataset.value = map;
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(map === current));
+        b.textContent = mapWord(map);
+        b.addEventListener('click', () => {
+          writeMapChoice(map);
+          renderMapPicker();
+        });
+        return b;
+      }),
+    );
+  };
+
   const fillCopy = () => {
     $('online-hub-title').textContent = ONLINE.hubTitle;
+    renderMapPicker();
+    const mapLabel = document.getElementById('online-map-label');
+    if (mapLabel) mapLabel.textContent = ONLINE.mapLabel;
     $('online-create').textContent = ONLINE.create;
     const findBtn = document.getElementById('online-find') as HTMLButtonElement | null;
     if (findBtn) {
@@ -358,9 +398,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
   };
 
-  const launchDuel = (token: string, player: MatchViewPayload, liveJoin: boolean) => {
+  /**
+   * The line a JOINER reads when the waiting game's map is not the one they picked. The server
+   * decided the board when that game was created, so this only reports what they are getting.
+   */
+  const mapNoticeFor = (player: MatchViewPayload): string | null => {
+    const board = boardChoiceOf(player.view.config);
+    return board === readMapChoice() ? null : board === 'small' ? ONLINE.opponentGameSmall : ONLINE.opponentGameClassic;
+  };
+
+  const launchDuel = (
+    token: string,
+    player: MatchViewPayload,
+    liveJoin: boolean,
+    mapNotice: string | null = null,
+  ) => {
     if (hooks.openDuel) {
-      hooks.openDuel({ matchId: player.matchId, seat: player.seat, view: player, token, liveJoin });
+      hooks.openDuel({ matchId: player.matchId, seat: player.seat, view: player, token, liveJoin, mapNotice: liveJoin ? mapNotice : null });
       return;
     }
     notice('online-hub-notice', ONLINE.openDuelSoon);
@@ -515,7 +569,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     const id = await ensureIdentity();
     if (!id) return false;
     try {
-      const res = await client.createMatch(id.token);
+      // The map is fixed for this duel here, and travels in the match record from now on.
+      const res = await client.createMatch(id.token, { board: readMapChoice() });
       serverOffset = res.serverNow - now();
       openWaiting(res.match);
       return true;
@@ -540,11 +595,13 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     if (!id) return;
     notice('online-hub-notice', ONLINE.findOpponentLooking);
     try {
-      const res = await client.findOpponent(id.token);
+      // The board is sent for the case where this search has to PARK; it never filters the queue,
+      // so a pairing takes whatever waiting game is oldest — and the joiner is told its map.
+      const res = await client.findOpponent(id.token, { board: readMapChoice() });
       serverOffset = res.serverNow - now();
       if (res.paired && res.player.status === 'active') {
         // Paired with an opponent right now: a live join.
-        launchDuel(id.token, res.player, true);
+        launchDuel(id.token, res.player, true, mapNoticeFor(res.player));
         return;
       }
       // Parked: we stay in the queue and keep polling, even if the player leaves the screen.
@@ -571,8 +628,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     try {
       const res = await client.joinMatch(id.token, cleaned);
       serverOffset = res.serverNow - now();
-      // Joining a duel in person is the joiner's live-join moment.
-      launchDuel(id.token, res.player, true);
+      // Joining a duel in person is the joiner's live-join moment: say which map they got.
+      launchDuel(id.token, res.player, true, mapNoticeFor(res.player));
     } catch (error) {
       if (error instanceof DuelError && error.code === 'ALREADY_JOINED') {
         notice('online-join-notice', ONLINE.errAlreadyJoined);
