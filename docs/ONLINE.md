@@ -42,18 +42,23 @@ untouched.
 - **Rate limits are NAT-friendly and tunable** (`RATE_*` env vars / Edge secrets).
 - **Live duels ship** on `CHANNEL=futa-test` and now the `futa05` preview (`/futa0.5/`); migration
   `0006_live_duels.sql` is applied.
+- **A standard online duel has a real Rematch as the finish screen's first, primary action** (owner
+  ask, 2026-10-14). `#go-rematch` is labelled `ONLINE.rematch` ("Rematch"); tapping it tears the
+  finished session down first (`tearDownOnlineDuel`), then creates a **new** match and surfaces the
+  existing invite/share screen (the same 4-character code + `Share invite` as Create a duel) — the
+  plan's "a fresh invite to the same friend". `Back to matches` (`#go-other`) and `Menu` (`#go-menu`)
+  remain as secondary exits, and `Share` is unchanged. There is no presence plumbing for async duels,
+  so the opponent is **not** pinged: they join the new duel by the shared code/link, exactly as they
+  joined the first one. The live end window's rematch (`LIVE.rematch`) pings because live has a
+  challenge channel; the flow the player sees (tap Rematch → a waiting surface for the same opponent)
+  is the same. Proof: `web/tests/online-rematch.test.ts` + `web/e2e/online-duel-two-browser.ts`
+  (finish → Rematch → fresh code → the other side joins and plays).
 
 ## Still open (do not report these as fixed)
 
 - **Presence (Online / Away) is not wired** — the indicator is deliberately hidden rather than faked.
 - A slow **retained-heap drift** (~270 KB per match in a long-lived tab; only a reload releases it).
 - An intermittent **seat-1 Bloom painting stall** (~1 run in 3, cause unidentified).
-- **A standard online duel has no rematch / "play again"** (verified 2026-10-14 against the code).
-  The finish screen's primary slot is relabelled **Back to matches** (`web/src/main.ts`:
-  `#go-rematch` → `ONLINE.backToMatches`, then opens the hub). A rematch exists **only** for live
-  duels (`LIVE.rematch`, `web/src/online/live/`). The plan's "a fresh invite to the same friend" is
-  **not** implemented. Note: the `rematch` / `rematchWaiting` / `wantsRematch` strings in
-  `src/strings.ts` live in the **`LIVE`** object, not `ONLINE`.
 - **The opponent's replayed turn carries less cockpit personality online than offline** (verified
   2026-10-14 against the code). The catch-up steps are queued for the shared `AnimQueue` **without**
   `markMoment()` / `displayEventForPlay()`, so the smart-cockpit LED announcements and the "big
