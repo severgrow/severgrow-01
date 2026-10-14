@@ -52,7 +52,7 @@ const waitFor = async (cond: () => Promise<boolean> | boolean, timeout = 20_000)
 // ---------------------------------------------------------------- server + build
 
 const memory = new MemoryStorage();
-const server = { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: 24 * 3_600_000 };
+const server = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: 24 * 3_600_000 };
 const live = createLiveRuntime({
   storage: memory,
   live: new MemoryLiveStore(memory),

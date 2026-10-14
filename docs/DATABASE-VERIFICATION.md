@@ -173,8 +173,9 @@ The database layer is verified. What remains is unchanged from the earlier plan:
    actions, render the returned player view — leaving solo play untouched.
 3. **Abuse controls:** rate limits on guest creation, join attempts and action submissions; rotate
    invite codes on a schedule (codes currently never expire).
-4. **Deployment hardening:** TLS termination, a locked `CORS_ORIGIN`, the database password handled
-   as a secret, and a decision on where the server runs (the pooler is designed for this).
+4. **Deployment hardening:** TLS termination, a locked `CORS_ORIGINS` allow-list, the database
+   password handled as a secret, and a decision on where the server runs (the pooler is designed
+   for this).
 5. **Monitoring and housekeeping:** error rate, revision conflicts, and a cleanup job for
    abandoned guests and waiting matches.
 6. **A dedicated database role for the API** (optional): the server currently connects as

@@ -395,11 +395,14 @@ Still open / deliberately unfinished:
 
 1. **Done** — Postgres (Supabase) with migrations `0001`–`0006` applied; the adapter is exercised
    against the real project (`npm run server:db-test`).
-2. **Done** — TLS on managed hosts and CORS **locked** to `PRODUCTION_CORS_ORIGIN`
-   (`server/src/config.ts`: `https://severgrow.github.io`) on the deployed Edge function. The `*`
-   value is only the local/dev default, so a browser on another origin is blocked (an `OPTIONS`
-   preflight answers with the production origin, never an echo of the caller's). Rotate the
-   service-role key as routine hygiene.
+2. **Done** — TLS on managed hosts and a CORS **allow-list** on the deployed Edge function
+   (`server/src/config.ts`): it defaults to `https://severgrow.github.io`, `https://www.futasaku.com`
+   and `https://futasaku.com`, and is extended or replaced by the comma-separated `CORS_ORIGINS` Edge
+   secret without a rebuild (see [`CUSTOM-DOMAIN.md`](CUSTOM-DOMAIN.md)). The `*` wildcard is only the
+   local/dev default, so a browser on another origin is blocked: an allow-listed origin is echoed
+   back, while a foreign origin receives the first configured origin and never an echo
+   (`server/tests/cors-allow-list.test.ts` proves both over real HTTP). Rotate the service-role key
+   as routine hygiene.
 3. **Done** — rate limits on guest creation, join and actions: NAT-friendly per-IP caps plus the
    per-player limits that are the real abuse control.
 4. **Done** — the live transport is the Realtime broadcast ping with polling as the safety net;

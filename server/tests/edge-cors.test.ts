@@ -30,7 +30,7 @@ describe('CORS single source of truth', () => {
   it('keeps the production preflight consistent with the shared app preflight', async () => {
     const app = createFetchApp({
       service: new MatchService({ storage: new MemoryStorage(), config: DEFAULT_SERVER_CONFIG }),
-      config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: PRODUCTION_CORS_ORIGIN },
+      config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: [PRODUCTION_CORS_ORIGIN] },
     });
     const fromApp = await app(new Request('https://duel.test/v1/guests', { method: 'OPTIONS', headers: { origin: PRODUCTION_CORS_ORIGIN } }));
     const fromEdge = corsPreflight(PRODUCTION_CORS_ORIGIN);
@@ -47,7 +47,12 @@ describe('CORS single source of truth', () => {
     // A local literal 'access-control-allow-headers' is exactly the drift that broke
     // the live site; the entry must reuse the shared helper instead.
     expect(source).not.toContain('access-control-allow-headers');
-    expect(source).toContain('corsHeaders(PRODUCTION_CORS_ORIGIN)');
+    // The entry resolves the allow-list from config (env-overridable) instead of pinning a single
+    // hardcoded origin — that hardcoded origin was the blocker for calling the API from a custom
+    // domain. See server/tests/cors-allow-list.test.ts for the behaviour proof.
+    expect(source).toContain('corsHeadersForRequest(corsOrigins');
+    expect(source).toContain('productionCorsOrigins()');
+    expect(source).not.toContain("corsOrigin: PRODUCTION_CORS_ORIGIN");
   });
 
   it('adds vary: origin for a locked origin but not for wildcard dev', () => {

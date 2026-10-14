@@ -339,7 +339,7 @@ const main = async (): Promise<void> => {
   const storage = postgresStorage(pool);
   const config = {
     ...DEFAULT_SERVER_CONFIG,
-    corsOrigin: '*',
+    corsOrigins: ['*'],
     // Local-only: the per-IP guest/join budgets would throttle 100 players from one address. This
     // raises them in THIS process only — nothing deployed changes, so nothing needs reverting.
     rateLimits: {

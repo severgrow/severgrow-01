@@ -46,7 +46,7 @@ export const liveTestConfig = (o: Partial<LiveConfig> = {}): LiveConfig => ({
 
 export const serverTestConfig = (o: Partial<ServerConfig> = {}): ServerConfig => ({
   ...DEFAULT_SERVER_CONFIG,
-  corsOrigin: '*',
+  corsOrigins: ['*'],
   turnTimeoutMs: DAY,
   graceExtensionMs: DAY,
   rateLimits: {

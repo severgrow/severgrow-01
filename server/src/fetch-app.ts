@@ -3,7 +3,7 @@
 import { pickClientIp } from './client-ip.js';
 import { PRODUCTION_CORS_ORIGIN, type ServerConfig } from './config.js';
 import { DEFAULT_SERVER_CONFIG } from './config.js';
-import { corsHeaders } from './cors.js';
+import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import type { MatchService } from './service.js';
 
@@ -52,12 +52,15 @@ const readJson = async (req: Request, maxBytes: number): Promise<unknown> => {
 // See client-ip.ts for why the header order and validation matter.
 const clientIpOf = (req: Request): string | null => pickClientIp(req.headers);
 
-/** Build a Fetch handler. Production hosts should pass corsOrigin = PRODUCTION_CORS_ORIGIN. */
+/** Build a Fetch handler. Production hosts should pass corsOrigins = productionCorsOrigins(). */
 export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<Response>) => {
   const service = deps.service;
   const config = deps.config ?? DEFAULT_SERVER_CONFIG;
   const logger = deps.logger ?? (() => undefined);
-  const cors = corsHeaders(config.corsOrigin);
+  // CORS is resolved PER REQUEST: the allow-list may hold several front-end origins (the GitHub
+  // Pages origin plus a custom domain during the move), and an allow-listed caller is echoed back
+  // while a foreign one only ever sees the first configured origin (see corsOriginFor).
+  const corsFor = (req: Request): Record<string, string> => corsHeadersForRequest(config.corsOrigins, req);
 
   const handle = async (req: Request, path: string, url: URL): Promise<Outcome> => {
     const method = req.method;
@@ -234,7 +237,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
 
     if (req.method === 'OPTIONS') {
       logger(`OPTIONS ${path} 204 ${Date.now() - started}ms`);
-      return new Response(null, { status: 204, headers: cors });
+      return new Response(null, { status: 204, headers: corsFor(req) });
     }
 
     try {
@@ -242,7 +245,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       logger(`${req.method} ${path} ${outcome.status} ${Date.now() - started}ms`);
       return new Response(JSON.stringify(outcome.body), {
         status: outcome.status,
-        headers: { ...cors, 'content-type': 'application/json; charset=utf-8' },
+        headers: { ...corsFor(req), 'content-type': 'application/json; charset=utf-8' },
       });
     } catch (error: unknown) {
       const apiError = error instanceof ApiError ? error : new ApiError('INTERNAL', 'Something went wrong on the server.');
@@ -250,7 +253,7 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       logger(`${req.method} ${path} ${apiError.status} ${Date.now() - started}ms`);
       return new Response(JSON.stringify({ ok: false, code: apiError.code, message: apiError.message }), {
         status: apiError.status,
-        headers: { ...cors, 'content-type': 'application/json; charset=utf-8' },
+        headers: { ...corsFor(req), 'content-type': 'application/json; charset=utf-8' },
       });
     }
   };

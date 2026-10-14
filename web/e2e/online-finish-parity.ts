@@ -46,10 +46,10 @@ const check = (name: string, ok: boolean, note = '') => {
 let now = 1_800_000_000_000;
 const service = new MatchService({
   storage: new MemoryStorage(),
-  config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: 24 * HOUR, maxOpenMatchesPerPlayer: 30 },
+  config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: 24 * HOUR, maxOpenMatchesPerPlayer: 30 },
   now: () => now,
 });
-const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' } });
+const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] } });
 await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
 const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 

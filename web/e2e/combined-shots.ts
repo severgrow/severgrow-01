@@ -43,9 +43,9 @@ const check = (name: string, ok: boolean, note = '') => {
 
 const service = new MatchService({
   storage: new MemoryStorage(),
-  config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' },
+  config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] },
 });
-const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' } });
+const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] } });
 await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
 const apiBase = `http://127.0.0.1:${(apiServer.address() as AddressInfo).port}`;
 console.log(`local duel API on ${apiBase}`);

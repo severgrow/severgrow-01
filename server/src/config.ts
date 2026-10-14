@@ -39,11 +39,15 @@ export type ServerConfig = {
   /** Open (waiting/active) matches a single player may own at once. */
   maxOpenMatchesPerPlayer: number;
   /**
-   * Allowed browser origin for CORS, or '*' for local development only.
-   * Production (Edge / deployed API) must be locked to https://severgrow.github.io
-   * — the origin has no path (P-17).
+   * Browser origins allowed to call the duel API. A LIST because the site can legitimately be
+   * reachable at more than one front-end origin at a time (the move to a custom domain keeps
+   * both `https://severgrow.github.io` and the new domain working during the switch). `'*'` is
+   * the local-development wildcard and must never be used in production.
+   *
+   * Every entry is an ORIGIN: scheme + host + optional port, never a path (P-17). See
+   * {@link productionCorsOrigins} for the production default and the `CORS_ORIGINS` override.
    */
-  corsOrigin: string;
+  corsOrigins: readonly string[];
   /** Per-match turn clock snapshot default (24h prod; tests pass seconds). */
   turnTimeoutMs: number;
   /**
@@ -80,8 +84,38 @@ export type ServerConfig = {
   };
 };
 
-/** The only production browser origin that may call the duel API. */
+/**
+ * The GitHub Pages origin that serves the FUTASAKU site today. It stays in the allow-list for as
+ * long as GitHub Pages hosts the site — including after a custom domain is pointed at it — so the
+ * existing `severgrow.github.io` link never breaks.
+ */
 export const PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io';
+
+/**
+ * The custom domain FUTASAKU is reached at (Cloudflare DNS → the same GitHub Pages site), and the
+ * bare/apex variant. Both are allowed: owners routinely end up with `www.` and the bare domain both
+ * resolving, and a visitor landing on the one that was not allow-listed would get every API call
+ * blocked. An ORIGIN has no path, so the site's `/futa0.5/` path never appears here.
+ */
+export const CUSTOM_DOMAIN_CORS_ORIGINS: readonly string[] = Object.freeze([
+  'https://www.futasaku.com',
+  'https://futasaku.com',
+]);
+
+/**
+ * The production CORS allow-list used when `CORS_ORIGINS` is not set: the long-standing GitHub Pages
+ * origin plus the custom domain, so the site works at the old and the new address at once and a
+ * fresh deploy needs NO secret set.
+ *
+ * `CORS_ORIGINS` (comma-separated ORIGINS) still overrides this whole list when it is set — use it
+ * to add or remove a domain later without a rebuild:
+ *   CORS_ORIGINS=https://severgrow.github.io,https://www.futasaku.com,https://futasaku.com
+ * Format: scheme + host + optional port, NO path, NO trailing slash. See docs/CUSTOM-DOMAIN.md.
+ */
+export const DEFAULT_PRODUCTION_CORS_ORIGINS: readonly string[] = Object.freeze([
+  PRODUCTION_CORS_ORIGIN,
+  ...CUSTOM_DOMAIN_CORS_ORIGINS,
+]);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -115,13 +149,69 @@ const envStr = (name: string): string | null => {
   return raw && raw.length > 0 ? raw : null;
 };
 
+/**
+ * One entry of a CORS allow-list, normalised to an origin, or null when it can never match.
+ *
+ * A browser's `Origin` header is scheme + host + optional port with NO path, so an entry carrying a
+ * path (`https://game.example.com/futa0.5`) or a trailing slash can never match a real request and
+ * would silently lock the whole site out. Such entries are dropped here rather than stored.
+ */
+const normalizeCorsOrigin = (entry: string): string | null => {
+  const value = entry.trim().replace(/\/+$/, '');
+  if (value === '') return null;
+  if (value === '*') return '*';
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  if (parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') return null;
+  return parsed.origin;
+};
+
+/** Parse a comma-separated CORS allow-list. Blank and unusable entries are dropped. */
+export const parseCorsOriginList = (raw: string | null | undefined): string[] => {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((entry) => normalizeCorsOrigin(entry))
+    .filter((origin): origin is string => origin !== null);
+};
+
+/**
+ * The effective production allow-list.
+ *
+ * `CORS_ORIGINS` (comma-separated) wins when it parses to at least one usable origin; otherwise the
+ * built-in {@link DEFAULT_PRODUCTION_CORS_ORIGINS} applies. The dev wildcard is filtered out here so
+ * a stray `CORS_ORIGINS=*` can never open production to every website.
+ *
+ * Example Edge secret / env var:
+ *   CORS_ORIGINS=https://severgrow.github.io,https://game.example.com
+ */
+export const productionCorsOrigins = (): string[] => {
+  const fromEnv = parseCorsOriginList(envStr('CORS_ORIGINS')).filter((origin) => origin !== '*');
+  return fromEnv.length > 0 ? fromEnv : [...DEFAULT_PRODUCTION_CORS_ORIGINS];
+};
+
+/**
+ * The CORS override for the Node dev/deployed server, read from `CORS_ORIGINS` (list) or the older
+ * `CORS_ORIGIN` (single value, kept working for the documented dev commands). Returns nothing when
+ * neither is set, so the config keeps its local wildcard default.
+ */
+export const corsOriginsFromEnv = (): { corsOrigins?: string[] } => {
+  const list = parseCorsOriginList(envStr('CORS_ORIGINS') ?? envStr('CORS_ORIGIN'));
+  return list.length > 0 ? { corsOrigins: list } : {};
+};
+
 export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   rulesVersion: CURRENT_RULES_VERSION,
   maxMovesPerMatch: 10_000,
   inviteCodeLength: INVITE_CODE_LENGTH,
   linkCodeLength: LINK_CODE_LENGTH,
   maxBodyBytes: 64 * 1024,
-  corsOrigin: '*',
+  corsOrigins: ['*'],
   maxOpenMatchesPerPlayer: 10,
   turnTimeoutMs: envInt('TURN_TIMEOUT_MS', DAY_MS),
   // One grace per player per match by default; the extension is one full turn window.

@@ -35,8 +35,11 @@ untouched.
   calling `GET /v1/health?db=1` (a real DB round trip) and then `POST /v1/sweep`. Daily means an
   expired-but-unvisited match is cleaned up within a day instead of up to two. The old GitHub Actions
   keep-alive workflow was **deleted** (workflows only run from the default branch, so it never fired).
-- **CORS is locked** to `PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io'` on the deployed Edge
-  function; `*` is only the local/dev default.
+- **CORS is an allow-list** on the deployed Edge function: it defaults to
+  `PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io'` and is extended with the comma-separated
+  `CORS_ORIGINS` Edge secret (no rebuild), so the site can be reachable at a custom domain as well as
+  the GitHub Pages address. `*` is only the local/dev default; a foreign origin is never echoed. See
+  [`CUSTOM-DOMAIN.md`](CUSTOM-DOMAIN.md).
 - **Codes:** invite codes are **4 characters** (`INVITE_CODE_LENGTH`); device link codes are
   **8** (`LINK_CODE_LENGTH`) — independent constants with a regression test.
 - **Rate limits are NAT-friendly and tunable** (`RATE_*` env vars / Edge secrets).

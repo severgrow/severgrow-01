@@ -153,9 +153,9 @@ const buildWithApi = async (apiBase: string): Promise<void> =>
 
 const service = new MatchService({
   storage: new MemoryStorage(),
-  config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: 24 * 3_600_000 },
+  config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: 24 * 3_600_000 },
 });
-const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' } });
+const apiServer = createHttpServer({ service, config: { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] } });
 await new Promise<void>((resolve) => apiServer.listen(0, '127.0.0.1', resolve));
 const apiPort = (apiServer.address() as AddressInfo).port;
 const apiBase = `http://127.0.0.1:${apiPort}`;

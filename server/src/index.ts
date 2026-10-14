@@ -6,7 +6,7 @@
 // A `.env` file (git-ignored) is read automatically by the npm scripts. The rules version is
 // pinned in server/src/config.ts.
 import { pathToFileURL } from 'node:url';
-import { DEFAULT_SERVER_CONFIG } from './config.js';
+import { DEFAULT_SERVER_CONFIG, corsOriginsFromEnv } from './config.js';
 import { createHttpServer } from './http.js';
 import { MatchService } from './service.js';
 import { MemoryStorage } from './storage/memory.js';
@@ -24,7 +24,7 @@ const buildStorage = (): { storage: Storage; description: string } => {
 export const startServer = async (options: { port?: number } = {}): Promise<{ port: number; storage: string; close: () => Promise<void> }> => {
   const config = {
     ...DEFAULT_SERVER_CONFIG,
-    ...(process.env.CORS_ORIGIN ? { corsOrigin: process.env.CORS_ORIGIN } : {}),
+    ...corsOriginsFromEnv(),
   };
   const { storage, description } = buildStorage();
   const live = await wireLiveNode(storage, config, databaseUrlFromEnv()); // live duels: docs/LIVE.md

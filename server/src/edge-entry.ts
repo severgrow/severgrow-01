@@ -5,9 +5,9 @@
 /// <reference path="./edge-deno.d.ts" />
 import postgres from 'postgres';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
-import { DEFAULT_SERVER_CONFIG, PRODUCTION_CORS_ORIGIN } from './config.js';
+import { DEFAULT_SERVER_CONFIG, productionCorsOrigins } from './config.js';
 import type { ServerConfig } from './config.js';
-import { corsHeaders } from './cors.js';
+import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
 import { createFetchApp } from './fetch-app.js';
 import { MatchService } from './service.js';
@@ -26,18 +26,26 @@ import {
 } from './storage/pool-config.js';
 import type { ConnectionDiagnostics } from './storage/pool-config.js';
 
+// The production CORS allow-list: the built-in GitHub Pages origin plus any custom domain listed in
+// the comma-separated `CORS_ORIGINS` Edge secret. Read once per isolate at boot, like every other
+// Edge secret — setting the secret is a dashboard/CLI change, never a code rebuild.
+const corsOrigins = productionCorsOrigins();
+
 const edgeConfig: ServerConfig = {
   ...DEFAULT_SERVER_CONFIG,
   rulesVersion: CURRENT_RULES_VERSION,
-  corsOrigin: PRODUCTION_CORS_ORIGIN,
+  corsOrigins,
 };
 
-// Preflight + early error/health responses must allow the client's custom
-// headers, or the browser blocks every request (guest creation included).
-const cors = corsHeaders(PRODUCTION_CORS_ORIGIN);
-const corsJson = { ...cors, 'content-type': 'application/json; charset=utf-8' };
+// Preflight + early error/health responses must allow the client's custom headers, or the browser
+// blocks every request (guest creation included). Resolved PER REQUEST so an allow-listed front-end
+// origin (GitHub Pages or the custom domain) is echoed back while a foreign origin is not.
+const corsFor = (req: Request): Record<string, string> => corsHeadersForRequest(corsOrigins, req);
 
 const log = (line: string): void => console.log(line);
+// Origins are public, never secrets — one boot line makes a mis-set CORS_ORIGINS visible in the
+// Edge Function logs instead of showing up as a browser CORS error.
+log(`CORS allow-list: ${corsOrigins.join(', ')}`);
 
 type EdgeRuntime = {
   app: (req: Request) => Promise<Response>;
@@ -144,7 +152,7 @@ const normalizePath = (pathname: string): string => {
 };
 
 /** A start/connection failure the caller can read: 503 when retryable, 500 when something else broke. */
-const failureResponse = (error: unknown): Response => {
+const failureResponse = (error: unknown, cors: Record<string, string>): Response => {
   const message = error instanceof Error ? error.message : String(error);
   const missingSecret = message.includes('DATABASE_URL');
   const unavailable = !missingSecret && isConnectionAcquisitionError(error);
@@ -157,11 +165,14 @@ const failureResponse = (error: unknown): Response => {
   log(`EDGE_BOOT_ERROR ${code} ${safeErrorText(error)}`);
   return new Response(
     JSON.stringify({ ok: false, code, message: body, rulesVersion: CURRENT_RULES_VERSION, serverNow: Date.now() }),
-    { status: missingSecret || unavailable ? 503 : 500, headers: corsJson },
+    { status: missingSecret || unavailable ? 503 : 500, headers: { ...cors, 'content-type': 'application/json; charset=utf-8' } },
   );
 };
 
 Deno.serve(async (req) => {
+  // Resolve CORS for THIS request: the allow-list may hold several front-end origins.
+  const cors = corsFor(req);
+  const corsJson = { ...cors, 'content-type': 'application/json; charset=utf-8' };
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors });
   }
@@ -189,13 +200,13 @@ Deno.serve(async (req) => {
       };
       return new Response(JSON.stringify(body), { status: 200, headers: corsJson });
     } catch (error: unknown) {
-      return failureResponse(error);
+      return failureResponse(error, cors);
     }
   }
   try {
     const runtime = await getRuntime();
     return await runtime.app(req);
   } catch (error: unknown) {
-    return failureResponse(error);
+    return failureResponse(error, cors);
   }
 });

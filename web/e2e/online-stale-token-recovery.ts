@@ -60,7 +60,7 @@ await new Promise<void>((resolve, reject) => {
   child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`build failed (${code})`))));
 });
 
-const apiConfig = { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*' };
+const apiConfig = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'] };
 const service = new MatchService({ storage: new MemoryStorage(), config: apiConfig });
 const apiServer = createHttpServer({ service, config: apiConfig });
 await new Promise<void>((resolve) => apiServer.listen(API_PORT, '127.0.0.1', resolve));

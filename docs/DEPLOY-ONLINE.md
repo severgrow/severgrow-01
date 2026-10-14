@@ -13,10 +13,11 @@ The game site stays on GitHub Pages. The API runs as a **Supabase Edge Function*
 | --- | --- |
 | Edge Function | `https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel` |
 | Health | `…/duel/v1/health` (add `?db=1` for a real database ping **and** the pooler diagnostic) |
-| CORS | Locked to `https://severgrow.github.io` (no path on the origin) |
+| CORS | Allow-list, defaulting to `https://severgrow.github.io` (no path on the origin). Add a custom domain without a rebuild via the comma-separated `CORS_ORIGINS` Edge secret — see [`CUSTOM-DOMAIN.md`](CUSTOM-DOMAIN.md) |
 | JWT gate | **Off** — guests use our own bearer tokens, not Supabase Auth |
 
-**Current status (2026-10-12):** full `duel` Edge Function is live via CLI deploy (`verify_jwt` off, CORS locked). Health is not a stub; `?db=1` returns `db.ok`; `npm run server:smoke` against the deployed URL passed. Redeploy after server changes with the CLI steps below (needs `SUPABASE_ACCESS_TOKEN` or `npx supabase login`).
+**Current status (2026-10-12):** full `duel` Edge Function is live via CLI deploy (`verify_jwt` off, CORS locked to the GitHub Pages origin). Health is not a stub; `?db=1` returns `db.ok`; `npm run server:smoke` against the deployed URL passed. Redeploy after server changes with the CLI steps below (needs `SUPABASE_ACCESS_TOKEN` or `npx supabase login`).
+> Moving the site to a **custom domain** (still GitHub Pages, Cloudflare as DNS) needs one Edge secret and no rebuild: see [`CUSTOM-DOMAIN.md`](CUSTOM-DOMAIN.md).
 
 ## One-time: put the database secret on the Edge Function
 
@@ -347,7 +348,8 @@ CI builds the dist on branch `futa0.5-online` via `.github/workflows/futa05-prev
 # Session pooler in .env (port 5432) — never commit .env
 npm run server:migrate
 npm run server:dev          # CORS * for local
-CORS_ORIGIN=https://severgrow.github.io npm run server:dev   # production CORS locally
+CORS_ORIGIN=https://severgrow.github.io npm run server:dev   # single production CORS origin locally
+CORS_ORIGINS=https://severgrow.github.io,https://your-domain.example npm run server:dev  # allow-list locally
 npm run server:verify
 ```
 

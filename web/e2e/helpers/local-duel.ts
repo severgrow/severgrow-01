@@ -95,7 +95,7 @@ const buildWithApi = (apiBase: string): Promise<void> =>
 /** Boot the API + the built page. Call `close()` in a finally block. */
 export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDuel> => {
   const memory = new MemoryStorage();
-  const server = { ...DEFAULT_SERVER_CONFIG, corsOrigin: '*', turnTimeoutMs: options.turnTimeoutMs ?? 24 * 3_600_000 };
+  const server = { ...DEFAULT_SERVER_CONFIG, corsOrigins: ['*'], turnTimeoutMs: options.turnTimeoutMs ?? 24 * 3_600_000 };
   // The CHANNEL=futa05 build now ships live duels (see web/src/online/live/flag.ts), so the harness
   // serves the live routes too — otherwise the live listener would log 404s and its challenge
   // inbox could never answer. These suites still exercise the online duel itself (live duels have
