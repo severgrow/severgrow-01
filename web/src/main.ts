@@ -92,10 +92,6 @@ import {
 import type { TutorialGate } from './logic/tutorial-gate.js';
 import { matchIntel, openingPublicDiscard } from './logic/match-intel.js';
 import type { GlassSurface } from './player/glass-surface.js';
-import {
-  TUTORIAL_EASTER_SELECTORS, mountTutorialEaster,
-} from './player/tutorial-easter.js';
-import type { TutorialEaster } from './player/tutorial-easter.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
@@ -295,9 +291,6 @@ let session: Session | null = null;
 let coach: CoachProgress = freshCoach();
 let glassSurface: GlassSurface | null = null;
 let tutorialGate: TutorialGate | null = null;
-let tutorialEaster: TutorialEaster | null = null;
-let tutorialAdvanceCount = 0;
-let tutorialEasterDone = false;
 let intelState: State | null = null;
 let tutorialDisplayKey = '';
 let tutorialTransitionPending = false;
@@ -1019,7 +1012,6 @@ async function mountPlayerEnhancements() {
       onBlockedTap: tutorialTapAnywhere,
       isPaintDragging: () => !!draw.ptr || draw.shape.length > 0,
     });
-    tutorialEaster = mountTutorialEaster();
     futa04Help = (await import('./player/help.js')).mountHelp({ sheet, onBulb: toggleMatchIntel });
     smartCockpit = (await import('./player/smart-cockpit.js')).mountSmartCockpit();
     layoutKey = '';
@@ -1269,34 +1261,11 @@ function clearTutorialTimers() {
 
 function releaseTutorialLock() {
   clearTutorialTimers();
-  tutorialEaster?.dismiss();
   tutorialGate?.clear();
   glassSurface?.hide();
   tutorialDisplayKey = '';
   tutorialTransitionPending = false;
-  tutorialAdvanceCount = 0;
-  tutorialEasterDone = false;
   document.documentElement.classList.remove('futa04-tutorial');
-}
-
-/** After the easter modal closes — full normal tutorial resume (no skipped step). */
-function resumeTutorialAfterEaster() {
-  if (!coach.tutorial || !session) return;
-  tutorialDisplayKey = '';
-  tutorialTransitionPending = false;
-  syncTutorialGate();
-  render();
-}
-
-function maybeShowTutorialEaster() {
-  if (!tutorialEaster || tutorialEasterDone || tutorialAdvanceCount < 4) return;
-  if (tutorialEaster.isOpen()) return;
-  tutorialEasterDone = true;
-  tutorialGate?.set({
-    selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
-  }, 'step');
-  glassSurface?.hideFocus?.();
-  tutorialEaster.show(resumeTutorialAfterEaster);
 }
 
 /** Dead taps stay silent — the gate already swallows them; never flash a "locked" toast. */
@@ -1308,7 +1277,7 @@ let lastTapAnywhere = 0;
 /** On an explanation (Next) step, a tap anywhere the step does not use moves on. */
 function tutorialTapAnywhere() {
   const progress = coach.tutorial;
-  if (!progress || openSheet || busy() || tutorialTransitionPending || tutorialEaster?.isOpen()) return;
+  if (!progress || openSheet || busy() || tutorialTransitionPending) return;
   if (tutorialLesson(progress.chapter, progress.step)?.action !== 'Next') return;
   const now = performance.now();
   if (now - lastTapAnywhere < 350) return;
@@ -1327,14 +1296,6 @@ function syncTutorialGate() {
   // Free play: no input lock — bulb and board stay fully usable.
   if (lesson?.action === 'FreeTurn') {
     tutorialGate.clear();
-    return;
-  }
-  // Easter modal: only its buttons (+ menu) — resume restores the real step gate.
-  if (tutorialEaster?.isOpen()) {
-    tutorialGate.set({
-      selectors: [...GATE_WINDOW_SELECTORS, ...GATE_MENU_SELECTORS, ...TUTORIAL_EASTER_SELECTORS],
-    }, 'step');
-    glassSurface?.hideFocus?.();
     return;
   }
   // Pause menu / sheets stay fully usable; menu button stays reachable.
@@ -1386,9 +1347,6 @@ const TUTORIAL_VERSION = 3 as const;
 
 function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   clearTutorialTimers();
-  tutorialEaster?.dismiss();
-  tutorialAdvanceCount = 0;
-  tutorialEasterDone = false;
   const state = tutorialChapter(chapter);
   log = ['A small match, played to learn.'];
   gameLevel = 7;
@@ -1495,7 +1453,6 @@ function tutorialAdvanceStep() {
   const progress = coach.tutorial;
   if (!progress) return;
   progress.step++;
-  tutorialAdvanceCount++;
   tutorialDisplayKey = '';
   tutorialStatus = null;
   const next = tutorialLesson(progress.chapter, progress.step);
@@ -1505,7 +1462,6 @@ function tutorialAdvanceStep() {
       beginSession(state, { ...coach, tutorial: { ...progress } }, [], state);
       save();
       announceTurn(HUMAN);
-      maybeShowTutorialEaster();
     });
     return;
   }
@@ -1513,7 +1469,6 @@ function tutorialAdvanceStep() {
     if (next.rewind) tutorialRewind(progress.step);
     ensureTutorialThrowPhase();
     armTutorialIdle();
-    maybeShowTutorialEaster();
     return;
   }
   tutorialStatus = tutorialFeedback('chapter-done');

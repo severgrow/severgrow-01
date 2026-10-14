@@ -24,9 +24,6 @@ try {
   await page.goto('http://localhost:4201/?tutorial=1&chapter=1');
   await page.waitForFunction(() => !!(window as any).__severgrow?.tutorial());
   for (let moves = 0; moves < 100; moves++) {
-    // The one-shot easter-egg popup (player/tutorial-easter.ts) pauses the tutorial until closed.
-    const easter = page.locator('#tutorial-easter:not([hidden]) button').first();
-    if (await easter.count()) { await easter.click(); continue; }
     const p = await progress();
     assert(p, 'tutorial remains active');
     if (p.chapter === TUTORIAL_CHAPTER_COUNT - 1 && tutorialLesson(p.chapter, p.step)?.action === 'FreeTurn') break;
