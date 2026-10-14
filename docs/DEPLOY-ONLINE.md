@@ -226,7 +226,7 @@ job:
 | | |
 | --- | --- |
 | Job name | `futasaku-keepalive` |
-| Schedule | `17 6 */2 * *` — **06:17 UTC every 2 days** (the previous cadence, quiet hour) |
+| Schedule | `17 6 * * *` — **06:17 UTC every day** (quiet hour) — see migration `0007_daily_sweeper.sql` |
 | Runs as | `postgres` (the role that created it) |
 | Step 1 | `GET …/duel/v1/health?db=1` — a **real database round trip** |
 | Step 2 | `POST …/duel/v1/sweep` — finishes overdue matches / expires waiting matches |
@@ -237,6 +237,16 @@ That round trip is what resets the free-tier inactivity clock; a bare liveness p
 sweeper call is the same database work with a purpose: matches past their deadline, waiting matches
 past the 48 h expiry and stale guests are cleaned up even when no client visits.
 
+**Why daily (migration `0007_daily_sweeper.sql`).** The job originally ran every 2 days
+(`17 6 */2 * *`). A fully abandoned match can then sit expired-but-unfinished for up to ~2 days past
+its 48-hour expiry window. Expiry is also evaluated lazily on any join / list / view, so in practice
+any visit by either player finishes it instantly — the cron is only the backstop for matches nobody
+ever revisits. Running **daily** at the same 06:17 UTC hour closes that gap: an unvisited expired
+match is now cleaned up within a day instead of up to two. The migration `ALTER`s the existing
+job's schedule in place (`cron.alter_job`), so the job name, role, command (`/v1/health?db=1` then
+`/v1/sweep`), the `postgres` role and the `cron.job_run_details` history are all unchanged; only the
+cadence moves. The health ping is untouched — it is what keeps the free project from pausing.
+
 **Why it moved off GitHub.** `.github/workflows/futa05-keepalive.yml` had **never run** — GitHub
 only fires `schedule`/`workflow_dispatch` for a workflow file present on the DEFAULT branch
 (`main`), and that file existed only on `futa0.5-online`. GitHub also disables scheduled workflows
@@ -245,8 +255,8 @@ dependencies, and nothing has to land on `main`. *The redundant GitHub workflow 
 there is exactly one mechanism and nobody mistakes the inert one for the keep-alive.*
 
 **No secret is stored.** `/v1/sweep` only needs the `x-futasaku-cron` header (`SWEEP_CRON_TOKEN`)
-to get a dedicated rate-limit bucket. At two sweeps every two days the ordinary per-IP budget
-(120/h) can never be exhausted, so the job sends **no** header and the migration embeds no
+to get a dedicated rate-limit bucket. At one sweep a day the ordinary per-IP budget (120/h) can
+never be exhausted, so the job sends **no** header and the migration embeds no
 credential. If a token is ever wanted, put it in Supabase Vault — never in the migration.
 
 ### Inspect it (SQL Editor runs as `postgres`, the job's role)
@@ -276,17 +286,17 @@ select cron.unschedule('futasaku-keepalive');
 -- Recreate the migration defaults (idempotent):
 --   npm run server:migrate
 
--- Or just change the schedule, e.g. daily:
+-- Or just change the schedule, e.g. hourly (the job ships DAILY, '17 6 * * *'):
 select cron.alter_job(job_id := (select jobid from cron.job where jobname = 'futasaku-keepalive'),
-                      schedule := '17 6 * * *');
+                      schedule := '17 * * * *');
 ```
 
 `postgres` has **read-only** access to `cron.job`, so pause with `cron.unschedule`, not an `UPDATE`.
 
-The 2-day cadence is more than enough to keep the free project awake (the pause threshold is
-~1 week) and to keep overdue matches moving. A more frequent sweeper — e.g. hourly — is a one-line
-`cron.alter_job` change if the owner wants overdue matches finished sooner; every-2-days is the
-conservative default.
+The **daily** cadence (`17 6 * * *`) keeps the free project awake (the pause threshold is ~1 week)
+and finishes unvisited overdue matches within a day instead of up to two. A more frequent sweeper —
+e.g. hourly — is a one-line `cron.alter_job` change if the owner wants overdue matches finished
+sooner; daily at 06:17 UTC is the default, set by migration `0007_daily_sweeper.sql`.
 
 ### If the Supabase project pauses anyway
 
@@ -299,7 +309,7 @@ conservative default.
 
 - `pg_cron` and `pg_net` ship on the free plan and are already in the server's
   `shared_preload_libraries`, so enabling them from SQL is enough (no dashboard toggle required).
-- Two days ⇒ ~15 runs/month, two outbound requests each — negligible against the free-tier Edge
+- Daily ⇒ ~30 runs/month, two outbound requests each — negligible against the free-tier Edge
   invocation budget (500k/mo).
 - The round trip is one small query (~100 ms end to end, measured).
 - The job is the ONLY scheduled mechanism; there is nothing else to check or keep enabled.

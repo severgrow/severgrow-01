@@ -46,6 +46,7 @@ server/src/index.ts              entry point (DATABASE_URL → postgres, else me
 server/migrations/0001_init.sql  the schema, with Row Level Security
 server/migrations/0005_keepalive_cron.sql  Supabase-native keep-alive + sweeper (pg_cron + pg_net)
 server/migrations/0006_live_duels.sql  live duels: challenges, live clock columns, presence (RLS, revoked)
+server/migrations/0007_daily_sweeper.sql  runs the keep-alive/sweeper job daily (cron.alter_job)
 server/src/live/                  live duels (futa-test + /futa0.5/ preview) — see docs/LIVE.md
 server/scripts/migrate.ts         versioned, checksummed migration runner
 server/scripts/smoke.ts          manual end-to-end smoke against a running server
@@ -288,10 +289,13 @@ is why the moves table *is* the revision history and the idempotency record.
 ## Keep-alive (pg_cron + pg_net)
 
 Migration `0005_keepalive_cron.sql` enables `pg_cron` + `pg_net` and schedules one job,
-`futasaku-keepalive`, at `17 6 */2 * *` (06:17 UTC every 2 days) as the `postgres` role. Each run
+`futasaku-keepalive`; migration `0007_daily_sweeper.sql` moves it to `17 6 * * *` (**06:17 UTC every
+day**, via `cron.alter_job`, keeping the same job name and history), running as the `postgres` role.
+Each run
 does a **real database round trip** (`GET /v1/health?db=1` → `service.pingStorage()`) — which is what
 resets the free project's ~1 week inactivity clock — and then `POST /v1/sweep` so overdue matches
-and expired waiting matches are finished without a client visiting. This replaces the inert GitHub
+and expired waiting matches are finished without a client visiting. The daily cadence means an
+expired-but-unvisited match is cleaned up within a day instead of up to two. This replaces the inert GitHub
 Actions workflow (`futa05-keepalive.yml`), which could never fire because it was never on the
 default branch; the workflow file was deleted.
 

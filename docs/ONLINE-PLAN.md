@@ -50,7 +50,7 @@ Menu: FUTASAKU, then PLAY ONLINE / PLAY OFFLINE. Offline stays exactly as today.
    - `VITE_SUPABASE_URL` — `https://wbfrbeedlvjercrukngn.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` — Project Settings → **API Keys** → **anon** / **public** key (safe to put in the client).
 
-**C. If the free project pauses after ~1 week idle:** Dashboard → project → **Restore** / resume. The Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`, every 2 days) keeps it awake with a real DB round trip and runs the sweeper; it replaced the GitHub workflow, which never fired from a side branch. See [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
+**C. If the free project pauses after ~1 week idle:** Dashboard → project → **Restore** / resume. The Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`; **daily** since migration `0007_daily_sweeper.sql`) keeps it awake with a real DB round trip and runs the sweeper; it replaced the GitHub workflow, which never fired from a side branch. See [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
 
 ---
 
@@ -110,7 +110,7 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 | # | Problem | Phase | Planned fix |
 | --- | --- | --- | --- |
 | P-1 | Hosting / Edge limits / pooler | 0, 1 | Edge + Transaction 6543 + `prepare:false`; Session 5432 for migrate/tests. Measured CPU ≪ 2 s. |
-| P-2 | Free project pause; GitHub schedule never ran / dies at ~60 days | 1, 8 | **Shipped:** the GitHub Actions keep-alive was **deleted** — GitHub only fires a `schedule` from the default branch, and that file lived only on a feature branch, so it never ran. The keep-alive is now a Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`), every 2 days at 06:17 UTC: `GET /v1/health?db=1` (a real DB round trip) + `POST /v1/sweep`. Observed running with `status='succeeded'` / HTTP 200; this also removes the ~60-day GitHub-inactivity risk. See `DEPLOY-ONLINE.md`. |
+| P-2 | Free project pause; GitHub schedule never ran / dies at ~60 days | 1, 8 | **Shipped:** the GitHub Actions keep-alive was **deleted** — GitHub only fires a `schedule` from the default branch, and that file lived only on a feature branch, so it never ran. The keep-alive is now a Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`; **daily** at 06:17 UTC since migration `0007_daily_sweeper.sql`): `GET /v1/health?db=1` (a real DB round trip) + `POST /v1/sweep`. Observed running with `status='succeeded'` / HTTP 200; this also removes the ~60-day GitHub-inactivity risk. See `DEPLOY-ONLINE.md`. |
 | P-3 | iOS Safari vs Home Screen storage | 2, 3, 4 | Honest Settings warning + one-time 8-char link code (10 min, single use, rate limited) → **new** token for same player. Never move an existing token. |
 | P-4 | Invite opens in another browser | 4 | Join creates guest on the spot; deep link `#/join/CODE` survives redirect. |
 | P-5 | SW caching / old client | 2, 3 | Never cache API; client version handshake → `CLIENT_TOO_OLD` + “Reload to update FUTASAKU”. |

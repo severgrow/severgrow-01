@@ -8,8 +8,10 @@
 > 2026-10-12 pass; some items have moved on since:
 > - **Keep-alive (P-2):** no longer a GitHub Actions workflow — that workflow never ran (GitHub only
 >   fires schedules from the default branch) and was **deleted**. The keep-alive is now the
->   Supabase-native `pg_cron` job `futasaku-keepalive` (every 2 days: `GET /v1/health?db=1` then
->   `POST /v1/sweep`). See [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
+>   Supabase-native `pg_cron` job `futasaku-keepalive` (now **daily** at 06:17 UTC, migration
+>   `0007_daily_sweeper.sql`; it was every 2 days when this report was written: `GET /v1/health?db=1`
+>   then `POST /v1/sweep`). See
+>   [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md#keep-alive-p-2--supabase-native-no-github).
 > - **P-12 "no grace":** the one-grace-per-player rule now exists (migration `0004_timeout_grace.sql`).
 > - **Owner follow-ups #2 and #4** are done/obsolete: `/futa0.5/` is published, and there is no GitHub
 >   keep-alive schedule left to re-enable.

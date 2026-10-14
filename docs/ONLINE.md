@@ -31,9 +31,10 @@ untouched.
   visible → a full readable pace) from a `gap` (a resume, a tab return or a network comeback →
   buffered and replayed at 2× with Skip). It does not jump straight to the current board.
 - **The sweeper runs on a schedule.** The Supabase-native `pg_cron` job `futasaku-keepalive` runs
-  every 2 days at 06:17 UTC, calling `GET /v1/health?db=1` (a real DB round trip) and then
-  `POST /v1/sweep`. The old GitHub Actions keep-alive workflow was **deleted** (workflows only run
-  from the default branch, so it never fired).
+  **daily** at 06:17 UTC (migration `0007_daily_sweeper.sql`, after 0005 installed it every 2 days),
+  calling `GET /v1/health?db=1` (a real DB round trip) and then `POST /v1/sweep`. Daily means an
+  expired-but-unvisited match is cleaned up within a day instead of up to two. The old GitHub Actions
+  keep-alive workflow was **deleted** (workflows only run from the default branch, so it never fired).
 - **CORS is locked** to `PRODUCTION_CORS_ORIGIN = 'https://severgrow.github.io'` on the deployed Edge
   function; `*` is only the local/dev default.
 - **Codes:** invite codes are **4 characters** (`INVITE_CODE_LENGTH`); device link codes are

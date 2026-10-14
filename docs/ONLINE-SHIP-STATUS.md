@@ -11,6 +11,8 @@
 > - Migration `0006_live_duels.sql` (applied 2026-10-14) adds a **9th table** (`live_challenges`, same
 >   RLS + anon/authenticated revoked posture), so §1's "8 tables" is one migration behind.
 > - Live duels can now also be reached from the `futa05` preview (`/futa0.5/`), not only `futa-test`.
+> - The keep-alive job's schedule is now **daily** (`17 6 * * *`, migration `0007_daily_sweeper.sql`),
+>   not every 2 days; §2's row and evidence below are the 2026-10-13 snapshot.
 >
 > Everything else here (keep-alive cron, RLS denials, the 50-match soak, storage per match) still
 > holds. Current index: [`ONLINE.md`](ONLINE.md); live duels: [`LIVE.md`](LIVE.md).
@@ -140,7 +142,7 @@ schedules one job:
 | | |
 | --- | --- |
 | Job | `futasaku-keepalive` (id 1), runs as `postgres` |
-| Schedule | `17 6 */2 * *` — 06:17 UTC every 2 days (the old cadence) |
+| Schedule | `17 6 */2 * *` — 06:17 UTC every 2 days (2026-10-13 snapshot; now **daily** via `0007_daily_sweeper.sql`) |
 | Step 1 | `net.http_get(…/duel/v1/health?db=1)` → a **real Postgres round trip** |
 | Step 2 | `net.http_post(…/duel/v1/sweep)` → finishes overdue / expired matches server-side |
 
@@ -282,7 +284,7 @@ caveat; **Not handled** = not done.
 | # | Problem | Status | Evidence | Gap / caveat |
 | --- | --- | --- | --- | --- |
 | P-1 | Hosting / Edge limits / pooler | **Handled / tested** | `docs/DEPLOY-ONLINE.md` measured 33/40 → 0/40 five-hundreds and peak 63→19 connections after the Transaction-pooler (6543) switch; `server/tests/edge-pool.test.ts`; commit `401f262`. | Depends on the deployed `DATABASE_URL` secret staying on the transaction pooler. |
-| P-2 | Free project pause / GH schedule | **Handled / tested** | Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005`): every 2 days it makes a real DB round trip (`/v1/health?db=1`, `db.ok:true`) and runs the sweeper. pg_cron ran it twice with `status='succeeded'`; `net._http_response` shows HTTP 200 (§2). Redundant GH workflow deleted. | A paused project cannot run its own cron — restore it first; the 2-day cadence keeps it from pausing. |
+| P-2 | Free project pause / GH schedule | **Handled / tested** | Supabase-native `pg_cron` job `futasaku-keepalive` (migrations `0005` + `0007`): every day (was every 2 days) it makes a real DB round trip (`/v1/health?db=1`, `db.ok:true`) and runs the sweeper. pg_cron ran it twice with `status='succeeded'`; `net._http_response` shows HTTP 200 (§2). Redundant GH workflow deleted. | A paused project cannot run its own cron — restore it first; the daily cadence keeps it from pausing. |
 | P-3 | iOS Safari vs Home Screen storage | **Handled (read)** | `device_link_codes` table (`0002`) + single-use 8-char codes; `server/tests/http.test.ts`, `service.test.ts`; Settings warning in the client. | Client storage warning is UI (not re-verified here). |
 | P-4 | Invite opens in another browser | **Handled (read)** | Join creates a guest on the spot; `#/join/CODE` deep link; `web/tests/lobby.test.ts`, e2e `online-invite-flow.ts`. | UI path not re-run by this worker. |
 | P-5 | Service-worker caching / old client | **Handled / tested** | `CLIENT_TOO_OLD` handshake (`server/tests/http-e2e.test.ts`, soak `handshake.client_too_old`); API is cross-origin and uncached. | — |
@@ -338,7 +340,7 @@ caveat; **Not handled** = not done.
   free-tier Supabase project; there is no sharding or replica.
 - **No ranking / matchmaking skill.** "Find opponent" pairs the open queue; there is no ladder.
 - **Keep-alive now runs in the database** (P-2): the pg_cron job is proven by a real run, not just
-  scheduled. It cannot survive the project being paused — but the 2-day cadence prevents that.
+  scheduled. It cannot survive the project being paused — but the daily cadence prevents that.
 - **Storage grows unpruned** (~26 KB/match; 10k ≈ 267 MB of a 500 MB database).
 - **Advisors:** only informational lints (one `rls_enabled_no_policy`, two performance INFO). Nothing
   security-actionable.

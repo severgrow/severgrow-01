@@ -105,7 +105,7 @@ const realtimeProbe = async (anon: string, trigger: () => Promise<void>): Promis
 // ----------------------------------------------------------------- pg_cron / pg_net (P-2, P-21 adjacent)
 
 /**
- * The 0005 keep-alive job plus the pg_net SSRF guard.
+ * The 0005/0007 keep-alive job (daily cadence) plus the pg_net SSRF guard.
  *
  * pg_net can make OUTBOUND HTTP requests from inside the database. It is platform-owned (the
  * `postgres` role cannot revoke its PUBLIC grants — a documented Supabase constraint), so the
@@ -122,8 +122,8 @@ const keepaliveChecks = async (pool: PgPool, anon: string): Promise<void> => {
     const job = (await rows(pool, `select jobname, schedule, command, username, active from cron.job where jobname = 'futasaku-keepalive'`))[0];
     const command = String(job?.command ?? '');
     check(
-      'futasaku-keepalive job exists with the intended cadence, target and role',
-      Boolean(job) && job!.schedule === '17 6 */2 * *' && command.includes('/v1/health?db=1') && command.includes('/v1/sweep') && command.includes('net.http_get') && command.includes('net.http_post') && job!.username === 'postgres' && job!.active === true,
+      'futasaku-keepalive job exists with the intended (daily) cadence, target and role',
+      Boolean(job) && job!.schedule === '17 6 * * *' && command.includes('/v1/health?db=1') && command.includes('/v1/sweep') && command.includes('net.http_get') && command.includes('net.http_post') && job!.username === 'postgres' && job!.active === true,
       job ? `${String(job.schedule)} as ${String(job.username)} (active=${String(job.active)})` : 'job missing — run `npm run server:migrate`',
     );
     check('the keep-alive job embeds no secret header', !command.includes('x-futasaku-cron'), 'no x-futasaku-cron header sent');
@@ -214,7 +214,7 @@ const main = async (): Promise<void> => {
     // 1) migrations
     const migrations = await rows(pool, 'select version from schema_migrations order by version');
     const versions = migrations.map((m) => String(m.version));
-    check('migrations 0001–0005 applied', ['0001_init.sql', '0002_deadlines_lists.sql', '0003_open_queue.sql', '0004_timeout_grace.sql', '0005_keepalive_cron.sql'].every((v) => versions.includes(v)), versions.join(', '));
+    check('migrations 0001–0007 applied', ['0001_init.sql', '0002_deadlines_lists.sql', '0003_open_queue.sql', '0004_timeout_grace.sql', '0005_keepalive_cron.sql', '0006_live_duels.sql', '0007_daily_sweeper.sql'].every((v) => versions.includes(v)), versions.join(', '));
 
     // 2) RLS on every public table
     const rls = await rows(

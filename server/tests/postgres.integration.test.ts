@@ -605,7 +605,8 @@ suite('real database: player views never leak', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
-// P-2 keep-alive (migration 0005_keepalive_cron.sql): the Supabase-native scheduled job.
+// P-2 keep-alive (migrations 0005_keepalive_cron.sql + 0007_daily_sweeper.sql): the
+// Supabase-native scheduled job, on the DAILY cadence 0007 installs.
 // A real cron/pg_net round trip and the Data-API denial for anon are proved by
 // `npm run server:verify-security`; here we prove the persisted job and the DB-level role denial.
 // ---------------------------------------------------------------------------------------------
@@ -623,7 +624,8 @@ suite('real database: Supabase keep-alive job (P-2)', () => {
     );
     expect(rows).toHaveLength(1);
     const job = rows[0]!;
-    expect(job.schedule).toBe('17 6 */2 * *');
+    // Migration 0007 moved the job from every-2-days to DAILY at the same quiet UTC hour.
+    expect(job.schedule).toBe('17 6 * * *');
     expect(job.username).toBe('postgres');
     expect(job.active).toBe(true);
     const command = String(job.command);
@@ -636,17 +638,26 @@ suite('real database: Supabase keep-alive job (P-2)', () => {
     expect(command).not.toContain('x-futasaku-cron');
   });
 
-  it('re-running the migration never duplicates the job (idempotent)', async () => {
+  it('re-running the job migrations never duplicates it and lands on the DAILY cadence', async () => {
     if (!(await cronInstalled())) return;
     const five = loadMigrations().find((m) => m.version.startsWith('0005_'));
+    const seven = loadMigrations().find((m) => m.version.startsWith('0007_'));
     expect(five, 'the 0005 migration must exist').toBeDefined();
-    // Re-execute the migration body directly (the runner itself would skip it as applied). This is
-    // the real test of the unschedule-then-schedule guard, not the checksum skip.
+    expect(seven, 'the 0007 migration must exist').toBeDefined();
+    // Re-execute the migration bodies directly (the runner itself would skip them as applied). This
+    // is the real test of the unschedule-then-schedule guard (0005) and of the in-place alter guard
+    // (0007), not the checksum skip.
     await pool.query(five!.sql);
+    await pool.query(seven!.sql);
+    // 0007 is idempotent: run it again and nothing changes.
+    await pool.query(seven!.sql);
     const { rows } = await pool.query(`select count(*)::int as n from cron.job where jobname = 'futasaku-keepalive'`);
     expect(Number(rows[0]?.n)).toBe(1);
-    const { rows: one } = await pool.query(`select schedule from cron.job where jobname = 'futasaku-keepalive'`);
-    expect(one[0]?.schedule).toBe('17 6 */2 * *');
+    const { rows: one } = await pool.query(`select jobid, schedule, command from cron.job where jobname = 'futasaku-keepalive'`);
+    expect(one[0]?.schedule).toBe('17 6 * * *');
+    // The alter preserved the command (the health ping + sweep) rather than blanking it.
+    expect(String(one[0]?.command)).toContain('/v1/health?db=1');
+    expect(String(one[0]?.command)).toContain('/v1/sweep');
   });
 
   it('denies anon and authenticated on every cron surface with 42501', async () => {
