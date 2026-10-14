@@ -4,6 +4,7 @@ import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
 import type { PopupPort } from './center.js';
+import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
 
 const MOSS = '#8fbf6a';
 const MOSS_INK = '#0d100d';
@@ -12,6 +13,7 @@ const CREAM = '#f0e9dc';
 
 const CSS = `
 ${glassBaseCss('.live-glass')}
+${WAIT_DOTS_CSS}
 .live-glass { z-index:90; }
 .live-glass[hidden], .live-scrim[hidden], .live-ring[hidden], .live-vignette[hidden] { display:none !important; }
 .live-scrim { position:fixed; inset:0; z-index:89; background:rgba(4,6,5,.34); touch-action:none; }
@@ -61,6 +63,12 @@ ${glassBaseCss('.live-glass')}
   font:800 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .live-chip .lamp { width:6px; height:6px; border-radius:50%; background:${LAVA}; box-shadow:0 0 8px ${LAVA}; }
 .live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
+/* "Opponent reconnecting" in the strip: the words plus the SHARED animated dots. The order puts it
+   just before the live clock; it is its own node, so the header's model never overwrites it. */
+.live-reconnect { order:2; flex:0 0 auto; display:inline-flex; align-items:center; color:#e2d4b4;
+  font:600 12px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.04em; white-space:nowrap; }
+.live-reconnect[hidden] { display:none; }
+.large-text .live-reconnect { font-size:15px; }
 .live-chip.lighting { animation:live-light 600ms ease-out 1; }
 /* The live clock in the duel strip (the header's own "invisible box" between the menu button and
    the logo). Always visible during live play, slim, on the header's surface: no frame, no fill,
@@ -370,6 +378,8 @@ export type HudModel = {
   /** Which home: my own (moss, bottom) or the opponent's (lava, top). */
   side: 'me' | 'opp';
   homeKey: string | null;
+  /** The opponent's heartbeat has gone stale while the duel is live: they are reconnecting. */
+  opponentReconnecting: boolean;
   reduceMotion: boolean;
 };
 
@@ -390,6 +400,15 @@ export const createHud = () => {
   ring.dataset.live = 'ring';
   const vignette = el('div', 'live-vignette');
   vignette.hidden = true;
+  // "Opponent reconnecting" + the shared animated dots, written into the strip next to the clock.
+  // The node is created and owned HERE (not written into one of `fillDuelHud`'s slots), so the
+  // header's own model can never overwrite it mid-grace.
+  const reconnecting = el('span', 'live-reconnect');
+  reconnecting.dataset.live = 'reconnect';
+  reconnecting.setAttribute('role', 'status');
+  reconnecting.hidden = true;
+  reconnecting.append(el('span', '', LIVE.opponentReconnecting), waitDots());
+  let reconnectShown: boolean | null = null;
   document.body.append(ring, vignette);
   let model: HudModel | null = null;
   let raf = 0;
@@ -403,7 +422,9 @@ export const createHud = () => {
 
   const attach = () => {
     const hud = document.getElementById('duel-hud');
-    if (hud && chip.parentElement !== hud) hud.prepend(chip);
+    if (!hud) return;
+    if (chip.parentElement !== hud) hud.prepend(chip);
+    if (reconnecting.parentElement !== hud) hud.append(reconnecting);
   };
 
   const place = (): boolean => {
@@ -522,6 +543,8 @@ export const createHud = () => {
       if (!on) {
         ring.setAttribute('hidden', '');
         vignette.hidden = true;
+        reconnecting.hidden = true;
+        reconnectShown = null;
         // No leftover arc: a go-live pulse that is still on screen when the session ends goes too.
         document.querySelectorAll('.live-ring[data-live="pulse"]').forEach((node) => node.remove());
         // Leaving live: hand the strip's time slot back to the 24-hour urgency rule.
@@ -542,6 +565,11 @@ export const createHud = () => {
       }
       ring.dataset.side = m!.side;
       chip.setAttribute('aria-label', LIVE.chipAria(Math.round(m!.limitMs / 1000)));
+      // The words do not tick, so only rewrite when the state actually flips (the dots animate).
+      if (reconnectShown !== m!.opponentReconnecting) {
+        reconnectShown = m!.opponentReconnecting;
+        reconnecting.hidden = !m!.opponentReconnecting;
+      }
       if (!raf) raf = requestAnimationFrame(frame);
     },
     /** The 600 ms go-live moment: the chip lights up, both homes pulse. */

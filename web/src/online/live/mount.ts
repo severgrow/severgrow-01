@@ -315,6 +315,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       deadline: s.turnDeadlineAt === null ? null : toLocal(s.turnDeadlineAt),
       side: actor === s.mySeat ? 'me' : 'opp',
       homeKey: homeKey(actor),
+      opponentReconnecting: s.opponent.reconnecting,
       reduceMotion: reduceMotion(),
     });
   };

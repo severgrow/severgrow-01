@@ -140,7 +140,7 @@ export const ONLINE = Object.freeze({
   emptyMatches: 'No matches yet.',
   firstCardTitle: 'How online duels work',
   firstCardLines: Object.freeze([
-    'Play live when both of you are here, or take turns over time.',
+    'Play in real time when both of you are here, or take turns over time.',
     'Your opponent only sees your turn after you Throw.',
     'Each turn has 24 hours. Miss it and you lose.',
   ] as const),
@@ -201,6 +201,57 @@ export const ONLINE = Object.freeze({
   errDrawFailed: 'Draw failed.',
   errResignFailed: 'Resign failed.',
 });
+
+/**
+ * The online duel header lane — the ONE place the strip's short words live (owner's cleanup,
+ * 2026-10-14). The lane is a single fixed-height row that must never wrap or reach the board, so
+ * these strings are deliberately tiny: aim for 24 characters or fewer, hard cap `HEADER_MAX`.
+ *
+ * ONE message is shown at a time. `HEADER_PRIORITY` (highest first) decides which source owns the
+ * lane; `HEADER_SOURCE` places each word. The live clock is the `clock` source (its text is the
+ * digit clock, not a word, so it is built by the UI, not listed here).
+ */
+export const HEADER_MAX = 32;
+
+export const HEADER = Object.freeze({
+  /** A pressing danger/timeout line — outranks everything. */
+  timeout: "Time's up",
+  graceWarning: 'One more chance',
+  /** Whose turn it is (the established two-phone words, all inside the 24-char target). */
+  yourTurn: 'Your turn',
+  theirTurn: "Opponent's turn",
+  replaying: 'Replaying their turn',
+  finished: 'Finished',
+  /** The presence/opponent line. */
+  opponentAway: 'Opponent away',
+  opponentHere: 'Opponent here',
+  waiting: 'Waiting',
+  /** Nothing pressing to say. */
+  idle: 'In play',
+});
+
+export type HeaderKey = keyof typeof HEADER;
+
+/** Highest priority first: the first source with something to say owns the lane. */
+export const HEADER_PRIORITY = Object.freeze(['danger', 'clock', 'turn', 'presence', 'idle'] as const);
+export type HeaderSource = (typeof HEADER_PRIORITY)[number];
+
+/** Which slot in `HEADER_PRIORITY` each header word belongs to. */
+export const HEADER_SOURCE: Readonly<Record<HeaderKey, HeaderSource>> = Object.freeze({
+  timeout: 'danger',
+  graceWarning: 'danger',
+  yourTurn: 'turn',
+  theirTurn: 'turn',
+  replaying: 'turn',
+  finished: 'turn',
+  opponentAway: 'presence',
+  opponentHere: 'presence',
+  waiting: 'presence',
+  idle: 'idle',
+});
+
+/** The one accessor the header lane uses to get a word. */
+export const headerText = (key: HeaderKey): string => HEADER[key];
 
 /**
  * The end-of-game screen in ONE place, so offline and online say the same thing. Reasons are
@@ -509,29 +560,34 @@ export const INSTALL = Object.freeze({
  * switch the SAME match to a short per-turn clock. Nothing about the board or the rules changes.
  */
 export const LIVE = Object.freeze({
-  goLive: 'Go live',
-  goLiveAria: (name: string, secs: number) => `Go live with ${name}: ${secs}-second turns in this match`,
-  waiting: (name: string, secs: number) => `Waiting for ${name}... ${secs}s`,
-  waitingFor: (name: string) => `Waiting for ${name}...`,
+  // Owner's rename, 2026-10-14: the mode is "Real time" everywhere a player can read it. The
+  // internal identifiers (LIVE_TURN_MS, the `live` mode id, DB columns, file names) stay.
+  goLive: 'Real time',
+  // No rule-stating number of seconds anywhere in the copy (owner, 2026-10-14): the live turn
+  // length never appears as words. The live clock in the header is the only place a digit shows.
+  goLiveAria: (name: string, _secs: number) => `Start a real time duel with ${name}`,
+  waiting: (name: string, _secs: number) => `Waiting for ${name}`,
+  // The waiting words carry no dots: the UI appends the SHARED animated ellipsis (see wait-dots).
+  waitingFor: (name: string) => `Waiting for ${name}`,
   waitingShort: 'Waiting',
   cancel: 'Cancel',
-  inLiveGame: 'In a live game',
+  inLiveGame: 'In real time',
   notAvailable: 'Not available',
   busy: 'Busy',
-  rateLimited: 'Try live again later',
-  wantsToGoLive: 'wants to go live',
+  rateLimited: 'Try real time again later',
+  wantsToGoLive: 'wants a real time duel',
   wantsRematch: 'wants a rematch',
-  terms: (secs: number) => `${secs}-second turns · same match`,
+  terms: (_secs: number) => 'Same match · each turn has a countdown',
   accept: 'Accept',
   notNow: 'Not now',
   notNowFrom: (name: string) => `${name}: Not now`,
   expired: 'No answer',
-  live: 'Live',
-  chip: (secs: number) => `LIVE ${secs}s`,
-  chipAria: (secs: number) => `Live game, ${secs}-second turns`,
+  live: 'Real time',
+  chip: (_secs: number) => 'Real time',
+  chipAria: (_secs: number) => 'Real time duel, each turn has a countdown',
   timeLeftSr: (secs: number) => `${secs} seconds left`,
   timesUp: "Time's up",
-  leaveLive: 'Leave live',
+  leaveLive: 'Leave real time',
   // Owner's ruling, 2026-10-14: leaving real-time FORFEITS the match, so the confirm states the
   // consequence outright. The warning lives in the confirm itself — there is no way to leave real
   // time that does not acknowledge the loss.
@@ -539,8 +595,11 @@ export const LIVE = Object.freeze({
   // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
   leaveWarning: 'Leaving real time loses',
   // ...plus the fuller explanation in the same glass window, never a wall of text.
-  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. Normal 24-hour games are unaffected.',
-  endedTitle: 'Live ended',
+  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. A dropped connection gets 10 seconds to reconnect first. Normal 24-hour games are unaffected.',
+  // The header strip's "the opponent has dropped" state. The animated dots are added by the UI (the
+  // shared `wait-dots` treatment), never baked into this string.
+  opponentReconnecting: 'Opponent reconnecting',
+  endedTitle: 'Real time ended',
   endedFinished: 'Match over',
   endedLeft: 'Back to 24-hour turns',
   backToYourGame: 'Back to your game',
@@ -549,9 +608,9 @@ export const LIVE = Object.freeze({
   targetMatch: 'your match',
   targetMenu: 'the menu',
   rematch: 'Rematch',
-  rematchWaiting: (name: string, secs: number) => `Rematch? Waiting for ${name}... ${secs}s`,
+  rematchWaiting: (name: string, _secs: number) => `Rematch? Waiting for ${name}`,
   close: 'Close',
-  allowChallenges: 'Allow live challenges',
+  allowChallenges: 'Allow real time challenges',
   allowChallengesHelp: 'Off: you show as Not available.',
-  failed: 'Could not go live right now.',
+  failed: 'Could not start real time right now.',
 });
