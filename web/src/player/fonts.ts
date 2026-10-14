@@ -78,6 +78,7 @@ ${T} .title {
   font-size: clamp(2.5rem, 7.5vw + 0.9rem, 4.25rem);
 }
 ${T} .levels-head h2,
+${T} .online-head h2,
 ${T} .sheet-head h2,
 ${T} .gameover .go-title,
 ${T} .lab h1,
@@ -95,7 +96,11 @@ ${T} .gameover .go-title {
   font-size: clamp(1.75rem, 3.6vw + 1rem, 3rem);
   text-wrap: balance;
 }
-${T} .levels-head h2 {
+/* The screen headings (difficulty pick and the online submenu screens) share ONE size: the online
+   hub used to keep the base 1.4rem Fragment Mono heading, so "Play online" and "Choose difficulty"
+   were a different face and a different size on consecutive screens. */
+${T} .levels-head h2,
+${T} .online-head h2 {
   font-size: clamp(1.45rem, 2.4vw + 0.9rem, 2rem);
   padding-top: 0.04em;
 }

@@ -268,14 +268,17 @@ button {
   place-items: center;
   overflow-y: auto;
 }
-/* One Futasaku surface: menu, difficulty pick, online submenu, and result card share these
-   cream tones. */
+/* One Futasaku surface: menu, difficulty pick, online submenu, the "Opponent found" card and the
+   result card share these cream tones. Every surface that shows a `.menu-buttons` button must be in
+   this list — outside it the cream tokens are undefined, so `var(--fu-cream)` fails and the button
+   falls back to a bare text button (that is exactly what `#online-matched` did before 2026-10-14). */
 #menu,
 #levels,
 .gameover,
 #online-hub,
 #online-waiting,
-#online-join {
+#online-join,
+#online-matched {
   --fu-cream: #e8ddc5;
   --fu-ink: #17181a;
   --fu-cream-70: color-mix(in srgb, #e8ddc5 70%, transparent);
@@ -287,12 +290,24 @@ button {
 }
 .menu-inner {
   width: min(420px, 100% - 32px);
+  /* The column's rhythm — the same 14px every Futasaku menu column uses. */
+  --menu-rhythm: 14px;
+  /* The wordmark stands one deliberate step further from the buttons than the column's own rhythm.
+     The removed tagline used to give this breathing room; since 2026-10-14 it is explicit, so the
+     logo never crowds the actions. Two rhythm steps (28px) is "a bit of space", not a void. */
+  --menu-head-gap: calc(2 * var(--menu-rhythm));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: var(--menu-rhythm);
   padding: 32px 0;
   text-align: center;
+}
+/* The wordmark and the buttons only: the gap is `--menu-head-gap`, and since the column's own gap
+   already contributes one `--menu-rhythm`, the margin adds just the second step. A tagline, when
+   SHOW_MENU_TAGLINE re-inserts one, breaks the `+` match and keeps its own old spacing. */
+#menu .menu-inner > .title + .menu-buttons {
+  margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm));
 }
 .title {
   font-size: clamp(2.6rem, 12vw, 3.6rem);
@@ -324,13 +339,13 @@ button {
 /* One button system for the whole surface: a quiet 1px cream frame for the default, and a single
    cream fill (Continue) as the only emphasis. No gradient, no glow, no drop shadow.
    Difficulty tiles reuse the same frame so New game → pick level keeps one rhythm; the online
-   submenu reuses `.menu-buttons` so its buttons match the menu exactly. */
+   submenu reuses `.menu-buttons` so its buttons match the menu exactly.
+   Height and corner come from the shared `.btn` scale (56 big / 44 normal, pill — UX.md §controls),
+   so a difficulty row IS a menu button instead of its own 52px / 14px shape. */
 .menu-buttons .btn,
 #levels .level-grid .difficulty-tile {
-  min-height: 52px;
   padding: 1px 20px 0;
   border: 1px solid var(--fu-cream-28);
-  border-radius: 14px;
   background: transparent;
   box-shadow: none;
   color: var(--fu-cream);
