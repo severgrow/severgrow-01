@@ -5,10 +5,14 @@ The owner does not code; report outcomes in short, plain English with the checks
 
 ## Branch safety
 
-- Work on **`futa0.4`**. Do not modify, merge into, reset, rebase or deploy `main` for Futasaku work.
+- **Two product lines.** The locked **0.4** line lands on **`futa0.4`**; the **0.5 online** line
+  (online duels + live duels, shipped as `/futa0.5/`) lands on **`futa0.5-online`** — start at
+  [`docs/ONLINE.md`](docs/ONLINE.md). Do not modify, merge into, reset, rebase or deploy `main` or
+  `dev` for this work.
 - Never discard uncommitted work from another checkout. Do not force push unless explicitly required and safe.
 - Pre-cleanup snapshot: `archive/futa0.4-before-cleanup`.
-- Product channel is `CHANNEL=futa04` (`/futa0.4/`). Quick experiments use `CHANNEL=futa-test` (`/futa-test/`).
+- Product channel is `CHANNEL=futa04` (`/futa0.4/`). The 0.5 preview is `CHANNEL=futa05`
+  (`/futa0.5/`, online duels **and** live duels); quick experiments use `CHANNEL=futa-test` (`/futa-test/`).
 
 ## Boundaries
 

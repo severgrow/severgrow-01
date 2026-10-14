@@ -3,7 +3,11 @@
 Grow a living network. Keep it connected. Cut theirs.
 
 Rules live in `src/engine/` (pure, deterministic). The browser client lives in `web/`.
-**Source of truth:** [`docs/SPEC.md`](docs/SPEC.md). Work on branch **`futa0.4`**.
+**Source of truth:** [`docs/SPEC.md`](docs/SPEC.md).
+
+**Branch map.** The locked **0.4** product line lands on **`futa0.4`**. The **0.5 online** line
+(online duels + live duels, shipped as `/futa0.5/`) lands on **`futa0.5-online`** — start at
+[`docs/ONLINE.md`](docs/ONLINE.md). Never deploy `main` or `dev` for this work.
 
 ```sh
 npm ci
@@ -26,7 +30,7 @@ Pre-cleanup archive branch: `archive/futa0.4-before-cleanup`
 | Futa04 presentation | `web/src/player/` |
 | Board, cards, effects, audio | `web/src/ui/` |
 | Save / settings / channels | `web/src/logic/persist.ts`, `web/src/channel.ts` |
-| Online duel backend | `server/` (see [`docs/BACKEND.md`](docs/BACKEND.md)) |
+| Online duels + live duels (0.5) | `web/src/online/`, `server/` (see [`docs/ONLINE.md`](docs/ONLINE.md); backend [`docs/BACKEND.md`](docs/BACKEND.md)) |
 | Spec | `docs/SPEC.md` |
 | Checks | `tests/`, `web/tests/`, `web/e2e/` |
 
