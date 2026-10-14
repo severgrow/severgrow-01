@@ -7,7 +7,7 @@
 Status: **built and shipped** — the online duel screens and backend are live on `/futa0.5/`.
 `web/src/online/` holds the client layer (identity, sync, draft, OnlineDriver); the backend runs
 against Supabase (deadlines, turn-gated views, batch submit, resign, match list, link codes,
-Postgres rate limits, sweeper, Realtime turn pings). Live duels (challenge → 45-second turns) also
+Postgres rate limits, sweeper, Realtime turn pings). Live duels (challenge → real time) also
 ship on `/futa0.5/` — see [`LIVE.md`](LIVE.md). The plan is [`ONLINE-PLAN.md`](ONLINE-PLAN.md).
 
 This document says exactly what works, what is unfinished, and what must happen before real

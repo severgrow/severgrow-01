@@ -263,19 +263,26 @@ const pillState = (s: SeatSession) => s.page.evaluate(() => {
 });
 
 const challengeAndAccept = async (a: SeatSession, b: SeatSession, label: string) => {
-  check(`${label}: Go live pill ready`, await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000), await pillState(a));
+  check(`${label}: Real time pill ready`, await waitFor(async () => (await pillState(a)).startsWith('ready'), 20_000), await pillState(a));
   await a.page.locator('[data-live="pill"]').click();
   check(`${label}: sender waits`, await waitFor(async () => (await pillState(a)).startsWith('waiting'), 8_000), await pillState(a));
   check(`${label}: pop-up appears for the recipient`, await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000));
   await b.page.locator('[data-live="accept"]').click();
   if (label === '1') {
     const lit = await waitFor(() => b.page.evaluate(`!!document.querySelector('[data-live="chip"].lighting')`) as Promise<boolean>, 5_000);
-    check('1: the 600 ms go-live moment plays (chip lights up)', lit);
+    check('1: the 600 ms real-time moment plays (the homes pulse)', lit);
     await shot(b, '09-go-live-transition');
   }
   const both = await waitFor(async () => !!(await dbg(a))?.status?.live && !!(await dbg(b))?.status?.live, 15_000);
   check(`${label}: both screens are live`, both);
-  check(`${label}: LIVE chip in the header (both)`, (await vis(a.page, '[data-live="chip"]')) && (await vis(b.page, '[data-live="chip"]')));
+  // The framed "LIVE 60s" chip is gone (owner's cleanup): the plain m:ss clock is the header's
+  // only number now, so that is what proves the real-time mode is on for both seats.
+  const clockOn = (s: SeatSession) =>
+    s.page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('#duel-hud [data-duel-urgency][data-live-clock]');
+      return !!el && !el.hidden && el.getBoundingClientRect().width > 1;
+    });
+  check(`${label}: the real-time clock is in the header (both)`, (await clockOn(a)) && (await clockOn(b)));
 };
 
 const closeAll = async (...s: SeatSession[]) => {
@@ -425,7 +432,7 @@ try {
     const m2 = await newMatch([null, m.guests[1]]);
     const c = await openSeat(duel, m2, 0, { reduceMotion: true, speed: 'skip' });
     await openDuel(c, m2.matchId);
-    check('4: third player sees "In a live game"', await waitFor(async () => (await pillState(c)) === 'disabled:In a live game', 15_000), await pillState(c));
+    check('4: third player sees "In real time"', await waitFor(async () => (await pillState(c)) === 'disabled:In real time', 15_000), await pillState(c));
     await shot(c, '02-pill-in-live-game');
     const res = await fetch(`${apiBase}/v1/matches/${m2.matchId}/live/challenge`, { method: 'POST', headers: { authorization: `Bearer ${m2.guests[0].token}`, 'content-type': 'application/json' }, body: '{}' });
     check('4: the server answers BUSY_LIVE', ((await res.json()) as { code?: string }).code === 'BUSY_LIVE');

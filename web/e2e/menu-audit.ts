@@ -344,7 +344,7 @@ for (const vp of VIEWPORTS) {
         name: 'live duel HUD strip',
         root: '#duel-hud',
         column: '#duel-hud',
-        heading: '#duel-hud .duel-opp b',
+        heading: '#duel-hud [data-duel-turn]',
         buttons: [],
       });
     } else notes.push(`${vp.key}: offline game did not start`);
@@ -376,7 +376,7 @@ await browser.close();
 await server.close();
 
 notes.unshift(
-  'General: the live-duel challenge pop-up, the "Go live" pill and the end window are injected only when a live server session exists, so they are not rendered here; their tokens are audited from source (web/src/online/live/ui.ts, web/src/online/online-css.ts) in the report.',
+  'General: the live-duel challenge pop-up, the "Real time" pill and the end window are injected only when a live server session exists, so they are not rendered here; their tokens are audited from source (web/src/online/live/ui.ts, web/src/online/online-css.ts) in the report.',
 );
 writeFileSync(`${OUT}audit-${LABEL}.json`, JSON.stringify({ label: LABEL, notes, results }, null, 2));
 

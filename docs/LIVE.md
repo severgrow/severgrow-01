@@ -30,15 +30,16 @@ leaving them is free, and their first missed turn only warns and extends.
 
 ## The flow
 
-1. **Go live.** In a match whose opponent has the app open, a quiet `● Go live` pill appears in the
-   status strip at the top. Disabled states: **In a live game** (you or them), **Not available**
-   (they switched challenges off), **Busy** (they are in the tutorial), **Try live again later** (too
+1. **Real time.** In a match whose opponent has the app open, a quiet `Real time` label appears in
+   the status strip at the top (plain text: no chip, no frame). Disabled states: **In real time**
+   (you or them), **Not available**
+   (they switched challenges off), **Busy** (they are in the tutorial), **Try real time again later** (too
    many tries). Hidden when they are offline.
-2. **Waiting.** Tapping it sends a challenge; the pill becomes `Waiting 40s · Cancel` (on wide
-   screens `Waiting for <name>... 40s`). One open challenge per match.
+2. **Waiting.** Tapping it sends a challenge; the label becomes `Waiting 40s · Cancel` (on wide
+   screens `Waiting for <name>` with the seconds counting down and the animated ellipsis). One open challenge per match.
 3. **The pop-up.** The other player sees it **anywhere** in the app — a computer game, another
-   online match, the menu — in the same dark glass as Match Intel: their name, "wants to go live",
-   "60-second turns · same match", a short **Leaving real time loses** warning (with the fuller rule
+   online match, the menu — in the same dark glass as Match Intel: their name, "wants a real time duel",
+   "Same match · each turn has a countdown", a short **Leaving real time loses** warning (with the fuller rule
    under it), a thin ring counting down the 45-second expiry, and two 44 px buttons: **Accept** and
    **Not now**. A soft two-note chime and a light buzz (only if Sound /
    Vibration are on). While it is open, the game underneath ignores taps.
@@ -46,8 +47,8 @@ leaving them is free, and their first missed turn only warns and extends.
      waits for an **animation or the opponent's turn replay** to finish (at most 10 seconds).
    - It never appears **during the tutorial**; the challenger sees "Busy".
 4. **Not now / no answer.** The challenger sees a quiet "<name>: Not now" or "No answer" line.
-5. **Accept.** Both screens play a 600 ms moment: both homes pulse, the lava **LIVE 60s** chip lights
-   up in the header, a short sound. The live clock starts.
+5. **Accept.** Both screens play a 600 ms moment: both homes pulse, the plain `m:ss` clock appears in
+   the header, a short sound. The real-time clock starts.
 6. **Where you were is kept.** If you accepted from a computer game, that game is saved exactly as it
    was (the normal Continue save). From another online match, its unsent moves stay in that match's
    own session storage. The app remembers "Back to your game".

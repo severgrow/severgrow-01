@@ -8,7 +8,7 @@
 //   2. the timeout ring around the active home reads as FUTASAKU's own thin ornamental line —
 //      subtle, side-coloured, and clearly legible in the last seconds (and under Reduce motion);
 //   3. the strip is CLICK-THROUGH: the text over the map never eats a board tap, while the one
-//      real control in it (the "Go live" pill) still works.
+//      real control in it (the "Real time" pill) still works.
 import { mkdirSync } from 'node:fs';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
 import { openDuel, openSeat, sleep, startLocalDuel } from './helpers/local-duel.js';
