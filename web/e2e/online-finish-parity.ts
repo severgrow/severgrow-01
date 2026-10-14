@@ -171,12 +171,19 @@ const countPolls = async (page: Page, ms: number): Promise<number> => {
   return count;
 };
 
+// The header lane collapsed to ONE word slot (`[data-duel-turn]`, class `duel-msg`): the deadline
+// urgency is written there as the "danger" word, with its tone on that same element
+// (`web/src/online/duel-hud.ts` fillDuelHud). The old `[data-duel-urgency]` slot now only hosts the
+// live clock. Read the tone + word from the lane, and treat "urgency showing" as a lit danger tone
+// (a full day left leaves the tone empty and the lane showing the ordinary turn word).
 const urgency = (page: Page): Promise<{ present: boolean; visible: boolean; tone: string; label: string }> =>
   page.evaluate(`(() => {
-    const el = document.querySelector('#duel-hud [data-duel-urgency]');
+    const el = document.querySelector('#duel-hud [data-duel-turn]');
     if (!el) return { present: false, visible: false, tone: '', label: '' };
     const r = el.getBoundingClientRect();
-    return { present: true, visible: !el.closest('[hidden]') && r.width > 1, tone: el.getAttribute('data-tone') || '', label: (el.textContent || '').trim() };
+    const tone = el.getAttribute('data-tone') || '';
+    const lit = tone === 'amber' || tone === 'red';
+    return { present: true, visible: lit && !el.closest('[hidden]') && r.width > 1, tone, label: (el.textContent || '').trim() };
   })()`) as Promise<{ present: boolean; visible: boolean; tone: string; label: string }>;
 
 const overlap = (page: Page): Promise<{ menu: number; brand: number; board: number; hudHeight: number }> =>
