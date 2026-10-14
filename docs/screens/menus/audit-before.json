@@ -1,0 +1,2391 @@
+{
+  "label": "before",
+  "notes": [
+    "General: the live-duel challenge pop-up, the \"Go live\" pill and the end window are injected only when a live server session exists, so they are not rendered here; their tokens are audited from source (web/src/online/live/ui.ts, web/src/online/online-css.ts) in the report.",
+    "360x640: #online-waiting did not open (needs the server); revealed it to measure CSS",
+    "360x640: how-to sheet did not open",
+    "390x844: #online-waiting did not open (needs the server); revealed it to measure CSS",
+    "390x844: how-to sheet did not open",
+    "768x1024: how-to sheet did not open",
+    "1280x800: #online-waiting did not open (needs the server); revealed it to measure CSS",
+    "1280x800: how-to sheet did not open"
+  ],
+  "results": [
+    {
+      "viewport": "360x640",
+      "surface": "main menu",
+      "data": {
+        "surface": "main menu",
+        "column": {
+          "sel": "#menu .menu-inner",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Futasaku",
+          "fontSize": 41.4,
+          "lineHeight": 38.09,
+          "letterSpacing": -1.24,
+          "weight": "800"
+        },
+        "buttons": [
+          {
+            "sel": "#menu-continue",
+            "present": false,
+            "h": 0,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-online",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-new",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-tutorial",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#menu-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": 82.1,
+        "titleToButtons": 14,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "difficulty pick",
+      "data": {
+        "surface": "difficulty pick",
+        "column": {
+          "sel": "#levels .levels-inner",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Choose difficulty",
+          "fontSize": 23.2,
+          "lineHeight": 25.52,
+          "letterSpacing": -0.28,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#levels .level-grid .difficulty-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels .level-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0,
+        "tile": {
+          "h": 52,
+          "radius": 14,
+          "border": "rgba(232, 221, 197, 0.28)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "minHeight": 52,
+          "fontSize": 18.4
+        }
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "online hub",
+      "data": {
+        "surface": "online hub",
+        "column": {
+          "sel": "#online-hub .online-inner",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Play online",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-create",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-find",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-open",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "online join",
+      "data": {
+        "surface": "online join",
+        "column": {
+          "sel": "#online-join .online-inner",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Join a duel",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-join-submit",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "online waiting / searching",
+      "data": {
+        "surface": "online waiting / searching",
+        "column": {
+          "sel": "#online-waiting .online-inner",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Waiting for a friend",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-share",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-copy",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-cancel-match",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-waiting-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "online matched card",
+      "data": {
+        "surface": "online matched card",
+        "column": {
+          "sel": "#online-matched .online-card",
+          "w": 288,
+          "left": 36,
+          "right": 324,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 14.4,
+          "padBottom": 14.4,
+          "gap": null
+        },
+        "heading": {
+          "text": "Opponent found",
+          "fontSize": 16.8,
+          "lineHeight": 24.86,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-matched-now",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-matched-later",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "settings sheet",
+      "data": {
+        "surface": "settings sheet",
+        "column": {
+          "sel": "#sheet-settings .sheet-body",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": null
+        },
+        "heading": {
+          "text": "Settings",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#sheet-settings #test-sound",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #test-vibration",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #restart-tutorial",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 1397
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "pause menu",
+      "data": {
+        "surface": "pause menu",
+        "column": {
+          "sel": "#sheet-menu .sheet-body",
+          "w": 328,
+          "left": 16,
+          "right": 344,
+          "viewport": 360,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 8
+        },
+        "heading": {
+          "text": "Paused",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#gm-resume",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(239, 229, 203)",
+            "bg": "rgb(239, 229, 203)",
+            "colour": "rgb(24, 25, 26)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-new",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-howto",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-main",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(0, 0, 0, 0)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "360x640",
+      "surface": "live duel HUD strip",
+      "data": {
+        "surface": "live duel HUD strip",
+        "column": {
+          "sel": "#duel-hud",
+          "w": 198,
+          "left": 58,
+          "right": 256,
+          "viewport": 360,
+          "centreOffset": -23,
+          "padTop": 1,
+          "padBottom": 1,
+          "gap": 2
+        },
+        "heading": {
+          "text": "",
+          "fontSize": 12.8,
+          "lineHeight": 14.08,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "main menu",
+      "data": {
+        "surface": "main menu",
+        "column": {
+          "sel": "#menu .menu-inner",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Futasaku",
+          "fontSize": 43.65,
+          "lineHeight": 40.16,
+          "letterSpacing": -1.31,
+          "weight": "800"
+        },
+        "buttons": [
+          {
+            "sel": "#menu-continue",
+            "present": false,
+            "h": 0,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-online",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-new",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-tutorial",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#menu-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": 84.2,
+        "titleToButtons": 14,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "difficulty pick",
+      "data": {
+        "surface": "difficulty pick",
+        "column": {
+          "sel": "#levels .levels-inner",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Choose difficulty",
+          "fontSize": 23.76,
+          "lineHeight": 26.14,
+          "letterSpacing": -0.29,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#levels .level-grid .difficulty-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels .level-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0,
+        "tile": {
+          "h": 52,
+          "radius": 14,
+          "border": "rgba(232, 221, 197, 0.28)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "minHeight": 52,
+          "fontSize": 18.4
+        }
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "online hub",
+      "data": {
+        "surface": "online hub",
+        "column": {
+          "sel": "#online-hub .online-inner",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Play online",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-create",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-find",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-open",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "online join",
+      "data": {
+        "surface": "online join",
+        "column": {
+          "sel": "#online-join .online-inner",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Join a duel",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-join-submit",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "online waiting / searching",
+      "data": {
+        "surface": "online waiting / searching",
+        "column": {
+          "sel": "#online-waiting .online-inner",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Waiting for a friend",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-share",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-copy",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-cancel-match",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-waiting-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "online matched card",
+      "data": {
+        "surface": "online matched card",
+        "column": {
+          "sel": "#online-matched .online-card",
+          "w": 318,
+          "left": 36,
+          "right": 354,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 14.4,
+          "padBottom": 14.4,
+          "gap": null
+        },
+        "heading": {
+          "text": "Opponent found",
+          "fontSize": 16.8,
+          "lineHeight": 24.86,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-matched-now",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-matched-later",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "settings sheet",
+      "data": {
+        "surface": "settings sheet",
+        "column": {
+          "sel": "#sheet-settings .sheet-body",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": null
+        },
+        "heading": {
+          "text": "Settings",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#sheet-settings #test-sound",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #test-vibration",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #restart-tutorial",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 1182
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "pause menu",
+      "data": {
+        "surface": "pause menu",
+        "column": {
+          "sel": "#sheet-menu .sheet-body",
+          "w": 358,
+          "left": 16,
+          "right": 374,
+          "viewport": 390,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 8
+        },
+        "heading": {
+          "text": "Paused",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#gm-resume",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(239, 229, 203)",
+            "bg": "rgb(239, 229, 203)",
+            "colour": "rgb(24, 25, 26)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-new",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-howto",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-main",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(0, 0, 0, 0)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "390x844",
+      "surface": "live duel HUD strip",
+      "data": {
+        "surface": "live duel HUD strip",
+        "column": {
+          "sel": "#duel-hud",
+          "w": 228,
+          "left": 58,
+          "right": 286,
+          "viewport": 390,
+          "centreOffset": -23,
+          "padTop": 1,
+          "padBottom": 1,
+          "gap": 2
+        },
+        "heading": {
+          "text": "",
+          "fontSize": 12.8,
+          "lineHeight": 14.08,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "main menu",
+      "data": {
+        "surface": "main menu",
+        "column": {
+          "sel": "#menu .menu-inner",
+          "w": 420,
+          "left": 174,
+          "right": 594,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Futasaku",
+          "fontSize": 68,
+          "lineHeight": 62.56,
+          "letterSpacing": -2.04,
+          "weight": "800"
+        },
+        "buttons": [
+          {
+            "sel": "#menu-continue",
+            "present": false,
+            "h": 0,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-online",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-new",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-tutorial",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#menu-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": 106.5,
+        "titleToButtons": 14,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "difficulty pick",
+      "data": {
+        "surface": "difficulty pick",
+        "column": {
+          "sel": "#levels .levels-inner",
+          "w": 420,
+          "left": 174,
+          "right": 594,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Choose difficulty",
+          "fontSize": 32,
+          "lineHeight": 35.2,
+          "letterSpacing": -0.38,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#levels .level-grid .difficulty-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels .level-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0,
+        "tile": {
+          "h": 52,
+          "radius": 14,
+          "border": "rgba(232, 221, 197, 0.28)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "minHeight": 52,
+          "fontSize": 18.4
+        }
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "online hub",
+      "data": {
+        "surface": "online hub",
+        "column": {
+          "sel": "#online-hub .online-inner",
+          "w": 420,
+          "left": 174,
+          "right": 594,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Play online",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-create",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-find",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-open",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "online join",
+      "data": {
+        "surface": "online join",
+        "column": {
+          "sel": "#online-join .online-inner",
+          "w": 420,
+          "left": 174,
+          "right": 594,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Join a duel",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-join-submit",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "online waiting / searching",
+      "data": {
+        "surface": "online waiting / searching",
+        "column": {
+          "sel": "#online-waiting .online-inner",
+          "w": 420,
+          "left": 174,
+          "right": 594,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Waiting for a friend",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-share",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-copy",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-cancel-match",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-waiting-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "online matched card",
+      "data": {
+        "surface": "online matched card",
+        "column": {
+          "sel": "#online-matched .online-card",
+          "w": 340,
+          "left": 214,
+          "right": 554,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 14.4,
+          "padBottom": 14.4,
+          "gap": null
+        },
+        "heading": {
+          "text": "Opponent found",
+          "fontSize": 16.8,
+          "lineHeight": 24.86,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-matched-now",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-matched-later",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "settings sheet",
+      "data": {
+        "surface": "settings sheet",
+        "column": {
+          "sel": "#sheet-settings .sheet-body",
+          "w": 736,
+          "left": 16,
+          "right": 752,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": null
+        },
+        "heading": {
+          "text": "Settings",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#sheet-settings #test-sound",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #test-vibration",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #restart-tutorial",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 954
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "pause menu",
+      "data": {
+        "surface": "pause menu",
+        "column": {
+          "sel": "#sheet-menu .sheet-body",
+          "w": 736,
+          "left": 16,
+          "right": 752,
+          "viewport": 768,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 8
+        },
+        "heading": {
+          "text": "Paused",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#gm-resume",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(239, 229, 203)",
+            "bg": "rgb(239, 229, 203)",
+            "colour": "rgb(24, 25, 26)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-new",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-howto",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-main",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(0, 0, 0, 0)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "768x1024",
+      "surface": "live duel HUD strip",
+      "data": {
+        "surface": "live duel HUD strip",
+        "column": {
+          "sel": "#duel-hud",
+          "w": 606,
+          "left": 58,
+          "right": 664,
+          "viewport": 768,
+          "centreOffset": -23,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 2
+        },
+        "heading": {
+          "text": "",
+          "fontSize": 12.8,
+          "lineHeight": 14.72,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "main menu",
+      "data": {
+        "surface": "main menu",
+        "column": {
+          "sel": "#menu .menu-inner",
+          "w": 420,
+          "left": 430,
+          "right": 850,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Futasaku",
+          "fontSize": 68,
+          "lineHeight": 62.56,
+          "letterSpacing": -2.04,
+          "weight": "800"
+        },
+        "buttons": [
+          {
+            "sel": "#menu-continue",
+            "present": false,
+            "h": 0,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-online",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-new",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#menu-tutorial",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#menu-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": 106.5,
+        "titleToButtons": 14,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "difficulty pick",
+      "data": {
+        "surface": "difficulty pick",
+        "column": {
+          "sel": "#levels .levels-inner",
+          "w": 420,
+          "left": 430,
+          "right": 850,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Choose difficulty",
+          "fontSize": 32,
+          "lineHeight": 35.2,
+          "letterSpacing": -0.38,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#levels .level-grid .difficulty-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels .level-tile",
+            "present": true,
+            "h": 52,
+            "radius": 14,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 52
+          },
+          {
+            "sel": "#levels-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0,
+        "tile": {
+          "h": 52,
+          "radius": 14,
+          "border": "rgba(232, 221, 197, 0.28)",
+          "bg": "rgba(0, 0, 0, 0)",
+          "minHeight": 52,
+          "fontSize": 18.4
+        }
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "online hub",
+      "data": {
+        "surface": "online hub",
+        "column": {
+          "sel": "#online-hub .online-inner",
+          "w": 420,
+          "left": 430,
+          "right": 850,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Play online",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-create",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-find",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-open",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "online join",
+      "data": {
+        "surface": "online join",
+        "column": {
+          "sel": "#online-join .online-inner",
+          "w": 420,
+          "left": 430,
+          "right": 850,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Join a duel",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-join-submit",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-join-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "online waiting / searching",
+      "data": {
+        "surface": "online waiting / searching",
+        "column": {
+          "sel": "#online-waiting .online-inner",
+          "w": 420,
+          "left": 430,
+          "right": 850,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 32,
+          "padBottom": 32,
+          "gap": 14
+        },
+        "heading": {
+          "text": "Waiting for a friend",
+          "fontSize": 22.4,
+          "lineHeight": 25.76,
+          "letterSpacing": -0.27,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-share",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": "rgb(232, 221, 197)",
+            "bg": "rgb(232, 221, 197)",
+            "colour": "rgb(23, 24, 26)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-copy",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-cancel-match",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(232, 221, 197, 0.28)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(232, 221, 197)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#online-waiting-back",
+            "present": true,
+            "h": 44,
+            "radius": 50,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 20.8,
+            "minHeight": null
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "online matched card",
+      "data": {
+        "surface": "online matched card",
+        "column": {
+          "sel": "#online-matched .online-card",
+          "w": 340,
+          "left": 470,
+          "right": 810,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 14.4,
+          "padBottom": 14.4,
+          "gap": null
+        },
+        "heading": {
+          "text": "Opponent found",
+          "fontSize": 16.8,
+          "lineHeight": 24.86,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#online-matched-now",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          },
+          {
+            "sel": "#online-matched-later",
+            "present": true,
+            "h": 56,
+            "radius": 999,
+            "border": null,
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 18.4,
+            "minHeight": 56
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "settings sheet",
+      "data": {
+        "surface": "settings sheet",
+        "column": {
+          "sel": "#sheet-settings .sheet-body",
+          "w": 426,
+          "left": 427,
+          "right": 853,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": null
+        },
+        "heading": {
+          "text": "Settings",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#sheet-settings #test-sound",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #test-vibration",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          },
+          {
+            "sel": "#sheet-settings #restart-tutorial",
+            "present": true,
+            "h": 36,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 13.6,
+            "minHeight": 36
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 1183
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "pause menu",
+      "data": {
+        "surface": "pause menu",
+        "column": {
+          "sel": "#sheet-menu .sheet-body",
+          "w": 426,
+          "left": 427,
+          "right": 853,
+          "viewport": 1280,
+          "centreOffset": 0,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 8
+        },
+        "heading": {
+          "text": "Paused",
+          "fontSize": 20,
+          "lineHeight": 22,
+          "letterSpacing": -0.24,
+          "weight": "700"
+        },
+        "buttons": [
+          {
+            "sel": "#gm-resume",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(239, 229, 203)",
+            "bg": "rgb(239, 229, 203)",
+            "colour": "rgb(24, 25, 26)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-new",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-howto",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-settings",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgb(70, 71, 74)",
+            "bg": "rgb(35, 36, 37)",
+            "colour": "rgb(238, 235, 228)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          },
+          {
+            "sel": "#gm-main",
+            "present": true,
+            "h": 44,
+            "radius": 999,
+            "border": "rgba(0, 0, 0, 0)",
+            "bg": "rgba(0, 0, 0, 0)",
+            "colour": "rgb(170, 168, 163)",
+            "fontSize": 15.2,
+            "minHeight": 44
+          }
+        ],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    },
+    {
+      "viewport": "1280x800",
+      "surface": "live duel HUD strip",
+      "data": {
+        "surface": "live duel HUD strip",
+        "column": {
+          "sel": "#duel-hud",
+          "w": 1118,
+          "left": 58,
+          "right": 1176,
+          "viewport": 1280,
+          "centreOffset": -23,
+          "padTop": 0,
+          "padBottom": 0,
+          "gap": 2
+        },
+        "heading": {
+          "text": "",
+          "fontSize": 12.8,
+          "lineHeight": 14.72,
+          "letterSpacing": null,
+          "weight": "700"
+        },
+        "buttons": [],
+        "logoToButtons": null,
+        "titleToButtons": null,
+        "columnOverflow": 0,
+        "rootOverflow": 0
+      }
+    }
+  ]
+}
