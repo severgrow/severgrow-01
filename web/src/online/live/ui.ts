@@ -4,7 +4,7 @@ import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
 import type { PopupPort } from './center.js';
-import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
+import { WAIT_DOTS_CLASS, WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
 
 const MOSS = '#8fbf6a';
 const MOSS_INK = '#0d100d';
@@ -51,17 +51,23 @@ ${WAIT_DOTS_CSS}
 .live-pill[data-state='waiting'] .dot { animation:live-breathe 1.2s ease-in-out infinite; }
 .live-pill[data-state='waiting'] { flex:0 1 auto; min-width:0; max-width:100%; }
 .live-pill .label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+/* The waiting state's SHARED animated dots: the pill's own 6px gap already spaces them, so the
+   component's default 2px left margin is dropped here (one treatment, local spacing). */
+.live-pill .${WAIT_DOTS_CLASS} { margin-left:0; }
 .live-pill .label .full { display:none; }
 @media (min-width: 560px) { .live-pill .label .full { display:inline; } .live-pill .label .short { display:none; } }
-.live-pill .secs { flex:none; font-variant-numeric:tabular-nums; }
+.live-pill .secs { flex:none; font-variant-numeric:tabular-nums; display:none; }
 .live-pill .secs:empty { display:none; }
+/* Measured: on a phone the countdown is what squeezes the waiting word out of the pill (the label
+   collapsed to 0-10 px), so it is shown only where there is room — the SAME 560 px breakpoint the
+   full/short name already uses. The word and the animated dots always win; the seconds are a bonus. */
+@media (min-width: 560px) { .live-pill .secs:not(:empty) { display:inline; } }
 .live-on [data-duel-urgency][data-live-clock] { display:inline-flex !important; } /* the live clock owns this slot */
 .live-pill .cancel { margin-left:4px; padding:0 0 0 8px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
   font:800 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.14em; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.live-chip .lamp { width:6px; height:6px; border-radius:50%; background:${LAVA}; box-shadow:0 0 8px ${LAVA}; }
 .live-chip[data-urgent='1'] { background:rgba(224,115,92,.28); color:#fff; }
 /* "Opponent reconnecting" in the strip: the words plus the SHARED animated dots. The order puts it
    just before the live clock; it is its own node, so the header's model never overwrites it. */
@@ -80,7 +86,6 @@ ${WAIT_DOTS_CSS}
 .duel-hud [data-live-clock][data-side='opp'] { color:#e0735c; }
 .duel-hud [data-live-clock][data-urgent='1'] { color:#f6d3c8; }
 .duel-hud [data-live-clock][data-side='me'][data-urgent='1'] { color:#d9efc2; }
-.duel-hud [data-live-clock] .live-clock-dot { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.85; }
 .large-text .duel-hud [data-live-clock] { font-size:15px; }
 .live-ring { position:fixed; z-index:7; pointer-events:none; }
 /* The home timeout ring. IDENTICAL on both homes: the colour means TIME, never the side, and which
@@ -319,7 +324,11 @@ export type PillModel =
   | { kind: 'disabled'; label: string }
   | { kind: 'waiting'; label: string; name: string; secs: number };
 
-/** The quiet "● Go live" pill in the duel status strip (appended into #duel-hud). */
+/**
+ * The quiet real-time pill in the duel status strip (appended into `#duel-hud`): a "Real time"
+ * control when a real-time duel can start, and the "Waiting for <name>" state while a challenge is
+ * open. It is a control, not a chip — the header's own surface shows through it.
+ */
 export const createPill = (onTap: () => void, onCancel: () => void) => {
   const pill = el('button', 'live-pill');
   pill.type = 'button';
@@ -332,7 +341,13 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
   const cancel = el('span', 'cancel', LIVE.cancel);
   cancel.setAttribute('role', 'button');
   cancel.dataset.live = 'cancel';
-  pill.append(dot, label, secs, cancel);
+  // The waiting state carries the SHARED animated ellipsis (the owner's rule: a waiting/connecting
+  // state always shows it). It is ONE stable node, toggled — never rebuilt per render, because the
+  // pill re-renders every 250 ms while a challenge is open and a rebuilt node would restart the CSS
+  // animation before it could ever cycle.
+  const dots = waitDots();
+  dots.hidden = true;
+  pill.append(dot, label, dots, secs, cancel);
   let state: PillModel['kind'] = 'hidden';
   pill.addEventListener('click', (e) => {
     if (state === 'waiting') {
@@ -365,6 +380,10 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
         label.textContent = m.label;
         pill.setAttribute('aria-label', m.label);
       }
+      // The animated ellipsis marks a waiting state, and only a waiting state.
+      dots.hidden = m.kind !== 'waiting';
+      // The seconds countdown is kept: it is the useful fact (how long the challenge stays open) and
+      // the dots add only a few px, while the label itself shrinks with an ellipsis if space is tight.
       secs.textContent = m.kind === 'waiting' ? `${m.secs}s` : '';
     },
   };
@@ -383,14 +402,13 @@ export type HudModel = {
   reduceMotion: boolean;
 };
 
-/** The live HUD: the LIVE chip in the status strip, the draining home ring, the vignette. */
+/** The live HUD: the live chip in the status strip, the draining home ring, the vignette. */
 export const createHud = () => {
   const chip = el('span', 'live-chip');
   chip.hidden = true;
   chip.dataset.live = 'chip';
-  const lamp = el('span', 'lamp');
   const text = el('span', 'text');
-  chip.append(lamp, text);
+  chip.append(text);
   // Sized to the HOME TILE's inner radius at run time (see `place`), so this starting box is only a
   // placeholder that is replaced before the ring is ever shown.
   const { svg: ring, fg, sh } = ringSvg('live-ring', 14, { fg: 2, track: 1.4, shadow: 4 });
@@ -416,8 +434,8 @@ export const createHud = () => {
   /** The header's own "invisible box": the live clock is written into the strip's time slot. */
   const clockEl = (): HTMLElement | null =>
     document.querySelector<HTMLElement>('#duel-hud [data-duel-urgency]');
-  const clockDot = el('span', 'live-clock-dot');
-  clockDot.setAttribute('aria-hidden', 'true');
+  // Only the words: the small circle that used to sit beside them is gone (owner's cleanup), and the
+  // header hides any such node anyway.
   const clockWords = el('span', 'live-clock-words');
 
   const attach = () => {
@@ -516,7 +534,7 @@ export const createHud = () => {
         // The live module's own announcer keeps the threshold lines (10, 8, 6, 4, 2, time's up).
         clock.removeAttribute('role');
         clock.setAttribute('aria-live', 'off');
-        clock.replaceChildren(clockDot, clockWords);
+        clock.replaceChildren(clockWords);
       }
       const label = clockText(left);
       if (clockWords.textContent !== label) clockWords.textContent = label;

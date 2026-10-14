@@ -4,6 +4,7 @@
 //   * the strip's words state the fact and nothing more — the dots are the ANIMATION, never text;
 //   * the header copy standard holds (<= 24 target, 32 hard cap);
 //   * the one dots implementation is shared and stops animating under Reduce motion.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LIVE } from '../../src/strings.js';
 import { WAIT_DOTS_CLASS, WAIT_DOTS_CSS } from '../src/online/live/wait-dots.js';
@@ -45,5 +46,44 @@ describe('the shared wait-dots treatment', () => {
     expect(WAIT_DOTS_CSS).toMatch(/prefers-reduced-motion[^}]*\.futasaku-wait-dots i[^}]*animation:none/s);
     // ...and the steady form is still visible (opacity 1), so it still says "waiting".
     expect(WAIT_DOTS_CSS).toMatch(/animation:none !important; opacity:1/);
+  });
+
+  it('can be hidden by any caller (the author display rule beats the browser [hidden] rule)', () => {
+    // Without its own hidden rule, `display:inline-flex` would keep the dots on screen after a
+    // caller sets `dots.hidden = true` — the pill's waiting state relies on this.
+    expect(WAIT_DOTS_CSS).toMatch(/\.futasaku-wait-dots\[hidden\]\s*\{\s*display:none/);
+  });
+});
+
+// The owner's rule: a waiting/connecting state always carries the animated ellipsis, and there is
+// exactly ONE treatment. Static checks on the source, in the spirit of the other static suites.
+const uiSource = readFileSync(new URL('../src/online/live/ui.ts', import.meta.url), 'utf8');
+
+describe('every waiting state reuses the one dots treatment', () => {
+  it('the challenge pill\'s waiting state uses the SHARED dots, not its own animation', () => {
+    expect(uiSource).toContain("import { WAIT_DOTS_CLASS, WAIT_DOTS_CSS, waitDots } from './wait-dots.js'");
+    // The pill builds the shared node once and toggles it (a rebuilt node would restart the CSS
+    // animation every 250 ms, before it could ever cycle).
+    expect(uiSource).toMatch(/const dots = waitDots\(\);/);
+    expect(uiSource).toMatch(/dots\.hidden = m\.kind !== 'waiting'/);
+    // No second dots animation: the one keyframe lives in the shared module only.
+    expect(uiSource).not.toContain('@keyframes futasaku-wait-dot');
+    expect(uiSource.split('waitDots()').length - 1).toBeGreaterThanOrEqual(2); // reconnect notice + pill
+  });
+
+  it('the reconnect notice and the pill both render the shared dots via waitDots()', () => {
+    expect(uiSource).toContain('waitDots()');
+    const uses = uiSource.match(/waitDots\(\)/g) ?? [];
+    expect(uses.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('the dead header circles are gone for good', () => {
+  it('the chip lamp and the clock dot nodes are deleted, not merely hidden', () => {
+    // The header session's e2e accepts either (its `circleGone` treats an absent node as gone), so
+    // deleting is the honest form: a node that is always hidden is dead weight.
+    expect(uiSource).not.toContain("el('span', 'lamp')");
+    expect(uiSource).not.toContain('live-clock-dot');
+    expect(uiSource).not.toContain('.live-chip .lamp');
   });
 });

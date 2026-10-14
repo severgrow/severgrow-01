@@ -21,6 +21,9 @@ export const WAIT_DOTS_CLASS = 'futasaku-wait-dots';
 /** The dots: three `<i>` elements, revealed one after another by `futasaku-wait-dot`. */
 export const WAIT_DOTS_CSS = `
 .${WAIT_DOTS_CLASS} { display:inline-flex; align-items:flex-end; gap:2px; margin-left:2px; }
+/* A display:inline-flex author rule beats the browser's own [hidden] { display:none }, so the
+   shared dots carry their own hidden rule: any caller may set dots.hidden = true and trust it. */
+.${WAIT_DOTS_CLASS}[hidden] { display:none !important; }
 .${WAIT_DOTS_CLASS} i { width:3px; height:3px; border-radius:50%; background:currentColor; opacity:1;
   animation: futasaku-wait-dot 1.35s ease-in-out infinite both; }
 .${WAIT_DOTS_CLASS} i:nth-child(2) { animation-delay:.22s; }
