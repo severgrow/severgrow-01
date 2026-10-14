@@ -110,7 +110,7 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 | # | Problem | Phase | Planned fix |
 | --- | --- | --- | --- |
 | P-1 | Hosting / Edge limits / pooler | 0, 1 | Edge + Transaction 6543 + `prepare:false`; Session 5432 for migrate/tests. Measured CPU ≪ 2 s. |
-| P-2 | Free project pause; GH schedule dies at ~60 days | 1, 8 | Keep-alive Actions every 2 days hitting `/v1/health?db=1` + sweeper; document Restore + re-enable workflow. |
+| P-2 | Free project pause; GitHub schedule never ran / dies at ~60 days | 1, 8 | **Shipped:** the GitHub Actions keep-alive was **deleted** — GitHub only fires a `schedule` from the default branch, and that file lived only on a feature branch, so it never ran. The keep-alive is now a Supabase-native `pg_cron` job `futasaku-keepalive` (migration `0005_keepalive_cron.sql`), every 2 days at 06:17 UTC: `GET /v1/health?db=1` (a real DB round trip) + `POST /v1/sweep`. Observed running with `status='succeeded'` / HTTP 200; this also removes the ~60-day GitHub-inactivity risk. See `DEPLOY-ONLINE.md`. |
 | P-3 | iOS Safari vs Home Screen storage | 2, 3, 4 | Honest Settings warning + one-time 8-char link code (10 min, single use, rate limited) → **new** token for same player. Never move an existing token. |
 | P-4 | Invite opens in another browser | 4 | Join creates guest on the spot; deep link `#/join/CODE` survives redirect. |
 | P-5 | SW caching / old client | 2, 3 | Never cache API; client version handshake → `CLIENT_TOO_OLD` + “Reload to update FUTASAKU”. |
@@ -120,8 +120,8 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 | P-9 | Throttled timers / skew | 3 | Countdown from timestamps + `serverNow` offset; never accumulate intervals. |
 | P-10 | Seat 1 perspective bugs | 0, 3b, 6 | One map/unmap; screenshots seat 0 vs 1. |
 | P-11 | Realtime limits / outages | 2, 3, 6 | Broadcast ping is a hint; polling is truth. |
-| P-12 | Forgotten matches / no push | 4, 5 | Visible deadline, last-2h warning, title count, one-tap nudge. **Grace rule:** not added unless you ask; recommendation in Phase 5 report. |
-| P-13 | Abuse | 2 | Postgres rate limits; 10 open matches; 8-char codes; same error for wrong/expired. |
+| P-12 | Forgotten matches / no push | 4, 5 | Visible deadline, last-2h warning, title count, one-tap nudge. **Grace rule (was "not added unless you ask"):** the owner later approved it and it **shipped** — one grace per player per match (migration `0004_timeout_grace.sql`, `TURN_GRACE_PER_PLAYER=1`); the first miss warns and extends by one turn window, the second loses with reason `timeout`. Push notifications still not done. |
+| P-13 | Abuse | 2 | Postgres rate limits; 10 open matches; **4-char invite codes** (the first cut was 8; link codes stay 8 — `INVITE_CODE_LENGTH` / `LINK_CODE_LENGTH` are separate constants with a regression test); same error for wrong/expired. Per-IP limits are NAT-friendly and env-tunable (defaults 200 guests/h, 400 joins/h); the tight per-player limits stay the real anti-abuse control. |
 | P-14 | Rules drift | 2 | Match stores rules version forever; refuse unreplayable versions; keep golden games. |
 | P-15 | Growth / N+1 / storage | 2, 6 | One-query match list + indexes; report storage per finished match. |
 | P-16 | Flaky e2e | 6 | Wait on state, never fixed sleeps; retry network only. |
@@ -131,7 +131,7 @@ Phase 0 does **not** heavily edit `web/src/main.ts` (another agent owns tutorial
 | P-20 | Two devices one player | 2, 6 | Second gets clean 409; recover by refetch. |
 | P-21 | Supabase default grants | 2, 6 | Every new table: RLS + revoke anon/authenticated; migration 0002 `alter default privileges … revoke`; tests as anon/authenticated DENIED; advisors clean; no tables in `supabase_realtime` publication; document in `BACKEND.md`. |
 
-*(Final report after Phase 8 will mark each: handled / tested / not handled and why.)*
+*(The shipped final status is `docs/ONLINE-SHIP-STATUS.md` §4, which marks each problem handled / tested / not handled and why.)*
 
 ---
 
