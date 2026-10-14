@@ -13,7 +13,7 @@ untouched.
 | Deploy, secrets, keep-alive cron, rate limits | [`DEPLOY-ONLINE.md`](DEPLOY-ONLINE.md) |
 | The wire contract | [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md) |
 | Backend: endpoints, storage, security, what is left | [`BACKEND.md`](BACKEND.md) |
-| Live duels (challenge → 45-second turns) | [`LIVE.md`](LIVE.md) |
+| Live duels (challenge → 60-second turns) | [`LIVE.md`](LIVE.md) |
 | Find opponent · parked search · timeout grace | [`FIND-OPPONENT.md`](FIND-OPPONENT.md) |
 | Invites (link-first, 4-character codes) | [`INVITE-FLOW.md`](INVITE-FLOW.md) |
 | Finish-screen parity with offline | [`ONLINE-VS-OFFLINE-FINISH.md`](ONLINE-VS-OFFLINE-FINISH.md) |

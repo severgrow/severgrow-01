@@ -271,6 +271,12 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     end.show({ reason: endReason(s), back, rematch });
   };
 
+  /**
+   * The live turn length to show when the wire omits `limitMs` (it always sends it). The ONE
+   * source of truth is the server's `LIVE_TURN_MS` default in `server/src/live/config.ts`.
+   */
+  const limitFallback = 60_000;
+
   const pillModel = (s: LiveStatusWire | null): PillModel => {
     if (!s || s.status !== 'active' || s.live) return { kind: 'hidden' };
     const name = s.opponent.name ?? '';
@@ -288,7 +294,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     if (s.block === 'RATE_LIMITED') return { kind: 'disabled', label: LIVE.rateLimited };
     if (s.block === 'OFFLINE') return { kind: 'hidden' };
     if (pending) return { kind: 'hidden' }; // their challenge is on its way to my pop-up
-    return { kind: 'ready', name, secs: Math.round((s.limitMs ?? 45_000) / 1000) };
+    return { kind: 'ready', name, secs: Math.round((s.limitMs ?? limitFallback) / 1000) };
   };
 
   const paint = () => {
@@ -300,7 +306,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       return;
     }
     const actor = s.actor;
-    const limit = s.limitMs ?? 45_000;
+    const limit = s.limitMs ?? limitFallback;
     hud.render({
       live: true,
       limitMs: limit,
@@ -317,7 +323,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
     const s = status;
     if (s?.live && s.matchId === currentMatchId() && s.turnDeadlineAt !== null) {
       const left = Math.ceil((toLocal(s.turnDeadlineAt) - Date.now()) / 1000);
-      if (left !== lastSecond && left >= 0 && left <= (s.limitMs ?? 45_000) / 1000) {
+      if (left !== lastSecond && left >= 0 && left <= (s.limitMs ?? limitFallback) / 1000) {
         lastSecond = left;
         const mine = s.actor === s.mySeat;
         if (left <= 5 && left > 0 && mine) {

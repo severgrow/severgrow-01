@@ -1,7 +1,7 @@
 // FUTASAKU live duels — server settings. Every value can be tuned with an environment variable /
 // Edge secret of the same name, without a code change. Times are milliseconds.
 //
-// The one most people will tune is LIVE_TURN_MS (the per-turn clock, default 45 s).
+// The one most people will tune is LIVE_TURN_MS (the per-turn clock, default 60 s).
 
 export type LiveConfig = {
   /** Per-turn clock in live mode. */
@@ -57,8 +57,14 @@ const envMs = (name: string, fallback: number): number => {
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 
+/**
+ * The live turn length. ONE source of truth: the server's default, which every `limitMs` the
+ * client shows is read from (`LIVE_TURN_MS` overrides it). Owner's call, 2026-10-14: 45 s -> 60 s.
+ */
+export const LIVE_TURN_MS_DEFAULT = 60 * SECOND;
+
 export const liveConfigFromEnv = (): LiveConfig => ({
-  turnMs: envMs('LIVE_TURN_MS', 45 * SECOND),
+  turnMs: envMs('LIVE_TURN_MS', LIVE_TURN_MS_DEFAULT),
   replayAllowanceMs: envMs('LIVE_REPLAY_ALLOWANCE_MS', 6 * SECOND),
   entryAllowanceMs: envMs('LIVE_ENTRY_ALLOWANCE_MS', 15 * SECOND),
   leaveGraceMs: envMs('LIVE_LEAVE_GRACE_MS', 60 * SECOND),

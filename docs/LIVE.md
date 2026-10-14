@@ -21,7 +21,7 @@ test-only gate. **It is a one-line revert:** remove `'futa05'` from `CHANNELS_WI
 ## What it is, in plain words
 
 Two players who already share an online match can switch that **same match** to a short clock:
-**45 seconds per turn** instead of 24 hours. The board, the cards, the score and the rules do not
+**60 seconds per turn** instead of 24 hours. (Owner's change, 2026-10-14: it was 45 seconds.) The board, the cards, the score and the rules do not
 change. Going back to 24-hour play is always possible. Only the game rules and the clocks ever
 decide a winner — nobody loses because of a live timeout.
 
@@ -35,14 +35,14 @@ decide a winner — nobody loses because of a live timeout.
    screens `Waiting for <name>... 40s`). One open challenge per match.
 3. **The pop-up.** The other player sees it **anywhere** in the app — a computer game, another
    online match, the menu — in the same dark glass as Match Intel: their name, "wants to go live",
-   "45-second turns · same match", a thin ring counting down the 45-second expiry, and two 44 px
+   "60-second turns · same match", a thin ring counting down the 45-second expiry, and two 44 px
    buttons: **Accept** and **Not now**. A soft two-note chime and a light buzz (only if Sound /
    Vibration are on). While it is open, the game underneath ignores taps.
    - It never appears **during a drag or a Bloom paint** (it waits as long as that lasts), and it
      waits for an **animation or the opponent's turn replay** to finish (at most 10 seconds).
    - It never appears **during the tutorial**; the challenger sees "Busy".
 4. **Not now / no answer.** The challenger sees a quiet "<name>: Not now" or "No answer" line.
-5. **Accept.** Both screens play a 600 ms moment: both homes pulse, the lava **LIVE 45s** chip lights
+5. **Accept.** Both screens play a 600 ms moment: both homes pulse, the lava **LIVE 60s** chip lights
    up in the header, a short sound. The live clock starts.
 6. **Where you were is kept.** If you accepted from a computer game, that game is saved exactly as it
    was (the normal Continue save). From another online match, its unsent moves stay in that match's
@@ -54,7 +54,12 @@ decide a winner — nobody loses because of a live timeout.
 
 ## The live clock
 
-- A thin ring drains around the home of the player whose turn it is (moss for you, lava for them).
+- The remaining time is ALWAYS shown in the header's status strip (the owner's "invisible box"
+  between the menu button and the logo), written into that strip's own time slot as `m:ss`, in the
+  material of whose turn it is. It is not a live region: the words change every second and only the
+  thresholds are announced. Leaving live hands the slot back to the 24-hour urgency rule.
+- A thin arc drains around the home of the player whose turn it is (moss for you, lava for them),
+  inset from the tile and 1.6 px wide; it thickens and brightens in the last ten seconds.
   The chip shows seconds under 10, a soft tick plays each second under 5 on your turn, and the
   screen edge glows faintly (not with Reduce motion). Screen readers hear "N seconds left" only at
   10, 8, 6, 4, 2 and "Time's up". Strikes are the two small dots in the chip (yours).
@@ -85,7 +90,7 @@ are milliseconds unless noted.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `LIVE_TURN_MS` | `45000` | The live turn length. **This is the one to tune.** |
+| `LIVE_TURN_MS` | `60000` | The live turn length. **This is the one to tune.** (`LIVE_TURN_MS_DEFAULT` in `server/src/live/config.ts` is the one source of truth; every number the client shows comes from the server's `limitMs`.) |
 | `LIVE_REPLAY_ALLOWANCE_MS` | `6000` | Time to watch the previous turn before the clock runs |
 | `LIVE_ENTRY_ALLOWANCE_MS` | `15000` | Extra time for the current player when both go live |
 | `LIVE_LEAVE_GRACE_MS` | `60000` | Extra time on your own turn after Leave live |
