@@ -3,6 +3,7 @@
 import { IllegalActionError, applyAs, legalActions, viewFor } from '../../../src/engine/index.js';
 import type { Action, State, View } from '../../../src/engine/index.js';
 import type { KeyValue } from '../../../server/src/client.js';
+import { sameMove } from '../logic/interaction.js';
 import { shadowFromView } from './shadow.js';
 
 export const draftStorageKey = (matchId: string): string => `severgrow.duel.draft.v1.${matchId}`;
@@ -66,8 +67,6 @@ const loadStored = (storage: KeyValue | null, matchId: string): DraftSnapshot | 
     return null;
   }
 };
-
-const sameAction = (a: Action, b: Action): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export const createDraftEngine = (options: {
   matchId: string;
@@ -137,8 +136,11 @@ export const createDraftEngine = (options: {
       if (!serverView) return false;
       if (serverView.actor !== serverView.player) return false;
       if (!shadow) shadow = shadowFromView(serverView);
-      const legal = legalActions(viewFor(shadow, serverView.player));
-      const enumerated = legal.some((a) => sameAction(a, action));
+      const view = viewFor(shadow, serverView.player);
+      const legal = legalActions(view);
+      // `sameMove`, not exact JSON: a set Bloom's hex order is not part of the move, and the
+      // mirrored seat-1 viewer enumerates it in the reverse order of the engine's own list.
+      const enumerated = legal.some((a) => sameMove(view, a, action));
       if (!enumerated && !(action.t === 'Bloom' && action.cards.length >= 5)) return false;
       try {
         const next = applyAs(shadow, serverView.player, action);

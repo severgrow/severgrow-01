@@ -64,6 +64,8 @@ export type LocalDuelOptions = {
   port: number;
   /** Turn length; a test wants it long so a slow machine never times a seat out. */
   turnTimeoutMs?: number;
+  /** Live-duel settings to override (e.g. a short `turnMs` to reach the low-time state quickly). */
+  liveConfig?: Partial<import('../../../server/src/live/config.js').LiveConfig>;
 };
 
 const buildWithApi = (apiBase: string): Promise<void> =>
@@ -102,7 +104,7 @@ export const startLocalDuel = async (options: LocalDuelOptions): Promise<LocalDu
     storage: memory,
     live: new MemoryLiveStore(memory),
     server,
-    config: { ...DEFAULT_LIVE_CONFIG },
+    config: { ...DEFAULT_LIVE_CONFIG, ...(options.liveConfig ?? {}) },
   });
   const service = new MatchService({ storage: live.storage, config: server });
   const apiServer = createHttpServer({ service, config: server, live: live.router(service) });

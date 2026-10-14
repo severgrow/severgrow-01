@@ -44,6 +44,48 @@ export const kindLabel = (kind: string): string => {
 /** The short label for a move button when several share the row (the full words stay its accessible name). */
 export const shortKindLabel = (kind: string): string => kindLabel(kind);
 
+/**
+ * Futa04's ONE-TAP board moves: Grow (Sprout), Bloom, a Fruit card and Blast all place on the tap
+ * that chooses them, and Undo is the safety net. The Throw still asks (its Discard ends the turn),
+ * and the classic look keeps its own "Confirm moves" setting.
+ *
+ * Blast joined this list on 2026-10-14 (owner's rule: "atm BLAST asks for extra confirmation tap -
+ * remove it - works same as grow or bloom"). It was the only board move left out, which is why it
+ * alone needed a second tap.
+ */
+export const futa04OneTap = (a: Action): boolean =>
+  a.t === 'Bloom' || a.t === 'Sprout' || a.t === 'PlayFruit' || a.t === 'MegaBomb';
+
+/**
+ * Is this the same move? Every action but a Bloom is compared exactly (JSON).
+ *
+ * A Bloom needs care, because `hexes[i]` receives `cards[i]` and the engine enumerates a Bloom's
+ * hexes in its own board order. A SET (all cards the same number) gives every hex the same number,
+ * so the order is not part of the move at all — the engine's own planner sorts the card/tile pairs
+ * before it applies them. A RUN's order IS the move: it is which hex gets which number.
+ *
+ * This mattered in real play: the online viewer is mirrored for seat 1, and a mirrored board
+ * enumerates a set's hexes in the reverse order of the engine's, so an exactly-compared set Bloom
+ * drawn correctly on the board was refused as "not legal" (nothing was placed, with no reason
+ * shown). Comparing a set by its tiles — the way the rules do — fixes that class of rejection
+ * without loosening anything: a run is still compared tile-for-tile, in order.
+ */
+export const sameMove = (v: View, a: Action, b: Action): boolean => {
+  if (a.t !== b.t) return false;
+  if (a.t !== 'Bloom' || b.t !== 'Bloom') return JSON.stringify(a) === JSON.stringify(b);
+  if (a.cards.length !== b.cards.length || a.hexes.length !== b.hexes.length) return false;
+  const rankOf = (id: number) => v.hand.find((c) => c.id === id)?.rank ?? -1;
+  const isSet = a.cards.length > 0 && a.cards.every((id) => rankOf(id) === rankOf(a.cards[0]!));
+  const key = (c: { q: number; r: number }) => coordKey(c);
+  if (isSet) {
+    if ([...a.cards].sort((x, y) => x - y).join('.') !== [...b.cards].sort((x, y) => x - y).join('.')) return false;
+    return a.hexes.map(key).sort().join(' ') === b.hexes.map(key).sort().join(' ');
+  }
+  const pairs = (x: Extract<Action, { t: 'Bloom' }>) =>
+    x.cards.map((id, i) => `${rankOf(id)}@${key(x.hexes[i]!)}`).sort().join(' ');
+  return pairs(a) === pairs(b);
+};
+
 /** The card ids of a Bloom kind. */
 export const kindCards = (kind: string): number[] => (kind.startsWith('bloom-') ? kind.split('-')[2]!.split('.').map(Number) : []);
 

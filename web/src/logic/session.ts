@@ -5,12 +5,11 @@ import { IllegalActionError, apply, legalActions, newGame, viewFor } from '../..
 import type { Action, Player, State, View } from '../../../src/engine/index.js';
 import { buildSteps } from './anim.js';
 import type { Step } from './anim.js';
-import { EMPTY_SEL, pendingAction, tapCard, tapHex, tapKind } from './interaction.js';
+import { EMPTY_SEL, pendingAction, sameMove, tapCard, tapHex, tapKind } from './interaction.js';
 import type { Sel } from './interaction.js';
 
 export type Played = { before: State; action: Action; after: State; steps: Step[] };
 
-const same = (a: Action, b: Action) => JSON.stringify(a) === JSON.stringify(b);
 
 export class Session {
   sel: Sel = EMPTY_SEL;
@@ -54,13 +53,13 @@ export class Session {
     return this.memo.legal;
   }
   get pending(): Action | null {
-    if (this.drawn && this.legal.some((a) => same(a, this.drawn!))) return this.drawn;
+    if (this.drawn && this.legal.some((a) => sameMove(this.view, a, this.drawn!))) return this.drawn;
     return this.legal.length ? pendingAction(this.view, this.legal, this.sel) : null;
   }
 
   /** A drawn placement to preview and confirm (null clears it). Only a legal move is kept. */
   preset(a: Action | null) {
-    this.drawn = a && this.legal.some((x) => same(x, a)) ? a : null;
+    this.drawn = a && this.legal.some((x) => sameMove(this.view, x, a)) ? a : null;
   }
   get presetMove(): Action | null {
     return this.drawn;
@@ -94,7 +93,8 @@ export class Session {
     const s = this.state;
     if (s.phase === 'GAME_OVER' || s.actor !== who) return null;
     const legal = who === this.viewer ? this.legal : legalActions(viewFor(s, who));
-    const enumerated=legal.some((a) => same(a, action));
+    const moveView = who === this.viewer ? this.view : viewFor(s, who);
+    const enumerated=legal.some((a) => sameMove(moveView, a, action));
     // Five/six-card Blooms expose every recipe in the legal menu while the
     // exact player-painted tile assignment is validated on demand by apply.
     if (!enumerated && !(action.t==='Bloom' && action.cards.length>=5 && who===this.viewer)) return null;
