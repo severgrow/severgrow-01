@@ -63,6 +63,7 @@ npm run server:migrate        # apply server/migrations/*.sql (idempotent, check
 npm run server:dev            # in-memory storage
 npm run server:dev            # with DATABASE_URL set → Postgres/Supabase
 npm run server:db-test        # real-database integration tests (skipped without DATABASE_URL)
+npm run server:live-db-test   # live-duel DB tests (need LIVE_DATABASE_URL; same string as DATABASE_URL)
 npm run server:smoke          # end-to-end smoke against a running server
 ```
 
@@ -77,6 +78,8 @@ Because the engine is shared, the server needs no build step to run under `tsx`.
    - Use the **database password** (not the `anon`/`service_role` API keys). This is a real secret.
 3. **Put it in `.env`** (git-ignored) as `DATABASE_URL=…`, with **no `?sslmode=…` query flag**.
    Never commit it, never paste it into a chat or an issue.
+   Also set `LIVE_DATABASE_URL` to the same string: the live-duel tables live in the same database,
+   and the live-duel Postgres suite skips loudly without it. See `docs/DEPLOY-ONLINE.md`.
 4. **Apply the schema:** `npm run server:migrate`. `--status` shows what is applied/pending;
    `--dry-run` lists without changing anything.
 5. **Verify:** `npm run server:db-test` (integration), `npm run server:smoke` (end-to-end), or both
@@ -329,6 +332,7 @@ tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-d
 | `server/tests/http.test.ts` | 8 tests: preflight/CORS, security headers, malformed and oversized bodies, missing bodies, 404s without internals, auth required on every match route, precise field validation, and that logs never contain tokens or bodies |
 | `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code (recording fake pool) |
 | `server/tests/postgres.integration.test.ts` | **17 tests against the real database** (skipped unless `DATABASE_URL` is set): schema/constraints, migration idempotency+checksums, RLS everywhere, `anon`/`authenticated` denial, token-hash-only storage, persistence across a brand-new pool, a two-guest create/join/play slice, DB-level idempotency, racing transactions, ten-way retry storm, rollback, leak checks |
+| `server/tests/live-postgres.integration.test.ts` | **7 tests against the real database** (skipped unless `LIVE_DATABASE_URL` is set): a whole live session (go-live, timeout auto-play, a strike, board unchanged by the switch), P-21 `42501` denial for `anon`/`authenticated` on every live table and column, nothing in the realtime publication, the one-pending-challenge partial index under racing inserts, mutual challenges and accept races serialized by real row locks, a late move racing the timeout tick |
 | `server/tests/migrate.test.ts` | migration runner: order, one transaction per migration, idempotency, checksum refusal, rollback, dry-run |
 | `server/tests/pg-pool.test.ts` | TLS decisions, env handling, password redaction |
 | `server/tests/client.test.ts` | 6 tests: request shape, bearer header, `since` handling, error mapping, session persistence/resume |
@@ -341,8 +345,10 @@ tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-d
 | `server/tests/rate-limit-nat.test.ts` | NAT/shared-IP regression: two players behind one IP create + join; a single IP still blocked above the new ceiling; per-player limits trip independently of IP; distinct forwarded IPs get distinct buckets; `cf-connecting-ip` beats a spoofed `x-forwarded-for`; cron sweep uses its dedicated bucket |
 | `docs/ONLINE-REPORT.md` | Phase 8 final report (P-1…P-21) |
 
-`vitest.config.ts` loads `.env` when it exists, so the real-database suite **runs** locally; in CI
-there is no `.env`, so it skips and is pinned separately by `npm run server:db-test`. A manual smoke
+`vitest.config.ts` loads `.env` when it exists, so the real-database suites **run** locally; in CI
+there is no `.env`, so they skip and are pinned separately by `npm run server:db-test` and
+`npm run server:live-db-test` (the live suite needs its own `LIVE_DATABASE_URL` — the same
+session-pooler string as `DATABASE_URL`). A manual smoke
 script (`npm run server:smoke`, 14 checks) exercises a live deployment and reuses the same client
 the browser will use.
 

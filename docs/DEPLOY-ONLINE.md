@@ -341,6 +341,14 @@ CORS_ORIGIN=https://severgrow.github.io npm run server:dev   # production CORS l
 npm run server:verify
 ```
 
+**Live-duel database tests.** The live tables (`live_challenges`, the `live_*` columns, presence) live
+in the SAME database, so set `LIVE_DATABASE_URL` in the git-ignored `.env` to the same session-pooler
+string as `DATABASE_URL`. `npm run server:live-db-test` then runs the live-duel DB layer for real —
+P-21 `42501` denial for `anon`/`authenticated`, an empty realtime publication, the one-pending
+challenge index, and the row-locked races. Without `LIVE_DATABASE_URL` that suite skips in
+`npm run check`, so the pinned script is what proves the live-duel DB layer. The suite removes every
+row it creates.
+
 ## Security reminder (P-21)
 
 Every new table must enable RLS and `revoke all from anon, authenticated` in the same migration. Supabase grants those roles full access by default. See `docs/BACKEND.md` and `docs/ONLINE-PLAN.md`.
