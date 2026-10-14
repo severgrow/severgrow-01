@@ -6286,6 +6286,11 @@ let appReady = false;
       seat: os.seat,
       finished: os.finished,
       queued: queue.pending,
+      /** Diagnostics: the revision the page has applied, and the sync engine's link state. */
+      revision: snap.revision,
+      /** Diagnostics: the sync engine's own revision (what its next `?since=` will be). */
+      syncRevision: os.driver.sync().revision(),
+      connection: snap.connection,
       /** Diagnostics: the pump's own state, so a test can prove nothing was left running. */
       pumping,
       watchdog: revealWatchdog !== 0,

@@ -1,0 +1,1374 @@
+{
+ "matches": [
+  {
+   "match": 1,
+   "mode": "live",
+   "exit": "pause-main",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 5480736,
+   "heap1": 5430084,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 5,
+    "rafs": 0,
+    "listenersLive": 398,
+    "listenersDetached": 85,
+    "listenerKeysLive": 174,
+    "socketsCreated": 6,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1021,
+    "heap": 6459211,
+    "storage": {
+     "localKeys": 4,
+     "localBytes": 514,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 397,
+    "listenersDetached": 84,
+    "listenerKeysLive": 174,
+    "socketsCreated": 6,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 961,
+    "heap": 6687943,
+    "storage": {
+     "localKeys": 4,
+     "localBytes": 513,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 2,
+   "mode": "live",
+   "exit": "pause-new",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 5849744,
+   "heap1": 5877504,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 400,
+    "listenersDetached": 363,
+    "listenerKeysLive": 174,
+    "socketsCreated": 12,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1019,
+    "heap": 7644206,
+    "storage": {
+     "localKeys": 4,
+     "localBytes": 514,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 405,
+    "listenersDetached": 374,
+    "listenerKeysLive": 175,
+    "socketsCreated": 12,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1009,
+    "heap": 8366715,
+    "storage": {
+     "localKeys": 4,
+     "localBytes": 513,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 3,
+   "mode": "async",
+   "exit": "finish-menu",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 0,
+   "requestsAfterLeave": 0,
+   "heap0": 6122108,
+   "heap1": 6144320,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 407,
+    "listenersDetached": 600,
+    "listenerKeysLive": 180,
+    "socketsCreated": 17,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1199,
+    "heap": 7555107,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 587,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 406,
+    "listenersDetached": 613,
+    "listenerKeysLive": 177,
+    "socketsCreated": 18,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1175,
+    "heap": 7484099,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 4,
+   "mode": "live",
+   "exit": "finish-other",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 6371996,
+   "heap1": 6434868,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 404,
+    "listenersDetached": 887,
+    "listenerKeysLive": 178,
+    "socketsCreated": 23,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1070,
+    "heap": 8831120,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 409,
+    "listenersDetached": 897,
+    "listenerKeysLive": 179,
+    "socketsCreated": 24,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1070,
+    "heap": 7546976,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 5,
+   "mode": "live",
+   "exit": "finish-back",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 6626340,
+   "heap1": 6603968,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 406,
+    "listenersDetached": 1197,
+    "listenerKeysLive": 178,
+    "socketsCreated": 29,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1101,
+    "heap": 8141011,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 411,
+    "listenersDetached": 1189,
+    "listenerKeysLive": 179,
+    "socketsCreated": 30,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1093,
+    "heap": 7646366,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 6,
+   "mode": "async",
+   "exit": "pause-main",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 6728544,
+   "heap1": 6830764,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 413,
+    "listenersDetached": 1445,
+    "listenerKeysLive": 182,
+    "socketsCreated": 35,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1281,
+    "heap": 8369953,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 5,
+    "rafs": 0,
+    "listenersLive": 417,
+    "listenersDetached": 1449,
+    "listenerKeysLive": 181,
+    "socketsCreated": 36,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1338,
+    "heap": 8008075,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 7,
+   "mode": "live",
+   "exit": "pause-new",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 6860664,
+   "heap1": 6956580,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 415,
+    "listenersDetached": 1743,
+    "listenerKeysLive": 182,
+    "socketsCreated": 41,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1062,
+    "heap": 8747635,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 416,
+    "listenersDetached": 1766,
+    "listenerKeysLive": 179,
+    "socketsCreated": 42,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1080,
+    "heap": 8144461,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 8,
+   "mode": "live",
+   "exit": "finish-menu",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 6940612,
+   "heap1": 7111168,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 412,
+    "listenersDetached": 2060,
+    "listenerKeysLive": 178,
+    "socketsCreated": 47,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1108,
+    "heap": 11261263,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 417,
+    "listenersDetached": 2063,
+    "listenerKeysLive": 179,
+    "socketsCreated": 48,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1108,
+    "heap": 8817088,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 9,
+   "mode": "async",
+   "exit": "finish-other",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7064436,
+   "heap1": 7245908,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 414,
+    "listenersDetached": 2321,
+    "listenerKeysLive": 178,
+    "socketsCreated": 53,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1261,
+    "heap": 8569903,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 419,
+    "listenersDetached": 2321,
+    "listenerKeysLive": 179,
+    "socketsCreated": 54,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1262,
+    "heap": 8743738,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 10,
+   "mode": "live",
+   "exit": "finish-back",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7153636,
+   "heap1": 7357980,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 416,
+    "listenersDetached": 2649,
+    "listenerKeysLive": 178,
+    "socketsCreated": 59,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1131,
+    "heap": 9032811,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 426,
+    "listenersDetached": 2617,
+    "listenerKeysLive": 183,
+    "socketsCreated": 60,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1128,
+    "heap": 8805138,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 11,
+   "mode": "live",
+   "exit": "pause-main",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7253864,
+   "heap1": 7462744,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 5,
+    "rafs": 0,
+    "listenersLive": 418,
+    "listenersDetached": 2943,
+    "listenerKeysLive": 178,
+    "socketsCreated": 65,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1128,
+    "heap": 8480002,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 433,
+    "listenersDetached": 2917,
+    "listenerKeysLive": 183,
+    "socketsCreated": 65,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1097,
+    "heap": 8922392,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 12,
+   "mode": "async",
+   "exit": "pause-new",
+   "requestsIdle": 1,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7323452,
+   "heap1": 7507484,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 426,
+    "listenersDetached": 3205,
+    "listenerKeysLive": 179,
+    "socketsCreated": 71,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1304,
+    "heap": 9192426,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 430,
+    "listenersDetached": 3183,
+    "listenerKeysLive": 183,
+    "socketsCreated": 71,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1301,
+    "heap": 9075089,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 13,
+   "mode": "live",
+   "exit": "finish-menu",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7455512,
+   "heap1": 7557564,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 427,
+    "listenersDetached": 3512,
+    "listenerKeysLive": 179,
+    "socketsCreated": 77,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1148,
+    "heap": 8858901,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 427,
+    "listenersDetached": 3531,
+    "listenerKeysLive": 179,
+    "socketsCreated": 77,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1135,
+    "heap": 9361806,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 14,
+   "mode": "live",
+   "exit": "finish-other",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7552764,
+   "heap1": 7650144,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 429,
+    "listenersDetached": 3814,
+    "listenerKeysLive": 179,
+    "socketsCreated": 83,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1132,
+    "heap": 8801631,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 430,
+    "listenersDetached": 3835,
+    "listenerKeysLive": 179,
+    "socketsCreated": 83,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1130,
+    "heap": 8708696,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "match": 15,
+   "mode": "async",
+   "exit": "finish-back",
+   "requestsIdle": 2,
+   "requestsHidden": 0,
+   "requestsTurn": 1,
+   "requestsAfterLeave": 0,
+   "heap0": 7624420,
+   "heap1": 7694388,
+   "s0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 431,
+    "listenersDetached": 4084,
+    "listenerKeysLive": 179,
+    "socketsCreated": 89,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1267,
+    "heap": 9038085,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "s1": {
+    "intervals": 0,
+    "timeouts": 4,
+    "rafs": 0,
+    "listenersLive": 431,
+    "listenersDetached": 4131,
+    "listenerKeysLive": 179,
+    "socketsCreated": 89,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1264,
+    "heap": 9660304,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  }
+ ],
+ "checkpoints": [
+  {
+   "label": "boot",
+   "seat0Heap": 3136084,
+   "seat1Heap": 3145224,
+   "seat0": {
+    "intervals": 0,
+    "timeouts": 0,
+    "rafs": 0,
+    "listenersLive": 203,
+    "listenersDetached": 0,
+    "listenerKeysLive": 156,
+    "socketsCreated": 0,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 588,
+    "heap": 5202091,
+    "storage": {
+     "localKeys": 3,
+     "localBytes": 355,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "input@.row|change|0",
+     "document|visibilitychange|0",
+     "window|resize|0",
+     "button.icon-only@.sheet-head|click|0",
+     "document|pointerdown|1",
+     "button.seg-btn|click|0"
+    ]
+   },
+   "seat1": {
+    "intervals": 0,
+    "timeouts": 0,
+    "rafs": 0,
+    "listenersLive": 203,
+    "listenersDetached": 0,
+    "listenerKeysLive": 156,
+    "socketsCreated": 0,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 588,
+    "heap": 6391927,
+    "storage": {
+     "localKeys": 3,
+     "localBytes": 354,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "input@.row|change|0",
+     "document|visibilitychange|0",
+     "window|resize|0",
+     "button.icon-only@.sheet-head|click|0",
+     "document|pointerdown|1",
+     "button.seg-btn|click|0"
+    ]
+   }
+  },
+  {
+   "label": "middle",
+   "seat0Heap": 6626340,
+   "seat1Heap": 6603968,
+   "seat0": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 406,
+    "listenersDetached": 1197,
+    "listenerKeysLive": 178,
+    "socketsCreated": 29,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1101,
+    "heap": 8141011,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 0,
+     "sessionBytes": 0,
+     "sessionDraftKeys": 0,
+     "sessionDraftSamples": []
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "seat1": {
+    "intervals": 0,
+    "timeouts": 3,
+    "rafs": 0,
+    "listenersLive": 411,
+    "listenersDetached": 1189,
+    "listenerKeysLive": 179,
+    "socketsCreated": 30,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1093,
+    "heap": 7646366,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  },
+  {
+   "label": "end",
+   "seat0Heap": 7623916,
+   "seat1Heap": 7694228,
+   "seat0": {
+    "intervals": 0,
+    "timeouts": 2,
+    "rafs": 0,
+    "listenersLive": 431,
+    "listenersDetached": 4084,
+    "listenerKeysLive": 179,
+    "socketsCreated": 89,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1267,
+    "heap": 8664358,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 586,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   },
+   "seat1": {
+    "intervals": 0,
+    "timeouts": 2,
+    "rafs": 0,
+    "listenersLive": 431,
+    "listenersDetached": 4131,
+    "listenerKeysLive": 179,
+    "socketsCreated": 89,
+    "socketsLive": 0,
+    "workers": 0,
+    "nodes": 1264,
+    "heap": 8622957,
+    "storage": {
+     "localKeys": 5,
+     "localBytes": 585,
+     "localDraftKeys": 0,
+     "localStarterKeys": 0,
+     "sessionKeys": 1,
+     "sessionBytes": 195,
+     "sessionDraftKeys": 1,
+     "sessionDraftSamples": [
+      "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+     ]
+    },
+    "topLive": [
+     "g.hex-cell.normal@.l-base|pointerdown|0",
+     "g.hex-cell.normal@.l-base|pointerup|0",
+     "g.hex-cell.normal@.l-base|pointercancel|0",
+     "g.hex-cell.normal@.l-base|pointerleave|0",
+     "g.hex-cell.normal@.l-base|pointerenter|0",
+     "input@.row|change|0"
+    ]
+   }
+  }
+ ],
+ "storage": {
+  "seat0": {
+   "localKeys": 5,
+   "localBytes": 586,
+   "localDraftKeys": 0,
+   "localStarterKeys": 0,
+   "sessionKeys": 1,
+   "sessionBytes": 195,
+   "sessionDraftKeys": 1,
+   "sessionDraftSamples": [
+    "futa05:severgrow.duel.draft.v1.f35e2f26-2ed6-4c4c-bc44-95396c4354b2"
+   ]
+  },
+  "seat1": {
+   "localKeys": 5,
+   "localBytes": 585,
+   "localDraftKeys": 0,
+   "localStarterKeys": 0,
+   "sessionKeys": 1,
+   "sessionBytes": 195,
+   "sessionDraftKeys": 1,
+   "sessionDraftSamples": [
+    "futa05:severgrow.duel.draft.v1.f476b263-c351-41c0-9bd1-2623a2d169c3"
+   ]
+  }
+ }
+}

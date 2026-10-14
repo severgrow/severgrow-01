@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import type { KeyValue } from '../../server/src/client.js';
 import {
+  STARTER_REVEAL_INDEX_KEY,
+  STARTER_REVEAL_KEEP,
   STARTER_REVEAL_PREFIX,
   fillDuelHud,
   hasStarterRevealed,
@@ -76,6 +78,23 @@ describe('per-match reveal marker', () => {
     };
     expect(hasStarterRevealed(throwing, 'match-a')).toBe(false);
     expect(() => markStarterRevealed(throwing, 'match-a')).not.toThrow();
+  });
+
+  it('does not accumulate one storage key per duel forever (bounded marker list)', () => {
+    const store = memoryStore();
+    // A device that plays many duels: without the cap, every match leaves its own key behind.
+    for (let i = 0; i < STARTER_REVEAL_KEEP * 3; i++) markStarterRevealed(store, `match-${i}`);
+    const markerKeys = [...store.raw.keys()].filter((k) => k.startsWith(STARTER_REVEAL_PREFIX) && k !== STARTER_REVEAL_INDEX_KEY);
+    expect(markerKeys.length).toBe(STARTER_REVEAL_KEEP);
+    // The newest matches are still marked; the oldest have been cleaned up.
+    expect(hasStarterRevealed(store, `match-${STARTER_REVEAL_KEEP * 3 - 1}`)).toBe(true);
+    expect(hasStarterRevealed(store, 'match-0')).toBe(false);
+    // Re-marking the same match does not duplicate it in the index.
+    markStarterRevealed(store, 'match-a');
+    markStarterRevealed(store, 'match-a');
+    const index = JSON.parse(store.raw.get(STARTER_REVEAL_INDEX_KEY) ?? '[]') as string[];
+    expect(index.filter((id) => id === 'match-a').length).toBe(1);
+    expect(index[0]).toBe('match-a');
   });
 });
 
