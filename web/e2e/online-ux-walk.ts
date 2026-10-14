@@ -296,7 +296,7 @@ try {
   const bTitle = ((await B.locator('#go-title').textContent()) ?? '').trim();
   check('finished: A shows a result', /won|lost|draw/i.test(aTitle), aTitle);
   check('finished: B shows the opposite result', /won|lost|draw/i.test(bTitle) && bTitle !== aTitle, bTitle);
-  const finishedClip = await clipped(A, '#go-title, #go-sub, #go-rematch');
+  const finishedClip = await clipped(A, '#go-title, #go-sub, #go-rematch, #go-other');
   if (finishedClip.length) finding('FIX', `finished text clipped: ${finishedClip.join(' | ')}`);
 
   check('no console errors during the walk', errors.length === 0, errors.slice(0, 3).join(' | '));

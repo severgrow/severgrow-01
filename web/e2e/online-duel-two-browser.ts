@@ -25,6 +25,18 @@ const waitVisible = async (page: Page, sel: string, ms = 15_000) => {
   await page.waitForSelector(`${sel}:not([hidden])`, { timeout: ms });
 };
 
+/** A finished match can raise the install invitation (a full-screen sheet) over the finish screen.
+ *  Dismiss it through the product's own affordance so it cannot swallow the next tap. */
+const dismissInstall = async (page: Page) => {
+  const prompt = page.locator('#install-prompt');
+  if (!(await prompt.isVisible().catch(() => false))) return;
+  await page.keyboard.press('Escape').catch(() => undefined);
+  await page.waitForTimeout(150);
+  if (await prompt.isVisible().catch(() => false)) {
+    await page.evaluate("(() => { const el = document.getElementById('install-prompt'); if (el) el.hidden = true; })()");
+  }
+};
+
 const settingsInit = () => {
   localStorage.clear();
   localStorage.setItem(
@@ -245,9 +257,18 @@ try {
       `goHidden=${goHidden} title=${title} cap=${caption.slice(0, 80)} hud=${hudText.slice(0, 40)} err=${resignErrors.join(';').slice(0, 100)}`,
     );
   }
-  const rematch = ((await pageB.locator('#go-rematch').textContent()) ?? '').trim();
+  // The finish screen's FIRST, primary action is now a REAL rematch (was "Back to matches").
+  await dismissInstall(pageA);
+  await dismissInstall(pageB);
+  const firstLabel = ((await pageB.locator('#go-rematch').textContent()) ?? '').trim();
+  const firstIsPrimary = await pageB
+    .locator('#go-rematch')
+    .evaluate((el) => el.classList.contains('primary'))
+    .catch(() => false);
   const goShown = !(await pageB.locator('#gameover').isHidden());
-  check('B: Back to matches CTA', goShown && /match/i.test(rematch), rematch);
+  check('B: Rematch is the first, primary CTA on the finish screen', goShown && firstLabel === 'Rematch' && firstIsPrimary, `${firstLabel} primary=${firstIsPrimary}`);
+  const backLabel = ((await pageB.locator('#go-other').textContent()) ?? '').trim();
+  check('B: Back to matches stays as a secondary way out', backLabel === 'Back to matches', backLabel);
 
   try {
     await pageA.waitForFunction(
@@ -262,6 +283,57 @@ try {
   } catch {
     check('A: sees finished after opponent resign', false, 'timed out waiting for sync');
   }
+
+  // ---------------- the real rematch: B taps Rematch, A joins the NEW duel and plays -------------
+  // A finished session must not leak: first Rematch tears the old duel down, then it creates a
+  // brand-new match and shows the existing invite/share screen with a FRESH code.
+  await pageB.locator('#go-rematch').click();
+  await waitVisible(pageB, '#online-waiting', 25_000);
+  const hudGone = await pageB.locator('#duel-hud').isHidden().catch(() => false);
+  const oldSessionB = await pageB.evaluate(
+    'window.__severgrow && window.__severgrow.online ? window.__severgrow.online() : null',
+  );
+  check(
+    'B: the finished session is torn down before the new match (no session on the invite screen)',
+    hudGone && oldSessionB === null,
+    `hud hidden=${hudGone} session=${oldSessionB === null ? 'null' : 'still open'}`,
+  );
+  const rematchInvite = ((await pageB.locator('#online-invite-code').textContent()) ?? '').trim();
+  check(
+    'B: Rematch shows a FRESH invite code',
+    new RegExp(`^[0-9A-HJKMNP-TV-Z]{${DEFAULT_SERVER_CONFIG.inviteCodeLength}}$`).test(rematchInvite) && rematchInvite !== invite,
+    `${rematchInvite} (was ${invite})`,
+  );
+  check('B: Rematch surfaces the same Share invite control', await pageB.locator('#online-share').isVisible().catch(() => false));
+
+  // A leaves the finish screen through the secondary exit and joins the new duel with the new code.
+  await dismissInstall(pageA);
+  await pageA.locator('#go-other').click();
+  await waitVisible(pageA, '#online-hub', 20_000);
+  await pageA.click('#online-join-open');
+  await waitVisible(pageA, '#online-join');
+  await pageA.fill('#online-join-code', rematchInvite);
+  await pageA.click('#online-join-submit');
+
+  await waitVisible(pageA, '#game', 25_000);
+  await waitVisible(pageB, '#game', 25_000);
+  const rematchSessionB = await pageB.evaluate(
+    'window.__severgrow && window.__severgrow.online ? window.__severgrow.online() : null',
+  );
+  const rematchSessionA = await pageA.evaluate(
+    'window.__severgrow && window.__severgrow.online ? window.__severgrow.online() : null',
+  );
+  const live = (s: unknown) => !!s && (s as { finished?: boolean }).finished === false;
+  check('A and B both hold a live session in the rematch', live(rematchSessionA) && live(rematchSessionB));
+  check(
+    'A and B both play the new duel (duel HUD on both)',
+    await pageA.locator('#duel-hud:not([hidden])').isVisible().catch(() => false) &&
+      await pageB.locator('#duel-hud:not([hidden])').isVisible().catch(() => false),
+  );
+  // Prove it is playable: whoever holds the turn commits one Draw through the ordinary confirm.
+  await tryConfirm(pageA, 'A');
+  await tryConfirm(pageB, 'B');
+  check('A: still playable after the rematch', await pageA.locator('#game:not([hidden])').isVisible().catch(() => false));
 } finally {
   await browser.close();
   await previewServer.close();

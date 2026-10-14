@@ -297,7 +297,9 @@ const runOnline = async (device: DeviceProfile, pool: BrowserPool): Promise<void
     rec.finishControls = await visibleControls(a.page);
     await shot(a, `${label}-4-finish`, SCREEN_DIR);
 
-    await clickCenter(a.page, '#go-rematch');
+    // The finish screen's primary slot is now a real Rematch; the "back to matches" exit it used
+    // to be is the next button (`#go-other`).
+    await clickCenter(a.page, '#go-other');
     await a.page.waitForSelector('#online-hub:not([hidden])', { timeout: 15_000 }).catch(() => null);
     await sleep(1200);
     rec.matchListText = await screenText(a.page, '#online-matches');

@@ -906,11 +906,14 @@ async function leaveVia(s: SeatSession, route: string): Promise<void> {
       if (await isVisible(s, '#gameover')) break;
       await sleep(150);
     }
+    // The finish screen's exits changed: its PRIMARY slot is now a real Rematch (which creates a
+    // fresh match — covered end-to-end by online-duel-two-browser.ts, not by this teardown soak),
+    // and the old primary slot is now "Back to matches" (`#go-other`). These routes only exercise
+    // teardown + return to the menu, so both back-out names use that one hub exit.
     if (route === 'finish-menu') await clickVisible(s, '#go-menu');
-    else if (route === 'finish-other') await clickVisible(s, '#go-other');
-    else await clickVisible(s, '#go-rematch'); // finish-back → Back to matches → the hub
+    else await clickVisible(s, '#go-other'); // Back to matches → the hub
     await sleep(500);
-    if (route === 'finish-back') await clickVisible(s, '#online-back');
+    if (route !== 'finish-menu') await clickVisible(s, '#online-back');
   } else if (route === 'lobby-back') {
     // Back to matches (the hub), then the lobby's own Back — the route a player takes when they
     // finish a duel and browse their matches before returning to the menu.
@@ -922,7 +925,7 @@ async function leaveVia(s: SeatSession, route: string): Promise<void> {
       if (await isVisible(s, '#gameover')) break;
       await sleep(150);
     }
-    await clickVisible(s, '#go-rematch');
+    await clickVisible(s, '#go-other'); // Back to matches → the hub
     await sleep(500);
     await clickVisible(s, '#online-back');
   }
