@@ -1,19 +1,28 @@
 // Phase 5 — OnlineSession Draw / draft / Throw / resign + offline flag regression.
 import { describe, expect, it } from 'vitest';
 import {
+  allNeighbors,
   applyAs,
+  boardCoords,
+  coordKey,
+  homeCoord,
   legalActions,
+  strangledPlayers,
   newGame,
+  onBoard,
+  parseKey,
   viewFor,
   CURRENT_RULES_VERSION,
 } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike, KeyValue } from '../../server/src/client.js';
+import { fromEngineResult } from '../../server/src/protocol.js';
 import type { MatchViewPayload } from '../../server/src/protocol.js';
 import {
   OnlineSession,
   createOnlineDriver,
+  duelUiFromSnapshot,
   isOnlineDuel,
   onlinePathsActive,
   setOnlineSession,
@@ -334,6 +343,258 @@ describe('a finished match is never gated by an animation', () => {
     expect(os.myTurn).toBe(false);
     expect(os.legal).toEqual([]);
     expect(os.finishInfo()?.title).toBe('You lost');
+    setOnlineSession(null);
+  });
+});
+
+describe('a Grow that ENDS the game is committed at once (the owner\'s KO win)', () => {
+  /**
+   * The bug the owner hit in normal online play: a Bloom/Sprout that surrounds the opponent's home
+   * is a MID-TURN DRAFT move. The draft's shadow became GAME_OVER, the page read that as "the match
+   * is finished" and showed the winner an end screen, but nothing was ever sent to the server — so
+   * the loser stayed on the board until the 24-hour deadline, and the winner's own screen showed the
+   * fallback title instead of the result. The move must be committed the moment it ends the game.
+   */
+  const winningState = (): State => {
+    const base = newGame(3107);
+    const home = homeCoord(1, base.config);
+    const board = { ...base.board };
+    // A ring of my tiles around the opponent's home would be cut off by the Sever at the end of the
+    // turn unless it is CONNECTED to my root, so lay a chain from my home to theirs first.
+    const mine = homeCoord(0, base.config);
+    const cells = boardCoords(base.config).map(coordKey);
+    const rock = new Set(cells.filter((k) => base.terrain[k] === 'rock'));
+    const prev = new Map<string, string | null>([[coordKey(mine), null]]);
+    const queue: string[] = [coordKey(mine)];
+    while (queue.length) {
+      const k = queue.shift()!;
+      if (k === coordKey(home)) break;
+      for (const n of allNeighbors(parseKey(k)).map(coordKey)) {
+        if (!cells.includes(n) || rock.has(n) || prev.has(n)) continue;
+        prev.set(n, k);
+        queue.push(n);
+      }
+    }
+    for (let k: string | null = coordKey(home); k && k !== coordKey(mine); k = prev.get(k) ?? null) {
+      if (k !== coordKey(home)) board[k] = { owner: 0 as const, strength: 9 };
+    }
+    // Rock never strangles, so the surrounding is built on the non-rock neighbours, all but one.
+    const neighbours = allNeighbors(home).filter((n) => onBoard(n, base.config) && base.terrain[coordKey(n)] !== 'rock');
+    for (const n of neighbours.slice(1)) board[coordKey(n)] = { owner: 0 as const, strength: 9 };
+    if (neighbours.length < 3) throw new Error('not enough neighbours on this board');
+    return {
+      ...base,
+      board,
+      phase: 'ACT',
+      actor: 0,
+      turnPlayer: 0,
+      sproutsThisTurn: 0,
+      hands: [[{ id: 1002, suit: 0, rank: 5 }], base.hands[1]],
+    };
+  };
+
+  /** The one open neighbour of the opponent's home: the hex that finishes the surround. */
+  const openKeyOf = (state: State): string => {
+    const home = homeCoord(1, state.config);
+    const open = allNeighbors(home).filter((n) => onBoard(n, state.config) && state.terrain[coordKey(n)] !== 'rock');
+    return coordKey(open[0]!);
+  };
+
+  it('the winning Sprout really does end the game in the engine', () => {
+    const state = winningState();
+    const sprout = legalActions(viewFor(state, 0)).find(
+      (a) => a.t === 'Sprout' && coordKey(a.coord) === openKeyOf(state),
+    );
+    expect(sprout, 'a winning Sprout is legal on the last open neighbour').toBeTruthy();
+    if (!sprout) return;
+    const after = applyAs(state, 0, sprout);
+    expect(after.phase).toBe('GAME_OVER');
+    expect(after.result?.reason).toBe('strangle');
+    expect(after.result?.winner).toBe(0);
+  });
+
+  it('playing it online commits the turn instead of leaving the match active', async () => {
+    let serverState = winningState();
+    let revision = 1;
+    let posts = 0;
+    const seat = 0 as const;
+    /** The wire payload for the current server state (status/result follow the state, like the API). */
+    const payload = (s: State, rev: number): MatchViewPayload => {
+      const finished = s.phase === 'GAME_OVER';
+      return {
+        ...payloadFor(s, seat, rev),
+        status: finished ? 'finished' : 'active',
+        result: finished && s.result ? fromEngineResult(s.result) : null,
+      };
+    };
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname;
+      if (init.method === 'POST' && path.endsWith('/actions')) {
+        posts++;
+        const body = JSON.parse(init.body!) as { actions: Action[]; expectedRevision: number };
+        let s = serverState;
+        // Exactly what the server's `runCommit` does: apply the move that ENDED the game and drop
+        // the rest of the turn, instead of rejecting the whole batch.
+        for (const a of body.actions) {
+          if (s.phase === 'GAME_OVER') break;
+          s = applyAs(s, s.actor, a);
+        }
+        serverState = s;
+        revision++;
+        return { status: 200, ok: true, json: async () => ({ ok: true, replayed: false, player: payload(s, revision), serverNow: Date.now() }) };
+      }
+      if (init.method === 'GET' && path.includes('/view')) {
+        return { status: 200, ok: true, json: async () => ({ ok: true, player: payload(serverState, revision), serverNow: Date.now() }) };
+      }
+      return { status: 404, ok: false, json: async () => ({ ok: false, code: 'NOT_FOUND', message: 'no' }) };
+    };
+    const driver = createOnlineDriver({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 'tok',
+      matchId: 'm1',
+      initial: payload(serverState, revision),
+      setTimer: () => 1,
+      clearTimer: () => undefined,
+    });
+    const os = new OnlineSession(driver);
+    setOnlineSession(os);
+
+    // Before the move: the match is active on the server, so the duel is NOT finished and the strip
+    // must not say "Finished" (the local draft's shadow is what used to leak that word).
+    const before = duelUiFromSnapshot(driver.snapshot(), false, false);
+    expect(before.turn).toBe('mine');
+    expect(os.finished).toBe(false);
+
+    const sprout = os.legal.find((a) => a.t === 'Sprout' && coordKey(a.coord) === openKeyOf(serverState));
+    expect(sprout, 'the winning Sprout is offered').toBeTruthy();
+    if (!sprout) return;
+    const res = await os.play(sprout);
+
+    // The turn was committed to the server (the old code never sent it at all) …
+    expect(posts).toBe(1);
+    expect(serverState.phase).toBe('GAME_OVER');
+    expect(serverState.result?.reason).toBe('strangle');
+    // … the page knows the match is over, and the board shows the real ending.
+    expect(res.ok).toBe(true);
+    expect(res.ok && res.finished).toBe(true);
+    expect(os.finished).toBe(true);
+    const info = os.finishInfo();
+    expect(info?.title).toBe('You won');
+    expect(info?.reason).toContain('surrounded');
+    // The strip reads the decided match (never "Your turn" on a finished duel).
+    expect(duelUiFromSnapshot(driver.snapshot(), false, false).turn).toBe('finished');
+    setOnlineSession(null);
+  });
+});
+
+describe('a Grow that ENDS the game is committed at once', () => {
+  /**
+   * The owner's report: after a KO win on one device, the other device never showed the end screen.
+   * Root cause: a Bloom/Blast/Sprout that strangles the opponent is a MID-TURN DRAFT move, so the
+   * match on the server stayed `active` while this device's own display state said GAME_OVER — the
+   * winning move was never sent, the opponent waited for the deadline, and this device could not
+   * even offer its Throw (its own state had no legal actions left). The server already expects the
+   * fix (`runCommit` applies the move that ended the game and drops the rest of the batch).
+   *
+   * This asserts the client half: one tap on a game-ending Grow must send `[move, EndAct]` as one
+   * batch and surface `finished: true`.
+   */
+  it('sends the winning move (with EndAct) as one batch, and reports finished', async () => {
+    // A Bloom that strangles. The ring around the opponent's root must survive the Sever that every
+    // placement runs first (tiles cut off from their own root are removed), so our tiles are one
+    // connected mass: the whole board is ours except the two roots, one open neighbour of THEIR
+    // root, and a normal terrain everywhere (rock hexes never count towards a strangle).
+    const base = newGame(3107);
+    const oppRoot = homeCoord(1, base.config);
+    const myRoot = homeCoord(0, base.config);
+    const ring = allNeighbors(oppRoot).filter((n) => Object.prototype.hasOwnProperty.call(base.board, coordKey(n)));
+    const target = ring[ring.length - 1]!;
+    const terrain: State['terrain'] = { ...base.terrain };
+    const board: State['board'] = {};
+    for (const key of Object.keys(base.board)) {
+      if (key === coordKey(myRoot)) board[key] = { owner: 0, strength: 0, root: true };
+      else if (key === coordKey(oppRoot)) board[key] = { owner: 1, strength: 0, root: true };
+      else board[key] = { owner: 0, strength: 1 };
+    }
+    for (const n of ring) {
+      const key = coordKey(n);
+      terrain[key] = 'normal';
+      board[key] = { owner: 0, strength: 1 };
+    }
+    // The Bloom sits on three CONNECTED hexes of their ring: the empty one it fills and the two
+    // they hold at strength 1 (a Bloom can take an enemy tile, never its own), so after it lands all
+    // six neighbours of their root are ours — the strangle.
+    board[coordKey(target)] = null;
+    board[coordKey(ring[0]!)] = { owner: 1, strength: 1 };
+    board[coordKey(ring[4]!)] = { owner: 1, strength: 1 };
+    const state: State = {
+      ...base,
+      phase: 'ACT',
+      actor: 0,
+      turnPlayer: 0,
+      startingPlayer: 0,
+      board,
+      terrain,
+      hands: [[{ id: 0, suit: 0, rank: 3 }, { id: 1, suit: 1, rank: 3 }, { id: 2, suit: 2, rank: 3 }], base.hands[1]],
+    };
+    // The position really is one move from a strangle, and the move really ends the game.
+    expect(strangledPlayers(state), 'not strangled yet').toEqual([]);
+
+    const batches: Action[][] = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      const path = new URL(url).pathname;
+      if (init.method === 'POST' && path.endsWith('/actions')) {
+        const body = JSON.parse(init.body!) as { actions?: Action[]; expectedRevision: number };
+        batches.push(body.actions ?? []);
+        // A committed batch of [winningMove, EndAct]: the server applies the move that ended the
+        // game and drops the rest of the batch (its own `runCommit` rule), so the fake does too.
+        let after = state;
+        for (const a of body.actions!) {
+          if (after.phase === 'GAME_OVER') break;
+          after = applyAs(after, after.actor, a);
+        }
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({
+            ok: true,
+            replayed: false,
+            player: payloadFor(after, 0, 2, {
+              status: 'finished',
+              result: after.result ?? { winner: 0, reason: 'strangle', scores: [9, 1] },
+            }),
+            serverNow: Date.now(),
+          }),
+        };
+      }
+      if (init.method === 'GET' && path.includes('/view')) {
+        return { status: 200, ok: true, json: async () => ({ ok: true, player: payloadFor(state, 0, 1), serverNow: Date.now() }) };
+      }
+      return { status: 404, ok: false, json: async () => ({ ok: false, code: 'NOT_FOUND', message: 'no' }) };
+    };
+    const driver = createOnlineDriver({
+      client: new DuelClient({ baseUrl: 'https://api.example', fetch: fetchImpl, storage: memoryStore() }),
+      token: 'tok',
+      matchId: 'm1',
+      initial: payloadFor(state, 0, 1),
+      setTimer: () => 1,
+      clearTimer: () => undefined,
+    });
+    const os = new OnlineSession(driver);
+    setOnlineSession(os);
+    const bloom = os.legal.find(
+      (a): a is Extract<Action, { t: 'Bloom' }> =>
+        a.t === 'Bloom' && a.hexes.some((h) => coordKey(h) === coordKey(target)),
+    );
+    expect(bloom, 'the position offers a game-ending Bloom (on the last open neighbour)').toBeTruthy();
+    if (!bloom) return;
+    const res = await os.play(bloom);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.finished, 'the session reports the match finished').toBe(true);
+    // ONE batch, carrying the winning move and the turn-ending EndAct together.
+    expect(batches).toHaveLength(1);
+    expect(batches[0]!.some((a) => a.t === 'Bloom')).toBe(true);
+    expect(batches[0]!.some((a) => a.t === 'EndAct')).toBe(true);
     setOnlineSession(null);
   });
 });

@@ -35,7 +35,9 @@ export type DuelUiModel = {
  * words). `finished` wins over everything.
  */
 export const turnStateFrom = (snap: MatchDriverSnapshot, revealing: boolean): TurnState => {
-  if (snap.status === 'finished' || snap.view.phase === 'GAME_OVER') return 'finished';
+  // The SERVER's phase: a mid-turn draft's shadow may be GAME_OVER (a Bloom that strangles) while
+  // the match itself is still active, and the strip must not say "Finished" for that.
+  if (snap.status === 'finished' || snap.serverPhase === 'GAME_OVER') return 'finished';
   if (snap.status !== 'active') return 'theirs';
   if (revealing) return 'replaying';
   // Status is 'active' here, so a GAME_OVER phase cannot occur: the actor alone decides.

@@ -133,7 +133,10 @@ export class OnlineSession {
 
   get finished(): boolean {
     const snap = this.driver.snapshot();
-    return snap.status === 'finished' || snap.view.phase === 'GAME_OVER';
+    // The SERVER's phase, not `snap.view` (which is the local draft's shadow mid-turn): a Grow that
+    // ends the game is only a draft until the Throw commits it, and treating that as a finished
+    // match is what left the opponent waiting for the deadline.
+    return snap.status === 'finished' || snap.serverPhase === 'GAME_OVER';
   }
 
   /** Sync the display board/hand from the driver (after a server view or a draft change). */
@@ -153,7 +156,7 @@ export class OnlineSession {
     this.driver.skipCatchUp();
     let steps: Step[];
     try {
-      steps = stepsFromEvents(events, this.driver.perspective());
+      steps = stepsFromEvents(events, this.driver.perspective(), this.view);
       const v = this.view;
       steps.push(syncStep(this.state.board, [v.score, v.opponentScore]));
     } catch (error) {
@@ -228,6 +231,25 @@ export class OnlineSession {
       after: this.state,
       steps: buildSteps(beforeEng, engine, afterEng, this.seat).map((s) => mapStepDisplay(s, this.driver)),
     };
+    // A Grow can END the game: a Bloom, Blast or Sprout that strangles the opponent's root (or
+    // strangles both). The move is only a LOCAL DRAFT at this point, so the match on the server
+    // stays active — the opponent waits for the deadline and the page cannot even offer the Throw
+    // any more, because its own display state is already GAME_OVER. Send the batch now.
+    //
+    // The server already expects exactly this: `runCommit` applies the move that ended the game and
+    // drops the rest of the turn, so `[winningMove, EndAct]` commits the win and finishes the match
+    // for BOTH devices. (That server rule was added for this case; the client half was missing.)
+    if (afterEng.phase === 'GAME_OVER') {
+      const res = await this.driver.throwTurn({ t: 'EndAct' });
+      if (!res.ok) {
+        // Nothing was committed. The driver has already dropped a draft it could not send and
+        // re-applied the server's view, so the board is back on the truth and the player can retry.
+        this.refresh();
+        return { ok: false, message: res.message ?? ONLINE.errTurnFailed };
+      }
+      this.refresh();
+      return { ok: true, played, catchUp: this.consumeCatchUp(), finished: this.finished };
+    }
     return { ok: true, played, catchUp: [], finished: false };
   }
 
@@ -375,5 +397,5 @@ export const onlineSessionFromPayload = (
 /** Events still waiting → Steps for AnimQueue (2× catch-up). */
 export const catchUpStepsFromDriver = (driver: OnlineDriver): Step[] => {
   const events: readonly Event[] = driver.pendingEvents();
-  return stepsFromEvents(events, driver.perspective());
+  return stepsFromEvents(events, driver.perspective(), driver.snapshot().screenView);
 };

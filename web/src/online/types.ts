@@ -37,6 +37,13 @@ export type MatchDriverSnapshot = {
   /** Seat that moves first this match (shared-engine seeded lottery). */
   startingPlayer: Player;
   view: View;
+  /**
+   * The SERVER's own phase, never the local draft's shadow. A mid-turn Grow is only a local draft,
+   * and one that ends the game (a Bloom that strangles) makes the draft's shadow GAME_OVER while
+   * the match on the server is still active — so "the match is over" must be read from here, not
+   * from `view`.
+   */
+  serverPhase: View['phase'];
   /** View with board/terrain hexes mapped for this seat's screen (Phase 3b). */
   screenView: View;
   legal: Action[];

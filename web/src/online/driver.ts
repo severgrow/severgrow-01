@@ -178,6 +178,7 @@ export const createOnlineDriver = (options: OnlineDriverOptions): OnlineDriver =
       turnStartRevision: player.turnStartRevision,
       startingPlayer: player.startingPlayer ?? player.view.turnPlayer,
       view,
+      serverPhase: player.view.phase,
       screenView,
       legal,
       screenLegal,
