@@ -303,10 +303,11 @@ verification is recorded in `docs/FUTASAKU_0_4_BASELINE.md`.
 - Only if a preset proves fun. Needs SPEC changes, new golden games, and the tests listed in
   `docs/LAB-KNOWN-BREAKAGE.md` fixed.
 
-### Live duels (FUTASAKU live, 45-second turns)
+### Live duels (FUTASAKU real time, 60-second turns)
 - Date: 2026-10-13 · Branch: `futa0.5-online` · Channels: `/futa0.5/` preview and `futa-test` (also `VITE_LIVE_DUELS=1`)
-- Two players who share an online match switch it to a 45-second clock; pop-up challenge from anywhere,
-  auto-played timeouts with strikes, leave/cooldown, rematch, "Back to your game". Details: `docs/LIVE.md`.
+- Two players who share an online match switch it to a 60-second clock; pop-up challenge from anywhere,
+  a real-time timeout or an explicit leave both LOSE the match (`timeout` / `resigned`), rematch,
+  "Back to your game". Details: `docs/LIVE.md`.
 - Check before locking in: migration 0006 applied on the real project, Edge bundle rebuilt and
-  deployed, Security Advisor clean, a two-phone playtest of the go-live moment and the 45-second
+  deployed, Security Advisor clean, a two-phone playtest of the go-live moment and the 60-second
   feel, the pop-up deferral on a real phone, and merging after the `futa0.5-online` smoothness pass.

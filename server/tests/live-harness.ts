@@ -1,4 +1,6 @@
 // Shared fake-clock harness for the live-duel server tests (not a test file itself).
+import { legalActions } from '../../src/engine/index.js';
+import type { Action, View } from '../../src/engine/index.js';
 import { RecordingBroadcaster } from '../src/broadcast.js';
 import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
 import type { ServerConfig } from '../src/config.js';
@@ -10,7 +12,6 @@ import type { LiveConfig } from '../src/live/config.js';
 import { MemoryLiveStore } from '../src/live/memory.js';
 import { RecordingNotifier } from '../src/live/notifier.js';
 import { createLiveRuntime } from '../src/live/runtime.js';
-import { nextAutoAction } from '../src/live/autoplay.js';
 import type { PresenceStatus } from '../src/live/types.js';
 
 export const DAY = 24 * 60 * 60 * 1000;
@@ -23,15 +24,11 @@ export const liveTestConfig = (o: Partial<LiveConfig> = {}): LiveConfig => ({
   turnMs: LIMIT,
   replayAllowanceMs: REPLAY,
   entryAllowanceMs: ENTRY,
-  leaveGraceMs: 60_000,
   challengeTtlMs: 45_000,
   presenceStaleMs: 45_000,
   notNowCooldownMs: 120_000,
   declineLimit: 3,
   declineWindowMs: 30 * 60_000,
-  leaveCooldownMs: 10 * 60_000,
-  leaveCooldownTurns: 3,
-  strikesToEnd: 2,
   challengesPerPlayerPerHour: 1000,
   presencePerPlayerPerMinute: 1000,
   ...o,
@@ -52,6 +49,32 @@ export const serverTestConfig = (o: Partial<ServerConfig> = {}): ServerConfig =>
   },
   ...o,
 });
+
+/**
+ * The next action a player's turn needs, from that player's OWN view: Draw from the deck, then the
+ * Grow step is skipped, then the drawn (or lowest) card is thrown. Pure; used only to drive a whole
+ * turn quickly in these tests (the server itself no longer plays a turn for anyone — a real-time
+ * timeout now LOSES the match, so nothing auto-plays).
+ */
+const nextTurnAction = (view: View): Action | null => {
+  const legal = legalActions(view);
+  if (legal.length === 0) return null;
+  switch (view.phase) {
+    case 'DRAW':
+      return legal.find((a) => a.t === 'Draw' && a.from === 'deck') ?? legal.find((a) => a.t === 'Draw') ?? legal[0]!;
+    case 'ACT':
+      return legal.find((a) => a.t === 'EndAct') ?? legal[0]!;
+    case 'DISCARD': {
+      const throws = legal.filter((a): a is Extract<Action, { t: 'Discard' }> => a.t === 'Discard');
+      throws.sort((a, b) => a.card - b.card);
+      return throws[0] ?? legal[0]!;
+    }
+    case 'KNOCK':
+      return legal.find((a) => a.t === 'Continue') ?? legal[0]!;
+    default:
+      return legal[0]!;
+  }
+};
 
 export const makeLiveHarness = (opts: { live?: Partial<LiveConfig>; server?: Partial<ServerConfig> } = {}) => {
   let clock = 1_700_000_000_000;
@@ -111,7 +134,7 @@ export const makeLiveHarness = (opts: { live?: Partial<LiveConfig>; server?: Par
       for (let i = 0; i < 8; i++) {
         const v = await service.viewPayload(p, matchId);
         if (v.status !== 'active' || v.actor !== v.seat || v.legalActions.length === 0) return;
-        const a = nextAutoAction(v.view, null)!;
+        const a = nextTurnAction(v.view)!;
         await service.submitAction(p, matchId, { expectedRevision: v.revision, requestId: `t-${(seq += 1)}`, action: a });
         const after = await service.viewPayload(p, matchId);
         if (after.actor !== after.seat) return;

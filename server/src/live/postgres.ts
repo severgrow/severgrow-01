@@ -2,7 +2,7 @@
 // a fixed order (challenge → match → players) so two live steps can never deadlock, and the match
 // row lock is the SAME lock the move pipeline takes, so a live step and a move are serialized.
 import type { Player, State } from '../../../src/engine/index.js';
-import type { MatchStatus } from '../protocol.js';
+import type { MatchStatus, OnlineGameResult } from '../protocol.js';
 import type { PgClient, PgPool, PgRow } from '../storage/postgres.js';
 import type {
   Challenge,
@@ -27,11 +27,7 @@ export const rowToLive = (row: PgRow): LiveMatch => ({
   matchId: String(row.id),
   liveSince: numOrNull(row.live_since),
   limitMs: numOrNull(row.live_limit_ms),
-  strikes: [num(row.live_strikes_seat0 ?? 0), num(row.live_strikes_seat1 ?? 0)],
-  strikeTurn: [numOrNull(row.live_strike_turn_seat0), numOrNull(row.live_strike_turn_seat1)],
   leftBy: seatOrNull(row.live_left_by),
-  cooldownUntil: [numOrNull(row.live_cooldown_until_seat0), numOrNull(row.live_cooldown_until_seat1)],
-  cooldownTurn: [numOrNull(row.live_cooldown_turn_seat0), numOrNull(row.live_cooldown_turn_seat1)],
   tailRev: numOrNull(row.live_tail_rev),
   autoplayRev: numOrNull(row.live_autoplay_rev),
   normalTimeoutMs: numOrNull(row.live_normal_timeout_ms),
@@ -63,28 +59,20 @@ const rowToChallenge = (row: PgRow): Challenge => ({
   newMatchId: strOrNull(row.new_match_id),
 });
 
+// The strikes / cooldown columns (migration 0006) are deliberately NOT written any more: the
+// strike escape hatch and the leaver cooldown are gone. The columns stay in the schema so no risky
+// migration is needed; existing values simply stop being read or updated.
 const LIVE_UPDATE = `update matches set
-  live_since = $2, live_limit_ms = $3, live_strikes_seat0 = $4, live_strikes_seat1 = $5,
-  live_strike_turn_seat0 = $6, live_strike_turn_seat1 = $7, live_left_by = $8,
-  live_cooldown_until_seat0 = $9, live_cooldown_until_seat1 = $10,
-  live_cooldown_turn_seat0 = $11, live_cooldown_turn_seat1 = $12, live_tail_rev = $13,
-  live_autoplay_rev = $14, live_normal_timeout_ms = $15, live_ended_reason = $16, live_ended_at = $17,
-  live_ended_by_seat = $18
+  live_since = $2, live_limit_ms = $3, live_left_by = $4,
+  live_tail_rev = $5, live_autoplay_rev = $6, live_normal_timeout_ms = $7,
+  live_ended_reason = $8, live_ended_at = $9, live_ended_by_seat = $10
  where id = $1`;
 
 const liveValues = (l: LiveMatch): unknown[] => [
   l.matchId,
   l.liveSince,
   l.limitMs,
-  l.strikes[0],
-  l.strikes[1],
-  l.strikeTurn[0],
-  l.strikeTurn[1],
   l.leftBy,
-  l.cooldownUntil[0],
-  l.cooldownUntil[1],
-  l.cooldownTurn[0],
-  l.cooldownTurn[1],
   l.tailRev,
   l.autoplayRev,
   l.normalTimeoutMs,
@@ -113,6 +101,16 @@ const isRetryable = (error: unknown): boolean => {
   const code = (error as { code?: unknown } | null)?.code;
   return code === '40P01' || code === '40001' || code === '23505';
 };
+
+/**
+ * The same finish the base `resignMatch` writes, done on the SAME locked client the live step holds
+ * (so a live ending and a move can never interleave). `status <> 'finished'` makes it idempotent at
+ * the SQL level: a timeout racing an explicit leave produces exactly ONE finish.
+ */
+const FINISH_MATCH = `update matches set
+  status = 'finished', result = $2, turn_deadline_at = null, expires_at = null,
+  turn_start_state = state, turn_start_revision = revision, updated_at = $3, finished_at = $3
+ where id = $1 and status <> 'finished'`;
 
 const makeTx = (client: PgClient): LiveTx => ({
   async match(matchId) {
@@ -168,6 +166,9 @@ const makeTx = (client: PgClient): LiveTx => ({
       clock.turnTimeoutMs,
       clock.turnDeadlineAt,
     ]);
+  },
+  async finishMatch(matchId, _playerId, result: OnlineGameResult, now) {
+    await client.query(FINISH_MATCH, [matchId, JSON.stringify(result), now]);
   },
   async savePlayer(p) {
     await client.query(

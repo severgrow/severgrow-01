@@ -1,24 +1,28 @@
 // Live duels — the service. Every rule decision is a pure function in rules.ts or the engine; this
 // file wires them to the storage and keeps each change inside ONE atomic `transact` step.
 //
-// The board, the score and the result are never touched by anything here: going live, leaving,
-// strikes and the end of live mode only change clocks and live columns. The one thing that writes
-// game state is the timed-out turn, and that goes through the normal move pipeline (commitBatch)
-// with engine-legal actions.
-import { matchSetup, stateFromSetup } from '../../../src/engine/index.js';
+// Live mode itself never touches the board, the score or the result: going live and the end of live
+// mode only change clocks and live columns. The TWO endings that also write the match result both
+// run inside the SAME row-locked `transact` the rest of this file uses:
+//   * LEAVING real-time mode forfeits — the leaver loses the match, reason `resigned`;
+//   * a REAL-TIME TIMEOUT loses — the seat that ran out of time loses the match, reason `timeout`,
+//     exactly like the 24-hour timeout (no auto-played turn, no strike, no way back to 24-hour play).
+// Both publish the same status-change ping a finished move publishes, so the WINNER's client reaches
+// the end screen at once instead of waiting for a poll or a deadline.
+import { matchSetup, scores, stateFromSetup } from '../../../src/engine/index.js';
 import type { Player } from '../../../src/engine/index.js';
 import { safePublish } from '../broadcast.js';
 import type { MatchBroadcaster } from '../broadcast.js';
 import type { ServerConfig } from '../config.js';
 import { newId, newInviteCode, newSeed } from '../ids.js';
+import type { OnlineGameResult } from '../protocol.js';
 import type { PlayerRecord, MatchRecord, Storage } from '../storage/types.js';
-import { autoDecision, autoPlayTurn, drawnCardFrom } from './autoplay.js';
 import type { LiveConfig } from './config.js';
 import { ApiError } from '../errors.js';
 import { LiveError } from './errors.js';
 import type { LiveErrorCode } from './errors.js';
 import type { LiveNotifier } from './notifier.js';
-import { applyStrike, challengeBlock, effectiveStatus, endLive, inLeaveCooldown, presenceWord, startLive, visibleStrikes } from './rules.js';
+import { challengeBlock, effectiveStatus, endLive, presenceWord, startLive } from './rules.js';
 import type { Challenge, ChallengeKind, LiveMatch, LivePlayer, LiveStore, LiveTx, LockedMatch, PresenceStatus } from './types.js';
 import { PRESENCE_STATUSES, liveManaged } from './types.js';
 
@@ -52,15 +56,13 @@ export type LiveStatusWire = {
   turnDeadlineAt: number | null;
   actor: Player;
   turnNumber: number;
-  /** Consecutive strikes still standing, per seat. */
-  strikes: [number, number];
   endedReason: LiveMatch['endedReason'];
   endedAt: number | null;
   endedBySeat: Player | null;
   leftBy: Player | null;
   opponent: { name: string | null; presence: 'online' | 'busy' | 'offline'; inLive: boolean; available: boolean };
-  me: { liveMatchId: string | null; challengesEnabled: boolean; cooldown: boolean };
-  /** Why a Go-live tap would be refused right now (null = allowed). */
+  me: { liveMatchId: string | null; challengesEnabled: boolean };
+  /** Why a real-time tap would be refused right now (null = allowed). */
   block: LiveErrorCode | null;
   rematchBlock: LiveErrorCode | null;
   pending: ChallengeWire | null;
@@ -75,7 +77,8 @@ export type MyChallengesWire = {
   serverNow: number;
 };
 
-type TickPlan = { kind: 'autoplay'; rev: number; deadline: number; seat: Player } | { kind: 'changed' } | null;
+/** What one live tick decided: stored state changed, or nothing was due. */
+type TickPlan = { kind: 'changed' } | null;
 
 export type LiveServiceOptions = {
   /** The UNWRAPPED base storage (the live layer must never re-enter its own wrapper). */
@@ -155,6 +158,12 @@ export class LiveService {
     if (m) await safePublish(this.broadcaster, matchId, { revision: m.turnStartRevision, status: m.status });
   }
 
+  /** Clear both players' "the one live match I am in" pointer, inside the caller's transaction. */
+  private async freePlayers(tx: LiveTx, playerIds: readonly string[], matchId: string): Promise<void> {
+    const players = await tx.players(playerIds);
+    for (const p of players) if (p.liveMatchId === matchId) await tx.savePlayer({ ...p, liveMatchId: null });
+  }
+
   // ---------------------------------------------------------------- presence and the switch
 
   async presence(player: PlayerRecord, status: unknown, matchId: unknown): Promise<{ status: PresenceStatus }> {
@@ -204,8 +213,6 @@ export class LiveService {
         kind,
         matchStatus: lm.match.status,
         live: lm.live,
-        fromSeat: seat,
-        turnNumber: lm.match.state.turnNumber,
         from,
         to,
         pending: open,
@@ -417,25 +424,24 @@ export class LiveService {
     const now = this.now();
     await this.live.transact(async (tx) => {
       const lm = await tx.match(matchId);
-      if (!lm || lm.live.liveSince === null) throw new LiveError('NOT_LIVE');
-      const players = await tx.players(lm.participants.map((p) => p.playerId));
-      for (const p of players) if (p.liveMatchId === matchId) await tx.savePlayer({ ...p, liveMatchId: null });
-      const normal = lm.live.normalTimeoutMs ?? this.server.turnTimeoutMs;
-      const turnNumber = lm.match.state.turnNumber;
-      const cooldownUntil: [number | null, number | null] = [lm.live.cooldownUntil[0], lm.live.cooldownUntil[1]];
-      const cooldownTurn: [number | null, number | null] = [lm.live.cooldownTurn[0], lm.live.cooldownTurn[1]];
-      cooldownUntil[seat] = now + this.config.leaveCooldownMs;
-      cooldownTurn[seat] = turnNumber + 2 * this.config.leaveCooldownTurns;
-      const myTurn = lm.match.state.actor === seat;
-      const ended = endLive({ ...lm.live, leftBy: seat, cooldownUntil, cooldownTurn }, now, 'left', seat);
-      // Leaving never gives extra time: on my own turn the live clock keeps running plus one grace,
-      // then the turn is auto-played; the opponent's current turn becomes a normal 24-hour turn.
-      await tx.saveLive({ ...ended, tailRev: myTurn ? lm.match.turnStartRevision : null });
-      await tx.saveClock(matchId, {
-        turnTimeoutMs: normal,
-        turnDeadlineAt: myTurn ? (lm.match.turnDeadlineAt ?? now) + this.config.leaveGraceMs : now + normal,
-      });
+      if (!lm) throw new LiveError('CHALLENGE_NOT_FOUND', 'Unknown match.');
+      // Idempotent: a repeated / double leave (or a retry) finds the duel already over and does
+      // nothing — one finish, ever, even if a timeout raced it.
+      if (lm.match.status === 'finished') return;
+      if (lm.live.liveSince === null) throw new LiveError('NOT_LIVE');
+      // LEAVING REAL-TIME FORFEITS. The leaver loses the whole match, with the existing `resigned`
+      // reason, in the SAME row-locked step that ends live mode and frees both players — so the
+      // finish, the live columns and the player rows can never drift apart or race a move.
+      await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
+      const winner: Player = seat === 0 ? 1 : 0;
+      const result: OnlineGameResult = { winner, reason: 'resigned', scores: scores(lm.match.state) };
+      const ended = endLive({ ...lm.live, leftBy: seat }, now, 'finished', null);
+      await tx.saveLive({ ...ended, tailRev: null, autoplayRev: null });
+      await tx.finishMatch(matchId, player.id, result, now);
     });
+    // The status-change ping every other ending publishes, so the WINNER's client leaves the board
+    // for the end screen at once: a resigned finish does not bump the revision, so a poll alone
+    // could leave them sitting there.
     await this.matchPing(matchId);
     return this.status(player, matchId);
   }
@@ -470,8 +476,6 @@ export class LiveService {
             kind,
             matchStatus: match.status,
             live,
-            fromSeat: seat,
-            turnNumber: match.state.turnNumber,
             from: me,
             to: opp,
             pending: pendingRow ? [pendingRow] : [],
@@ -489,7 +493,6 @@ export class LiveService {
       turnDeadlineAt: match.status === 'finished' ? null : match.turnDeadlineAt,
       actor: match.state.actor,
       turnNumber: match.state.turnNumber,
-      strikes: visibleStrikes(live, match.state.turnNumber),
       endedReason: live.endedReason,
       endedAt: live.endedAt,
       endedBySeat: live.endedBySeat,
@@ -503,7 +506,6 @@ export class LiveService {
       me: {
         liveMatchId: me.liveMatchId,
         challengesEnabled: me.challengesEnabled,
-        cooldown: inLeaveCooldown(live, seat, now, match.state.turnNumber),
       },
       block: blockFor('live'),
       rematchBlock: blockFor('rematch'),
@@ -520,12 +522,7 @@ export class LiveService {
     try {
       // Cheap unlocked check first: the row lock is only taken when a decision is actually due.
       if (!(await this.live.needsTick(matchId, now))) return false;
-      for (let i = 0; i < 6; i++) {
-        const plan = await this.planTick(matchId, now);
-        if (!plan) break;
-        changed = true;
-        if (plan.kind === 'autoplay') await this.autoplay(matchId, plan);
-      }
+      changed = (await this.planTick(matchId, now)) !== null;
     } catch (error) {
       console.warn(`live tick failed for a match: ${String(error).slice(0, 200)}`);
     }
@@ -543,115 +540,59 @@ export class LiveService {
     return this.live.needsTick(matchId, now);
   }
 
-  /** ONE row-locked decision: strike / end / tail / cleanup. Returns what to do next, if anything. */
+  /**
+   * ONE row-locked decision for a live match. Returns what changed, if anything. There are exactly
+   * two things a tick does now:
+   *
+   *   1. a match that FINISHED while live-managed (any ending) — drop the live columns and free both
+   *      players, so nothing is left half-live (this is the natural-strangle / resign cleanup);
+   *   2. a REAL-TIME TIMEOUT — the seat that ran out LOSES the match (`timeout`), immediately.
+   *
+   * Nothing here auto-plays a turn and nothing strikes: a real-time timeout ends the duel exactly
+   * like the 24-hour timeout does.
+   */
   private planTick(matchId: string, now: number): Promise<TickPlan> {
     return this.live.transact(async (tx): Promise<TickPlan> => {
       const lm = await tx.match(matchId);
       if (!lm) return null;
       const { match } = lm;
-      let live = lm.live;
-      let dirty = false;
+      const live = lm.live;
       if (match.status === 'finished') {
         if (!liveManaged(live)) return null;
-        const wasLive = live.liveSince !== null;
-        live = { ...(wasLive ? endLive(live, now, 'finished', null) : live), tailRev: null, autoplayRev: null };
-        await tx.saveLive(live);
-        const players = await tx.players(lm.participants.map((p) => p.playerId));
-        for (const p of players) if (p.liveMatchId === matchId) await tx.savePlayer({ ...p, liveMatchId: null });
+        await tx.saveLive({
+          ...(live.liveSince !== null ? endLive(live, now, 'finished', null) : live),
+          tailRev: null,
+          autoplayRev: null,
+        });
+        await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
         return { kind: 'changed' };
       }
       if (match.status !== 'active') return null;
-      if (live.autoplayRev !== null && live.autoplayRev !== match.revision) {
-        live = { ...live, autoplayRev: null };
-        dirty = true;
-      }
-      if (live.tailRev !== null && live.tailRev !== match.turnStartRevision) {
-        live = { ...live, tailRev: null };
-        dirty = true;
-      }
       const deadline = match.turnDeadlineAt;
-      const due = deadline !== null && now > deadline;
-      const seat = match.state.actor;
-      if (live.autoplayRev === match.revision && deadline !== null) {
-        if (dirty) await tx.saveLive(live);
-        return { kind: 'autoplay', rev: match.revision, deadline, seat };
-      }
-      if (!due || deadline === null) {
-        if (dirty) {
-          await tx.saveLive(live);
-          return { kind: 'changed' };
-        }
-        return null;
-      }
+      if (deadline === null || now <= deadline) return null;
       if (live.liveSince !== null) {
-        const struck = applyStrike(live, seat, match.state.turnNumber, this.config);
-        live = { ...struck.live, autoplayRev: match.revision };
-        if (struck.ends) {
-          // Two consecutive strikes: back to 24-hour play. Nobody loses by a live timeout.
-          live = endLive(live, now, 'strikes', seat);
-          await tx.saveClock(matchId, { turnTimeoutMs: live.normalTimeoutMs ?? this.server.turnTimeoutMs, turnDeadlineAt: deadline });
-          const players = await tx.players(lm.participants.map((p) => p.playerId));
-          for (const p of players) if (p.liveMatchId === matchId) await tx.savePlayer({ ...p, liveMatchId: null });
-        }
-        await tx.saveLive(live);
-        return { kind: 'autoplay', rev: match.revision, deadline, seat };
+        // A real-time timeout loses the match, the same single row-locked decision point the async
+        // clock uses. The finish, the live columns and the player rows land together or not at all.
+        const seat = match.state.actor;
+        const loser = lm.participants.find((p) => p.seat === seat);
+        const winner: Player = seat === 0 ? 1 : 0;
+        const result: OnlineGameResult = { winner, reason: 'timeout', scores: scores(match.state) };
+        await tx.saveLive({ ...endLive(live, now, 'finished', seat), tailRev: null, autoplayRev: null });
+        await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
+        if (loser) await tx.finishMatch(matchId, loser.playerId, result, now);
+        return { kind: 'changed' };
       }
-      if (live.tailRev !== null && live.tailRev === match.turnStartRevision) {
-        live = { ...live, tailRev: null, autoplayRev: match.revision };
-        await tx.saveLive(live);
-        return { kind: 'autoplay', rev: match.revision, deadline, seat };
-      }
-      if (dirty) {
-        await tx.saveLive(live);
+      // Legacy tolerance ONLY: a row left over from before real-time leaving became a forfeit can
+      // still carry the old tail markers with no live session. Hand it back to the normal 24-hour
+      // clock instead of leaving it outside both clocks. Nothing new ever sets these markers.
+      if (live.tailRev !== null || live.autoplayRev !== null) {
+        const normal = live.normalTimeoutMs ?? this.server.turnTimeoutMs;
+        await tx.saveLive({ ...live, tailRev: null, autoplayRev: null });
+        await tx.saveClock(matchId, { turnTimeoutMs: normal, turnDeadlineAt: now + normal });
+        await this.freePlayers(tx, lm.participants.map((p) => p.playerId), matchId);
         return { kind: 'changed' };
       }
       return null;
-    });
-  }
-
-  /** Commit the timed-out turn through the normal move pipeline, at the deadline instant. */
-  private async autoplay(matchId: string, plan: { rev: number; deadline: number; seat: Player }): Promise<void> {
-    const match = await this.storage.matchById(matchId);
-    if (match && match.revision === plan.rev && match.status === 'active') {
-      const parts = await this.storage.participantsOf(matchId);
-      const who = parts.find((p) => p.seat === plan.seat);
-      const moves = await this.storage.movesOf(matchId, match.turnStartRevision);
-      const drawn = drawnCardFrom(moves.flatMap((m) => m.events), plan.seat);
-      const actions = who && match.state.actor === plan.seat ? autoPlayTurn(match.state, plan.seat, drawn) : [];
-      let committed = false;
-      if (who && actions.length > 0) {
-        const res = await this.storage.commitBatch({
-          matchId,
-          playerId: who.playerId,
-          expectedRevision: plan.rev,
-          requestId: `live-auto-${plan.rev}`,
-          // "At the deadline": the next deadline is measured from it, so a late check never gifts time.
-          now: plan.deadline,
-          actions,
-          decideOne: ({ match: m, seat, action }) => autoDecision(m.state, seat, action),
-        });
-        committed = res.ok;
-      }
-      if (!committed && match.revision === plan.rev) {
-        // Nothing could be auto-played (should not happen): fall back to 24-hour play, never a loss.
-        await this.live.transact(async (tx) => {
-          const lm = await tx.match(matchId);
-          if (!lm || lm.match.revision !== plan.rev) return;
-          const normal = lm.live.normalTimeoutMs ?? this.server.turnTimeoutMs;
-          const ended = lm.live.liveSince !== null ? endLive(lm.live, this.now(), 'strikes', plan.seat) : lm.live;
-          await tx.saveLive({ ...ended, autoplayRev: null, tailRev: null });
-          await tx.saveClock(matchId, { turnTimeoutMs: normal, turnDeadlineAt: this.now() + normal });
-          const players = await tx.players(lm.participants.map((p) => p.playerId));
-          for (const p of players) if (p.liveMatchId === matchId) await tx.savePlayer({ ...p, liveMatchId: null });
-        });
-        return;
-      }
-    }
-    // Clear the marker so the 24-hour rule owns the match again when live is over.
-    await this.live.transact(async (tx) => {
-      const lm = await tx.match(matchId);
-      if (!lm || lm.live.autoplayRev !== plan.rev || lm.match.revision === plan.rev) return;
-      await tx.saveLive({ ...lm.live, autoplayRev: null });
     });
   }
 }

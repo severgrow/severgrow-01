@@ -2,7 +2,7 @@
 // and Postgres (production). Each `transact` call is ONE atomic step: in Postgres a transaction
 // holding row locks, in memory a serialized section whose writes are applied all at once.
 import type { Player, State } from '../../../src/engine/index.js';
-import type { MatchStatus } from '../protocol.js';
+import type { MatchStatus, OnlineGameResult } from '../protocol.js';
 
 /** What the app tells the server it is doing (heartbeat every 20 s while visible). */
 export type PresenceStatus = 'idle' | 'offline_game' | 'in_match' | 'in_live' | 'tutorial';
@@ -28,6 +28,12 @@ export const defaultLivePlayer = (playerId: string): LivePlayer => ({
   presenceMatchId: null,
 });
 
+/**
+ * Why the last live session ended. `strikes` is LEGACY read-only tolerance (the old "two strikes →
+ * back to 24-hour turns" escape hatch): nothing produces it any more, but a finished row written
+ * before this change may still carry it. Only `finished` (match over — resignation, timeout or a
+ * normal end) and `left` (legacy leave) can be produced now.
+ */
 export type LiveEndReason = 'finished' | 'left' | 'strikes';
 
 /** Live-mode columns of one match (matches.live_*). */
@@ -37,24 +43,17 @@ export type LiveMatch = {
   liveSince: number | null;
   /** Live turn length snapshot for the session. */
   limitMs: number | null;
-  /** Consecutive timeouts per seat. */
-  strikes: [number, number];
-  /** The engine turnNumber of each seat's last strike (to tell "consecutive"). */
-  strikeTurn: [number | null, number | null];
-  /** Seat that last pressed Leave live. */
+  /** Seat that last pressed Leave live (a record only; leaving now forfeits the match). */
   leftBy: Player | null;
-  /** Leaver cooldown per seat: blocked while now < until AND turnNumber < turn. */
-  cooldownUntil: [number | null, number | null];
-  cooldownTurn: [number | null, number | null];
-  /** After Leave live on the leaver's own turn: the turn (turnStartRevision) still auto-played on expiry. */
+  /** LEGACY (never set now): the turn (turnStartRevision) an old leave would have auto-played. */
   tailRev: number | null;
-  /** A timeout was decided for this revision; the auto-played turn is still to be committed. */
+  /** LEGACY (never set now): the revision an old timeout was decided for. */
   autoplayRev: number | null;
   /** The match's normal (24-hour) turn timeout, restored when live ends. */
   normalTimeoutMs: number | null;
   endedReason: LiveEndReason | null;
   endedAt: number | null;
-  /** Seat whose strikes ended the last session (for the end window), null otherwise. */
+  /** Seat whose timeout or strikes ended the last session (for the end window), null otherwise. */
   endedBySeat: Player | null;
 };
 
@@ -62,11 +61,7 @@ export const defaultLiveMatch = (matchId: string): LiveMatch => ({
   matchId,
   liveSince: null,
   limitMs: null,
-  strikes: [0, 0],
-  strikeTurn: [null, null],
   leftBy: null,
-  cooldownUntil: [null, null],
-  cooldownTurn: [null, null],
   tailRev: null,
   autoplayRev: null,
   normalTimeoutMs: null,
@@ -126,6 +121,13 @@ export interface LiveTx {
   saveLive(live: LiveMatch): Promise<void>;
   /** Write the match clock (turn_timeout_ms / turn_deadline_at). */
   saveClock(matchId: string, clock: { turnTimeoutMs: number; turnDeadlineAt: number | null }): Promise<void>;
+  /**
+   * Finish the match in the SAME row-locked step (the match row is already locked by `match()`):
+   * used by the real-time forfeit, where leaving ends the duel with the leaver as the loser and
+   * reason `resigned`. Idempotent — a match already `finished` is left untouched, and the revision
+   * is NOT bumped (exactly like the base `resignMatch`).
+   */
+  finishMatch(matchId: string, playerId: string, result: OnlineGameResult, now: number): Promise<void>;
   savePlayer(player: LivePlayer): Promise<void>;
   insertChallenge(challenge: Challenge): Promise<void>;
   saveChallenge(challenge: Challenge): Promise<void>;

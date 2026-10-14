@@ -1,5 +1,6 @@
 // FUTASAKU live duels — every server rule, on a fake clock (memory adapter).
 import { describe, expect, it } from 'vitest';
+import { scores } from '../../src/engine/index.js';
 import { isLiveError } from '../src/live/errors.js';
 import { DAY, ENTRY, LIMIT, REPLAY, makeLiveHarness } from './live-harness.js';
 import type { LiveHarness } from './live-harness.js';
@@ -82,80 +83,92 @@ describe('go live', () => {
   });
 });
 
-describe('timeouts and strikes', () => {
-  it('a timeout auto-plays the turn (engine-legal), hands over, and gives ONE strike; nobody loses', async () => {
+describe('real-time timeouts LOSE the match (no strikes, no escape back to 24-hour play)', () => {
+  it('finishes the match: the seat that ran out loses, reason timeout, and the winner is pinged at once', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
-    const actor = await h.actorOf(matchId, a, b);
     const before = await match(h, matchId);
-    const deadline = before.turnDeadlineAt!;
+    const seat = before.state.actor;
     h.advance(LIMIT + ENTRY + 1);
+    h.broadcaster.published.length = 0;
     const s = await h.live.status(a, matchId); // a poll is the lazy decision point
     const after = await match(h, matchId);
-    expect(after.status).toBe('active');
-    expect(after.state.actor).not.toBe(before.state.actor);
-    expect(after.state.turnNumber).toBe(before.state.turnNumber + 1);
-    expect(after.revision).toBeGreaterThan(before.revision);
-    expect(after.turnDeadlineAt).toBe(deadline + LIMIT + REPLAY);
-    const actorSeat = before.state.actor;
-    expect(s.strikes[actorSeat]).toBe(1);
-    expect(s.live).toBe(true);
-    // The opponent's view of the auto-played turn hides the drawn card, as for any turn.
-    const other = actor.id === a.id ? b : a;
-    const v = await h.service.viewPayload(other, matchId, before.revision);
-    const draw = v.events.find((e) => e.t === 'Draw');
-    expect(draw).toBeTruthy();
-    if (draw && draw.t === 'Draw' && draw.from === 'deck') expect(draw.card).toBeUndefined();
-  });
-
-  it('two CONSECUTIVE strikes end live mode: back to 24-hour turns, deadline set normally', async () => {
-    const h = makeLiveHarness();
-    const { a, b, matchId } = await h.pair();
-    await h.goLive(a, b, matchId);
-    const sleeper = await h.actorOf(matchId, a, b);
-    const other = sleeper.id === a.id ? b : a;
-    h.advance(LIMIT + ENTRY + 1);
-    await h.live.status(a, matchId); // strike 1
-    await h.playTurn(other, matchId);
-    const d = (await match(h, matchId)).turnDeadlineAt!;
-    h.advance(LIMIT + REPLAY + 1);
-    const s = await h.live.status(a, matchId); // strike 2 → live ends
+    expect(after.status).toBe('finished');
+    expect(after.result).toEqual({ winner: seat === 0 ? 1 : 0, reason: 'timeout', scores: scores(before.state) });
+    // The board and the revision are untouched: a timeout is a clock decision, not a move.
+    expect(after.state).toEqual(before.state);
+    expect(after.revision).toBe(before.revision);
+    // The winner's client is woken by the SAME status-change ping every other ending publishes.
+    expect(h.broadcaster.published).toHaveLength(1);
+    expect(h.broadcaster.published[0]).toEqual({ matchId, ping: { revision: after.turnStartRevision, status: 'finished' } });
+    // Live is over, both players are free, and the wire says the match is over (not "back to 24 h").
     expect(s.live).toBe(false);
-    expect(s.endedReason).toBe('strikes');
-    const m = await match(h, matchId);
-    expect(m.status).toBe('active');
-    expect(m.result).toBeNull();
-    expect(m.turnTimeoutMs).toBe(DAY);
-    expect(m.turnDeadlineAt).toBe(d + DAY);
-    expect(m.liveManaged).toBe(false);
+    expect(s.status).toBe('finished');
+    expect(s.endedReason).toBe('finished');
+    expect(s.turnDeadlineAt).toBeNull();
     expect((await h.liveStore.player(a.id)).liveMatchId).toBeNull();
     expect((await h.liveStore.player(b.id)).liveMatchId).toBeNull();
-    // From now on the normal 24-hour rule owns the match (grace first, never a live loss).
-    h.advance(DAY + 1);
-    const later = await h.service.viewPayload(a, matchId);
-    expect(later.status).toBe('active');
   });
 
-  it('strikes that are not consecutive do not end live mode', async () => {
+  it('never auto-plays the turn and never hands the match back to the 24-hour clock', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
-    const sleeper = await h.actorOf(matchId, a, b);
-    const other = sleeper.id === a.id ? b : a;
+    const movesBefore = await h.memory.movesOf(matchId, 0);
     h.advance(LIMIT + ENTRY + 1);
-    await h.live.status(a, matchId); // sleeper strike 1
-    await h.playTurn(other, matchId);
-    await h.playTurn(sleeper, matchId); // sleeper plays a turn: the streak resets
-    await h.playTurn(other, matchId);
-    h.advance(LIMIT + REPLAY + 1);
     const s = await h.live.status(a, matchId);
-    expect(s.live).toBe(true);
-    const seat = (await h.memory.participantOf(matchId, sleeper.id))!.seat;
-    expect(s.strikes[seat]).toBe(1);
+    const after = await match(h, matchId);
+    expect(after.status).toBe('finished'); // NOT 'active'
+    expect(after.liveManaged).toBe(false);
+    expect(s.endedReason).not.toBe('strikes');
+    expect(after.turnTimeoutMs).not.toBe(DAY); // the live clock is never swapped for the 24-hour one
+    // Nothing was played on the runner-out's behalf.
+    expect(await h.memory.movesOf(matchId, 0)).toHaveLength(movesBefore.length);
+    void b;
   });
 
-  it('a late move after a live deadline is refused as stale (the auto-play went first)', async () => {
+  it('a player who goes quiet does NOT forfeit: only the clock ends a real-time duel', async () => {
+    const h = makeLiveHarness();
+    const { a, b, matchId } = await h.pair();
+    await h.goLive(a, b, matchId);
+    // The tab is closed / the app is backgrounded: presence goes stale well before the turn clock.
+    h.advance(46_001);
+    const s = await h.live.status(a, matchId);
+    expect(s.opponent.presence).toBe('offline');
+    expect((await match(h, matchId)).status).toBe('active'); // going quiet is NOT a forfeit event
+    // ...but the server clock keeps running, and it is what ends the duel.
+    h.advance(LIMIT + ENTRY + 1);
+    const ended = await h.live.status(a, matchId);
+    expect(ended.status).toBe('finished');
+    expect((await match(h, matchId)).result?.reason).toBe('timeout');
+    void b;
+  });
+
+  it('a timeout and an explicit leave racing produce exactly ONE finish', async () => {
+    const h = makeLiveHarness();
+    const { a, b, matchId } = await h.pair();
+    await h.goLive(a, b, matchId);
+    const before = await match(h, matchId);
+    const leaver = await h.actorOf(matchId, a, b); // the actor will time out; it also presses Leave
+    const other = leaver.id === a.id ? b : a;
+    h.advance(LIMIT + ENTRY + 1);
+    const results = await Promise.allSettled([h.live.leave(leaver, matchId), h.live.status(other, matchId)]);
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    const after = await match(h, matchId);
+    expect(after.status).toBe('finished');
+    expect(after.result).not.toBeNull();
+    // Whichever of the two won the row lock, the leaver is the loser either way.
+    expect(['timeout', 'resigned']).toContain(after.result!.reason);
+    expect(after.result!.winner).toBe(before.state.actor === 0 ? 1 : 0);
+    // A repeated leave (a retry / a second tap) can never finish it a second time.
+    await h.live.leave(leaver, matchId);
+    const again = await match(h, matchId);
+    expect(again.result).toEqual(after.result);
+    expect(again.revision).toBe(after.revision);
+  });
+
+  it('a late move after the deadline is refused (the timeout already finished the match)', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
@@ -165,11 +178,14 @@ describe('timeouts and strikes', () => {
     const res = await code(
       h.service.submitAction(actor, matchId, { expectedRevision: v.revision, requestId: 'late-1', action: v.legalActions[0]! }),
     );
-    expect(['STALE_REVISION', 'NOT_YOUR_TURN']).toContain(res);
-    expect((await match(h, matchId)).state.actor).not.toBe(v.seat);
+    expect(res).toBe('TIMED_OUT');
+    const m = await match(h, matchId);
+    expect(m.status).toBe('finished');
+    expect(m.result?.reason).toBe('timeout');
+    void b;
   });
 
-  it('the sweeper also runs due live decisions', async () => {
+  it('the sweeper also runs due real-time decisions and finishes the match', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
@@ -177,96 +193,104 @@ describe('timeouts and strikes', () => {
     h.advance(LIMIT + ENTRY + 1);
     await h.service.sweep('127.0.0.1');
     const after = await match(h, matchId);
-    expect(after.state.actor).not.toBe(before.state.actor);
-    expect(after.status).toBe('active');
+    expect(after.status).toBe('finished');
+    expect(after.result).toEqual({ winner: before.state.actor === 0 ? 1 : 0, reason: 'timeout', scores: scores(before.state) });
+    void a;
+    void b;
   });
 
-  it('a long absence of both players resolves to 24-hour play, never a loss', async () => {
+  it('a long absence of both players ends as a real-time LOSS, never a quiet return to 24-hour play', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     h.advance(10 * 60_000);
     const s = await h.live.status(a, matchId);
     expect(s.live).toBe(false);
-    expect(s.endedReason).toBe('strikes');
+    expect(s.endedReason).toBe('finished');
     const m = await match(h, matchId);
-    expect(m.status).toBe('active');
-    expect(m.turnTimeoutMs).toBe(DAY);
+    expect(m.status).toBe('finished');
+    expect(m.result?.reason).toBe('timeout');
+    void b;
   });
 });
 
-describe('leave live', () => {
-  it('leaving on my own turn: the live clock continues plus 60 s, then the turn is auto-played; later turns are 24 h', async () => {
+describe('leaving real-time forfeits', () => {
+  it('finishes the match with the LEAVER as the loser (reason resigned) and pings the winner at once', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const leaver = await h.actorOf(matchId, a, b);
     const other = leaver.id === a.id ? b : a;
-    const d = (await match(h, matchId)).turnDeadlineAt!;
-    h.advance(1_000);
-    const s = await h.live.leave(leaver, matchId);
-    expect(s.live).toBe(false);
-    expect(s.endedReason).toBe('left');
-    let m = await match(h, matchId);
-    expect(m.turnDeadlineAt).toBe(d + 60_000);
-    expect(m.turnTimeoutMs).toBe(DAY);
-    const before = m.state;
-    h.advance(d + 60_000 - h.now() + 1);
-    await h.service.viewPayload(other, matchId);
-    m = await match(h, matchId);
-    expect(m.state.actor).not.toBe(before.actor);
-    expect(m.turnDeadlineAt).toBe(d + 60_000 + DAY);
-    expect(m.liveManaged).toBe(false);
     const seat = (await h.memory.participantOf(matchId, leaver.id))!.seat;
-    expect((await h.live.status(leaver, matchId)).strikes[seat]).toBe(0);
+    const before = await match(h, matchId);
+    h.broadcaster.published.length = 0;
+    const s = await h.live.leave(leaver, matchId);
+    const m = await match(h, matchId);
+    expect(m.status).toBe('finished');
+    expect(m.result).toEqual({ winner: seat === 0 ? 1 : 0, reason: 'resigned', scores: scores(before.state) });
+    // The board is untouched and the revision did not move: a forfeit is not a move.
+    expect(m.state).toEqual(before.state);
+    expect(m.revision).toBe(before.revision);
+    expect(s.live).toBe(false);
+    expect(s.status).toBe('finished');
+    expect(s.leftBy).toBe(seat);
+    expect(s.endedReason).toBe('finished');
+    // The winner is told immediately, by the same terminal-status ping every other ending publishes.
+    expect(h.broadcaster.published.at(-1)).toEqual({ matchId, ping: { revision: m.turnStartRevision, status: 'finished' } });
+    expect((await h.liveStore.player(a.id)).liveMatchId).toBeNull();
+    expect((await h.liveStore.player(b.id)).liveMatchId).toBeNull();
+    void other;
   });
 
-  it('leaving on the opponent turn turns their turn into a normal 24-hour turn', async () => {
-    const h = makeLiveHarness();
-    const { a, b, matchId } = await h.pair();
-    await h.goLive(a, b, matchId);
-    const actor = await h.actorOf(matchId, a, b);
-    const leaver = actor.id === a.id ? b : a;
-    await h.live.leave(leaver, matchId);
-    expect((await match(h, matchId)).turnDeadlineAt).toBe(h.now() + DAY);
-  });
-
-  it('the leaver cannot challenge again for 10 minutes or 3 of their turns, whichever comes first', async () => {
+  it('a double leave finishes once and changes nothing the second time', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     await h.goLive(a, b, matchId);
     const leaver = await h.actorOf(matchId, a, b);
-    const other = leaver.id === a.id ? b : a;
-    await h.live.leave(other, matchId);
-    await h.online(a, b);
-    expect(await code(h.live.challenge(other, matchId, 'live'))).toBe('COOLDOWN');
-    // The OTHER player is not in cooldown.
-    const c = await h.live.challenge(leaver, matchId, 'live');
-    await h.live.cancel(leaver, c.challenge.id);
-    h.advance(10 * 60_000);
-    await h.online(a, b);
-    expect(await code(h.live.challenge(other, matchId, 'live'))).toBe('OK');
+    await h.live.leave(leaver, matchId);
+    const first = await match(h, matchId);
+    await h.live.leave(leaver, matchId); // a retry / second tap
+    const second = await match(h, matchId);
+    expect(second.result).toEqual(first.result);
+    expect(second.revision).toBe(first.revision);
+    expect(second.status).toBe('finished');
+    void b;
   });
 
-  it('the cooldown also ends after 3 of the leaver own turns', async () => {
+  it('leaving a match that is not live is refused and the ASYNC match is left untouched (leaving async is free)', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
-    await h.goLive(a, b, matchId);
-    const actor = await h.actorOf(matchId, a, b);
-    const leaver = actor.id === a.id ? b : a;
-    await h.live.leave(leaver, matchId);
-    for (let i = 0; i < 6; i++) {
-      await h.playTurn(actor, matchId);
-      await h.playTurn(leaver, matchId);
-    }
-    await h.online(a, b);
-    expect(await code(h.live.challenge(leaver, matchId, 'live'))).toBe('OK');
+    const before = await match(h, matchId);
+    expect(await code(h.live.leave(a, matchId))).toBe('NOT_LIVE');
+    const after = await match(h, matchId);
+    // The scope boundary, pinned: a normal 24-hour duel is NOT finished by "leaving" it. Leaving
+    // async play is a pure client action (there is no endpoint for it), so nothing here may end the
+    // match. A future change must not widen the forfeit to async duels.
+    expect(after).toEqual(before);
+    expect(after.status).toBe('active');
+    expect(after.result).toBeNull();
+    void b;
   });
+});
 
-  it('leaving a match that is not live is refused', async () => {
+describe('the ASYNC 24-hour clock stays forgiving (real time is the strict one)', () => {
+  it('a first miss warns and extends; a second miss by the same seat loses — unchanged by the real-time rule', async () => {
     const h = makeLiveHarness();
     const { a, matchId } = await h.pair();
-    expect(await code(h.live.leave(a, matchId))).toBe('NOT_LIVE');
+    const before = await match(h, matchId);
+    const seat = before.state.actor;
+    h.advance(DAY + 1);
+    await h.service.sweep('127.0.0.1');
+    const first = await match(h, matchId);
+    expect(first.status).toBe('active'); // the async clock is forgiving: one grace
+    expect(first.graceUsed[seat]).toBe(1);
+    expect(first.turnDeadlineAt).toBe(before.turnDeadlineAt! + DAY);
+    h.advance(DAY + 1);
+    await h.service.sweep('127.0.0.1');
+    const second = await match(h, matchId);
+    expect(second.status).toBe('finished');
+    expect(second.result?.reason).toBe('timeout');
+    void a;
   });
 });
 
@@ -482,22 +506,23 @@ describe('other matches and the end of live', () => {
     expect(await code(h.live.challenge(a, matchId, 'rematch'))).toBe('MATCH_NOT_ACTIVE');
   });
 
-  it('switching modes on and off changes nothing about the board, scores or result', async () => {
+  it('going live and leaving never touch the board; leaving only settles the RESULT (it forfeits)', async () => {
     const h = makeLiveHarness();
     const { a, b, matchId } = await h.pair();
     const actor = await h.actorOf(matchId, a, b);
     await h.playTurn(actor, matchId);
-    const v0 = await h.service.viewPayload(a, matchId);
+    const before = await match(h, matchId);
     await h.goLive(a, b, matchId);
-    const v1 = await h.service.viewPayload(a, matchId);
+    expect((await match(h, matchId)).state).toEqual(before.state);
     const leaver = await h.actorOf(matchId, a, b);
-    await h.live.leave(leaver === a ? b : a, matchId);
-    const v2 = await h.service.viewPayload(a, matchId);
-    for (const v of [v1, v2]) {
-      expect(v.view).toEqual(v0.view);
-      expect(v.revision).toBe(v0.revision);
-      expect(v.result).toEqual(v0.result);
-    }
+    const leaverSeat = (await h.memory.participantOf(matchId, leaver.id))!.seat;
+    await h.live.leave(leaver, matchId);
+    const after = await match(h, matchId);
+    expect(after.state).toEqual(before.state); // the board never moves
+    expect(after.revision).toBe(before.revision); // and no move was invented
+    expect(after.status).toBe('finished');
+    expect(after.result).toEqual({ winner: leaverSeat === 0 ? 1 : 0, reason: 'resigned', scores: scores(before.state) });
+    void b;
   });
 });
 
@@ -525,7 +550,7 @@ describe('HTTP routes', () => {
     expect(st?.body).toMatchObject({ ok: true, live: { matchId, live: false } });
   });
 
-  it('full flow over the router: challenge, poll, accept, leave', async () => {
+  it('full flow over the router: challenge, poll, accept, leave (which forfeits)', async () => {
     const h = makeLiveHarness();
     const { matchId, ta, tb } = await h.pair();
     await call(h, 'POST', '/v1/players/me/presence', ta, { status: 'idle' });
@@ -535,8 +560,9 @@ describe('HTTP routes', () => {
     expect(inbox.incoming.map((c) => c.id)).toEqual([ch.challenge.id]);
     const acc = (await call(h, 'POST', `/v1/challenges/${ch.challenge.id}/accept`, tb, {}))!.body as { liveMatchId: string };
     expect(acc.liveMatchId).toBe(matchId);
-    const out = (await call(h, 'POST', `/v1/matches/${matchId}/live/leave`, ta, {}))!.body as { live: { live: boolean } };
+    const out = (await call(h, 'POST', `/v1/matches/${matchId}/live/leave`, ta, {}))!.body as { live: { live: boolean; status: string } };
     expect(out.live.live).toBe(false);
+    expect(out.live.status).toBe('finished');
   });
 
   it('errors are stable codes', async () => {

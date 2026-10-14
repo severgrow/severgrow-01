@@ -7,7 +7,6 @@ export type LiveErrorCode =
   | 'BUSY'
   | 'NOT_AVAILABLE'
   | 'OFFLINE'
-  | 'COOLDOWN'
   | 'TOO_MANY_PENDING'
   | 'RATE_LIMITED'
   | 'CHALLENGE_NOT_FOUND'
@@ -21,7 +20,6 @@ const STATUS: Record<LiveErrorCode, number> = {
   BUSY: 409,
   NOT_AVAILABLE: 409,
   OFFLINE: 409,
-  COOLDOWN: 429,
   TOO_MANY_PENDING: 409,
   RATE_LIMITED: 429,
   CHALLENGE_NOT_FOUND: 404,
@@ -37,7 +35,6 @@ export const LIVE_MESSAGES: Record<LiveErrorCode, string> = {
   BUSY: 'Busy right now.',
   NOT_AVAILABLE: 'Not available for live games.',
   OFFLINE: 'Not online right now.',
-  COOLDOWN: 'You left live play recently. Try again a little later.',
   TOO_MANY_PENDING: 'A challenge is already waiting in this match.',
   RATE_LIMITED: 'Too many challenges. Try again later.',
   CHALLENGE_NOT_FOUND: 'That challenge is gone.',

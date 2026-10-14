@@ -3,6 +3,7 @@
 // compare-and-set on every match it read. A base commit that landed in between (another request
 // moved the match) makes the step retry from scratch, exactly like a lock wait in Postgres.
 import type { MemoryStorage } from '../storage/memory.js';
+import type { OnlineGameResult } from '../protocol.js';
 import type { Challenge, LiveMatch, LivePlayer, LiveStore, LiveTx, LockedMatch, PresenceStatus } from './types.js';
 import { defaultLiveMatch, defaultLivePlayer, liveManaged } from './types.js';
 
@@ -11,6 +12,9 @@ const copy = <T>(v: T): T => structuredClone(v);
 class Conflict extends Error {}
 
 type Snapshot = { revision: number; turnDeadlineAt: number | null; status: string };
+
+/** A finish buffered inside a live step; applied through the base storage at commit. */
+type Finish = { playerId: string; result: OnlineGameResult; now: number };
 
 export class MemoryLiveStore implements LiveStore {
   private readonly players = new Map<string, LivePlayer>();
@@ -50,6 +54,7 @@ export class MemoryLiveStore implements LiveStore {
     const clocks = new Map<string, { turnTimeoutMs: number; turnDeadlineAt: number | null }>();
     const players = new Map<string, LivePlayer>();
     const challenges = new Map<string, Challenge>();
+    const finishes = new Map<string, Finish>();
     const tx: LiveTx = {
       match: async (matchId) => {
         const m = await this.base.matchById(matchId);
@@ -87,6 +92,9 @@ export class MemoryLiveStore implements LiveStore {
       saveClock: async (matchId, clock) => {
         clocks.set(matchId, { ...clock });
       },
+      finishMatch: async (matchId, playerId, result, now) => {
+        finishes.set(matchId, { playerId, result, now });
+      },
       savePlayer: async (p) => {
         players.set(p.playerId, copy(p));
       },
@@ -106,6 +114,9 @@ export class MemoryLiveStore implements LiveStore {
         throw new Conflict('match moved during a live step');
       }
     }
+    // Finishes first: they only touch the match row, and the base `resignMatch` is idempotent, so a
+    // timeout and an explicit leave racing can only ever produce ONE finish.
+    for (const [matchId, f] of finishes) await this.base.resignMatch(matchId, f.playerId, f.now, f.result);
     // Pending-uniqueness per match (the Postgres partial unique index).
     const merged = this.mergedChallenges(challenges);
     const pendingByMatch = new Map<string, number>();

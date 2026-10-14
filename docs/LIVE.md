@@ -22,21 +22,25 @@ test-only gate. **It is a one-line revert:** remove `'futa05'` from `CHANNELS_WI
 
 Two players who already share an online match can switch that **same match** to a short clock:
 **60 seconds per turn** instead of 24 hours. (Owner's change, 2026-10-14: it was 45 seconds.) The board, the cards, the score and the rules do not
-change. Going back to 24-hour play is always possible. Only the game rules and the clocks ever
-decide a winner — nobody loses because of a live timeout.
+change. Real time is **high-stakes: you cannot step away from it.** Leaving real time forfeits the
+match (you lose, reason `resigned`), and running out of time loses it (reason `timeout`). There is no
+way back to 24-hour turns once it starts. Closing the tab is not an escape: the clock keeps running
+on the server, so you lose by timeout. Normal (24-hour) duels are untouched and stay forgiving —
+leaving them is free, and their first missed turn only warns and extends.
 
 ## The flow
 
 1. **Go live.** In a match whose opponent has the app open, a quiet `● Go live` pill appears in the
    status strip at the top. Disabled states: **In a live game** (you or them), **Not available**
-   (they switched challenges off), **Busy** (they are in the tutorial), **Live again soon** (you
-   left live play recently), **Try live again later** (too many tries). Hidden when they are offline.
+   (they switched challenges off), **Busy** (they are in the tutorial), **Try live again later** (too
+   many tries). Hidden when they are offline.
 2. **Waiting.** Tapping it sends a challenge; the pill becomes `Waiting 40s · Cancel` (on wide
    screens `Waiting for <name>... 40s`). One open challenge per match.
 3. **The pop-up.** The other player sees it **anywhere** in the app — a computer game, another
    online match, the menu — in the same dark glass as Match Intel: their name, "wants to go live",
-   "60-second turns · same match", a thin ring counting down the 45-second expiry, and two 44 px
-   buttons: **Accept** and **Not now**. A soft two-note chime and a light buzz (only if Sound /
+   "60-second turns · same match", a short **Leaving real time loses** warning (with the fuller rule
+   under it), a thin ring counting down the 45-second expiry, and two 44 px buttons: **Accept** and
+   **Not now**. A soft two-note chime and a light buzz (only if Sound /
    Vibration are on). While it is open, the game underneath ignores taps.
    - It never appears **during a drag or a Bloom paint** (it waits as long as that lasts), and it
      waits for an **animation or the opponent's turn replay** to finish (at most 10 seconds).
@@ -47,7 +51,7 @@ decide a winner — nobody loses because of a live timeout.
 6. **Where you were is kept.** If you accepted from a computer game, that game is saved exactly as it
    was (the normal Continue save). From another online match, its unsent moves stay in that match's
    own session storage. The app remembers "Back to your game".
-7. **The end.** When live ends (match finished, someone left, or two timeouts in a row), a glass
+7. **The end.** When the duel ends (a resignation, a real-time timeout, or the board itself), a glass
    window offers **Back to your game** (or match / menu) and, after a finished match, **Rematch**.
    If both press Rematch, a **new** match starts, already live (the engine's usual lottery decides
    who starts), and "Back to your game" still points at what you were doing before.
@@ -58,11 +62,12 @@ decide a winner — nobody loses because of a live timeout.
   between the menu button and the logo), written into that strip's own time slot as `m:ss`, in the
   material of whose turn it is. It is not a live region: the words change every second and only the
   thresholds are announced. Leaving live hands the slot back to the 24-hour urgency rule.
-- A thin arc drains around the home of the player whose turn it is (moss for you, lava for them),
-  inset from the tile and 1.6 px wide; it thickens and brightens in the last ten seconds.
-  The chip shows seconds under 10, a soft tick plays each second under 5 on your turn, and the
-  screen edge glows faintly (not with Reduce motion). Screen readers hear "N seconds left" only at
-  10, 8, 6, 4, 2 and "Time's up". Strikes are the two small dots in the chip (yours).
+- A thin arc drains around the home of the player whose turn it is, fitted inside the tile. The
+  arc's LENGTH is the time left and its colour runs green → orange → red across the turn — the same
+  on both homes, because the colour means time and the home it sits on says whose turn it is. It
+  gains weight near the end. The chip shows seconds under 10, a soft tick plays each second under 5
+  on your turn, and the screen edge glows faintly (not with Reduce motion). Screen readers hear
+  "N seconds left" only at 10, 8, 6, 4, 2 and "Time's up".
 - **The server keeps the time.** A turn's clock starts when the previous turn was thrown **plus a
   6-second allowance** to watch that turn's replay (no replay-length report exists in the current
   client, so the fixed allowance is used). Draw / Grow / Throw inside a turn never reset it.
@@ -70,12 +75,17 @@ decide a winner — nobody loses because of a live timeout.
 - **Time's up:** the server plays the rest of that turn — Draw from the deck (the throw pile only if
   the deck is empty), skip Grow, throw the card just drawn — always choosing from the engine's own
   legal moves, using only that player's own view. That player gets a **strike**.
-- **Two strikes in a row by the same player** end live mode: the match goes back to 24-hour turns
-  with a normal 24-hour deadline. Nobody loses.
-- **Leave live** (pause menu, one confirm): if it is your turn, your clock keeps running **plus 60
-  seconds**, then your turn is auto-played (no strike); after that all turns are 24-hour turns. If it
-  is the other player's turn, their turn becomes a normal 24-hour turn. The leaver cannot challenge
-  again for **10 minutes or 3 of their own turns, whichever comes first**.
+- **Time's up = you lose.** If the clock runs out on your turn the match is finished immediately: you
+  lose, reason `timeout`. The server does not play the turn for you, there is no strike, and there is
+  **no return to 24-hour play**. The winner is told at once (the same status-change ping every ending
+  publishes), so they never sit on a finished board.
+- **Leave real time = you resign.** The pause-menu **Leave live** item asks **"Leave and lose this
+  real-time duel?"** and, on confirm, finishes the match with the leaver as the loser, reason
+  `resigned`. Cancelling does nothing. There is no cooldown and no grace: the match is simply over for
+  both players.
+- **Walking away is not an escape.** Only the explicit leave button forfeits. Closing the tab,
+  switching apps, or a brief network blip does **not** itself end the match — but the clock keeps
+  running on the server, so a player who has gone quiet times out and loses.
 
 ## Limits
 
@@ -93,14 +103,17 @@ are milliseconds unless noted.
 | `LIVE_TURN_MS` | `60000` | The live turn length. **This is the one to tune.** (`LIVE_TURN_MS_DEFAULT` in `server/src/live/config.ts` is the one source of truth; every number the client shows comes from the server's `limitMs`.) |
 | `LIVE_REPLAY_ALLOWANCE_MS` | `6000` | Time to watch the previous turn before the clock runs |
 | `LIVE_ENTRY_ALLOWANCE_MS` | `15000` | Extra time for the current player when both go live |
-| `LIVE_LEAVE_GRACE_MS` | `60000` | Extra time on your own turn after Leave live |
 | `LIVE_CHALLENGE_TTL_MS` | `45000` | How long a challenge waits for an answer |
 | `LIVE_PRESENCE_STALE_MS` | `45000` | No heartbeat for this long = offline |
 | `LIVE_NOT_NOW_COOLDOWN_MS` | `120000` | Wait after a "Not now" |
 | `LIVE_DECLINE_LIMIT` (count) / `LIVE_DECLINE_WINDOW_MS` | `3` / `1800000` | Declines per match before the long wait |
-| `LIVE_LEAVE_COOLDOWN_MS` / `LIVE_LEAVE_COOLDOWN_TURNS` (count) | `600000` / `3` | Leaver cooldown |
-| `LIVE_STRIKES_TO_END` (count) | `2` | Timeouts in a row that end live mode |
 | `LIVE_CHALLENGES_PER_PLAYER_PER_HOUR` (count) | `30` | Abuse cap |
+
+**Removed (2026-10-14):** `LIVE_LEAVE_GRACE_MS`, `LIVE_LEAVE_COOLDOWN_MS`,
+`LIVE_LEAVE_COOLDOWN_TURNS` and `LIVE_STRIKES_TO_END`. Leaving real time now forfeits and a real-time
+timeout now loses, so there is no grace, no cooldown and no strike escape hatch. The old
+`live_strikes_*` / `live_cooldown_*` columns stay in the schema (no risky migration); nothing reads or
+writes them.
 
 **Exact clicks to change the turn length on Supabase:** open the Supabase dashboard → your
 FUTASAKU project → **Edge Functions** (left menu) → **Secrets** (sometimes under *Manage secrets*)
@@ -110,7 +123,7 @@ it (no redeploy needed for a secret change on current Supabase; if it does not a
 
 ## Where the code is
 
-- Server: `server/src/live/` (rules, auto-play, service, router, memory + Postgres stores, wiring),
+- Server: `server/src/live/` (rules, service, router, memory + Postgres stores, wiring),
   migration `server/migrations/0006_live_duels.sql` (the brief said "0003"; 0003–0005 were taken).
 - Client: `web/src/online/live/` (listener, pop-up, pill, HUD, end window, return targets, channel).
 - Tests: `server/tests/live-*.ts`, `web/tests/live-center.test.ts`, `web/e2e/live-duels.ts`

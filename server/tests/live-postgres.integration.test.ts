@@ -139,7 +139,7 @@ suite('live duels on real Postgres', () => {
     expect(rows).toEqual([]);
   });
 
-  it('a whole live session: go live, a timeout auto-play, a strike, and the board unchanged by the switch', async () => {
+  it('a whole live session: go live, then a real-time timeout FINISHES the match (the board unchanged by the switch)', async () => {
     const { a, b, matchId } = await pair();
     const before = await service.viewPayload(a, matchId);
     const c = await live.challenge(a, matchId, 'live');
@@ -149,11 +149,14 @@ suite('live duels on real Postgres', () => {
     expect(mid.turnDeadlineAt).toBe(clock + LIMIT + ENTRY);
     clock += LIMIT + ENTRY + 1;
     const s = await live.status(a, matchId);
-    expect(s.live).toBe(true);
-    expect(s.strikes[before.actor]).toBe(1);
-    const after = await service.viewPayload(a, matchId);
-    expect(after.actor).not.toBe(before.actor);
-    expect(after.status).toBe('active');
+    expect(s.live).toBe(false);
+    expect(s.status).toBe('finished');
+    expect(s.endedReason).toBe('finished');
+    const { rows } = await pool.query('select status, result from matches where id = $1', [matchId]);
+    expect(rows[0]!.status).toBe('finished');
+    expect((rows[0]!.result as { reason: string }).reason).toBe('timeout');
+    expect((rows[0]!.result as { winner: number }).winner).toBe(before.actor === 0 ? 1 : 0);
+    void b;
   });
 
   it('the database allows only ONE pending challenge per match (racing inserts)', async () => {
@@ -182,7 +185,7 @@ suite('live duels on real Postgres', () => {
     expect(out.sort()).toEqual(['CHALLENGE_CLOSED', 'OK']);
   });
 
-  it('a racing late move and the timeout tick: exactly one turn is applied', async () => {
+  it('a racing late move and the real-time timeout: exactly ONE finish, and no turn is applied', async () => {
     const { a, b, matchId } = await pair();
     const c = await live.challenge(a, matchId, 'live');
     await live.accept(b, c.challenge.id);
@@ -196,9 +199,13 @@ suite('live duels on real Postgres', () => {
       live.status(a, matchId),
       live.status(b, matchId),
     ]);
-    const moves = await pool.query(`select request_id from match_moves where match_id = $1 order by revision`, [matchId]);
-    const ids = moves.rows.map((r) => String(r.request_id));
-    expect(ids.some((id) => id.startsWith('live-auto-'))).toBe(true);
-    expect(ids).not.toContain('late-race');
+    const finished = await pool.query(`select status, result, revision from matches where id = $1`, [matchId]);
+    expect(finished.rows[0]!.status).toBe('finished');
+    expect((finished.rows[0]!.result as { reason: string }).reason).toBe('timeout');
+    // The late move never landed: no move row, and the revision never moved past the last real turn.
+    const moves = await pool.query(`select request_id from match_moves where match_id = $1`, [matchId]);
+    expect(moves.rows.map((r) => String(r.request_id))).not.toContain('late-race');
+    expect(Number(finished.rows[0]!.revision)).toBe(v.revision);
+    void b;
   });
 });

@@ -28,8 +28,15 @@ describe('the live turn length', () => {
   it('the other live timings are untouched by the turn-length change', () => {
     expect(DEFAULT_LIVE_CONFIG.replayAllowanceMs).toBe(6_000);
     expect(DEFAULT_LIVE_CONFIG.entryAllowanceMs).toBe(15_000);
-    expect(DEFAULT_LIVE_CONFIG.leaveGraceMs).toBe(60_000);
-    expect(DEFAULT_LIVE_CONFIG.strikesToEnd).toBe(2);
+  });
+
+  it('the strike and leaver-cooldown knobs are gone (a real-time timeout now loses outright)', () => {
+    // Owner's ruling, 2026-10-14: leaving real-time forfeits AND a real-time timeout loses, so there
+    // is no strike escape hatch and nothing to cooldown. A future change must not silently re-add a
+    // dead knob: the config type has no such field at all.
+    for (const gone of ['strikesToEnd', 'leaveGraceMs', 'leaveCooldownMs', 'leaveCooldownTurns'] as const) {
+      expect(gone in DEFAULT_LIVE_CONFIG).toBe(false);
+    }
   });
 
   it('every player-facing sentence takes its number from the wire, not from a fixed word', () => {
