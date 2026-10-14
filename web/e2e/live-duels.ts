@@ -18,6 +18,7 @@ import type { FetchLike } from '../../server/src/client.js';
 import { DEFAULT_LIVE_CONFIG } from '../../server/src/live/config.js';
 import { MemoryLiveStore } from '../../server/src/live/memory.js';
 import { createLiveRuntime } from '../../server/src/live/runtime.js';
+import type { MatchListEntry } from '../../server/src/protocol.js';
 import { CHROME, openDuel, openSeat } from './helpers/local-duel.js';
 import type { LocalDuel, LocalMatch, SeatSession } from './helpers/local-duel.js';
 
@@ -94,9 +95,23 @@ const nodeFetch: FetchLike = (url, init) => fetch(url, init);
 const api = new DuelClient({ baseUrl: apiBase, fetch: nodeFetch });
 const browser: Browser = await chromium.launch({ executablePath: CHROME });
 
+/**
+ * Guests this harness created, so a scenario can hand back the matches it opened before the next one
+ * starts. Every scenario gets its OWN fresh guests (`newMatch` mints a new guest unless the scenario
+ * deliberately reuses one, as 3 and 4 do to prove the multi-match behaviour), so each guest's
+ * open-match baseline is 0 and the invariant is simply that it returns to 0.
+ */
+let scenarioGuests: string[] = [];
+const runGuests: string[] = [];
+const rememberGuest = (token: string): void => {
+  scenarioGuests.push(token);
+  runGuests.push(token);
+};
+
 const newMatch = async (guests?: [LocalMatch['guests'][0] | null, LocalMatch['guests'][1] | null]): Promise<LocalMatch> => {
   const g = async () => {
     const r = await api.createGuest();
+    rememberGuest(r.token);
     return { token: r.token, playerId: r.player.id, displayName: r.player.displayName };
   };
   const creator = guests?.[0] ?? (await g());
@@ -107,6 +122,63 @@ const newMatch = async (guests?: [LocalMatch['guests'][0] | null, LocalMatch['gu
   return { matchId: created.match.matchId, guests: [creator, joiner], inviteCode: created.match.inviteCode, starterSeat };
 };
 const duel = { origin, browser } as unknown as LocalDuel;
+
+// ---------------------------------------------------------------- match hygiene
+
+/**
+ * A guest's OPEN matches, read from the product's own list endpoint — the same rows the lobby renders
+ * as `#online-matches li[data-match-id]`. `finished` never counts: the per-player cap is on open
+ * matches only (`server/src/config.ts` `maxOpenMatchesPerPlayer = 10`).
+ */
+const openMatchesOf = async (token: string): Promise<MatchListEntry[]> => {
+  const list = await api.listMatches(token);
+  return list.matches.filter((m) => m.status !== 'finished');
+};
+
+/**
+ * Hand back everything a scenario left open, through the REAL product paths: an in-play match is
+ * resigned (`POST /v1/matches/:id/resign`), a parked search is retired with the matchmaking `cancel`.
+ * Nothing is deleted directly, so the cleanup also exercises those paths, and both calls are
+ * tolerated-when-unnecessary (a match the scenario already resigned answers MATCH_FINISHED).
+ *
+ * Without this the harness would creep toward the 10-open-match cap and a scenario that hit it would
+ * fail on a missing lobby row instead of proving anything — a false signal, worse than a failure.
+ */
+const closeOpenMatches = async (token: string): Promise<void> => {
+  for (let round = 0; round < 3; round++) {
+    const open = await openMatchesOf(token).catch(() => [] as MatchListEntry[]);
+    if (open.length === 0) return;
+    for (const m of open) {
+      if (m.status === 'active') await api.resign(token, m.matchId).catch(() => undefined);
+      else await api.cancelSearch(token).catch(() => undefined);
+    }
+  }
+};
+
+/**
+ * Finish this scenario's matches and PROVE the open-match count is back where it started. The
+ * verifying read is deliberately NOT error-tolerant: a guest whose state cannot be read is a failed
+ * proof, not a pass, so an unreachable API can never look like a clean teardown.
+ */
+const teardownScenario = async (name: string): Promise<void> => {
+  const guests = [...new Set(scenarioGuests)];
+  scenarioGuests = [];
+  for (const token of guests) await closeOpenMatches(token);
+  const left: string[] = [];
+  let unreadable = 0;
+  for (const token of guests) {
+    try {
+      for (const m of await openMatchesOf(token)) left.push(`${m.matchId}(${m.status})`);
+    } catch {
+      unreadable += 1;
+    }
+  }
+  check(
+    `${name}: cleanup — open-match count back to its baseline`,
+    left.length === 0 && unreadable === 0,
+    `${guests.length} guest(s), ${left.length} left open${left.length ? `: ${left.join(', ')}` : ''}${unreadable ? `, ${unreadable} unreadable` : ''}`,
+  );
+};
 
 // ---------------------------------------------------------------- page helpers
 
@@ -166,6 +238,25 @@ const openBoth = async (m: LocalMatch, opts: { reduceMotion?: boolean; speed?: '
   return { a, b };
 };
 
+/**
+ * What the duel strip's time slot shows right now. While a live duel runs the LIVE clock owns this
+ * element (`data-live-clock`), so the 24-hour urgency words are suppressed there by design — see
+ * `fillDuelHud` in `web/src/online/duel-hud.ts` and the strip-clock rules in
+ * `web/src/online/live/ui.ts`. "No 24-hour warning" is therefore about the WORDS, not about the
+ * element being invisible: the visible strip clock is a separate, deliberate thing.
+ */
+const urgencySlot = (p: Page): Promise<string> =>
+  (
+    p.evaluate(`(() => {
+      const u = document.querySelector('#duel-hud [data-duel-urgency]');
+      if (!u || u.closest('[hidden]')) return 'absent';
+      const r = u.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return 'hidden';
+      const who = u.dataset.liveClock === '1' ? 'live-clock' : u.dataset.tone ? 'warning:' + u.dataset.tone : 'warning';
+      return who + ':' + (u.textContent || '').trim();
+    })()`) as Promise<string>
+  ).catch(() => 'unreadable');
+
 const pillState = (s: SeatSession) => s.page.evaluate(() => {
   const p = document.querySelector<HTMLElement>('[data-live="pill"]');
   return p && !p.hidden ? `${p.dataset.state}:${p.querySelector('.label')?.textContent ?? ''}` : 'hidden';
@@ -198,6 +289,10 @@ const run = async (name: string, fn: () => Promise<void>) => {
     await fn();
   } catch (e) {
     check(`${name}: no crash`, false, String(e).slice(0, 300));
+  } finally {
+    // Always, even when the scenario threw: one failure must never poison every later scenario by
+    // leaving an open match (and so a step closer to the cap) behind.
+    await teardownScenario(name);
   }
 };
 
@@ -219,7 +314,9 @@ try {
       return !!st && side === (st.actor === st.mySeat ? 'me' : 'opp');
     };
     check('1: the ring is around the ACTIVE home on both seats', (await waitFor(() => ringOk(a), 5_000)) && (await waitFor(() => ringOk(b), 5_000)));
-    check('1: no 24-hour warning while live', !(await vis(a.page, '[data-duel-urgency]')) && !(await vis(b.page, '[data-duel-urgency]')));
+    const slotA = await urgencySlot(a.page);
+    const slotB = await urgencySlot(b.page);
+    check('1: no 24-hour warning while live', !slotA.startsWith('warning') && !slotB.startsWith('warning'), `${slotA} | ${slotB}`);
     const before = (await api.getState(m.guests[0].token, m.matchId)).player.view.turnNumber;
     for (let t = 0; t < 3; t++) {
       await waitFor(async () => (await myTurn(a)) || (await myTurn(b)), 20_000);
@@ -496,6 +593,26 @@ try {
       await closeAll(a, b);
     }
   });
+
+  // Whole-run invariant: the harness leaves the live service exactly as it found it, so the suite is
+  // re-runnable back to back and a later scenario can never start from a drifted open-match count.
+  // As above, an unreadable guest counts as a FAILED proof rather than a silent pass.
+  const guests = [...new Set(runGuests)];
+  const openAtStart = 0; // no guest exists before the first scenario creates one, so the baseline is 0
+  let openAtEnd = 0;
+  let unreadable = 0;
+  for (const token of guests) {
+    try {
+      openAtEnd += (await openMatchesOf(token)).length;
+    } catch {
+      unreadable += 1;
+    }
+  }
+  check(
+    'run: the open-match count is the same at the start and the end',
+    openAtEnd === openAtStart && unreadable === 0,
+    `start ${openAtStart} → end ${openAtEnd}${unreadable ? ` (${unreadable} unreadable)` : ''}, across ${guests.length} guest(s) this run created`,
+  );
 } finally {
   await browser.close().catch(() => undefined);
   await previewServer.close().catch(() => undefined);

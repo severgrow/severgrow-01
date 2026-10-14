@@ -1,26 +1,27 @@
-local live duel API on http://127.0.0.1:44817
+local live duel API on http://127.0.0.1:51092
 
 --- 1-flow
 PASS  1: Go live pill ready  (ready:Go live)
-PASS  1: sender waits  (waiting:Waiting for PineMoth...Waiting)
+PASS  1: sender waits  (waiting:Waiting for JadeAspen...Waiting)
 PASS  1: pop-up appears for the recipient
 PASS  1: the 600 ms go-live moment plays (chip lights up)
 PASS  1: both screens are live
 PASS  1: LIVE chip in the header (both)
 PASS  1: ring drawn around a home
 PASS  1: the ring is around the ACTIVE home on both seats
-PASS  1: no 24-hour warning while live
+PASS  1: no 24-hour warning while live  (live-clock:0:18 | live-clock:0:18)
 PASS  1: live turn 1 played through the UI
 PASS  1: live turn 2 played through the UI
 PASS  1: live turn 3 played through the UI
 PASS  1: three live turns advanced the match  (1 -> 4)
-PASS  1: still live, no strikes  ({"live":true,"strikes":[0,0],"ended":null})
+PASS  1: still live after three turns (no strikes, nothing ended)  ({"live":true,"ended":null})
 PASS  1: finish → end-of-live window (both)
 PASS  1: Rematch offered after a finish
+PASS  1-flow: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 2-bot-return
 PASS  2: Go live pill ready  (ready:Go live)
-PASS  2: sender waits  (waiting:Waiting for AmberMole...Waiting)
+PASS  2: sender waits  (waiting:Waiting for RootAspen...Waiting)
 PASS  2: pop-up appears for the recipient
 PASS  2: both screens are live
 PASS  2: LIVE chip in the header (both)
@@ -28,6 +29,7 @@ PASS  2: return target is the bot game
 PASS  2: end window offers Back to your game
 PASS  2: the bot game is back on screen
 PASS  2: the bot game resumes at the IDENTICAL position
+PASS  2-bot-return: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 3-draft-return
 PASS  3: B holds the turn in match 2
@@ -39,62 +41,70 @@ PASS  3: B gets Back to your match
 PASS  3: B is back in match 2
 PASS  3: the unsent draft is still stored for match 2
 PASS  3: the drafted board is exactly as left
+PASS  3-draft-return: cleanup — open-match count back to its baseline  (4 guest(s), 0 left open)
 
 --- 4-busy-live
 PASS  4: Go live pill ready  (ready:Go live)
-PASS  4: sender waits  (waiting:Waiting for OakFox...Waiting)
+PASS  4: sender waits  (waiting:Waiting for MossyDeer...Waiting)
 PASS  4: pop-up appears for the recipient
 PASS  4: both screens are live
 PASS  4: LIVE chip in the header (both)
 PASS  4: third player sees "In a live game"  (disabled:In a live game)
 PASS  4: the server answers BUSY_LIVE
+PASS  4-busy-live: cleanup — open-match count back to its baseline  (3 guest(s), 0 left open)
 
 --- 5-notnow-expiry
 PASS  5: the waiting pill never runs under the logo
 PASS  5: sender sees a quiet "Not now"
 PASS  5: re-challenge is held back  (disabled:Try live again later)
 PASS  5: an unanswered challenge expires on both screens
+PASS  5-notnow-expiry: cleanup — open-match count back to its baseline  (4 guest(s), 0 left open)
 
---- 6-strikes
+--- 6-timeout
 PASS  6: Go live pill ready  (ready:Go live)
-PASS  6: sender waits  (waiting:Waiting for BloomAspen...Waiting)
+PASS  6: sender waits  (waiting:Waiting for SunnyMoth...Waiting)
 PASS  6: pop-up appears for the recipient
 PASS  6: both screens are live
 PASS  6: LIVE chip in the header (both)
-PASS  6: first timeout → auto-played, one strike
-PASS  6: the match continues (nobody lost)
-PASS  6: the other player plays their live turn
-PASS  6: second consecutive timeout → back to 24-hour turns
-PASS  6: next deadline is a normal 24-hour one
-PASS  6: end window says why
+PASS  6: a real-time timeout ends live for both
+PASS  6: the match is finished on the server
+PASS  6: the runner-out is the loser, reason timeout
+PASS  6: NOT returned to a 24-hour clock
+PASS  6: the winner reaches the end screen promptly
+PASS  6-timeout: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
---- 7-leave
+--- 7-leave-forfeit
 PASS  7: Go live pill ready  (ready:Go live)
-PASS  7: sender waits  (waiting:Waiting for MapleStone...Waiting)
+PASS  7: sender waits  (waiting:Waiting for LeafyHeron...Waiting)
 PASS  7: pop-up appears for the recipient
 PASS  7: both screens are live
 PASS  7: LIVE chip in the header (both)
-PASS  7: live ended for both
-PASS  7: leaving gives only the grace (old deadline + 4 s test grace)  (4000)
-PASS  7: the leaver is in cooldown  (disabled:Live again soon)
-PASS  7: after the grace the turn is auto-played
+PASS  7: the confirm states the forfeit outright  (Leave and lose this real-time duel?)
+PASS  7: live ends for both
+PASS  7: the match is FINISHED (not handed back to 24-hour turns)
+PASS  7: the leaver loses, reason resigned
+PASS  7: the winner reaches the end screen promptly
+PASS  7-leave-forfeit: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 8-rematch
 PASS  8: Go live pill ready  (ready:Go live)
-PASS  8: sender waits  (waiting:Waiting for PineLynx...Waiting)
+PASS  8: sender waits  (waiting:Waiting for GladeBadger...Waiting)
 PASS  8: pop-up appears for the recipient
 PASS  8: both screens are live
 PASS  8: LIVE chip in the header (both)
 PASS  8: both land in a NEW match that is already live
+PASS  8-rematch: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 9-dnd
 PASS  9: sender sees "Not available"  (disabled:Not available)
+PASS  9-dnd: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 10-mid-replay
 PASS  10: actor plays a turn
 PASS  10: the replay ran on the watcher
 PASS  10: the pop-up appears after the replay
-PASS  10: never on top of the running replay  (held back 0 frames; replay under an already-open pop-up 3 frames)
+PASS  10: never on top of the running replay  (held back 0 frames; replay under an already-open pop-up 4 frames)
+PASS  10-mid-replay: cleanup — open-match count back to its baseline  (2 guest(s), 0 left open)
 
 --- 11-widths
 PASS  11: 360px — pop-up inside the screen, 44px buttons, no sideways scroll  ({"inside":true,"big":true,"scroll":true})
@@ -105,5 +115,7 @@ PASS  11: 430px — pop-up inside the screen, 44px buttons, no sideways scroll  
 PASS  11: 430px — pill inside the screen
 PASS  11: 1280px — pop-up inside the screen, 44px buttons, no sideways scroll  ({"inside":true,"big":true,"scroll":true})
 PASS  11: 1280px — pill inside the screen
+PASS  11-widths: cleanup — open-match count back to its baseline  (8 guest(s), 0 left open)
+PASS  run: the open-match count is the same at the start and the end  (start 0 → end 0, across 33 guest(s) this run created)
 
 ALL PASS
