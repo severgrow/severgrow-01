@@ -24,11 +24,24 @@ import { ENTRY, LIMIT, liveTestConfig, serverTestConfig } from './live-harness.j
 const URL_ = (process.env.LIVE_DATABASE_URL ?? '').trim();
 const suite = describe.skipIf(URL_.length === 0);
 if (!URL_) console.warn('\n*** LIVE POSTGRES TESTS SKIPPED — LIVE_DATABASE_URL is not set ***\n');
+// Explicit pin (`npm run server:live-db-test`) must not look green when nothing ran.
+if (!URL_ && process.env.REQUIRE_DATABASE === '1') {
+  throw new Error('LIVE POSTGRES TESTS SKIPPED — LIVE_DATABASE_URL is not set (REQUIRE_DATABASE=1).');
+}
+
+// Everything this run creates is removed again in afterAll (matches cascade to participants,
+// moves and challenges), so the suite leaves the shared database exactly as it found it.
+const CREATED_PLAYERS: string[] = [];
+const CREATED_MATCHES: string[] = [];
 
 let pool: PgPool & { end?: () => Promise<void> };
 let service: MatchService;
 let live: LiveService;
-let clock = 1_800_000_000_000;
+// The clock starts in Jan 2027, so every row this suite writes (players, matches, challenges and
+// the rate-limit windows derived from it) carries a future timestamp real server data never has.
+const CLOCK_START = 1_800_000_000_000;
+const RATE_WINDOW_START = Math.floor(CLOCK_START / 3_600_000) * 3_600_000;
+let clock = CLOCK_START;
 
 const code = async (p: Promise<unknown>): Promise<string> => {
   try {
@@ -48,6 +61,8 @@ const pair = async () => {
   await service.joinMatch(b, m.match.inviteCode);
   await live.presence(a, 'idle', null);
   await live.presence(b, 'idle', null);
+  CREATED_PLAYERS.push(a.id, b.id);
+  CREATED_MATCHES.push(m.match.matchId);
   return { a, b, matchId: m.match.matchId };
 };
 
@@ -87,7 +102,16 @@ suite('live duels on real Postgres', () => {
   });
 
   afterAll(async () => {
-    await pool?.end?.();
+    if (pool === undefined) return;
+    try {
+      // Explicit WHERE; matches cascade to participants, moves and challenges.
+      if (CREATED_MATCHES.length > 0) await pool.query('delete from matches where id = any($1::uuid[])', [CREATED_MATCHES]);
+      if (CREATED_PLAYERS.length > 0) await pool.query('delete from players where id = any($1::uuid[])', [CREATED_PLAYERS]);
+      // The guard-bucket counters this run bumped (all in future windows only this suite uses).
+      await pool.query('delete from rate_limits where window_start >= $1', [RATE_WINDOW_START]);
+    } finally {
+      await pool.end?.();
+    }
   });
 
   it('P-21: RLS is on and anon/authenticated are DENIED on every live table and column', async () => {
