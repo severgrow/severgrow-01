@@ -23,6 +23,7 @@ import type {
   SubmitActionRequest,
   SubmitActionResponse,
   UpgradeResponse,
+  WorldMapPayload,
 } from './protocol.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
@@ -265,6 +266,16 @@ export class DuelClient {
     const view = knownRevision ? player : { ...player, events: [] };
     this.saveSession({ token: session.token, matchId: view.matchId, seat: view.seat, revision: view.revision });
     return { session: { token: session.token, matchId: view.matchId, seat: view.seat, revision: view.revision }, player: view };
+  }
+
+  // ---- the shared world map ----
+
+  /**
+   * The public shared map: the same fixed grid for everyone, with each tile's holder. It needs no
+   * account — looking at the map is the point of a shared map — so it takes no token.
+   */
+  async worldMap(): Promise<WorldMapPayload> {
+    return await this.request<WorldMapPayload>('GET', '/v1/world');
   }
 
   // ---- transport ----

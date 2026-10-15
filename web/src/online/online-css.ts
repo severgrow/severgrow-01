@@ -344,4 +344,42 @@ export const ONLINE_CSS = `
    keeps that dot out of the header lane. Do not delete it with the two deleted circles above. */
 #duel-hud .live-pill .dot { display: none; }
 
+/* ---- The shared world map (the seed spike): one tile per won duel, the same grid for everyone.
+   A quiet 8x8 field of cells: held cells carry the holder's initial, free cells stay recessed. No
+   new visual language — the same recessed-glass surface the rows above use. */
+.world-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.3rem;
+  margin: 0.35rem 0 0.2rem;
+  padding: 0.5rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, #161c16 86%, #2c3a26);
+}
+.world-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 7px;
+  background: color-mix(in srgb, #10150f 82%, #26301f);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #cfe0b8;
+  overflow: hidden;
+}
+/* A held cell glows softly so the marks read at a glance; free cells stay flat and empty. */
+.world-cell[data-held="true"] {
+  background: color-mix(in srgb, #2f4326 78%, #6f9152);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 10%, transparent);
+}
+/* Taken from the player you beat: a faint warm edge, the only difference between the two states. */
+.world-cell[data-tookover="true"] {
+  background: color-mix(in srgb, #4a3d24 74%, #b8934e);
+}
+.world-cell[data-held="true"] span { opacity: 0.95; }
+
 `;
+

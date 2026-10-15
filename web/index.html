@@ -117,11 +117,24 @@
           <button id="online-create" class="btn primary big" type="button">Create a duel</button>
           <button id="online-find" class="btn ghost big" type="button" hidden>Find opponent</button>
           <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
+          <button id="online-world" class="btn ghost big" type="button">The world map</button>
         </div>
         <h3 class="online-section" id="online-matches-title">Your online matches</h3>
         <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
         <ul id="online-matches" class="online-matches" aria-live="polite"></ul>
         <p id="online-hub-notice" class="online-notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="online-world-screen" class="screen online-world" aria-label="The world map" hidden>
+      <div class="online-inner">
+        <header class="online-head">
+          <button id="online-world-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
+          <h2 id="online-world-title">The world map</h2>
+        </header>
+        <p id="online-world-summary" class="muted small"></p>
+        <div id="online-world-grid" class="world-grid"></div>
+        <p id="online-world-notice" class="online-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
 

@@ -45,7 +45,7 @@ export type LobbyUiHooks = {
   now?: () => number;
 };
 
-type OnlineScreen = 'hub' | 'waiting' | 'join' | null;
+type OnlineScreen = 'hub' | 'waiting' | 'join' | 'world' | null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -149,6 +149,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   const hub = $('online-hub');
   const waitingEl = $('online-waiting');
   const joinEl = $('online-join');
+  const worldEl = $('online-world-screen');
   const menuEl = document.getElementById('menu');
 
   // The SHARED wait-dots stylesheet (web/src/online/live/wait-dots.ts). The lobby can be the first
@@ -184,7 +185,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   } catch {
     brandMark = null;
   }
-  const screens: Record<'hub' | 'waiting' | 'join', HTMLElement> = { hub, waiting: waitingEl, join: joinEl };
+  const screens: Record<'hub' | 'waiting' | 'join' | 'world', HTMLElement> = { hub, waiting: waitingEl, join: joinEl, world: worldEl };
   const notice = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -204,6 +205,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     hub.hidden = next !== 'hub';
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
+    worldEl.hidden = next !== 'world';
     // The online screens are their own full-screen view: keep the main menu fully out of the
     // way (hidden, not merely behind) so its title/buttons can never bleed through the panel.
     // Every path back to the menu goes through hooks.showMenu() → showScreen('menu').
@@ -228,6 +230,9 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       findBtn.title = ONLINE.findOpponentHint;
     }
     $('online-join-open').textContent = ONLINE.join;
+    const worldBtn = document.getElementById('online-world') as HTMLButtonElement | null;
+    if (worldBtn) worldBtn.textContent = ONLINE.worldMap;
+    $('online-world-title').textContent = ONLINE.worldTitle;
     $('online-matches-title').textContent = ONLINE.yourMatches;
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
     // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it
@@ -690,6 +695,46 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   // ---- wire buttons ----
   fillCopy();
+  /**
+   * The shared world map: a PUBLIC read (no account needed), the same grid for everyone. View only
+   * — the player is looking at marks other people earned, so there is nothing to press.
+   */
+  const renderWorld = async () => {
+    const grid = document.getElementById('online-world-grid');
+    const summary = document.getElementById('online-world-summary');
+    if (!grid) return;
+    if (summary) summary.textContent = ONLINE.worldLoading;
+    notice('online-world-notice', '');
+    grid.replaceChildren();
+    try {
+      const payload = await client.worldMap();
+      if (summary) {
+        summary.textContent =
+          payload.filled === 0 ? ONLINE.worldEmpty : ONLINE.worldHeld(payload.filled, payload.cells);
+      }
+      const byCell = new Map(payload.tiles.map((t) => [t.cell, t]));
+      for (let cell = 0; cell < payload.cells; cell++) {
+        const tile = byCell.get(cell);
+        const el = document.createElement('div');
+        el.className = 'world-cell';
+        el.dataset.held = tile ? 'true' : 'false';
+        if (tile?.tookOver) el.dataset.tookover = 'true';
+        if (tile) {
+          const name = tile.ownerName?.trim() || '';
+          const mark = document.createElement('span');
+          // A held cell carries the holder's initial; the full name rides the tooltip.
+          mark.textContent = (name[0] ?? '·').toUpperCase();
+          el.append(mark);
+          el.title = tile.tookOver ? `${name} · ${ONLINE.worldTaken}` : name;
+        }
+        grid.append(el);
+      }
+    } catch {
+      if (summary) summary.textContent = '';
+      notice('online-world-notice', ONLINE.worldError);
+    }
+  };
+
   menuOnline?.addEventListener('click', () => void openHub());
   $('online-back').addEventListener('click', () => {
     show(null);
@@ -698,6 +743,12 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   });
   $('online-waiting-back').addEventListener('click', () => void openHub());
   $('online-join-back').addEventListener('click', () => void openHub());
+  $('online-world-back').addEventListener('click', () => void openHub());
+  document.getElementById('online-world')?.addEventListener('click', () => {
+    fillCopy();
+    show('world');
+    void renderWorld();
+  });
   $('online-create').addEventListener('click', () => void createMatch());
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {

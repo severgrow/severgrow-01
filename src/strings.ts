@@ -66,6 +66,15 @@ export const ONLINE = Object.freeze({
   pageTitleBase: 'FUTASAKU',
   hubTitle: 'Play online',
   hubBack: 'Back',
+  // The shared world map: one tile per won duel, the same map for everyone.
+  worldMap: 'The world map',
+  worldTitle: 'The world map',
+  worldLoading: 'Reading the map',
+  worldEmpty: 'No tiles yet. Win a duel to place the first one.',
+  worldTaken: 'taken',
+  worldYou: 'You',
+  worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles claimed`,
+  worldError: 'Could not read the map. Try again.',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',
   // No baked-in dots: the UI appends the SHARED animated ellipsis (web/src/online/live/wait-dots.ts).
