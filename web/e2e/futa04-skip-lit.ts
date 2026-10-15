@@ -1,5 +1,5 @@
 // Evidence for the lit Skip key (owner ask 2026-10-14: "when showing skip button button should
-// be lit up"). Writes docs/screens/skip-lit/ at 360x640, 390x844, 768x1024 and 1280x800, offline
+// be lit up"; since 2026-10-15 lit as backlit hardware — the frame and icon glow, no square ring). Writes docs/screens/skip-lit/ at 360x640, 390x844, 768x1024 and 1280x800, offline
 // AND online, plus the tutorial's SKIP GROW step, with before/after pairs and measured pixel
 // deltas. The "before" frame is the same live page with the new lit rule disabled via one
 // injected override, so before/after differ only by the lit state.
@@ -86,7 +86,7 @@ const keyState = (page: Page) => page.evaluate(() => {
   const box = document.getElementById('smart-bloom') as HTMLElement;
   const r = key.getBoundingClientRect();
   return { action: key.dataset.action, label: key.getAttribute('aria-label'), disabled: key.disabled,
-    boxShadow: cs.boxShadow, color: cs.color, background: cs.backgroundColor, outline: cs.outline,
+    boxShadow: cs.boxShadow, frameFilter: getComputedStyle(key, '::before').filter, color: cs.color, background: cs.backgroundColor, outline: cs.outline,
     animation: cs.animationName, transition: cs.transitionDuration,
     width: Math.round(r.width), height: Math.round(r.height), x: r.x, y: r.y,
     bloomOnOffer: !!box && !box.hidden };
@@ -103,7 +103,7 @@ const capture = async (page: Page, tag: string) => {
   const afterPng = await page.screenshot({ clip, type: 'png' });
   const key = await page.evaluate(() => { const r = (document.getElementById('smart-context') as HTMLElement).getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
   // The lit rule off — exactly the pre-change frame (one rule, no other effect).
-  const style = await page.addStyleTag({ content: `html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled){box-shadow:none!important;color:var(--control-ivory)!important} .moves :is(.futa04-skip,.end.skip):not(.tutorial-next){box-shadow:none!important}` });
+  const style = await page.addStyleTag({ content: `html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled){box-shadow:none!important;color:var(--control-ivory)!important;background:#111312!important} html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled)::before,html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled) svg{filter:none!important} .moves :is(.futa04-skip,.end.skip):not(.tutorial-next){box-shadow:none!important}` });
   const dim = await keyState(page);
   write(`${tag}-before.jpg`, await page.screenshot({ type: 'jpeg', quality: 78 }));
   write(`${tag}-cockpit-before.jpg`, await page.screenshot({ clip, type: 'jpeg', quality: 80 }));
@@ -177,7 +177,7 @@ try {
       const shot = await capture(page, `offline-skip-${vp.tag}`);
       const entry = { ...st, ...(shot && { delta: shot.delta }) };
       (states[`offline-skip-${vp.tag}`] = entry);
-      log(`[${vp.tag}] offline skip-alone`, JSON.stringify({ action: st.action, bloom: st.bloomOnOffer, lit: !!shot?.lit.boxShadow.includes('2px'), delta: shot?.delta }));
+      log(`[${vp.tag}] offline skip-alone`, JSON.stringify({ action: st.action, bloom: st.bloomOnOffer, lit: shot?.lit.frameFilter !== 'none', delta: shot?.delta }));
     } finally { await context.close(); }
   }
   // The competition view: Skip is lit while a Bloom recipe is on offer (390x844 + 1280x800).
@@ -208,7 +208,7 @@ try {
       const st = await keyState(page);
       write(`offline-${variant}-390x844.jpg`, await page.screenshot({ type: 'jpeg', quality: 78 }));
       (states[`offline-${variant}-390x844`] = st);
-      log(`[390x844] ${variant}`, JSON.stringify({ lit: st.boxShadow.includes('2px'), animation: st.animation, w: st.width, h: st.height, action: st.action }));
+      log(`[390x844] ${variant}`, JSON.stringify({ lit: st.frameFilter !== 'none', animation: st.animation, w: st.width, h: st.height, action: st.action }));
     } finally { await context.close(); }
   }
 
@@ -225,7 +225,7 @@ try {
       const st = await keyState(page);
       const shot = await capture(page, 'tutorial-skip-390x844');
       (states['tutorial-skip-390x844'] = { lesson, ...st, ...(shot && { delta: shot.delta }) });
-      log('[tutorial] SKIP GROW', JSON.stringify({ lesson, action: st.action, lit: !!shot?.lit.boxShadow.includes('2px'), delta: shot?.delta }));
+      log('[tutorial] SKIP GROW', JSON.stringify({ lesson, action: st.action, lit: shot?.lit.frameFilter !== 'none', delta: shot?.delta }));
     } finally { await context.close(); }
   }
 
@@ -263,7 +263,7 @@ try {
       const st = await keyState(seat.page);
       const shot = await capture(seat.page, 'online-skip-390x844');
       (states['online-skip-390x844'] = { seat: moverSeat, ...st, ...(shot && { delta: shot.delta }) });
-      log('[online] 390x844', JSON.stringify({ seat: moverSeat, action: st.action, bloom: st.bloomOnOffer, lit: !!shot?.lit.boxShadow.includes('2px'), delta: shot?.delta }));
+      log('[online] 390x844', JSON.stringify({ seat: moverSeat, action: st.action, bloom: st.bloomOnOffer, lit: shot?.lit.frameFilter !== 'none', delta: shot?.delta }));
       // 1280x800 desktop seat of the same duel, resuming at the same grow step.
       const wide = await openSeat(duel, match, moverSeat, { viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false, reduceMotion: true, speed: 'fast' });
       await openDuel(wide, match.matchId);
@@ -272,7 +272,7 @@ try {
       const wideState = await keyState(wide.page);
       const wideShot = await capture(wide.page, 'online-skip-1280x800');
       (states['online-skip-1280x800'] = { seat: wide.seat, ...wideState, ...(wideShot && { delta: wideShot.delta }) });
-      log('[online] 1280x800', JSON.stringify({ action: wideState.action, bloom: wideState.bloomOnOffer, lit: !!wideShot?.lit.boxShadow.includes('2px'), delta: wideShot?.delta }));
+      log('[online] 1280x800', JSON.stringify({ action: wideState.action, bloom: wideState.bloomOnOffer, lit: wideShot?.lit.frameFilter !== 'none', delta: wideShot?.delta }));
     } finally { await duel.close(); }
   }
 } finally {

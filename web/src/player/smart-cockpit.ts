@@ -91,13 +91,19 @@ html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[ari
   color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
 }
 html.futa04-information #futa04-box #smart-context:active:not(:disabled) { transform:translateY(1px) scale(.98); }
-/* The Skip key reads lit whenever Skip is the move in this slot. It reuses the key's own
-   ready glow plus the accent ring the coach already draws on a recommended control, so the
-   state is a ring and a brighter face — not a hue change alone. Static: nothing animates,
-   so Reduce motion and Large text are untouched and the 44px target never moves. */
+/* The Skip key reads lit whenever Skip is the move in this slot (owner ask 2026-10-14). It is
+   lit like backlit hardware: the key's own metal frame brightens and warms, the icon goes bright
+   cream, and a soft halo follows the frame's real outline. (It used to be a 2px ring around the
+   button's square box, which sat outside the rounded frame art and read as a stray box — owner,
+   2026-10-15.) Static: nothing animates, so Reduce motion and Large text are untouched and the
+   44px target never moves. */
 html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled) {
-  color:#fff1cf; box-shadow:0 0 0 2px var(--c-accent), 0 0 9px rgba(196,150,88,.30);
+  color:#fff6dc; background:#1a1914;
 }
+html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled)::before {
+  filter:brightness(1.38) sepia(.28) saturate(1.25) drop-shadow(0 0 4px rgba(232,190,120,.55)) drop-shadow(0 0 9px rgba(196,150,88,.32));
+}
+html.futa04-information #futa04-box #smart-context[data-action='skip']:not(:disabled) svg { opacity:1; filter:drop-shadow(0 0 3px rgba(255,226,170,.55)); }
 html.futa04-information #futa04-box #smart-context:disabled { opacity:.68; cursor:default; }
 html.futa04-information #futa04-box #smart-context:disabled svg { opacity:.45; }
 html.futa04-information #futa04-box #futa04-actions > .hand-slot:disabled { opacity:.72; }
