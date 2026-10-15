@@ -305,6 +305,14 @@ export const RESULT = Object.freeze({
   breakdown: (mine: string, theirs: string) => `You: ${mine} · ${OPP.label}: ${theirs}`,
   /** The share button (offline and online alike). */
   share: 'Share',
+  /**
+   * The finish card's ONE disclosure (owner direction, 2026-10-16: "way shorter… no scrolling").
+   * The result, its one reason and a way forward stay on the card; the detail lines and the extra
+   * actions live behind this one word, so every mode fits one phone screen.
+   */
+  more: 'More',
+  /** The same disclosure once it is open. */
+  less: 'Less',
 });
 
 /** The words for the one-card Grow. Code still uses action `Sprout`; players read Grow. */
@@ -937,6 +945,12 @@ export const CAMPAIGN = Object.freeze({
   levelWon: (number: number): string => `Level ${number} complete`,
   /** the finish screen's secondary way out, back to the level list */
   back: 'Back to campaign',
+  /**
+   * The finish screen's LEADING action after a won level (owner direction, 2026-10-16): the next
+   * level starts straight away, so the player never has to walk back to the list to pick it. The
+   * list stays one tap away as the secondary action.
+   */
+  nextLevel: 'Next level',
   /** the finish screen's small "next level unlocked" note after a campaign win */
   unlockedNext: (name: string): string => `Next level unlocked: ${name}`,
   /** the finish screen's note after the last level of the campaign as built */

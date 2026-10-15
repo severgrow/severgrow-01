@@ -493,23 +493,31 @@
       </div>
     </section>
 
+    <!-- ===== Finish screen (one card, shared by every mode: offline, campaign and online) ===== -->
+    <!-- Owner direction (2026-10-16): the card is SHORTER and never scrolls on a phone, in every
+         mode. The rule it follows: the outcome, the final score, the ONE reason and a way forward
+         are always on the card; every detail line and every extra action is marked `data-go-extra`
+         and lives behind the single "More" disclosure below (main.ts drives it). A mode marks an
+         extra as unavailable with `data-go-available="0"` (e.g. no big cut to replay), so the
+         disclosure hides itself when there is nothing behind it. -->
     <section id="gameover" class="gameover" role="dialog" aria-modal="true" aria-labelledby="go-title" hidden>
       <div class="go-card">
         <h2 id="go-title" class="go-title"></h2>
         <p id="go-sub" class="go-sub"></p>
         <p id="go-score" class="go-score num"></p>
         <p id="go-reason" class="muted"></p>
-        <p id="go-break" class="muted small"></p>
-        <p id="go-moves" class="muted small" hidden></p>
-        <ul id="go-highlights" class="highlights"></ul>
+        <p id="go-break" class="muted small" data-go-extra hidden></p>
+        <p id="go-moves" class="muted small" data-go-extra hidden></p>
+        <ul id="go-highlights" class="highlights" data-go-extra hidden></ul>
         <div class="go-buttons">
           <button id="go-rematch" class="btn primary big" type="button">Play again</button>
           <button id="go-other" class="btn ghost" type="button"></button>
-          <button id="go-cut" class="btn ghost" type="button" hidden>Replay the biggest cut</button>
-          <button id="go-share" class="btn ghost" type="button">Share</button>
-          <button id="go-board" class="btn ghost" type="button">See the board</button>
+          <button id="go-more" class="btn link" type="button" aria-expanded="false">More</button>
+          <button id="go-share" class="btn ghost" type="button" data-go-extra hidden>Share</button>
+          <button id="go-board" class="btn ghost" type="button" data-go-extra hidden>See the board</button>
+          <button id="go-cut" class="btn ghost" type="button" data-go-extra hidden>Replay the biggest cut</button>
           <button id="go-menu" class="btn link" type="button">Back to menu</button>
-          <p id="go-stats" class="muted small stats-line"></p>
+          <p id="go-stats" class="muted small stats-line" data-go-extra hidden></p>
         </div>
       </div>
     </section>

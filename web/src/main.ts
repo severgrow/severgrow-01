@@ -179,6 +179,9 @@ import { debugLines, isDebug } from './logic/debug.js';
 import { NOTES_KEY, emptyNotes, noteEvent, notesSummary } from './logic/playnotes.js';
 import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
+// The finish card's leading action per mode (online rematch / next level / try again), decided in
+// one pure place so the whole matrix is unit-tested (owner direction, 2026-10-16).
+import { finishLead } from './logic/finish-actions.js';
 import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
@@ -1618,6 +1621,19 @@ function startTutorialFromMenu() {
   startTutorial(0, 'core');
 }
 
+/**
+ * The campaign's ONE entry point — the campaign screen's own leading action, and (owner direction,
+ * 2026-10-16) where the guided run now hands the player off. It resumes an unfinished campaign match
+ * when there is one; otherwise it opens the player's CURRENT level, which is level 1 for a new
+ * player and their own level for one who has already progressed. There is deliberately no second way
+ * to start a level.
+ */
+function enterCampaign() {
+  const resume = campaignResume();
+  if (resume) return continueCampaignMatch(resume);
+  startCampaignLevel(currentLevel(campaignProgress));
+}
+
 function completeTutorial() {
   const my = epoch;
   releaseTutorialLock();
@@ -1629,6 +1645,11 @@ function completeTutorial() {
     coach = freshCoach();
     tutorialGate?.clear();
     glassSurface?.hide();
+    // Owner direction (2026-10-16): "after tutorial it takes you to level 1". Finishing the guided
+    // run now hands the player to a REAL level through the campaign's own entry point, rather than
+    // back to a menu. A player who has already progressed lands on their current level, not on a
+    // level they beat long ago. The legacy channels (no campaign) keep the menu they always had.
+    if (FEATURES.campaign) return enterCampaign();
     showScreen('menu');
   }, 1750);
 }
@@ -5048,6 +5069,33 @@ function renderCoach(advice: Advice | null) {
   }
 }
 
+/**
+ * The finish card's ONE disclosure (owner direction, 2026-10-16: "way shorter… no scrolling"). The
+ * outcome, the final score, the ONE reason and a way forward are always on the card; every detail
+ * line and every extra action carries `data-go-extra` and lives behind this. A mode marks an extra
+ * as unavailable with `data-go-available="0"` (no big cut to replay, no one-card-move line), and the
+ * disclosure hides itself when nothing is behind it. Shared by all three modes, so they cannot drift.
+ */
+let goExtrasOpen = false;
+function syncGoExtras() {
+  const extras = [...document.querySelectorAll<HTMLElement>('#gameover [data-go-extra]')];
+  const available = extras.filter((el) => el.dataset.goAvailable !== '0');
+  for (const el of extras) el.hidden = !(goExtrasOpen && el.dataset.goAvailable !== '0');
+  const more = $('go-more');
+  more.hidden = available.length === 0;
+  more.textContent = goExtrasOpen ? RESULT.less : RESULT.more;
+  more.setAttribute('aria-expanded', String(goExtrasOpen));
+}
+/** Marks one disclosure member as available this time (default: available). */
+function setGoExtra(id: string, available: boolean) {
+  const el = document.getElementById(id);
+  if (el) el.dataset.goAvailable = available ? '1' : '0';
+}
+function setGoExtrasOpen(open: boolean) {
+  goExtrasOpen = open;
+  syncGoExtras();
+}
+
 function renderGameOver() {
   const go = $('gameover');
   if (isOnlineDuel()) {
@@ -5085,7 +5133,7 @@ function renderGameOver() {
     $('go-score').innerHTML = `<span class="you">${info.scores[0]}</span><span class="dash">–</span><span class="bot">${info.scores[1]}</span>`;
     $('go-break').textContent = info.breakdown;
     $('go-moves').textContent = info.moves ?? '';
-    $('go-moves').hidden = !info.moves;
+    setGoExtra('go-moves', !!info.moves);
     $('go-highlights').replaceChildren(
       ...info.highlights.map((h) => {
         const li = document.createElement('li');
@@ -5096,8 +5144,9 @@ function renderGameOver() {
     );
     // The record line counts offline games only — never leak it onto a server match.
     $('go-stats').textContent = '';
-    $('go-stats').hidden = true;
-    $('go-cut').hidden = true;
+    setGoExtra('go-stats', false);
+    // A duel has no offline cut replay to offer.
+    setGoExtra('go-cut', false);
     // The owner's ask: a REAL rematch leads the finish screen, ahead of the old "back out" that
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
     // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
@@ -5107,11 +5156,15 @@ function renderGameOver() {
     other.textContent = ONLINE.backToMatches;
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
+    // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
+    if (wasHidden) setGoExtrasOpen(false);
+    else syncGoExtras();
     // The primary action takes focus the moment the screen appears, exactly as offline does.
     if (wasHidden) $('go-rematch').focus();
     return;
   }
   const st = session?.state;
+  const wasHidden = go.hidden;
   const show = !!st && st.phase === 'GAME_OVER' && !!st.result && !busy() && !gameOverDismissed && !$('game').hidden;
   if (go.hidden === !show) return;
   go.hidden = !show;
@@ -5119,6 +5172,9 @@ function renderGameOver() {
   const r = st.result;
   const won = r.winner === HUMAN;
   const campaign = campaignLevel;
+  // The next level the win unlocked (null on a loss, and null past the last built level — read from
+  // the level data, never a hardcoded count, so a worker adding levels needs no change here).
+  const next = campaign && won ? nextCampaignLevel(campaign.number) : null;
   $('go-title').textContent = won
     ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(gameLevel)
     : resultTitle(r, HUMAN);
@@ -5126,7 +5182,6 @@ function renderGameOver() {
   // follows — so it never repeats the outcome or the reason below it.
   if (campaign) {
     // "Level 6 · Branching Out", plus one small note about what the win unlocked.
-    const next = won ? nextCampaignLevel(campaign.number) : null;
     const note = next
       ? ` · ${CAMPAIGN.unlockedNext(next.name)}`
       : won && !next ? ` · ${CAMPAIGN.chapterDone}` : '';
@@ -5134,9 +5189,19 @@ function renderGameOver() {
   } else {
     $('go-sub').textContent = `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
   }
-  $('go-rematch').textContent = won ? 'Play again' : 'Try again';
+  // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
+  // next level starts straight away, with no walk back to the list to pick it. The last built level
+  // has no next, so that same button becomes the honest way out (the level list) rather than a dead
+  // one. A loss and a plain offline game keep the retry/again words they always had. Which one leads
+  // is decided in one pure place (`finishLead`), and the next level is read from the level DATA.
+  const lead = finishLead({ online: false, campaign: !!campaign, won, hasNext: !!next });
+  const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
+  $('go-rematch').textContent = leadWord;
+  $('go-rematch').setAttribute('aria-label', leadWord);
   const other = $('go-other');
-  other.hidden = false;
+  // On the last level the primary already IS "Back to campaign": one action, not two that do the
+  // same thing (the online rematch keeps its own secondary, untouched).
+  other.hidden = lead === 'back-to-campaign';
   other.textContent = campaign ? CAMPAIGN.back : 'Change difficulty';
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
@@ -5154,16 +5219,16 @@ function renderGameOver() {
     };
     requestAnimationFrame(tick);
   }
-  $('go-cut').hidden = !session?.biggestCut;
+  setGoExtra('go-cut', !!session?.biggestCut);
   $('go-share').textContent = RESULT.share;
   $('go-reason').textContent = resultReason(r, HUMAN);
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
-  $('go-moves').hidden = !moves;
+  setGoExtra('go-moves', !!moves);
   $('go-break').textContent = RESULT.breakdown(breakdownPart(st, HUMAN), breakdownPart(st, BOT));
   $('go-stats').textContent = statsLine(stats);
-  $('go-stats').hidden = false;
+  setGoExtra('go-stats', true);
   $('go-highlights').replaceChildren(
     ...gameHighlights(st.history ?? [], HUMAN).map((h) => {
       const li = document.createElement('li');
@@ -5172,6 +5237,10 @@ function renderGameOver() {
       return li;
     }),
   );
+  // A fresh finish starts folded (see the online branch): the card shows the result and the ways
+  // forward, and the details wait behind "More" — that is what keeps it on one phone screen.
+  if (wasHidden) setGoExtrasOpen(false);
+  else syncGoExtras();
   $('go-rematch').focus();
 }
 
@@ -5970,11 +6039,7 @@ bind('levels-back', () => showScreen('menu'));
 // Campaign: the screen, its way back, and its one prominent action (resume, or the current level).
 bind('menu-campaign', () => showScreen('campaign'));
 bind('campaign-back', () => showScreen('menu'));
-bind('campaign-continue', () => {
-  const resume = campaignResume();
-  if (resume) return continueCampaignMatch(resume);
-  startCampaignLevel(currentLevel(campaignProgress));
-});
+bind('campaign-continue', () => enterCampaign());
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
 document.addEventListener(
@@ -6426,10 +6491,23 @@ bind('go-rematch', () => {
     });
     return;
   }
-  // A campaign rematch restarts the SAME level from its fixed seed (never a random one).
+  // A WON campaign level leads with the next one (owner direction, 2026-10-16): the player never
+  // walks back to the level list to pick it. The next level comes from the level DATA, so the last
+  // built level honestly has none: that same button is then the way out, back to the level list. A
+  // loss, and a plain offline game, restart what was just played — exactly as before.
+  const wonNow = session?.state.phase === 'GAME_OVER' && session.state.result?.winner === HUMAN;
+  if (campaignLevel && wonNow) {
+    const next = nextCampaignLevel(campaignLevel.number);
+    if (next) return startCampaignLevel(next);
+    $('gameover').hidden = true;
+    return showScreen('campaign');
+  }
+  // A campaign retry restarts the SAME level from its fixed seed (never a random one).
   if (campaignLevel) return startCampaignLevel(campaignLevel);
   startGame(randomSeed(), gameLevel);
 });
+// The finish card's ONE disclosure: every detail line and every extra action is behind it.
+bind('go-more', () => setGoExtrasOpen(!goExtrasOpen));
 bind('go-board', () => {
   gameOverDismissed = true;
   render();

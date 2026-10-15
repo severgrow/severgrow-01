@@ -1881,13 +1881,16 @@ svg.usable .hex-cell {
   background: var(--c-surface);
   border: 1px solid var(--fu-cream-22);
   border-radius: 16px;
-  padding: 24px 20px 16px;
+  /* Owner direction (2026-10-16): the card is shorter and never scrolls on a phone. The result, its
+     one reason and a way forward lead; the detail lines and extra actions wait behind the single
+     "More" disclosure, so the height is bounded by what a player must read, not by what we know. */
+  padding: 18px 18px 12px;
   box-shadow: none;
 }
 .go-title {
   margin: 0;
   color: var(--fu-cream);
-  font-size: clamp(2.2rem, 10vw, 3rem);
+  font-size: clamp(1.9rem, 8.5vw, 2.6rem);
   line-height: 1;
 }
 .gameover.won .go-title {
@@ -1899,8 +1902,8 @@ svg.usable .hex-cell {
   color: var(--fu-cream-70);
 }
 .go-score {
-  font-size: 2.4rem;
-  margin: 10px 0 2px;
+  font-size: 2.1rem;
+  margin: 6px 0 2px;
   display: flex;
   justify-content: center;
   gap: 12px;
@@ -1920,7 +1923,7 @@ svg.usable .hex-cell {
 .highlights {
   list-style: none;
   padding: 0;
-  margin: 20px 0 4px;
+  margin: 14px 0 4px;
   display: grid;
   gap: 0;
 }
@@ -1931,7 +1934,7 @@ svg.usable .hex-cell {
   column-gap: 14px;
   align-items: baseline;
   text-align: left;
-  padding: 12px 0;
+  padding: 8px 0;
   border: 0;
   border-top: 1px solid var(--fu-cream-14);
   border-radius: 0;
@@ -1943,7 +1946,7 @@ svg.usable .hex-cell {
   grid-row: span 2;
   align-self: center;
   font-family: var(--font-display);
-  font-size: 1.9rem;
+  font-size: 1.6rem;
   font-weight: var(--w-display, 700);
   line-height: 1;
   text-align: left;
@@ -1977,11 +1980,11 @@ svg.usable .hex-cell {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 14px;
 }
 /* Same button system as the menu: quiet cream frame for the rest, and one cream fill (Play again). */
 .gameover .go-buttons .btn {
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 20px;
   border: 1px solid var(--fu-cream-28);
   border-radius: 14px;
@@ -1998,7 +2001,11 @@ svg.usable .hex-cell {
   color: var(--fu-ink);
   box-shadow: none;
 }
+/* The two quiet text rows (the "More" disclosure and Back to menu) take less room than a framed
+   button: they are ways OUT, not the way forward, and the height they give back is what keeps the
+   card on one phone screen. */
 .gameover .go-buttons .btn.link {
+  min-height: 34px;
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -2086,7 +2093,7 @@ svg.usable .hex-cell {
 @media (prefers-reduced-motion: reduce) {
   .sheet,
   .gameover,
-  .gameover .go-card::before {
+  .gameover::before {
     animation: none;
   }
 }
@@ -4453,22 +4460,25 @@ html.final-turns .game::after {
   fill: var(--c-bg);
   fill-opacity: 0.38;
 }
-/* overhaul item 20: a calm flourish behind the result (one soft glow, fading in once) */
-.gameover .go-card {
-  position: relative;
-  isolation: isolate;
-}
-.gameover .go-card::before {
+/* overhaul item 20: a calm flourish behind the result (one soft glow, fading in once).
+   Owner direction (2026-10-16): it must not create scrolling. The glow used to be a halo on the
+   CARD with `inset: -40px`, which added 40px to the card's scrollable overflow — a real 40px scroll
+   on the card that never fit. It is now the SCREEN's own glow, inside its box: the same cream, the
+   same one-shot fade, no overflow anywhere, and the card stays a plain scrolling-free surface. */
+.gameover::before {
   content: '';
   position: absolute;
-  inset: -40px;
-  z-index: -1;
+  inset: 0;
   border-radius: 50%;
   background: radial-gradient(closest-side, color-mix(in srgb, var(--fu-cream, #e8ddc5) 11%, transparent), transparent);
   animation: go-flourish 1.6s ease-out both;
   pointer-events: none;
 }
-.gameover.won .go-card::before {
+.gameover .go-card {
+  position: relative;
+  isolation: isolate;
+}
+.gameover.won::before {
   background: radial-gradient(closest-side, color-mix(in srgb, var(--fu-cream, #e8ddc5) 14%, transparent), transparent);
 }
 @keyframes go-flourish {
@@ -4481,7 +4491,7 @@ html.final-turns .game::after {
     transform: scale(1);
   }
 }
-.reduce-motion .gameover .go-card::before {
+.reduce-motion .gameover::before {
   animation: none;
 }
 /* Part 2: the cut's impact flash (local, soft-edged, ≤35% white, ≤60ms) */
