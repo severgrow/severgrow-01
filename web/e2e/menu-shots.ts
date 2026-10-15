@@ -118,6 +118,12 @@ try {
         JSON.stringify(order) === JSON.stringify(['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings']), order.join(' | '));
       check(`${vp.key}: exactly one filled button on the menu, and it is PLAY`,
         JSON.stringify(await leaders(page, '#menu')) === JSON.stringify(['menu-play']), (await leaders(page, '#menu')).join(' | '));
+      // Five entries must fit a 360x640 phone without the column scrolling or the page widening.
+      const fit = await page.evaluate(() => {
+        const inner = document.querySelector('#menu .menu-inner')!;
+        return { overflow: inner.scrollHeight - inner.clientHeight, wide: document.documentElement.scrollWidth > window.innerWidth };
+      });
+      check(`${vp.key}: the signed-out menu fits without scrolling or widening`, fit.overflow <= 0 && !fit.wide, `overflow ${fit.overflow}px`);
       await shotName(page, `menu-signed-out-${vp.key}`);
       await context.close();
     }
@@ -134,6 +140,11 @@ try {
       check(`${vp.key}: PLAY holds Play online / LEVEL n / Training`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Training']), entries.join(' | '));
       check(`${vp.key}: exactly one filled button in the submenu, and it is Play online`,
         JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
+      const fit = await page.evaluate(() => {
+        const inner = document.querySelector('#play-menu .levels-inner')!;
+        return inner.scrollHeight - inner.clientHeight;
+      });
+      check(`${vp.key}: the submenu column fits without scrolling`, fit <= 0, `overflow ${fit}px`);
       await shotName(page, `play-submenu-${vp.key}`);
       await context.close();
     }
