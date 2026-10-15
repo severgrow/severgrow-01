@@ -1262,11 +1262,11 @@ svg.usable .hex-cell {
 .coach-glow {
   box-shadow: 0 0 0 2px var(--c-accent);
 }
-/* The moves-row Skip is lit whenever it is on offer; the cockpit's #smart-context mirrors
-   this with its own key-glow ring. The tutorial's Next wears the same class but is not a Skip. */
-.moves :is(.futa04-skip, .end.skip):not(.tutorial-next) {
-  box-shadow: 0 0 0 2px var(--c-accent);
-}
+/* The moves-row Skip carries NO highlight (owner, 2026-10-15: "skip is highlighted on every grow
+   — remove; i just wanted it to be possible during grow, but not extra highlighted"). So Skip is
+   offered like any other move key and reads as one. AVAILABILITY IS UNCHANGED: the Skip is still
+   revealed while a turn plays out (main.ts gates it on `busy()`, not on the phase), it simply no
+   longer advertises itself with a ring. The tutorial's Next shares the class but was never a Skip. */
 
 /* ---------- confirm bar, moves, piles ---------- */
 .confirm {
