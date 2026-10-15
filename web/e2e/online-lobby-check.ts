@@ -43,26 +43,68 @@ try {
   // replaced the old `check('tagline is GROW · CONNECT · CONQUER', ...)` which only asserted the
   // text was present.)
   check('the tagline string is still available to re-enable', ONLINE.tagline === 'GROW · CONNECT · CONQUER', ONLINE.tagline);
-  check('the menu has no tagline element (removed, not hidden)', (await page.locator('#menu .tagline, #menu-tagline').count()) === 0);
+  // The DELETED tagline must leave no trace (no hidden placeholder, no leftovers). The deliberate
+  // beta 0.53 line reuses the `tagline` class (`web/src/feedback/mount.ts`), so it is excluded by
+  // id: this check still fails on an unremoved or half-removed `#menu-tagline`.
+  check('the removed tagline element is gone (not a hidden placeholder)',
+    (await page.locator('#menu .tagline:not(#menu-beta), #menu-tagline').count()) === 0);
+  // The beta line is added by a late dynamic import (`web/src/feedback/mount.ts`, mounted
+  // unconditionally from main.ts). Wait for the menu to settle before measuring the slot, so this
+  // reads the finished menu rather than a boot transient (the accounts suites wait the same way).
+  await page.waitForSelector('#menu-beta', { timeout: 10_000 }).catch(() => undefined);
   const menuColumn = await page.evaluate(() => {
+    // No named inner functions here on purpose: tsx/esbuild rewrites them with a `__name` helper
+    // that does not exist in the page.
     const inner = document.querySelector('#menu .menu-inner')!;
+    const title = document.querySelector('#menu .title') as HTMLElement;
+    const buttons = document.querySelector('#menu .menu-buttons') as HTMLElement;
     const kids = [...inner.children];
-    const between = kids
-      .slice(
-        kids.findIndex((k) => k.classList.contains('title')) + 1,
-        kids.findIndex((k) => k.classList.contains('menu-buttons')),
-      )
-      .map((k) => k.id || k.className);
-    const title = document.querySelector('#menu .title')!;
-    const buttons = document.querySelector('#menu .menu-buttons')!;
+    const slot = kids.slice(kids.indexOf(title) + 1, kids.indexOf(buttons)).map((k) => {
+      const rect = k.getBoundingClientRect();
+      const style = getComputedStyle(k);
+      return {
+        id: k.id || String(k.className),
+        h: +rect.height.toFixed(1),
+        mt: Number.parseFloat(style.marginTop) || 0,
+        mb: Number.parseFloat(style.marginBottom) || 0,
+        // A real element: painted AND carrying words. A hidden or empty leftover is not.
+        visible: rect.width > 1 && rect.height > 1 && !k.closest('[hidden]'),
+        text: (k.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      };
+    });
+    const rowGap = Number.parseFloat(getComputedStyle(inner).rowGap) || 0;
+    const buttonsMarginTop = Number.parseFloat(getComputedStyle(buttons).marginTop) || 0;
     return {
-      between,
-      gap: Math.round(buttons.getBoundingClientRect().top - title.getBoundingClientRect().bottom),
-      columnGap: Math.round(Number.parseFloat(getComputedStyle(inner).rowGap)),
+      slot,
+      rowGap,
+      span: +(buttons.getBoundingClientRect().top - title.getBoundingClientRect().bottom).toFixed(1),
+      // Every pixel of the span, accounted for: the column's own gap between each pair, the
+      // slotted elements' margin boxes, and the sibling margin the buttons carry when the slot
+      // is empty (the `2 × rhythm` head gap the removed tagline was meant to leave behind).
+      expected: +(
+        rowGap * (slot.length + 1) +
+        slot.reduce((n, s) => n + s.mt + s.h + s.mb, 0) +
+        buttonsMarginTop
+      ).toFixed(1),
     };
   });
-  check('nothing sits between the wordmark and the buttons (no tagline, no empty row)', menuColumn.between.length === 0, JSON.stringify(menuColumn.between));
-  check('no empty gap where the tagline was (wordmark→buttons = the column gap)', menuColumn.gap === menuColumn.columnGap, `gap ${menuColumn.gap}px vs column ${menuColumn.columnGap}px`);
+  // The owner removed the tagline on 2026-10-14 and ruled on 2026-10-15 that the beta 0.53 line
+  // KEEPS its place between the wordmark and the buttons. So the rule is not "nothing may sit
+  // there": it is "nothing DEAD sits there, and no pixel is unexplained". This still fails on an
+  // unremoved tagline, a hidden placeholder or a leftover empty row.
+  const dead = menuColumn.slot.filter((s) => !s.visible || s.text.length === 0);
+  check('anything between the wordmark and the buttons is a real, visible, non-empty element',
+    dead.length === 0, menuColumn.slot.map((s) => `${s.id} ${s.visible ? 'visible' : 'HIDDEN'} "${s.text.slice(0, 30)}"`).join(' | ') || 'slot empty');
+  // The deliberate beta line is a real feature, not a leftover: assert it is the thing in the slot.
+  check('the deliberate beta 0.53 line is the element in that slot',
+    menuColumn.slot.some((s) => s.id === 'menu-beta' && s.visible && s.text.length > 0),
+    menuColumn.slot.map((s) => s.id).join(' | ') || 'slot empty');
+  // No void: the wordmark stands the column rhythm from whatever sits in the slot, and the span
+  // is exactly the slot's own height + margins — nothing more. (With an empty slot this reduces to
+  // the 2 × rhythm head gap, 28px.)
+  check('the wordmark → buttons span holds no unexplained gap (no void where the tagline was)',
+    Math.abs(menuColumn.span - menuColumn.expected) <= 1,
+    `span ${menuColumn.span}px vs explained ${menuColumn.expected}px [rhythm ${menuColumn.rowGap}px, slot ${menuColumn.slot.map((s) => `${s.id} h${s.h}`).join(', ') || 'empty'}]`);
   check('title is FUTASAKU', ((await page.locator('#menu .title').textContent()) ?? '').toUpperCase().includes('FUTASAKU'));
   // `#menu-online` carries the `hidden` attribute when the build has no duel endpoint (main.ts).
   // Read the attribute, not isHidden(): the entry also sits inside the (hidden) PLAY submenu now,
