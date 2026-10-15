@@ -76,3 +76,14 @@ export const openOnlineHub = async (page: Page, options: MenuEntryOptions = {}):
   await openMenuEntry(page, 'menu-online', { timeout });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: Math.min(timeout, 30_000) });
 };
+
+/**
+ * Wait until a main-menu entry is READY to be opened: the app has built its final menu (the entry
+ * sits behind the PLAY doorway on product channels, or on the flat menu on legacy ones). This is
+ * the "the menu is up and this entry exists" wait a bare
+ * `waitForSelector('#menu-online:not([hidden])')` used to express — except that wait can no longer
+ * succeed on a product build, because behind the doorway the entry lives in a `hidden` subtree and
+ * Playwright's default wait state is "visible".
+ */
+export const waitMenuEntry = (page: Page, id: string, options: MenuEntryOptions = {}): Promise<void> =>
+  waitMenuShape(page, id, options.timeout ?? 40_000);

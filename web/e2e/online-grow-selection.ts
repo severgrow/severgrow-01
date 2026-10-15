@@ -26,7 +26,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -219,7 +219,7 @@ const openApp = async (
   await context.addInitScript({ content: settingsScript(identity) });
   const page = await context.newPage();
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 45_000 });
+  await waitMenuEntry(page, 'menu-online', { timeout: 45_000 });
   return { context, page };
 };
 

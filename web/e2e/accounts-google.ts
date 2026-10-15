@@ -20,7 +20,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { MemoryIdentityLinkStore, createAccountsRouter, supabaseAuthProvider } from '../../server/src/accounts/accounts.js';
 import { playerTag } from '../../src/player-tag.js';
 import { CHROME } from './helpers/local-duel.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = 4243;
 const SHOTS = process.env.SHOTS === '1';
@@ -149,7 +149,7 @@ const device = async (b: Browser, w = 390, h = 844) => {
   const context = await b.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
   const page = await context.newPage();
   await page.goto(`${origin}/`);
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
+  await waitMenuEntry(page, 'menu-online', { timeout: 40_000 });
   return { context, page };
 };
 const dismissFirstCard = async (page: Page) => {
@@ -265,7 +265,7 @@ try {
   await d3.page.click('#menu-settings');
   await d3.page.click('[data-acct="sign-out"]');
   await d3.page.click('[data-acct="confirm-yes"]');
-  await d3.page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
+  await waitMenuEntry(d3.page, 'menu-online', { timeout: 40_000 });
   check('signed out: this phone forgot the account', (await identity(d3.page)) === null);
   await openMenuEntry(d3.page, 'menu-online');
   check('signed out: the welcome offers Google again', await waitFor(() => d3.page.locator('#acct-welcome').isVisible()));

@@ -21,7 +21,7 @@ import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { createHttpServer } from '../../server/src/http.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -101,7 +101,7 @@ const openApp = async (
   await context.addInitScript({ content: 'try { window.confirm = function () { return true; }; } catch (e) {}' });
   const page = await context.newPage();
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
+  await waitMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.evaluate(() => (window as unknown as { __severgrow?: { ready?: () => boolean } }).__severgrow?.ready?.());
   return { context, page };
 };

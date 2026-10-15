@@ -10,7 +10,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 // The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
@@ -159,7 +159,7 @@ try {
   // --- menu ---
   await A.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await A.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
-  await A.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
+  await waitMenuEntry(A, 'menu-online', { timeout: 25_000 });
   await shoot(A, '01-menu-desktop-1280x800');
   // The owner moved Play online behind the PLAY doorway (2026-10-15): the menu offers PLAY and the
   // lobby entry is one tap inside it, so assert the player-reachable route, not a flat menu id.
@@ -174,7 +174,7 @@ try {
 
   await B.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await B.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
-  await B.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
+  await waitMenuEntry(B, 'menu-online', { timeout: 25_000 });
   await shoot(B, '02-menu-phone-390x844');
 
   // --- hub ---

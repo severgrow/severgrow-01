@@ -11,7 +11,7 @@ import type { Browser, BrowserContext, Page, Request, Response } from 'playwrigh
 import { onlinePerspective } from '../../src/online/perspective.js';
 import { coordKey } from '../../../src/engine/index.js';
 import type { Action, Player } from '../../../src/engine/index.js';
-import { openMenuEntry, openOnlineHub } from './menu-nav.js';
+import { openMenuEntry, openOnlineHub, waitMenuEntry } from './menu-nav.js';
 
 export const LIVE_APP = 'https://severgrow.github.io/severgrow-01/futa0.5/';
 export const LIVE_API = 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
@@ -782,7 +782,10 @@ export const joinDuelViaLink = async (session: Session, inviteCode: string): Pro
   const { page } = session;
   await page.goto(`${LIVE_APP}#/join/${inviteCode}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await waitHidden(page, '#menu');
-  await waitHidden(page, '#menu-online', 30_000);
+  // Wait for the menu (and the Play online entry behind the PLAY doorway) to be built. The old
+  // waitHidden(page, '#menu-online') cannot succeed on a product build any more: the entry lives
+  // inside the hidden PLAY submenu, and Playwright's default wait state is "visible".
+  await waitMenuEntry(page, 'menu-online', { timeout: 30_000 });
   // An invite link boots straight into the join screen (lobby handles the hash).
   const joinVisible = await page
     .waitForSelector('#online-join:not([hidden])', { timeout: 15_000 })

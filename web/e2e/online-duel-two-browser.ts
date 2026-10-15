@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 import { createHttpServer } from '../../server/src/http.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
@@ -86,7 +86,7 @@ const openPlayer = async (browser: Browser, origin: string, label: string): Prom
   await page.goto(origin);
   await waitVisible(page, '#menu');
   // Lobby mounts async after menu; wait until Play online is un-hidden.
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 15_000 });
+  await waitMenuEntry(page, 'menu-online', { timeout: 15_000 });
   check(`${label}: Play online shown`, true);
   return page;
 };

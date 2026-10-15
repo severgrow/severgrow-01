@@ -25,7 +25,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
-import { openMenuEntry } from './helpers/menu-nav.js';
+import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -111,7 +111,7 @@ const openApp = async (
   await context.addInitScript({ content: "try { window.confirm = function () { return true; }; } catch (e) {}" });
   const page = await context.newPage();
   await page.goto(origin, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
+  await waitMenuEntry(page, 'menu-online', { timeout: 40_000 });
   return { context, page };
 };
 
@@ -333,7 +333,7 @@ try {
 
   // ========================================================================== 2. REFRESH / RETURN
   await A.reload({ waitUntil: 'domcontentloaded' });
-  await A.waitForSelector('#menu-online:not([hidden])', { timeout: 30_000 });
+  await waitMenuEntry(A, 'menu-online', { timeout: 30_000 });
   await reopenFromList(A, stateA!.matchId);
   await A.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await A.waitForTimeout(1500); // give a replay a chance to happen before we judge
@@ -346,7 +346,7 @@ try {
   );
 
   await B.reload({ waitUntil: 'domcontentloaded' });
-  await B.waitForSelector('#menu-online:not([hidden])', { timeout: 30_000 });
+  await waitMenuEntry(B, 'menu-online', { timeout: 30_000 });
   await reopenFromList(B, stateB!.matchId);
   await B.waitForSelector('#duel-hud:not([hidden])', { timeout: 15_000 });
   await B.waitForTimeout(1500);
