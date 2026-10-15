@@ -8,6 +8,7 @@
 import type { RulesConfig } from '../../../src/engine/index.js';
 import type { CampaignLevel } from '../../../src/campaign/index.js';
 import { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY } from '../../../src/campaign/index.js';
+import { SAVE_KEY } from './persist.js';
 
 export { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY };
 export { CAMPAIGN_PROGRESS_KEY, parseProgress, serializeProgress, freshProgress } from '../../../src/campaign/index.js';
@@ -26,6 +27,32 @@ export const overridesForMatch = (
   labOverrides: Partial<RulesConfig> = {},
 ): Partial<RulesConfig> => (campaign ? campaign.config : isTest ? labOverrides : {});
 
+/**
+ * The storage key an offline save belongs to. A campaign save NEVER shares the classic key, so
+ * introducing the campaign cannot overwrite (or be mistaken for) an existing classic save.
+ */
+export const offlineSaveKey = (campaign: CampaignLevel | null): string =>
+  campaign ? CAMPAIGN_SAVE_KEY : SAVE_KEY;
+
 /** Which offline match the player last played, so Continue resumes the right one. */
 export type OfflineMode = 'classic' | 'campaign';
 export const parseLastMode = (raw: string | null): OfflineMode => (raw === 'campaign' ? 'campaign' : 'classic');
+
+/**
+ * The campaign's own resume save: which level, and the offline match save (the same
+ * `encodeSave` format the classic game uses, so resuming replays through the tested decoder).
+ */
+export type CampaignSave = { levelId: string; match: string };
+
+export const encodeCampaignSave = (levelId: string, match: string): string =>
+  JSON.stringify({ v: 1, levelId, match });
+
+export const decodeCampaignSave = (raw: string | null): CampaignSave | null => {
+  try {
+    const s = JSON.parse(raw ?? '') as { v?: number; levelId?: unknown; match?: unknown };
+    if (s?.v !== 1 || typeof s.levelId !== 'string' || !s.levelId || typeof s.match !== 'string' || !s.match) return null;
+    return { levelId: s.levelId, match: s.match };
+  } catch {
+    return null;
+  }
+};

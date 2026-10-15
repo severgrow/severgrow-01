@@ -26,6 +26,7 @@
     "calibrate": "tsx src/sim/calibrate.ts",
     "verify-proof": "tsx src/sim/verify-proof.ts",
     "bot-timing": "tsx src/sim/bot-timing.ts",
+    "campaign:balance": "tsx src/sim/campaign-balance.ts",
     "server:dev": "node --env-file-if-exists=.env --import tsx server/src/index.ts",
     "server:smoke": "node --env-file-if-exists=.env --import tsx server/scripts/smoke.ts",
     "server:migrate": "node --env-file-if-exists=.env --import tsx server/scripts/migrate.ts",

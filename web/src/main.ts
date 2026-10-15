@@ -78,6 +78,32 @@ import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel } from '
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
+import type { Loaded } from './logic/persist.js';
+// Campaign mode (the primary offline experience). Progress and the campaign match save are separate
+// from the classic save; `overridesForMatch` is the offline-only seam that lets a level pass terrain.
+import {
+  CAMPAIGN_CHAPTERS,
+  CAMPAIGN_LEVELS,
+  campaignLevelById,
+  currentLevel,
+  isCompleted,
+  isUnlocked,
+  nextCampaignLevel,
+  parseProgress,
+  recordCampaignResult,
+  serializeProgress,
+  CAMPAIGN_PROGRESS_KEY,
+} from '../../src/campaign/index.js';
+import type { CampaignLevel, CampaignProgress } from '../../src/campaign/index.js';
+import {
+  CAMPAIGN_SAVE_KEY,
+  LAST_MODE_KEY,
+  decodeCampaignSave,
+  encodeCampaignSave,
+  offlineSaveKey,
+  overridesForMatch,
+  parseLastMode,
+} from './logic/campaign.js';
 import {
   freeTurnGuide, migrateTutorialProgress, nextTutorialChapter, previousTutorialChapter,
   tutorialAccepts, tutorialChapter, tutorialFeedback, tutorialTrackFor,
@@ -142,7 +168,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -395,7 +421,18 @@ function beatHome(p: Player, my: number) {
 
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
-  if (session) store.set(SAVE_KEY, encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base }));
+  if (!session) return;
+  const encoded = encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base });
+  // A campaign match saves under its OWN key together with the level it belongs to: the classic
+  // offline save is never overwritten by a campaign game, and a campaign match resumes as the level
+  // it actually is (the level's config is carried by the save's base state).
+  if (campaignLevel) {
+    store.set(offlineSaveKey(campaignLevel), encodeCampaignSave(campaignLevel.id, encoded));
+    store.set(LAST_MODE_KEY, 'campaign');
+    return;
+  }
+  store.set(offlineSaveKey(null), encoded);
+  store.set(LAST_MODE_KEY, 'classic');
 };
 
 // ---------- the look ----------
@@ -526,12 +563,13 @@ function drawLogo() {
 let openSheet: HTMLElement | null = null;
 /** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
  *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
-let shownScreen: 'menu' | 'levels' | 'game' | null = null;
-function showScreen(name: 'menu' | 'levels' | 'game') {
+let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
+function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
   shownScreen = name;
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
+  $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
   for (const id of ['online-hub', 'online-waiting', 'online-join']) {
     const el = document.getElementById(id);
@@ -540,17 +578,35 @@ function showScreen(name: 'menu' | 'levels' | 'game') {
   if (name === 'levels') {
     renderLevelGrid();
   }
+  if (name === 'campaign') {
+    renderCampaignScreen();
+  }
   if (name === 'menu' && !same) {
     const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
-    const canContinue = !!saved && saved.state.phase !== 'GAME_OVER';
+    const campaignCanContinue = FEATURES.campaign && !!campaignResume();
+    const resumeCampaign = campaignCanContinue && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign';
+    const resumeClassic = !!saved && saved.state.phase !== 'GAME_OVER' && !resumeCampaign;
+    const canContinue = resumeCampaign || resumeClassic;
     $('menu-continue').hidden = !canContinue;
     $('menu-continue').classList.remove('version-btn');
-    const continueLabel = canContinue && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
+    const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
     $('menu-continue').textContent = continueLabel;
     $('menu-continue').setAttribute('aria-label', continueLabel);
     {
-      $('menu-new').classList.toggle('primary', !canContinue);
-      $('menu-new').classList.toggle('ghost', canContinue);
+      // On the product channels the campaign leads the offline column and the difficulty picker
+      // becomes its secondary "Classic vs AI". Every other channel is untouched.
+      $('menu-new').classList.toggle('primary', !canContinue && !FEATURES.campaign);
+      $('menu-new').classList.toggle('ghost', canContinue || FEATURES.campaign);
+      const cmp = $('menu-campaign');
+      cmp.hidden = !FEATURES.campaign;
+      if (FEATURES.campaign) {
+        cmp.textContent = CAMPAIGN.title;
+        cmp.setAttribute('aria-label', CAMPAIGN.title);
+        cmp.classList.add('primary');
+        cmp.classList.remove('ghost');
+        $('menu-new').textContent = CAMPAIGN.classic;
+        $('menu-new').setAttribute('aria-label', `${CAMPAIGN.classic}. Choose a difficulty.`);
+      }
     }
     $('menu-tutorial').classList.remove('primary');
     $('menu-tutorial').classList.add('ghost');
@@ -658,6 +714,94 @@ function renderLevelGrid() {
         startGame(seed, level);
       });
       return b;
+    }),
+  );
+}
+
+// ---------- campaign screen ----------
+
+/** The saved unfinished campaign match: the level it belongs to and its replayed state, or null. */
+function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress> } | null {
+  const raw = decodeCampaignSave(store.get(CAMPAIGN_SAVE_KEY));
+  if (!raw) return null;
+  const level = campaignLevelById(raw.levelId);
+  if (!level) return null;
+  const saved = decodeSave<CoachProgress>(raw.match);
+  if (!saved || saved.state.phase === 'GAME_OVER') return null;
+  return { level, saved };
+}
+
+/** One level tile: completed, the current level, an unlocked level, or locked. */
+function campaignTile(level: CampaignLevel, currentId: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'campaign-tile';
+  b.dataset.level = level.id;
+  const unlocked = isUnlocked(campaignProgress, level);
+  const completed = isCompleted(campaignProgress, level.id);
+  b.dataset.state = completed ? 'completed' : !unlocked ? 'locked' : level.id === currentId ? 'current' : 'open';
+  b.disabled = !unlocked;
+  const num = document.createElement('span');
+  num.className = 'ct-num';
+  num.textContent = String(level.number).padStart(2, '0');
+  const name = document.createElement('span');
+  name.className = 'ct-name';
+  name.textContent = level.name;
+  b.append(num, name);
+  const label = CAMPAIGN.levelLabel(level.number, level.name);
+  if (completed) {
+    const mark = document.createElement('span');
+    mark.className = 'ct-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '✓';
+    b.append(mark);
+    b.setAttribute('aria-label', `${label}. ${CAMPAIGN.completed}.`);
+  } else if (!unlocked) {
+    b.setAttribute('aria-label', `${label}. ${CAMPAIGN.locked}.`);
+  } else if (b.dataset.state === 'current') {
+    b.setAttribute('aria-label', `${label}. ${CAMPAIGN.current}.`);
+  } else {
+    b.setAttribute('aria-label', label);
+  }
+  b.addEventListener('click', () => {
+    sound.unlock();
+    startCampaignLevel(level);
+  });
+  return b;
+}
+
+/** The campaign screen: a compact chapter list drawn from the level data. Nothing here is static. */
+function renderCampaignScreen() {
+  $('campaign-heading').textContent = CAMPAIGN.heading;
+  const total = CAMPAIGN_LEVELS.length;
+  const done = CAMPAIGN_LEVELS.filter((l) => isCompleted(campaignProgress, l.id)).length;
+  $('campaign-progress').textContent = CAMPAIGN.progress(done, total);
+  const resume = campaignResume();
+  const hint = $('campaign-resume-hint');
+  hint.hidden = !resume;
+  if (resume) hint.textContent = CAMPAIGN.resumeHint;
+  $('campaign-continue').textContent = resume ? CAMPAIGN.resume : CAMPAIGN.play;
+  const here = currentLevel(campaignProgress).id;
+  $('campaign-chapters').replaceChildren(
+    ...CAMPAIGN_CHAPTERS.map((chapter) => {
+      const block = document.createElement('section');
+      block.className = 'campaign-chapter';
+      block.dataset.chapter = chapter.id;
+      const head = document.createElement('div');
+      head.className = 'campaign-chapter-head';
+      const words = CAMPAIGN.chapters[chapter.id];
+      const name = document.createElement('h3');
+      name.className = 'campaign-chapter-name';
+      name.textContent = `${CAMPAIGN.chapterName(chapter.number)} · ${words?.title ?? ''}`;
+      const sub = document.createElement('p');
+      sub.className = 'campaign-chapter-sub';
+      sub.textContent = words?.subtitle ?? '';
+      head.append(name, sub);
+      const grid = document.createElement('div');
+      grid.className = 'campaign-grid';
+      grid.append(...chapter.levels.map((level) => campaignTile(level, here)));
+      block.append(head, grid);
+      return block;
     }),
   );
 }
@@ -1141,7 +1285,18 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   delete panel.dataset.winner;
 }
 
-async function startGame(seed: number, level: Level = settings.level, watch: { level: Level; pause: number } | null = null) {
+async function startGame(
+  seed: number,
+  level: Level = settings.level,
+  watch: { level: Level; pause: number } | null = null,
+  /**
+   * THE SEAM. Only the offline campaign screen passes a level here. `campaignLevel` is what makes
+   * `save()` use the campaign's own key; every other caller (classic, tutorial, rematch, a URL seed)
+   * leaves it null, so no other match can carry a campaign board. Online never calls this at all —
+   * its board comes from the server.
+   */
+  campaign: CampaignLevel | null = null,
+) {
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
@@ -1152,8 +1307,10 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
   }
   store.set(SEEN_KEY, '1');
   gameLevel = level;
-  // the test copy: the Lab's active experiment (none: the classic game)
-  const overrides = IS_TEST && lab ? lab.overrides() : {};
+  campaignLevel = campaign;
+  // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
+  // otherwise {} — the classic game's own configuration.
+  const overrides = overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
   const opening = IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
@@ -1163,12 +1320,24 @@ async function startGame(seed: number, level: Level = settings.level, watch: { l
     await runStarterLottery(opponentStarts);
   }
   const state: State = opening;
-  log = [`New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`];
-  beginSession(state, null, [], opponentStarts ? state : null);
+  log = [
+    campaign
+      ? `${CAMPAIGN.started(campaign.number, campaign.name)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
+      : `New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
+  ];
+  // A campaign match always keeps its opening as the replay base: the save must replay under the
+  // LEVEL's config (its authored board), never under the default config.
+  beginSession(state, null, [], campaign || opponentStarts ? state : null);
   dealIn();
   firstToolTips();
   save();
   announceTurn(state.turnPlayer);
+}
+
+/** Opens a campaign level as a fresh, reproducible match. The fixed seed makes the start identical. */
+function startCampaignLevel(level: CampaignLevel) {
+  gameOverDismissed = true;
+  void startGame(level.seed, level.botLevel, null, level);
 }
 
 function clearFreePlayBulbNudge() {
@@ -1616,7 +1785,27 @@ function tutorialAfterPlay(p: Played, by: Player) {
   else advance();
 }
 
+/** Resumes a saved campaign match as the level it belongs to (its board comes from the save's base). */
+function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachProgress> }) {
+  log = [CAMPAIGN.started(r.level.number, r.level.name)];
+  watching = null;
+  if (IS_TEST) {
+    document.body.classList.remove('lab-watching');
+    lab?.watchingChanged(null);
+  }
+  campaignLevel = r.level;
+  gameLevel = r.saved.level;
+  store.set(LAST_MODE_KEY, 'campaign');
+  beginSession(r.saved.state, r.saved.coach, r.saved.actions, r.saved.base ?? null);
+}
+
 function continueGame() {
+  // Continue resumes whichever offline match the player last played: the campaign match when one is
+  // unfinished and newer, otherwise the classic saved game (unchanged).
+  if (FEATURES.campaign && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign') {
+    const campaign = campaignResume();
+    if (campaign) return continueCampaignMatch(campaign);
+  }
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
   if (!saved) return startGame(randomSeed());
   const lesson = saved.coach?.tutorial;
@@ -1638,6 +1827,8 @@ function continueGame() {
     lab?.watchingChanged(null);
   }
   gameLevel = saved.level;
+  campaignLevel = null; // a resumed classic match is never a campaign match
+  store.set(LAST_MODE_KEY, 'classic');
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
 }
 
@@ -1680,6 +1871,16 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
+      // Campaign progress: a win unlocks the next level and marks this one completed; a loss
+      // removes nothing. Its own record — the classic stats above are never reshaped by it.
+      if (campaignLevel) {
+        campaignProgress = recordCampaignResult(campaignProgress, campaignLevel, {
+          won: p.after.result.winner === HUMAN,
+          score: p.after.result.scores[HUMAN],
+          turns: p.after.turnNumber,
+        });
+        saveCampaignProgress();
+      }
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
@@ -1949,6 +2150,15 @@ let lastTurnKey = '';
 /** Whether the ? tip is open. */
 /** The bot level of the game being played (kept with the saved game). */
 let gameLevel: Level = 7;
+/**
+ * The campaign level of the ACTIVE match, or null for a classic / tutorial match. It is the only
+ * production source of match overrides (see `overridesForMatch`), and it is cleared by every other
+ * way a match can start, so a campaign board can never leak into a classic or online game.
+ */
+let campaignLevel: CampaignLevel | null = null;
+/** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
+let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
+const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
 let lastBoard: unknown = null;
 let lastOverlay = '';
 let coachWhyOpen = false;
@@ -4785,14 +4995,26 @@ function renderGameOver() {
   if (!show || !st?.result) return;
   const r = st.result;
   const won = r.winner === HUMAN;
-  $('go-title').textContent = won ? RESULT.beatLevel(gameLevel) : resultTitle(r, HUMAN);
+  const campaign = campaignLevel;
+  $('go-title').textContent = won
+    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(gameLevel)
+    : resultTitle(r, HUMAN);
   // The subtitle is context only (which level this was), the same rule the online finish screen
   // follows — so it never repeats the outcome or the reason below it.
-  $('go-sub').textContent = `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+  if (campaign) {
+    // "Level 6 · Branching Out", plus one small note about what the win unlocked.
+    const next = won ? nextCampaignLevel(campaign.number) : null;
+    const note = next
+      ? ` · ${CAMPAIGN.unlockedNext(next.name)}`
+      : won && !next ? ` · ${CAMPAIGN.chapterDone}` : '';
+    $('go-sub').textContent = `${CAMPAIGN.started(campaign.number, campaign.name)}${note}`;
+  } else {
+    $('go-sub').textContent = `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+  }
   $('go-rematch').textContent = won ? 'Play again' : 'Try again';
   const other = $('go-other');
   other.hidden = false;
-  other.textContent = 'Change difficulty';
+  other.textContent = campaign ? CAMPAIGN.back : 'Change difficulty';
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)
@@ -5602,6 +5824,14 @@ document.addEventListener('pointerdown', (e) => {
   if (!(e.target as Element | null)?.closest?.('.hud .score, #score-pop')) $('score-pop').hidden = true;
 });
 bind('levels-back', () => showScreen('menu'));
+// Campaign: the screen, its way back, and its one prominent action (resume, or the current level).
+bind('menu-campaign', () => showScreen('campaign'));
+bind('campaign-back', () => showScreen('menu'));
+bind('campaign-continue', () => {
+  const resume = campaignResume();
+  if (resume) return continueCampaignMatch(resume);
+  startCampaignLevel(currentLevel(campaignProgress));
+});
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
 document.addEventListener(
@@ -5702,7 +5932,7 @@ bind('go-other', () => {
     void onlineLobbyCtl?.openHub();
     return;
   }
-  showScreen('levels');
+  showScreen(campaignLevel ? 'campaign' : 'levels');
 });
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
@@ -5745,7 +5975,7 @@ bind('gm-new', () => {
   }
   if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
   sheet(null);
-  showScreen('levels');
+  showScreen(campaignLevel ? 'campaign' : 'levels');
 });
 bind('gm-howto', () => openHowToReference());
 bind('gm-settings', () => sheet('sheet-settings'));
@@ -6053,6 +6283,8 @@ bind('go-rematch', () => {
     });
     return;
   }
+  // A campaign rematch restarts the SAME level from its fixed seed (never a random one).
+  if (campaignLevel) return startCampaignLevel(campaignLevel);
   startGame(randomSeed(), gameLevel);
 });
 bind('go-board', () => {
@@ -6447,7 +6679,7 @@ const params = BOOT_PARAMS;
 const urlSeed = Number(params.get('seed'));
 if (typeof __CHANNEL__ !== 'undefined' && __CHANNEL__ === 'test' && params.get('lab') === '1') {
   // the dev-only material lab: every material in every palette (?lab=1, add &detail=low for Low)
-  for (const id of ['menu', 'levels', 'game']) $(id).hidden = true;
+  for (const id of ['menu', 'levels', 'campaign', 'game']) $(id).hidden = true;
   void import('./lab.js').then((m) => m.showLab(params.get('detail') === 'low' ? 'low' : 'normal', settings.reduceMotion));
 } else if (session) showScreen('game'); // an immediate menu tap may start play while optional UI mounts
 else if (params.get('tutorial') === '1' || params.get('tutorial') === 'pro') {

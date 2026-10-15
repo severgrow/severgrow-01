@@ -94,6 +94,9 @@
         <div class="menu-buttons">
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
+          <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
+               so no other channel ever shows it. Its words come from src/strings.ts. -->
+          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
@@ -196,7 +199,23 @@
       </div>
     </div>
 
-    <!-- ===== Pick a level ===== -->
+    <!-- ===== Campaign (the primary offline mode) ===== -->
+    <!-- The chapter list and level tiles are drawn from the level data by main.ts, so a level is
+         never duplicated here. Everything a player reads comes from src/strings.ts and the level. -->
+    <section id="campaign" class="screen campaign" aria-label="Campaign" hidden>
+      <div class="campaign-inner levels-inner">
+        <header class="levels-head">
+          <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2 id="campaign-heading">Campaign</h2>
+        </header>
+        <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue">Continue</button>
+        <p id="campaign-resume-hint" class="campaign-hint muted small" hidden></p>
+        <p id="campaign-progress" class="campaign-progress muted small"></p>
+        <div id="campaign-chapters" class="campaign-chapters"></div>
+      </div>
+    </section>
+
+    <!-- ===== Pick a level (Classic vs AI, unchanged) ===== -->
     <section id="levels" class="screen levels" aria-label="Pick a level" hidden>
       <div class="levels-inner">
         <header class="levels-head">
