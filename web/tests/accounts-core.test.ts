@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ACCOUNT_KEY,
+  NICKNAME_KEY,
   PENDING_KEY,
   PENDING_MAX_AGE_MS,
   authorizeUrl,
@@ -16,6 +17,8 @@ import {
   readCallback,
   redirectTarget,
   savePending,
+  setNicknamePrompt,
+  takeNicknamePrompt,
   takePending,
   writeAccount,
 } from '../src/accounts/core.js';
@@ -93,5 +96,17 @@ describe('device records', () => {
   it('turns the server answer into the identity the online lobby reads', () => {
     expect(identityFromSignIn({ token: 't', player: { id: 'p', displayName: 'MapleFox', kind: 'account' } })).toEqual({ token: 't', playerId: 'p', displayName: 'MapleFox', kind: 'account' });
     expect(identityFromSignIn({ player: { id: 'p' } })).toBeNull();
+  });
+
+  it('the nickname invitation is single use', () => {
+    const { m, kv } = memory();
+    expect(takeNicknamePrompt(kv)).toBeNull();
+    setNicknamePrompt(kv, 'p1');
+    expect(takeNicknamePrompt(kv)).toBe('p1');
+    expect(m.has(NICKNAME_KEY)).toBe(false);
+    expect(takeNicknamePrompt(kv)).toBeNull();
+    m.set(NICKNAME_KEY, '{nonsense');
+    expect(takeNicknamePrompt(kv)).toBeNull();
+    expect(takeNicknamePrompt(null)).toBeNull();
   });
 });

@@ -26,7 +26,9 @@ import {
   redirectTarget,
   savePending,
   setFlash,
+  setNicknamePrompt,
   takeFlash,
+  takeNicknamePrompt,
   takePending,
   writeAccount,
 } from './core.js';
@@ -82,6 +84,11 @@ body.acct-on #online-storage-note { display:none; }
   width:min(420px, calc(100vw - 32px)); box-sizing:border-box; padding:12px 14px; border-radius:14px; background:rgba(8,10,10,.92);
   border:1px solid rgba(214,204,177,.25); color:#f0e9dc; font:400 14px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); text-align:center; }
 .acct-toast[data-tone='bad'] { border-color:rgba(224,115,92,.6); }
+/* The nickname field: dark glass, NO border contour — the fill alone marks it, cream text on focus. */
+.acct-input { min-height:44px; width:100%; box-sizing:border-box; padding:0 14px; border:0; border-radius:12px;
+  background:rgba(255,255,255,.07); color:#f6ecd8; font:600 16px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace); }
+.acct-input::placeholder { color:#8f866f; font-weight:400; }
+.acct-input:focus-visible { outline:2px solid #f0e9dc; outline-offset:1px; }
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
@@ -160,11 +167,11 @@ const apiUrl = (path: string): string | null => {
   const region = duelRegion();
   return `${api}${path}${region ? `?forceFunctionRegion=${encodeURIComponent(region)}` : ''}`;
 };
-const apiPost = async (path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
+const apiRequest = async (method: 'POST' | 'PATCH', path: string, body: unknown, token: string | null): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> => {
   const url = apiUrl(path);
   if (!url) return { ok: false, status: 0, json: {} };
   const res = await fetch(url, {
-    method: 'POST',
+    method,
     headers: {
       'content-type': 'application/json',
       accept: 'application/json',
@@ -182,6 +189,9 @@ const apiPost = async (path: string, body: unknown, token: string | null): Promi
   }
   return { ok: res.ok, status: res.status, json };
 };
+const apiPost = (path: string, body: unknown, token: string | null) => apiRequest('POST', path, body, token);
+/** PATCH /v1/players/me chooses a display name (server/src/fetch-app.ts). */
+const apiPatch = (path: string, body: unknown, token: string | null) => apiRequest('PATCH', path, body, token);
 
 const SETTINGS_CACHE = 'futasaku.auth.google.v1';
 /** Is "Continue with Google" switched on in the Supabase dashboard? Asked once per session. */
@@ -341,6 +351,10 @@ export const mountAccounts = async (): Promise<void> => {
               }
               const name = shownName(identity) ?? '';
               const outcome = res.json.outcome;
+              // The sign-in that FORMED this account (a brand-new one, or a guest upgraded in place)
+              // invites the player to choose a name. The step is shown once, right after the reload
+              // below; skipping consumes the invitation. A later sign-in is 'signed-in'/'same'.
+              if (outcome === 'created' || outcome === 'linked') setNicknamePrompt(kv, identity.playerId);
               const text = outcome === 'linked' ? ACCOUNT.linked(name) : outcome === 'signed-in' && before && before.playerId !== identity.playerId ? ACCOUNT.switched(name) : ACCOUNT.welcomeBack(name);
               setFlash(kv, { kind: 'signed-in', text, returnTo: pending.returnTo });
               // Start clean on the new identity: every online screen re-reads it from storage.
@@ -399,6 +413,8 @@ export const mountAccounts = async (): Promise<void> => {
   // ---- 3. the one-time welcome before the first online visit ----
   const welcome = sheet('acct-welcome', ACCOUNT.welcomeTitle);
   const confirmSheet = sheet('acct-confirm', ACCOUNT.deleteTitle);
+  // The nickname step reuses the same glass panel. Its contents are rebuilt each time it opens.
+  const nickSheet = sheet('acct-nickname', ACCOUNT.nicknameTitle);
   {
     const status = el('p', 'acct-status');
     status.setAttribute('role', 'status');
@@ -522,6 +538,73 @@ export const mountAccounts = async (): Promise<void> => {
       }
     });
 
+  /**
+   * Choose a name — one clear screen, shown once after the sign-in that FORMED the account and again
+   * from Settings. Deliberately NOT a gate: the scrim, Escape and "Skip for now" all close it and
+   * leave the generated nature name in place, so a player who does not care is never blocked from
+   * playing. The server re-checks the name (server/src/display-name.ts); this only reports.
+   */
+  const submitNickname = async (input: HTMLInputElement, status: HTMLElement, save: HTMLButtonElement, skip: HTMLButtonElement) => {
+    const s = signedIn();
+    if (!s) return;
+    if (input.value.trim().length === 0) {
+      status.textContent = ACCOUNT.nicknameError;
+      status.dataset.tone = 'bad';
+      input.focus({ preventScroll: true });
+      return;
+    }
+    save.disabled = skip.disabled = true;
+    status.textContent = ACCOUNT.working;
+    status.dataset.tone = '';
+    try {
+      const res = await apiPatch('/v1/players/me', { displayName: input.value }, s.identity.token);
+      const player = res.ok ? (res.json.player as { displayName?: unknown } | undefined) : undefined;
+      if (!player || typeof player.displayName !== 'string') throw new Error(String(res.status));
+      // Keep this device's identity honest, so Settings and the lobby show the NEW name at once.
+      // The #tag is derived from the player id, so it is untouched and stays exactly as it was.
+      writeIdentity(kv, { ...s.identity, displayName: player.displayName });
+      nickSheet.close();
+      renderSettings();
+      say(ACCOUNT.nicknameSaved);
+    } catch {
+      status.textContent = navigator.onLine ? ACCOUNT.nicknameError : ACCOUNT.offline;
+      status.dataset.tone = 'bad';
+      save.disabled = skip.disabled = false;
+    }
+  };
+
+  const openNickname = () => {
+    const s = signedIn();
+    if (!s) return;
+    nickSheet.panel.textContent = '';
+    const status = el('p', 'acct-status');
+    status.setAttribute('role', 'status');
+    const input = el('input', 'acct-input');
+    input.type = 'text';
+    input.maxLength = 40;
+    input.value = s.identity.displayName ?? '';
+    input.placeholder = ACCOUNT.nicknamePlaceholder;
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('spellcheck', 'false');
+    input.setAttribute('aria-label', ACCOUNT.nicknamePlaceholder);
+    const save = button('acct-btn', ACCOUNT.nicknameSave, 'nickname-save');
+    const skip = button('acct-btn', ACCOUNT.nicknameSkip, 'nickname-skip');
+    const actions = el('div', 'acct-actions row');
+    actions.append(skip, save);
+    nickSheet.panel.append(el('h2', '', ACCOUNT.nicknameTitle), el('p', '', ACCOUNT.nicknameBody), input, status, actions);
+    skip.addEventListener('click', () => nickSheet.close());
+    save.addEventListener('click', () => void submitNickname(input, status, save, skip));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void submitNickname(input, status, save, skip);
+      }
+    });
+    nickSheet.open();
+    // `open` focuses the first button, which would make "Skip for now" feel like the primary action.
+    input.focus({ preventScroll: true });
+  };
+
   const renderSettings = () => {
     box.textContent = '';
     const s = signedIn();
@@ -530,6 +613,12 @@ export const mountAccounts = async (): Promise<void> => {
     if (name) box.append(el('p', 'acct-who', ACCOUNT.youAre(name)));
     if (s) {
       box.append(el('p', 'muted small', ACCOUNT.signedIn(s.email)));
+      // The Settings entry for the name: reuses the same sheet as the first-login step.
+      const nameRow = el('div', 'acct-actions row');
+      const rename = button('acct-btn', ACCOUNT.nicknameSettings, 'change-nickname');
+      rename.addEventListener('click', () => openNickname());
+      nameRow.append(rename);
+      box.append(nameRow);
       const row = el('div', 'acct-actions row');
       const out = button('acct-btn', ACCOUNT.signOut, 'sign-out');
       const del = button('acct-btn danger', ACCOUNT.deleteAccount, 'delete');
@@ -558,6 +647,12 @@ export const mountAccounts = async (): Promise<void> => {
   };
   renderSettings();
   refresh();
+  // ---- 6. the one-time nickname step, right after the sign-in that formed this account ----
+  // Consumed here (single use), so it is asked exactly once: skipping leaves the generated nature
+  // name in place and never nags again. A later sign-in on another device is 'signed-in' and sets
+  // no invitation at all.
+  const pendingNickname = takeNicknamePrompt(kv);
+  if (pendingNickname && signedIn()?.identity.playerId === pendingNickname) openNickname();
   // The lobby rewrites identity (first guest, link codes, a 401 reset); keep both views honest.
   for (const id of ['menu-settings', 'gm-settings']) document.getElementById(id)?.addEventListener('click', () => setTimeout(renderSettings, 0));
   document.getElementById('menu-online')?.addEventListener('click', () => setTimeout(refresh, 0));

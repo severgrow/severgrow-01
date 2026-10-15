@@ -14,6 +14,8 @@ export const PENDING_KEY = 'futasaku.auth.pending.v1';
 export const ACCOUNT_KEY = 'futasaku.account.v1';
 export const WELCOME_KEY = 'futasaku.account.welcome.v1';
 export const FLASH_KEY = 'futasaku.account.flash.v1';
+/** A one-shot invitation to choose a nickname; set by the sign-in that FORMED the account. */
+export const NICKNAME_KEY = 'futasaku.account.nickname.v1';
 /** A sign-in started longer ago than this is ignored (the verifier is single-use anyway). */
 export const PENDING_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -116,6 +118,19 @@ export const takeFlash = (kv: KeyValue | null): Flash | null => {
   const f = readJson<Flash>(kv, FLASH_KEY);
   drop(kv, FLASH_KEY);
   return f && typeof f.text === 'string' ? f : null;
+};
+
+/**
+ * The one-shot nickname invitation. It is set by the sign-in that FORMED the account (a brand-new
+ * account, or a guest upgraded in place) and read once after the reload that follows, so the step
+ * is asked exactly once no matter how many times the player signs in later. Skipping consumes it.
+ */
+export const setNicknamePrompt = (kv: KeyValue | null, playerId: string): boolean => writeJson(kv, NICKNAME_KEY, { playerId });
+/** Reads AND removes the pending invitation (single use). Null when missing or malformed. */
+export const takeNicknamePrompt = (kv: KeyValue | null): string | null => {
+  const p = readJson<{ playerId?: unknown }>(kv, NICKNAME_KEY);
+  drop(kv, NICKNAME_KEY);
+  return p && typeof p.playerId === 'string' ? p.playerId : null;
 };
 
 /** GET /auth/v1/settings → is the Google provider switched on in the Supabase dashboard? */

@@ -788,6 +788,17 @@ export const ACCOUNT = Object.freeze({
   deleted: 'Your account is deleted. You are now playing as a guest.',
   working: 'One moment…',
   opening: 'Opening Google…',
+  // Choosing a name — asked once, right after the first Google sign-in, and changeable in Settings.
+  // Only a signed-in account may choose one; a guest keeps its generated nature name. The server
+  // re-checks every name (server/src/display-name.ts), so this copy is only what the player sees.
+  nicknameTitle: 'Choose your name',
+  nicknameBody: 'This is the name other players see. You can change it later in Settings.',
+  nicknamePlaceholder: 'Your name',
+  nicknameSave: 'Save',
+  nicknameSkip: 'Skip for now',
+  nicknameSaved: 'Name saved.',
+  nicknameError: "That name cannot be used. Use 1 to 40 letters, numbers, spaces or - _ '.",
+  nicknameSettings: 'Change nickname',
   linked: (name: string) => `Signed in. Your matches are saved to your account, ${name}.`,
   welcomeBack: (name: string) => `Signed in. Welcome back, ${name}.`,
   switched: (name: string) => `Signed in as ${name}. Games played as a guest on this device were not moved.`,
