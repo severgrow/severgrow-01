@@ -381,15 +381,77 @@ tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-d
 
 Every request to the deployed API is a paid **Edge Function invocation** (Free plan: a hard monthly
 cap; Pro: a larger allowance, then billed). One day of automated tests against the real project
-used the whole Free allowance (2026-10-15), so:
+used the whole Free allowance (2026-10-15), so the rule is: **the real project is reachable only
+when you ask for it, by name.**
 
-- `npm run check`, `npm run e2e` and every local browser suite (`web/e2e/helpers/local-duel.ts`,
-  `npm run e2e:live`) run against an **in-process** API and never touch Supabase.
-- Scripts that DO hit the real project stop with `SKIPPED … (exit 3)` unless run on purpose:
-  `FUTASAKU_REAL_PROJECT=1 npx tsx <script>`. Guarded: `web/e2e/online-live-ping-latency.ts`,
-  `online-live-smoothness.ts` (when `LIVE_API` is the real project), `online-device-matrix.ts`,
-  `offline-vs-online-audit.ts`, `server/scripts/online-soak.ts`, `server/scripts/load-test.ts`
-  (`server/scripts/real-project-guard.ts`). `online-simulation.ts` already needs `--live`.
+### Free by default (spends nothing)
+
+- `npm run check` / `npm test`, `npm run e2e`, `npm run e2e:online`, `npm run e2e:live`,
+  `npm run typecheck`, every `web:tests`/`server/tests` unit suite, and every local browser suite
+  (`web/e2e/helpers/local-duel.ts`, `web/e2e/live-duels.ts`) run against an **in-process** API
+  (or the dead address `http://127.0.0.1:9`) and never touch Supabase.
+- The real-database integration suites are **skipped** unless `REQUIRE_DATABASE=1` is set, even
+  when `.env` supplies `DATABASE_URL` / `LIVE_DATABASE_URL` (`vitest.config.ts` loads `.env`, which
+  is exactly why the opt-in, not the URL, is the gate):
+  `server/tests/postgres.integration.test.ts`, `server/tests/invite-code-retry.test.ts` (its
+  Postgres part), `server/tests/live-postgres.integration.test.ts`,
+  `server/tests/accounts-postgres.integration.test.ts`. Each prints a loud
+  `*** … SKIPPED — REQUIRE_DATABASE=1 is not set ***`.
+- e2e scripts whose **default** target is the deployed `/futa0.5/` site (whose bundle bakes the real
+  Edge API) stop with `SKIPPED … (exit 3)` unless the target is loopback or the opt-in is set:
+  `web/e2e/online-live-ping-latency.ts`, `online-live-smoothness.ts`, `online-device-matrix.ts`,
+  `offline-vs-online-audit.ts`, `online-live-proof.ts`, `online-ux-walk.ts`,
+  `online-lobby-overlay.ts`. (`online-ux-local.ts` sets `BASE_URL=http://127.0.0.1:…` first, so the
+  local walk stays free.)
+- `server/scripts/online-soak.ts` and `server/scripts/load-test.ts` are guarded the same way;
+  `server/scripts/online-simulation.ts` already needs `--live`.
+- `server/scripts/hosting-spike.ts` and every `src/sim/*` script are pure local CPU.
+- The only scheduled traffic is the Supabase-native `pg_cron` keep-alive job (migration `0007`):
+  one `/v1/health?db=1` + one `/v1/sweep` per day. There are no scheduled GitHub Actions.
+
+### Opting in on purpose
+
+- Real Edge / live site: prefix with `FUTASAKU_REAL_PROJECT=1`
+  (`FUTASAKU_REAL_PROJECT=1 npx tsx web/e2e/online-device-matrix.ts`) — see
+  `server/scripts/real-project-guard.ts` (`requireRealProjectOptIn` stops the run with **exit code
+  3**, never a false PASS; `requireLocalOrRealProjectOptIn` lets a loopback target pass).
+- Real database: `npm run server:db-test`, `npm run server:live-db-test` and `npm run server:verify`
+  set `REQUIRE_DATABASE=1` themselves. `npm run server:migrate` and
+  `server/scripts/verify-security.ts` are deliberate one-off commands that require `DATABASE_URL`
+  and exit non-zero without it.
+- The default npm commands never invoke any of the above (enforced by the test below).
+
+### Rough cost of the heavy suites (orders of magnitude, not measurements)
+
+One completed duel against the real project is on the order of a few hundred Edge requests and
+≈ 1 MB of egress (each turn is Draw + a grow + EndAct + Discard, plus per-seat view/poll traffic and
+Realtime frames). The heavy suites multiply that:
+
+| Suite | Default volume | Rough scale per run |
+| --- | --- | --- |
+| `server/scripts/online-soak.ts` | configurable matches × turns | largest — tens of MB+ |
+| `server/scripts/load-test.ts` | `--matches=50`, `--duration=300` | tens of MB |
+| `web/e2e/online-device-matrix.ts` | `--games=30` across 3 engines | tens of MB |
+| `web/e2e/online-live-smoothness.ts` | `DUELS=5`, `TURNS=3` | single-digit MB |
+| `web/e2e/online-live-ping-latency.ts` | 3 attempts | ~1 MB |
+
+They are cheap to reason about because each is opt-in: run them small, watch the dashboard, and
+prefer the local in-process harness for anything that does not specifically need the deployment.
+
+### The structural guarantee
+
+`server/tests/quota-guard.test.ts` fails the build if a default path could reach the real project:
+it parses the entry points under `web/e2e/` and `server/scripts/` for the constructs that matter
+(a real `*.supabase.co` host, the deployed app URL, a `DATABASE_URL`/`LIVE_DATABASE_URL` read, or a
+local helper that carries one) and requires each to be classified as `guard` (imports and calls the
+opt-in guard), `local-default` (pins a loopback target) or `explicit-command` (needs `DATABASE_URL`
+/ `--live` and is absent from the default npm scripts). It also pins the guard's exit-3 contract and
+proves — with an unreachable URL and no opt-in — that the real-database suites skip without opening
+a socket. It asserts on those constructs, never on source layout, so unrelated edits nearby cannot
+break it.
+
+### App idle traffic
+
 - The app itself keeps idle traffic low: the live-duel challenge check runs every **30 s** while the
   per-player Realtime ping is connected (4 s only when Realtime is down, or a challenge is waiting),
   and the live status check runs every **10 s** in a match (1 s only while live or waiting; 30 s
@@ -403,8 +465,8 @@ used the whole Free allowance (2026-10-15), so:
 | `server/tests/http-e2e.test.ts` | 4 tests: the whole vertical slice over real HTTP with two clients + refresh/reconnect, auth failures, error codes, card-reconstruction |
 | `server/tests/http.test.ts` | 8 tests: preflight/CORS, security headers, malformed and oversized bodies, missing bodies, 404s without internals, auth required on every match route, precise field validation, and that logs never contain tokens or bodies |
 | `server/tests/postgres.test.ts` | 11 tests: row mapping, the transactional statement sequence, rollback on every rejection, idempotent replay, duplicate invite code (recording fake pool) |
-| `server/tests/postgres.integration.test.ts` | **17 tests against the real database** (skipped unless `DATABASE_URL` is set): schema/constraints, migration idempotency+checksums, RLS everywhere, `anon`/`authenticated` denial, token-hash-only storage, persistence across a brand-new pool, a two-guest create/join/play slice, DB-level idempotency, racing transactions, ten-way retry storm, rollback, leak checks |
-| `server/tests/live-postgres.integration.test.ts` | **7 tests against the real database** (skipped unless `LIVE_DATABASE_URL` is set): a whole live session (go-live, timeout auto-play, a strike, board unchanged by the switch), P-21 `42501` denial for `anon`/`authenticated` on every live table and column, nothing in the realtime publication, the one-pending-challenge partial index under racing inserts, mutual challenges and accept races serialized by real row locks, a late move racing the timeout tick |
+| `server/tests/postgres.integration.test.ts` | **17 tests against the real database** (skipped unless `REQUIRE_DATABASE=1` and `DATABASE_URL` are set; run with `npm run server:db-test`): schema/constraints, migration idempotency+checksums, RLS everywhere, `anon`/`authenticated` denial, token-hash-only storage, persistence across a brand-new pool, a two-guest create/join/play slice, DB-level idempotency, racing transactions, ten-way retry storm, rollback, leak checks |
+| `server/tests/live-postgres.integration.test.ts` | **7 tests against the real database** (skipped unless `REQUIRE_DATABASE=1` and `LIVE_DATABASE_URL` are set; run with `npm run server:live-db-test`): a whole live session (go-live, timeout auto-play, a strike, board unchanged by the switch), P-21 `42501` denial for `anon`/`authenticated` on every live table and column, nothing in the realtime publication, the one-pending-challenge partial index under racing inserts, mutual challenges and accept races serialized by real row locks, a late move racing the timeout tick |
 | `server/tests/migrate.test.ts` | migration runner: order, one transaction per migration, idempotency, checksum refusal, rollback, dry-run |
 | `server/tests/pg-pool.test.ts` | TLS decisions, env handling, password redaction |
 | `server/tests/client.test.ts` | 6 tests: request shape, bearer header, `since` handling, error mapping, session persistence/resume |
