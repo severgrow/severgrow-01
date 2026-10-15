@@ -218,6 +218,13 @@ export const mountAccounts = async (): Promise<void> => {
   // ---- 0. the privacy policy at futasaku.com/#privacy (every build, even offline-only ones) ----
   const privacy = sheet('acct-privacy', PRIVACY.title);
   privacy.panel.append(el('h2', '', PRIVACY.title), el('p', 'acct-small', PRIVACY.updated), el('p', '', PRIVACY.intro));
+  // The same document at its canonical, crawlable address (real HTML, no JavaScript needed). The
+  // panel stays the offline-friendly view; this normal anchor just makes the two visibly one page.
+  const canonicalPolicy = el('a', 'acct-linkbtn', 'futasaku.com/privacy');
+  canonicalPolicy.href = './privacy/';
+  canonicalPolicy.style.alignSelf = 'flex-start';
+  canonicalPolicy.style.paddingLeft = '0';
+  privacy.panel.append(canonicalPolicy);
   for (const s of PRIVACY.sections) {
     privacy.panel.append(el('h3', '', s.heading));
     const ul = el('ul');

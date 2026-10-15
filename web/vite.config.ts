@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
+import { PRIVACY } from '../src/strings.js';
+import { writePrivacyPage } from './src/privacy-page.js';
 
 // The playable web version. Builds to web/dist with relative paths so it works
 // from any GitHub Pages URL.
@@ -40,6 +42,10 @@ export default defineConfig({
       .replace(/<link rel="preload" href="[^"]*(?:besley|commissioner|fragment-mono)[^"]*"[^>]*>/g, '');
   } } }, { name: 'isolate-development-art', configResolved(config) { output = resolve(config.root, config.build.outDir); }, closeBundle() {
     const channel = process.env.CHANNEL ?? 'futa04';
+    // The static /privacy page — real HTML at the real path, on every channel. Google's OAuth
+    // verification crawls it with JavaScript off, so it is generated from src/strings.ts PRIVACY
+    // (one source of truth) and carries no external script or stylesheet.
+    writePrivacyPage(PRIVACY, output);
     if (channel === 'futa04' || channel === 'futa-test' || channel === 'futa05') {
       const path = resolve(output, 'manifest.webmanifest');
       const manifest = JSON.parse(readFileSync(path, 'utf8'));
