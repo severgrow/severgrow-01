@@ -54,6 +54,12 @@ describe('every menu surface centres the same column', () => {
     expect(has(onlineCss, '.online-inner', 'padding: 32px 0')).toBe(true);
     expect(has(onlineCss, '.online-inner', 'gap: 14px')).toBe(true);
   });
+
+  it('the PLAY submenu (the product menu doorway) repeats it exactly', () => {
+    expect(has(styleCss, '.play-inner', COLUMN)).toBe(true);
+    expect(has(styleCss, '.play-inner', 'padding: 32px 0')).toBe(true);
+    expect(has(styleCss, '.play-inner', 'gap: 14px')).toBe(true);
+  });
 });
 
 describe('the main menu gives the wordmark deliberate breathing room', () => {
@@ -84,6 +90,12 @@ describe('one heading scale across the screen titles', () => {
     expect(group, 'the online heading must join the display heading group').toBeTruthy();
   });
 
+  it('the PLAY submenu heading joins the same display heading group', () => {
+    const group = rulesFor(fontsCss, '.play-head h2').find((r) => r.body.includes('font-family: var(--font-display)'));
+    expect(group, 'the PLAY heading must join the display heading group').toBeTruthy();
+    expect(rulesFor(fontsCss, '.play-head h2').some((r) => r.body.includes('font-size: clamp(1.45rem, 2.4vw + 0.9rem, 2rem)'))).toBe(true);
+  });
+
   it('the online hub heading shares the difficulty heading size', () => {
     const clamp = 'font-size: clamp(1.45rem, 2.4vw + 0.9rem, 2rem)';
     expect(rulesFor(fontsCss, '.online-head h2').some((r) => r.body.includes(clamp))).toBe(true);
@@ -95,7 +107,7 @@ describe('every surface that shows a cream menu button is in the cream-token sco
   it('the "Opponent found" card is included (outside the scope its buttons fall back to bare text)', () => {
     const scope = rules(styleCss).find((r) => r.body.includes('--fu-cream: #e8ddc5'));
     expect(scope, 'the cream-token scope must exist').toBeTruthy();
-    for (const id of ['#menu', '#levels', '.gameover', '#online-hub', '#online-waiting', '#online-join', '#online-matched']) {
+    for (const id of ['#menu', '#play-menu', '#levels', '.gameover', '#online-hub', '#online-waiting', '#online-join', '#online-matched']) {
       expect(scope!.prelude, `${id} must share the cream tokens`).toContain(id);
     }
   });

@@ -273,6 +273,7 @@ button {
    this list — outside it the cream tokens are undefined, so `var(--fu-cream)` fails and the button
    falls back to a bare text button (that is exactly what `#online-matched` did before 2026-10-14). */
 #menu,
+#play-menu,
 #levels,
 #campaign,
 .gameover,
@@ -380,6 +381,39 @@ button {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+/* ---------- PLAY submenu (the product menu's single doorway) ---------- */
+/* One more surface of the same product as #menu / #levels / the online hub: the menu is hidden
+   while it is open, so it is a screen of its own (no panel, no frame, the menu's own background
+   behind it), and it repeats the same centred column, rhythm and heading as the screens above. */
+.play-menu {
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+}
+.play-inner {
+  /* Same column width as the main menu / difficulty pick, so Play online / LEVEL n / Training
+     read as the menu's own buttons rather than a second, differently-shaped list. */
+  width: min(420px, 100% - 32px);
+  padding: 32px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+.play-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+/* The back button keeps its full 44x44 tap target even when the title (flexes) needs the room. */
+.play-head > .icon-only { flex: 0 0 auto; }
+.play-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding-top: 1px;
 }
 /* ---------- game layout ---------- */
 .game {

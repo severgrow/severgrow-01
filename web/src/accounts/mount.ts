@@ -449,6 +449,14 @@ export const mountAccounts = async (): Promise<void> => {
     hubHead?.after(hub);
   }
 
+  // ---- 4b. the main menu's LOG IN: the same Google flow, one button, gone once signed in ----
+  // It sits at the TOP of the main menu and reuses `start` and `signedIn` — no second sign-in path,
+  // no second round trip. It returns to the menu (ReturnTo 'menu'), so a fresh sign-in lands back
+  // where the player was, and it is only ever wired here, inside the Google-on branch: with the
+  // provider off it stays hidden and untouched.
+  const menuLogin = document.getElementById('menu-login') as HTMLButtonElement | null;
+  menuLogin?.addEventListener('click', () => void start('menu', menuLogin, null));
+
   // ---- 5. the Account block in Settings ----
   const note = document.getElementById('online-storage-note');
   const box = el('div');
@@ -544,6 +552,9 @@ export const mountAccounts = async (): Promise<void> => {
 
   const refresh = () => {
     hub.hidden = signedIn() !== null;
+    // The main menu's LOG IN follows the same state: shown to a guest, hidden the moment the
+    // player is signed in (and never shown at all when this whole Google branch is skipped).
+    if (menuLogin) menuLogin.hidden = signedIn() !== null;
   };
   renderSettings();
   refresh();
