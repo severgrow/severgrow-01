@@ -12,7 +12,7 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
-import { legalActions, viewFor } from '../../src/engine/index.js';
+import { legalActions, startingPlayerFor, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
@@ -95,16 +95,38 @@ try {
       num: Number.parseFloat(getComputedStyle(document.querySelector('#campaign .ct-num')!).fontSize),
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       clipped: [...document.querySelectorAll('#campaign .ct-name')].filter((el) => el.scrollWidth > el.clientWidth + 1).length,
-      scrollable: (() => {
-        const el = document.getElementById('campaign')!;
-        return el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY === 'auto';
-      })(),
+      overflowY: getComputedStyle(document.getElementById('campaign')!).overflowY,
     }));
     assert.ok(typography.name >= 12, `level name ${typography.name}px is readable`);
     assert.ok(typography.num >= 14, `level number ${typography.num}px is readable`);
     assert.ok(typography.overflow <= 1, `no horizontal overflow (${typography.overflow}px)`);
     assert.equal(typography.clipped, 0, 'no level name is clipped');
-    assert.equal(typography.scrollable, true, 'the level list scrolls when it is taller than the phone');
+    assert.equal(typography.overflowY, 'auto', 'the campaign screen can scroll');
+    // The screen must stay usable at 50 levels, not just 10: clone the tiles to 50 and scroll.
+    const scroll = await page.evaluate(() => {
+      const screen = document.getElementById('campaign')!;
+      const grid = screen.querySelector('.campaign-grid')!;
+      const tile = grid.querySelector('.campaign-tile')!;
+      const original = grid.querySelectorAll('.campaign-tile').length;
+      for (let i = 0; i < 40; i++) grid.append(tile.cloneNode(true));
+      const overflows = screen.scrollHeight > screen.clientHeight;
+      screen.scrollTop = 99999;
+      const scrolled = screen.scrollTop > 0;
+      const last = screen.querySelector('.campaign-tile:last-child')!.getBoundingClientRect();
+      const lastVisible = last.bottom <= window.innerHeight + 1;
+      // Back to the top: the heading must be reachable, never clipped above the screen.
+      screen.scrollTop = 0;
+      const headerTop = document.getElementById('campaign-heading')!.getBoundingClientRect().top;
+      // Undo the clones so every later screenshot and assertion sees the real 10 levels.
+      const all = screen.querySelectorAll('.campaign-tile');
+      for (let i = all.length - 1; i >= original; i--) all[i]!.remove();
+      return { overflows, scrolled, lastVisible, headerTop };
+    });
+    assert.equal(scroll.overflows, true, '50 levels make the list taller than the phone');
+    assert.equal(scroll.scrolled, true, 'the list scrolls down to the last level');
+    assert.equal(scroll.lastVisible, true, 'the last level is reachable on screen');
+    assert.ok(scroll.headerTop >= -1, `the top of the list is reachable (heading at ${scroll.headerTop}px)`);
+    assert.equal(await tiles.count(), CAMPAIGN_LEVELS.length, 'the clone test left no tiles behind');
     await page.screenshot({ path: `${OUT}campaign-${vp.key}.png` });
 
     // Level 1 opens on ITS seed and its authored (rock-free) board.
@@ -177,7 +199,17 @@ try {
       assert.equal(await page.locator('#campaign-progress').textContent(), '1 of 10 complete');
       assert.equal(await page.locator('#campaign-continue').textContent(), 'Continue');
       await page.screenshot({ path: `${OUT}campaign-progress-${vp.key}.png` });
-      console.log(`${vp.key}: level 1 won; unlock, states and the finish note all pass`);
+      // Replaying a campaign level restarts THE SAME level from its fixed start.
+      await click(page, `#campaign .campaign-tile[data-level="${level1.id}"]`);
+      await page.waitForFunction((seed: number) => {
+        const s = (window as any).__severgrow.state();
+        return !!s && s.seed === seed && s.phase !== 'GAME_OVER' && s.turnNumber === 1;
+      }, level1.seed, { timeout: 20000 });
+      const restarted = (await stateOf(page))!;
+      assert.equal(restarted.seed, level1.seed, 'a replay uses the level seed, never a random one');
+      assert.equal(restarted.startingPlayer, startingPlayerFor(restarted.seed), 'the fixed opening seat');
+      assert.equal(restarted.config.board?.rock.length, 0);
+      console.log(`${vp.key}: level 1 won; unlock, states, the finish note and the fixed restart all pass`);
     } else {
       console.log(`${vp.key}: level 1 ended ${finished.result!.winner === null ? 'in a draw' : 'as a loss'}; unlock not exercised`);
     }

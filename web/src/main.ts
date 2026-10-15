@@ -1871,6 +1871,9 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
     if (p.before.phase !== 'GAME_OVER' && !watching && !coach.tutorial) {
       stats = recordResult(stats, p.after.result, HUMAN, gameLevel);
       store.set(STATS_KEY, JSON.stringify(stats));
+      // The install invitation counts EVERY finished game — offline here, online at the finish
+      // screen — and never a tutorial step (the guard above already excludes the tutorial).
+      installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
       if (campaignLevel) {
@@ -1881,9 +1884,6 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         });
         saveCampaignProgress();
       }
-      // The install invitation counts EVERY finished game — offline here, online at the finish
-      // screen — and never a tutorial step (the guard above already excludes the tutorial).
-      installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
     }
   }
   log = log.slice(0, 300);

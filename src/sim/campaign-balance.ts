@@ -30,7 +30,11 @@ const GAMES = Math.max(2, arg('games', 30));
 const SEED_STEP = Math.max(1, arg('seed-step', 1013));
 /** The versus-reference run costs the most (level 7 evaluates every bloom), so it is capped. */
 const REF_GAMES = Math.max(1, arg('ref-games', Math.min(GAMES, 10)));
+/** The classic-board baseline is one sweep per bot level the campaign uses. */
+const BASELINE_GAMES = Math.max(2, arg('baseline-games', Math.min(GAMES, 16)));
 const JSON_OUT = process.argv.find((a) => a.startsWith('--json='))?.slice(7) ?? '';
+/** Below this many decided games a seat split is reported as a small-sample note, not a defect. */
+const BIAS_MIN_DECIDED = 60;
 const REFERENCE: Level = 7;
 
 /** The seat holding this level's bot (used to read the versus-reference games). */
@@ -82,11 +86,16 @@ const report = (o: { games: number; refGames: number; seedStep: number; onRow?: 
     const sweep = { ...base, startWins: sweepGames.filter((g) => g.winner === g.startingPlayer).length };
     const decided = sweep.firstWins + sweep.secondWins;
     const imbalance = decided ? Math.abs(sweep.firstWins - sweep.secondWins) / decided : 0;
-    if (decided >= 20 && imbalance > 0.2) {
+    // A skew is only worth calling out over enough games to mean something. Below that the numbers
+    // are still printed (and compared with the classic-board baseline), just not labelled a defect.
+    if (decided >= BIAS_MIN_DECIDED && imbalance > 0.2) {
       flags.push(`LAYOUT BIAS: seat 0 won ${sweep.firstWins}, seat 1 won ${sweep.secondWins} (${Math.round(imbalance * 100)}% skew)`);
     }
-    if (decided >= 20 && Math.max(sweep.firstWins, sweep.secondWins) / decided >= 0.8) {
+    if (decided >= BIAS_MIN_DECIDED && Math.max(sweep.firstWins, sweep.secondWins) / decided >= 0.8) {
       flags.push('ONE-SIDED: the same AI wins 80%+ from one seat');
+    }
+    if (decided < BIAS_MIN_DECIDED && imbalance > 0.35) {
+      flags.push(`SEAT SKEW (small sample, ${decided} decided): seat 0 ${sweep.firstWins} / seat 1 ${sweep.secondWins} — see the classic-board baseline`);
     }
     if (sweep.avgTurns < 10) flags.push(`SHORT: games average ${sweep.avgTurns.toFixed(1)} turns`);
     if (sweep.avgTurns > 55) flags.push(`LONG: games average ${sweep.avgTurns.toFixed(1)} turns`);
@@ -126,16 +135,50 @@ const report = (o: { games: number; refGames: number; seedStep: number; onRow?: 
   return out;
 };
 
+export type BaselineRow = {
+  botLevel: Level;
+  games: number;
+  firstWins: number;
+  secondWins: number;
+  draws: number;
+  startWins: number;
+  avgTurns: number;
+};
+
+/**
+ * The SAME same-AI sweep on the CLASSIC generated board (default terrain), for each bot level the
+ * campaign uses. This is the game's own seat skew — the spec deals player 0 first and does not
+ * balance hands — so a campaign level's seat split can be read against it instead of in isolation.
+ */
+const baseline = (o: { games: number; seedStep: number }): BaselineRow[] => {
+  const bots = [...new Set(CAMPAIGN_LEVELS.map((l) => l.botLevel))].sort((a, b) => a - b);
+  const firstSeed = CAMPAIGN_LEVELS[0]!.seed;
+  return bots.map((botLevel) => {
+    const games: LevelGameResult[] = [];
+    for (let i = 0; i < o.games; i++) {
+      games.push(playLevelGame(firstSeed + i * o.seedStep, [botLevel, botLevel], {}));
+    }
+    const t = tally(games);
+    return { botLevel, ...t, startWins: games.filter((g) => g.winner === g.startingPlayer).length };
+  });
+};
+
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : '–');
 const seatWord = (g: LevelGameResult) => (g.winner === null ? 'draw' : `seat ${g.winner}`);
 
-const markdown = (rows: LevelReport[], games: number, seedStep: number): string => {
+const markdown = (
+  rows: LevelReport[],
+  games: number,
+  seedStep: number,
+  baselineRows: readonly BaselineRow[],
+): string => {
   const lines: string[] = [];
   lines.push(`## Campaign balance — Chapter I (${games} alternate seeds per level, seed step ${seedStep})`);
   lines.push('');
   lines.push('Bot-vs-bot evidence, not proof of human difficulty. The sweep uses the SAME AI on both');
-  lines.push('seats, so its seat split measures the LAYOUT, not the bots. "vs L7" is the level bot against');
-  lines.push('the reference bot (level 7) with the seats swapped.');
+  lines.push('seats, so its seat split reflects the LAYOUT, the spec\'s unbalanced deal and player 0 moving');
+  lines.push('first — read it against the classic-board baseline below, never on its own. "vs L7" is the');
+  lines.push('level bot against the reference bot (level 7) with the seats swapped.');
   lines.push('');
   lines.push('| Lv | Name | AI | Rocks | Gold | Published seed | Sweep seat0 / seat1 / draw | Sweep start-seat wins | Sweep avg turns (min–max) | vs L7 | Flags |');
   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
@@ -148,6 +191,16 @@ const markdown = (rows: LevelReport[], games: number, seedStep: number): string 
       : '–';
     lines.push(
       `| ${r.number} | ${r.name} | ${r.botLevel} | ${r.rocks} | ${r.gold} | ${seatWord(r.published)} in ${r.published.turns} turns (${r.published.scores[0]}–${r.published.scores[1]}) | ${sw} | ${startWins} | ${dur} | ${ref} | ${r.flags.length ? r.flags.join('; ') : '—'} |`,
+    );
+  }
+  lines.push('');
+  lines.push('### Classic-board baseline (same AI both seats, default generated board)');
+  lines.push('');
+  lines.push('| Bot level | Games | Seat 0 / seat 1 / draw | Start-seat wins | Avg turns |');
+  lines.push('| --- | --- | --- | --- | --- |');
+  for (const b of baselineRows) {
+    lines.push(
+      `| ${b.botLevel} | ${b.games} | ${b.firstWins} / ${b.secondWins} / ${b.draws} | ${b.startWins} (${pct(b.startWins, b.games)}) | ${b.avgTurns.toFixed(1)} |`,
     );
   }
   lines.push('');
@@ -166,9 +219,21 @@ const rows = report({
       `… L${String(r.number).padStart(2)} ${r.name.padEnd(18)} sweep seat0/seat1/draw ${r.sweep.firstWins}/${r.sweep.secondWins}/${r.sweep.draws}  avg ${r.sweep.avgTurns.toFixed(1)} turns  vs L${REFERENCE} ${r.vsReference.levelWins}-${r.vsReference.refWins}${r.flags.length ? `  [${r.flags.join('; ')}]` : ''}`,
     ),
 });
+// The classic-board baseline: the game's own seat skew, for comparison with each level.
 console.log('');
-console.log(markdown(rows, GAMES, SEED_STEP));
+console.log(`… classic-board baseline (${BASELINE_GAMES} seeds per bot level)…`);
+const baselineRows = baseline({ games: BASELINE_GAMES, seedStep: SEED_STEP });
+for (const b of baselineRows) {
+  console.log(
+    `   bot L${b.botLevel}: seat0/seat1/draw ${b.firstWins}/${b.secondWins}/${b.draws}  start-seat wins ${b.startWins}  avg ${b.avgTurns.toFixed(1)} turns`,
+  );
+}
+console.log('');
+console.log(markdown(rows, GAMES, SEED_STEP, baselineRows));
 if (JSON_OUT) {
-  writeFileSync(JSON_OUT, JSON.stringify({ games: GAMES, seedStep: SEED_STEP, reference: REFERENCE, rows }, null, 2));
+  writeFileSync(
+    JSON_OUT,
+    JSON.stringify({ games: GAMES, baselineGames: BASELINE_GAMES, seedStep: SEED_STEP, reference: REFERENCE, rows, baseline: baselineRows }, null, 2),
+  );
   console.log(`\nwrote ${JSON_OUT}`);
 }

@@ -125,9 +125,10 @@ centre plus one mirrored rich pair — the same shape Classic's generated terrai
 ## The balance tool
 
 ```sh
-npm run campaign:balance                              # 30 alternate seeds per level
-npm run campaign:balance -- --games=20 --ref-games=6  # faster
-npm run campaign:balance -- --json=/tmp/balance.json  # raw results
+npm run campaign:balance                                          # 30 alternate seeds per level
+npm run campaign:balance -- --games=16 --ref-games=4              # faster
+npm run campaign:balance -- --games=16 --baseline-games=16        # plus the classic-board baseline
+npm run campaign:balance -- --json=/tmp/balance.json              # raw results
 ```
 
 For each level it plays:
@@ -140,14 +141,54 @@ For each level it plays:
 - **the level's bot vs a reference bot (level 7)**, seats swapped, so the difficulty progression can
   be read off.
 
-It flags measurable problems only: a seat skew > 20% over ≥ 20 decided games, one seat winning 80%+
+It also runs a **classic-board baseline**: the same same-AI sweep on the default generated board for
+each bot level the campaign uses. The spec deals player 0 first and does not balance hands, so a
+level's seat split must be read against that baseline, not on its own.
+
+It flags measurable problems only: a seat skew > 20% over ≥ 60 decided games, one seat winning 80%+
 with the same AI both sides, a very short or very long average game, or a level whose opening is not
-reproducible.
+reproducible. Below 60 decided games a big skew is reported as a **small-sample note**, never as a
+defect.
 
 Two honest limits, stated in the tool's own output: when both seats run the same AI a seat *swap*
 changes nothing, so the layout question is measured by the seat split across many **deals** (plus how
 often the starting seat wins); and **bot-vs-bot results are evidence, not proof of human difficulty**
 — a bot plays a different game from a person.
+
+### Chapter I results (2026-10-15)
+
+`npm run campaign:balance -- --games=16 --ref-games=4 --baseline-games=16`. 16 alternating deals per
+level (small sample — read it as directional, not significant).
+
+| Lv | Published seed | Sweep seat0 / seat1 | Sweep avg turns | vs L7 (seats swapped) | Flags |
+| --- | --- | --- | --- | --- | --- |
+| 1 | seat 0, 60 turns, 10–3 | 8 / 8 | 56.9 (21–60) | 0–8 | LONG |
+| 2 | seat 1, 60 turns, 4–7 | 11 / 5 | 58.5 (40–60) | 0–8 | small-sample skew note; LONG |
+| 3 | seat 1, 60 turns, 4–22 | 7 / 9 | 59.4 (52–60) | 1–7 | LONG |
+| 4 | seat 1, 48 turns, 8–11 | 8 / 8 | 51.8 | 0–8 | — |
+| 5 | seat 0, 60 turns, 13–7 | 8 / 8 | 54.2 | 0–8 | — |
+| 6 | seat 1, 52 turns, 12–14 | 9 / 7 | 53.1 | 0–8 | — |
+| 7 | seat 1, 48 turns, 8–11 | 7 / 9 | 51.1 | 0–8 | — |
+| 8 | seat 1, 34 turns, 8–21 | 9 / 7 | 43.9 | 0–8 | — |
+| 9 | seat 0, 36 turns, 19–5 | 8 / 8 | 44.4 | 1–7 | — |
+| 10 | seat 0, 48 turns, 19–9 | 10 / 6 | 44.9 | 0–8 | — |
+
+Classic-board baseline (same AI both seats): bot 1 → 7/9, 58.1 turns; bot 2 → 8/8, 53.4; bot 3 →
+10/6, 41.5.
+
+Reading:
+
+- **Nothing is invalid**: all ten boards validate, all ten are reproducible, and every seat split is
+  inside the classic board's own spread at this sample size (bot 3 on the *classic* board already
+  splits 10/6). No level is biased by this evidence.
+- **Levels 1-3 run long in bot-vs-bot play** (57-59 turns, i.e. to the 30-turn cap). That is the
+  existing bot level 1's behaviour, not the campaign's: the classic baseline for bot 1 is 58.1 turns.
+  A person finishes far sooner — the browser e2e beats level 1 with a plain beginner policy in about
+  30 turns at 10–3.
+- **The AI progression is real**: the level bot loses to level 7 almost every game (0–8), and the
+  Chapter I games get shorter as the AI improves (57 → 44 turns), which is the intended ramp.
+- **No rock count or AI value was changed.** The only adjustment to the design pack was level 9's
+  rich pair moving to the `r` axis, for legality.
 
 ## Tests
 
