@@ -2408,6 +2408,24 @@ function injectStall(): void {
   animLog('test:stall-injected');
 }
 
+/**
+ * My turn starts: a soft light passes over my hand. Each card carries its own ready-made glow
+ * (#hand .card::before) and only its OPACITY animates, which the phone composites on the GPU. The
+ * old version animated a drop-shadow filter on the whole hand, repainting every card every frame
+ * for 0.9s, right at the turn hand-over (motion pass, owner 2026-10-15).
+ */
+let handGlowTimer: ReturnType<typeof setTimeout> | undefined;
+function glowHand(ms: number): void {
+  const hand = $('hand');
+  clearTimeout(handGlowTimer);
+  hand.classList.remove('turn-glow');
+  hand.style.setProperty('--turn-glow-ms', `${Math.round(ms)}ms`);
+  requestAnimationFrame(() => {
+    hand.classList.add('turn-glow');
+    handGlowTimer = setTimeout(() => hand.classList.remove('turn-glow'), ms + 50);
+  });
+}
+
 async function playStep(step: Step, my: number) {
   if (stallInject) {
     const pending = stallInject;
@@ -2783,7 +2801,7 @@ async function playStep(step: Step, my: number) {
       // Only the now-active home answers, with one existing heartbeat; the other stays still.
       beatHome(step.player, my);
       // My turn starts: a soft glow passes over my hand.
-      if (step.player === HUMAN) anim($('hand'), [{ filter: 'drop-shadow(0 0 0 transparent)' }, { filter: 'drop-shadow(0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent))', offset: 0.4 }, { filter: 'drop-shadow(0 0 0 transparent)' }], { duration: 900 * Math.max(f, 0.5) });
+      if (step.player === HUMAN) glowHand(900 * Math.max(f, 0.5));
       // an empty opponent turn starts at once (its quick beats are in its plan)
       const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
       const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;

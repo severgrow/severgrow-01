@@ -156,6 +156,13 @@ html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 
   0%,100% { opacity:1; }
   50% { opacity:.8; }
 }
+/* The grow hand keeps its scale breathe (futa04-card-breathe's 1.055) while the LED alarms, on the
+   LED's beat, with the urgency dip on top. An opacity-only cue here REPLACED the breathe, so the
+   hand looked like it stopped the moment the display started blinking GROW! (owner, 2026-10-15). */
+@keyframes idle-urgency-grow-hand {
+  0%,100% { scale:1; opacity:1; }
+  50% { scale:1.055; opacity:.86; }
+}
 /* Keep the throw hand's scale breathe (futa04-card-breathe) while the LED alarms —
    idle must not replace body pulse with a glow-only cue. The cue is a tight rim, not a
    halo, so the cards never read as lamps; colours and depth shadow are unchanged. */
@@ -173,8 +180,8 @@ html.futa04-information #smart-led-window.led-alarm { animation:smart-led-alarm 
 html.futa04-information.idle-urgency[data-step='draw'] :is(#deck,#discard).ready .pile-card {
   animation:idle-urgency-draw 1200ms ease-in-out infinite;
 }
-html.futa04-information.idle-urgency[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim) {
-  animation:idle-urgency-grow 1200ms ease-in-out infinite;
+html.futa04-information.idle-urgency[data-step='grow'] #hand:not(.waiting) .card.playable:not(.dim):not(.lifted) {
+  animation:idle-urgency-grow-hand 1200ms ease-in-out infinite;
 }
 html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]) #smart-bloom-button,
 html.futa04-information.idle-urgency[data-step='grow'] #smart-bloom:not([hidden]) #smart-bloom-button .futa04-combination {

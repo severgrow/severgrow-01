@@ -5699,3 +5699,23 @@ html.align-overlay::before {
 @media (min-width: 600px) and (max-height: 560px) {
   html.futa04-branding body #menu #logo { display: none !important; }
 }
+
+/* My turn starts: a soft light passes over my hand (main.ts glowHand). Each card's glow is drawn
+   once and only its opacity animates (GPU-cheap); it sits behind the card's own face. */
+#hand .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  box-shadow: 0 -4px 10px color-mix(in srgb, var(--c-text) 30%, transparent);
+  opacity: 0;
+}
+#hand.turn-glow .card::before {
+  animation: hand-turn-glow var(--turn-glow-ms, 900ms) ease-in-out 1;
+}
+@keyframes hand-turn-glow {
+  0%, 100% { opacity: 0; }
+  40% { opacity: 1; }
+}
