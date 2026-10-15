@@ -289,16 +289,30 @@ export const mountAccounts = async (): Promise<void> => {
   };
   const shownName = (id: Identity | null): string | null => (id?.displayName ? taggedName(id.displayName, id.playerId) : null);
 
-  /** Back where the player started: waits (up to 10 s) for the menu button to be ready, then taps it. */
+  /**
+   * Back where the player started: wait (up to 10 s) for the menu button to be ready, then tap it.
+   * On the product menu the duel lobby is MOVED behind the PLAY submenu (web/src/main.ts), so the
+   * entry can be present but not visible; opening that doorway first is part of finding it. A
+   * button that is merely hidden in a background screen is still waited for, never force-clicked.
+   */
   const go = (returnTo: ReturnTo) => {
     const id = returnTo === 'online' ? 'menu-online' : returnTo === 'settings' ? 'menu-settings' : null;
     if (!id) return;
     const until = Date.now() + 10_000;
+    const retry = () => {
+      if (Date.now() < until) setTimeout(tryTap, 150);
+    };
     const tryTap = () => {
       const b = document.getElementById(id);
       const menu = document.getElementById('menu');
-      if (b && !b.hidden && menu && !menu.hidden && b.offsetParent !== null) b.click();
-      else if (Date.now() < until) setTimeout(tryTap, 150);
+      if (!b || b.hidden || !menu) return retry();
+      if (b.offsetParent === null) {
+        // Not on screen: the product menu hides the lobby behind the PLAY submenu — open it.
+        const play = document.getElementById('menu-play');
+        if (play && !play.hidden && play.offsetParent !== null) play.click();
+        return retry();
+      }
+      b.click();
     };
     tryTap();
   };
