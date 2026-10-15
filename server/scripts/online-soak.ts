@@ -64,6 +64,7 @@ const HIGH_LIMITS: ServerConfig['rateLimits'] = {
   linkRedeemPerIpPerHour: 1_000_000,
   actionsPerPlayerPerMinute: 10_000_000,
   sweepPerIpPerHour: 1_000_000,
+  worldPerIpPerHour: 1_000_000,
 };
 
 const MAX_LOOP = 6_000;

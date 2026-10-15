@@ -88,6 +88,7 @@ const INTEGRATION_CONFIG = {
     linkRedeemPerIpPerHour: 100_000,
     actionsPerPlayerPerMinute: 100_000,
     sweepPerIpPerHour: 100_000,
+    worldPerIpPerHour: 100_000,
   },
 };
 

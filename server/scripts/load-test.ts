@@ -353,6 +353,7 @@ const main = async (): Promise<void> => {
       linkRedeemPerIpPerHour: 10_000_000,
       actionsPerPlayerPerMinute: 10_000_000,
       sweepPerIpPerHour: 10_000_000,
+      worldPerIpPerHour: 10_000_000,
     },
   };
   const service = new MatchService({ storage, config });

@@ -85,6 +85,8 @@ export type ServerConfig = {
     linkRedeemPerIpPerHour: number;
     actionsPerPlayerPerMinute: number;
     sweepPerIpPerHour: number;
+    /** Reads of the PUBLIC shared world map, per IP per hour (it needs no account to view). */
+    worldPerIpPerHour: number;
   };
 };
 
@@ -244,6 +246,9 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
     linkRedeemPerIpPerHour: envInt('RATE_LINK_REDEEM_PER_IP_PER_HOUR', 20),
     actionsPerPlayerPerMinute: envInt('RATE_ACTIONS_PER_PLAYER_PER_MINUTE', 120),
     sweepPerIpPerHour: envInt('RATE_SWEEP_PER_IP_PER_HOUR', 120),
+    // The shared world map is a PUBLIC read (it needs no account to view), so it carries a
+    // generous per-IP cap: far above what a human browsing the map could reach, far below a flood.
+    worldPerIpPerHour: envInt('RATE_WORLD_PER_IP_PER_HOUR', 600),
   }),
 });
 

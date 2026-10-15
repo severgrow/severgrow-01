@@ -35,6 +35,7 @@ const soakConfig = (): ServerConfig => ({
     linkRedeemPerIpPerHour: 1_000,
     actionsPerPlayerPerMinute: 10_000,
     sweepPerIpPerHour: 1_000,
+    worldPerIpPerHour: 1_000,
   },
 });
 

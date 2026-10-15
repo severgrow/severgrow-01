@@ -32,12 +32,14 @@ import type {
   PlayerSummary,
   SubmitActionRequest,
   SubmitActionResponse,
+  WorldMapPayload,
 } from './protocol.js';
 import { fromEngineResult } from './protocol.js';
 import { actorChanged, gatedRevisionFor, gatedStateFor, turnBoundaryAdvanced } from './turn-boundary.js';
 import { graceSpentBetween } from './grace.js';
+import { WORLD_MAP_CELLS, WORLD_MAP_COLS, WORLD_MAP_ROWS, planWorldPlacement } from './world.js';
 import { playerSummary } from './storage/types.js';
-import type { Decision, MatchRecord, Participant, PlayerRecord, Storage } from './storage/types.js';
+import type { Decision, MatchRecord, Participant, PlayerRecord, Storage, WorldTile } from './storage/types.js';
 
 const MAX_REQUEST_ID = 200;
 const GUEST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -487,6 +489,7 @@ export class MatchService {
     const finished = await this.storage.resignMatch(matchId, player.id, this.now(), result);
     if (!finished) throw new ApiError('INTERNAL', 'Could not resign.');
     await safePublish(this.broadcaster, matchId, { revision: finished.revision, status: finished.status });
+    await this.safeAwardDuelTile(finished);
     return { match: await this.summary(finished), player: await this.payload(finished, seat, []) };
   }
 
@@ -508,7 +511,11 @@ export class MatchService {
     }
     for (const matchId of result.timedOutIds) {
       const match = await this.storage.matchById(matchId);
-      if (match) await safePublish(this.broadcaster, matchId, { revision: match.revision, status: match.status });
+      if (match) {
+        await safePublish(this.broadcaster, matchId, { revision: match.revision, status: match.status });
+        // A timeout is a real loss, so it earns the winner a tile exactly like a played-out duel.
+        await this.safeAwardDuelTile(match);
+      }
     }
     if (result.deletedGuests > 0) {
       // Housekeeping log for operators (no secrets).
@@ -572,6 +579,8 @@ export class MatchService {
     }
     // The commit's own expiry step may have spent a grace before applying the action.
     if (!result.replayed) await this.publishGraceChange(before, result.match);
+    // A duel that just finished with a winner puts ONE tile on the shared map (idempotent).
+    if (result.match.status === 'finished') await this.safeAwardDuelTile(result.match);
 
     const events = result.moves.flatMap((m) => m.events);
     return {
@@ -717,6 +726,9 @@ export class MatchService {
     // own next fetch. (A committing finish is announced by `submitAction`, never twice.)
     if (before.status !== 'finished' && fresh.status === 'finished') {
       await safePublish(this.broadcaster, fresh.id, { revision: fresh.revision, status: fresh.status });
+      // A poll that discovers the finish harvests the tile too, so a duel nobody is watching still
+      // leaves its mark. Idempotent: the same finish can never mint a second tile.
+      await this.safeAwardDuelTile(fresh);
     }
     return fresh;
   }
@@ -735,6 +747,98 @@ export class MatchService {
     const participant: Participant | null = await this.storage.participantOf(matchId, player.id);
     if (!participant) throw new ApiError('NOT_A_PARTICIPANT', 'You are not in this match.');
     return participant.seat;
+  }
+
+  // ---- the shared world map (the world-map seed spike) ----
+
+  /**
+   * The PUBLIC read: the whole shared map, the same grid for everyone, with each tile's holder.
+   * No account is needed to look at it (it is the point of a shared map), so it carries a
+   * generous per-IP cap instead of a per-player one.
+   */
+  async worldMap(clientIp: string | null = null): Promise<WorldMapPayload> {
+    await this.rateLimit(`world:ip:${clientIp ?? 'unknown'}`, HOUR_MS, this.config.rateLimits.worldPerIpPerHour);
+    const tiles = await this.storage.listWorldTiles();
+    return {
+      cols: WORLD_MAP_COLS,
+      rows: WORLD_MAP_ROWS,
+      cells: WORLD_MAP_CELLS,
+      filled: tiles.length,
+      tiles: [...tiles]
+        .sort((a, b) => a.cell - b.cell)
+        .map((tile) => ({
+          cell: tile.cell,
+          ownerName: tile.ownerName,
+          awardedAt: tile.awardedAt,
+          tookOver: tile.tookOver,
+        })),
+      serverNow: this.now(),
+    };
+  }
+
+  /**
+   * A duel FINISHED with a winner earns exactly ONE tile on the SHARED map. Every choice is made
+   * here, on the server, from data the server already owns:
+   *
+   *   * the map is the fixed `WORLD_MAP_CELLS` grid, identical for everyone;
+   *   * beat a player who holds a tile and you TAKE that tile from them (the challenge rule);
+   *   * otherwise you claim a free cell derived from a hash of the SERVER-generated match id.
+   *
+   * A client has no way to influence any of it: no endpoint accepts a cell, and the match id (the
+   * only input to the hash) is minted by the server. `world_tiles.match_id` is unique, so the
+   * winning duel can never award twice no matter how many times the finish is observed.
+   *
+   * The loop only exists for races (two duels finishing at the same instant): a lost race re-reads
+   * the map and re-plans. It is bounded by the map size.
+   */
+  async awardDuelTile(match: MatchRecord): Promise<WorldTile | null> {
+    const winner = match.result?.winner ?? null;
+    if (match.status !== 'finished' || winner === null) return null;
+
+    const already = await this.storage.worldTileForMatch(match.id);
+    if (already) return already;
+
+    const participants = await this.storage.participantsOf(match.id);
+    const winnerSeat = participants.find((p) => p.seat === winner);
+    const loserSeat = participants.find((p) => p.seat !== winner);
+    if (!winnerSeat || !loserSeat) return null;
+
+    const now = this.now();
+    for (let attempt = 0; attempt < WORLD_MAP_CELLS; attempt++) {
+      const plan = planWorldPlacement({
+        matchId: match.id,
+        winnerId: winnerSeat.playerId,
+        loserId: loserSeat.playerId,
+        tiles: await this.storage.listWorldTiles(),
+      });
+      if (plan.kind === 'none') return null;
+      const claim = {
+        cell: plan.cell,
+        matchId: match.id,
+        ownerId: winnerSeat.playerId,
+        awardedAt: now,
+        tookOver: plan.kind === 'takeover',
+      };
+      const outcome =
+        plan.kind === 'takeover'
+          ? await this.storage.takeOverWorldTile(claim, loserSeat.playerId)
+          : await this.storage.claimWorldTile(claim);
+      if (outcome === 'placed') return this.storage.worldTileForMatch(match.id);
+      // Lost the race. If some other writer already awarded THIS match's single tile we are done;
+      // otherwise the re-read above moves the plan on to the next candidate cell.
+      const raced = await this.storage.worldTileForMatch(match.id);
+      if (raced) return raced;
+    }
+    return null;
+  }
+
+  /** A duel must never fail because the map hiccuped: log and carry on. */
+  private async safeAwardDuelTile(match: MatchRecord): Promise<void> {
+    try {
+      await this.awardDuelTile(match);
+    } catch (error) {
+      console.warn(`world map: could not award a tile for match ${match.id}: ${String(error)}`);
+    }
   }
 
   private async summary(match: MatchRecord): Promise<MatchSummary> {
