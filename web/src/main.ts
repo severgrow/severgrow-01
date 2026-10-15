@@ -74,7 +74,9 @@ import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
 import { LEVEL_INFO } from './logic/levels-ui.js';
-import { DIFFICULTIES, chooseDifficultyLevel, defaultDifficultyForLevel } from './logic/difficulty.js';
+import {
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+} from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
@@ -423,7 +425,15 @@ function beatHome(p: Player, my: number) {
 const save = () => {
   if (isOnlineDuel()) return; // online matches live on the server + device identity, not the offline save
   if (!session) return;
-  const encoded = encodeSave({ seed: session.state.seed, actions: session.log, coach, level: gameLevel, base: session.base });
+  const encoded = encodeSave({
+    seed: session.state.seed,
+    actions: session.log,
+    coach,
+    level: gameLevel,
+    base: session.base,
+    // The training tier the game came from, so a reloaded game still earns its carry-over.
+    ...(gameDifficulty ? { difficulty: gameDifficulty } : {}),
+  });
   // A campaign match saves under its OWN key together with the level it belongs to: the classic
   // offline save is never overwritten by a campaign game, and a campaign match resumes as the level
   // it actually is (the level's config is carried by the save's base state).
@@ -693,6 +703,18 @@ document.addEventListener('click', (e) => {
   if (t && (t.dataset.tip === 'fruit' || t.dataset.tip === 'strengthen' || (IS_FUTA04 && t.dataset.tip === 'draw'))) showTip(t.dataset.tip);
 });
 
+/**
+ * The pending one-game carry-over (a win steps the tier's next game up, a loss steps it down). It
+ * lives in the browser, is read by the ONE tier that earned it, and is cleared the moment that
+ * tier's next game starts. Restored from `d282dfd` and pointed at the three TRAINING tiers.
+ */
+const readDifficultyStep = () => parseDifficultyStep(store.get(DIFFICULTY_STEP_KEY));
+/** Records the level a finished game earned, or clears THIS tier's pending step when it earned none. */
+const writeDifficultyStep = (id: DifficultyId, level: Level | null) => {
+  if (level !== null) store.set(DIFFICULTY_STEP_KEY, JSON.stringify({ id, level }));
+  else if (readDifficultyStep()?.id === id) store.remove(DIFFICULTY_STEP_KEY);
+};
+
 function renderLevelGrid() {
   $('level-grid').replaceChildren(
     ...DIFFICULTIES.map((tier) => {
@@ -703,16 +725,20 @@ function renderLevelGrid() {
       b.dataset.difficulty = tier.id;
       // Visible label is CAPS via CSS; keep the spoken name title-case.
       const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
-      b.setAttribute('aria-label', `${spoken}. Start a new game at this difficulty.`);
+      b.setAttribute('aria-label', `${spoken}. Train against the computer at this difficulty.`);
       b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();
         const seed = randomSeed();
-        const level = chooseDifficultyLevel(tier.id as DifficultyId, seed);
+        // The carry-over is spent here: this game plays it, the next one is back to the tier's own
+        // level unless a finished game moves it again. A step earned by ANOTHER tier stays put.
+        const pending = readDifficultyStep();
+        const level = stepLevelFor(pending, tier.id as DifficultyId) ?? tier.level;
+        if (pending?.id === tier.id) writeDifficultyStep(tier.id as DifficultyId, null);
         store.set('severgrow.difficulty', tier.id);
         settings = { ...settings, level };
         saveSettings();
-        startGame(seed, level);
+        startGame(seed, level, null, null, tier.id as DifficultyId);
       });
       return b;
     }),
@@ -1296,6 +1322,11 @@ async function startGame(
    * its board comes from the server.
    */
   campaign: CampaignLevel | null = null,
+  /**
+   * The TRAINING tier this offline game came from, or null. It is what the one-game carry-over is
+   * recorded against when the game ends; online never calls this at all, so it stays null there.
+   */
+  difficulty: DifficultyId | null = null,
 ) {
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
@@ -1307,6 +1338,7 @@ async function startGame(
   }
   store.set(SEEN_KEY, '1');
   gameLevel = level;
+  gameDifficulty = difficulty;
   campaignLevel = campaign;
   // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
   // otherwise {} — the classic game's own configuration.
@@ -1493,6 +1525,7 @@ function startTutorial(chapter = 0, track = tutorialTrackFor(chapter)) {
   const state = tutorialChapter(chapter);
   log = ['A small match, played to learn.'];
   gameLevel = 7;
+  gameDifficulty = null; // the tutorial is its own match, never one of the training tiers
   tipOpen = null;
   beginSession(state, { ...freshCoach(), tutorial: { chapter, step: 0, version: TUTORIAL_VERSION, track } }, [], state);
   save();
@@ -1795,6 +1828,7 @@ function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachPro
   }
   campaignLevel = r.level;
   gameLevel = r.saved.level;
+  gameDifficulty = null; // a campaign level is not a training tier: it never writes a carry-over
   store.set(LAST_MODE_KEY, 'campaign');
   beginSession(r.saved.state, r.saved.coach, r.saved.actions, r.saved.base ?? null);
 }
@@ -1827,6 +1861,8 @@ function continueGame() {
     lab?.watchingChanged(null);
   }
   gameLevel = saved.level;
+  // A resumed training game keeps its tier, so finishing it still earns the one-game carry-over.
+  gameDifficulty = saved.difficulty ?? null;
   campaignLevel = null; // a resumed classic match is never a campaign match
   store.set(LAST_MODE_KEY, 'classic');
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
@@ -1874,6 +1910,14 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
       installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
+      // The one-game carry-over, earned by this finished game: a win steps the training tier's next
+      // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
+      // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.
+      if (gameDifficulty) {
+        const winner = p.after.result.winner;
+        const outcome = winner === HUMAN ? 'win' : winner === null ? 'draw' : 'loss';
+        writeDifficultyStep(gameDifficulty, stepAfterGame(gameDifficulty, gameLevel, outcome));
+      }
       // Campaign progress: a win unlocks the next level and marks this one completed; a loss
       // removes nothing. Its own record — the classic stats above are never reshaped by it.
       if (campaignLevel) {
@@ -2150,6 +2194,12 @@ let lastTurnKey = '';
 /** Whether the ? tip is open. */
 /** The bot level of the game being played (kept with the saved game). */
 let gameLevel: Level = 7;
+/**
+ * The TRAINING tier the current OFFLINE game came from (null: a match started outside the tiers —
+ * a URL seed, the lab, a campaign level, the tutorial, or any online duel). It is what the
+ * one-game carry-over is recorded against when the game ends.
+ */
+let gameDifficulty: DifficultyId | null = null;
 /**
  * The campaign level of the ACTIVE match, or null for a classic / tutorial match. It is the only
  * production source of match overrides (see `overridesForMatch`), and it is cleared by every other
@@ -6747,6 +6797,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
       const api = duelApiUrl();
       if (!api) return;
       leaveOnline();
+      // An online duel is never a training tier: its finish must not write a carry-over.
+      gameDifficulty = null;
       const client = new DuelClient({
         baseUrl: api,
         storage: browserStorage(),

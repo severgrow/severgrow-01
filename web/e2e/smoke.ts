@@ -15,7 +15,7 @@ import { EMPTY_SEL, kindOf, options, tapCard, targetHexes } from '../src/logic/i
 import { chooseBloom, clickKind, drawMeld } from './drawing.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import { THEME_IDS } from '../src/logic/themes.js';
-import { defaultDifficultyForLevel, difficultyById } from '../src/logic/difficulty.js';
+import { DIFFICULTIES, DIFFICULTY_STEP_KEY } from '../src/logic/difficulty.js';
 import type { Level } from '../../src/bots/levels.js';
 
 const THEMES = ['soil'] as const; // the full suite runs on the default palette; every palette gets a quick game below
@@ -72,24 +72,36 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   return { page, errors };
 };
 
-/** On the difficulty screen, pick the tier that contains `level`, seeded so that exact level is chosen. */
-const pickDifficultyLevel = async (page: Page, level: Level) => {
-  const tier = defaultDifficultyForLevel(level);
-  const choices: readonly Level[] = difficultyById(tier)!.levels;
-  const index = choices.indexOf(level);
-  if (index < 0) throw new Error(`level ${level} is not in difficulty ${tier}`);
-  // chooseDifficultyLevel uses seed % choices.length; randomSeed is getRandomValues()[0] % 1e9.
-  await page.evaluate((idx) => {
-    crypto.getRandomValues = ((arr: Uint32Array) => {
-      arr[0] = idx;
-      return arr;
-    }) as typeof crypto.getRandomValues;
-  }, index);
-  await page.click(`#level-grid [data-difficulty="${tier}"]`);
+/** Builds the menu as far as the Training entry: the product menu keeps it behind PLAY. */
+const openTraining = async (page: Page) => {
+  const play = page.locator('#menu-play');
+  if ((await play.count()) > 0 && (await play.isVisible())) await play.click();
 };
 
-/** Play → difficulty screen → the given bot level (default 7). */
+/**
+ * On the training screen, pick the tier whose NEXT game plays `level`. A tier's own level is fixed
+ * (no seeding any more), so a level only reachable through a tier's one-game carry-over — Medium's
+ * 7 after a win, Hard's 9 after a win — has that pending step written first, exactly as a finished
+ * game would.
+ */
+const pickDifficultyLevel = async (page: Page, level: Level) => {
+  const direct = DIFFICULTIES.find((tier) => tier.level === level);
+  const tier = direct ?? DIFFICULTIES.find((t) => (t.levels as readonly Level[]).includes(level));
+  if (!tier) throw new Error(`level ${level} has no training tier`);
+  if (tier !== direct) {
+    await page.evaluate(
+      ([key, value]) => {
+        try { localStorage.setItem(key!, value!); } catch { /* storage blocked: the pick still works */ }
+      },
+      [DIFFICULTY_STEP_KEY, JSON.stringify({ id: tier.id, level })],
+    );
+  }
+  await page.click(`#level-grid [data-difficulty="${tier.id}"]`);
+};
+
+/** Play → Training → the given bot level (default 7). */
 const newGame = async (page: Page, level: Level = 7) => {
+  await openTraining(page);
   await page.click('#menu-new');
   await pickDifficultyLevel(page, level);
 };
@@ -601,9 +613,10 @@ const oldWords = (page: Page) => bannedWords(page, '\\b(?:clumps?|hyphae?|grow a
   await page.waitForTimeout(200);
   await scan(page, 'settings');
   await page.locator('#sheet-settings [data-close]').click().catch(() => {});
+  await openTraining(page);
   await page.click('#menu-new');
   await page.waitForTimeout(200);
-  await scan(page, 'difficulty picker');
+  await scan(page, 'training picker');
   await pickDifficultyLevel(page, 7);
   await idle(page);
   await page.click('#hud-menu');

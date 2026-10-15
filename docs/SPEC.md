@@ -67,15 +67,18 @@ opening state from it.
 
 ## Difficulty
 
-| Label | Bot levels |
+The three TRAINING tiers (owner direction, 2026-10-15). A tier’s first game starts at the bottom of
+its range; the only movement is the one-game carry-over, a win stepping the tier’s next game one bot
+level UP and a loss one DOWN, never outside the tier’s own range.
+
+| Label | Bot level range |
 | --- | --- |
-| Beginner | 1–2 |
 | Easy | 3–4 |
 | Medium | 5–6–7 |
-| Hard | 8 |
-| Pro | 9 |
+| Hard | 8–9 |
 
-One level is chosen from the tier’s list using the match seed (`chooseDifficultyLevel`).
+No level is chosen from the match seed: the tier’s level is fixed for the next game until a finished
+game moves it (`stepAfterGame` in `web/src/logic/difficulty.ts`).
 
 ---
 

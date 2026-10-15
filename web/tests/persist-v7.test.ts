@@ -96,6 +96,17 @@ describe('autosave: seed + actions (v0.7)', () => {
     const ok = JSON.parse(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 7 }));
     expect(decodeSave(JSON.stringify({ ...ok, level: 12 }))!.level).toBe(7);
   });
+
+  it('keeps the training tier it came from, so a reloaded game still earns its carry-over', () => {
+    const s = played(21, 6);
+    const raw = encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 5, difficulty: 'medium' });
+    expect(decodeSave(raw)!.difficulty).toBe('medium');
+    // A game outside the tiers (a URL seed, the lab, a campaign level) writes no tier.
+    expect(decodeSave(encodeSave({ seed: s.state.seed, actions: s.log, coach: null, level: 5 }))).not.toHaveProperty('difficulty');
+    // A tier this build no longer has is dropped, exactly as an unknown level is.
+    const ok = JSON.parse(raw);
+    expect(decodeSave(JSON.stringify({ ...ok, difficulty: 'pro' }))).not.toHaveProperty('difficulty');
+  });
 });
 
 describe('autosave from a set position (tests, the lab)', () => {
