@@ -10,6 +10,8 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { OnlineSession, createOnlineDriver } from '../src/online/index.js';
 import { createFakeChannel } from '../src/online/channel.js';
+import { displayEventForPlay } from '../src/player/display-readout.js';
+import { replayedByOpponent } from '../src/player/replay-display.js';
 import { CURRENT_RULES_VERSION, applyAs, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Event, State } from '../../src/engine/index.js';
 import type { MatchViewPayload } from '../../server/src/protocol.js';
@@ -292,4 +294,87 @@ describe('catch-up after a gap (return, backgrounded tab, refresh)', () => {
     expect(JSON.parse(store.get('severgrow.duel.session.v1') ?? '{}')).toMatchObject({ revision: 14 });
   });
 });
+
+describe('a replayed opponent turn reaches the cockpit (personality + "not ours")', () => {
+  // The preview the page composes in its online `onChange`: the enemy's committed turn arrives as
+  // replay steps, and the cockpit gets the SAME DisplayEvent the player's own moves get — with the
+  // "theirs" flag the display dims on. Without the wiring the game stayed silent and identical.
+  it('yields a cockpit DisplayEvent and reads as theirs, through the real driver + session', async () => {
+    const seat = 0 as const;
+    const opp = 1 as const;
+    const state = stateForSeat(seat, 21);
+    const view = viewFor(state, seat);
+    const base: MatchViewPayload = {
+      matchId: 'm',
+      rulesVersion: CURRENT_RULES_VERSION,
+      status: 'active',
+      revision: 1,
+      turnStartRevision: 1,
+      seat,
+      startingPlayer: opp,
+      turnPlayer: opp,
+      actor: opp,
+      view: { ...view, actor: opp, turnPlayer: opp }, // the waiting seat, mid-opponent-turn
+      legalActions: [],
+      events: [],
+      turnDeadlineAt: null,
+      graceUsed: [0, 0],
+      gracePeriods: 1,
+      opponent: { seat: opp, playerId: 'opp', displayName: 'Fern' },
+      result: null,
+      serverNow: Date.now(),
+    };
+    // The enemy's finished turn: a MegaBomb that clears four tiles — a moment worth a banner.
+    const events: Event[] = [
+      {
+        t: 'MegaBomb',
+        player: opp,
+        cards: [1, 2],
+        target: { q: 0, r: 0 },
+        destroyed: [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 1 }, { q: 1, r: 1 }],
+      },
+    ];
+    const next: MatchViewPayload = {
+      ...base,
+      revision: 2,
+      turnStartRevision: 2,
+      view,
+      actor: seat,
+      turnPlayer: seat,
+      legalActions: legalActions(view),
+      events,
+    };
+    let fetches = 0;
+    const fetchImpl: FetchLike = async () => {
+      fetches += 1;
+      const player = fetches === 1 ? base : next;
+      return { status: 200, ok: true, json: async () => ({ ok: true, player, serverNow: Date.now() }) };
+    };
+    const driver = createOnlineDriver({
+      client: new DuelClient({ baseUrl: 'https://api.test', fetch: fetchImpl, storage: memoryStore() }),
+      token: 't',
+      matchId: 'm',
+      initial: base,
+      ...noTimers,
+    });
+    const os = new OnlineSession(driver);
+    await driver.start();
+    // The state the replay starts from — the page reads this before rebuilding the display state.
+    const before = os.state;
+    await driver.sync().refresh();
+    const pending = [...driver.pendingEvents()];
+    os.refresh(); // what the page's onChange does before it consumes
+    const steps = os.consumeCatchUp();
+    const after = os.state;
+
+    expect(replayedByOpponent(pending, os.seat), 'the enemy authored this replay').toBe(true);
+    const event = displayEventForPlay(before, after, steps, 0);
+    expect(event, 'the enemy’s MegaBomb is a cockpit moment, not silence').toBeTruthy();
+    expect(event!.message).toBe('-4'); // the enemy's blast: minus four of my tiles
+    expect(event!.mode).toBe('red');
+    // And the player's own replay of the same shape is NOT theirs.
+    expect(replayedByOpponent([{ t: 'MegaBomb', player: seat, cards: [1, 2], target: { q: 0, r: 0 }, destroyed: [] }], os.seat)).toBe(false);
+  });
+});
+
 

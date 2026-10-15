@@ -218,6 +218,11 @@ html.futa04-information.reduce-motion #smart-led-window:is(.led-pulse,.led-alarm
 @media (prefers-reduced-motion:reduce) {
   html.futa04-information #smart-led-window:is(.led-pulse,.led-alarm,.led-flash-cut,.led-flash-bloom) { animation:none; }
 }
+/* Opponent replay: the read-out says "not yours" by going a little quieter. A modest luminance
+   drop that stays fully legible — never a blackout, never a flash, no border, no badge: the DIM
+   is the whole signal. It is a STATE, not motion, so Reduce motion keeps it and adds nothing. */
+html.futa04-information #smart-panel.led-theirs #smart-led { filter:brightness(.8) saturate(.9); }
+html.futa04-information #smart-panel.led-theirs #smart-led-spill { opacity:calc(var(--spill-opacity,.16) * .6); }
 /* Reflected light from the display, falling on the keys below. This is NOT a lamp: it is
    the display's own light bouncing off the control strip. Three physical cues only — a
    thin catch on each key's top edge, faint light in the seam between keys, and a whisper
@@ -835,6 +840,12 @@ export function mountSmartCockpit() {
     for (const b of moves.querySelectorAll<HTMLButtonElement>('button')) b.tabIndex = -1;
     refreshMessage();
   }, flash, hint: (value:string) => machine.hint(value), event: (event:DisplayEvent) => machine.event(event),
+    /**
+     * The display is showing the OPPONENT's replayed turn: dim the glass so it reads as not
+     * yours. A state, toggled by its owner (main's `theirsDim`); one small class, no inline
+     * style, so nothing here can leak a stuck dim past the drain that clears it.
+     */
+    dim: (on: boolean) => { panel.classList.toggle('led-theirs', on); },
     /** Hold a drag word (DRAW/PLACE/THROW/BLOOM/MEGA) on the sign; null clears it. Never FAST. */
     led: (word:string|null) => {
       if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber');

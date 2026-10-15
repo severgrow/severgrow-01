@@ -16,6 +16,7 @@ import { AnimQueue, captionFor } from './logic/anim.js';
 import type { Step } from './logic/anim.js';
 import { displayEventForPlay } from './player/display-readout.js';
 import type { DisplayEvent } from './player/display-readout.js';
+import { createTheirsDim, replayedByOpponent } from './player/replay-display.js';
 import { outcomeCue } from './player/outcome-light.js';
 import type { OutcomeLight } from './player/atmosphere.js';
 import { gameHighlights } from './logic/highlights.js';
@@ -326,6 +327,12 @@ let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
 const outcomeSteps = new WeakMap<Step, { tone: 'good' | 'bad'; strength: number }>();
 const displaySteps = new WeakMap<Step, DisplayEvent>();
+/**
+ * The cockpit display's "this is the opponent's move" dim (owner ask 2026-10-15). Owned here so
+ * every path that begins an online replay (begin) and every path that drains one (clear) can lift
+ * it; the sink is the cockpit's own `dim`, so there is no inline style write anywhere else.
+ */
+const theirsDim = createTheirsDim((on) => smartCockpit?.dim(on));
 let inspectKey: string | null = null;
 let focusKey: string | null = null;
 let showOpps = false;
@@ -2016,6 +2023,7 @@ function fastForward() {
   pumping = false;
   if (getOnlineSession()) {
     getOnlineSession()!.endReveal();
+    theirsDim.clear();
     paintOnlineHudFromSession();
   }
   render();
@@ -2251,6 +2259,7 @@ async function pump() {
       markTiming('replay:end', { queued: queue.pending });
       if (getOnlineSession()) {
         getOnlineSession()!.endReveal();
+        theirsDim.clear();
         markTiming('input:open', { revealing: false });
         paintOnlineHudFromSession();
       }
@@ -2344,6 +2353,9 @@ function releaseGate(reason: string, detail: Record<string, unknown>): void {
   pumping = false;
   pumpWanted = false;
   fastForward();
+  // A stuck dim would be worse than none: releaseGate can bypass fastForward's own clear, so the
+  // safety release lifts it unconditionally here too (idempotent — a no-op when already lifted).
+  theirsDim.clear();
   const os = getOnlineSession();
   if (os?.isRevealing) {
     os.endReveal();
@@ -5674,6 +5686,8 @@ function tearDownOnlineDuel(): void {
   setOnlineSession(null);
   onlineResign = null;
   syncResignMenu();
+  // The only exit from a duel: a dim left on while a replay was in flight must never survive it.
+  theirsDim.clear();
   const hud = document.getElementById('duel-hud');
   if (hud) hud.hidden = true;
 }
@@ -6515,6 +6529,11 @@ void import('./online/lobby-ui.js').then(async (m) => {
         onChange: () => {
           const os = getOnlineSession();
           if (!os) return;
+          // Both ends of the replay, read BEFORE the display state is rebuilt: the cockpit's
+          // read-out for the enemy's turn needs them, exactly as the offline game does. `pending`
+          // is captured here too, because `consumeCatchUp` clears the driver's buffer below.
+          const beforeState = os.state;
+          const pending = os.driver.pendingEvents();
           os.refresh();
           syncSessionFromOnline();
           let catchUp: Step[] = [];
@@ -6529,6 +6548,22 @@ void import('./online/lobby-ui.js').then(async (m) => {
             os.endReveal();
           }
           if (catchUp.length) {
+            // The enemy's finished turn gets the SAME cockpit personality the player's own moves
+            // get — same DisplayEvent, same one mechanism offline uses: the event rides its anchor
+            // step (the outcome cue, else the turn's closing sync) and fires exactly when that step
+            // animates, via the single `displaySteps` consumer. Their play is never silent again.
+            if (IS_FUTA04) {
+              const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN);
+              const cue = outcomeCue(catchUp, HUMAN);
+              if (cue) outcomeSteps.set(cue.step, cue);
+              if (displayEvent) {
+                const anchor = cue?.step ?? catchUp.find((step) => step.k === 'sync');
+                if (anchor) displaySteps.set(anchor, displayEvent);
+              }
+              // "Not ours": read from the events (right for a live turn AND a catch-up after being
+              // away, and never true for the player's own aftermath). Lifted at every drain below.
+              if (replayedByOpponent(pending, os.seat)) theirsDim.begin();
+            }
             // The enemy's finished turn is shown at the OFFLINE game's own pace (one tile at a
             // time, MOTION.move each) so the player can see what arrived. A catch-up after being
             // away keeps its 2x and its Skip.
