@@ -8,6 +8,7 @@ import type { Action, Card, Player, State } from '../../src/engine/index.js';
 import { cutPosition } from './cut-positions.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM ? {executablePath:process.env.PW_CHROMIUM} : {}),args:['--no-sandbox']});
@@ -185,7 +186,7 @@ try {
   const menuCtx = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const menu = await menuCtx.newPage();
   await menu.goto('http://localhost:4199/');
-  await menu.locator('#menu-new').click();
+  await openMenuEntry(menu, 'menu-new');
   await menu.locator('#levels').waitFor({state:'visible'});
   assert.deepEqual(await menu.locator('#level-grid button').allTextContents(),['BEGINNER','EASY','MEDIUM','HARD','PRO']);
   assert.equal(await menu.locator('#level-grid button svg,#level-grid button .lt-note').count(),0,'difficulty choices are names only');

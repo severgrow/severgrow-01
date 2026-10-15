@@ -12,6 +12,7 @@ import { preview } from 'vite';
 import { createCards, mulberry32 } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { checkState } from '../../src/sim/invariants.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const STEPS = Number(arg('steps') ?? 400);
@@ -72,7 +73,7 @@ const run = async (name: string, touch: boolean, seed: number) => {
     localStorage.setItem('severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'skip' }));
   });
   await page.goto(BASE);
-  await page.click('#menu-new');
+  await openMenuEntry(page, 'menu-new');
   // Difficulty tiers replace per-level tiles (Easy covers bot levels 3–4).
   await page.click('#level-grid [data-difficulty="easy"]');
   const cdp: CDPSession | null = touch ? await page.context().newCDPSession(page) : null;

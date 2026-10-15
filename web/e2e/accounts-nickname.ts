@@ -23,6 +23,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { MemoryIdentityLinkStore, createAccountsRouter, supabaseAuthProvider } from '../../server/src/accounts/accounts.js';
 import { playerTag } from '../../src/player-tag.js';
 import { CHROME } from './helpers/local-duel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = 4244;
 const SHOTS = process.env.SHOTS === '1';
@@ -136,16 +137,10 @@ const settingsText = (page: Page) => page.locator('#acct-settings').innerText().
 const sheetVisible = (page: Page, id: string) => page.locator(`#${id}`).isVisible().catch(() => false);
 const nicknameOpen = (page: Page, timeout = 20_000) => waitFor(() => sheetVisible(page, 'acct-nickname'), timeout);
 
-/** Reach the duel lobby: on product channels it lives behind the PLAY submenu, on legacy ones it is
- *  on the menu itself. Clicks the real entry either way, so the module's own handler still runs. */
-const openLobbyEntry = async (page: Page) => {
-  const play = page.locator('#menu-play');
-  if (await play.isVisible().catch(() => false)) {
-    await play.click();
-    await waitFor(() => page.locator('#play-menu').isVisible().catch(() => false));
-  }
-  await page.click('#menu-online');
-};
+/** Reach the duel lobby through the ONE shared doorway helper (helpers/menu-nav.ts): it opens the
+ *  PLAY submenu on product channels and clicks the entry directly on legacy flat menus, so the
+ *  module's own handler still runs either way. */
+const openLobbyEntry = (page: Page) => openMenuEntry(page, 'menu-online');
 
 /** Boot a fresh phone-sized device and walk it as far as the first online visit. */
 const device = async (w: number, h: number) => {

@@ -12,6 +12,7 @@ import { CURRENT_RULES_VERSION, coordKey, legalActions, newGame, viewFor } from 
 import type { Card, Player, State, Suit } from '../../src/engine/index.js';
 import { fixture } from '../../tests/helpers.js';
 import { clickKind, hexCenter } from './drawing.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -87,8 +88,8 @@ for (const size of SIZES) {
     const page = await open(size, { url: '?seed=12' });
     // ?seed=12 starts a game at once (level 7, the default); otherwise go through the menu
     await page.waitForTimeout(1500);
-    if (await page.locator('#menu-new').isVisible()) {
-      await page.locator('#menu-new').click({ force: true });
+    if (await page.locator('#menu:not([hidden])').isVisible().catch(() => false)) {
+      await openMenuEntry(page, 'menu-new');
       await page.waitForTimeout(400);
       await page.locator('#level-grid [data-level="7"]').click({ force: true }).catch(() => {});
     }

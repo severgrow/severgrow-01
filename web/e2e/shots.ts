@@ -9,6 +9,7 @@ import { preview } from 'vite';
 import { THEME_IDS } from '../src/logic/themes.js';
 import { cutDemo, goldDemo } from './positions.js';
 import { chooseBloom, drawMeld } from './drawing.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const dir = process.argv.find((a) => a.startsWith('--dir='))?.slice(6) ?? 'docs/screens';
 mkdirSync(dir, { recursive: true });
@@ -113,7 +114,7 @@ for (const id of THEME_IDS) {
   await page.goto(BASE);
   await page.waitForTimeout(300);
   await shot(page, 'menu');
-  await page.click('#menu-new');
+  await openMenuEntry(page, 'menu-new');
   await page.waitForTimeout(300);
   await shot(page, 'levels');
   await page.close();

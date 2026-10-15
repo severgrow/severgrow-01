@@ -96,12 +96,17 @@ const fmt = (r: Awaited<ReturnType<typeof framesDuring>>) =>
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   const t0 = Date.now();
   await page.goto(BASE, { waitUntil: 'commit' });
-  await page.waitForSelector('#menu-new:not([disabled])', { state: 'visible', timeout: 60000 });
+  // The product menu's leading entry is PLAY; the offline picker is one tap inside it (2026-10-15).
+  await page.waitForSelector('#menu-play:not([disabled])', { state: 'visible', timeout: 60000 });
   const shown = Date.now() - t0;
-  // the first tap that works: tapping New game opens the level screen (a tap on the opening
-  // splash only skips it, so keep tapping every 100 ms until the level screen opens)
+  // the first tap that works: PLAY opens the submenu, then Training opens the level screen (a tap
+  // on the opening splash only skips it, so keep tapping every 100 ms until the level screen opens)
   for (let i = 0; i < 300 && !(await page.locator('#levels').isVisible()); i++) {
-    await page.locator('#menu-new').tap({ timeout: 1000 }).catch(() => {});
+    if (await page.locator('#menu-play').isVisible().catch(() => false)) {
+      await page.locator('#menu-play').tap({ timeout: 1000 }).catch(() => {});
+    } else if (await page.locator('#menu-new').isVisible().catch(() => false)) {
+      await page.locator('#menu-new').tap({ timeout: 1000 }).catch(() => {});
+    }
     await page.waitForTimeout(100);
   }
   console.log(`Menu visible after ${(shown / 1000).toFixed(2)} s`);

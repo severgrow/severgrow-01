@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -54,7 +55,7 @@ const openGame = async (v: (typeof VIEWPORTS)[number]) => {
   });
   await page.goto('http://localhost:4197/');
   await page.waitForTimeout(700);
-  await page.locator('#menu-new').click({ force: true });
+  await openMenuEntry(page, 'menu-new');
   await page.waitForTimeout(400);
   const tile = page.locator('.level-tile').nth(6);
   if (await tile.count()) await tile.click({ force: true });

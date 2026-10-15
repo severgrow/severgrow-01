@@ -5,6 +5,7 @@ import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import type { Page } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const server = await preview({configFile:'web/vite.config.ts',preview:{port:4224,strictPort:true},logLevel:'silent'});
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
@@ -27,7 +28,7 @@ try {
     await page.waitForFunction(() => !!(window as any).__ready);
     check((await page.locator('#menu .menu-buttons button:visible').allTextContents()).join('|').includes('New game|Tutorial|Settings'),`${width}: minimal main menu`);
     check(await page.locator('#menu-howto,#menu-stats,#menu-v3').count()===0,`${width}: obsolete front-menu elements absent`);
-    await page.locator('#menu-new').click();
+    await openMenuEntry(page, 'menu-new');
     check((await page.locator('.difficulty-tile').allTextContents()).length===5,`${width}: five named difficulty choices`);
     await page.locator('[data-difficulty="medium"]').click();
     await page.waitForSelector('#deck.ready');

@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -33,7 +34,7 @@ for (const [w, h] of [[1000, 620], [1280, 800], [1440, 900], [1920, 1080]] as co
   });
   await page.goto('http://localhost:4196/');
   await page.waitForTimeout(800);
-  await page.click('#menu-new');
+  await openMenuEntry(page, 'menu-new');
   await page.waitForTimeout(500);
   const tile = page.locator('.level-tile').nth(6);
   if (await tile.count()) await tile.click();

@@ -15,7 +15,9 @@ import { preview } from 'vite';
 import { legalActions, startingPlayerFor, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { MENU } from '../../src/strings.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = Number(process.env.PORT ?? 4207);
 const CHROME =
@@ -71,10 +73,11 @@ try {
     await page.locator('#menu').waitFor({ state: 'visible' });
     await page.screenshot({ path: `${OUT}menu-${vp.key}.png` });
 
-    // The campaign is the primary offline entry and leads to the campaign screen.
-    assert.equal(await page.locator('#menu-campaign').textContent(), 'Campaign');
-    assert.equal(await page.locator('#menu-campaign').isVisible(), true);
-    await click(page, '#menu-campaign');
+    // The campaign moved behind the PLAY doorway and its entry now names the current level
+    // ("LEVEL 1") — main.ts, owner direction 2026-10-15 — so assert that word and reach it the
+    // way a player does.
+    assert.equal(await page.locator('#menu-campaign').textContent(), MENU.level(1), 'the PLAY entry names the current campaign level');
+    await openMenuEntry(page, 'menu-campaign');
     await page.locator('#campaign-chapters .campaign-tile').first().waitFor({ state: 'visible' });
     assert.equal(await page.locator('#campaign').isVisible(), true);
     const tiles = page.locator('#campaign .campaign-tile');

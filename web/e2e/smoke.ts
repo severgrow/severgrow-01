@@ -4,6 +4,7 @@
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome,
 // or one installed with `npx playwright-core install chromium`).
 import { positionSave } from './position.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
@@ -73,9 +74,8 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
 };
 
 /** Builds the menu as far as the Training entry: the product menu keeps it behind PLAY. */
-const openTraining = async (page: Page) => {
-  const play = page.locator('#menu-play');
-  if ((await play.count()) > 0 && (await play.isVisible())) await play.click();
+const openTraining = async (page: Page): Promise<void> => {
+  await openMenuEntry(page, 'menu-new');
 };
 
 /**
@@ -102,7 +102,6 @@ const pickDifficultyLevel = async (page: Page, level: Level) => {
 /** Play → Training → the given bot level (default 7). */
 const newGame = async (page: Page, level: Level = 7) => {
   await openTraining(page);
-  await page.click('#menu-new');
   await pickDifficultyLevel(page, level);
 };
 
@@ -614,7 +613,6 @@ const oldWords = (page: Page) => bannedWords(page, '\\b(?:clumps?|hyphae?|grow a
   await scan(page, 'settings');
   await page.locator('#sheet-settings [data-close]').click().catch(() => {});
   await openTraining(page);
-  await page.click('#menu-new');
   await page.waitForTimeout(200);
   await scan(page, 'training picker');
   await pickDifficultyLevel(page, 7);
