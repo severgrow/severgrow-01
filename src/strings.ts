@@ -815,6 +815,7 @@ export const PRIVACY = Object.freeze({
     Object.freeze({
       heading: 'Who handles the data',
       lines: Object.freeze([
+        'FUTASAKU is run by Patryk Socha, who is responsible for the data described here.',
         'Supabase runs our game server and database, in the EU (Ireland).',
         'GitHub Pages delivers the website itself.',
         'Google handles signing in with Google.',
@@ -826,7 +827,7 @@ export const PRIVACY = Object.freeze({
       lines: Object.freeze([
         'Settings → Delete my account removes your Google sign-in and your email from FUTASAKU at once, and signs out your other devices.',
         'Finished matches stay in your opponents’ history under your generated name, which is not linked to you any more.',
-        'To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so. We reply within 30 days.',
+        'To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so, or email info@futasaku.com.',
         'You can also remove FUTASAKU from your Google account at myaccount.google.com/permissions.',
       ]),
     }),
@@ -834,6 +835,12 @@ export const PRIVACY = Object.freeze({
       heading: 'Children',
       lines: Object.freeze([
         'FUTASAKU is not made for children under 13, and we do not knowingly collect their data.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Contact',
+      lines: Object.freeze([
+        'Any question about your data, or a request to see or remove it: info@futasaku.com. We reply within 30 days.',
       ]),
     }),
     Object.freeze({
