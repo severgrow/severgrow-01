@@ -350,20 +350,15 @@ export const turnsLeftText = (n: number) => (n <= 1 ? 'Last turn' : `${n} turns 
 
 /**
  * The two piles on the board, named the way the tutorial names them: "Draw pile", "Throw pile"
- * (the recorded word list in docs/DECISIONS.md). One source of truth for the names: the board
- * shows the short forms, the accessible label uses the full ones. The pre-render labels in
- * web/index.html mirror `drawShort`/`discardShort`. `lastCard` is the deck's own clock label.
+ * (the recorded word list in docs/DECISIONS.md). One source of truth for the pile's label and its
+ * accessible name; the pre-render labels in web/index.html mirror `draw`/`discard`.
+ * In the Futa04 skin the visible label is hidden, so `draw` is mostly what a screen reader and a
+ * long-press tooltip say. `lastCard` is the deck's own clock label, not a pile name.
  */
 export const PILES = Object.freeze({
   draw: 'Draw pile',
   discard: 'Throw pile',
-  /** The short forms the pile shows on the board; the full names stay the accessible label. */
-  drawShort: 'Draw',
-  discardShort: 'Throw',
-  /** The Draw pile's own clock label when one card is left. "Last" is the longest form the pile
-   *  fits: "Last card" (≈66px) overflows the ≈50px pile and clips, so the amber count carries the
-   *  rest. The word stays, so the state is never signalled by colour alone. */
-  lastCard: 'Last',
+  lastCard: 'Last card',
 });
 
 /** v0.7: the two homes. Code says "root"; the player reads "home", "your tree", "opponent's volcano". */

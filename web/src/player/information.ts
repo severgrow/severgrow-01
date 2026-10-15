@@ -92,8 +92,7 @@ export const INFORMATION_CSS = `
 .futa04-information #moves .bloom-options { max-height: min(50dvh, 320px); overflow-y: auto; }
 .futa04-information .futa04-combination { max-width:100%; }
 .futa04-information .futa04-mini-card { flex-shrink: 1; min-width: 8px; padding-inline: 0; }
-/* The pile's short name is shown (it is what tells the two piles apart); see the
-   .pile-label rule in the #futa04-box block below for its placement. */
+.futa04-information .pile-label { display: none; }
 .futa04-information #deck.coach-glow { box-shadow: none; }
 .futa04-information #discard.futa04-bloom-draw .pile-top { border-color: var(--c-gold); }
 .futa04-information #hand .card.futa04-throw-picked {
@@ -213,21 +212,9 @@ html.futa04-information .dock #futa04-box .pile-card {
   --pile-h: 71px; --cw: 50px; --ch: 71px; width: 50px; height: 71px;
 }
 html.futa04-information .dock #futa04-box .pile { justify-content: flex-start; }
-/* The pile's short name ("Draw" / "Throw") sits under its count in the meta strip. The strip is
-   the pile's own width, so this adds no horizontal cost to the dock's columns; the count keeps
-   its place at the top of the strip and the name takes the line beneath it. */
 html.futa04-information .dock #futa04-box .pile-meta {
   position: absolute; inset: auto auto 0 0; width: var(--box-pile);
-  height: 30px; justify-self: stretch; pointer-events: none;
-}
-html.futa04-information .dock #futa04-box :is(#deck,#discard) .pile-label {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 12px; line-height: 12px;
-  font-size: 10px; letter-spacing: 0; white-space: nowrap; text-align: center;
-  color: var(--c-text);
-}
-/* One card left: the name keeps its amber cue (the rule above would otherwise win on specificity). */
-html.futa04-information .dock #futa04-box #deck[data-count='last'] .pile-label {
-  color: var(--c-gold, var(--c-accent));
+  height: 18px; justify-self: stretch; pointer-events: none;
 }
 html.futa04-information .dock #futa04-box :is(#deck,#discard) .pile-meta .pile-count { position: absolute; inset: 0 auto auto 0; height: 18px; }
 html.futa04-information .dock #futa04-box .pile-count.pile-meter {

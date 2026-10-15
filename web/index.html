@@ -254,20 +254,20 @@
           <div class="table-row">
             <p id="hint" class="hint-line" role="status" aria-live="polite"></p>
             <div class="piles">
-              <!-- The pile labels below mirror PILES.drawShort / PILES.discardShort in
-                   src/strings.ts; main.ts keeps them in sync on every render. -->
+              <!-- The pile labels below mirror PILES.draw / PILES.discard in src/strings.ts;
+                   main.ts keeps them in sync on every render. -->
               <button id="deck" class="pile deck" type="button" aria-label="Draw pile">
                 <span class="pile-card">
                   <span class="pile-stack" aria-hidden="true"></span>
                 </span>
-                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Draw</span><span class="pile-count num" id="deck-count">0</span></span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Draw pile</span><span class="pile-count num" id="deck-count">0</span></span>
                 <span class="pile-hint" id="deck-hint" aria-hidden="true"></span>
               </button>
               <button id="discard" class="pile discard" type="button" aria-label="Throw pile">
                 <span class="pile-card">
                   <span class="pile-top" id="discard-top" aria-hidden="true"></span>
                 </span>
-                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw</span><span class="pile-count num" id="discard-count">0</span></span>
+                <span class="pile-meta" aria-hidden="true"><span class="pile-label">Throw pile</span><span class="pile-count num" id="discard-count">0</span></span>
                 <span class="pile-hint" id="discard-hint" aria-hidden="true"></span>
               </button>
             </div>

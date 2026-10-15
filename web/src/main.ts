@@ -4583,8 +4583,7 @@ function renderPiles(v: View, advice: Advice | null) {
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
   $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
-  $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.drawShort;
-  $('discard').querySelector('.pile-label')!.textContent = PILES.discardShort;
+  $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
     b.disabled = !look.enabled;

@@ -101,13 +101,7 @@ try {
       `${width}: tool trio matches, aligns and retains separate touch targets (${JSON.stringify(tools)})`);
     check(tools.overlaps.length === 0, `${width}: tools never cover piles, moves or cards (${tools.overlaps})`);
     check(await page.locator('#deck.coach-glow').count() === 0, `${width}: Deck has no square suggestion outline`);
-    // The piles now show a deliberate short name (owner decision): "Draw" / "Throw", not the
-    // empty strip this used to assert.
-    {
-      const labels = (await page.locator('.pile-label:visible').allInnerTexts()).map((s) => s.trim()).sort();
-      check(labels.length === 2 && labels[0] === 'Draw' && labels[1] === 'Throw',
-        `${width}: each pile shows its short name (${labels.join(', ')})`);
-    }
+    check(await page.locator('.pile-label:visible').count() === 0, `${width}: pile descriptions leave no visible clutter`);
     check(!await page.locator('#step-cue').isVisible(), `${width}: routine board prompt is gone`);
     await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === '0:0', undefined, { timeout: 8000 });
     check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: live score rests in the LED`);
