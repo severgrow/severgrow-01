@@ -20,7 +20,9 @@ import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
-import { CHROME, openSeat, startLocalDuel } from './helpers/local-duel.js';
+import { CAMPAIGN_LEVELS, nextCampaignLevel } from '../../src/campaign/index.js';
+import { CAMPAIGN, RESULT } from '../../src/strings.js';
+import { CHROME, openDuel, openSeat, startLocalDuel } from './helpers/local-duel.js';
 
 const OUT = new URL('../../docs/screens/finish/', import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 4301);
@@ -132,11 +134,41 @@ const toGameOver = async (page: Page, maxSteps = 2000): Promise<string> => {
   return `still playing after ${maxSteps} steps`;
 };
 
+/** The seed of the match on screen (the campaign's own level identity). */
 /** The finish card is ready when it is on screen and the app is idle. */
 const waitFinish = async (page: Page) => {
   await page.waitForSelector('#gameover:not([hidden])', { timeout: 30_000 });
   await page.waitForFunction('(() => { const h = window.__severgrow; return !h.busy(); })()', undefined, { timeout: 30_000 });
   await page.waitForTimeout(450);
+  await dismissInstall(page);
+};
+
+const stateSeed = (page: Page): Promise<number | null> =>
+  page.evaluate('(() => { const h = window.__severgrow; const s = h && h.state(); return s ? s.seed : null; })()') as Promise<number | null>;
+
+/**
+ * Dismiss the install invitation if it is on screen. It is a timed sheet that may open OVER the
+ * finish card (by design — it counts the games this device has played), and it takes pointer events
+ * while it is up. A player closes it; so does this, with the sheet's own control.
+ */
+const dismissInstall = async (page: Page): Promise<void> => {
+  for (const id of ['#install-close', '#install-later']) {
+    const el = page.locator(id);
+    if (await el.isVisible().catch(() => false)) {
+      await el.click({ timeout: 2_000 }).catch(() => undefined);
+      return;
+    }
+  }
+};
+
+/** Click a control, dismissing the install sheet whenever it gets in the way (never force-clicked). */
+const clickThrough = async (page: Page, selector: string, tries = 30): Promise<boolean> => {
+  for (let i = 0; i < tries; i++) {
+    await dismissInstall(page);
+    const ok = await page.locator(selector).click({ timeout: 1_500 }).then(() => true).catch(() => false);
+    if (ok) return true;
+  }
+  return false;
 };
 
 const bootScreen = async (browser: Browser, vp: { width: number; height: number }) => {
@@ -152,8 +184,9 @@ const bootScreen = async (browser: Browser, vp: { width: number; height: number 
   return { context, page, errors };
 };
 
-const report = async (mode: string, vp: string, page: Page, errors: string[]) => {
+const report = async (mode: string, vp: string, page: Page, errors: string[], expectLead?: string) => {
   const m = await measure(page);
+  const leadLabel = m.buttons.find((b) => b.id === 'go-rematch')?.label ?? '';
   console.log(`\n--- ${mode} ${vp}: "${m.title}" · ${m.reason}`);
   console.log(`    visible: ${m.visibleParts.join(' ') || '(none)'}`);
   console.log(`    hidden : ${m.hiddenParts.join(' ') || '(none)'}`);
@@ -165,6 +198,7 @@ const report = async (mode: string, vp: string, page: Page, errors: string[]) =>
   check(`${mode} ${vp}: every visible button is inside the viewport`, m.clipped.length === 0, m.clipped.join(' | '));
   check(`${mode} ${vp}: exactly one leading (cream) button`, m.primary.length === 1, m.primary.join(' | '));
   check(`${mode} ${vp}: the outcome, the score and the reason are all legible`, !!m.title && m.visibleParts.includes('go-score') && m.visibleParts.includes('go-reason'), m.title);
+  if (expectLead) check(`${mode} ${vp}: the leading button reads "${expectLead}"`, leadLabel === expectLead, leadLabel);
   check(`${mode} ${vp}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
   await page.screenshot({ path: `${OUT}finish-${mode}-${vp}.png` });
   console.log(`    shot: docs/screens/finish/finish-${mode}-${vp}.png`);
@@ -187,7 +221,10 @@ try {
       const ended = await toGameOver(page);
       check(`classic ${vp.key}: the game reached its end`, ended === 'ended', ended);
       await waitFinish(page);
-      const m = await report('classic', vp.key, page, errors);
+      // A plain offline game keeps its own two words: "Play again" on a win, "Try again" on a loss.
+      const classicWon = (await page.textContent('#go-title')) === RESULT.won;
+      const m = await report('classic', vp.key, page, errors, classicWon ? 'Play again' : 'Try again');
+      check(`classic ${vp.key}: a plain offline game never offers a next level`, !m.buttons.some((b) => b.label === 'Next level'));
       seen[`classic-${vp.key}`] = m.visibleParts;
       await context.close();
     }
@@ -203,11 +240,34 @@ try {
       await page.waitForSelector('#campaign:not([hidden])', { timeout: 10_000 });
       await page.click('#campaign-continue');
       await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      // The campaign's own leading button IS the campaign entry point the tutorial now uses, so this
+      // also proves the handoff lands in a REAL level: a fresh profile opens level 1 (its own seed).
+      const opened = (await stateSeed(page)) ?? 0;
+      check(`campaign ${vp.key}: a fresh profile opens campaign level 1`, opened === CAMPAIGN_LEVELS[0]!.seed, `seed ${opened}`);
       const ended = await toGameOver(page);
       check(`campaign ${vp.key}: the campaign level reached its end`, ended === 'ended', ended);
       await waitFinish(page);
-      const m = await report('campaign', vp.key, page, errors);
+      const wonIt = (await page.textContent('#go-title')) === CAMPAIGN.levelWon(CAMPAIGN_LEVELS[0]!.number);
+      const m = await report('campaign', vp.key, page, errors, wonIt ? CAMPAIGN.nextLevel : undefined);
       seen[`campaign-${vp.key}`] = m.visibleParts;
+      // A WON level leads with the next one, and tapping it really opens that level — the whole point
+      // of the owner's rule: no walk back to the level list to pick it.
+      if (wonIt) {
+        const second = nextCampaignLevel(CAMPAIGN_LEVELS[0]!.number);
+        check(`campaign ${vp.key}: a won level offers a next level at all`, !!second);
+        if (second) {
+          const led = await clickThrough(page, '#go-rematch');
+          check(`campaign ${vp.key}: the leading button is tappable`, led);
+          await page.waitForFunction(
+            `(() => { const h = window.__severgrow; return !!h.state() && h.state().seed === ${second.seed} && !h.busy(); })()`,
+            undefined,
+            { timeout: 40_000 },
+          );
+          const nowSeed = (await stateSeed(page)) ?? 0;
+          check(`campaign ${vp.key}: the leading button opens the NEXT level`, nowSeed === second.seed, `level ${second.number} seed ${nowSeed}`);
+          await page.screenshot({ path: `${OUT}finish-campaign-next-level-${vp.key}.png` });
+        }
+      }
       await context.close();
     }
   }
@@ -223,9 +283,10 @@ if (MODES.includes('online')) {
     for (const vp of VIEWPORTS) {
       const match = await duel.newMatch();
       const a = await openSeat(duel, match, 0, { viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true, reduceMotion: true, speed: 'skip' });
-      const b = await openSeat(duel, match, 1, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reduceMotion: true, speed: 'skip' });
       const errors: string[] = [];
       a.page.on('pageerror', (e) => errors.push(e.message));
+      // The lobby list resumes the running match; the board (and the duel HUD) come up from there.
+      await openDuel(a, match.matchId);
       await a.page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       // Keep the confirm() out of the way, then resign: a real end to a real duel.
       await a.page.evaluate('(() => { window.confirm = () => true; })()');
@@ -233,7 +294,7 @@ if (MODES.includes('online')) {
       await waitFinish(a.page);
       check(`online ${vp.key}: the duel really ended`, (await a.page.textContent('#go-title')) !== '');
       await report('online', vp.key, a.page, errors);
-      await Promise.all([a.context.close(), b.context.close()]);
+      await a.context.close();
     }
   } finally {
     await duel.close();
