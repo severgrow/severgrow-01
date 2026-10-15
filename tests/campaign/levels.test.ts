@@ -1,0 +1,203 @@
+// CAMPAIGN MODE — Phase A: every level's board is legal and playable, the campaign is well formed,
+// and a level is REPRODUCIBLE (same id → identical terrain, homes and opening deal).
+import { describe, expect, it } from 'vitest';
+import {
+  CAMPAIGN_CELLS,
+  CAMPAIGN_CHAPTERS,
+  CAMPAIGN_HOMES,
+  CAMPAIGN_LEVELS,
+  CampaignError,
+  campaignChecks,
+  campaignLevelById,
+  campaignLevelByNumber,
+  campaignOpening,
+  currentLevel,
+  freshProgress,
+  nextCampaignLevel,
+  recordCampaignResult,
+  validateCampaign,
+  validateLevel,
+} from '../../src/campaign/index.js';
+
+describe('campaign levels: the definition is well formed', () => {
+  it('the whole campaign validates (no throw) and has Chapter I as levels 1-10', () => {
+    expect(() => validateCampaign()).not.toThrow();
+    expect(CAMPAIGN_LEVELS).toHaveLength(10);
+    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(CAMPAIGN_LEVELS.every((l) => l.chapter === 1)).toBe(true);
+    expect(CAMPAIGN_CHAPTERS[0]!.levels).toHaveLength(10);
+  });
+
+  it('ids are stable, unique and ordered; lookups agree', () => {
+    const ids = CAMPAIGN_LEVELS.map((l) => l.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(campaignLevelById(level.id)).toBe(level);
+      expect(campaignLevelByNumber(level.number)).toBe(level);
+    }
+    expect(campaignLevelById('c1-99')).toBeNull();
+    expect(nextCampaignLevel(10)).toBeNull();
+    expect(nextCampaignLevel(1)).toBe(CAMPAIGN_LEVELS[1]);
+  });
+
+  it('every level uses the existing bot levels and a non-negative integer seed', () => {
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(level.botLevel).toBeGreaterThanOrEqual(1);
+      expect(level.botLevel).toBeLessThanOrEqual(9);
+      expect(Number.isSafeInteger(level.seed)).toBe(true);
+      expect(level.seed).toBeGreaterThanOrEqual(0);
+      expect(level.name.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('every level board passes the validation layer', () => {
+    const checks = campaignChecks();
+    expect([...checks.keys()]).toEqual(CAMPAIGN_LEVELS.map((l) => l.id));
+    for (const [id, c] of checks) {
+      expect(c.openCells, id).toBeGreaterThanOrEqual(20);
+      expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('the authored boards match the design rock counts exactly', () => {
+    const rocks = new Map(CAMPAIGN_LEVELS.map((l) => [l.number, l.config.board!.rock.length]));
+    expect([...rocks.entries()]).toEqual([
+      [1, 0], [2, 0], [3, 1], [4, 0], [5, 2],
+      [6, 1], [7, 2], [8, 0], [9, 3], [10, 3],
+    ]);
+  });
+
+  it('every level sits on the classic radius-3 hexagon with the classic homes', () => {
+    for (const level of CAMPAIGN_LEVELS) {
+      const board = level.config.board!;
+      expect([...board.cells].sort()).toEqual([...CAMPAIGN_CELLS].sort());
+      expect(board.homes).toEqual([...CAMPAIGN_HOMES]);
+      expect(level.config.boardRadius).toBe(3);
+    }
+  });
+});
+
+describe('campaign levels: the validation layer fails loudly and specifically', () => {
+  const base = CAMPAIGN_LEVELS[0]!;
+  const withBoard = (rock: string[], gold: string[] = ['0,0'], homes = [...CAMPAIGN_HOMES] as [string, string]) => ({
+    ...base,
+    id: 'broken',
+    config: { ...base.config, board: { cells: [...CAMPAIGN_CELLS], rock, gold, homes } },
+  });
+
+  it('names the level and the problem on an impossible config', () => {
+    const bad = { ...base, id: 'bad-seed', seed: 1.5 };
+    expect(() => validateLevel(bad)).toThrow(CampaignError);
+    expect(() => validateLevel(bad)).toThrow(/campaign level bad-seed/);
+  });
+
+  it('rejects a hex that is both rock and gold', () => {
+    expect(() => validateLevel(withBoard(['0,1'], ['0,1']))).toThrow(/both rock and gold/);
+  });
+
+  it('rejects a rock on a home (the engine refuses it first, and the level is named)', () => {
+    expect(() => validateLevel(withBoard([CAMPAIGN_HOMES[0]]))).toThrow(CampaignError);
+    expect(() => validateLevel(withBoard([CAMPAIGN_HOMES[0]]))).toThrow(/campaign level broken/);
+    expect(() => validateLevel(withBoard([CAMPAIGN_HOMES[0]]))).toThrow(/INVALID_BOARD|is terrain/);
+  });
+
+  it('rejects a hex walled off from both homes', () => {
+    // Three rocks close every approach to the edge hex 3,0: it is on the board but unreachable.
+    expect(() => validateLevel(withBoard(['3,-1', '2,0', '2,1']))).toThrow(/3,0 is walled off/);
+  });
+
+  it('rejects a level whose config the engine refuses (a bad board)', () => {
+    const bad = {
+      ...base,
+      id: 'engine-refuses',
+      config: { ...base.config, board: { cells: [...CAMPAIGN_CELLS], rock: [], gold: [], homes: [CAMPAIGN_HOMES[0], CAMPAIGN_HOMES[0]] as [string, string] } },
+    };
+    expect(() => validateLevel(bad)).toThrow(/INVALID_BOARD/);
+  });
+
+});
+
+describe('campaign levels: reproducible', () => {
+  it('the same level id always yields the same seed, terrain, homes and opening hands', () => {
+    for (const level of CAMPAIGN_LEVELS) {
+      const a = campaignOpening(level);
+      const b = campaignOpening(campaignLevelById(level.id)!);
+      expect(b.seed).toBe(a.seed);
+      expect(b.terrain).toEqual(a.terrain);
+      expect(b.board).toEqual(a.board);
+      expect(b.hands).toEqual(a.hands);
+      expect(b.deck).toEqual(a.deck);
+      expect(b.discard).toEqual(a.discard);
+      expect(b.startingPlayer).toBe(a.startingPlayer);
+      expect(b.turnPlayer).toBe(a.turnPlayer);
+      expect(b.config).toEqual(a.config);
+    }
+  });
+
+  it('every campaign level differs from at least one other level (seeds and boards are not copies)', () => {
+    const signatures = new Set(
+      CAMPAIGN_LEVELS.map((l) => `${l.seed}|${JSON.stringify(l.config.board!.rock)}|${l.botLevel}`),
+    );
+    expect(signatures.size).toBe(CAMPAIGN_LEVELS.length);
+  });
+
+  it('the opening is on the authored board (homes are the authored homes, rock is rock)', () => {
+    const level = CAMPAIGN_LEVELS[6]!; // First Obstacle, two rocks
+    const s = campaignOpening(level);
+    expect(s.config.board!.rock).toEqual(['-3,0', '-3,1']);
+    expect(s.terrain['-3,0']).toBe('rock');
+    expect(s.terrain['0,0']).toBe('rich');
+    for (const home of CAMPAIGN_HOMES) {
+      expect(s.board[home]?.root).toBe(true);
+      expect(s.terrain[home]).toBe('normal');
+    }
+  });
+});
+
+describe('campaign progress: the unlock rule', () => {
+  it('level 1 is open by default and nothing else is', () => {
+    const p = freshProgress();
+    expect(p.unlocked).toBe(1);
+    expect(currentLevel(p).number).toBe(1);
+  });
+
+  it('a win unlocks the next level and marks this one completed; a loss removes nothing', () => {
+    const l1 = CAMPAIGN_LEVELS[0]!;
+    const l2 = CAMPAIGN_LEVELS[1]!;
+    let p = freshProgress();
+    p = recordCampaignResult(p, l1, { won: true, score: 7, turns: 12 });
+    expect(p.unlocked).toBe(2);
+    expect(p.completed).toContain(l1.id);
+    expect(currentLevel(p).number).toBe(2);
+
+    // A loss at level 2 changes nothing about progress.
+    const afterLoss = recordCampaignResult(p, l2, { won: false, score: 9, turns: 31 });
+    expect(afterLoss.unlocked).toBe(2);
+    expect(afterLoss.completed).toEqual(p.completed);
+    expect(afterLoss.best[l2.id]).toEqual({ won: false, score: 9, turns: 31 });
+    // The best result keeps a win over a loss, and the higher score over the lower.
+    const back = recordCampaignResult(afterLoss, l2, { won: true, score: 4, turns: 20 });
+    expect(back.best[l2.id]!.won).toBe(true);
+    expect(back.best[l2.id]!.score).toBe(4);
+  });
+
+  it('a completed level stays replayable and does not move the unlock pointer backwards', () => {
+    let p = freshProgress();
+    p = recordCampaignResult(p, CAMPAIGN_LEVELS[0]!, { won: true, score: 5, turns: 8 });
+    p = recordCampaignResult(p, CAMPAIGN_LEVELS[1]!, { won: true, score: 5, turns: 8 });
+    p = recordCampaignResult(p, CAMPAIGN_LEVELS[2]!, { won: true, score: 5, turns: 8 });
+    // Replay an earlier level and lose: unlocked stays at 4, completed keeps all three.
+    const replay = recordCampaignResult(p, CAMPAIGN_LEVELS[0]!, { won: false, score: 1, turns: 30 });
+    expect(replay.unlocked).toBe(4);
+    expect(replay.completed).toEqual(p.completed);
+  });
+
+  it('lists progress after a full Chapter I run', () => {
+    let p = freshProgress();
+    for (const level of CAMPAIGN_LEVELS) p = recordCampaignResult(p, level, { won: true, score: 10, turns: 10 });
+    expect(p.completed).toHaveLength(10);
+    expect(p.unlocked).toBe(11);
+    // The campaign as built is finished: Continue sits on the last level.
+    expect(currentLevel(p).number).toBe(10);
+  });
+});

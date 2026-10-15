@@ -25,6 +25,11 @@ export const FEATURES = Object.freeze({
   /** V3 art archived; skins come later */
   v3: false,
   watch: CHANNEL === 'test',
+  /**
+   * Campaign mode (the primary offline experience). Product channels only — the lab / experiment
+   * copy (`test`, `futa-test`) keeps the menu it is used to, so its e2e keeps working unchanged.
+   */
+  campaign: CHANNEL === 'futa04' || CHANNEL === 'futa05',
 });
 const isPreviewHost = typeof location !== 'undefined' && (
   location.hostname.endsWith('.chatgpt.site') ||

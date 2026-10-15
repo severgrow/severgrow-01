@@ -852,3 +852,49 @@ export const PRIVACY = Object.freeze({
   ]),
   close: 'Close',
 });
+
+/**
+ * Campaign mode. Every word a player reads on the campaign surfaces lives here; the ten level
+ * NAMES are level data (`src/campaign/levels.ts`), exactly as the tutorial's lesson lines are.
+ * The copy stays in the game's own voice and promises nothing the game does not do.
+ */
+export const CAMPAIGN = Object.freeze({
+  /** the main menu entry that opens the campaign */
+  title: 'Campaign',
+  /** the main menu entry that keeps the old difficulty picker */
+  classic: 'Classic vs AI',
+  /** the campaign screen heading */
+  heading: 'Campaign',
+  /** the prominent button that resumes an unfinished campaign match */
+  resume: 'Resume',
+  /** the prominent button that opens the current level when nothing is unfinished */
+  play: 'Continue',
+  /** a completed level's small action */
+  replay: 'Replay',
+  /** the state words on a level tile */
+  completed: 'Completed',
+  current: 'You are here',
+  locked: 'Locked',
+  /** small progress line under the heading, e.g. "3 of 10 complete" */
+  progress: (done: number, total: number): string => `${done} of ${total} complete`,
+  /** the chapter label, e.g. "Chapter I" (Roman numeral from the chapter number) */
+  chapterName: (chapter: number): string =>
+    `Chapter ${['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][chapter - 1] ?? chapter}`,
+  /** chapter titles + subtitles, keyed by the chapter id in src/campaign/levels.ts */
+  chapters: Object.freeze({
+    'first-growth': Object.freeze({
+      title: 'First Growth',
+      subtitle: 'Ten gentle levels on the open ground.',
+    }),
+  }) as Readonly<Record<string, { title: string; subtitle: string }>>,
+  /** a locked level's spoken/greyed label, e.g. "Level 4, Locked" */
+  levelLabel: (number: number, name: string): string => `Level ${number}, ${name}`,
+  /** resume the campaign match exactly where it stopped */
+  resumeHint: 'Your campaign match is unfinished.',
+  /** the log line when a campaign level opens (Level N · name) */
+  started: (number: number, name: string): string => `Level ${number} · ${name}`,
+  /** the finish screen's small "next level unlocked" note after a campaign win */
+  unlockedNext: (name: string): string => `Next level unlocked: ${name}`,
+  /** the finish screen's note after the last level of the campaign as built */
+  chapterDone: 'Chapter complete. More levels are on the way.',
+});
