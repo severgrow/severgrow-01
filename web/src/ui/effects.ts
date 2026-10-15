@@ -222,7 +222,15 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     d.className = 'flyer card back';
     Object.assign(d.style, { left: `${a.left}px`, top: `${a.top}px`, width: `${a.width}px`, height: `${a.height}px` });
     document.body.appendChild(d);
-    removeAfter(anim(d, [{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.4)`, opacity: 0 }], { duration: 400 * f, easing: 'ease-in', fill: 'forwards' }), d, 0);
+    // The opponent's hidden draw: the card stays visible most of the way, then fades as it arrives
+    // (it used to ease in AND fade from the start, so it was barely seen).
+    const tx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const ty = b.top + b.height / 2 - (a.top + a.height / 2);
+    removeAfter(anim(d, [
+      { transform: 'translate(0,0) scale(1)', opacity: 1 },
+      { transform: `translate(${(tx * 0.7).toFixed(1)}px, ${(ty * 0.7).toFixed(1)}px) scale(.6)`, opacity: 1, offset: 0.65 },
+      { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(.4)`, opacity: 0 },
+    ], { duration: 380 * f, easing: EASE.out, fill: 'forwards' }), d, 0);
   }
 
   /** One quiet ring, only on the tile that just changed (bigger shine for a top rank). */

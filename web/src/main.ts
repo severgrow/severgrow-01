@@ -228,6 +228,17 @@ const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpe
 const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
 /** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
 const BLOOM_STAGGER_MS = 80;
+// Motion pass (owner, 2026-10-15): slow enough to see, fast enough to feel snappy. Measured with
+// web/e2e/motion-audit.ts (median on screen, before → after): grow 1 tile 683 → ~500ms, grow 3
+// tiles 1270 → ~900ms, strengthen 570 → ~420ms, Blast ≥ 640ms (was 430), turn hand-over 325 →
+// 260ms, the opponent's hidden draw 125 → 200ms (it was a blink).
+/** A multi-tile grow: the next tile starts when the previous one is this far through its pop. */
+const GROW_OVERLAP = 0.6;
+/** After the last tile of a grow has landed, how long it holds before the next step. */
+const GROW_HOLD_MS = 160;
+const BLAST_MIN_MS = 640;
+const TURN_HANDOVER_MS = 260;
+const OPP_DRAW_MS = 200;
 /**
  * True while the LIVE enemy turn is being replayed (not a catch-up after being away). The player
  * must be able to SEE which tiles arrived, so it plays at the offline game's own pace — one tile
@@ -2198,7 +2209,11 @@ async function pump() {
           fastForward();
           return;
         }
-        await playStep(queue.peek()!, my);
+        const step = queue.peek()!;
+        const stepStarted = performance.now();
+        await playStep(step, my);
+        // Read-only timing for the motion audit (web/e2e/motion-audit.ts): what played, for how long.
+        animLog('step', { k: step.k, ms: Math.round(performance.now() - stepStarted), n: step.k === 'grow' ? step.tiles.length : step.k === 'sever' || step.k === 'remove' ? step.keys.length : step.k === 'megaBomb' ? step.destroyed.length : 0, who: 'player' in step ? step.player : -1 });
       }
       if (my !== epoch) return;
       // A live enemy turn must be READABLE: even a turn that grew nothing (a hidden draw plus a
@@ -2449,7 +2464,7 @@ async function playStep(step: Step, my: number) {
         flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
         // The enemy's hidden draw: their card is private, so the deck flyer is the only cue.
         // A live reveal gives it a beat of its own instead of a blink.
-        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : 120 * f, my);
+        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
       }
       return;
     }
@@ -2505,15 +2520,16 @@ async function playStep(step: Step, my: number) {
           if (session?.state.terrain[t.key] === 'rich') sound.chime(0.08);
           const hp = hapticFor(st.heavy ? 'placeTop' : 'place', settings);
           if (hp && by === HUMAN) vibrate(true, hp as number | number[]);
-          // Land beat only — stagger was double-counting with the animation duration.
-          await wait(MOTION.move * f + (i + 1 < step.tiles.length ? BLOOM_STAGGER_MS * 0.35 * f : 0), my);
+          // Motion pass (2026-10-15): the next tile starts while this one is ~60% landed, so a
+          // Bloom reads as one wave of distinct pops instead of a slow count (3 tiles: 1.27s → ~0.9s).
+          await wait(i + 1 < step.tiles.length ? GROW_OVERLAP * MOTION.move * f : MOTION.move * f, my);
         }
         if (bloom && anchor && m > 0 && !b.fadeOnly) flash(anchor, f, false);
         if (b.float && by === HUMAN) floatText(`+${step.tiles.length}`, step.tiles[Math.floor(step.tiles.length / 2)]!.key, 'good', f);
         const cap = captionFor(step, HUMAN);
         if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
         if (mo.tier === 'big') await impact(mo, f, my);
-        await wait(180 * f, my);
+        await wait(GROW_HOLD_MS * f, my);
         return;
       }
       if (!show()) return;
@@ -2577,7 +2593,8 @@ async function playStep(step: Step, my: number) {
       const cap = captionFor(step, HUMAN);
       if (cap && !(mo.banner && mo.first)) caption(cap, step.tiles[Math.floor(step.tiles.length / 2)]!.key, by === HUMAN ? 'good' : 'info');
       if (mo.tier === 'big') await impact(mo, f, my);
-      await wait(last + (IS_FUTA04 ? 672 : 420) * f, my);
+      // The tile has landed after MOTION.move; a short hold lets it register (was a 672ms wait).
+      await wait(last + (IS_FUTA04 ? MOTION.move + GROW_HOLD_MS : 420) * f, my);
       return;
     }
     case 'sever': {
@@ -2626,7 +2643,9 @@ async function playStep(step: Step, my: number) {
         ], { duration: MOTION.move * 1.1 * f, delay, easing: EASE.out, transformOrigin: 'center', fill: 'forwards' } as KeyframeAnimationOptions);
         drift(key, delay + MOTION.move * 0.4 * f, f, IS_FUTA04 ? 2 : 1);
       }
-      await wait(Math.min(840, lastRing * 36 + MOTION.move * 1.15) * f, my);
+      // Blast is the heaviest move: it holds the screen long enough to register (at least 640ms)
+      // even when it only clears one ring, which used to be gone in ~430ms.
+      await wait(Math.max(BLAST_MIN_MS, Math.min(840, lastRing * 36 + MOTION.move * 1.15)) * f, my);
       quietAmbient(false);
       show();
       return;
@@ -2664,7 +2683,8 @@ async function playStep(step: Step, my: number) {
       vibrate(settings.vibration && settings.effects !== 'low', 12);
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, step.key, step.player === HUMAN ? 'good' : 'info');
-      await wait(560 * f, my);
+      // the count-up takes MOTION.quick; then a short hold (was 560ms in all)
+      await wait((MOTION.quick + 230) * f, my);
       return;
     }
     case 'fruit': {
@@ -2768,7 +2788,7 @@ async function playStep(step: Step, my: number) {
       const oppQuick = step.player === BOT && session && botPlan?.beats.quick && botPlan.keys[0] === posKey(session.state);
       const quick = oppQuick ? 0 : quickShow && step.player === HUMAN ? quickShow.show.turn : null;
       if (step.player === HUMAN) quickShow = null;
-      await wait(quick ?? 320 * f, my);
+      await wait(quick ?? TURN_HANDOVER_MS * f, my);
       return;
     }
     case 'end': {
