@@ -76,6 +76,15 @@ describe('campaign levels: the definition is well formed', () => {
     }
   });
 
+  it('no level has a single hex that decides the game (no chokepoint between the homes)', () => {
+    // The design rule for Chapter III in particular: a board must never leave one hex whose removal
+    // alone cuts the two homes apart. Removing any single open hex, the homes stay connected.
+    const checks = campaignChecks();
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(checks.get(level.id)!.singleHexChokepoints, level.id).toEqual([]);
+    }
+  });
+
   it('the authored boards match the design rock counts exactly', () => {
     const rocks = new Map(CAMPAIGN_LEVELS.map((l) => [l.number, l.config.board!.rock.length]));
     expect([...rocks.entries()]).toEqual([

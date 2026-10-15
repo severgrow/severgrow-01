@@ -54,10 +54,15 @@ restructuring. (Chapter II+ will appear as soon as those levels exist.)
   `CampaignError` that names the level, never swallowed;
 - an authored board is legal: `cells` unique, `rock`/`gold` are a subset of `cells`, no hex is both,
   the two homes differ, homes are cells and never terrain;
-- the board is **playable**: at least 20 open hexes, every open hex reachable from *both* homes (no
-  walled-off pocket), and each home has at least 3 open neighbours (so it cannot be strangled at
-  once);
-- ids are unique, numbers run 1..n, chapters are contiguous.
+- an authored board is the **full hexagon of its declared radius** (37 hexes at radius 3, the
+  tutorial's 19 at radius 2), so `boardRadius` and `board.cells` can never drift apart;
+- the board is **playable**: enough open hexes (20 on the product board; on a smaller board, the
+  board size minus four — a 19-hex map may lose at most four hexes to rock), every open hex reachable
+  from *both* homes (no walled-off pocket), and each home has at least 3 open neighbours (so it
+  cannot be strangled at once);
+- no authored rock or gold sits inside a **root zone** (a home or a home's neighbour) — the same rule
+  the generator obeys. `validateLevel` reports those hexes and the campaign tests assert none;
+- ids are unique, numbers run 1..n, chapters are contiguous, and every chapter has levels.
 
 `resolveConfig` alone checks that rock/gold are never on a home, and `rootZone` already protects both
 roots and their neighbours in the generated terrain.
@@ -66,7 +71,8 @@ roots and their neighbours in the generated terrain.
 
 The generator (`generateTerrain`) places **point-symmetric pairs** only, so it can never make the
 one-rock and three-rock boards the design asks for, nor a ridge, a chokepoint or a maze. Chapter I
-therefore uses `config.board`, and the same route is open to every later chapter.
+therefore uses `config.board`, and the same route is open to every later chapter — Chapters II and
+III are built entirely from authored boards for exactly this reason.
 
 Notes when authoring:
 
@@ -74,33 +80,96 @@ Notes when authoring:
   They stay at their defaults; `resolveConfig` still requires `rockCount` even and `richCount` odd.
 - Keep stones off the home-to-home diagonal (the central routes) and outside both root zones unless
   the level is *meant* to squeeze a flank.
-- `boardRadius: 3` is set on every Chapter I level so layout, naming and camera code use the same
-  radius as Classic.
+- Levels 1-3 play on the **tutorial's small map** (`config.boardRadius: TUTORIAL_BOARD_RADIUS`, a
+  radius-2 hexagon of 19 hexes, imported from `web/src/logic/tutorial-script.ts` so there is one
+  source of truth for that size). Levels 4-30 use the product radius 3 (37 hexes).
 
 ## Chapter I
 
 `AI` = the existing bot level. `Rocks` = the authored rock count. `Gold` = authored rich hexes.
+`Map` = the board radius (2 = the tutorial's small map, 19 hexes).
 
-| Lv | Name | AI | Rocks | Gold | Intent |
-| --- | --- | --- | --- | --- | --- |
-| 1 | First Seed | 1 | 0 | centre | Completely open, welcoming |
-| 2 | New Growth | 1 | 0 | centre | Another open board; reinforce the basics |
-| 3 | Two Directions | 1 | 1 | centre + pair | One harmless edge rock |
-| 4 | The Clearing | 2 | 0 | centre | Open board, slightly better bot |
-| 5 | Stone in the Grass | 2 | 2 | centre + pair | Scattered rocks away from central routes |
-| 6 | Branching Out | 2 | 1 | centre + pair | Encourage multiple directions |
-| 7 | First Obstacle | 2 | 2 | centre + pair | Small rock cluster near a flank |
-| 8 | The Open Field | 3 | 0 | centre | Stronger opponent, forgiving terrain |
-| 9 | Around the Stone | 3 | 3 | centre + pair (other axis) | A short detour around blocked hexes |
-| 10 | The First Grove | 3 | 3 | centre + pair | Chapter finale testing the fundamentals |
+| Lv | Name | AI | Rocks | Gold | Map | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | First Seed | 1 | 0 | centre | 2 | Completely open, welcoming; the tutorial's own opening |
+| 2 | New Growth | 1 | 0 | centre + inner pair | 2 | Reinforce the basics; a first taste of contested gold |
+| 3 | Two Directions | 1 | 1 | centre + pair | 2 | One harmless edge rock |
+| 4 | The Clearing | 2 | 0 | centre + pair | 3 | Open board, slightly better bot |
+| 5 | Stone in the Grass | 2 | 2 | centre + pair | 3 | Scattered rocks away from central routes |
+| 6 | Branching Out | 2 | 1 | centre + pair | 3 | Encourage multiple directions |
+| 7 | First Obstacle | 2 | 2 | centre + pair | 3 | Small rock cluster near a flank |
+| 8 | The Open Field | 3 | 0 | centre + flank pair | 3 | Stronger opponent, forgiving terrain |
+| 9 | Around the Stone | 3 | 3 | centre + pair (other axis) | 3 | A short detour around blocked hexes |
+| 10 | The First Grove | 3 | 3 | centre + pair | 3 | Chapter finale testing the fundamentals |
 
-Every level's rock count and AI matches the design pack exactly. One adjustment was made for
-legality: **level 9's rich pair moved from the `q` axis to the `r` axis**, because the design's
-three-hex wall sits on the `q` axis (`-2,0` would have been both rock and gold). Nothing about the
-level's intent or difficulty changed.
+Every level's rock count and AI matches the design pack exactly. Two adjustments were made for
+legality, neither of which changed a level's intent: **level 9's rich pair moved from the `q` axis to
+the `r` axis** (the design's three-hex wall sits on the `q` axis, so `-2,0` would have been both rock
+and gold), and **level 3's single edge rock moved from `-3,0` to `-2,0`** when the level moved to the
+radius-2 map (`-3,0` is not on that board).
 
-The two "open" rock levels (1, 2, 4, 8) carry only the centre gold. Levels with stones carry the
-centre plus one mirrored rich pair — the same shape Classic's generated terrain takes.
+### The 2026-10-16 refinement
+
+Two changes, both owner direction, both terrain-only:
+
+- **Gold in every level (levels 2, 4, 8 changed).** Those three levels previously carried only the
+  centre gold; each now carries one mirrored gold pair as well, on an axis no rock occupies. Gold is
+  the campaign's second difficulty lever — a rich hex scores 2 instead of 1, so both players are
+  pulled toward the same fights — and the first pass barely used it. Level 1 is deliberately left with
+  a single gold centre: it is the first board a player ever sees. No rock count, level name, seed or
+  bot level changed.
+- **Levels 1-3 moved onto the tutorial's small map** (radius 2 → 19 hexes, `TUTORIAL_BOARD_RADIUS`).
+  They are the first three levels ever and the tutorial's own ground, so the opening chapter stays
+  small, quick and legible. A smaller board is *less* forgiving in one respect (fewer places to grow)
+  and *more* forgiving in another (the two homes are closer, the whole map is visible at once), so the
+  level 3 rock was re-placed and every board re-validated; the boards keep 19, 19 and 18 open hexes of
+  19. Levels 4-30 stay on the product hexagon.
+
+## Chapter II — Broken Ground (levels 11-20)
+
+Theme: **learn to navigate.** Rocks create choices, not walls. Every board keeps a wide open middle or
+a credible side route, so Bloom and networks stay meaningful; the step up from Chapter I is the
+terrain the player has to read and the better bots behind it.
+
+| Lv | Name | AI | Rocks | Gold | Open hexes | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 11 | Pebble Trail | 3 | 2 | 3 | 35 | A mirrored pebble pair beside the trail; still wide open |
+| 12 | Split Meadow | 3 | 3 | 3 | 34 | A short wall across the centre; two lanes to pick |
+| 13 | The Detour | 3 | 4 | 3 | 33 | A four-hex arc to route around |
+| 14 | Open Horizon | 4 | 1 | 3 | 36 | Breathing space: one lone stone, a clearly better bot |
+| 15 | Twin Stones | 4 | 4 | 3 | 33 | Twin wings plus a central pair: two threats at once |
+| 16 | Broken Crossing | 4 | 4 | 3 | 33 | A broken wall with two crossings |
+| 17 | The Long Way | 4 | 5 | 3 | 32 | Both inner lanes close early; go the long way |
+| 18 | Quiet Clearing | 4 | 2 | 3 | 35 | Breathing space: fewer stones, a sharper bot |
+| 19 | Stone Garden | 4 | 5 | 3 | 32 | Five scattered stones, five small choices |
+| 20 | The Broken Grove | 5 | 5 | 5 | 32 | Chapter finale: bot 5 and five gold |
+
+## Chapter III — Narrow Paths (levels 21-30)
+
+Theme: **fight for space.** Contested hexes and corridors — but no level leaves a single hex that
+decides the game: every wall here has at least two openings, and a defensive route exists alongside
+the attack, so the board narrows the choice rather than dictating it.
+
+| Lv | Name | AI | Rocks | Gold | Open hexes | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 21 | The Passage | 4 | 4 | 3 | 33 | Two offset walls leave one diagonal passage |
+| 22 | Forked Path | 4 | 5 | 3 | 32 | Choose a fork; the wings reopen behind it |
+| 23 | Central Ground | 5 | 4 | 3 | 33 | The centre is a fortress with two doors |
+| 24 | The Side Route | 5 | 5 | 3 | 32 | A long ridge; the short way is walled, the side route is not |
+| 25 | The Bottleneck | 5 | 6 | 3 | 31 | Two blobs with a narrow neck between them |
+| 26 | Four Corners | 5 | 4 | 3 | 33 | The four outer corners are spoken for |
+| 27 | Split Decision | 5 | 6 | 3 | 31 | One split, two choices, no time to dither |
+| 28 | Open Conflict | 6 | 2 | 3 | 35 | Breathing space with the sharpest bot in the campaign |
+| 29 | The Crossing | 6 | 6 | 5 | 31 | Cross at the centre or round the ends; gold on both |
+| 30 | Heart of Stone | 6 | 6 | 3 | 31 | The finale: a stone heart round the gold centre |
+
+Both chapters are built **entirely from authored boards** (`config.board`): the generator places
+point-symmetric pairs only, so it cannot make a fork, a corridor or a ridge. Rock counts and AI levels
+match the design pack exactly. **Gold is used as the second difficulty lever**: two boundaries carry a
+second rich pair — level 20 and the level 29 crossing, five gold each — while levels 2 and 16 put
+their pair right beside the centre and levels 8 and 23 put it on the wings, both of which pull the two
+players toward the same fights. The curve is deliberately not "one more rock each time": 14, 18 and 28
+are the breathing-space levels, each more open than its neighbours but against a stronger bot.
 
 ## Progress and saving
 

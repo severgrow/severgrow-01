@@ -37,6 +37,13 @@ export type LevelChecks = {
    * the rule fails loudly rather than quietly.
    */
   terrainInRootZone: readonly string[];
+  /**
+   * Open hexes whose removal ALONE disconnects the two homes — a hex that would decide the game by
+   * itself. The campaign's design rule (Chapter III especially: "no single hex should be an
+   * unavoidable win") is that a board must never have one; the campaign tests assert the shipped
+   * boards have none. The two homes themselves are never counted.
+   */
+  singleHexChokepoints: readonly string[];
 };
 
 /** Every non-rock hex reachable from `from` by walking open hexes. */
@@ -132,7 +139,36 @@ const validateBoard = (level: CampaignLevel, spec: BoardSpec): LevelChecks => {
   }
   const terrainInRootZone = [...spec.rock, ...spec.gold].filter((k) => rootZone.has(k));
 
-  return { openCells: open.length, rock: rock.size, gold: gold.size, minHomeOpenNeighbours, terrainInRootZone };
+  // No single hex may decide the game: removing one open hex (other than a home) must leave the two
+  // homes connected. A hex that fails this is a chokepoint, and is reported for the tests to assert.
+  const openSet = new Set(open);
+  const connectedWithout = (without: string): boolean => {
+    const set = new Set(openSet);
+    set.delete(without);
+    const seen = new Set([h0]);
+    const stack = [h0];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      for (const n of allNeighbors(parseKey(cur))) {
+        const nk = coordKey(n);
+        if (set.has(nk) && !seen.has(nk)) {
+          seen.add(nk);
+          stack.push(nk);
+        }
+      }
+    }
+    return seen.has(h1);
+  };
+  const singleHexChokepoints = open.filter((k) => !spec.homes.includes(k) && !connectedWithout(k));
+
+  return {
+    openCells: open.length,
+    rock: rock.size,
+    gold: gold.size,
+    minHomeOpenNeighbours,
+    terrainInRootZone,
+    singleHexChokepoints,
+  };
 };
 
 /**
@@ -163,6 +199,7 @@ export const validateLevel = (level: CampaignLevel): LevelChecks => {
     gold: level.config.richCount ?? 0,
     minHomeOpenNeighbours: 6,
     terrainInRootZone: [],
+    singleHexChokepoints: [],
   };
 };
 
