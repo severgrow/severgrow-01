@@ -23,6 +23,8 @@ const CHROME =
   '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
 const OUT = new URL('../../docs/screens/campaign/', import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
+/** The served build's storage prefix. futa04 installs `main2:`; futa05 installs `futa05:`. */
+const PREFIX = process.env.E2E_STORAGE_PREFIX ?? 'main2:';
 
 const VIEWPORTS = [
   { key: '360x640', width: 360, height: 640 },
@@ -58,13 +60,13 @@ try {
   for (const vp of VIEWPORTS) {
     const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height }, hasTouch: true, isMobile: true });
     page.on('pageerror', (error) => errors.push(`${vp.key}: ${error.message}`));
-    await page.addInitScript(() => {
+    await page.addInitScript((prefix: string) => {
       (window as any).__name = (f: unknown) => f;
       window.confirm = () => true;
-      localStorage.setItem(`${'main2:'}severgrow.settings.v1`, JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: true, confirmPolicy: 'never' }));
-    });
+      localStorage.setItem(`${prefix}severgrow.settings.v1`, JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: true, confirmPolicy: 'never' }));
+    }, PREFIX);
     await page.goto(`http://localhost:${PORT}/`);
-    await assertDistChannel(page, 'main2:');
+    await assertDistChannel(page, PREFIX);
     await page.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 20000 });
     await page.locator('#menu').waitFor({ state: 'visible' });
     await page.screenshot({ path: `${OUT}menu-${vp.key}.png` });
