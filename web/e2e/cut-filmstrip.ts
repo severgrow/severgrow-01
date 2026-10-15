@@ -5,14 +5,15 @@ import { positionSave } from './position.js';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { cutPosition } from './cut-positions.js';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const dir = arg('dir') ?? 'docs/screens/overhaul/cut';
 mkdirSync(dir, { recursive: true });
 const TIMES = [0, 100, 220, 400, 700, 1000, 1400, 1800];
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4193, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4193, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
@@ -77,7 +78,7 @@ const film = async (name: string, n: number, mine: boolean, settings: Record<str
     },
     [JSON.stringify({ sound: false, coach: false, speed: 'normal', level: 7, ...settings }), positionSave({ state, coach: doneCoach, level: 7 })],
   );
-  await page.goto('http://localhost:4193/');
+  await page.goto(BASE);
   await page.click('#menu-continue');
   await page.mouse.move(2, 2); // (no hover tooltip over the board)
   // the opponent's own move must not run first: for its turn the page clock is frozen from the start

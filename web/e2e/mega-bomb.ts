@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { allNeighbors, coordKey, newGame } from '../../src/engine/index.js';
 import type { Player, State } from '../../src/engine/index.js';
 import { positionSave } from './position.js';
@@ -12,7 +12,8 @@ const blastBoard={...base.board,[coordKey(target)]:{owner:1 as Player,strength:9
 for(const neighbor of allNeighbors(target))if(blastBoard[coordKey(neighbor)]===null)blastBoard[coordKey(neighbor)]={owner:1,strength:4};
 const state: State = { ...base, phase:'ACT', board:blastBoard,
   hands:[[{id:1000,suit:null,rank:0},{id:1001,suit:null,rank:0},{id:1002,suit:0,rank:3}],base.hands[1]] };
-const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4199, { logLevel: 'silent' });
 const browser = await chromium.launch({executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium',args:['--no-sandbox']});
 try {
   // Futasaku 0.4 ships the default skin only; the V3 skin is a localhost-only art preview
@@ -36,7 +37,7 @@ try {
         localStorage.setItem(`${prefix}severgrow.settings.v1`, settings);
       }
     },positionSave({state:game}));
-    await page.goto('http://localhost:4199/');
+    await page.goto(BASE);
     await page.click('#menu-continue');
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     assert(await page.locator('#board').evaluate(board => {

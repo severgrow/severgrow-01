@@ -17,7 +17,7 @@ import { mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import type { Action } from '../../src/engine/index.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { createHttpServer } from '../../server/src/http.js';
@@ -234,14 +234,8 @@ const advanceOneTurn = async (matchId: string, token: string): Promise<number> =
 
 await buildWithApi(apiBase);
 
-const previewServer = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { host: '127.0.0.1', port: 4211, strictPort: true },
-  logLevel: 'error',
-});
-const origin =
-  previewServer.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ??
-  `http://127.0.0.1:${(previewServer.httpServer?.address() as AddressInfo | null)?.port ?? 4211}`;
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server: previewServer, origin } = await servePreview(4211, { logLevel: 'error' });
 console.log(`preview at ${origin}`);
 for (let i = 0; i < 40; i++) {
   try {

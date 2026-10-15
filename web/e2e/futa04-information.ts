@@ -1,13 +1,15 @@
 // Explicit Futa04 help and message checks. No game hooks are used to perform these moves.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply } from '../../src/engine/index.js';
 
 const external = process.env.FUTA04_URL;
-const server = external ? null : await preview({ configFile: 'web/vite.config.ts', preview: { port: 4195, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts) unless an external URL was supplied.
+const served = external ? null : await servePreview(4195, { logLevel: 'silent' });
+const server = served?.server ?? null;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox', '--ignore-certificate-errors'], ...(external && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
-const base = external ?? 'http://localhost:4195/';
+const base = external ?? served!.url;
 let checks = 0;
 const check = (value: unknown, label: string) => { assert(value, label); checks++; };
 try {

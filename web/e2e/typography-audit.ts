@@ -5,13 +5,14 @@
 //   CHANNEL=test npm run web:build && npx tsx web/e2e/typography-audit.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
 const OUT = 'docs/screens/typography';
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4194, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4194, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
@@ -91,7 +92,7 @@ for (const kind of ['touch', 'desk'] as const) {
     localStorage.clear();
     localStorage.setItem('test:severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'fast' }));
   });
-  await page.goto('http://localhost:4194/');
+  await page.goto(BASE);
   await page.waitForTimeout(900);
   const f = await fontsInUse(page);
   check(`${kind}: Besley + Fragment Mono in use`, f.cls && f.body === 'Fragment Mono' && f.title === 'Besley' && f.btn === 'Fragment Mono' && f.num === 'Futasaku Numerals' && ['Besley', 'Fragment Mono', 'Futasaku Numerals'].every((x) => f.loaded.includes(x)), JSON.stringify(f));

@@ -3,7 +3,7 @@
 import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
@@ -11,7 +11,8 @@ import { chooseLevelAction } from '../../src/bots/levels.js';
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const dir = arg('dir') ?? 'docs/screens/review';
 mkdirSync(dir, { recursive: true });
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4197, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4197, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 /** Bots play until it is my Grow step on turn `turn` (or later). */
@@ -33,7 +34,7 @@ for (const [name, seed, turn] of [['mid', 31, 11], ['late', 44, 17]] as const) {
     localStorage.setItem('severgrow.save.v7', st as string);
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
   }, [positionSave({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
-  await page.goto('http://localhost:4197/');
+  await page.goto(BASE);
   await page.click('#menu-continue');
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${dir}/${name}.png` });

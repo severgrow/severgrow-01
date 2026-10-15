@@ -1,13 +1,14 @@
 /** Behavioural browser check for the 0.3 menu, resting score and short event response. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import type { Page } from 'playwright-core';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
-const server = await preview({configFile:'web/vite.config.ts',preview:{port:4224,strictPort:true},logLevel:'silent'});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4224, { logLevel: 'silent' });
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
 let checks=0;
 const check=(value:unknown,label:string)=>{assert(value,label);checks++;};
@@ -24,7 +25,7 @@ try {
     const page=await browser.newPage({viewport:{width,height},isMobile:width<600,hasTouch:width<600});
     const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
     await page.addInitScript(() => window.addEventListener('severor-ready', () => { (window as any).__ready = true; }));
-    await page.goto('http://localhost:4224/');
+    await page.goto(BASE);
     await page.waitForFunction(() => !!(window as any).__ready);
     check((await page.locator('#menu .menu-buttons button:visible').allTextContents()).join('|').includes('New game|Tutorial|Settings'),`${width}: minimal main menu`);
     check(await page.locator('#menu-howto,#menu-stats,#menu-v3').count()===0,`${width}: obsolete front-menu elements absent`);
@@ -55,7 +56,7 @@ try {
     await page.close();
   }
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  await page.goto('http://localhost:4224/?seed=3');await page.waitForSelector('#deck.ready');
+  await page.goto(`${BASE}?seed=3`);await page.waitForSelector('#deck.ready');
   await page.waitForTimeout(6100);
   check(await page.locator('#smart-led-text').innerText()==='DRAW','idle phase hint appears after six seconds');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());

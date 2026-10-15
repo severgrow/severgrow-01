@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { openMenuEntry, waitMenuEntry } from './helpers/menu-nav.js';
 import { createHttpServer } from '../../server/src/http.js';
@@ -85,7 +85,9 @@ const openPlayer = async (browser: Browser, origin: string, label: string): Prom
   await page.addInitScript(settingsInit);
   await page.goto(origin);
   await waitVisible(page, '#menu');
-  // Lobby mounts async after menu; wait until Play online is un-hidden.
+  // Lobby mounts async after menu; wait until the menu (and Play online behind the PLAY doorway)
+  // is built. This used to be waitForSelector('#menu-online:not([hidden])'), which can no longer
+  // succeed on a product build: the entry now sits inside the hidden PLAY submenu.
   await waitMenuEntry(page, 'menu-online', { timeout: 15_000 });
   check(`${label}: Play online shown`, true);
   return page;
@@ -103,14 +105,8 @@ const apiBase = `http://127.0.0.1:${apiPort}`;
 console.log(`local duel API on ${apiBase}`);
 await buildWithApi(apiBase);
 
-const previewServer = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { host: '127.0.0.1', port: 4206, strictPort: true },
-  logLevel: 'error',
-});
-const origin =
-  previewServer.resolvedUrls?.local?.[0]?.replace(/\/$/, '') ??
-  `http://127.0.0.1:${(previewServer.httpServer?.address() as AddressInfo | null)?.port ?? 4206}`;
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server: previewServer, origin } = await servePreview(4206, { logLevel: 'error' });
 console.log(`preview at ${origin}`);
 
 // Wait until the preview actually answers (vite can return before listen settles).

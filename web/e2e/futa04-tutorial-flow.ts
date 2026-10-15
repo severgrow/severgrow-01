@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { tutorialAccepts, tutorialLesson, TUTORIAL_CHAPTER_COUNT } from '../src/logic/tutorial-script.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4201, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const served = await servePreview(4201, { logLevel: 'silent' });
+const server = served.server;
+const BASE = served.url;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const reducedMotion = process.env.FUTASAKU_REDUCED_MOTION !== '0';
@@ -21,7 +24,7 @@ const waitStep = (chapter: number, step: number) => page.waitForFunction(({ chap
 }, { chapter, step }, { timeout: 25000 });
 try {
   await page.addInitScript(reduced => localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ speed: 'fast', reduceMotion: reduced, sound: false, music: false, coach: false, eyeCandy: !reduced })), reducedMotion);
-  await page.goto('http://localhost:4201/?tutorial=1&chapter=1');
+  await page.goto(`${BASE}?tutorial=1&chapter=1`);
   await page.waitForFunction(() => !!(window as any).__severgrow?.tutorial());
   for (let moves = 0; moves < 100; moves++) {
     const p = await progress();
@@ -82,7 +85,7 @@ try {
   await page.waitForFunction(() => !document.getElementById('menu')!.hidden, undefined, { timeout: 15000 });
   for (const [width, height] of [[320, 568], [360, 640], [390, 844], [430, 932], [844, 390], [900, 700], [1280, 800], [1920, 1080]] as const) {
     await page.setViewportSize({ width, height });
-    await page.goto('http://localhost:4201/?tutorial=1&chapter=1');
+    await page.goto(`${BASE}?tutorial=1&chapter=1`);
     await page.waitForFunction(() => !!(window as any).__severgrow?.tutorial());
     const geometry = await page.evaluate(() => {
       const glass = document.querySelector('#futasaku-glass')!.getBoundingClientRect();

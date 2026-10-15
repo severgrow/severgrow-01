@@ -5,13 +5,14 @@
 //   CHANNEL=test npm run web:build && npx tsx web/e2e/camera-check.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { CLASSIC, PRESETS, encodeSetup } from '../src/lab-mode/setup.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4188, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4188, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
@@ -65,7 +66,7 @@ for (const name of ['Classic', 'Big hex', 'Huge hex', 'Rhombus 7x7', 'Tall recta
     },
     name === 'Classic' ? null : encodeSetup(map),
   );
-  await page.goto('http://localhost:4188/');
+  await page.goto(BASE);
   await page.waitForTimeout(500);
   await page.click('#menu-new');
   await page.click('#level-grid [data-level="7"]');

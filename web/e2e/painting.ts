@@ -5,7 +5,7 @@
 import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Browser, CDPSession, Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { EMPTY_SEL, kindOf, tapKind } from '../src/logic/interaction.js';
@@ -20,8 +20,8 @@ const check = (name: string, ok: boolean, note = '') => {
   results.push({ name, ok, note });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4187, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4187/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4187, { logLevel: 'silent' });
 const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

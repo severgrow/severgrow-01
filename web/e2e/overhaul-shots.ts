@@ -4,7 +4,7 @@
 import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
@@ -14,7 +14,8 @@ const dir = arg('dir') ?? 'docs/screens/overhaul';
 const W = Number(arg('w') ?? 390);
 const H = Number(arg('h') ?? 844);
 mkdirSync(dir, { recursive: true });
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4198, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4198, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 const midGame = (seed: number, turn: number): State => {
@@ -32,7 +33,7 @@ await page.addInitScript(([st]) => {
   localStorage.setItem('severgrow.save.v7', st as string);
   localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
 }, [positionSave({ state, coach: { step: 99, taught: [], known: [], choice: 0, summaryDone: true }, level: 8 })]);
-await page.goto('http://localhost:4198/');
+await page.goto(BASE);
 await page.click('#menu-continue');
 await page.waitForTimeout(1200);
 const tag = `${W}x${H}`;

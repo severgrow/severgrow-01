@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import type { Page } from 'playwright-core';
 import { hexDistance, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { State, Tile } from '../../src/engine/index.js';
@@ -10,8 +10,11 @@ import { hexCenter } from './drawing.js';
 import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 
-const BASE = process.env.FUTA04_URL ?? 'http://localhost:4198/';
-const server = process.env.FUTA04_URL ? null : await preview({ configFile:'web/vite.config.ts', preview:{ port:4198, strictPort:true }, logLevel:'silent' });
+// The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
+// worktrees at once without fighting over a hardcoded number.
+const served = process.env.FUTA04_URL ? null : await servePreview(4198, { logLevel: 'silent' });
+const BASE = process.env.FUTA04_URL ?? served!.url;
+const server = served?.server ?? null;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath:process.env.PW_CHROMIUM } : {}), args:['--no-sandbox'] });
 const dir = '/tmp/futasaku-smart-cockpit'; mkdirSync(dir,{recursive:true});
 let checks = 0;

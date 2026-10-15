@@ -10,14 +10,16 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 
-const BASE = process.env.FUTA04_URL ?? 'http://localhost:4194/';
-const server = process.env.FUTA04_URL
+const served = process.env.FUTA04_URL
   ? null
-  : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port: 4194, strictPort: true }, logLevel: 'silent' });
+  // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+  : await servePreview(4194, { build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, logLevel: 'silent' });
+const BASE = process.env.FUTA04_URL ?? served!.url;
+const server = served?.server ?? null;
 const browser = await chromium.launch({
   ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}),
   args: ['--no-sandbox'],

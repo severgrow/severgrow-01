@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { allNeighbors, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State } from '../../src/engine/index.js';
 import { cutPosition } from './cut-positions.js';
@@ -10,12 +10,13 @@ import { positionSave } from './position.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
-const server = await preview({configFile:'web/vite.config.ts',preview:{port:4199,strictPort:true},logLevel:'silent'});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4199, { logLevel: 'silent' });
 const browser = await chromium.launch({...(process.env.PW_CHROMIUM ? {executablePath:process.env.PW_CHROMIUM} : {}),args:['--no-sandbox']});
 const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
 try {
   await page.addInitScript(() => localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:false,speed:'normal'})));
-  await page.goto('http://localhost:4199/?seed=2');
+  await page.goto(`${BASE}?seed=2`);
   await page.waitForSelector('#deck.ready');
   const draw = await page.evaluate(async () => {
     const before = new Set((window as any).__severgrow.state().hands[0].map((card:{id:number})=>card.id));
@@ -53,7 +54,7 @@ try {
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
   assert.equal(await page.locator('.flyer.card').count(),0,'fast-forward removes an interrupted flight');
 
-  await page.goto('http://localhost:4199/?seed=3');
+  await page.goto(`${BASE}?seed=3`);
   await page.waitForSelector('#deck.ready');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
   await page.waitForFunction(() => (window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());
@@ -75,7 +76,7 @@ try {
       localStorage.setItem('main2:severgrow.save.v7', s as string);
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify(g));
     }, [save, cfg] as const);
-    await p.goto('http://localhost:4199/');
+    await p.goto(BASE);
     await assertDistChannel(p);   // loud if the served dist was built for another channel
     await p.waitForSelector('#menu-continue');
     await p.click('#menu-continue');
@@ -185,7 +186,7 @@ try {
   // (empty storage) makes this block deterministic; the assertion's intent is unchanged.
   const menuCtx = await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const menu = await menuCtx.newPage();
-  await menu.goto('http://localhost:4199/');
+  await menu.goto(BASE);
   await openMenuEntry(menu, 'menu-new');
   await menu.locator('#levels').waitFor({state:'visible'});
   assert.deepEqual(await menu.locator('#level-grid button').allTextContents(),['BEGINNER','EASY','MEDIUM','HARD','PRO']);

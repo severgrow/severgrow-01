@@ -9,7 +9,7 @@
 import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { isFruitCard } from '../../src/engine/index.js';
 import type { Player, State } from '../../src/engine/index.js';
 import { NINE_CHAIN, NINE_PAIR, fruitPosition } from './fruitcards-pos.js';
@@ -22,8 +22,8 @@ const check = (name: string, ok: boolean, note = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 // DIST=/other/dir serves another build
-const server = await preview({ configFile: 'web/vite.config.ts', ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), preview: { port: 4194, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4194/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4194, { ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

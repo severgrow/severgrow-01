@@ -8,7 +8,7 @@ import { openMenuEntry } from './helpers/menu-nav.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
@@ -28,8 +28,8 @@ const check = (name: string, ok: boolean, note?: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4174, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4174/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4174, { logLevel: 'silent' });
 const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 const demo = cutDemo();

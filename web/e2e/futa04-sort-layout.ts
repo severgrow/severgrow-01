@@ -1,11 +1,14 @@
 /** Pile positions must follow the turn phase, never a card's sort animation. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import type { Page } from 'playwright-core';
 
-const BASE = process.env.FUTA04_URL ?? 'http://localhost:4192/';
-const server = process.env.FUTA04_URL ? null : await preview({ configFile: 'web/vite.config.ts', preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
+// The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
+// worktrees at once without fighting over a hardcoded number.
+const served = process.env.FUTA04_URL ? null : await servePreview(4192, { logLevel: 'silent' });
+const BASE = process.env.FUTA04_URL ?? served!.url;
+const server = served?.server ?? null;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 let checks = 0;
 

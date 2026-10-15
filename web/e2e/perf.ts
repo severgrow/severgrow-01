@@ -6,15 +6,15 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { fixture } from '../../tests/helpers.js';
 import { positionSave } from './position.js';
 import { cutPosition } from './cut-positions.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4193, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4193/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4193, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

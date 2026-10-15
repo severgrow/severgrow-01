@@ -3,11 +3,13 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4193, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const served = await servePreview(4193, { logLevel: 'silent' });
+const server = served.server;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 let checks = 0;
 const check = (v: unknown, name: string) => {
@@ -30,7 +32,7 @@ try {
       sessionStorage.setItem('seeded', '1');
       localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
     });
-    await page.goto('http://localhost:4193/?seed=219682080&skin-preview=v3');
+    await page.goto(`${served.url}?seed=219682080&skin-preview=v3`);
     await idle(page);
     // Ground painting and asset decoding are asynchronous, especially under CI load.
     await page.waitForFunction(() => !!document.querySelector('#board pattern[id$="skin-ground"] image')?.getAttribute('href'), undefined, { timeout: 30000 });
@@ -73,7 +75,7 @@ try {
     await page.screenshot({ path: `/tmp/main2-shots/v3-${w}x${h}.png` });
     check(errors.length === 0, `${w}: no errors (${errors.join(' | ')})`);
     // No public skin chooser: a regular URL, including the former flag, uses the default look.
-    await page.goto('http://localhost:4193/?seed=219682080&design=v3');
+    await page.goto(`${served.url}?seed=219682080&design=v3`);
     await idle(page);
     check(await page.evaluate(() => !(document.querySelector('#board') as SVGSVGElement).dataset.skin && !document.querySelector('#menu-v3')), `${w}: default board is the only public skin`);
     await page.close();

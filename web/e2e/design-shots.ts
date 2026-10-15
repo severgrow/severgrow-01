@@ -4,12 +4,12 @@
 // two opponents play a while ("Watch a game", fast), and saves screenshots in both orientations.
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 
 const out = process.argv[2] ?? 'web/e2e/out-design';
 const only = process.argv[3] ?? '';
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4181, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4181/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4181, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : { executablePath: '/opt/pw-browsers/chromium' });
 const errors: string[] = [];
 

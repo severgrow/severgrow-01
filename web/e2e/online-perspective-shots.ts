@@ -3,7 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { applyAs, newGame, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
@@ -51,7 +51,7 @@ const openSeat = async (
     localStorage.setItem('main2:severgrow.save.v7', payload);
     localStorage.setItem('main2:severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
   }, save);
-  await page.goto('http://localhost:4199/');
+  await page.goto(BASE);
   await assertDistChannel(page);   // loud if the served dist was built for another channel
   await page.click('#menu-continue');
   await page.waitForTimeout(1600);
@@ -60,11 +60,8 @@ const openSeat = async (
   return { page, path };
 };
 
-const server = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { port: 4199, strictPort: true },
-  logLevel: 'silent',
-});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4199, { logLevel: 'silent' });
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );

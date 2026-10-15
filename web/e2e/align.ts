@@ -10,7 +10,7 @@
 //   npx tsx web/e2e/align.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { coordKey, legalActions, newGame, rootCoord, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { fixture } from '../../tests/helpers.js';
@@ -22,8 +22,8 @@ const check = (name: string, ok: boolean, note = '') => {
   results.push({ name, ok });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
-const server = await preview({ configFile: 'web/vite.config.ts', ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), preview: { port: 4195, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4195/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4195, { ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

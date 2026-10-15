@@ -5,16 +5,19 @@ import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { apply, legalActions, viewFor } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
-// Run the focused sort/pile regression after the board-turn suite, before this
-// script opens its own preview server on the same port.
+// Run the focused sort/pile regression after the board-turn suite. Both suites now take a FREE
+// port (helpers/preview-port.ts), so they can run concurrently in different worktrees too.
 await import('./futa04-sort-layout.js');
 await import('./foundation-restart.js');
-const BASE = process.env.FUTA04_URL ?? 'http://localhost:4192/';
-const server = process.env.FUTA04_URL ? null : await preview({ configFile: 'web/vite.config.ts', build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, preview: { port: 4192, strictPort: true }, logLevel: 'silent' });
+// The page is served on a FREE port (helpers/preview-port.ts) so this suite can run in two
+// worktrees at once without fighting over a hardcoded number.
+const served = process.env.FUTA04_URL ? null : await servePreview(4192, { build: { outDir: process.env.FUTA04_DIST ?? 'dist' }, logLevel: 'silent' });
+const BASE = process.env.FUTA04_URL ?? served!.url;
+const server = served?.server ?? null;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'], ...(process.env.FUTA04_URL && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {}) });
 let checks = 0;
 const check = (value: unknown, name: string) => { assert(value, name); checks++; };

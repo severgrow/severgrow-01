@@ -5,12 +5,13 @@
 //   CHANNEL=test npm run web:build && npx tsx web/e2e/pro-check.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4189, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4189, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const fails = new Map<string, number>();
@@ -59,7 +60,7 @@ for (const [w, h] of [[390, 844], [390, 664], [360, 640], [430, 932]] as const) 
     localStorage.clear();
     localStorage.setItem('test:severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'fast' }));
   });
-  await page.goto('http://localhost:4189/');
+  await page.goto(BASE);
   await page.waitForTimeout(500);
   await page.click('#menu-new');
   await page.click('#level-grid [data-level="7"]');

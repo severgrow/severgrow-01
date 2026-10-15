@@ -4,14 +4,14 @@
 // whole "Classic" game against the opponent, then starts "Huge hex" and opens a share link.
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 import { PRESETS, encodeSetup } from '../src/lab-mode/setup.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4179, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4179/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4179, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {

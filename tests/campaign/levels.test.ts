@@ -6,6 +6,8 @@ import {
   CAMPAIGN_CHAPTERS,
   CAMPAIGN_HOMES,
   CAMPAIGN_LEVELS,
+  CAMPAIGN_SMALL_CELLS,
+  CAMPAIGN_SMALL_HOMES,
   CampaignError,
   campaignChecks,
   campaignLevelById,
@@ -18,14 +20,19 @@ import {
   validateCampaign,
   validateLevel,
 } from '../../src/campaign/index.js';
+import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 describe('campaign levels: the definition is well formed', () => {
-  it('the whole campaign validates (no throw) and has Chapter I as levels 1-10', () => {
+  it('the whole campaign validates (no throw): three chapters of ten, levels 1-30', () => {
     expect(() => validateCampaign()).not.toThrow();
-    expect(CAMPAIGN_LEVELS).toHaveLength(10);
-    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(CAMPAIGN_LEVELS.every((l) => l.chapter === 1)).toBe(true);
-    expect(CAMPAIGN_CHAPTERS[0]!.levels).toHaveLength(10);
+    expect(CAMPAIGN_LEVELS).toHaveLength(30);
+    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    // Chapters are contiguous and each holds exactly its ten levels.
+    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3]);
+    for (const chapter of CAMPAIGN_CHAPTERS) expect(chapter.levels).toHaveLength(10);
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(CAMPAIGN_CHAPTERS[level.chapter - 1]!.levels).toContain(level);
+    }
   });
 
   it('ids are stable, unique and ordered; lookups agree', () => {
@@ -36,7 +43,7 @@ describe('campaign levels: the definition is well formed', () => {
       expect(campaignLevelByNumber(level.number)).toBe(level);
     }
     expect(campaignLevelById('c1-99')).toBeNull();
-    expect(nextCampaignLevel(10)).toBeNull();
+    expect(nextCampaignLevel(30)).toBeNull();
     expect(nextCampaignLevel(1)).toBe(CAMPAIGN_LEVELS[1]);
   });
 
@@ -54,35 +61,85 @@ describe('campaign levels: the definition is well formed', () => {
     const checks = campaignChecks();
     expect([...checks.keys()]).toEqual(CAMPAIGN_LEVELS.map((l) => l.id));
     for (const [id, c] of checks) {
-      expect(c.openCells, id).toBeGreaterThanOrEqual(20);
+      const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
+      // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
+      // hexes it may lose to rock. Levels 4-30 keep the product board's original floor of 20.
+      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('no authored board draws rock or gold inside a root zone (the generator eligibility rule)', () => {
+    const checks = campaignChecks();
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(checks.get(level.id)!.terrainInRootZone, level.id).toEqual([]);
     }
   });
 
   it('the authored boards match the design rock counts exactly', () => {
     const rocks = new Map(CAMPAIGN_LEVELS.map((l) => [l.number, l.config.board!.rock.length]));
     expect([...rocks.entries()]).toEqual([
+      // Chapter I (design pack): 0,0,1,0,2,1,2,0,3,3
       [1, 0], [2, 0], [3, 1], [4, 0], [5, 2],
       [6, 1], [7, 2], [8, 0], [9, 3], [10, 3],
+      // Chapter II (design pack): 2,3,4,1,4,4,5,2,5,5
+      [11, 2], [12, 3], [13, 4], [14, 1], [15, 4],
+      [16, 4], [17, 5], [18, 2], [19, 5], [20, 5],
+      // Chapter III (design pack): 4,5,4,5,6,4,6,2,6,6
+      [21, 4], [22, 5], [23, 4], [24, 5], [25, 6],
+      [26, 4], [27, 6], [28, 2], [29, 6], [30, 6],
     ]);
   });
 
-  it('every level sits on the classic radius-3 hexagon with the classic homes', () => {
+  it('uses gold as well as rocks across 1-30 (every level but the first has gold off the centre)', () => {
+    for (const level of CAMPAIGN_LEVELS) {
+      expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(1);
+      expect(level.config.board!.gold, level.id).toContain('0,0');
+    }
+    // The refinement: every level from 2 on rewards growth on gold beyond the bare centre.
+    for (const level of CAMPAIGN_LEVELS.filter((l) => l.number > 1)) {
+      expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('keeps the difficulty ramp readable: the bot level never drops by more than one between chapters', () => {
+    const bots = CAMPAIGN_LEVELS.map((l) => l.botLevel);
+    // Chapter I tops out at 3; Chapter II reaches 5 and never sits below 3; Chapter III tops at 6.
+    expect(Math.max(...bots.slice(0, 10))).toBe(3);
+    expect(Math.max(...bots.slice(10, 20))).toBe(5);
+    expect(Math.max(...bots.slice(20))).toBe(6);
+    for (let i = 11; i < 30; i++) expect(bots[i]! - bots[i - 1]!, `level ${i + 1}`).toBeLessThanOrEqual(1);
+  });
+
+  it('levels 1-3 use the tutorial small map (radius 2); levels 4-30 the product hexagon (radius 3)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      expect([...board.cells].sort()).toEqual([...CAMPAIGN_CELLS].sort());
-      expect(board.homes).toEqual([...CAMPAIGN_HOMES]);
-      expect(level.config.boardRadius).toBe(3);
+      // Owner direction 2026-10-16: the first three levels are played on the SAME map the tutorial
+      // teaches on. This is a deliberate narrowing, not a range: the split is exact per level.
+      const small = level.number <= 3;
+      const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
+      const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
+      const expectedHomes = small ? CAMPAIGN_SMALL_HOMES : CAMPAIGN_HOMES;
+      expect(level.config.boardRadius, level.id).toBe(expectedRadius);
+      expect(level.config.rootStyle, level.id).toBe('ring2');
+      expect([...board.cells].sort(), level.id).toEqual([...expectedCells].sort());
+      expect(board.homes, level.id).toEqual([...expectedHomes]);
     }
+    // The tutorial map really is the smaller board (19 hexes vs 37) — the point of the change.
+    expect(CAMPAIGN_SMALL_CELLS).toHaveLength(19);
+    expect(CAMPAIGN_CELLS).toHaveLength(37);
+    expect(TUTORIAL_BOARD_RADIUS).toBe(2);
   });
 });
 
 describe('campaign levels: the validation layer fails loudly and specifically', () => {
-  const base = CAMPAIGN_LEVELS[0]!;
+  // A product-board (radius 3) level as the base: these checks are about OTHER rules, so the board
+  // must not trip the radius/hexagon check first.
+  const base = CAMPAIGN_LEVELS[3]!; // level 4, the product hexagon
   const withBoard = (rock: string[], gold: string[] = ['0,0'], homes = [...CAMPAIGN_HOMES] as [string, string]) => ({
     ...base,
     id: 'broken',
-    config: { ...base.config, board: { cells: [...CAMPAIGN_CELLS], rock, gold, homes } },
+    config: { ...base.config, boardRadius: 3, board: { cells: [...CAMPAIGN_CELLS], rock, gold, homes } },
   });
 
   it('names the level and the problem on an impossible config', () => {
@@ -104,6 +161,30 @@ describe('campaign levels: the validation layer fails loudly and specifically', 
   it('rejects a hex walled off from both homes', () => {
     // Three rocks close every approach to the edge hex 3,0: it is on the board but unreachable.
     expect(() => validateLevel(withBoard(['3,-1', '2,0', '2,1']))).toThrow(/3,0 is walled off/);
+  });
+
+  it('rejects a board whose cells do not match its declared radius', () => {
+    // A radius-3 cell list on a level declared as the tutorial's radius-2 map: caught up front.
+    const bad = {
+      ...CAMPAIGN_LEVELS[0]!,
+      id: 'wrong-radius',
+      config: { ...CAMPAIGN_LEVELS[0]!.config, board: { cells: [...CAMPAIGN_CELLS], rock: [], gold: ['0,0'], homes: [...CAMPAIGN_HOMES] as [string, string] } },
+    };
+    expect(() => validateLevel(bad)).toThrow(/is not the 2-ring hexagon/);
+  });
+
+  it('rejects a board so full of rock that too little is left to play', () => {
+    // The tutorial map minus its two homes and the centre, filled with rock: 3 open hexes, far below
+    // the small map's floor of 15. The level is refused loudly, and named.
+    const rock = CAMPAIGN_SMALL_CELLS.filter((k) => k !== '0,0' && !CAMPAIGN_SMALL_HOMES.includes(k));
+    const bad = {
+      ...CAMPAIGN_LEVELS[0]!,
+      id: 'cramped',
+      config: { ...CAMPAIGN_LEVELS[0]!.config, board: { cells: [...CAMPAIGN_SMALL_CELLS], rock: [...rock], gold: ['0,0'], homes: [...CAMPAIGN_SMALL_HOMES] as [string, string] } },
+    };
+    expect(() => validateLevel(bad)).toThrow(CampaignError);
+    expect(() => validateLevel(bad)).toThrow(/campaign level cramped/);
+    expect(() => validateLevel(bad)).toThrow(/too cramped to play/);
   });
 
   it('rejects a level whose config the engine refuses (a bad board)', () => {
@@ -192,12 +273,12 @@ describe('campaign progress: the unlock rule', () => {
     expect(replay.completed).toEqual(p.completed);
   });
 
-  it('lists progress after a full Chapter I run', () => {
+  it('lists progress after a full campaign run (all three chapters)', () => {
     let p = freshProgress();
     for (const level of CAMPAIGN_LEVELS) p = recordCampaignResult(p, level, { won: true, score: 10, turns: 10 });
-    expect(p.completed).toHaveLength(10);
-    expect(p.unlocked).toBe(11);
+    expect(p.completed).toHaveLength(30);
+    expect(p.unlocked).toBe(31);
     // The campaign as built is finished: Continue sits on the last level.
-    expect(currentLevel(p).number).toBe(10);
+    expect(currentLevel(p).number).toBe(30);
   });
 });

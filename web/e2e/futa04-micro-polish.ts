@@ -2,10 +2,12 @@
  * stone remain independent of board skin, and reduced motion stays still. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { coordKey, legalActions, viewFor } from '../../src/engine/index.js';
 
-const server = await preview({ configFile:'web/vite.config.ts', preview:{ port:4194, strictPort:true }, logLevel:'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const served = await servePreview(4194, { logLevel: 'silent' });
+const server = served.server;
 const browser = await chromium.launch({ executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium', args:['--no-sandbox'] });
 try {
   // Futasaku 0.4 ships the default skin; the V3 skin is a localhost-only art preview
@@ -16,7 +18,7 @@ try {
     const page = await browser.newPage({ viewport:{ width:390,height:844 }, isMobile:true, hasTouch:true });
     const errors:string[] = []; page.on('pageerror',e=>errors.push(e.message));
     await page.addInitScript(reduceMotion=>localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({ sound:false,music:false,coach:false,reduceMotion })),reduced);
-    await page.goto('http://localhost:4194/?seed=3');
+    await page.goto(`${served.url}?seed=3`);
     await page.waitForSelector('#deck.ready');
     await page.locator('#deck').evaluate(el=>(el as HTMLButtonElement).click());
     await page.waitForFunction(()=>(window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());

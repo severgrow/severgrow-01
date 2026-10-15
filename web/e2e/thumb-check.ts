@@ -4,14 +4,15 @@
 // Saves screenshots in docs/screens/thumb3/ (thumb layout v3: piles in the curve's notch, bottom-anchored dock).  Run: CHANNEL=test npm run web:build && npx tsx web/e2e/thumb-check.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { CLASSIC, PRESETS, encodeSetup } from '../src/lab-mode/setup.js';
 import type { LabSetup } from '../src/lab-mode/setup.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4185, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4185, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
@@ -37,7 +38,7 @@ const open = async (w: number, h: number, handSize: number, side: 'right' | 'lef
     },
     [active, side] as const,
   );
-  await page.goto('http://localhost:4185/');
+  await page.goto(BASE);
   await page.waitForTimeout(500);
   await page.click('#menu-new');
   await page.click('#level-grid [data-level="7"]');
@@ -215,7 +216,7 @@ for (const [w, h] of [[390, 844], [360, 640]] as const) {
 // desktop and landscape: unchanged (no thumb layout)
 for (const vp of [{ width: 1280, height: 800, touch: false }, { width: 844, height: 390, touch: true }]) {
   const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch, isMobile: vp.touch });
-  await page.goto('http://localhost:4185/');
+  await page.goto(BASE);
   await page.waitForTimeout(400);
   await page.click('#menu-new');
   await page.click('#level-grid [data-level="7"]');

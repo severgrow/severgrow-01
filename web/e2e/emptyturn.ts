@@ -5,7 +5,7 @@
 import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { stuckBoard } from './empty-positions.js';
 
 const results: { name: string; ok: boolean }[] = [];
@@ -14,8 +14,8 @@ const check = (name: string, ok: boolean, note?: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 // DIST=/other/dir serves another build (so a long test on web/dist can keep running)
-const server = await preview({ configFile: 'web/vite.config.ts', ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), preview: { port: 4193, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4193/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4193, { ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const until = (page: Page, fn: string, ms = 8000) => page.waitForFunction(fn, undefined, { timeout: ms });
 const HOOK = '(window.__severgrow)';

@@ -1,16 +1,15 @@
 // Tutorial focus lock: dead chrome stays dead; target still works; menu Exit releases.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import { servePreview } from './helpers/preview-port.js';
 
-const server = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { port: 4198, strictPort: true },
-  logLevel: 'silent',
-});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const served = await servePreview(4198, { logLevel: 'silent' });
+const server = served.server;
+const BASE = served.url;
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 const errors: string[] = [];
 const VIEWPORTS = [
@@ -36,7 +35,7 @@ const openTutorial = async (page: import('playwright-core').Page, chapter = 1) =
       localStorage.setItem(k, settings);
     }
   });
-  await page.goto(`http://localhost:4198/?tutorial=1&chapter=${chapter}`);
+  await page.goto(`${BASE}?tutorial=1&chapter=${chapter}`);
   // the free turn has no step lock; every other chapter opens locked
   await page.waitForFunction(() => {
     const h = (window as any).__severgrow;
@@ -274,7 +273,7 @@ try {
         localStorage.setItem(k, settings);
       }
     });
-    await page.goto('http://localhost:4198/');
+    await page.goto(BASE);
     await page.waitForSelector('#menu-new, #menu-play, #menu-tutorial');
     const gate = await page.evaluate(() => (window as any).__severgrow?.tutorialGate?.());
     assert.ok(!gate || gate.active === false, 'normal boot must not arm the tutorial gate');

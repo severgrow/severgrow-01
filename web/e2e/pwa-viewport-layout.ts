@@ -1,11 +1,12 @@
 /** Standalone iPhone viewport and full-desktop composition regression checks. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 
-const server = await preview({ configFile:'web/vite.config.ts', preview:{ port:4199, strictPort:true }, logLevel:'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4199, { logLevel: 'silent' });
 const browser = await chromium.launch({ executablePath:process.env.PW_CHROMIUM ?? '/usr/bin/chromium', args:['--no-sandbox'] });
-const base = 'http://localhost:4199/?seed=1';
+const base = `${BASE}?seed=1`;
 
 try {
   const pwa = await browser.newPage({ viewport:{width:393,height:806}, isMobile:true, hasTouch:true });

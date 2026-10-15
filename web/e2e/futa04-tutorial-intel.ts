@@ -1,13 +1,15 @@
 // Authored tutorial and the two controls built on public match information.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { legalActions, viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { TUTORIAL_CHAPTER_COUNT, tutorialAccepts, tutorialLesson, tutorialLessons } from '../src/logic/tutorial-script.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
 
-const server=await preview({configFile:'web/vite.config.ts',preview:{port:4197,strictPort:true},logLevel:'silent'});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const served=await servePreview(4197,{logLevel:'silent'});
+const server=served.server;
 const browser=await chromium.launch({...(process.env.PW_CHROMIUM?{executablePath:process.env.PW_CHROMIUM}:{}),args:['--no-sandbox']});
 const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
 const reducedMotion=process.env.FUTASAKU_REDUCED_MOTION!=='0';
@@ -18,7 +20,7 @@ const play=(action:Action,who:0|1=0)=>page.evaluate(([a,p])=>(window as any).__s
 /** Wait for the app to finish booting (async UI mounts + the first screen), never a fixed sleep.
  *  The `severor-ready` event fires once, so poll the `ready` hook and fall back to the event. */
 const waitBoot=(p:import('playwright-core').Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
-const base='http://localhost:4197/';
+const base=served.url;
 try {
   await page.addInitScript(reduced=>{
     localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({speed:'fast',reduceMotion:reduced,sound:false,music:false,coach:false,eyeCandy:!reduced}));

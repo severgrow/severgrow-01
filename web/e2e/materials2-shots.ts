@@ -7,15 +7,15 @@ import { positionSave } from './position.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { goldDemo } from './positions.js';
 import { newGame } from '../../src/engine/index.js';
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const dir = arg('dir') ?? 'docs/screens/materials2';
 mkdirSync(dir, { recursive: true });
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4178, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4178/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4178, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 const demo = goldDemo();

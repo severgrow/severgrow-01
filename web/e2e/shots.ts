@@ -5,7 +5,7 @@ import { positionSave } from './position.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { THEME_IDS } from '../src/logic/themes.js';
 import { cutDemo, goldDemo } from './positions.js';
 import { chooseBloom, drawMeld } from './drawing.js';
@@ -13,8 +13,8 @@ import { openMenuEntry } from './helpers/menu-nav.js';
 
 const dir = process.argv.find((a) => a.startsWith('--dir='))?.slice(6) ?? 'docs/screens';
 mkdirSync(dir, { recursive: true });
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4175, strictPort: true }, logLevel: 'silent' });
-const BASE = 'http://localhost:4175/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4175, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 const demo = cutDemo();

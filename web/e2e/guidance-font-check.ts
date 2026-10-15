@@ -5,13 +5,14 @@
 //   CHANNEL=test npm run web:build && npx tsx web/e2e/guidance-font-check.ts
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { viewFor } from '../../src/engine/index.js';
 import type { Action, State } from '../../src/engine/index.js';
 import { chooseLevelAction } from '../../src/bots/levels.js';
 
 const OUT = 'docs/screens/guidance-font';
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4191, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4191, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 let failed = 0;
 const check = (name: string, ok: boolean, note = '') => {
@@ -49,7 +50,7 @@ for (const [w, h, large] of [[390, 844, false], [360, 640, false], [360, 640, tr
     localStorage.clear();
     localStorage.setItem('test:severgrow.settings.v1', JSON.stringify({ sound: false, coach: false, speed: 'fast', largeText: lg }));
   }, large);
-  await page.goto('http://localhost:4191/');
+  await page.goto(BASE);
   await page.waitForTimeout(600);
   await page.click('#menu-new');
   await page.click('#level-grid [data-level="7"]');
@@ -101,7 +102,7 @@ for (const [w, h, large] of [[390, 844, false], [360, 640, false], [360, 640, tr
 const lab = await browser.newPage({ viewport: { width: 1400, height: 2200 }, deviceScaleFactor: 1 });
 const labErr: string[] = [];
 lab.on('pageerror', (e) => labErr.push(e.message));
-await lab.goto('http://localhost:4191/?lab=1');
+await lab.goto(`${BASE}?lab=1`);
 await lab.waitForSelector('.fb-col[data-overflow]', { timeout: 20000 });
 await lab.waitForTimeout(800);
 const fb = await lab.evaluate(() => [...document.querySelectorAll<HTMLElement>('.fb-col')].map((c) => `${c.dataset.pair}: ${c.dataset.overflow === 'true' ? 'overflows' : 'fits'}`));
