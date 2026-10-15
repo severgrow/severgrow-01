@@ -15,6 +15,7 @@ import { createSupabaseBroadcaster } from './broadcast-supabase.js';
 import type { MatchBroadcaster } from './broadcast.js';
 import { postgresStorage } from './storage/postgres.js';
 import { wireLiveEdge } from './live/runtime.js';
+import { chainRouters, createFeedbackRouter, postgresFeedbackStore } from './feedback/feedback.js';
 import type { PgPool } from './storage/postgres.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 import {
@@ -125,7 +126,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     // Missing values just mean the browser falls back to polling (P-11); no failure either way.
     ...(broadcaster ? { broadcaster } : {}),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: live.router(service) }); // live duels: docs/LIVE.md
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() })) }); // live duels + beta feedback
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 

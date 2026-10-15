@@ -14,6 +14,8 @@ import { databaseUrlFromEnv, poolFromUrl, redactUrl } from './storage/pg-pool.js
 import { postgresStorage } from './storage/postgres.js';
 import type { Storage } from './storage/types.js';
 import { wireLiveNode } from './live/node.js';
+import { chainRouters } from './feedback/feedback.js';
+import { feedbackRouterNode } from './feedback/node.js';
 
 const buildStorage = (): { storage: Storage; description: string } => {
   const url = databaseUrlFromEnv();
@@ -29,7 +31,7 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   const { storage, description } = buildStorage();
   const live = await wireLiveNode(storage, config, databaseUrlFromEnv()); // live duels: docs/LIVE.md
   const service = new MatchService({ storage: live.storage, config });
-  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: live.router(service) });
+  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: chainRouters(live.router(service), await feedbackRouterNode(storage, service, databaseUrlFromEnv())) }); // + beta feedback: docs/BETA.md
 
   const port = options.port ?? Number(process.env.PORT ?? 8787);
   await new Promise<void>((resolve) => server.listen(port, resolve));

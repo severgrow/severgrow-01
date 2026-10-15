@@ -6610,5 +6610,7 @@ if (timingEnabled()) {
   renderReadout();
 }
 
+// Beta feedback (docs/BETA.md): Report a problem, crash reports, the #beta tester guide. Read-only.
+void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

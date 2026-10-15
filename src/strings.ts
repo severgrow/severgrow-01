@@ -640,3 +640,63 @@ export const LIVE = Object.freeze({
   allowChallengesHelp: 'Off: you show as Not available.',
   failed: 'Could not start real time right now.',
 });
+
+/**
+ * Beta feedback (web/src/feedback/): "Report a problem" (pause menu and Settings) and the tester
+ * guide at futasaku.com/#beta. Plain words; promise only what is true.
+ */
+export const FEEDBACK = Object.freeze({
+  open: 'Report a problem',
+  title: 'Report a problem',
+  prompt: 'What happened? What did you expect?',
+  placeholder: 'e.g. After my Bloom the board froze and I could not throw.',
+  attached: 'We also send your app version, phone type, screen size and where you are in the game (turn and step) — never your cards or your name.',
+  send: 'Send',
+  cancel: 'Cancel',
+  sending: 'Sending…',
+  sent: 'Thanks — sent.',
+  queued: 'Saved. It will send when you are back online.',
+  failed: 'Could not send. Please try again in a minute.',
+  empty: 'Please write a few words first.',
+  guideLink: 'Tester guide',
+  close: 'Close',
+});
+
+/** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */
+export const BETA_GUIDE = Object.freeze({
+  title: 'Welcome, tester',
+  intro: 'Thank you for helping test FUTASAKU. This page has everything you need — it takes two minutes.',
+  sections: Object.freeze([
+    Object.freeze({
+      heading: 'Put it on your home screen',
+      lines: Object.freeze([
+        'iPhone (Safari): tap Share, then Add to Home Screen.',
+        'Android (Chrome): tap the ⋮ menu, then Install app or Add to Home screen.',
+        'It then opens full-screen like an app, and works offline for games against the computer.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Learn the game',
+      lines: Object.freeze([
+        'Play the Tutorial from the main menu once — it is short and shows every move.',
+        'Then try a game against the computer before playing a person.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Play a friend online',
+      lines: Object.freeze([
+        'Main menu → Play online → invite a friend and send them the code or link.',
+        'Each turn can take up to 24 hours. There are no notifications yet, so tell your opponent when you have moved, or agree a time to play together.',
+        'When you both have the match open, you can try Real time: 60 seconds a turn. Careful — in Real time, running out of time or leaving loses the match.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Tell us what you find',
+      lines: Object.freeze([
+        'Anything odd, confusing, slow or broken: open the menu (☰) and tap Report a problem.',
+        'Say what you did and what happened. Screenshots help too — send them to whoever invited you.',
+        'Crashes are reported automatically, without your cards or your name.',
+      ]),
+    }),
+  ]),
+});
