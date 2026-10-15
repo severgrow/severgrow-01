@@ -1,7 +1,9 @@
 -- Seeds/world v1. New tables preserve 0009_world_map.sql as historical data.
 -- The migration runner keys the FULL filename, so both historical 0009 files are distinct.
 create table if not exists seed_wallets (
-  player_id uuid primary key references players(id) on delete restrict,
+  -- A never-funded zero wallet may leave with an expired guest; funded activity is retained
+  -- by the cleanup guard and the immutable ledger/claim FKs below.
+  player_id uuid primary key references players(id) on delete cascade,
   balance integer not null default 0 check (balance >= 0),
   lifetime_earned bigint not null default 0 check (lifetime_earned >= 0),
   lifetime_spent bigint not null default 0 check (lifetime_spent >= 0),

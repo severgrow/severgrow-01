@@ -887,6 +887,9 @@ export const postgresStorage = (pool: PgPool): Storage => ({
        and not exists (select 1 from match_participants mp where mp.player_id = p.id)
        and not exists (select 1 from seed_wallets sw where sw.player_id = p.id
          and (sw.balance > 0 or sw.lifetime_earned > 0 or sw.lifetime_spent > 0))
+       and not exists (select 1 from seed_reward_receipts sr where sr.player_id = p.id)
+       and not exists (select 1 from seed_ledger sl where sl.player_id = p.id)
+       and not exists (select 1 from training_seed_tickets st where st.player_id = p.id)
        and not exists (select 1 from world_claims wc where wc.owner_id = p.id)`,
       [cutoff],
     );

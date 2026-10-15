@@ -4,6 +4,7 @@ import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
 import { SEED_ECONOMY, utcDay } from './config.js';
 import { planSeedReward } from './rewards.js';
 import type { ClaimResult, RewardInput, RewardResult, SeedWallet, TrainingTicket, WorldEconomyStore } from './types.js';
+import { emptyWallet } from './types.js';
 
 const number = (v: unknown): number => Number(v ?? 0);
 const walletFromRow = (r: Record<string, unknown>): SeedWallet => ({
@@ -35,9 +36,8 @@ const transaction = async <T>(pool: PgPool, work: (client: PgClient) => Promise<
 /** All debits, credits, caps and claims are checked and written inside Postgres transactions. */
 export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
   async wallet(playerId) {
-    await pool.query('insert into seed_wallets(player_id) values ($1) on conflict do nothing', [playerId]);
     const { rows } = await pool.query('select * from seed_wallets where player_id = $1', [playerId]);
-    return walletFromRow(rows[0]!);
+    return rows[0] ? walletFromRow(rows[0]) : emptyWallet();
   },
   async world() {
     return transaction(pool, async (client) => {
@@ -45,7 +45,7 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       // Claim writers take this row exclusively before inserting a claim.
       const meta = await client.query('select revision from world_meta where version = 1 for share');
       const claims = await client.query(`select c.cell_id, c.owner_id, c.claimed_at, p.display_name as owner_name
-                    from world_claims c join players p on p.id = c.owner_id`);
+                    from world_claims c join players p on p.id = c.owner_id order by c.cell_id`);
       return {
         revision: number(meta.rows[0]?.revision),
         claims: claims.rows.map((r) => ({

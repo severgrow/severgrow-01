@@ -1423,7 +1423,8 @@ async function startGame(
   trainingRewardTicketId = ticketId;
   if (ticketId) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, id: ticketId }));
   else store.remove(TRAINING_REWARD_TICKET_KEY);
-  seedRewardMessage = '';
+  seedRewardMessage = difficulty && onlineBuildEnabled() && !ticketId
+    ? 'Seed rewards unavailable for this match' : '';
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;

@@ -771,44 +771,49 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // The first affordable claim is invited only on the quiet menu, never during a match,
   // animation, online turn or rematch flow. The server remembers acknowledgement per identity.
   let invitationOpen = false;
+  let invitationChecking = false;
+  let invitationDismissedThisSession = false;
   const checkWorldInvitation = async () => {
-    if (invitationOpen || menuEl?.hidden !== false || !worldEl.hidden) return;
-    await syncSeedRewards();
-    if (menuEl?.hidden !== false) return;
-    const id = await ensureIdentity();
-    if (!id) return;
-    let wallet;
-    try { wallet = await client.seedWallet(id.token); } catch { return; }
-    if (wallet.balance < 100 || wallet.worldInvitationSeen || menuEl?.hidden !== false) return;
-    invitationOpen = true;
-    const sheet = document.createElement('div');
-    sheet.className = 'world-invitation';
-    sheet.setAttribute('role', 'dialog');
-    sheet.setAttribute('aria-modal', 'true');
-    sheet.setAttribute('aria-label', '100 Seeds');
-    const card = document.createElement('div');
-    card.className = 'world-invitation-card';
-    const title = document.createElement('strong');
-    title.textContent = '100 SEEDS';
-    const line = document.createElement('p');
-    line.textContent = 'Your place in the world is waiting.';
-    const actions = document.createElement('div');
-    const open = document.createElement('button');
-    open.textContent = 'OPEN WORLD MAP';
-    const later = document.createElement('button');
-    later.textContent = 'LATER';
-    const finish = (go: boolean) => {
-      sheet.remove(); invitationOpen = false;
-      void client.acknowledgeWorldInvitation(id.token);
-      if (go) openWorld('menu');
-    };
-    open.addEventListener('click', () => finish(true));
-    later.addEventListener('click', () => finish(false));
-    actions.append(open, later);
-    card.append(seedIcon(28), title, line, actions);
-    sheet.append(card);
-    document.body.append(sheet);
-    open.focus();
+    if (invitationOpen || invitationChecking || invitationDismissedThisSession || menuEl?.hidden !== false || !worldEl.hidden) return;
+    invitationChecking = true;
+    try {
+      await syncSeedRewards();
+      if (menuEl?.hidden !== false) return;
+      const id = await ensureIdentity();
+      if (!id) return;
+      let wallet;
+      try { wallet = await client.seedWallet(id.token); } catch { return; }
+      if (wallet.balance < 100 || wallet.worldInvitationSeen || menuEl?.hidden !== false) return;
+      invitationOpen = true;
+      const sheet = document.createElement('div');
+      sheet.className = 'world-invitation';
+      sheet.setAttribute('role', 'dialog');
+      sheet.setAttribute('aria-modal', 'true');
+      sheet.setAttribute('aria-label', '100 Seeds');
+      const card = document.createElement('div');
+      card.className = 'world-invitation-card';
+      const title = document.createElement('strong');
+      title.textContent = '100 SEEDS';
+      const line = document.createElement('p');
+      line.textContent = 'Your place in the world is waiting.';
+      const actions = document.createElement('div');
+      const open = document.createElement('button');
+      open.textContent = 'OPEN WORLD MAP';
+      const later = document.createElement('button');
+      later.textContent = 'LATER';
+      const finish = (go: boolean) => {
+        sheet.remove(); invitationOpen = false; invitationDismissedThisSession = true;
+        void client.acknowledgeWorldInvitation(id.token).catch(() => { /* Retry on a later session. */ });
+        if (go) openWorld('menu');
+      };
+      open.addEventListener('click', () => finish(true));
+      later.addEventListener('click', () => finish(false));
+      actions.append(open, later);
+      card.append(seedIcon(28), title, line, actions);
+      sheet.append(card);
+      document.body.append(sheet);
+      open.focus();
+    } finally { invitationChecking = false; }
   };
   window.addEventListener('futasaku:menu', () => { void checkWorldInvitation(); });
   if (menuEl?.hidden === false) void checkWorldInvitation();

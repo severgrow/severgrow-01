@@ -37,9 +37,15 @@ export class WorldView {
   async open() {
     this.active = true;
     this.notice('');
-    this.identity = await this.ensureIdentity();
-    if (!this.active) return;
-    await this.refresh(true);
+    // The world is public. A guest token may be slow, offline or rate-limited; it must never
+    // prevent the player from seeing the map. Attach the private wallet when identity resolves.
+    const publicRefresh = this.refresh(true);
+    void this.ensureIdentity().then((identity) => {
+      if (!this.active) return;
+      this.identity = identity;
+      void this.refresh(true);
+    }).catch(() => { /* Public world remains usable without an identity. */ });
+    await publicRefresh;
   }
   close() {
     this.active = false;
@@ -54,14 +60,22 @@ export class WorldView {
   async refresh(force = false) {
     if (!this.active) return;
     try {
+      const identityAtRequest = this.identity;
       const [map, wallet] = await Promise.all([
         this.client.worldMap(),
-        this.identity ? this.client.seedWallet(this.identity.token).catch(() => null) : Promise.resolve(null),
+        identityAtRequest ? this.client.seedWallet(identityAtRequest.token).catch(() => null) : Promise.resolve(null),
       ]);
       if (!this.active) return;
-      const walletChanged = this.wallet?.balance !== wallet?.balance;
-      this.wallet = wallet;
-      if (force || walletChanged || !this.world || this.world.revision !== map.world.revision) {
+      const walletChanged = identityAtRequest === this.identity && this.wallet?.balance !== wallet?.balance;
+      if (identityAtRequest === this.identity) this.wallet = wallet;
+      const ownerChanged = this.world?.claims.length !== map.world.claims.length ||
+        map.world.claims.some((claim, index) => {
+          const previous = this.world?.claims[index];
+          return !previous || previous.cellId !== claim.cellId || previous.ownerName !== claim.ownerName ||
+            previous.ownerId !== claim.ownerId;
+        });
+      if (!this.world || map.world.revision > this.world.revision ||
+        (map.world.revision === this.world.revision && (force || walletChanged || ownerChanged))) {
         this.world = map.world;
         this.paint();
       }
