@@ -598,6 +598,28 @@ function setLead(btn: HTMLElement, lead: boolean) {
   btn.classList.toggle('primary', lead);
   btn.classList.toggle('ghost', !lead);
 }
+/**
+ * The saved-game resume on the main menu — "Continue", or the campaign's "Resume" — or hidden when
+ * there is nothing to resume. It is recomputed EVERY time the menu is shown and is deliberately NOT
+ * inside the "the screen did not change" guard below: the menu is the ONLY way back into a saved
+ * match, so a fresh boot, a reload and a return from a submenu must all agree with storage. A miss
+ * here would leave a player staring at a menu with no way back into their game (2026-10-15).
+ * Returns whether there is anything to continue, for the rest of the menu's own layout.
+ */
+function syncMenuResume(): boolean {
+  const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
+  const campaignCanContinue = FEATURES.campaign && !!campaignResume();
+  const resumeCampaign = campaignCanContinue && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign';
+  const resumeClassic = !!saved && saved.state.phase !== 'GAME_OVER' && !resumeCampaign;
+  const canContinue = resumeCampaign || resumeClassic;
+  const btn = $('menu-continue');
+  btn.hidden = !canContinue;
+  btn.classList.remove('version-btn');
+  const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
+  btn.textContent = continueLabel;
+  btn.setAttribute('aria-label', continueLabel);
+  return canContinue;
+}
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
   shownScreen = name;
@@ -616,68 +638,65 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   if (name === 'campaign') {
     renderCampaignScreen();
   }
-  if (name === 'menu' && !same) {
-    const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
-    const campaignCanContinue = FEATURES.campaign && !!campaignResume();
-    const resumeCampaign = campaignCanContinue && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign';
-    const resumeClassic = !!saved && saved.state.phase !== 'GAME_OVER' && !resumeCampaign;
-    const canContinue = resumeCampaign || resumeClassic;
-    $('menu-continue').hidden = !canContinue;
-    $('menu-continue').classList.remove('version-btn');
-    const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
-    $('menu-continue').textContent = continueLabel;
-    $('menu-continue').setAttribute('aria-label', continueLabel);
-    // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
-    // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
-    // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
-    // under it.
-    const online = onlineBuildEnabled();
-    $('menu-play').hidden = !FEATURES.campaign;
-    $('menu-play').textContent = MENU.play;
-    $('menu-play').setAttribute('aria-label', MENU.play);
-    $('play-title').textContent = MENU.playTitle;
-    $('menu-login').textContent = MENU.login;
-    $('menu-login').setAttribute('aria-label', MENU.login);
-    $('menu-world').textContent = MENU.world;
-    $('menu-world').setAttribute('aria-label', MENU.world);
-    // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
-    // only when the build has an online endpoint to read the map from.
-    $('menu-world').hidden = !(FEATURES.campaign && online);
-    if (FEATURES.campaign) {
-      setLead($('menu-play'), true);
-      setLead($('menu-continue'), false);
-      setLead($('menu-world'), false);
-      // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
-      // are the next tier down and the back control is the quietest of all. A build with no online
-      // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
-      const cmp = $('menu-campaign');
-      cmp.hidden = false;
-      const current = currentLevel(campaignProgress).number;
-      cmp.textContent = MENU.level(current);
-      cmp.setAttribute('aria-label', `${MENU.level(current)}, campaign. Open the campaign.`);
-      $('menu-online').hidden = !online;
-      setLead($('menu-online'), online);
-      setLead(cmp, !online);
-      $('menu-new').textContent = MENU.training;
-      $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
-      setLead($('menu-new'), false);
-      $('levels-heading').textContent = MENU.trainingTitle;
-    } else {
-      // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
-      // picker, and no submenu at all. Untouched, so their own suites need no change.
-      $('menu-campaign').hidden = true;
-      $('menu-new').hidden = false;
-      $('menu-new').textContent = 'Play offline';
-      $('menu-new').setAttribute('aria-label', 'Play offline');
-      $('menu-new').classList.toggle('primary', !canContinue);
-      $('menu-new').classList.toggle('ghost', canContinue);
-      $('levels-heading').textContent = 'Choose difficulty';
+  if (name === 'menu') {
+    // The resume is recomputed on EVERY menu show — outside the `!same` guard below — so a fresh
+    // boot, a reload or a return from a submenu can never leave the player without their way back
+    // into a saved match (see syncMenuResume).
+    const canContinue = syncMenuResume();
+    if (!same) {
+      // ---- the menu's own layout: re-rendered only when the screen actually changed ----
+      // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
+      // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
+      // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
+      // under it.
+      const online = onlineBuildEnabled();
+      $('menu-play').hidden = !FEATURES.campaign;
+      $('menu-play').textContent = MENU.play;
+      $('menu-play').setAttribute('aria-label', MENU.play);
+      $('play-title').textContent = MENU.playTitle;
+      $('menu-login').textContent = MENU.login;
+      $('menu-login').setAttribute('aria-label', MENU.login);
+      $('menu-world').textContent = MENU.world;
+      $('menu-world').setAttribute('aria-label', MENU.world);
+      // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
+      // only when the build has an online endpoint to read the map from.
+      $('menu-world').hidden = !(FEATURES.campaign && online);
+      if (FEATURES.campaign) {
+        setLead($('menu-play'), true);
+        setLead($('menu-continue'), false);
+        setLead($('menu-world'), false);
+        // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
+        // are the next tier down and the back control is the quietest of all. A build with no online
+        // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
+        const cmp = $('menu-campaign');
+        cmp.hidden = false;
+        const current = currentLevel(campaignProgress).number;
+        cmp.textContent = MENU.level(current);
+        cmp.setAttribute('aria-label', `${MENU.level(current)}, campaign. Open the campaign.`);
+        $('menu-online').hidden = !online;
+        setLead($('menu-online'), online);
+        setLead(cmp, !online);
+        $('menu-new').textContent = MENU.training;
+        $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
+        setLead($('menu-new'), false);
+        $('levels-heading').textContent = MENU.trainingTitle;
+      } else {
+        // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
+        // picker, and no submenu at all. Untouched, so their own suites need no change.
+        $('menu-campaign').hidden = true;
+        $('menu-new').hidden = false;
+        $('menu-new').textContent = 'Play offline';
+        $('menu-new').setAttribute('aria-label', 'Play offline');
+        $('menu-new').classList.toggle('primary', !canContinue);
+        $('menu-new').classList.toggle('ghost', canContinue);
+        $('levels-heading').textContent = 'Choose difficulty';
+      }
+      $('menu-tutorial').classList.remove('primary');
+      $('menu-tutorial').classList.add('ghost');
+      // Rename the one tutorial entry from src/strings.ts (single source).
+      $('menu-tutorial').textContent = HELP.tutorial;
+      $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
     }
-    $('menu-tutorial').classList.remove('primary');
-    $('menu-tutorial').classList.add('ghost');
-    // Rename the one tutorial entry from src/strings.ts (single source).
-    $('menu-tutorial').textContent = HELP.tutorial;
-    $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
   }
   $('gameover').hidden = true;
   render();

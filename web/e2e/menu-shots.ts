@@ -197,6 +197,42 @@ try {
         (await page.locator('#menu').isVisible()) && !(await page.locator('#online-hub').isVisible()));
       await context.close();
     }
+
+    // ---- 6. the saved-game resume survives a reload (the regression guard, 2026-10-15) ----
+    // A player who reloads with a saved match MUST be offered Continue on the fresh menu: it is the
+    // only way back into that match. The boot shows the menu while `shownScreen` may already say
+    // 'menu' (returning from PLAY sets it back), so the reveal must not depend on "the screen
+    // changed". Seeded from the URL: the game starts at once, is played one real turn, and the page
+    // is then reloaded WITHOUT the query, exactly as a player who taps the browser's reload does.
+    {
+      const { context, page } = await device(vp, false, `resume-${vp.key}`);
+      page.on('dialog', (d) => void d.accept());
+      // Speed off and Reduce motion on, exactly as the other suites boot: the deck and the board must
+      // be still enough to tap (and the state compared afterwards must be the settled one).
+      await page.evaluate(([prefix, settings]) => localStorage.setItem(`${prefix}severgrow.settings.v1`, settings), [PREFIX, JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' })] as const);
+      await page.goto(`${origin}/?seed=219682080`, { waitUntil: 'domcontentloaded' });
+      // String expressions (not arrow functions): tsx wraps named helpers the page does not have.
+      const settled = `(() => { const h = window.__severgrow; const lottery = document.getElementById('starter-lottery');
+        return !!h && !!h.state() && !h.busy() && h.state().actor === 0 && !!lottery && lottery.hidden; })()`;
+      await page.waitForFunction(settled, undefined, { timeout: 40_000 });
+      // A real tap on the deck: the pile carries its own idle animation, so click its centre with
+      // the mouse rather than waiting for Playwright's "stable" gate.
+      const deck = await page.locator('#deck').boundingBox();
+      await page.mouse.click(deck!.x + deck!.width / 2, deck!.y + deck!.height / 2);
+      await page.waitForFunction(settled, undefined, { timeout: 40_000 });
+      const saved = await page.evaluate('JSON.stringify(window.__severgrow.state())');
+      await page.evaluate(() => history.replaceState(null, '', location.pathname));
+      await page.reload();
+      await page.waitForSelector('#menu:not([hidden])', { timeout: 40_000 });
+      // Poll for the reveal (the menu section is unhidden a beat before its buttons are styled).
+      const offered = await page.locator('#menu-continue').waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
+      check(`${vp.key}: a reload with a saved game still offers Continue`, offered);
+      await page.click('#menu-continue');
+      await page.waitForFunction(settled, undefined, { timeout: 40_000 });
+      const resumed = await page.evaluate('JSON.stringify(window.__severgrow.state())');
+      check(`${vp.key}: Continue resumes the exact saved game`, resumed === saved);
+      await context.close();
+    }
   }
 } finally {
   await browser.close().catch(() => undefined);

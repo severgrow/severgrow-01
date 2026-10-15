@@ -116,3 +116,30 @@ describe('LOG IN reuses the one Google flow and hides itself when signed in', ()
     expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = signedIn\(\) !== null/);
   });
 });
+
+// The saved-game resume is the ONLY way back into a match, so it must never depend on the menu
+// being re-rendered: a fresh boot, a reload and a return from a submenu all show the menu while
+// `shownScreen` may already say 'menu' (the menu restructure made PLAY a section of its own that
+// sets it back). Pinned here because the failure it prevents is silent and total: a player with a
+// finished turn and no Continue button (regression guard, 2026-10-15).
+describe('the saved-game resume is recomputed on every menu show', () => {
+  it('ships Continue hidden in the markup, so the product must reveal it', () => {
+    expect(menuSection).toMatch(/id="menu-continue"[^>]*hidden/);
+  });
+
+  it('recomputes it OUTSIDE the "the screen did not change" guard', () => {
+    const body = mainSource.slice(mainSource.indexOf('function showScreen('), mainSource.indexOf("$('gameover').hidden = true;"));
+    const call = body.indexOf('= syncMenuResume()');
+    const gate = body.indexOf('if (!same)');
+    expect(call, 'showScreen must recompute the resume').toBeGreaterThan(-1);
+    expect(gate, 'the menu layout is still re-rendered only on a change').toBeGreaterThan(-1);
+    expect(call, 'the resume must be recomputed before the !same gate, never inside it').toBeLessThan(gate);
+  });
+
+  it('reads the resume decision from storage, not from a cached flag', () => {
+    const sync = mainSource.slice(mainSource.indexOf('function syncMenuResume('), mainSource.indexOf('function showScreen('));
+    expect(sync).toMatch(/decodeSave<CoachProgress>\(store\.get\(SAVE_KEY\)\)/);
+    expect(sync).toMatch(/saved\.state\.phase !== 'GAME_OVER'/);
+    expect(sync).toMatch(/btn\.hidden = !canContinue/);
+  });
+});
