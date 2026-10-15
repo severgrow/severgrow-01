@@ -630,6 +630,9 @@ export const LIVE = Object.freeze({
   waitingTiny: 'Wait',
   cancel: 'Cancel',
   inLiveGame: 'In real time',
+  // The bolt's hidden words when a real-time duel is not possible because the opponent is away.
+  away: 'Opponent away',
+  awayAria: (name: string) => `Real time duel: ${name || 'your opponent'} is away`,
   notAvailable: 'Not available',
   busy: 'Busy',
   rateLimited: 'Try real time again later',
@@ -653,7 +656,8 @@ export const LIVE = Object.freeze({
   // Said BEFORE the situation, on the accept surface (the challenge glass): one short line...
   leaveWarning: 'Leaving real time loses',
   // ...plus the fuller explanation in the same glass window, never a wall of text.
-  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. A dropped connection gets 10 seconds to reconnect first. Normal 24-hour games are unaffected.',
+  // Owner, 2026-10-15: the reconnect grace is never explained to players (it still exists).
+  leaveWarningHelp: 'In real time, leaving or running out of time loses the whole match. Normal 24-hour games are unaffected.',
   // The header strip's "the opponent has dropped" state. The animated dots are added by the UI (the
   // shared `wait-dots` treatment), never baked into this string.
   opponentReconnecting: 'Opponent reconnecting',

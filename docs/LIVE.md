@@ -69,10 +69,14 @@ leaving them is free, and their first missed turn only warns and extends.
   gains weight near the end. The chip shows seconds under 10, a soft tick plays each second under 5
   on your turn, and the screen edge glows faintly (not with Reduce motion). Screen readers hear
   "N seconds left" only at 10, 8, 6, 4, 2 and "Time's up".
-- **The server keeps the time.** A turn's clock starts when the previous turn was thrown **plus a
-  6-second allowance** to watch that turn's replay (no replay-length report exists in the current
-  client, so the fixed allowance is used). Draw / Grow / Throw inside a turn never reset it.
-- **Going live mid-turn:** the player whose turn it is gets the live limit **plus 15 seconds**.
+- **The server keeps the time.** A turn's clock starts the moment the previous turn was thrown
+  (the replay allowance defaults to 0 since 2026-10-15). Draw / Grow / Throw inside a turn never reset it.
+- **The control is a bolt** (owner, 2026-10-15): one icon, no words, under the wordmark at the top
+  right (`web/src/ui/hud-rail.ts`), right edges aligned, with the full-screen icon to its left on a
+  computer. Outline = no real-time duel possible (the opponent is away, busy, or has real time off);
+  filled with a soft glow = the opponent is here, tap to invite; breathing = the invite waits, tap
+  to cancel; steady = the duel is live. The reconnect grace is never explained in the copy.
+- **Going live mid-turn:** the turn clock starts at the full live limit — no extra seconds (owner, 2026-10-15: every turn is exactly 60 s; the allowance knobs below default to 0).
 - **Time's up:** the server plays the rest of that turn — Draw from the deck (the throw pile only if
   the deck is empty), skip Grow, throw the card just drawn — always choosing from the engine's own
   legal moves, using only that player's own view. That player gets a **strike**.
@@ -119,8 +123,8 @@ are milliseconds unless noted.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `LIVE_TURN_MS` | `60000` | The live turn length. **This is the one to tune.** (`LIVE_TURN_MS_DEFAULT` in `server/src/live/config.ts` is the one source of truth; every number the client shows comes from the server's `limitMs`.) |
-| `LIVE_REPLAY_ALLOWANCE_MS` | `6000` | Time to watch the previous turn before the clock runs |
-| `LIVE_ENTRY_ALLOWANCE_MS` | `15000` | Extra time for the current player when both go live |
+| `LIVE_REPLAY_ALLOWANCE_MS` | `0` | Time to watch the previous turn before the clock runs (was 6000; owner 2026-10-15: every turn exactly the limit) |
+| `LIVE_ENTRY_ALLOWANCE_MS` | `0` | Extra time for the current player when both go live (was 15000) |
 | `LIVE_CHALLENGE_TTL_MS` | `45000` | How long a challenge waits for an answer |
 | `LIVE_PRESENCE_STALE_MS` | `45000` | No heartbeat for this long = offline (and therefore "dropped") |
 | `LIVE_RECONNECT_GRACE_MS` | `10000` | First drop: the turn clock is extended by this, then the turn is auto-played |

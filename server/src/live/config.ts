@@ -65,8 +65,10 @@ export const LIVE_TURN_MS_DEFAULT = 60 * SECOND;
 
 export const liveConfigFromEnv = (): LiveConfig => ({
   turnMs: envMs('LIVE_TURN_MS', LIVE_TURN_MS_DEFAULT),
-  replayAllowanceMs: envMs('LIVE_REPLAY_ALLOWANCE_MS', 6 * SECOND),
-  entryAllowanceMs: envMs('LIVE_ENTRY_ALLOWANCE_MS', 15 * SECOND),
+  // Owner, 2026-10-15: EVERY real-time turn is exactly the turn clock, the first ones included —
+  // no hidden extra seconds when a duel goes live (was 15 s) or to watch the replay (was 6 s).
+  replayAllowanceMs: envMs('LIVE_REPLAY_ALLOWANCE_MS', 0),
+  entryAllowanceMs: envMs('LIVE_ENTRY_ALLOWANCE_MS', 0),
   challengeTtlMs: envMs('LIVE_CHALLENGE_TTL_MS', 45 * SECOND),
   presenceStaleMs: envMs('LIVE_PRESENCE_STALE_MS', 45 * SECOND),
   reconnectGraceMs: envMs('LIVE_RECONNECT_GRACE_MS', 10 * SECOND),

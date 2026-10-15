@@ -22,9 +22,10 @@ describe('the reconnecting copy', () => {
   it('the forfeit warning is short too, with the longer explanation as its own line', () => {
     expect(LIVE.leaveWarning.length).toBeLessThanOrEqual(24);
     expect(LIVE.leaveConfirm).toBe('Leave and lose this real-time duel?');
-    // The help line explains BOTH ways a real-time duel is lost, and the reconnect grace.
+    // The help line explains BOTH ways a real-time duel is lost. Owner, 2026-10-15: the reconnect
+    // grace still exists but is never explained to players.
     expect(LIVE.leaveWarningHelp).toContain('loses the whole match');
-    expect(LIVE.leaveWarningHelp).toContain('10 seconds');
+    expect(LIVE.leaveWarningHelp).not.toMatch(/seconds|reconnect|grace/i);
     expect(LIVE.leaveWarningHelp).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });
@@ -60,21 +61,16 @@ describe('the shared wait-dots treatment', () => {
 const uiSource = readFileSync(new URL('../src/online/live/ui.ts', import.meta.url), 'utf8');
 
 describe('every waiting state reuses the one dots treatment', () => {
-  it('the challenge pill\'s waiting state uses the SHARED dots, not its own animation', () => {
-    expect(uiSource).toContain("import { WAIT_DOTS_CLASS, WAIT_DOTS_CSS, waitDots } from './wait-dots.js'");
-    // The pill builds the shared node once and toggles it (a rebuilt node would restart the CSS
-    // animation every 250 ms, before it could ever cycle).
-    expect(uiSource).toMatch(/const dots = waitDots\(\);/);
-    expect(uiSource).toMatch(/dots\.hidden = m\.kind !== 'waiting'/);
+  it('the reconnect notice uses the SHARED dots, not its own animation', () => {
+    expect(uiSource).toContain("import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js'");
+    expect(uiSource).toMatch(/reconnecting\.append\(el\('span', '', LIVE\.opponentReconnecting\), waitDots\(\)\)/);
     // No second dots animation: the one keyframe lives in the shared module only.
     expect(uiSource).not.toContain('@keyframes futasaku-wait-dot');
-    expect(uiSource.split('waitDots()').length - 1).toBeGreaterThanOrEqual(2); // reconnect notice + pill
   });
 
-  it('the reconnect notice and the pill both render the shared dots via waitDots()', () => {
-    expect(uiSource).toContain('waitDots()');
-    const uses = uiSource.match(/waitDots\(\)/g) ?? [];
-    expect(uses.length).toBeGreaterThanOrEqual(2);
+  it('the real-time bolt has no words and so no dots: a waiting invite breathes instead (owner, 2026-10-15)', () => {
+    expect(uiSource.match(/waitDots\(\)/g) ?? []).toHaveLength(1); // the reconnect notice only
+    expect(uiSource).toMatch(/\.live-pill\[data-state='waiting'\] svg \{ animation:live-bolt-wait/);
   });
 });
 
@@ -105,30 +101,23 @@ describe('the lane hides only nodes that still exist', () => {
     expect(cssSource).toContain('#duel-hud .live-chip');
   });
 
-  it('the pill dot rule stays: the pill still creates its own dot node', () => {
-    // `createPill` still builds the dot and appends it to the pill, so its rule is live too.
-    expect(uiSource).toContain("el('span', 'dot')");
-    expect(cssSource).toContain('#duel-hud .live-pill .dot');
-  });
 });
 
-describe('a waiting finger reaches the Cancel control', () => {
-  it('the Cancel control stacks above the pill tap extender', () => {
-    // The pill's transparent ::after (its 44px tap extender) is a positioned descendant painted
-    // above the pill's inline content, so without a stacking step it swallows every tap and the
-    // delegated click handler never sees the cancel target — the player could not back out.
-    expect(uiSource).toMatch(/\.live-pill \.cancel \{[^}]*position:\s*relative[^}]*z-index:\s*1/s);
+describe('the real-time bolt (owner, 2026-10-15): one icon, no words on screen', () => {
+  it('a waiting invite is cancelled by tapping the bolt itself — the whole 44px icon is the target', () => {
+    // The old pill had a separate ~55x13px "Cancel" word that needed a hit-box overlay. The bolt has
+    // no words: while an invite waits, a tap anywhere on the icon cancels it.
+    expect(uiSource).toMatch(/if \(state === 'waiting'\) onCancel\(\);/);
+    expect(uiSource).toMatch(/\.live-pill \{[^}]*width:44px;[^}]*height:44px;/s);
   });
 
-  it('the Cancel control is a REAL full-height target, not just its glyphs', () => {
-    // The word's own box is ~55x13 px — far under the 44px minimum every other control meets — and
-    // Cancel is the escape hatch out of a state the player may be stuck in. The transparent ::after
-    // overlay gives it a full-height hit box without moving the word. Measured in the header-lane
-    // e2e: 55x44 px at both 360 and 390 px (the lane's own 44 px is the ceiling).
-    expect(uiSource).toMatch(/\.live-pill \.cancel::after \{[^}]*content:''[^}]*position:absolute[^}]*inset:-16px 0/s);
-    // A purely additive overlay: it adds no background, border or shadow of its own.
-    expect(uiSource).toMatch(/\.live-pill \.cancel::after \{[^}]*\}/s);
-    const overlay = uiSource.match(/\.live-pill \.cancel::after \{([^}]*)\}/s)?.[1] ?? '';
-    expect(overlay).not.toMatch(/background|border(?!-radius)|box-shadow|outline/);
+  it('its words are never on screen: only a visually hidden label and the accessible name', () => {
+    expect(uiSource).toMatch(/\.live-pill \.label \{[^}]*clip-path:inset\(50%\)/s);
+    expect(uiSource).not.toContain("el('span', 'cancel'");
+  });
+
+  it('outline when not possible, filled and glowing when the opponent is here', () => {
+    expect(uiSource).toMatch(/\.live-pill:is\(\[data-state='away'\], \[data-state='disabled'\]\)/);
+    expect(uiSource).toMatch(/\[data-state='ready'\][^{]*\{[^}]*fill:#f2dfb0;[^}]*drop-shadow/s);
   });
 });

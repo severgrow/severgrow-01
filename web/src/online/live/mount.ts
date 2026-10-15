@@ -282,7 +282,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   const limitFallback = 60_000;
 
   const pillModel = (s: LiveStatusWire | null): PillModel => {
-    if (!s || s.status !== 'active' || s.live) return { kind: 'hidden' };
+    if (!s || s.status !== 'active') return { kind: 'hidden' };
+    if (s.live) return { kind: 'live' };
     const name = s.opponent.name ?? '';
     const pending = s.pending;
     if (pending && pending.fromMe) {
@@ -290,12 +291,12 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       const secs = Math.max(0, Math.ceil((toLocal(pending.expiresAt) - Date.now()) / 1000));
       return { kind: 'waiting', label: LIVE.waiting(name, secs), name, secs };
     }
-    if (s.opponent.presence === 'offline') return { kind: 'hidden' };
+    if (s.opponent.presence === 'offline') return { kind: 'away', name };
     if (s.me.liveMatchId || s.opponent.inLive || s.block === 'BUSY_LIVE') return { kind: 'disabled', label: LIVE.inLiveGame };
     if (s.block === 'NOT_AVAILABLE') return { kind: 'disabled', label: LIVE.notAvailable };
     if (s.block === 'BUSY' || s.opponent.presence === 'busy') return { kind: 'disabled', label: LIVE.busy };
     if (s.block === 'RATE_LIMITED') return { kind: 'disabled', label: LIVE.rateLimited };
-    if (s.block === 'OFFLINE') return { kind: 'hidden' };
+    if (s.block === 'OFFLINE') return { kind: 'away', name };
     if (pending) return { kind: 'hidden' }; // their challenge is on its way to my pop-up
     return { kind: 'ready', name, secs: Math.round((s.limitMs ?? limitFallback) / 1000) };
   };
