@@ -6552,7 +6552,11 @@ void import('./online/lobby-ui.js').then(async (m) => {
             // get — same DisplayEvent, same one mechanism offline uses: the event rides its anchor
             // step (the outcome cue, else the turn's closing sync) and fires exactly when that step
             // animates, via the single `displaySteps` consumer. Their play is never silent again.
-            if (IS_FUTA04) {
+            //
+            // Scope is the OPPONENT's replay only. `theirs` is read from the events (right for a
+            // live turn AND a catch-up after being away, and never true for the player's own
+            // aftermath, which keeps its current, silent-online behaviour).
+            if (IS_FUTA04 && replayedByOpponent(pending, os.seat)) {
               const displayEvent = displayEventForPlay(beforeState, os.state, catchUp, HUMAN);
               const cue = outcomeCue(catchUp, HUMAN);
               if (cue) outcomeSteps.set(cue.step, cue);
@@ -6560,9 +6564,8 @@ void import('./online/lobby-ui.js').then(async (m) => {
                 const anchor = cue?.step ?? catchUp.find((step) => step.k === 'sync');
                 if (anchor) displaySteps.set(anchor, displayEvent);
               }
-              // "Not ours": read from the events (right for a live turn AND a catch-up after being
-              // away, and never true for the player's own aftermath). Lifted at every drain below.
-              if (replayedByOpponent(pending, os.seat)) theirsDim.begin();
+              // "Not ours": dim the glass while it plays. Lifted at every drain point below.
+              theirsDim.begin();
             }
             // The enemy's finished turn is shown at the OFFLINE game's own pace (one tile at a
             // time, MOTION.move each) so the player can see what arrived. A catch-up after being
