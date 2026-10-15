@@ -22,6 +22,7 @@
 // leak, and the guard that fails this run if one appears.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { onlinePerspective } from '../src/online/perspective.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 import {
   type LocalDuel,
   type SeatSession,
@@ -245,7 +246,8 @@ const toMenu = async (s: SeatSession): Promise<void> => {
 /** Menu → online hub → tap this match's row → the duel board. */
 const enterDuel = async (s: SeatSession, matchId: string): Promise<void> => {
   await toMenu(s);
-  await clickVisible(s, '#menu-online');
+  // Play online is behind the PLAY doorway on product channels; openMenuEntry routes the doorway.
+  await openMenuEntry(s.page, 'menu-online');
   for (let i = 0; i < 100; i++) {
     if (await isVisible(s, '#online-hub')) break;
     await sleep(100);

@@ -2,7 +2,8 @@
 //   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/online-lobby-check.ts
 import { chromium } from 'playwright-core';
 import { preview } from 'vite';
-import { ONLINE } from '../../src/strings.js';
+import { MENU, ONLINE } from '../../src/strings.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const server = await preview({
   configFile: 'web/vite.config.ts',
@@ -63,13 +64,16 @@ try {
   check('nothing sits between the wordmark and the buttons (no tagline, no empty row)', menuColumn.between.length === 0, JSON.stringify(menuColumn.between));
   check('no empty gap where the tagline was (wordmark→buttons = the column gap)', menuColumn.gap === menuColumn.columnGap, `gap ${menuColumn.gap}px vs column ${menuColumn.columnGap}px`);
   check('title is FUTASAKU', ((await page.locator('#menu .title').textContent()) ?? '').toUpperCase().includes('FUTASAKU'));
-  check('Play online hidden without API URL', await page.locator('#menu-online').isHidden());
-  check('Play offline still present', await page.locator('#menu-new').isVisible());
-  const offlineLabel = ((await page.locator('#menu-new').textContent()) ?? '').toLowerCase();
-  check('Play offline label', offlineLabel.includes('offline') || offlineLabel.includes('new'));
-  await page.click('#menu-new');
+  // `#menu-online` carries the `hidden` attribute when the build has no duel endpoint (main.ts).
+  // Read the attribute, not isHidden(): the entry also sits inside the (hidden) PLAY submenu now,
+  // so a plain isHidden() would be true on every build and the check would be hollow.
+  check('Play online hidden without API URL', (await page.locator('#menu-online').getAttribute('hidden')) !== null);
+  // The offline entry now lives behind the PLAY doorway and reads "Training" on the product menu
+  // (main.ts sets MENU.training); reach it the way a player does, and keep proving the path works.
+  check('the offline entry keeps the product word', ((await page.locator('#menu-new').textContent()) ?? '').trim() === MENU.training);
+  await openMenuEntry(page, 'menu-new');
   await page.waitForSelector('#levels:not([hidden])', { timeout: 8000 });
-  check('Play offline opens difficulty', true);
+  check('the offline entry opens the difficulty picker', true);
   await page.click('#levels-back');
   await page.waitForSelector('#menu:not([hidden])');
   check('back to menu', true);

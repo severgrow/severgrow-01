@@ -26,6 +26,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -223,7 +224,7 @@ const openApp = async (
 };
 
 const openHub = async (page: Page): Promise<void> => {
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online');
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   const firstOk = page.locator('#online-first-ok');
   if (await firstOk.isVisible().catch(() => false)) await firstOk.click();
@@ -547,7 +548,7 @@ try {
 
   // ========================================================================== OFFLINE comparison
   const { context: ctxOff, page: off } = await openApp(browser, { width: 390, height: 844 });
-  await off.click('#menu-new');
+  await openMenuEntry(off, 'menu-new');
   await off.waitForSelector('#levels:not([hidden])', { timeout: 15_000 });
   await off.locator('.level-tile').first().click();
   await off.waitForSelector('#game:not([hidden])', { timeout: 20_000 });

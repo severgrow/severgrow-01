@@ -10,6 +10,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 // The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
@@ -160,10 +161,16 @@ try {
   await A.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
   await A.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
   await shoot(A, '01-menu-desktop-1280x800');
-  check('menu: Play online visible', await A.locator('#menu-online:not([hidden])').isVisible());
+  // The owner moved Play online behind the PLAY doorway (2026-10-15): the menu offers PLAY and the
+  // lobby entry is one tap inside it, so assert the player-reachable route, not a flat menu id.
+  await A.click('#menu-play');
+  await A.waitForSelector('#play-menu:not([hidden])', { timeout: 10_000 });
+  check('menu: Play online is visible inside the PLAY doorway', await A.locator('#menu-online').isVisible());
   // `#menu-tagline` was in this list; the owner removed the tagline from the menu on 2026-10-14, so
   // there is no such element to clip-check any more (asserting a hidden one would be hollow).
-  check('menu: no clipped text', (await clipped(A, '#menu .title, #menu-online, #menu-new')).length === 0);
+  check('menu: no clipped text', (await clipped(A, '#play-title, #menu-online, #menu-new')).length === 0);
+  await A.click('#play-back');
+  await A.waitForSelector('#menu:not([hidden])', { timeout: 10_000 });
 
   await B.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
   await B.waitForSelector('#menu:not([hidden])', { timeout: 25_000 });
@@ -171,14 +178,14 @@ try {
   await shoot(B, '02-menu-phone-390x844');
 
   // --- hub ---
-  await A.click('#menu-online');
+  await openMenuEntry(A, 'menu-online');
   await A.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await A.locator('#online-first-ok').isVisible().catch(() => false)) await A.click('#online-first-ok');
   await shoot(A, '03-hub-desktop');
   const hubClip = await clipped(A, '#online-hub h2, #online-create, #online-find, #online-join-open, .online-row-status');
   if (hubClip.length) finding('FIX', `hub text clipped: ${hubClip.join(' | ')}`);
 
-  await B.click('#menu-online');
+  await openMenuEntry(B, 'menu-online');
   await B.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await B.locator('#online-first-ok').isVisible().catch(() => false)) await B.click('#online-first-ok');
   await shoot(B, '04-hub-phone');
@@ -243,7 +250,7 @@ try {
   await A.waitForSelector('#sheet-menu:not([hidden])', { timeout: 6_000 });
   await A.click('#gm-main');
   await A.waitForSelector('#menu:not([hidden])', { timeout: 15_000 });
-  await A.click('#menu-online');
+  await openMenuEntry(A, 'menu-online');
   await A.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   const rowTime = ((await A.locator('#online-matches .online-row-time').first().textContent().catch(() => '')) ?? '').trim();
   check('lobby: the deadline is still in the match list as a duration', /\d+\s*(d|h|m)/i.test(rowTime) && !/\d:\d\d/.test(rowTime), rowTime);

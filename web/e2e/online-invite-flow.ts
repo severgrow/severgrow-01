@@ -14,6 +14,7 @@ import { createHttpServer } from '../../server/src/http.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { ONLINE } from '../../src/strings.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PHASE = process.env.PHASE ?? 'after';
@@ -80,8 +81,7 @@ const newContext = async (browser: Browser, origin: string): Promise<{ ctx: Brow
 };
 
 const openHub = async (page: Page, label: string): Promise<void> => {
-  await waitVisible(page, '#menu-online');
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online');
   await waitVisible(page, '#online-hub');
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
   check(`${label}: online hub open`, true);

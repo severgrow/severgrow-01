@@ -27,6 +27,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DuelClient } from '../../server/src/client.js';
 import type { FetchLike } from '../../server/src/client.js';
 import { resultReason, resultTitle } from '../src/logic/log.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME = process.env.PW_CHROMIUM;
 const OUT = new URL('../../docs/screens/offline-vs-online/', import.meta.url).pathname;
@@ -139,8 +140,7 @@ const newContext = async (browser: Browser, seat: 0 | 1, matchId: string, viewpo
 
 const openDuel = async (page: Page, matchId: string): Promise<void> => {
   if (await page.locator('#menu:not([hidden])').isVisible().catch(() => false)) {
-    await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-    await page.click('#menu-online');
+    await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   }
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
@@ -254,8 +254,7 @@ try {
   {
     const d = await newContext(browser, 0, match1.matchId, { width: 1280, height: 800 });
     try {
-      await d.page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-      await d.page.click('#menu-online');
+      await openMenuEntry(d.page, 'menu-online', { timeout: 40_000 });
       await d.page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
       if (await d.page.locator('#online-first-ok').isVisible().catch(() => false)) await d.page.click('#online-first-ok');
       await d.page.locator(`#online-matches li[data-match-id="${match1.matchId}"]`).click();

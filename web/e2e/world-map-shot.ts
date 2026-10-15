@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -59,8 +60,8 @@ await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown
 await page.waitForTimeout(600);
 await page.screenshot({ path: join(OUT, 'world-menu-390x844.png') });
 
-// Play online -> hub
-await page.click('#menu-online');
+// Play online -> hub (behind the PLAY doorway on product channels)
+await openMenuEntry(page, 'menu-online');
 await page.waitForTimeout(700);
 await page.screenshot({ path: join(OUT, 'world-hub-390x844.png') });
 

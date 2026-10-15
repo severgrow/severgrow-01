@@ -26,6 +26,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 // The deployed site bakes the REAL Edge API into its bundle (STUB only intercepts the stub host, so
@@ -129,8 +130,7 @@ const newPage = async (browser: Browser, vp: (typeof viewports)[number]): Promis
 };
 
 const openHub = async (page: Page): Promise<boolean> => {
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 25_000 });
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online', { timeout: 25_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
   return page.locator('#online-hub:not([hidden])').isVisible().catch(() => false);

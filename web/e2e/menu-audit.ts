@@ -17,6 +17,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const LABEL = process.argv[2] ?? 'after';
 const OUT = new URL('../../docs/screens/menus/', import.meta.url).pathname;
@@ -183,14 +184,14 @@ for (const vp of VIEWPORTS) {
     root: '#menu',
     column: '#menu .menu-inner',
     heading: '#menu .title',
-    buttons: ['#menu-continue', '#menu-online', '#menu-new', '#menu-tutorial', '#menu-settings'],
+    buttons: ['#menu-login', '#menu-play', '#menu-continue', '#menu-world', '#menu-tutorial', '#menu-settings'],
     logo: '#logo',
     wordmark: '#menu .title',
     buttonsColumn: '#menu .menu-buttons',
   });
 
-  // ---- 2. Difficulty pick ----
-  await page.click('#menu-new');
+  // ---- 2. Difficulty pick (Training is behind the PLAY doorway on product channels) ----
+  await openMenuEntry(page, 'menu-new');
   await ready(page, '#levels:not([hidden])');
   await shootClipped(page, 'levels', vp.key);
   const levels = await record({
@@ -209,7 +210,7 @@ for (const vp of VIEWPORTS) {
   await ready(page, '#menu:not([hidden])');
   const onlineVisible = await page.locator('#menu-online:not([hidden])').count();
   if (onlineVisible) {
-    await page.click('#menu-online');
+    await openMenuEntry(page, 'menu-online');
     const hubUp = await page.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 }).then(() => true).catch(() => false);
     if (!hubUp) {
       await page.evaluate(() => { const el = document.getElementById('online-hub'); if (el) el.hidden = false; });
@@ -292,7 +293,7 @@ for (const vp of VIEWPORTS) {
   // ---- 7. Pause menu + how-to (a real game) ----
   const menuUp = await page.locator('#menu:not([hidden])').count();
   if (menuUp) {
-    await page.click('#menu-new', { force: true });
+    await openMenuEntry(page, 'menu-new');
     await ready(page, '#levels:not([hidden])');
     const tile = page.locator('#levels .level-tile, #levels .difficulty-tile').nth(2);
     if (await tile.count()) await tile.click({ force: true });

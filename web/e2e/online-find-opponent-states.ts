@@ -20,6 +20,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { preview } from 'vite';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const API_PORT = 4301;
 const PREVIEW_PORT = 4208;
@@ -84,8 +85,7 @@ const visible = (page: Page, id: string) =>
  * matched immediately (`#game`) when somebody was already waiting — so wait for either.
  */
 const openFind = async (page: Page) => {
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 15_000 });
   await page.click('#online-find');
   await page.waitForFunction(

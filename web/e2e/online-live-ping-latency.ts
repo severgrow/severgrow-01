@@ -15,6 +15,7 @@
 import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
 import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 requireRealProjectOptIn('online-live-ping-latency'); // real Supabase project: opt-in only
 
 const LIVE_APP = 'https://severgrow.github.io/severgrow-01/futa0.5/';
@@ -106,8 +107,7 @@ const visible = (page: Page, id: string) =>
   }, id);
 
 const openHub = async (page: Page) => {
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 15_000 });
   if (await visible(page, 'online-first-card')) await page.click('#online-first-ok');
 };

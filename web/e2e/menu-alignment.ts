@@ -17,6 +17,7 @@
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { preview } from 'vite';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = Number(process.env.PORT ?? 4286);
 const CHROME =
@@ -147,8 +148,8 @@ for (const vp of VIEWPORTS) {
   check(`${tag}: the menu column is centred`, centred(menu.menu.centre), `offset ${menu.menu.centre}px`);
   check(`${tag}: the menu column does not overflow`, menu.menu.overflow === 0, `overflow ${menu.menu.overflow}px`);
 
-  // The difficulty pick
-  await page.click('#menu-new');
+  // The difficulty pick (Training lives behind the PLAY doorway on product channels)
+  await openMenuEntry(page, 'menu-new');
   await page.waitForSelector('#levels:not([hidden])', { timeout: 10_000 });
   await page.waitForTimeout(400);
   const levels = await measure(page);
@@ -160,7 +161,7 @@ for (const vp of VIEWPORTS) {
   await page.waitForSelector('#menu:not([hidden])', { timeout: 10_000 });
   const hubVisible = (await page.locator('#menu-online:not([hidden])').count()) > 0;
   if (hubVisible) {
-    await page.click('#menu-online');
+    await openMenuEntry(page, 'menu-online');
     const hubUp = await page.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 }).then(() => true).catch(() => false);
     if (!hubUp) await page.evaluate(() => { const el = document.getElementById('online-hub'); if (el) el.hidden = false; });
     await page.waitForTimeout(400);

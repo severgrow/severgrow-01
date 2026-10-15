@@ -20,6 +20,7 @@ import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { MemoryIdentityLinkStore, createAccountsRouter, supabaseAuthProvider } from '../../server/src/accounts/accounts.js';
 import { playerTag } from '../../src/player-tag.js';
 import { CHROME } from './helpers/local-duel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = 4243;
 const SHOTS = process.env.SHOTS === '1';
@@ -170,7 +171,7 @@ try {
   // ---- 1. a new player: the welcome, then guest play ----
   const d1 = await device(browser);
   await waitFor(() => d1.page.evaluate("document.body.classList.contains('acct-on')") as Promise<boolean>);
-  await d1.page.click('#menu-online');
+  await openMenuEntry(d1.page, 'menu-online');
   check('first Play online shows the welcome (Google or guest)', await waitFor(() => d1.page.locator('#acct-welcome').isVisible()));
   check('the hub is NOT opened behind it (nothing forced)', !(await d1.page.locator('#online-hub').isVisible()));
   const wFits = (await d1.page.evaluate(`(() => { const r = document.getElementById('acct-welcome').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && [...document.querySelectorAll('#acct-welcome button')].every(b => b.getBoundingClientRect().height >= 44); })()`)) as boolean;
@@ -187,7 +188,7 @@ try {
   const friend = await service.createGuest();
   await service.joinMatch(await service.authenticate(friend.token), invite);
   await d1.page.click('#online-back');
-  await d1.page.click('#menu-online');
+  await openMenuEntry(d1.page, 'menu-online');
   check('the welcome is shown only once', await hubOpen(d1.page) && !(await d1.page.locator('#acct-welcome').isVisible()));
   const friendShown = `${friend.player.displayName} #${playerTag(friend.player.id)}`;
   check('the match list shows the opponent with a name tag', await waitFor(async () => (await listText(d1.page)).includes(friendShown)), friendShown);
@@ -217,7 +218,7 @@ try {
 
   // ---- 3. another phone: the same Google brings back the exact player and matches ----
   const d2 = await device(browser, 360, 640);
-  await d2.page.click('#menu-online');
+  await openMenuEntry(d2.page, 'menu-online');
   await waitFor(() => d2.page.locator('#acct-welcome').isVisible());
   await shot(d2.page, 'welcome-360x640');
   fake.nextUser = 'alice';
@@ -231,7 +232,7 @@ try {
 
   // ---- 4. a phone that already played as someone else switches; nothing is merged ----
   const d3 = await device(browser);
-  await d3.page.click('#menu-online');
+  await openMenuEntry(d3.page, 'menu-online');
   await waitFor(() => d3.page.locator('#acct-welcome').isVisible());
   await d3.page.click('[data-acct="welcome-guest"]');
   await hubOpen(d3.page);
@@ -246,7 +247,7 @@ try {
 
   // ---- 5. a cancelled Google sign-in changes nothing ----
   const d4 = await device(browser);
-  await d4.page.click('#menu-online');
+  await openMenuEntry(d4.page, 'menu-online');
   await waitFor(() => d4.page.locator('#acct-welcome').isVisible());
   await d4.page.click('[data-acct="welcome-guest"]');
   await hubOpen(d4.page);
@@ -266,7 +267,7 @@ try {
   await d3.page.click('[data-acct="confirm-yes"]');
   await d3.page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
   check('signed out: this phone forgot the account', (await identity(d3.page)) === null);
-  await d3.page.click('#menu-online');
+  await openMenuEntry(d3.page, 'menu-online');
   check('signed out: the welcome offers Google again', await waitFor(() => d3.page.locator('#acct-welcome').isVisible()));
 
   await d1.page.click('[data-acct="delete"]');
@@ -299,7 +300,7 @@ try {
   // ---- 8. Google not switched on in Supabase yet: nothing about accounts shows ----
   fake.googleOn = false;
   const d5 = await device(browser);
-  await d5.page.click('#menu-online');
+  await openMenuEntry(d5.page, 'menu-online');
   check('Google off: Play online goes straight to the hub', await hubOpen(d5.page));
   check('Google off: no welcome, no Google button anywhere', !(await d5.page.locator('#acct-welcome').isVisible()) && (await d5.page.locator('.acct-google:visible').count()) === 0);
   for (const d of [d1, d2, d3, d4, d5]) await d.context.close();

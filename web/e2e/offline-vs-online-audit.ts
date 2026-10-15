@@ -29,6 +29,7 @@ import {
 } from './helpers/online-matrix.js';
 import type { DeviceProfile, Session } from './helpers/online-matrix.js';
 import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 requireRealProjectOptIn('offline-vs-online-audit'); // real Supabase project: opt-in only
 
 const OFFLINE_URL = process.env.OFFLINE_URL ?? 'http://127.0.0.1:4180/';
@@ -109,7 +110,7 @@ const runOffline = async (device: DeviceProfile, browser: Browser): Promise<void
     rec.menuControls = await visibleControls(page);
     await shot({ page } as Session, `${label}-1-menu`, SCREEN_DIR);
 
-    await clickCenter(page, '#menu-new');
+    await openMenuEntry(page, 'menu-new');
     await page.waitForSelector('#levels:not([hidden])', { timeout: 10_000 }).catch(() => null);
     await sleep(300);
     rec.levelControls = await visibleControls(page);

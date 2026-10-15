@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { preview } from 'vite';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 import { createHttpServer } from '../../server/src/http.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
@@ -126,7 +127,7 @@ const browser = await chromium.launch({ executablePath: CHROME });
 
 try {
   const pageA = await openPlayer(browser, origin, 'A');
-  await pageA.click('#menu-online');
+  await openMenuEntry(pageA, 'menu-online');
   await waitVisible(pageA, '#online-hub');
   check('A: online hub open', true);
 
@@ -161,7 +162,7 @@ try {
   }
 
   const pageB = await openPlayer(browser, origin, 'B');
-  await pageB.click('#menu-online');
+  await openMenuEntry(pageB, 'menu-online');
   await waitVisible(pageB, '#online-hub');
   const firstOkB = pageB.locator('#online-first-ok');
   if (await firstOkB.isVisible().catch(() => false)) await firstOkB.click();

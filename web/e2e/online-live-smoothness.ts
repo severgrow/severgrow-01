@@ -19,6 +19,7 @@
 import { isLocalTarget, requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 import { chromium } from 'playwright-core';
 import type { BrowserContext, CDPSession, Page } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const LIVE_APP = process.env.LIVE_APP ?? 'https://severgrow.github.io/severgrow-01/futa0.5/';
 const LIVE_API = process.env.LIVE_API ?? 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
@@ -175,8 +176,7 @@ const open = async (guest: Guest, hash = ''): Promise<Seat> => {
 };
 
 const openHub = async (page: Page) => {
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
 };

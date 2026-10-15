@@ -11,6 +11,7 @@ import type { Browser, BrowserContext, Page, Request, Response } from 'playwrigh
 import { onlinePerspective } from '../../src/online/perspective.js';
 import { coordKey } from '../../../src/engine/index.js';
 import type { Action, Player } from '../../../src/engine/index.js';
+import { openMenuEntry, openOnlineHub } from './menu-nav.js';
 
 export const LIVE_APP = 'https://severgrow.github.io/severgrow-01/futa0.5/';
 export const LIVE_API = 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
@@ -744,9 +745,7 @@ export const openHub = async (session: Session): Promise<void> => {
     }
   }
   await waitHidden(page, '#menu');
-  await waitHidden(page, '#menu-online', 30_000);
-  await page.click('#menu-online');
-  await waitHidden(page, '#online-hub', 30_000);
+  await openOnlineHub(page, { timeout: 30_000 });
   const firstOk = page.locator('#online-first-ok');
   if (await firstOk.isVisible().catch(() => false)) await firstOk.click();
 };
@@ -790,7 +789,9 @@ export const joinDuelViaLink = async (session: Session, inviteCode: string): Pro
     .then(() => true)
     .catch(() => false);
   if (!joinVisible) {
-    await page.click('#menu-online');
+    // The deep link did not land on the join screen: reach it the way a player does (PLAY doorway
+    // on product channels, the flat menu on legacy ones).
+    await openMenuEntry(page, 'menu-online', { timeout: 20_000 });
     await waitHidden(page, '#online-join', 20_000);
   }
   const field = page.locator('#online-join-code');
@@ -896,9 +897,7 @@ export const readMatchListDeadline = async (
   try {
     await page.goto(LIVE_APP, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await waitHidden(page, '#menu');
-    await waitHidden(page, '#menu-online', 30_000);
-    await page.click('#menu-online');
-    await waitHidden(page, '#online-hub', 30_000);
+    await openOnlineHub(page, { timeout: 30_000 });
     const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);
     await row.waitFor({ state: 'visible', timeout: 25_000 });
     const time = ((await row.locator('.online-row-time').textContent()) ?? '').replace(/\s+/g, ' ').trim();

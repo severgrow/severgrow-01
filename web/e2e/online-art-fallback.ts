@@ -29,6 +29,7 @@ import { DEFAULT_LIVE_CONFIG } from '../../server/src/live/config.js';
 import { MemoryLiveStore } from '../../server/src/live/memory.js';
 import { createLiveRuntime } from '../../server/src/live/runtime.js';
 import { CHROME } from './helpers/local-duel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const PORT = 4396;
 const PREFIX = 'futa05:';
@@ -139,8 +140,8 @@ const openSeat = async (browser: Browser, guests: [Guest, Guest], matchId: strin
 const openDuel = async (s: Seat, matchId: string): Promise<void> => {
   const { page } = s;
   for (let attempt = 0; attempt < 3; attempt++) {
-    await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-    await page.click('#menu-online');
+    // Play online is behind the PLAY doorway on product channels.
+    await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
     await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
     if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
     const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);

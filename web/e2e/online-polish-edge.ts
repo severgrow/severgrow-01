@@ -13,6 +13,7 @@
 //      screen is not colour-only;
 //   6. a whole match with no console error or warning on CHROMIUM and on WEBKIT.
 import { chromium, webkit } from 'playwright-core';
+import { openMenuEntry } from './helpers/menu-nav.js';
 import {
   type SeatSession,
   endTurnViaPage,
@@ -326,7 +327,7 @@ for (const [engineName, executablePath] of [['chromium', CHROME], ['webkit', und
     );
     await page.goto(local.origin, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#menu', { timeout: 30_000 });
-    await page.click('#menu-online');
+    await openMenuEntry(page, 'menu-online');
     await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
     if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
     const row = page.locator(`#online-matches li[data-match-id="${match.matchId}"]`);

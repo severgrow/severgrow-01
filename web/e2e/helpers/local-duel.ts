@@ -22,6 +22,7 @@ import { DEFAULT_LIVE_CONFIG } from '../../../server/src/live/config.js';
 import { MemoryLiveStore } from '../../../server/src/live/memory.js';
 import { createLiveRuntime } from '../../../server/src/live/runtime.js';
 import type { FetchLike } from '../../../server/src/client.js';
+import { openMenuEntry } from './menu-nav.js';
 
 /** The Chromium the other e2e suites use; override with PW_CHROMIUM. */
 export const CHROME =
@@ -248,8 +249,8 @@ export const openSeat = async (
 /** Walk the lobby into the running duel (the match row resumes it). */
 export const openDuel = async (session: SeatSession, matchId: string): Promise<void> => {
   const { page } = session;
-  await page.waitForSelector('#menu-online:not([hidden])', { timeout: 40_000 });
-  await page.click('#menu-online');
+  // Play online lives behind the PLAY doorway on product channels; this opens it either way.
+  await openMenuEntry(page, 'menu-online', { timeout: 40_000 });
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   if (await page.locator('#online-first-ok').isVisible().catch(() => false)) await page.click('#online-first-ok');
   const row = page.locator(`#online-matches li[data-match-id="${matchId}"]`);

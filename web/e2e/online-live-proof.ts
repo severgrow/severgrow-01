@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, ConsoleMessage, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
 // The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
@@ -76,7 +77,7 @@ try {
 
   // --- Player A: guest + create ---
   const pageA = await openPlayer(browser, 'A', loggedA);
-  await pageA.click('#menu-online');
+  await openMenuEntry(pageA, 'menu-online');
   await pageA.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   check('A: online hub open', true);
   await dismissFirstCard(pageA);
@@ -91,7 +92,7 @@ try {
 
   // --- Player B: guest + join ---
   const pageB = await openPlayer(browser, 'B', loggedB);
-  await pageB.click('#menu-online');
+  await openMenuEntry(pageB, 'menu-online');
   await pageB.waitForSelector('#online-hub:not([hidden])', { timeout: 20_000 });
   await dismissFirstCard(pageB);
   const hubNoticeB = (await pageB.locator('#online-hub-notice').textContent().catch(() => '')) ?? '';

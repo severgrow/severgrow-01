@@ -21,6 +21,7 @@ import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
 import { createHttpServer } from '../../server/src/http.js';
 import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const CHROME =
   process.env.PW_CHROMIUM ??
@@ -106,7 +107,7 @@ const openApp = async (
 };
 
 const openHub = async (page: Page): Promise<void> => {
-  await page.click('#menu-online');
+  await openMenuEntry(page, 'menu-online');
   await page.waitForSelector('#online-hub:not([hidden])', { timeout: 25_000 });
   const firstOk = page.locator('#online-first-ok');
   if (await firstOk.isVisible().catch(() => false)) await firstOk.click();
