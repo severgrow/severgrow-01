@@ -85,6 +85,7 @@ import {
   CAMPAIGN_CHAPTERS,
   CAMPAIGN_LEVELS,
   campaignLevelById,
+  completedCount,
   currentLevel,
   isCompleted,
   isUnlocked,
@@ -774,8 +775,7 @@ function campaignTile(level: CampaignLevel, currentId: string): HTMLButtonElemen
 function renderCampaignScreen() {
   $('campaign-heading').textContent = CAMPAIGN.heading;
   const total = CAMPAIGN_LEVELS.length;
-  const done = CAMPAIGN_LEVELS.filter((l) => isCompleted(campaignProgress, l.id)).length;
-  $('campaign-progress').textContent = CAMPAIGN.progress(done, total);
+  $('campaign-progress').textContent = CAMPAIGN.progress(completedCount(campaignProgress), total);
   const resume = campaignResume();
   const hint = $('campaign-resume-hint');
   hint.hidden = !resume;

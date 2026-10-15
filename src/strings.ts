@@ -873,9 +873,7 @@ export const CAMPAIGN = Object.freeze({
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
   play: 'Continue',
-  /** a completed level's small action */
-  replay: 'Replay',
-  /** the state words on a level tile */
+  /** the state words on a level tile (a completed tile is tapped to replay it) */
   completed: 'Completed',
   current: 'You are here',
   locked: 'Locked',
