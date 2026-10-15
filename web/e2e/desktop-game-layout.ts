@@ -1,6 +1,6 @@
 // The game on a computer (owner, 2026-10-15): the board has the same air above and below it, the
 // hand keeps clear of the bottom edge, the cockpit sits centred in the empty space right of the
-// board, and a full-screen icon stays in the header during the game. Phones are untouched.
+// board, and a full-screen icon stays under the wordmark during the game. Phones are untouched.
 //
 //   PW_CHROMIUM=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npx tsx web/e2e/desktop-game-layout.ts
 //   SHOTS=1 ... also writes docs/screens/desktop-game/*.png
@@ -35,7 +35,7 @@ const MEASURE = `(() => {
     handBottom: cards.length ? Math.max(...cards.map(c => c.bottom)) : null, menu: R(document.getElementById('hud-menu')), brand: R(document.getElementById('hud-brand')),
     win: (() => { const b = document.getElementById('hud-window'); return b && !b.hidden && getComputedStyle(b).display !== 'none' ? R(b) : null; })() };
 })()`;
-type M = { layout: string; board: { l: number; t: number; r: number; b: number; w: number }; box: { l: number; r: number; w: number }; handBottom: number; menu: { r: number; b: number }; brand: { l: number }; win: { l: number; r: number; t: number; b: number } | null };
+type M = { layout: string; board: { l: number; t: number; r: number; b: number; w: number }; box: { l: number; r: number; w: number }; handBottom: number; menu: { r: number; b: number }; brand: { l: number; r: number; b: number }; win: { l: number; r: number; t: number; b: number } | null };
 try {
   for (const [w, h] of [[1440, 900], [1920, 1080], [1280, 720], [1024, 768]] as const) {
     const page = await browser.newPage({ viewport: { width: w, height: h } });
@@ -53,7 +53,8 @@ try {
     const roomL = m.box.l - m.board.r, roomR = w - m.box.r;
     if (m.board.r + 24 + m.box.w < w) check(`${w}x${h}: the cockpit is centred in the space right of the board`, Math.abs(roomL - roomR) <= 4, `${Math.round(roomL)} / ${Math.round(roomR)}px`);
     else check(`${w}x${h}: no room to centre: the cockpit stays where it was`, roomR <= 4, `${Math.round(roomR)}px`);
-    check(`${w}x${h}: a full-screen icon sits in the header, just left of the wordmark`, !!m.win && m.win.r <= m.brand.l + 1 && m.win.r >= m.brand.l - 12 && m.win.t < 10, JSON.stringify(m.win));
+    // Owner, 2026-10-15: under the wordmark, right edges aligned (the real-time bolt, online only, goes to its right).
+    check(`${w}x${h}: a full-screen icon sits under the wordmark, right edges aligned`, !!m.win && m.win.t >= m.brand.b - 1 && Math.abs(m.win.r - m.brand.r) <= 2, JSON.stringify({ win: m.win, brand: m.brand }));
     check(`${w}x${h}: it is icon-only with a name`, (await page.locator('#hud-window').innerText()).trim() === '' && (await page.getAttribute('#hud-window', 'aria-label')) === 'Full screen');
     if (SHOTS) {
       mkdirSync('docs/screens/desktop-game', { recursive: true });

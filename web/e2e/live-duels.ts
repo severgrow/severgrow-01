@@ -446,7 +446,8 @@ try {
     await a.page.locator('[data-live="pill"]').click();
     await waitFor(() => vis(b.page, '[data-mode="challenge"]'), 15_000);
     await shot(a, '03-waiting');
-    check('5: the waiting pill never runs under the logo', (await a.page.evaluate(`(() => { const p = document.querySelector('[data-live="pill"]').getBoundingClientRect(); const l = document.querySelector('#futasaku-hud-white'); const r = l ? l.getBoundingClientRect() : null; return !r || p.right <= r.left + 1 || r.width === 0; })()`)) as boolean);
+    // Owner, 2026-10-15: the control is the bolt in the rail UNDER the wordmark, right edges aligned.
+    check('5: the waiting bolt never covers the logo (it sits under it, right edges aligned)', (await a.page.evaluate(`(() => { const p = document.querySelector('[data-live="pill"]').getBoundingClientRect(); const l = document.getElementById('hud-brand'); const r = l ? l.getBoundingClientRect() : null; return !r || r.width === 0 || (p.top >= r.bottom - 1 && Math.abs(p.right - r.right) <= 2); })()`)) as boolean);
     await shot(b, '04-challenge-popup');
     await b.page.locator('[data-live="decline"]').click();
     check('5: sender sees a quiet "Not now"', await waitFor(async () => (await text(a.page, '[data-mode="note"]')).includes('Not now') && (await vis(a.page, '[data-mode="note"]')), 10_000));

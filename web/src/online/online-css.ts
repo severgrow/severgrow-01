@@ -321,28 +321,10 @@ export const ONLINE_CSS = `
    these neutralisations win no matter which stylesheet is injected last.
    - the chip still HAS a node (the go-live moment lights it and nothing else does), but the strip
      shows no chip: the plain m:ss clock is the lane's only number, so it is hidden here outright;
-   - the "Real time" pill is a control, not a chip: it keeps its 44px tap target but loses every
-     frame (no border, background, radius or shadow) so it reads as plain header text;
    - the two small circles that used to sit beside the chip (its lamp) and the clock (its dot) are
      both GONE (owner's cleanup): the nodes themselves were deleted, so no rule hides them here. */
 #duel-hud .live-chip { display: none !important; }
-#duel-hud .live-pill {
-  order: 3;
-  pointer-events: auto;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  padding: 0 2px;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-}
-#duel-hud .live-pill::after { inset: -6px 0; } /* keep the 44px touch target without a frame */
-#duel-hud .live-pill[disabled] { border: 0; opacity: .62; }
-/* The pill's own dot node still EXISTS (it breathes in the ready state), so this rule is live: it
-   keeps that dot out of the header lane. Do not delete it with the two deleted circles above. */
-#duel-hud .live-pill .dot { display: none; }
+/* The real-time control is now the bolt in the rail under the wordmark (live/ui.ts), not in this lane. */
 
 /* ---- The shared world map (the seed spike): one tile per won duel, the same grid for everyone.
    A quiet 8x8 field of cells: held cells carry the holder's initial, free cells stay recessed. No

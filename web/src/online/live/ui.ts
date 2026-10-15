@@ -1,10 +1,11 @@
 // Live duels — the DOM pieces. Same dark glass, moss and lava, same fonts; no new visual language.
 // Everything is created here and appended to existing containers; no shared markup is edited.
+import { hudRail } from '../../ui/hud-rail.js';
 import { LIVE } from '../../../../src/strings.js';
 import { glassBaseCss } from '../../player/glass-surface.js';
 import type { ChallengeWire } from './api.js';
 import type { PopupPort } from './center.js';
-import { WAIT_DOTS_CLASS, WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
+import { WAIT_DOTS_CSS, waitDots } from './wait-dots.js';
 
 const MOSS = '#8fbf6a';
 const MOSS_INK = '#0d100d';
@@ -40,49 +41,24 @@ ${WAIT_DOTS_CSS}
   letter-spacing:.08em; cursor:pointer; border:1px solid rgba(214,204,177,.22); background:rgba(255,255,255,.04); color:${CREAM}; }
 .live-glass .lg-actions button.primary { background:${MOSS}; border-color:${MOSS}; color:${MOSS_INK}; }
 .live-glass .lg-actions button:focus-visible { outline:2px solid ${CREAM}; outline-offset:2px; }
-.live-pill { order:3; flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; min-height:32px; padding:0 10px; margin:6px 0;
-  border-radius:999px; border:1px solid rgba(143,191,106,.45); background:rgba(8,10,10,.42); color:${CREAM};
-  font:600 12px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace); letter-spacing:.06em; white-space:nowrap; cursor:pointer;
-  position:relative; pointer-events:auto; } /* the strip is click-through; the pill is a real control */
-.live-pill::after { content:''; position:absolute; inset:-6px 0; } /* 44px touch target */
-.live-pill .dot { width:7px; height:7px; border-radius:50%; background:${MOSS}; box-shadow:0 0 6px ${MOSS}; }
-.live-pill[disabled] { opacity:.62; cursor:default; border-color:rgba(214,204,177,.18); }
-.live-pill[disabled] .dot { background:#b7a98a; box-shadow:none; }
-.live-pill[data-state='waiting'] .dot { animation:live-breathe 1.2s ease-in-out infinite; }
-/* The waiting pill keeps its CONTENT width (never shrinks): the word is the whole point of the
-   state, and a shrinking flex item made the label the only thing that could give — it collapsed to
-   a few px at 360 px, so the player could not read that they were waiting. The lane is built to
-   ticker its own message, so it absorbs whatever the pill does not take. */
-.live-pill[data-state='waiting'] { flex:0 0 auto; max-width:100%; }
-.live-pill .label { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-/* The waiting state's SHARED animated dots: the pill's own gap already spaces them, so the
-   component's default 2px left margin is dropped here (one treatment, local spacing). */
-.live-pill .${WAIT_DOTS_CLASS} { margin-left:0; }
-.live-pill .label .full { display:none; }
-.live-pill .label .short { display:none; }
-/* The state word by width: the narrowest phones show the one-word tiny form, a normal phone the
-   short "Waiting", and a wide enough strip the full "Waiting for <name>". Exactly one shows. */
-@media (min-width: 375px) { .live-pill .label .tiny { display:none; } .live-pill .label .short { display:inline; } }
-@media (min-width: 560px) { .live-pill .label .full { display:inline; } .live-pill .label .short { display:none; } }
-.live-pill .secs { flex:none; font-variant-numeric:tabular-nums; display:none; }
-.live-pill .secs:empty { display:none; }
-/* Measured: on a phone the countdown is what squeezes the waiting word out of the pill (the label
-   collapsed to 0-10 px), so it is shown only where there is room — the SAME 560 px breakpoint the
-   full/short name already uses. The word and the animated dots always win; the seconds are a bonus. */
-@media (min-width: 560px) { .live-pill .secs:not(:empty) { display:inline; } }
+/* The real-time BOLT (owner, 2026-10-15): one icon, no words, in the rail under the wordmark
+   (ui/hud-rail.ts), rightmost. An outline while a real-time duel is not possible (the opponent is
+   away, busy, or has real time switched off); filled and softly glowing when the opponent is here
+   and a tap invites them; breathing while the invite waits (a tap cancels it); steady while the
+   duel is live. Its words live only in the accessible name and a visually hidden label. */
+.live-pill { order:2; width:44px; height:44px; display:grid; place-items:center end; padding:0; border:0; border-radius:10px;
+  background:transparent; color:${CREAM}; cursor:pointer; position:relative; -webkit-tap-highlight-color:transparent; }
+.live-pill svg { width:24px; height:24px; overflow:visible; }
+.live-pill svg path { fill:transparent; stroke:currentColor; stroke-width:1.5; stroke-linejoin:round; transition:fill .3s ease, filter .3s ease, opacity .3s ease; }
+.live-pill:is([data-state='away'], [data-state='disabled']) { opacity:.6; cursor:default; }
+.live-pill:is([data-state='ready'], [data-state='waiting'], [data-state='live']) svg path {
+  fill:#f2dfb0; stroke:#f6e6bd; filter:drop-shadow(0 0 3px rgba(242,214,140,.55)) drop-shadow(0 0 8px rgba(242,200,110,.28)); }
+.live-pill[data-state='live'] { cursor:default; }
+.live-pill[data-state='waiting'] svg { animation:live-bolt-wait 1.4s ease-in-out infinite; }
+@keyframes live-bolt-wait { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+.live-pill:focus-visible { outline:2px solid ${CREAM}; outline-offset:-2px; }
+.live-pill .label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .live-on [data-duel-urgency][data-live-clock] { display:inline-flex !important; } /* the live clock owns this slot */
-/* The Cancel control must actually be REACHABLE by a finger: the pill's transparent ::after (the
-   44px tap extender) is a positioned descendant painted above the pill's inline content, so without
-   a stacking step it swallows every tap and the delegated handler never sees the cancel target. */
-.live-pill .cancel { position:relative; z-index:1; margin-left:3px; padding:0 0 0 6px; border-left:1px solid rgba(214,204,177,.22); color:#e2d4b4; }
-/* ...and it must be a REAL target, not just its glyphs: the word's own box is only ~55x13 px, far
-   below the 44px minimum every other control meets, and Cancel is the escape hatch out of a state
-   the player may be stuck in. This transparent overlay gives it a full-height, full-width hit box
-   (measured 55x44 px; the lane's own 44 px is the ceiling) WITHOUT moving the word, its type or its
-   colour — the box is purely additive. It is a child of the Cancel span, whose z-index:1 stacking
-   context keeps the whole thing above the pill's own ::after, so where the two hit areas overlap the
-   Cancel wins; everywhere else the pill's extender still owns the tap (see the header-lane e2e). */
-.live-pill .cancel::after { content:''; position:absolute; inset:-16px 0; }
 .live-pill[hidden], .live-chip[hidden] { display:none; }
 .live-chip { order:-1; flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; min-height:24px; padding:0 8px; border-radius:6px;
   background:rgba(224,115,92,.14); border:1px solid rgba(224,115,92,.55); color:#f6d3c8;
@@ -132,10 +108,10 @@ ${WAIT_DOTS_CSS}
 @keyframes live-light { 0% { box-shadow:0 0 0 rgba(224,115,92,0); transform:scale(.9); } 40% { box-shadow:0 0 18px rgba(224,115,92,.7); transform:scale(1.06); } 100% { box-shadow:0 0 0 rgba(224,115,92,0); transform:scale(1); } }
 @keyframes live-pulse { 0% { transform:scale(1); opacity:1 } 50% { transform:scale(1.35); opacity:.6 } 100% { transform:scale(1); opacity:1 } }
 .large-text .live-glass .lg-name { font-size:19px; }
-.large-text .live-glass .lg-actions button, .large-text .live-pill { font-size:15px; }
+.large-text .live-glass .lg-actions button { font-size:15px; }
 .large-text .live-chip { font-size:13px; }
-.reduce-motion .live-chip.lighting, .reduce-motion .live-ring.pulse, .reduce-motion .live-pill[data-state='waiting'] .dot { animation:none !important; }
-@media (prefers-reduced-motion: reduce) { .live-chip.lighting, .live-ring.pulse, .live-pill[data-state='waiting'] .dot { animation:none !important; } }
+.reduce-motion .live-chip.lighting, .reduce-motion .live-ring.pulse, .reduce-motion .live-pill[data-state='waiting'] svg { animation:none !important; }
+@media (prefers-reduced-motion: reduce) { .live-chip.lighting, .live-ring.pulse, .live-pill[data-state='waiting'] svg { animation:none !important; } }
 `;
 
 export const injectLiveStyles = (): void => {
@@ -339,45 +315,35 @@ export const createGlassNote = (): ((text: string, ms?: number) => void) => {
 
 export type PillModel =
   | { kind: 'hidden' }
+  | { kind: 'away'; name: string }
   | { kind: 'ready'; name: string; secs: number }
   | { kind: 'disabled'; label: string }
-  | { kind: 'waiting'; label: string; name: string; secs: number };
+  | { kind: 'waiting'; label: string; name: string; secs: number }
+  | { kind: 'live' };
+
+const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2.5 5 13.6h6.1l-1.3 7.9 8.6-11.3h-6.2z"/></svg>';
 
 /**
- * The quiet real-time pill in the duel status strip (appended into `#duel-hud`): a "Real time"
- * control when a real-time duel can start, and the "Waiting for <name>" state while a challenge is
- * open. It is a control, not a chip — the header's own surface shows through it.
+ * The real-time bolt (owner, 2026-10-15): an icon-only control in the rail under the wordmark.
+ * Outline = no real-time duel possible right now; filled and glowing = the opponent is here, tap to
+ * invite; breathing = the invite is waiting, tap to cancel; steady = the duel is live. The state
+ * words stay in a visually hidden `.label` and the accessible name, never on screen.
  */
 export const createPill = (onTap: () => void, onCancel: () => void) => {
   const pill = el('button', 'live-pill');
   pill.type = 'button';
   pill.dataset.live = 'pill';
   pill.hidden = true;
-  const dot = el('span', 'dot');
-  dot.setAttribute('aria-hidden', 'true');
+  pill.innerHTML = BOLT;
   const label = el('span', 'label');
-  const secs = el('span', 'secs');
-  const cancel = el('span', 'cancel', LIVE.cancel);
-  cancel.setAttribute('role', 'button');
-  cancel.dataset.live = 'cancel';
-  // The waiting state carries the SHARED animated ellipsis (the owner's rule: a waiting/connecting
-  // state always shows it). It is ONE stable node, toggled — never rebuilt per render, because the
-  // pill re-renders every 250 ms while a challenge is open and a rebuilt node would restart the CSS
-  // animation before it could ever cycle.
-  const dots = waitDots();
-  dots.hidden = true;
-  pill.append(dot, label, dots, secs, cancel);
+  pill.append(label);
   let state: PillModel['kind'] = 'hidden';
-  pill.addEventListener('click', (e) => {
-    if (state === 'waiting') {
-      if ((e.target as HTMLElement).closest('[data-live="cancel"]')) onCancel();
-      return;
-    }
-    if (state === 'ready') onTap();
+  pill.addEventListener('click', () => {
+    if (state === 'waiting') onCancel(); // the whole icon is the way back out of a waiting invite
+    else if (state === 'ready') onTap();
   });
   const attach = () => {
-    const hud = document.getElementById('duel-hud');
-    if (hud && pill.parentElement !== hud) hud.append(pill);
+    if (!pill.parentElement) hudRail().append(pill);
   };
   return {
     element: pill,
@@ -386,24 +352,24 @@ export const createPill = (onTap: () => void, onCancel: () => void) => {
       state = m.kind;
       pill.dataset.state = m.kind;
       pill.hidden = m.kind === 'hidden';
-      cancel.hidden = m.kind !== 'waiting';
-      pill.disabled = m.kind === 'disabled';
+      pill.setAttribute('aria-disabled', String(!(m.kind === 'ready' || m.kind === 'waiting')));
+      label.textContent = '';
       if (m.kind === 'ready') {
         label.textContent = LIVE.goLive;
         pill.setAttribute('aria-label', LIVE.goLiveAria(m.name, m.secs));
       } else if (m.kind === 'waiting') {
-        label.textContent = '';
         label.append(el('span', 'full', LIVE.waitingFor(m.name)), el('span', 'short', LIVE.waitingShort), el('span', 'tiny', LIVE.waitingTiny));
         pill.setAttribute('aria-label', `${m.label}. ${LIVE.cancel}`);
       } else if (m.kind === 'disabled') {
         label.textContent = m.label;
         pill.setAttribute('aria-label', m.label);
+      } else if (m.kind === 'away') {
+        label.textContent = LIVE.away;
+        pill.setAttribute('aria-label', LIVE.awayAria(m.name));
+      } else if (m.kind === 'live') {
+        label.textContent = LIVE.live;
+        pill.setAttribute('aria-label', LIVE.chipAria(0));
       }
-      // The animated ellipsis marks a waiting state, and only a waiting state.
-      dots.hidden = m.kind !== 'waiting';
-      // The seconds countdown is kept: it is the useful fact (how long the challenge stays open) and
-      // the dots add only a few px, while the label itself shrinks with an ellipsis if space is tight.
-      secs.textContent = m.kind === 'waiting' ? `${m.secs}s` : '';
     },
   };
 };

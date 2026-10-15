@@ -6,8 +6,9 @@
 //   • anywhere else (Safari, Firefox, or already installed but opened in a tab): true full screen,
 //     and a second press (or Esc) comes back.
 //   • already running in its own window (installed): full screen.
-// In a game the same idea sits beside the wordmark as a plain icon: full screen only.
+// In a game the same idea sits under the wordmark (ui/hud-rail.ts) as a plain icon: full screen only.
 import { isIOS, isMobile, isStandalone, nativeInstallAvailable, promptNativeInstall } from './install.js';
+import { hudRail } from '../ui/hud-rail.js';
 
 export type AppWindowCopy = { install: string; fullscreen: string; exitFullscreen: string };
 
@@ -28,15 +29,14 @@ const CSS = `
 
 const canFullscreen = (): boolean => typeof document.documentElement.requestFullscreen === 'function' && document.fullscreenEnabled !== false;
 
-/** In a game: a plain icon beside the wordmark, in the header's own quiet style (like the ☰). */
+/** In a game: a plain icon under the wordmark, in the header's own quiet style (like the ☰). */
 const HUD_CSS = `
-#hud-window { position:fixed; z-index:8; top:env(safe-area-inset-top, 0px); right:var(--hud-window-right, 84px);
-  width:44px; height:44px; display:grid; place-items:center; padding:0; border:0; border-radius:10px; background:transparent;
-  color:var(--c-text, #e8ddc5); opacity:.62; cursor:pointer; transition:opacity .16s ease, background-color .16s ease; }
-#hud-window:hover, #hud-window:focus-visible { opacity:1; background:rgba(232,221,197,.08); }
+#hud-window { order:1; width:44px; height:44px; display:grid; place-items:center end; padding:0; border:0; border-radius:10px; background:transparent;
+  color:var(--c-text, #e8ddc5); opacity:.66; cursor:pointer; transition:opacity .16s ease; }
+#hud-window:hover, #hud-window:focus-visible { opacity:1; }
 #hud-window:focus-visible { outline:2px solid var(--c-text, #e8ddc5); outline-offset:-2px; }
-#hud-window svg { width:18px; height:18px; }
-#hud-window[hidden], #game[hidden] ~ #hud-window { display:none; }
+#hud-window svg { width:24px; height:24px; }
+#hud-window[hidden] { display:none; }
 `;
 
 const toggleFullscreen = () => {
@@ -78,12 +78,12 @@ export const mountAppWindowButton = (copy: AppWindowCopy): void => {
     toggleFullscreen();
   });
 
-  // ---- in a game: full screen only (never an install dialog mid-game), beside the wordmark ----
+  // ---- in a game: full screen only (never an install dialog mid-game), in the rail under the wordmark ----
   const hud = document.createElement('button');
   hud.id = 'hud-window';
   hud.type = 'button';
   const game = document.getElementById('game');
-  (game?.parentElement ?? document.body).append(hud);
+  hudRail().append(hud);
   hud.addEventListener('click', toggleFullscreen);
   function paintHud(): void {
     const full = document.fullscreenElement !== null;
@@ -93,18 +93,8 @@ export const mountAppWindowButton = (copy: AppWindowCopy): void => {
     hud.setAttribute('aria-label', label);
     hud.title = label;
     hud.dataset.mode = full ? 'exit' : 'fullscreen';
-    placeHud();
-    requestAnimationFrame(placeHud); // again once the header has settled (online adds its own strip)
-  }
-  /** Sit just left of the wordmark, whatever its width and wherever the header puts it. */
-  function placeHud(): void {
-    const brand = document.getElementById('hud-brand')?.getBoundingClientRect();
-    if (brand && brand.width > 0) document.documentElement.style.setProperty('--hud-window-right', `${Math.round(innerWidth - brand.left + 4)}px`);
   }
   if (game) new MutationObserver(paintHud).observe(game, { attributes: true, attributeFilter: ['hidden'] });
-  const brandEl = document.getElementById('hud-brand');
-  if (brandEl && typeof ResizeObserver === 'function') new ResizeObserver(placeHud).observe(brandEl);
-  window.addEventListener('resize', paintHud);
 
   document.addEventListener('fullscreenchange', paint);
   window.addEventListener('beforeinstallprompt', () => setTimeout(paint, 0));

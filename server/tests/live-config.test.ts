@@ -26,9 +26,11 @@ describe('the live turn length', () => {
     expect(liveConfigFromEnv().turnMs).toBe(60_000);
   });
 
-  it('the other live timings are untouched by the turn-length change', () => {
-    expect(DEFAULT_LIVE_CONFIG.replayAllowanceMs).toBe(6_000);
-    expect(DEFAULT_LIVE_CONFIG.entryAllowanceMs).toBe(15_000);
+  it('every real-time turn is exactly the turn clock: no extra seconds on entry or for the replay', () => {
+    // Owner, 2026-10-15: "1st round is longer than 60s - 2nd too -- all turn to be 60s". The
+    // allowances stay as tunable knobs (the harness exercises them), but by default they add nothing.
+    expect(DEFAULT_LIVE_CONFIG.replayAllowanceMs).toBe(0);
+    expect(DEFAULT_LIVE_CONFIG.entryAllowanceMs).toBe(0);
   });
 
   it('the strike and leaver-cooldown knobs are gone (a real-time timeout now loses outright)', () => {
