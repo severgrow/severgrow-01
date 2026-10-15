@@ -371,8 +371,12 @@ describe('rule 7–8: me, lists, nature names', () => {
     const guest = await h.service.createGuest();
     const player = await h.service.authenticate(guest.token);
     expect((await h.service.getMe(player)).id).toBe(player.id);
-    const renamed = await h.service.renameMe(player, 'anything');
-    expect(renamed.displayName).toMatch(NATURE_NAME_PATTERN);
+    // Free-text names are for SIGNED-IN players: a guest keeps its generated nature name (pinned in
+    // rename-me.test.ts). An account stores the typed name.
+    await expect(h.service.renameMe(player, 'anything')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await h.service.upgradePlayer(player, 'anything');
+    const renamed = await h.service.renameMe(await h.service.authenticate(guest.token), 'anything');
+    expect(renamed.displayName).toBe('anything');
 
     const { code } = await h.service.createLinkCode(player);
     const linked = await h.service.redeemLinkCode(code);

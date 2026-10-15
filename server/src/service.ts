@@ -20,6 +20,7 @@ import { safePublish } from './broadcast.js';
 import type { MatchBroadcaster } from './broadcast.js';
 import { DEFAULT_SERVER_CONFIG, clientVersionOk } from './config.js';
 import type { ServerConfig } from './config.js';
+import { assertDisplayName } from './display-name.js';
 import { ApiError, engineCodeToApi } from './errors.js';
 import { playerTag } from '../../src/player-tag.js';
 import { hashToken, newId, newInviteCode, newSeed, newToken, normalizeInviteCode } from './ids.js';
@@ -131,12 +132,18 @@ export class MatchService {
     return playerSummary(player);
   }
 
+  /**
+   * A signed-in player chooses their own name. The typed name is NORMALISED and STORED — the old
+   * "nature names only" rule is gone now that accounts exist (server/src/display-name.ts holds the
+   * one decision: trim, collapse spaces, charset, blocklist). Only an account may do this; a guest
+   * keeps its generated nature name until it signs in. The #tag comes from the player id, so a
+   * rename never moves it.
+   */
   async renameMe(player: PlayerRecord, displayName: string): Promise<PlayerSummary> {
-    if (typeof displayName !== 'string' || displayName.trim().length < 1 || displayName.length > 40) {
-      throw new ApiError('INVALID_REQUEST', 'Pick a display name of 1 to 40 characters.');
+    if (player.kind !== 'account') {
+      throw new ApiError('FORBIDDEN', 'Sign in with Google to choose your own name.');
     }
-    // Nature names only in this version — no free-text moderation surface.
-    const name = natureName(`${player.id}:${displayName.trim()}`);
+    const name = assertDisplayName(displayName);
     const updated: PlayerRecord = { ...player, displayName: name };
     await this.storage.updatePlayer(updated);
     return playerSummary(updated);
