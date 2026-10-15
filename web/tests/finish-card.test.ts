@@ -76,21 +76,24 @@ describe('the card is one screen: the result leads, the rest waits behind "More"
     expect(goButtons).not.toMatch(/id="go-menu"[^>]*data-go-extra/);
   });
 
-  it('the detail lines and the extra actions are all behind it, hidden by default', () => {
-    for (const id of ['go-break', 'go-moves', 'go-highlights', 'go-stats', 'go-share', 'go-board', 'go-cut']) {
+  it('the detail lines and the extra actions are behind it, hidden by default', () => {
+    // `go-board` is deliberately NOT here: it is how a player looks at the final position, and the
+    // documented way for a suite to put the card away (`web/e2e/smoke.ts` uses `#go-board:visible`).
+    for (const id of ['go-break', 'go-moves', 'go-highlights', 'go-stats', 'go-share', 'go-cut']) {
       expect(goCard, `${id} is a detail line or an extra action`).toMatch(new RegExp(`id="${id}"[^>]*data-go-extra`));
       expect(goCard, `${id} starts hidden`).toMatch(new RegExp(`id="${id}"[^>]*data-go-extra[^>]*hidden|id="${id}"[^>]*hidden[^>]*data-go-extra`));
     }
+    expect(goCard).not.toMatch(/id="go-board"[^>]*data-go-extra/);
     expect(RESULT.more).toBe('More');
     expect(RESULT.less).toBe('Less');
   });
 
-  it('there are only THREE action rows before the disclosure: lead, secondary, More', () => {
+  it('there are only FOUR action rows before the disclosure: lead, secondary, board, More', () => {
     // The owner's rule was "six is too many". Count what is visible before anyone taps anything.
     const firstIds = [...goButtons.matchAll(/<button id="([^"]+)"([^>]*)>/g)]
       .filter((m) => !/data-go-extra/.test(m[2]!))
       .map((m) => m[1]!);
-    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-more', 'go-menu']);
+    expect(firstIds).toEqual(['go-rematch', 'go-other', 'go-board', 'go-more', 'go-menu']);
   });
 
   it('is driven by one disclosure in main.ts, shared by every mode', () => {
