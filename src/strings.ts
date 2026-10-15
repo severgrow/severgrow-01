@@ -574,6 +574,23 @@ export const INSTALL = Object.freeze({
     'Open your browser menu (the three dots).',
     'Choose Install app or Add to Home Screen.',
   ] as const),
+  /**
+   * On a computer there is no home screen: Chrome and Edge install the game as its own window,
+   * started from the dock, taskbar or Start menu. Same invitation, desktop words.
+   */
+  desktop: Object.freeze({
+    title: 'Open FUTASAKU in its own window',
+    why: Object.freeze([
+      'Its own window — no tabs, no browser bars',
+      'Works offline, even with no connection',
+      'Start it from your dock, taskbar or Start menu',
+    ] as const),
+    install: 'Open in its own window',
+    manualSteps: Object.freeze([
+      'Click the install icon at the right end of the address bar (Safari on a Mac: open the File menu).',
+      'Choose Install (Safari: Add to Dock).',
+    ] as const),
+  }),
 });
 
 /**

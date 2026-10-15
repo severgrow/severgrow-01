@@ -142,3 +142,19 @@ describe('install invitation: which face to show', () => {
     expect(installVariant({ ios: false, hasNativePrompt: false })).toBe('manual');
   });
 });
+
+describe('desktop words (owner, 2026-10-15)', () => {
+  it('a computer is offered "its own window", never the home screen; a phone keeps the home screen', async () => {
+    const { INSTALL } = await import('../../src/strings.js');
+    const { installCopyFor } = await import('../src/logic/install-prompt.js');
+    const desk = installCopyFor(INSTALL, true);
+    expect(desk.title).toBe('Open FUTASAKU in its own window');
+    expect(desk.install).toBe('Open in its own window');
+    for (const line of [desk.title, desk.install, ...desk.why, ...desk.manualSteps]) expect(line).not.toMatch(/home screen/i);
+    expect(desk.done).toBe(INSTALL.done);
+    expect(desk.never).toBe(INSTALL.never);
+    const phone = installCopyFor(INSTALL, false);
+    expect(phone.title).toBe(INSTALL.title);
+    expect(phone.install).toBe('Add to home screen');
+  });
+});

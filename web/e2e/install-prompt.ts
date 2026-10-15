@@ -30,8 +30,10 @@ const duel: LocalDuel = await startLocalDuel({ port: PORT, turnTimeoutMs: 24 * 3
 
 /** Open a match with both seats, seat 1 resigns, and return the winner's page (seat 0). */
 const playAndWin = async (match: LocalMatch, viewport: { width: number; height: number }): Promise<SeatSession> => {
-  const seat0 = await openSeat(duel, match, 0, { viewport });
-  const seat1 = await openSeat(duel, match, 1, { viewport });
+  // A wide screen is a real computer: mouse and keyboard, no touch (that is what picks the desktop words).
+  const device = viewport.width >= 700 ? { hasTouch: false, isMobile: false } : {};
+  const seat0 = await openSeat(duel, match, 0, { viewport, ...device });
+  const seat1 = await openSeat(duel, match, 1, { viewport, ...device });
   await openDuel(seat0, match.matchId);
   await openDuel(seat1, match.matchId);
   await waitIdle(seat0);
@@ -48,6 +50,7 @@ try {
   const winner = await playAndWin(mobile, { width: 390, height: 844 });
   await winner.page.waitForSelector(PROMPT, { timeout: 30_000 });
   check(await winner.page.locator('#install-title').innerText().then((t) => t.length > 0), 'online win: invitation shows with a headline');
+  const winnerTitleOnPhone = await winner.page.locator('#install-title').innerText();
   check(await winner.page.locator('#install-why li').count() >= 2, 'online win: invitation lists what the player gets');
   check(await winner.page.locator('#install-never').isVisible(), 'online win: "Don\'t show again" is offered');
   // Screenshot the way it actually appears: over the finish screen.
@@ -65,6 +68,11 @@ try {
   const desktop = await duel.newMatch();
   const big = await playAndWin(desktop, { width: 1280, height: 800 });
   await big.page.waitForSelector(PROMPT, { timeout: 30_000 });
+  const deskTitle = await big.page.locator('#install-title').innerText();
+  const deskText = await big.page.locator('#install-prompt').innerText();
+  check(deskTitle === 'Open FUTASAKU in its own window', `desktop: offers its own window (${deskTitle})`);
+  check(!/home screen/i.test(deskText), 'desktop: never mentions a home screen');
+  check(/home screen/i.test(winnerTitleOnPhone), 'phone: still offers the home screen');
   await big.page.screenshot({ path: `${OUT}/first-online-win-1280x800.png` });
   await big.context.close();
 

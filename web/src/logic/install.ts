@@ -14,8 +14,8 @@
 // When the game already runs installed (standalone / minimal-ui / iOS standalone) the invitation
 // is never offered.
 
-import { INSTALL_PROMPT_KEY, InstallInvitation, installVariant } from './install-prompt.js';
-import type { GameOutcome, InstallVariant } from './install-prompt.js';
+import { INSTALL_PROMPT_KEY, InstallInvitation, installCopyFor, installVariant } from './install-prompt.js';
+import type { GameOutcome, InstallDesktopCopy, InstallVariant } from './install-prompt.js';
 
 type InstallPromptEvent = Event & {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -53,6 +53,8 @@ export type InstallCopy = {
   never: string;
   iosSteps: readonly string[];
   manualSteps: readonly string[];
+  /** Computer words: "its own window" instead of "home screen". */
+  desktop?: InstallDesktopCopy;
 };
 
 export type InstallStorage = {
@@ -122,15 +124,17 @@ export const mountInstallPrompt = (options: {
 
   const paint = (): void => {
     variant = installVariant({ ios: isIOS(), hasNativePrompt: deferred !== null });
-    if (title) title.textContent = options.copy.title;
-    if (why) fill(why, options.copy.why);
+    // A computer has no home screen: there the same invitation offers the game in its own window.
+    const words = installCopyFor(options.copy, !isMobile() && !isIOS());
+    if (title) title.textContent = words.title;
+    if (why) fill(why, words.why);
     if (steps) {
-      const lines = variant === 'ios' ? options.copy.iosSteps : options.copy.manualSteps;
+      const lines = variant === 'ios' ? words.iosSteps : words.manualSteps;
       fill(steps, lines);
       steps.hidden = variant === 'native';
     }
     if (accept) {
-      accept.textContent = variant === 'native' ? options.copy.install : options.copy.done;
+      accept.textContent = variant === 'native' ? words.install : options.copy.done;
     }
     if (later) {
       later.textContent = options.copy.notNow;

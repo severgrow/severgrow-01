@@ -87,6 +87,18 @@ export type InstallVariant = 'native' | 'ios' | 'manual';
  * Android / desktop Chromium). Otherwise the player gets short instructions: `ios` names the
  * Share icon; `manual` is the generic browser-menu wording. There is never a dead button.
  */
+/** The words that differ on a computer, where "home screen" means nothing (src/strings.ts INSTALL.desktop). */
+export type InstallDesktopCopy = { title: string; why: readonly string[]; install: string; manualSteps: readonly string[] };
+
+/**
+ * Phone words on a phone, window words on a computer. Only the title, the reasons, the install
+ * button and the browser-menu steps change; the buttons that close the invitation keep their words.
+ */
+export const installCopyFor = <C extends { title: string; why: readonly string[]; install: string; manualSteps: readonly string[]; desktop?: InstallDesktopCopy }>(
+  copy: C,
+  desktop: boolean,
+): C => (desktop && copy.desktop ? { ...copy, ...copy.desktop } : copy);
+
 export const installVariant = (usage: { ios: boolean; hasNativePrompt: boolean }): InstallVariant =>
   usage.hasNativePrompt ? 'native' : usage.ios ? 'ios' : 'manual';
 
