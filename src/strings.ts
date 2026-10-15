@@ -918,6 +918,14 @@ export const CAMPAIGN = Object.freeze({
       title: 'First Growth',
       subtitle: 'Ten gentle levels on the open ground.',
     }),
+    'broken-ground': Object.freeze({
+      title: 'Broken Ground',
+      subtitle: 'Ten levels of broken ground, with a way round.',
+    }),
+    'narrow-paths': Object.freeze({
+      title: 'Narrow Paths',
+      subtitle: 'Ten narrow levels where space must be won.',
+    }),
   }) as Readonly<Record<string, { title: string; subtitle: string }>>,
   /** a locked level's spoken/greyed label, e.g. "Level 4, Locked" */
   levelLabel: (number: number, name: string): string => `Level ${number}, ${name}`,
