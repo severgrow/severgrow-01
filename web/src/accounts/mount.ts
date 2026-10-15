@@ -300,11 +300,15 @@ export const mountAccounts = async (): Promise<void> => {
     // Drop the code from the address bar at once: it is single-use and must not be bookmarked or shared.
     history.replaceState(history.state, '', location.pathname + cleanSearch(location.search) + (isCallbackHash(location.hash) ? '' : location.hash));
     if (pending) {
-      const fail = (text: string) => {
+      const fail = (text: string, why?: unknown) => {
+        // The reason never reaches the player, so log it: without this, every sign-in failure looks
+        // identical ("did not finish") and the stage that broke is unguessable. Console only, no
+        // player-facing change.
+        if (why !== undefined) console.warn('[FUTASAKU] Google sign-in failed:', why);
         setFlash(kv, { kind: 'failed', text, returnTo: pending.returnTo });
       };
       try {
-        if ('error' in callback) fail(ACCOUNT.failed);
+        if ('error' in callback) fail(ACCOUNT.failed, { stage: 'callback', error: callback.error });
         else {
           const ex = await fetch(`${supa.url}/auth/v1/token?grant_type=pkce`, {
             method: 'POST',
@@ -313,15 +317,21 @@ export const mountAccounts = async (): Promise<void> => {
           });
           const session = ex.ok ? ((await ex.json()) as { access_token?: unknown }) : null;
           const access = typeof session?.access_token === 'string' ? session.access_token : null;
-          if (!access) fail(ACCOUNT.failed);
-          else {
+          if (!access) {
+            const body = ex.ok ? null : await ex.text().catch(() => null);
+            fail(ACCOUNT.failed, { stage: 'token-exchange', status: ex.status, body: body?.slice(0, 300) });
+          } else {
             const before = readIdentity(kv);
             const res = await apiPost('/v1/auth/google', { accessToken: access }, before?.token ?? null);
             // Our server has its own token now; the Supabase session is not needed any more.
             void fetch(`${supa.url}/auth/v1/logout`, { method: 'POST', headers: { apikey: supa.key, authorization: `Bearer ${access}` } }).catch(() => undefined);
             const identity = res.ok ? identityFromSignIn(res.json) : null;
-            if (!identity) fail(res.status === 403 || res.status === 404 ? ACCOUNT.unavailable : ACCOUNT.failed);
-            else {
+            if (!identity) {
+              fail(
+                res.status === 403 || res.status === 404 ? ACCOUNT.unavailable : ACCOUNT.failed,
+                { stage: 'our-server', status: res.status, body: JSON.stringify(res.json).slice(0, 300) },
+              );
+            } else {
               writeIdentity(kv, identity);
               writeAccount(kv, { provider: 'google', email: typeof res.json.email === 'string' ? res.json.email : null, playerId: identity.playerId });
               try {
