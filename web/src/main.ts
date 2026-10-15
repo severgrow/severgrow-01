@@ -868,7 +868,7 @@ if (FEATURES.slimHeader) {
     box.id = 'gm-status';
     box.className = 'gm-status';
     box.innerHTML = '<div class="gm-scores"><span class="gm-you"><small>You</small><b class="num" id="gm-score-you">0</b></span><span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span></div><div class="gm-turn" id="gm-turn"></div><button id="gm-history" class="btn ghost" type="button">What happened</button>';
-    box.querySelector('.gm-bot small')!.textContent = OPP.Label;
+    box.querySelector('.gm-bot small')!.textContent = OPP.label; // the plain word beside a score ("Opponent"), not the possessive
     body.prepend(box);
     box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
   }

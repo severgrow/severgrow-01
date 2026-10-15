@@ -70,6 +70,17 @@ try {
     const context = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
     const page = await context.newPage();
     const label = `${w}x${h}`;
+    // 0. The beta line on the main menu: between the wordmark and the buttons; its link opens the form.
+    await page.goto(`${origin}/`);
+    check(`${label}: the main menu shows the beta line`, await waitFor(() => page.locator('#menu-beta').isVisible(), 20_000));
+    const order = (await page.evaluate(`(() => { const t = document.querySelector('#menu .title').getBoundingClientRect(); const n = document.getElementById('menu-beta').getBoundingClientRect(); const b = document.querySelector('#menu .menu-buttons').getBoundingClientRect(); return t.bottom <= n.top && n.bottom <= b.top && n.left >= 0 && n.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; })()`)) as boolean;
+    check(`${label}: it sits between the title and the buttons, inside the screen`, order);
+    check(`${label}: every menu button stays on screen`, (await page.evaluate(`[...document.querySelectorAll('#menu .menu-buttons .btn')].filter(b => b.offsetParent).every(b => b.getBoundingClientRect().bottom <= innerHeight)`)) as boolean);
+    check(`${label}: it says version 0.53`, (await page.locator('#menu-beta').innerText()).includes('0.53'));
+    await shot(page, `menu-${label}`);
+    await page.locator('#menu-beta button').click();
+    check(`${label}: "let us know here" opens Report a problem`, await waitFor(() => page.locator('#fb-report').isVisible()));
+    await page.locator('#fb-report button', { hasText: 'Cancel' }).click();
     await page.goto(`${origin}/?seed=4242`);
     await page.waitForSelector('#game:not([hidden])');
     await page.waitForSelector('#starter-lottery', { state: 'hidden', timeout: 20_000 }).catch(() => undefined);

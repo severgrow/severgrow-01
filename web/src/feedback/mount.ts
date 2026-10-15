@@ -147,6 +147,11 @@ ${glassBaseCss('.fb-glass')}
 .fb-glass .fb-status { min-height:1.4em; color:#c9e4a8; }
 .fb-glass .fb-status[data-tone='bad'] { color:#e0735c; }
 .large-text .fb-glass p, .large-text .fb-glass li { font-size:16px; }
+#menu-beta { text-wrap:pretty; }
+@media (max-height: 700px) { #menu-beta { font-size:0.78rem; line-height:1.4; } }
+#menu-beta button { display:inline; min-height:0; padding:6px 2px; margin:-6px 0; border:0; background:none; color:inherit;
+  font:inherit; letter-spacing:inherit; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+#menu-beta button:focus-visible { outline:2px solid currentColor; outline-offset:2px; border-radius:4px; }
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
@@ -262,6 +267,21 @@ export const mountFeedback = (): void => {
   checkHash();
   window.addEventListener('hashchange', checkHash);
 
+  // ---- the beta line on the main menu (in the old tagline slot, with the tagline's own spacing) ----
+  const menuButtons = document.querySelector('#menu .menu-buttons');
+  let betaLink: HTMLButtonElement | null = null;
+  if (menuButtons && !document.getElementById('menu-beta')) {
+    const note = el('p', 'tagline');
+    note.id = 'menu-beta';
+    note.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
+    betaLink = el('button', '', FEEDBACK.betaLink);
+    betaLink.type = 'button';
+    betaLink.dataset.fb = 'menu-link';
+    betaLink.addEventListener('click', () => openGuide()); // replaced by the report form below when a server exists
+    note.append(betaLink);
+    menuButtons.before(note);
+  }
+
   // ---- "Report a problem" ----
   if (!api) return; // a build with no server (offline only) has nowhere to send a report
   const report = sheet('fb-report', FEEDBACK.title);
@@ -327,7 +347,12 @@ export const mountFeedback = (): void => {
     area.focus({ preventScroll: true });
   };
 
-  // Entry points: the pause menu (in a game) and Settings (anywhere).
+  // Entry points: the main-menu beta line, the pause menu (in a game) and Settings (anywhere).
+  if (betaLink) {
+    const fresh = betaLink.cloneNode(true) as HTMLButtonElement;
+    fresh.addEventListener('click', openReport);
+    betaLink.replaceWith(fresh);
+  }
   const button = (id: string, cls: string) => {
     const b = el('button', cls, FEEDBACK.open);
     b.type = 'button';

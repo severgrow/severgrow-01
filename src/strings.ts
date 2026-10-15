@@ -660,6 +660,10 @@ export const FEEDBACK = Object.freeze({
   empty: 'Please write a few words first.',
   guideLink: 'Tester guide',
   close: 'Close',
+  /** The beta line on the main menu, between the wordmark and the buttons. */
+  betaVersion: '0.53',
+  betaNote: (version: string) => `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
+  betaLink: 'let us know here.',
 });
 
 /** The one-page tester guide (futasaku.com/#beta). Each section: a heading and a few lines. */
