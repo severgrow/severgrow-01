@@ -429,7 +429,7 @@ Realtime frames). The heavy suites multiply that:
 
 | Suite | Default volume | Rough scale per run |
 | --- | --- | --- |
-| `server/scripts/online-soak.ts` | configurable matches × turns | largest — tens of MB+ |
+| `server/scripts/online-soak.ts` | `--total=200` duels (`--edge=20` live) | largest — tens of MB+ |
 | `server/scripts/load-test.ts` | `--matches=50`, `--duration=300` | tens of MB |
 | `web/e2e/online-device-matrix.ts` | `--games=30` across 3 engines | tens of MB |
 | `web/e2e/online-live-smoothness.ts` | `DUELS=5`, `TURNS=3` | single-digit MB |
