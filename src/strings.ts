@@ -504,6 +504,25 @@ export const HELP = Object.freeze({
   tutorialFinal: 'Look up a move in Match Intel › How to.',
 });
 
+/** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
+ *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Training. */
+export const MENU = Object.freeze({
+  /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
+  login: 'LOG IN',
+  /** the one doorway to the offline modes and the duel lobby */
+  play: 'Play',
+  /** the PLAY screen's heading */
+  playTitle: 'Play',
+  /** the main menu entry that opens the shared world map */
+  world: 'The world map',
+  /** the PLAY entry that opens the three training tiers */
+  training: 'Training',
+  /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */
+  level: (number: number): string => `LEVEL ${number}`,
+  /** the training screen's heading (the tier picker keeps its legacy heading off the product menu) */
+  trainingTitle: 'Training',
+});
+
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */
 export const TUTORIAL = Object.freeze({
   showMe: 'Show me',

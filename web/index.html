@@ -92,15 +92,41 @@
              SHOW_MENU_TAGLINE = true in src/strings.ts, and main.ts re-inserts the element in this
              slot (the words live in ONLINE.tagline). See docs/DECISIONS.md. -->
         <div class="menu-buttons">
+          <!-- LOG IN (product channels only): its own button at the TOP, above PLAY, and hidden the
+               moment the player is signed in. The accounts module reveals it (and hides it again)
+               from the one Google flow it already owns — no second sign-in path lives here. -->
+          <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
+          <!-- PLAY (product channels only) opens the submenu below. Revealed by main.ts, so no other
+               channel ever shows it. Its three entries are moved into #play-menu at boot. -->
+          <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
           <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
-               so no other channel ever shows it. Its words come from src/strings.ts. -->
+               so no other channel ever shows it. Its words come from src/strings.ts, and on the
+               product menu it reads LEVEL <n> (the level the player is on). -->
           <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
+          <!-- The world map (product channels: shown when the build has an online endpoint). -->
+          <button id="menu-world" class="btn ghost big" type="button" aria-label="The world map" hidden>The world map</button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== PLAY submenu (product channels) ===== -->
+    <!-- The single doorway to the offline modes and the duel lobby. Modelled on the online hub: a
+         real `.screen` with a back button in its header, and the menu fully hidden while it is open.
+         Its three entries — Play online / LEVEL <n> / Training — are MOVED into #play-actions at
+         boot by main.ts, so each keeps its one id, its one handler and its one set of words: no
+         second copy of the online or campaign wiring exists. -->
+    <section id="play-menu" class="screen play-menu" aria-label="Play" hidden>
+      <div class="play-inner">
+        <header class="play-head">
+          <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
+          <h2 id="play-title">Play</h2>
+        </header>
+        <div id="play-actions" class="menu-buttons play-actions"></div>
       </div>
     </section>
 
@@ -220,7 +246,7 @@
       <div class="levels-inner">
         <header class="levels-head">
           <button id="levels-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2>Choose difficulty</h2>
+          <h2 id="levels-heading">Choose difficulty</h2>
         </header>
         <div id="level-grid" class="level-grid"></div>
       </div>

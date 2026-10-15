@@ -171,7 +171,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -575,9 +575,25 @@ let openSheet: HTMLElement | null = null;
 /** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
  *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
 let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
+/**
+ * The PLAY submenu (product menu only). It is not one of the four screens: it is a doorway that
+ * replaces the menu, exactly as the online hub does. Opening anything else closes it.
+ */
+function closePlayMenu() {
+  $('play-menu').hidden = true;
+}
+function openPlayMenu() {
+  $('menu-play').hidden = false;
+  $('menu-play').classList.add('primary');
+  $('menu-play').classList.remove('ghost');
+  $('play-menu').hidden = false;
+  $('menu').hidden = true;
+  shownScreen = null; // the menu is no longer the screen on show, so it re-renders on return
+}
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
   shownScreen = name;
+  closePlayMenu();
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
@@ -603,21 +619,46 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
     $('menu-continue').textContent = continueLabel;
     $('menu-continue').setAttribute('aria-label', continueLabel);
-    {
-      // On the product channels the campaign leads the offline column and the difficulty picker
-      // becomes its secondary "Classic vs AI". Every other channel is untouched.
-      $('menu-new').classList.toggle('primary', !canContinue && !FEATURES.campaign);
-      $('menu-new').classList.toggle('ghost', canContinue || FEATURES.campaign);
+    $('menu-play').hidden = !FEATURES.campaign;
+    $('menu-play').textContent = MENU.play;
+    $('menu-play').setAttribute('aria-label', MENU.play);
+    $('menu-play').classList.toggle('primary', FEATURES.campaign);
+    $('menu-play').classList.toggle('ghost', !FEATURES.campaign);
+    $('play-title').textContent = MENU.playTitle;
+    $('menu-login').textContent = MENU.login;
+    $('menu-login').setAttribute('aria-label', MENU.login);
+    $('menu-world').textContent = MENU.world;
+    $('menu-world').setAttribute('aria-label', MENU.world);
+    if (FEATURES.campaign) {
+      // The product menu: PLAY carries the ONE cream fill (and Continue sits right under it as a
+      // quiet resume), and the offline/online entries live in the submenu as LEVEL <n> / Training.
+      $('menu-continue').classList.remove('primary');
+      $('menu-continue').classList.add('ghost');
       const cmp = $('menu-campaign');
-      cmp.hidden = !FEATURES.campaign;
-      if (FEATURES.campaign) {
-        cmp.textContent = CAMPAIGN.title;
-        cmp.setAttribute('aria-label', CAMPAIGN.title);
-        cmp.classList.add('primary');
-        cmp.classList.remove('ghost');
-        $('menu-new').textContent = CAMPAIGN.classic;
-        $('menu-new').setAttribute('aria-label', `${CAMPAIGN.classic}. Choose a difficulty.`);
-      }
+      cmp.hidden = false;
+      cmp.classList.remove('primary');
+      cmp.classList.add('ghost');
+      // The campaign entry is the player's campaign progress: "LEVEL 1", then "LEVEL 2", "LEVEL 25"…
+      const current = currentLevel(campaignProgress).number;
+      cmp.textContent = MENU.level(current);
+      cmp.setAttribute('aria-label', `${MENU.level(current)}, campaign. Open the campaign.`);
+      $('menu-new').classList.remove('primary');
+      $('menu-new').classList.add('ghost');
+      $('menu-new').textContent = MENU.training;
+      $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
+      // The one emphasis inside PLAY is the duel lobby (it is hidden when the build has no API).
+      $('menu-online').classList.add('primary');
+      $('menu-online').classList.remove('ghost');
+      $('levels-heading').textContent = MENU.trainingTitle;
+    } else {
+      // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
+      // picker, and no submenu at all. Untouched, so their own suites need no change.
+      $('menu-campaign').hidden = true;
+      $('menu-new').classList.toggle('primary', !canContinue);
+      $('menu-new').classList.toggle('ghost', canContinue);
+      $('menu-new').textContent = 'Play offline';
+      $('menu-new').setAttribute('aria-label', 'Play offline');
+      $('levels-heading').textContent = 'Choose difficulty';
     }
     $('menu-tutorial').classList.remove('primary');
     $('menu-tutorial').classList.add('ghost');
@@ -5856,6 +5897,26 @@ const bind = (id: string, fn: () => void) =>
     sound.unlock();
     fn();
   });
+
+// ---------- the product menu: LOG IN + PLAY, and the PLAY submenu ----------
+
+/**
+ * The product menu (owner direction, 2026-10-15) puts the offline modes and the duel lobby behind
+ * ONE doorway, PLAY. The three entries are MOVED into the submenu's column rather than duplicated,
+ * so each keeps its id, its existing handler and its words: the online hub's own click binding, the
+ * campaign screen binding, and the training picker below. The legacy channels never see the submenu
+ * and keep the flat menu they are used to, so their own tests are untouched.
+ */
+const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+if (FEATURES.campaign) {
+  const actions = document.getElementById('play-actions');
+  if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
+}
+
+bind('menu-play', openPlayMenu);
+bind('play-back', () => showScreen('menu'));
+// The hub takes over the whole screen; the submenu must not stay behind it.
+$('menu-online').addEventListener('click', closePlayMenu);
 
 bind('menu-new', () => {
   if (!$('menu-continue').hidden && !window.confirm('Start a new game? The saved game will be lost.')) return;
