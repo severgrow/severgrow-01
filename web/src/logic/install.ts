@@ -85,6 +85,25 @@ const captureNativePrompt = (): void => {
   });
 };
 
+/** True while the browser offers its own install dialog (Chrome / Edge, not installed yet). */
+export const nativeInstallAvailable = (): boolean => {
+  captureNativePrompt();
+  return deferred !== null;
+};
+
+/** Opens the browser's own install dialog once (the browser allows each captured prompt one use). */
+export const promptNativeInstall = async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
+  const current = deferred;
+  if (!current) return 'unavailable';
+  deferred = null;
+  try {
+    await current.prompt();
+    return (await current.userChoice).outcome;
+  } catch {
+    return 'dismissed';
+  }
+};
+
 const element = <T extends HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
 
 export const mountInstallPrompt = (options: {

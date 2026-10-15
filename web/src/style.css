@@ -5668,3 +5668,34 @@ html.align-overlay::before {
   pointer-events: auto;
   transition: opacity var(--curtain-in, 160ms) cubic-bezier(.4, 0, .67, 1);
 }
+
+/* ---------- the main menu fits a short window (owner, 2026-10-15) ----------
+   On a computer in a normal browser window (bookmarks bar, dock…) the menu used to need ~610px of
+   height, so Tutorial/Settings fell below the fold. On short, wide-ish screens the column now
+   scales with the window's height: smaller logo and wordmark, a tighter rhythm, the beta line on
+   two wider lines, buttons a little shorter (never under 44px). Tall screens are unchanged.
+   Checked by web/e2e/desktop-menu-fit.ts from 1000x460 to 1920x950, with and without Continue. */
+@media (min-width: 600px) and (max-height: 760px) {
+  #menu .menu-inner {
+    --menu-rhythm: clamp(6px, 1.5dvh, 14px);
+    padding: clamp(10px, 3dvh, 32px) 0;
+  }
+  html.futa04-branding body #menu #logo {
+    /* The logo takes whatever height is left once everything else fits: full size on a roomy
+       window, down to a small mark on a very short one. */
+    width: clamp(88px, calc(100dvh - 516px), 240px);
+    margin-bottom: clamp(2px, 1dvh, 16px);
+  }
+  #menu .title { font-size: clamp(2rem, 8dvh, 4.25rem); }
+  #menu #menu-beta {
+    width: min(620px, 100vw - 32px);
+    max-width: none;
+    margin-bottom: clamp(2px, 1dvh, 14px);
+  }
+  #menu .menu-buttons { gap: clamp(5px, 1dvh, 8px); }
+  #menu .menu-buttons .btn.big { min-height: clamp(44px, 7.5dvh, 56px); }
+}
+/* A very short window: the mark would be a smudge, so the wordmark carries the page alone. */
+@media (min-width: 600px) and (max-height: 560px) {
+  html.futa04-branding body #menu #logo { display: none !important; }
+}

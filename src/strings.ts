@@ -586,6 +586,12 @@ export const INSTALL = Object.freeze({
       'Start it from your dock, taskbar or Start menu',
     ] as const),
     install: 'Open in its own window',
+    /** The icon-only button, top right of the main menu on a computer (its tooltip / screen-reader name). */
+    windowButton: Object.freeze({
+      install: 'Open FUTASAKU in its own window',
+      fullscreen: 'Full screen',
+      exitFullscreen: 'Leave full screen',
+    }),
     manualSteps: Object.freeze([
       'Click the install icon at the right end of the address bar (Safari on a Mac: open the File menu).',
       'Choose Install (Safari: Add to Dock).',

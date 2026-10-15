@@ -68,6 +68,7 @@ import { comboGroups, handOrder, nextSort } from './logic/hand.js';
 import { guideTarget } from './logic/guide.js';
 import { howToReferenceHtml } from './logic/howto-reference.js';
 import { mountInstallPrompt } from './logic/install.js';
+import { mountAppWindowButton } from './logic/app-window.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
@@ -6343,6 +6344,7 @@ fillIcons();
 // The install invitation: a timed prompt after a played game (no menu button any more). The words
 // live in src/strings.ts; the counting rule lives in logic/install-prompt.ts.
 const installPrompt = mountInstallPrompt({ copy: INSTALL, storage: store });
+mountAppWindowButton(INSTALL.desktop.windowButton); // computers: open in its own window / full screen
 // once the photo-like grass and lava are painted (in the background), redraw the board with them
 if (!IS_FUTA04) onPhotosReady(() => {
   lastBoard = null;
