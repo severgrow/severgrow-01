@@ -8,6 +8,10 @@ import type { IdentityStore } from './identity.js';
 import { duelApiUrl, duelRegion, findOpponentEnabled, onlineBuildEnabled, parkedOfferMs } from './config.js';
 import { WAIT_DOTS_CSS, waitDots } from './live/wait-dots.js';
 import { createHudBrandMark } from '../player/branding.js';
+import { WorldView } from './world-view.js';
+import { seedIcon } from './seed-icon.js';
+import { flushSeedProofs } from './seed-rewards.js';
+import type { RewardResult } from '../../../server/src/seeds/types.js';
 import {
   FIRST_ONLINE_CARD_KEY,
   friendlyJoinError,
@@ -68,6 +72,8 @@ export type OnlineLobbyController = {
    * invite/share screen (the same one `createMatch` / "Create a duel" opens).
    */
   rematch(): Promise<void>;
+  trainingSeedTicket(botLevel: number): Promise<{ id: string; seed: number } | null>;
+  syncSeedRewards(): Promise<{ key: string; reward: RewardResult }[]>;
 };
 
 export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController => {
@@ -83,6 +89,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
       rematch: async () => undefined,
+      trainingSeedTicket: async () => null,
+      syncSeedRewards: async () => [],
     };
   }
 
@@ -114,6 +122,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   let waiting: { matchId: string; inviteCode: string } | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let serverOffset = 0;
+  let worldView: WorldView | null = null;
 
   // How the join screen was reached. A typed code joins straight away; a link arrival confirms
   // first (an intentional asymmetry — a forwarded link may reach the wrong person).
@@ -215,6 +224,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   };
 
   const show = (next: OnlineScreen) => {
+    if (next !== 'world') worldView?.close();
     hub.hidden = next !== 'hub';
     waitingEl.hidden = next !== 'waiting';
     joinEl.hidden = next !== 'join';
@@ -333,6 +343,23 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     }
     return status.identity;
   };
+  const syncSeedRewards = async () => {
+    const id = await ensureIdentity();
+    const storage = browserStorage();
+    return id && storage ? flushSeedProofs(storage, client, id.token) : [];
+  };
+  const trainingSeedTicket = async (botLevel: number) => {
+    const id = await ensureIdentity();
+    if (!id) return null;
+    try {
+      const ticket = await client.issueTrainingTicket(id.token, botLevel);
+      return { id: ticket.id, seed: ticket.seed };
+    } catch { return null; }
+  };
+  worldView = new WorldView(client, async () => {
+    const id = await ensureIdentity();
+    return id ? { token: id.token, playerId: id.playerId } : null;
+  });
 
   const reloadMatches = async () => {
     const id = await ensureIdentity();
@@ -711,45 +738,8 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
 
   // ---- wire buttons ----
   fillCopy();
-  /**
-   * The shared world map: a PUBLIC read (no account needed), the same grid for everyone. View only
-   * — the player is looking at marks other people earned, so there is nothing to press.
-   */
-  const renderWorld = async () => {
-    const grid = document.getElementById('online-world-grid');
-    const summary = document.getElementById('online-world-summary');
-    if (!grid) return;
-    if (summary) summary.textContent = ONLINE.worldLoading;
-    notice('online-world-notice', '');
-    grid.replaceChildren();
-    try {
-      const payload = await client.worldMap();
-      if (summary) {
-        summary.textContent =
-          payload.filled === 0 ? ONLINE.worldEmpty : ONLINE.worldHeld(payload.filled, payload.cells);
-      }
-      const byCell = new Map(payload.tiles.map((t) => [t.cell, t]));
-      for (let cell = 0; cell < payload.cells; cell++) {
-        const tile = byCell.get(cell);
-        const el = document.createElement('div');
-        el.className = 'world-cell';
-        el.dataset.held = tile ? 'true' : 'false';
-        if (tile?.tookOver) el.dataset.tookover = 'true';
-        if (tile) {
-          const name = tile.ownerName?.trim() || '';
-          const mark = document.createElement('span');
-          // A held cell carries the holder's initial; the full name rides the tooltip.
-          mark.textContent = (name[0] ?? '·').toUpperCase();
-          el.append(mark);
-          el.title = tile.tookOver ? `${name} · ${ONLINE.worldTaken}` : name;
-        }
-        grid.append(el);
-      }
-    } catch {
-      if (summary) summary.textContent = '';
-      notice('online-world-notice', ONLINE.worldError);
-    }
-  };
+  /** The shared world view owns its refresh, pan/zoom, selection and purchases. */
+  const renderWorld = () => worldView?.open();
 
   menuOnline?.addEventListener('click', () => void openHub());
   $('online-back').addEventListener('click', () => {
@@ -778,6 +768,50 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     refreshTitle();
   });
   document.getElementById('online-world')?.addEventListener('click', () => openWorld('hub'));
+  // The first affordable claim is invited only on the quiet menu, never during a match,
+  // animation, online turn or rematch flow. The server remembers acknowledgement per identity.
+  let invitationOpen = false;
+  const checkWorldInvitation = async () => {
+    if (invitationOpen || menuEl?.hidden !== false || !worldEl.hidden) return;
+    await syncSeedRewards();
+    if (menuEl?.hidden !== false) return;
+    const id = await ensureIdentity();
+    if (!id) return;
+    let wallet;
+    try { wallet = await client.seedWallet(id.token); } catch { return; }
+    if (wallet.balance < 100 || wallet.worldInvitationSeen || menuEl?.hidden !== false) return;
+    invitationOpen = true;
+    const sheet = document.createElement('div');
+    sheet.className = 'world-invitation';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.setAttribute('aria-label', '100 Seeds');
+    const card = document.createElement('div');
+    card.className = 'world-invitation-card';
+    const title = document.createElement('strong');
+    title.textContent = '100 SEEDS';
+    const line = document.createElement('p');
+    line.textContent = 'Your place in the world is waiting.';
+    const actions = document.createElement('div');
+    const open = document.createElement('button');
+    open.textContent = 'OPEN WORLD MAP';
+    const later = document.createElement('button');
+    later.textContent = 'LATER';
+    const finish = (go: boolean) => {
+      sheet.remove(); invitationOpen = false;
+      void client.acknowledgeWorldInvitation(id.token);
+      if (go) openWorld('menu');
+    };
+    open.addEventListener('click', () => finish(true));
+    later.addEventListener('click', () => finish(false));
+    actions.append(open, later);
+    card.append(seedIcon(28), title, line, actions);
+    sheet.append(card);
+    document.body.append(sheet);
+    open.focus();
+  };
+  window.addEventListener('futasaku:menu', () => { void checkWorldInvitation(); });
+  if (menuEl?.hidden === false) void checkWorldInvitation();
   $('online-create').addEventListener('click', () => void createMatch());
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {
@@ -910,7 +944,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, openWorld, handleBootHash, refreshTitle, openMatch, rematch };
+  return { enabled: true, openHub, openWorld, handleBootHash, refreshTitle, openMatch, rematch, trainingSeedTicket, syncSeedRewards };
 };
 
 const escapeHtml = (s: string) =>

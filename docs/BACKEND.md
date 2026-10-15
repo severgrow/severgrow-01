@@ -1,5 +1,7 @@
 # Futasaku 0.5 — backend foundation
 
+> The isolated Seeds/shared-world extension, including migration and cutover, is documented in [WORLD-MAP.md](WORLD-MAP.md). It is not yet deployed.
+
 > **Status pointer:** start at [`ONLINE.md`](ONLINE.md) for the current online-duels status. This
 > document describes the backend as built; the dated verification snapshots are
 > [`ONLINE-SHIP-STATUS.md`](ONLINE-SHIP-STATUS.md) and [`DATABASE-VERIFICATION.md`](DATABASE-VERIFICATION.md).

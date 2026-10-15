@@ -17,6 +17,10 @@ import { wireLiveNode } from './live/node.js';
 import { chainRouters } from './feedback/feedback.js';
 import { feedbackRouterNode } from './feedback/node.js';
 import { accountsRouterNode } from './accounts/node.js';
+import { WorldEconomyService } from './seeds/service.js';
+import { createWorldEconomyRouter } from './seeds/router.js';
+import { MemoryWorldEconomyStore } from './seeds/memory.js';
+import { postgresWorldEconomyStore } from './seeds/postgres.js';
 
 const buildStorage = (): { storage: Storage; description: string } => {
   const url = databaseUrlFromEnv();
@@ -31,8 +35,10 @@ export const startServer = async (options: { port?: number } = {}): Promise<{ po
   };
   const { storage, description } = buildStorage();
   const live = await wireLiveNode(storage, config, databaseUrlFromEnv()); // live duels: docs/LIVE.md
-  const service = new MatchService({ storage: live.storage, config });
-  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: chainRouters(live.router(service), await feedbackRouterNode(storage, service, databaseUrlFromEnv()), await accountsRouterNode(storage, service, databaseUrlFromEnv())) }); // + beta feedback (docs/BETA.md) + accounts (docs/ACCOUNTS.md)
+  const economyStore = storage instanceof MemoryStorage ? new MemoryWorldEconomyStore() : postgresWorldEconomyStore(poolFromUrl(databaseUrlFromEnv()!));
+  const economy = new WorldEconomyService(economyStore, live.storage);
+  const service = new MatchService({ storage: live.storage, config, economy });
+  const server = createHttpServer({ service, config, logger: (line) => console.log(line), live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), await feedbackRouterNode(storage, service, databaseUrlFromEnv()), await accountsRouterNode(storage, service, databaseUrlFromEnv())) });
 
   const port = options.port ?? Number(process.env.PORT ?? 8787);
   await new Promise<void>((resolve) => server.listen(port, resolve));

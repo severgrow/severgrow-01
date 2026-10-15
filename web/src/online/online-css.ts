@@ -326,42 +326,80 @@ export const ONLINE_CSS = `
 #duel-hud .live-chip { display: none !important; }
 /* The real-time control is now the bolt in the rail under the wordmark (live/ui.ts), not in this lane. */
 
-/* ---- The shared world map (the seed spike): one tile per won duel, the same grid for everyone.
-   A quiet 8x8 field of cells: held cells carry the holder's initial, free cells stay recessed. No
-   new visual language — the same recessed-glass surface the rows above use. */
+/* The world uses the whole safe viewport; the other online screens retain their narrow column. */
+.online-world {
+  display: grid; place-items: stretch; z-index: 3; background: var(--c-bg);
+  overflow: hidden; overscroll-behavior: contain;
+}
+.online-world .online-inner {
+  box-sizing: border-box;
+  width: 100%; max-width: none; height: 100dvh; min-height: 0;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  gap: 8px;
+}
+.online-world .online-head { max-width: 720px; width: 100%; margin-inline: auto; }
+.online-world .online-head h2 { font-size: 1.05rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.online-world #online-world-summary { text-align: center; margin: 0; opacity: .58; }
+.world-wallet {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 30px; color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
+}
+.seed-icon { flex: none; color: #e8ddbe; }
 .world-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 0.3rem;
-  margin: 0.35rem 0 0.2rem;
-  padding: 0.5rem;
-  border-radius: 12px;
-  background: color-mix(in srgb, #161c16 86%, #2c3a26);
+  flex: 1 1 auto; min-height: 0; width: min(100%, 1100px); margin: 0 auto;
+  display: grid; place-items: center; overflow: hidden;
+  border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);
+  box-shadow: inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
 }
-.world-cell {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 7px;
-  background: color-mix(in srgb, #10150f 82%, #26301f);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #cfe0b8;
-  overflow: hidden;
+.world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.world-map-svg:active { cursor: grabbing; }
+.world-hex {
+  fill: #252b26; stroke: #697267; stroke-width: .36; vector-effect: non-scaling-stroke;
+  transition: fill 160ms ease, stroke 160ms ease, opacity 160ms ease; cursor: pointer;
 }
-/* A held cell glows softly so the marks read at a glance; free cells stay flat and empty. */
-.world-cell[data-held="true"] {
-  background: color-mix(in srgb, #2f4326 78%, #6f9152);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 10%, transparent);
+.world-hex.held, .world-hex.mine { fill: color-mix(in srgb, var(--territory) 55%, #252b26); stroke: var(--territory); }
+.world-hex.mine { fill: color-mix(in srgb, var(--territory) 76%, #2b3027); }
+.world-hex.available { stroke: #c9c89c; stroke-width: .65; }
+.world-hex.same-owner { stroke-width: 1.1; }
+.world-hex.selected { stroke: #f2e5c5; stroke-width: 1.2; filter: drop-shadow(0 0 2px #d4c28c80); }
+.world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.5; }
+.world-selection {
+  min-height: 58px; width: min(100%, 720px); margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  color: #e8ddbe; border-top: 1px solid #d9cba632; font-size: .83rem; letter-spacing: .04em;
 }
-/* Taken from the player you beat: a faint warm edge, the only difference between the two states. */
-.world-cell[data-tookover="true"] {
-  background: color-mix(in srgb, #4a3d24 74%, #b8934e);
+.world-claim-button {
+  min-height: 44px; padding: 0 17px; flex: none;
+  color: #eee3c6; background: #2b3029; border: 1px solid #d5c89b7a;
+  border-radius: 9px; font: inherit; font-weight: 700; letter-spacing: .08em;
 }
-.world-cell[data-held="true"] span { opacity: 0.95; }
+.world-claim-button:active { transform: translateY(1px); }
+.online-world .online-notice { min-height: 20px; max-width: 720px; width: 100%; margin: 0 auto; }
+@media (max-height: 650px) { .online-world .online-inner { gap: 3px; } .world-selection { min-height: 48px; } }
+@media (prefers-reduced-motion: reduce) { .world-hex { transition: none; } }
+
+.world-invitation {
+  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: #050806ae;
+}
+.world-invitation-card {
+  width: min(100%, 360px); padding: 23px 21px 19px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; color: #eee3c6; border-radius: 15px;
+  border: 1px solid #d8cda557; background: #1c211edb;
+  box-shadow: 0 20px 80px #0009; backdrop-filter: blur(10px);
+}
+.world-invitation-card strong { font-size: 1.16rem; letter-spacing: .1em; }
+.world-invitation-card p { margin: 3px 0 13px; line-height: 1.4; }
+.world-invitation-card > div { width: 100%; display: flex; gap: 8px; }
+.world-invitation-card button {
+  flex: 1; min-height: 44px; border-radius: 8px; border: 1px solid #d8cda558;
+  color: #eee3c6; background: #343a31; font: inherit; font-size: .75rem; letter-spacing: .06em;
+}
+.world-invitation-card button:last-child { background: transparent; opacity: .75; }
 
 `;
 

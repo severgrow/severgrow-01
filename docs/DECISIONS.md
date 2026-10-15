@@ -1,5 +1,9 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-10-15 — Seeds/world v1 implementation boundary
+
+The isolated `futa0.5-world-seeds` branch adds a server-owned Seeds ledger and a 183-cell shared world while preserving the current engine. No merge or deployment is included. The historical automatic map-award path is removed in source and historical owners are copied in the new migration. The online owner must coordinate schema, Edge and web activation so no old awards are missed between copy and cutover. Details: [WORLD-MAP.md](WORLD-MAP.md).
+
 One line each: where the brief left room, what was chosen and why.
 
 ## Positioning pass (v0.8.1)

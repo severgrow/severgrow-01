@@ -1,5 +1,7 @@
 # Accounts — "Continue with Google" (FUTASAKU 0.5, branch `futa0.5-online`)
 
+The proposed world economy attaches wallets and claims to the same canonical player ID preserved by guest upgrade and account recovery; see [WORLD-MAP.md](WORLD-MAP.md). A nickname change does not transfer ownership.
+
 **Status (2026-10-15): BUILT and tested, NOT switched on.** The owner chose Google sign-in as a
 prominent, default part of FUTASAKU — never forced, guest play always available — with nature names
 plus a permanent tag (`MapleFox #7QK2`). Everything in the repo is done and tested against a local

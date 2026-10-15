@@ -19,6 +19,9 @@ import { chainRouters, createFeedbackRouter, postgresFeedbackStore } from './fee
 import type { PgPool } from './storage/postgres.js';
 import { createAccountsRouter, postgresIdentityLinkStore, supabaseAuthProvider } from './accounts/accounts.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
+import { postgresWorldEconomyStore } from './seeds/postgres.js';
+import { WorldEconomyService } from './seeds/service.js';
+import { createWorldEconomyRouter } from './seeds/router.js';
 import {
   classifyDatabaseUrl,
   edgePoolOptions,
@@ -120,9 +123,11 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
   });
   const pool = withEdgeConnectionRetry(poolFromPostgresJs(sql));
   const live = wireLiveEdge({ storage: postgresStorage(pool), pool, server: edgeConfig, env: (n) => Deno.env.get(n), ...(broadcaster ? { broadcaster } : {}) });
+  const economy = new WorldEconomyService(postgresWorldEconomyStore(pool), live.storage);
   const service = new MatchService({
     storage: live.storage,
     config: edgeConfig,
+    economy,
     // Live pings: the platform exposes SUPABASE_URL / SUPABASE_ANON_KEY to every function.
     // Missing values just mean the browser falls back to polling (P-11); no failure either way.
     ...(broadcaster ? { broadcaster } : {}),
@@ -137,7 +142,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts) }); // live duels + beta feedback + accounts
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 

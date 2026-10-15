@@ -32,8 +32,6 @@ import type {
   Storage,
   SweepResult,
   TokenRecord,
-  WorldTile,
-  WorldTileClaim,
 } from './types.js';
 
 export type PgRow = Record<string, unknown>;
@@ -107,16 +105,6 @@ const rowToMove = (row: PgRow): MoveRecord => ({
   events: asJson<Event[]>(row.events),
   requestId: asString(row.request_id),
   createdAt: asNumber(row.created_at),
-});
-
-/** A world-map tile row; `ownerName` comes from the joined `players` row, never from the tile. */
-const rowToWorldTile = (row: PgRow): WorldTile => ({
-  cell: asNumber(row.cell),
-  matchId: asString(row.match_id),
-  ownerId: asString(row.owner_id),
-  ownerName: asNullableString(row.owner_name),
-  awardedAt: asNumber(row.awarded_at),
-  tookOver: row.took_over === true || row.took_over === 't' || row.took_over === 1,
 });
 
 const isUniqueViolation = (error: unknown): boolean =>
@@ -895,7 +883,11 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     let deletedGuests = 0;
     const cutoff = now - guestMaxAgeMs;
     const { rows: guests } = await pool.query(
-      "select id from players p where p.kind = 'guest' and p.created_at < $1 and not exists (select 1 from match_participants mp where mp.player_id = p.id)",
+      `select id from players p where p.kind = 'guest' and p.created_at < $1
+       and not exists (select 1 from match_participants mp where mp.player_id = p.id)
+       and not exists (select 1 from seed_wallets sw where sw.player_id = p.id
+         and (sw.balance > 0 or sw.lifetime_earned > 0 or sw.lifetime_spent > 0))
+       and not exists (select 1 from world_claims wc where wc.owner_id = p.id)`,
       [cutoff],
     );
     for (const row of guests) {
@@ -934,61 +926,6 @@ export const postgresStorage = (pool: PgPool): Storage => ({
     );
     if (!rows[0]) return null;
     return { playerId: asString(rows[0].player_id) };
-  },
-
-  // ---- the shared world map (the world-map seed spike) ----
-
-  async listWorldTiles(): Promise<WorldTile[]> {
-    const { rows } = await pool.query(
-      `select t.cell, t.match_id, t.owner_id, t.awarded_at, t.took_over, p.display_name as owner_name
-         from world_tiles t
-         left join players p on p.id = t.owner_id
-        order by t.cell asc`,
-    );
-    return rows.map(rowToWorldTile);
-  },
-
-  async worldTileForMatch(matchId: string): Promise<WorldTile | null> {
-    const { rows } = await pool.query(
-      `select t.cell, t.match_id, t.owner_id, t.awarded_at, t.took_over, p.display_name as owner_name
-         from world_tiles t
-         left join players p on p.id = t.owner_id
-        where t.match_id = $1`,
-      [matchId],
-    );
-    return rows[0] ? rowToWorldTile(rows[0]) : null;
-  },
-
-  async claimWorldTile(claim: WorldTileClaim): Promise<'placed' | 'conflict'> {
-    // `on conflict do nothing` covers BOTH unique constraints (the cell primary key and the
-    // one-tile-per-match unique index): either collision is a lost race the caller re-plans.
-    const { rows } = await pool.query(
-      `insert into world_tiles (cell, match_id, owner_id, awarded_at, took_over)
-       values ($1, $2, $3, $4, $5)
-       on conflict do nothing
-       returning cell`,
-      [claim.cell, claim.matchId, claim.ownerId, claim.awardedAt, claim.tookOver],
-    );
-    return rows.length > 0 ? 'placed' : 'conflict';
-  },
-
-  async takeOverWorldTile(claim: WorldTileClaim, fromOwnerId: string): Promise<'placed' | 'conflict'> {
-    try {
-      const { rows } = await pool.query(
-        `update world_tiles
-            set match_id = $2, owner_id = $3, awarded_at = $4, took_over = $5
-          where cell = $1
-            and owner_id = $6
-            and not exists (select 1 from world_tiles where match_id = $2 and cell <> $1)
-          returning cell`,
-        [claim.cell, claim.matchId, claim.ownerId, claim.awardedAt, claim.tookOver, fromOwnerId],
-      );
-      return rows.length > 0 ? 'placed' : 'conflict';
-    } catch (error) {
-      // A simultaneous writer claimed this match's single tile first.
-      if (isUniqueViolation(error)) return 'conflict';
-      throw error;
-    }
   },
 
   async commitMove(input: CommitInput): Promise<CommitResult> {

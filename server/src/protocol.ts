@@ -160,23 +160,15 @@ export type SweepResponse = {
  * cell, the holder's display name, when it was placed and whether it was taken by beating the
  * previous holder. No player id, no match id — the map is a public read.
  */
-export type WorldTileSummary = {
-  cell: number;
-  ownerName: string | null;
-  awardedAt: number;
-  tookOver: boolean;
-};
-
-/** The whole shared map. `cells` is the fixed grid size, `filled` how many are held right now. */
 export type WorldMapPayload = {
-  cols: number;
-  rows: number;
-  cells: number;
-  filled: number;
-  tiles: WorldTileSummary[];
-  serverNow: number;
+  world: {
+    version: number;
+    revision: number;
+    cells: { id: string; q: number; r: number }[];
+    claims: { cellId: string; ownerId: string; ownerName: string | null; ownerTag: string; colour: string; claimedAt: number }[];
+    cost: number;
+  };
 };
-
 export type WorldMapResponse = { ok: true } & WorldMapPayload;
 
 export type ApiFailure = { ok: false; code: string; message: string };
