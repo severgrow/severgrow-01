@@ -5,7 +5,8 @@
 //     opens in its own window, started from the dock / taskbar / Start menu.
 //   • anywhere else (Safari, Firefox, or already installed but opened in a tab): true full screen,
 //     and a second press (or Esc) comes back.
-//   • already running in its own window: the button is not shown.
+//   • already running in its own window (installed): full screen.
+// In a game the same idea sits beside the wordmark as a plain icon: full screen only.
 import { isIOS, isMobile, isStandalone, nativeInstallAvailable, promptNativeInstall } from './install.js';
 
 export type AppWindowCopy = { install: string; fullscreen: string; exitFullscreen: string };
@@ -27,42 +28,84 @@ const CSS = `
 
 const canFullscreen = (): boolean => typeof document.documentElement.requestFullscreen === 'function' && document.fullscreenEnabled !== false;
 
+/** In a game: a plain icon beside the wordmark, in the header's own quiet style (like the ☰). */
+const HUD_CSS = `
+#hud-window { position:fixed; z-index:8; top:env(safe-area-inset-top, 0px); right:var(--hud-window-right, 84px);
+  width:44px; height:44px; display:grid; place-items:center; padding:0; border:0; border-radius:10px; background:transparent;
+  color:var(--c-text, #e8ddc5); opacity:.62; cursor:pointer; transition:opacity .16s ease, background-color .16s ease; }
+#hud-window:hover, #hud-window:focus-visible { opacity:1; background:rgba(232,221,197,.08); }
+#hud-window:focus-visible { outline:2px solid var(--c-text, #e8ddc5); outline-offset:-2px; }
+#hud-window svg { width:18px; height:18px; }
+#hud-window[hidden], #game[hidden] ~ #hud-window { display:none; }
+`;
+
+const toggleFullscreen = () => {
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  else void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+};
+
 export const mountAppWindowButton = (copy: AppWindowCopy): void => {
   const menu = document.getElementById('menu');
   if (!menu || document.getElementById('app-window')) return;
-  // Phones and tablets have the install invitation; this button is for computers.
-  if (isMobile() || isIOS() || isStandalone()) return;
+  // Phones and tablets have the install invitation; these buttons are for computers.
+  if (isMobile() || isIOS()) return;
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + HUD_CSS;
   document.head.append(style);
+
+  // ---- the main menu: its own window first (Chrome/Edge), else full screen ----
   const btn = document.createElement('button');
   btn.id = 'app-window';
   btn.type = 'button';
   menu.append(btn);
-
   const paint = () => {
-    const installed = isStandalone();
     const full = document.fullscreenElement !== null;
-    const install = !full && nativeInstallAvailable();
-    btn.hidden = installed || (!install && !canFullscreen());
+    // Already running in its own window (installed): the button offers full screen instead.
+    const install = !full && !isStandalone() && nativeInstallAvailable();
+    btn.hidden = !install && !canFullscreen();
     const label = full ? copy.exitFullscreen : install ? copy.install : copy.fullscreen;
     btn.innerHTML = full ? ICON_COLLAPSE : install ? ICON_WINDOW : ICON_EXPAND;
     btn.setAttribute('aria-label', label);
     btn.title = label;
     btn.dataset.mode = full ? 'exit' : install ? 'install' : 'fullscreen';
+    paintHud();
   };
-
   btn.addEventListener('click', () => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => undefined);
-      return;
-    }
-    if (nativeInstallAvailable()) {
+    if (!document.fullscreenElement && !isStandalone() && nativeInstallAvailable()) {
       void promptNativeInstall().then(paint);
       return;
     }
-    void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+    toggleFullscreen();
   });
+
+  // ---- in a game: full screen only (never an install dialog mid-game), beside the wordmark ----
+  const hud = document.createElement('button');
+  hud.id = 'hud-window';
+  hud.type = 'button';
+  const game = document.getElementById('game');
+  (game?.parentElement ?? document.body).append(hud);
+  hud.addEventListener('click', toggleFullscreen);
+  function paintHud(): void {
+    const full = document.fullscreenElement !== null;
+    hud.hidden = !canFullscreen() || !game || game.hidden;
+    const label = full ? copy.exitFullscreen : copy.fullscreen;
+    hud.innerHTML = full ? ICON_COLLAPSE : ICON_EXPAND;
+    hud.setAttribute('aria-label', label);
+    hud.title = label;
+    hud.dataset.mode = full ? 'exit' : 'fullscreen';
+    placeHud();
+    requestAnimationFrame(placeHud); // again once the header has settled (online adds its own strip)
+  }
+  /** Sit just left of the wordmark, whatever its width and wherever the header puts it. */
+  function placeHud(): void {
+    const brand = document.getElementById('hud-brand')?.getBoundingClientRect();
+    if (brand && brand.width > 0) document.documentElement.style.setProperty('--hud-window-right', `${Math.round(innerWidth - brand.left + 4)}px`);
+  }
+  if (game) new MutationObserver(paintHud).observe(game, { attributes: true, attributeFilter: ['hidden'] });
+  const brandEl = document.getElementById('hud-brand');
+  if (brandEl && typeof ResizeObserver === 'function') new ResizeObserver(placeHud).observe(brandEl);
+  window.addEventListener('resize', paintHud);
+
   document.addEventListener('fullscreenchange', paint);
   window.addEventListener('beforeinstallprompt', () => setTimeout(paint, 0));
   window.addEventListener('appinstalled', paint);

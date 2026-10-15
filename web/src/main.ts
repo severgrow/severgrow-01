@@ -3099,6 +3099,8 @@ function renderRevealTile(): void {
 function render() {
   const t0 = performance.now();
   applyLayout();
+  // A new layout (or a game screen not drawn yet): place the cockpit once it can be measured.
+  if (sideDockStale && IS_FUTA04) requestAnimationFrame(() => sideDockStale && centreSideDock());
   syncGlow();
   updateFuta04MoveActive();
   if (!session || $('game').hidden) return;
@@ -3533,6 +3535,31 @@ function alignDrawPiles() {
   piles.style.setProperty('--futa04-draw-shift', `${Math.round(Math.max(0, Math.min(desired, room)))}px`);
   drawPileAnchorKey = anchorKey;
 }
+/**
+ * Wide screens: centre the cockpit in the empty space to the right of the board (owner,
+ * 2026-10-15), instead of pushed against the screen edge. Measured once per layout (never per
+ * move), anchored on the cockpit — not the hand — so the dock never jumps as the hand changes
+ * size. It only ever moves left, and always keeps clear of the board.
+ */
+let sideDockStale = true;
+function centreSideDock(): void {
+  const root = document.documentElement;
+  if (root.dataset.layout !== 'side') {
+    root.style.removeProperty('--side-dock-shift');
+    sideDockStale = false;
+    return;
+  }
+  const tiles = document.querySelector('#board-wrap .l-base')?.getBoundingClientRect();
+  const box = document.getElementById('futa04-box')?.getBoundingClientRect();
+  if (!tiles || !box || tiles.width === 0 || box.width === 0) return; // not drawn yet: the next render retries
+  sideDockStale = false;
+  const current = parseFloat(root.style.getPropertyValue('--side-dock-shift')) || 0;
+  const left = box.left - current; // where the cockpit sits with no shift
+  const room = innerWidth - tiles.right;
+  const want = tiles.right + room / 2 - box.width / 2; // its left edge, centred in the room
+  const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
+  root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
   const { w, h } = gameViewport();
@@ -3618,6 +3645,7 @@ function applyLayout() {
   board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
+  if (IS_FUTA04) sideDockStale = true;
 
 }
 window.addEventListener('resize', () => applyLayout());

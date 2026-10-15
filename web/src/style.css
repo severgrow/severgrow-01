@@ -5719,3 +5719,22 @@ html.align-overlay::before {
   0%, 100% { opacity: 0; }
   40% { opacity: 1; }
 }
+
+/* ---------- wide screens: even margins, a centred cockpit (owner, 2026-10-15) ----------
+   The board used to start under the header band (≈50px of air above it) and run to ~8px from
+   the bottom; the hand sat ~3–10px from the bottom edge. Now the board rises into the empty
+   header band (the ☰ and the wordmark sit in the corners, which the hex shape leaves empty) so it
+   gets the same air above and below, and the hand keeps the same air under it. The cockpit is
+   centred in the empty space right of the board by main.ts centreSideDock (--side-dock-shift). */
+html.futa04-branding[data-layout='side'] {
+  --side-air: clamp(14px, 2.4vh, 28px);
+}
+html.futa04-branding[data-layout='side'] .board-wrap {
+  margin-top: calc(var(--side-air) - var(--hud-h, 44px) - 6px);
+  margin-bottom: calc(var(--side-air) - 8px);
+}
+html.futa04-branding[data-layout='side'] .dock {
+  /* the dock's rows have fixed heights, so it is lifted as a whole (it sits at the grid's end) */
+  margin-bottom: calc(var(--side-air) - 10px);
+  translate: var(--side-dock-shift, 0px) 0;
+}
