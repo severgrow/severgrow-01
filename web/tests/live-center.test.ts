@@ -1,7 +1,7 @@
 // Live duels — the challenge listener with a fake server, a fake channel and a fake clock.
 import { describe, expect, it } from 'vitest';
 import type { ChallengeWire, LiveApi, MyChallengesWire } from '../src/online/live/api.js';
-import { POLL_MS, createChallengeCenter } from '../src/online/live/center.js';
+import { POLL_MS, REALTIME_IDLE_POLL_MS, createChallengeCenter } from '../src/online/live/center.js';
 import type { PopupPort, Probe } from '../src/online/live/center.js';
 import { MAX_SOFT_DEFER_MS, deferDecision } from '../src/online/live/deferral.js';
 import { createReturnStore, restoreTarget, RETURN_KEY } from '../src/online/live/return-target.js';
@@ -102,11 +102,11 @@ const fakePopup = () => {
   return { port, shown, open: () => open };
 };
 
-const setup = (screen: Partial<ReturnType<Probe['screen']>> = {}) => {
+const setup = (screen: Partial<ReturnType<Probe['screen']> & { realtime: boolean }> = {}) => {
   const clock = fakeClock();
   const server = fakeServer();
   const popup = fakePopup();
-  const state = { tutorial: false, hardBusy: false, softBusy: false, visible: true, ...screen };
+  const state = { tutorial: false, hardBusy: false, softBusy: false, visible: true, realtime: false, ...screen };
   let pinged: (() => void) | null = null;
   const started: string[] = [];
   const center = createChallengeCenter({
@@ -124,6 +124,7 @@ const setup = (screen: Partial<ReturnType<Probe['screen']>> = {}) => {
         pinged = cb;
         return () => void (pinged = null);
       },
+      connected: () => state.realtime,
     },
     events: { onLiveStarted: (m) => void started.push(m) },
   });
@@ -259,6 +260,49 @@ describe('challenge listener', () => {
   });
 });
 
+describe('polling cost (Supabase quota)', () => {
+  const inboxCalls = (t: ReturnType<typeof setup>) => t.server.calls.filter((c) => c === 'inbox').length;
+
+  it('with the Realtime ping connected and nothing pending, the inbox is checked only every 30 s', async () => {
+    const t = setup({ realtime: true });
+    t.center.start();
+    await t.flush();
+    const start = inboxCalls(t);
+    await t.clock.advance(60_000);
+    expect(inboxCalls(t) - start).toBe(60_000 / REALTIME_IDLE_POLL_MS);
+    expect(REALTIME_IDLE_POLL_MS).toBe(30_000);
+  });
+
+  it('without Realtime, polling is the only path, so it stays at 4 s (no slower than before)', async () => {
+    const t = setup({ realtime: false });
+    t.center.start();
+    await t.flush();
+    const start = inboxCalls(t);
+    await t.clock.advance(60_000);
+    expect(inboxCalls(t) - start).toBe(60_000 / POLL_MS);
+  });
+
+  it('a ping still brings a challenge at once while idle-polling slowly', async () => {
+    const t = setup({ realtime: true });
+    t.center.start();
+    await t.flush();
+    t.server.setInbox({ incoming: [challenge()] });
+    t.ping();
+    await t.flush();
+    expect(t.popup.shown).toEqual(['c1']);
+  });
+
+  it('while my own challenge is waiting for an answer, it checks every 4 s even with Realtime', async () => {
+    const t = setup({ realtime: true });
+    t.server.setInbox({ outgoing: [challenge({ id: 'mine', fromMe: true, expiresAt: 2_000_000 })] });
+    t.center.start();
+    await t.flush();
+    const start = inboxCalls(t);
+    await t.clock.advance(20_000);
+    expect(inboxCalls(t) - start).toBe(20_000 / POLL_MS);
+  });
+});
+
 describe('return target', () => {
   const kv = () => {
     const m = new Map<string, string>();
@@ -294,5 +338,32 @@ describe('return target', () => {
     expect(createReturnStore(store).get()).toBeNull();
     store.set(RETURN_KEY, 'not json');
     expect(createReturnStore(store).get()).toBeNull();
+  });
+});
+
+describe('player channel: connected only after a confirmed join', () => {
+  it('reports connected after the server confirms the join, and not after the socket drops', async () => {
+    const { createPlayerChannel } = await import('../src/online/live/channel.js');
+    type L = (ev: { data?: unknown }) => void;
+    const listeners: Record<string, L[]> = {};
+    const sock = {
+      readyState: 1,
+      sent: [] as string[],
+      send(d: string) { this.sent.push(d); },
+      close() {},
+      addEventListener(type: string, cb: L) { (listeners[type] ??= []).push(cb); },
+    };
+    {
+      const ch = createPlayerChannel(() => sock, { url: 'https://x.supabase.co', key: 'anon' });
+      const stop = ch.subscribe('p1', () => undefined);
+      expect(ch.connected?.()).toBe(false);
+      listeners.open!.forEach((f) => f({}));
+      expect(ch.connected?.()).toBe(false); // an open socket is not a join
+      listeners.message!.forEach((f) => f({ data: JSON.stringify({ topic: 'realtime:player:p1', event: 'phx_reply', payload: { status: 'ok' } }) }));
+      expect(ch.connected?.()).toBe(true);
+      listeners.close!.forEach((f) => f({}));
+      expect(ch.connected?.()).toBe(false);
+      stop();
+    }
   });
 });

@@ -42,6 +42,7 @@ import type { Action, Event, Player, State } from '../../src/engine/index.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { createDraftEngine } from '../../web/src/online/draft.js';
 import { emptyClock, noteServerNow, remainingMs } from '../../web/src/online/clock.js';
+import { requireRealProjectOptIn } from './real-project-guard.js';
 
 // ----------------------------------------------------------------- constants
 
@@ -2010,6 +2011,7 @@ const isEntryPoint = (): boolean => {
 export const runCli = main;
 
 if (isEntryPoint()) {
+  requireRealProjectOptIn('online-soak'); // real database + Edge: opt-in only (helpers stay importable)
   void main().catch((error: unknown) => {
     console.error(`SOAK FAILED: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     process.exit(1);

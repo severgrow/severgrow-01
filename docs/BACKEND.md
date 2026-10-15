@@ -377,6 +377,24 @@ real `set role` in `server/tests/live-postgres.integration.test.ts`), nothing in
 publication, one pending challenge per match enforced by a unique partial index. Endpoints and
 tuning: [`LIVE.md`](LIVE.md), [`NETWORK-CONTRACT.md`](NETWORK-CONTRACT.md#live-duels-preview-channels-docslivemd).
 
+## Tests and the Supabase quota
+
+Every request to the deployed API is a paid **Edge Function invocation** (Free plan: a hard monthly
+cap; Pro: a larger allowance, then billed). One day of automated tests against the real project
+used the whole Free allowance (2026-10-15), so:
+
+- `npm run check`, `npm run e2e` and every local browser suite (`web/e2e/helpers/local-duel.ts`,
+  `npm run e2e:live`) run against an **in-process** API and never touch Supabase.
+- Scripts that DO hit the real project stop with `SKIPPED … (exit 3)` unless run on purpose:
+  `FUTASAKU_REAL_PROJECT=1 npx tsx <script>`. Guarded: `web/e2e/online-live-ping-latency.ts`,
+  `online-live-smoothness.ts` (when `LIVE_API` is the real project), `online-device-matrix.ts`,
+  `offline-vs-online-audit.ts`, `server/scripts/online-soak.ts`, `server/scripts/load-test.ts`
+  (`server/scripts/real-project-guard.ts`). `online-simulation.ts` already needs `--live`.
+- The app itself keeps idle traffic low: the live-duel challenge check runs every **30 s** while the
+  per-player Realtime ping is connected (4 s only when Realtime is down, or a challenge is waiting),
+  and the live status check runs every **10 s** in a match (1 s only while live or waiting; 30 s
+  when the tab is hidden). The duel board's own 2 s sync poll is unchanged.
+
 ## Test results
 
 | Suite | Result |

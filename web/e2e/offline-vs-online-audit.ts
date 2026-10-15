@@ -28,6 +28,8 @@ import {
   waitGame,
 } from './helpers/online-matrix.js';
 import type { DeviceProfile, Session } from './helpers/online-matrix.js';
+import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+requireRealProjectOptIn('offline-vs-online-audit'); // real Supabase project: opt-in only
 
 const OFFLINE_URL = process.env.OFFLINE_URL ?? 'http://127.0.0.1:4180/';
 const SCREEN_DIR = 'docs/screens/offline-vs-online';

@@ -199,6 +199,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
       }
       waiting = res.challenge;
       seenOutgoing.set(res.challenge.id, 'pending');
+      void center?.pollNow(); // the listener sees it is waiting and checks fast until answered
       haptic(8);
     } catch (e) {
       note(errorWord((e as { code?: string }).code) ?? LIVE.failed);
@@ -340,7 +341,7 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   };
   window.setInterval(second, 250);
 
-  // ---- the per-match status poll (1 s while live or waiting, 3 s otherwise; only in a match) ----
+  // ---- the per-match status poll (1 s while live or waiting, 10 s otherwise; only in a match) ----
   let inflight = false;
   const refresh = async (): Promise<void> => {
     const m = currentMatchId();
@@ -375,7 +376,8 @@ const run = (host: LiveHost, api: LiveApi, playerId: string): void => {
   };
   const loop = () => {
     const fast = !!status?.live || !!waiting || !!status?.pending;
-    const delay = document.visibilityState !== 'visible' ? 10_000 : fast ? 1_000 : 3_000;
+    // Every check is a paid Edge call: 1 s only while live or waiting, 10 s otherwise, 30 s hidden.
+    const delay = document.visibilityState !== 'visible' ? 30_000 : fast ? 1_000 : 10_000;
     void refresh().finally(() => window.setTimeout(loop, delay));
   };
   loop();

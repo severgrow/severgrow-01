@@ -14,6 +14,8 @@
 //   npx tsx web/e2e/online-live-ping-latency.ts
 import { chromium } from 'playwright-core';
 import type { BrowserContext, Page } from 'playwright-core';
+import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+requireRealProjectOptIn('online-live-ping-latency'); // real Supabase project: opt-in only
 
 const LIVE_APP = 'https://severgrow.github.io/severgrow-01/futa0.5/';
 const LIVE_API = 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';

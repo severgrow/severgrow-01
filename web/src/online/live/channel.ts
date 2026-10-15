@@ -18,14 +18,16 @@ export const isChallengeFrame = (frame: unknown, topic: string): boolean => {
   return inner === 'challenge';
 };
 
-export const createPlayerChannel = (socketCtor?: (url: string) => Socket): PlayerChannel => {
+export const createPlayerChannel = (socketCtor?: (url: string) => Socket, config?: { url: string; key: string }): PlayerChannel => {
   const env = (import.meta as { env?: Record<string, string | undefined> }).env;
-  const url = env?.VITE_SUPABASE_URL?.trim();
-  const key = env?.VITE_SUPABASE_ANON_KEY?.trim();
-  if (!url || !key) return { subscribe: () => () => undefined };
+  const url = (config?.url ?? env?.VITE_SUPABASE_URL)?.trim();
+  const key = (config?.key ?? env?.VITE_SUPABASE_ANON_KEY)?.trim();
+  if (!url || !key) return { subscribe: () => () => undefined, connected: () => false };
   const wsUrl = `${url.replace(/^http/i, 'ws').replace(/\/+$/, '')}/realtime/v1/websocket?apikey=${encodeURIComponent(key)}&vsn=1.0.0`;
   const make = socketCtor ?? ((u: string) => new (globalThis as unknown as { WebSocket: new (u: string) => Socket }).WebSocket(u));
+  let joined = 0; // subscriptions whose channel join the server confirmed
   return {
+    connected: () => joined > 0,
     subscribe(playerId, onPing) {
       const topic = `realtime:player:${playerId}`;
       let socket: Socket | null = null;
@@ -34,6 +36,12 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket): Playe
       let failures = 0;
       let closed = false;
       let ref = 0;
+      let isJoined = false;
+      const setJoined = (on: boolean) => {
+        if (on === isJoined) return;
+        isJoined = on;
+        joined += on ? 1 : -1;
+      };
       const send = (t: string, event: string, payload: unknown) => {
         if (socket?.readyState !== 1) return;
         ref += 1;
@@ -53,12 +61,16 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket): Playe
         });
         socket.addEventListener('message', (ev) => {
           try {
-            if (isChallengeFrame(JSON.parse(String(ev.data)), topic)) onPing();
+            const frame = JSON.parse(String(ev.data)) as { topic?: unknown; event?: unknown; payload?: { status?: unknown } };
+            // Only a confirmed join counts as "connected" (a socket that opens but cannot join does not).
+            if (frame.topic === topic && frame.event === 'phx_reply' && frame.payload?.status === 'ok') setJoined(true);
+            if (isChallengeFrame(frame, topic)) onPing();
           } catch {
             /* non-JSON frame */
           }
         });
         const down = () => {
+          setJoined(false);
           if (beat) clearInterval(beat);
           beat = null;
           socket = null;
@@ -77,6 +89,7 @@ export const createPlayerChannel = (socketCtor?: (url: string) => Socket): Playe
       open();
       return () => {
         closed = true;
+        setJoined(false);
         if (beat) clearInterval(beat);
         if (retry) clearTimeout(retry);
         try {

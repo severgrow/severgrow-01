@@ -50,6 +50,7 @@ import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 import type { MatchViewPayload, SubmitActionRequest } from '../src/protocol.js';
+import { requireRealProjectOptIn } from './real-project-guard.js';
 
 // ----------------------------------------------------------------- argument parsing
 
@@ -634,6 +635,7 @@ const isEntryPoint = (): boolean => {
 };
 
 if (isEntryPoint()) {
+  requireRealProjectOptIn('load-test'); // real database + Edge: opt-in only (helpers stay importable)
   void main().catch((error: unknown) => {
     console.error(`LOAD TEST FAILED: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
     process.exit(1);

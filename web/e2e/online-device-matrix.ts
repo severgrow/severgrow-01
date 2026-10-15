@@ -58,6 +58,8 @@ import {
   type Session,
   type SessionOptions,
 } from './helpers/online-matrix.js';
+import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+requireRealProjectOptIn('online-device-matrix'); // real Supabase project: opt-in only
 
 // ---------------------------------------------------------------------------- arguments
 

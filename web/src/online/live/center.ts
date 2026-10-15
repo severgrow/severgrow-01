@@ -6,7 +6,14 @@ import { deferDecision } from './deferral.js';
 import type { ScreenState } from './deferral.js';
 
 export const HEARTBEAT_MS = 20_000;
+/** Inbox check when polling is the only path (Realtime down) or a challenge is in flight. */
 export const POLL_MS = 4_000;
+/**
+ * Inbox check while the per-player Realtime ping is connected and nothing is pending. The ping is
+ * what brings a new challenge at once; this slow poll is only the safety net. Every check is a
+ * paid Edge Function call, so this is the line that keeps an idle app cheap (Supabase quota).
+ */
+export const REALTIME_IDLE_POLL_MS = 30_000;
 export const DEFER_CHECK_MS = 250;
 
 export type Clock = {
@@ -28,7 +35,11 @@ export type PopupPort = {
 };
 
 /** Per-player ping channel: a hint to poll now. */
-export type PlayerChannel = { subscribe(playerId: string, onPing: () => void): () => void };
+export type PlayerChannel = {
+  subscribe(playerId: string, onPing: () => void): () => void;
+  /** True while the Realtime channel is joined (pings can arrive). Absent = never connected. */
+  connected?(): boolean;
+};
 
 export type CenterEvents = {
   /** A live session began for this player (as the accepter OR as the sender whose challenge was accepted). */
@@ -104,7 +115,15 @@ export const createChallengeCenter = (deps: {
     if (!running || !probe.visible()) return; // paused while hidden
     pollTimer = clock.setTimeout(() => {
       void pollNow().finally(schedulePoll);
-    }, POLL_MS);
+    }, pollDelay());
+  };
+
+  /** Fast only when it matters: Realtime down, a pop-up open/queued, or my challenge awaiting an answer. */
+  let outgoingPending = false;
+  const pollDelay = (): number => {
+    const realtime = deps.channel?.connected?.() === true;
+    if (!realtime || current !== null || accepting || outgoingPending) return POLL_MS;
+    return REALTIME_IDLE_POLL_MS;
   };
 
   const hidePopup = () => {
@@ -158,6 +177,10 @@ export const createChallengeCenter = (deps: {
 
   const applyInbox = (inbox: MyChallengesWire) => {
     deps.events?.onInbox?.(inbox);
+    const wasPending = outgoingPending;
+    outgoingPending = inbox.outgoing.some((c) => c.status === 'pending' && clock.now() <= c.expiresAt);
+    // A challenge just went out: switch to the fast check now, not after the slow timer fires.
+    if (outgoingPending && !wasPending && running && pollTimer !== null) schedulePoll();
     const was = live;
     live = inbox.liveMatchId;
     const first = baseline;
