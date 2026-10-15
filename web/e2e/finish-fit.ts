@@ -301,6 +301,14 @@ if (MODES.includes('online')) {
   }
 }
 
+// NOTE: the tutorial's own hand-off (finishing the guided run opens a campaign level) is NOT driven
+// here. The guided run's last chapter is a "look and tap" chapter whose steps did not advance under a
+// generic tap driver (60 steps, still in the chapter), and driving all 13 chapters is a suite of its
+// own (`web/e2e/futa04-tutorial-*.ts`). The hand-off itself is pinned at the source by
+// `web/tests/finish-card.test.ts`, and the entry point it calls IS proven here: the campaign block
+// above opens campaign level 1 (seed 95001) from the campaign's own leading button, which is the very
+// button `enterCampaign()` backs.
+
 void seen;
 console.log(`\n${failed === 0 ? 'ALL PASS' : `${failed} FAILED`} — shots in docs/screens/finish/`);
 process.exit(failed === 0 ? 0 : 1);
