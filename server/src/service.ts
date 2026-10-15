@@ -21,6 +21,7 @@ import type { MatchBroadcaster } from './broadcast.js';
 import { DEFAULT_SERVER_CONFIG, clientVersionOk } from './config.js';
 import type { ServerConfig } from './config.js';
 import { ApiError, engineCodeToApi } from './errors.js';
+import { playerTag } from '../../src/player-tag.js';
 import { hashToken, newId, newInviteCode, newSeed, newToken, normalizeInviteCode } from './ids.js';
 import { natureName } from './nature-names.js';
 import type {
@@ -440,6 +441,7 @@ export class MatchService {
         turnPlayer: match.status === 'waiting' ? null : gated.turnPlayer,
         turnDeadlineAt: match.status === 'finished' ? null : match.turnDeadlineAt,
         opponentName: row.opponentName,
+        opponentTag: row.opponentId ? playerTag(row.opponentId) : null,
         lastActivityAt: match.updatedAt,
         unseenTurn: match.status === 'active' && gated.turnPlayer === row.mySeat && row.lastSeenAt < match.updatedAt,
         revision: rev,

@@ -88,6 +88,8 @@ export type MatchListEntry = {
   turnPlayer: Player | null;
   turnDeadlineAt: number | null;
   opponentName: string | null;
+  /** "7QK2": tells two players with the same nature name apart (src/player-tag.ts). */
+  opponentTag?: string | null;
   lastActivityAt: number;
   unseenTurn: boolean;
   revision: number;

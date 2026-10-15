@@ -1,4 +1,156 @@
-# Accounts — decision-ready plan (FUTASAKU 0.5, branch `futa0.5-online`)
+# Accounts — "Continue with Google" (FUTASAKU 0.5, branch `futa0.5-online`)
+
+**Status (2026-10-15): BUILT and tested, NOT switched on.** The owner chose Google sign-in as a
+prominent, default part of FUTASAKU — never forced, guest play always available — with nature names
+plus a permanent tag (`MapleFox #7QK2`). Everything in the repo is done and tested against a local
+Postgres and a fake Supabase Auth. Nothing shows to players until the owner does the setup below:
+the app asks Supabase whether Google is switched on and stays exactly as before until it is.
+
+The original proposal (2026-10-14) is kept below the line as history.
+
+## What a player sees
+
+| Where | Guest | Signed in |
+| --- | --- | --- |
+| First tap on **Play online** | A one-time card: **Continue with Google** / **Play as guest** (+ Privacy) | — |
+| Top of **Play online** | "Playing as a guest…" + **Continue with Google** | nothing |
+| **Settings → Online** | "You are MapleFox #7QK2", **Continue with Google**, Privacy | "You are …", "Signed in with Google · email", **Sign out**, **Delete my account**, Privacy |
+| `futasaku.com/#privacy` | The privacy policy | same |
+| Offline / tutorial / computer games | No change, ever | No change |
+
+Name tags (`src/player-tag.ts`) show in the match list and in Settings ("You are …"). The in-game bar keeps the plain name (short, and the list is where players tell each other apart). They are derived from the
+player id, so they never change and need no storage. (The live-duel challenge pop-up still shows the
+plain name — adding the tag there means changing the live ping payload; left for later.)
+
+## How it works (and why it is safe)
+
+```
+browser ──(1) PKCE: verifier stays on the device──▶ Supabase /auth/v1/authorize?provider=google
+        ◀─(2) Google → Supabase → back with ?code=… ─
+        ──(3) code + verifier ──────────────────────▶ Supabase /auth/v1/token  → access token
+        ──(4) access token, ONCE, + this device's token ─▶ our API POST /v1/auth/google
+                                                       └─ asks Supabase GET /auth/v1/user "whose token is this?"
+        ◀─(5) one of OUR player tokens (same kind a guest has) ─
+        ──(6) Supabase session closed (/logout); the access token is thrown away
+```
+
+- **The browser is never trusted** with who it is. The server ignores any id or email in the request
+  and asks Supabase. A token that is not a Google sign-in is refused. (`server/src/accounts/accounts.ts`)
+- **Upgrade in place.** A guest who signs in keeps the same player id, name, matches and history.
+- **Recovery.** On another device, the same Google finds the same player and issues a new token.
+- **No merging, no overwriting.** A device whose guest differs from the Google's account switches to
+  the account; the guest is left untouched (the toast says its games were not moved). A second,
+  different Google on a device whose player already has one gets its own new player. The database
+  enforces one Google per player and one player per Google (`server/migrations/0010_accounts.sql`).
+- **Racing first sign-ins** (two devices at once) end on one player: the loser of the insert re-reads.
+- **What we store:** a row `(provider 'google', Supabase user id, player id)`. No email, name or photo
+  in our tables; the email stays in Supabase Auth and on the player's device (Settings).
+- **Delete my account:** removes the link, deletes the Supabase Auth user (the email), signs out every
+  other device, and leaves this device playing as a guest. POST `/v1/auth/google/delete` (POST because
+  the API's CORS list has no DELETE).
+- **Sign out:** this device forgets the account and starts as a fresh guest next time; the account and
+  its matches are untouched.
+- **Rate limits:** sign-in 30/h per IP, delete 10/h per player.
+- **Privacy housekeeping:** 0010 also adds a nightly pg_cron job that deletes rate-limit rows (keyed by
+  IP) older than 2 days — the privacy policy promises it.
+
+## Files
+
+| Piece | File |
+| --- | --- |
+| Migration | `server/migrations/0010_accounts.sql` |
+| Server router, stores, Supabase check | `server/src/accounts/accounts.ts`, `server/src/accounts/node.ts` |
+| Wiring | `server/src/index.ts`, `server/src/edge-entry.ts` (bundle rebuilt) |
+| Name tags | `src/player-tag.ts`; `opponentTag` in the match list; `web/src/online/lobby.ts` |
+| Browser: PKCE, records | `web/src/accounts/core.ts` |
+| Browser: screens | `web/src/accounts/mount.ts` (one line in `web/src/main.ts`) |
+| Words, privacy policy | `src/strings.ts` → `ACCOUNT`, `PRIVACY` |
+| Tests | `server/tests/accounts.test.ts` (21), `server/tests/accounts-postgres.integration.test.ts` (4, real Postgres), `web/tests/accounts-core.test.ts` (9), `web/tests/player-tag.test.ts` (4), `web/e2e/accounts-google.ts` (browser, 40+ checks) |
+| Screenshots | `docs/screens/accounts/` |
+
+Run the real-Postgres suite (a throwaway local database, never production):
+`LIVE_DATABASE_URL=postgres://postgres@127.0.0.1:55432/futalive PGSSL=disable npx vitest run server/tests/accounts-postgres.integration.test.ts`
+
+## Setup — exactly what the owner clicks (no code)
+
+Project: Supabase **FUTASAKU** (`wbfrbeedlvjercrukngn`). Site: **https://www.futasaku.com**.
+Never paste the Client Secret anywhere except the Supabase box in B1, and never into a chat.
+
+### A. Google Cloud (about 10 minutes)
+
+1. Open <https://console.cloud.google.com>. Top bar → project picker → **New project** → name it
+   `FUTASAKU` → **Create**, then make sure it is selected.
+2. ☰ menu → **Google Auth Platform** (older screens: **APIs & Services → OAuth consent screen**) →
+   **Get started**:
+   - App name: `FUTASAKU`; User support email: your email → **Next**
+   - Audience: **External** → **Next**
+   - Contact information: your email → **Next** → tick the policy box → **Create**.
+3. **Branding** (left menu):
+   - App home page: `https://www.futasaku.com/`
+   - App privacy policy link: `https://www.futasaku.com/#privacy`
+   - Authorized domains → **Add domain**: `futasaku.com`, then `wbfrbeedlvjercrukngn.supabase.co`
+   - Leave the logo empty (a logo makes Google review the app first). **Save**.
+4. **Data Access** → **Add or remove scopes** → tick `openid`, `.../auth/userinfo.email`,
+   `.../auth/userinfo.profile` → **Update** → **Save**. (All three are "non-sensitive": no review needed.)
+5. **Clients** → **Create client** → Application type **Web application**, name `FUTASAKU web`:
+   - Authorized JavaScript origins: `https://www.futasaku.com` and `https://futasaku.com`
+   - Authorized redirect URIs: `https://wbfrbeedlvjercrukngn.supabase.co/auth/v1/callback`
+   - **Create**. Copy the **Client ID** and the **Client secret** (download the JSON too; the secret
+     may not be shown again).
+6. **Audience**: while it says **Testing**, only the emails under **Test users** can sign in (add
+   yourself and your testers, up to 100). When you are happy, click **Publish app** → **Confirm**.
+
+### B. Supabase (about 5 minutes)
+
+1. <https://supabase.com/dashboard> → project **FUTASAKU** → **Authentication** → **Sign In / Providers**
+   → **Google** → switch it **on** → paste the **Client ID** and **Client Secret** from A5 → **Save**.
+   **Do this step LAST** (after C1–C2): the button appears in the game as soon as it is on.
+2. **Authentication** → **URL Configuration**:
+   - Site URL: `https://www.futasaku.com`
+   - Redirect URLs → **Add URL**: `https://www.futasaku.com/**` and `https://futasaku.com/**` → **Save**.
+3. Optional tidy-up: **Sign In / Providers → Email** → off (the game only accepts Google sign-ins;
+   the server refuses anything else anyway).
+
+### C. Release order (a Claude session with access can do C1–C2 and check them)
+
+1. Apply the database changes: `npm run server:migrate` (adds 0009 feedback + 0010 accounts).
+2. Deploy the server: `supabase functions deploy duel`. Check `…/duel/v1/health?db=1` is ok.
+3. Then B1 (switch Google on). Then test on your own phone: Play online → Continue with Google →
+   create a duel → open futasaku.com on a second device → Continue with Google → the duel is there.
+   Settings → Delete my account → check **Authentication → Users** in Supabase: your user is gone.
+4. Things only a real phone can prove (not testable here): the iPhone **home-screen** app. iOS may
+   finish the Google page in a Safari sheet; if the sign-in does not stick in the home-screen app,
+   tell Claude — the fix is a small change to open sign-in in Safari and come back.
+
+**Before release, not after:** the policy names "Report a problem" as the contact. Data-protection law
+in the UK/EU also expects a contact email and who runs the game — give Claude the email and name you
+want shown and it will add them. This policy was written to match the code; it is not legal advice.
+
+## Privacy policy — where each line comes from
+
+| Policy says | Code |
+| --- | --- |
+| Offline: nothing leaves the device | no network call outside `web/src/online`, `web/src/feedback`, `web/src/accounts` |
+| Guest data: id, nature name, matches, scrambled keys | `players`, `matches`, `match_moves`, `player_tokens` (sha-256) |
+| IP counters deleted after two days | `0010_accounts.sql` cron `futasaku-rate-limit-cleanup` |
+| Guests with no matches deleted after 30 days | sweeper, `GUEST_MAX_AGE_MS` |
+| Google: email, name, picture, id at Supabase; only a link in our DB | Supabase Auth `auth.users`; `player_identities` |
+| Email shown only to the player | `futasaku.account.v1` in the browser; never sent to our API |
+| Report contents | `web/src/feedback/core.ts` `buildContext`, server `cleanContext` |
+| Supabase EU (Ireland), GitHub Pages, Google | `docs/DEPLOY-ONLINE.md` (eu-west-1) |
+| Delete my account | `POST /v1/auth/google/delete` |
+
+## Testing tips
+
+- Every e2e suite builds with a fake or unreachable Supabase URL, so the welcome card never appears
+  there. A suite that runs against the REAL project after Google is switched on must first set
+  `localStorage['futasaku.account.welcome.v1'] = '1'` (or build with `VITE_ACCOUNTS=off`).
+- `VITE_ACCOUNTS=off` hides everything account-related in a build. Only an `https://` Supabase URL is
+  asked whether Google is on; `VITE_ACCOUNTS=on` forces the check for a local fake (the accounts e2e).
+
+---
+
+# (History) Accounts — decision-ready plan, 2026-10-14
 
 **Status: a proposal for you to sign off, not a decision.** Written 2026-10-14 by a worker who
 **read the code and the schema**. Nothing here is deployed; no application code, `server/`, `web/`

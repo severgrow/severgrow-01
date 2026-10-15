@@ -6612,5 +6612,7 @@ if (timingEnabled()) {
 
 // Beta feedback (docs/BETA.md): Report a problem, crash reports, the #beta tester guide. Read-only.
 void import('./feedback/mount.js').then((f) => f.mountFeedback()).catch(() => undefined);
+// Accounts: "Continue with Google" (docs/ACCOUNTS.md); shows nothing until Google is on in Supabase.
+void import('./accounts/mount.js').then((a) => a.mountAccounts()).catch(() => undefined);
 appReady = true;
 window.dispatchEvent(new Event('severor-ready'));

@@ -90,6 +90,18 @@ export class MemoryStorage implements Storage {
     return player ? copy(player) : null;
   }
 
+  /** Accounts (docs/ACCOUNTS.md): sign a player out of every device but one. */
+  async revokeTokensOfPlayer(playerId: string, keepTokenHash: string, now: number): Promise<number> {
+    let n = 0;
+    for (const t of this.tokensByHash.values()) {
+      if (t.playerId === playerId && t.tokenHash !== keepTokenHash && t.revokedAt === null) {
+        t.revokedAt = now;
+        n += 1;
+      }
+    }
+    return n;
+  }
+
   // ---- matches ----
 
   async createMatch(match: MatchRecord): Promise<{ ok: true } | Fail> {

@@ -297,3 +297,20 @@ Whichever is chosen, a recovery must **attach to the existing `players` row** (n
 player) so matches and history survive. Names are also flagged: only **400** auto-generated nature
 names exist, so collisions/impersonation are certain — recommend a stable discriminator when names
 and accounts are done together.
+
+### 2026-10-15 — Accounts: "Continue with Google" is built (owner decision; switched on by the owner)
+
+Owner's decision, superseding the 2026-10-14 proposal: Google sign-in is a **prominent, default** part
+of FUTASAKU but **never forced** — a one-time "Continue with Google / Play as guest" card before the
+first online visit, a line for guests in Play online, and an Account block in Settings. Offline play
+never needs an account. Names stay generated, with a permanent tag from the player id
+(`MapleFox #7QK2`); chosen names come later. Scope is accounts + permanent identity only (no XP,
+ranks, clans, map).
+
+Built on the existing Supabase project with plain HTTP (no SDK): PKCE in the browser, the server checks
+every Supabase token with Supabase itself and never trusts an id or email from the browser, and issues
+its own token. A guest upgrades **in place** (same player, same matches); another device recovers the
+same player; nothing is ever merged or overwritten (DB unique keys both ways). "Delete my account"
+removes the link and the Supabase user and signs out other devices. Privacy policy at
+`futasaku.com/#privacy`. Nothing appears until the owner switches Google on in Supabase — release order
+and clicks in [`ACCOUNTS.md`](ACCOUNTS.md).

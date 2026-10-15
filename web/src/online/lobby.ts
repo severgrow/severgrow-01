@@ -133,7 +133,8 @@ export const toLobbyRow = (
   return {
     matchId: entry.matchId,
     bucket,
-    opponentName: entry.opponentName?.trim() || ONLINE.opponentFallback,
+    // "MapleFox #7QK2": the tag tells two players with the same nature name apart.
+    opponentName: entry.opponentName?.trim() ? (entry.opponentTag ? `${entry.opponentName.trim()} #${entry.opponentTag}` : entry.opponentName.trim()) : ONLINE.opponentFallback,
     statusWord: status.word,
     statusIcon: status.icon,
     timeLeft: timeText,

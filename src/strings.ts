@@ -704,3 +704,112 @@ export const BETA_GUIDE = Object.freeze({
     }),
   ]),
 });
+
+/** Accounts: "Continue with Google" (web/src/accounts/, docs/ACCOUNTS.md). */
+export const ACCOUNT = Object.freeze({
+  continueGoogle: 'Continue with Google',
+  playAsGuest: 'Play as guest',
+  welcomeTitle: 'Keep your games',
+  welcomeBody: 'Sign in with Google to keep your online matches safe and pick them up on any phone or computer.',
+  welcomeSmall: 'Games against the computer never need an account. You can sign in later from Settings.',
+  privacy: 'Privacy',
+  hubGuest: 'Playing as a guest: your matches live only on this device.',
+  settingsTitle: 'Account',
+  youAre: (name: string) => `You are ${name}`,
+  signedIn: (email: string | null) => (email ? `Signed in with Google · ${email}` : 'Signed in with Google'),
+  guestNote: 'Guest on this device. Sign in with Google to keep your matches on every device.',
+  signOut: 'Sign out',
+  signOutTitle: 'Sign out on this device?',
+  signOutBody: 'Your matches stay in your account. Sign in with Google again to get them back.',
+  deleteAccount: 'Delete my account',
+  deleteTitle: 'Delete your account?',
+  deleteLines: Object.freeze([
+    'Your Google sign-in and your email address are deleted from FUTASAKU.',
+    'Every other phone or computer signed in to this account is signed out.',
+    'This device keeps playing as a guest. Finished matches stay in your opponents’ history under your nature name.',
+  ]),
+  deleteConfirm: 'Delete',
+  cancel: 'Cancel',
+  deleted: 'Your account is deleted. You are now playing as a guest.',
+  working: 'One moment…',
+  opening: 'Opening Google…',
+  linked: (name: string) => `Signed in. Your matches are saved to your account, ${name}.`,
+  welcomeBack: (name: string) => `Signed in. Welcome back, ${name}.`,
+  switched: (name: string) => `Signed in as ${name}. Games played as a guest on this device were not moved.`,
+  failed: 'Google sign-in did not finish. Please try again.',
+  offline: 'You are offline. Connect and try again.',
+  unavailable: 'Google sign-in is not available right now. Please try again later.',
+});
+
+/**
+ * The privacy policy, opened at futasaku.com/#privacy (web/src/accounts/mount.ts). Keep it TRUE: every
+ * line here is checked against the code in docs/ACCOUNTS.md ("Privacy policy — where each line comes
+ * from"). Change the code, change this, change `updated`.
+ */
+export const PRIVACY = Object.freeze({
+  title: 'Privacy',
+  updated: 'Last updated 15 October 2026',
+  intro:
+    'FUTASAKU is a small independent game. We collect as little as we can, we never sell data, and there are no ads or tracking.',
+  sections: Object.freeze([
+    Object.freeze({
+      heading: 'Playing against the computer',
+      lines: Object.freeze([
+        'Nothing leaves your device. Your settings and saved game are kept in your browser.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Playing online as a guest',
+      lines: Object.freeze([
+        'We store a random player id, your generated name (like MapleFox #7QK2), your online matches (the moves, the result and the times), and sign-in keys that only work from your device (stored scrambled).',
+        'Your IP address is used for a short time to stop spam (counting requests per hour). Those counters are deleted after two days.',
+        'A guest with no matches is deleted after 30 days.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Signing in with Google',
+      lines: Object.freeze([
+        'Sign-in runs through Supabase Auth. It receives from Google your email address, your name, your profile picture link and your Google account id.',
+        'We use them only to recognise you when you sign in again. Our game database keeps just a link between your sign-in and your player. Your email is shown only to you, in Settings.',
+        'We never see your Google password, and we never post anything or read anything else from your Google account.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Problem reports',
+      lines: Object.freeze([
+        'When you use Report a problem, or the game crashes, we receive your message, your player id, the app version, your device type, screen size, browser and language, your game settings, and the game position (turn and step). Never your cards, your email or your sign-in keys.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Who handles the data',
+      lines: Object.freeze([
+        'Supabase runs our game server and database, in the EU (Ireland).',
+        'GitHub Pages delivers the website itself.',
+        'Google handles signing in with Google.',
+        'Each of them may keep short technical logs, such as IP addresses, under their own privacy policies.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Deleting your data',
+      lines: Object.freeze([
+        'Settings → Delete my account removes your Google sign-in and your email from FUTASAKU at once, and signs out your other devices.',
+        'Finished matches stay in your opponents’ history under your generated name, which is not linked to you any more.',
+        'To have everything removed, matches included, or to ask what we hold about you, use Report a problem and say so. We reply within 30 days.',
+        'You can also remove FUTASAKU from your Google account at myaccount.google.com/permissions.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Children',
+      lines: Object.freeze([
+        'FUTASAKU is not made for children under 13, and we do not knowingly collect their data.',
+      ]),
+    }),
+    Object.freeze({
+      heading: 'Changes',
+      lines: Object.freeze([
+        'If this policy changes, the date above changes with it. A big change is announced in the game first.',
+      ]),
+    }),
+  ]),
+  close: 'Close',
+});

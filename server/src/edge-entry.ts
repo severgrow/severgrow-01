@@ -17,6 +17,7 @@ import { postgresStorage } from './storage/postgres.js';
 import { wireLiveEdge } from './live/runtime.js';
 import { chainRouters, createFeedbackRouter, postgresFeedbackStore } from './feedback/feedback.js';
 import type { PgPool } from './storage/postgres.js';
+import { createAccountsRouter, postgresIdentityLinkStore, supabaseAuthProvider } from './accounts/accounts.js';
 import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 import {
   classifyDatabaseUrl,
@@ -126,7 +127,17 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     // Missing values just mean the browser falls back to polling (P-11); no failure either way.
     ...(broadcaster ? { broadcaster } : {}),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() })) }); // live duels + beta feedback
+  // Accounts (docs/ACCOUNTS.md): Supabase injects SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.
+  const supaUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const supaKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+  const accounts = createAccountsRouter({
+    links: postgresIdentityLinkStore(pool),
+    storage: live.storage,
+    auth: supaUrl && supaKey ? supabaseAuthProvider({ url: supaUrl, anonKey: supaKey, serviceRoleKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? null }) : null,
+    authenticate: (t) => service.authenticate(t),
+    now: () => service.serverNow(),
+  });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts) }); // live duels + beta feedback + accounts
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 
