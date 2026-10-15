@@ -92,16 +92,32 @@ const shotName = async (page: Page, name: string) => {
   console.log(`   ${path.split('/').pop()}`);
 };
 
+/**
+ * The ONE action that leads on a screen: the buttons inside `scope` that are really on screen AND
+ * carry the cream fill. The owner's rule is exactly one (PLAY on the menu, Play online in the
+ * submenu); "all filled" and "all contour" are both failures.
+ */
+const leaders = (page: Page, scope: string) =>
+  page.evaluate((s) => [...document.querySelectorAll(`${s} .btn`) as unknown as Iterable<HTMLElement>]
+    .filter((b) => b.getClientRects().length > 0 && b.classList.contains('primary'))
+    .map((b) => b.id), scope);
+
 try {
   for (const vp of VIEWPORTS) {
-    // ---- 1. the main menu, signed out: LOG IN at the top, PLAY below it ----
+    // ---- 1. the main menu, signed out: LOG IN at the top, PLAY (the one leader), then the world
+    //         map, Tutorial and Settings ----
     {
       const { context, page } = await device(vp, false, `out-${vp.key}`);
       const loginBox = await page.locator('#menu-login').boundingBox();
       const playBox = await page.locator('#menu-play').boundingBox();
       check(`${vp.key}: LOG IN is visible on the signed-out menu`, await page.locator('#menu-login').isVisible());
       check(`${vp.key}: LOG IN sits above PLAY`, !!loginBox && !!playBox && loginBox.y < playBox.y);
-      check(`${vp.key}: PLAY is visible`, await page.locator('#menu-play').isVisible());
+      const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons > .btn')]
+        .filter((b) => (b as HTMLElement).getClientRects().length > 0).map((b) => b.id));
+      check(`${vp.key}: the menu reads LOG IN / PLAY / World map / Tutorial / Settings`,
+        JSON.stringify(order) === JSON.stringify(['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings']), order.join(' | '));
+      check(`${vp.key}: exactly one filled button on the menu, and it is PLAY`,
+        JSON.stringify(await leaders(page, '#menu')) === JSON.stringify(['menu-play']), (await leaders(page, '#menu')).join(' | '));
       await shotName(page, `menu-signed-out-${vp.key}`);
       await context.close();
     }
@@ -116,6 +132,8 @@ try {
       check(`${vp.key}: the PLAY heading reads Play`, (await page.textContent('#play-title'))?.trim() === 'Play');
       const entries = await page.locator('#play-actions button').allTextContents();
       check(`${vp.key}: PLAY holds Play online / LEVEL n / Training`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Training']), entries.join(' | '));
+      check(`${vp.key}: exactly one filled button in the submenu, and it is Play online`,
+        JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
       await shotName(page, `play-submenu-${vp.key}`);
       await context.close();
     }
@@ -139,6 +157,33 @@ try {
       const { context, page } = await device(vp, true, `in-${vp.key}`);
       check(`${vp.key}: LOG IN is gone once signed in`, !(await page.locator('#menu-login').isVisible()));
       await shotName(page, `menu-signed-in-${vp.key}`);
+      await context.close();
+    }
+
+    // ---- 5. the world map entry really opens the map, and its back returns HERE (not to the
+    //         online hub) ----
+    {
+      const { context, page } = await device(vp, false, `world-${vp.key}`);
+      await page.route('**/v1/world*', (r) => r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true, cols: 8, rows: 8, cells: 64, filled: 2, serverNow: Date.now(),
+          tiles: [
+            { cell: 9, ownerName: 'BloomHeron', awardedAt: Date.now() - 3_600_000, tookOver: false },
+            { cell: 10, ownerName: 'WillowBirch', awardedAt: Date.now() - 1_800_000, tookOver: true },
+          ],
+        }),
+      }));
+      await page.click('#menu-world');
+      await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 10_000 });
+      await page.waitForTimeout(500);
+      const held = await page.locator('#online-world-grid .world-cell[data-held="true"]').count();
+      check(`${vp.key}: the world map opens from the main menu with the map drawn`, held === 2, `${held} held cells`);
+      await page.click('#online-world-back');
+      await page.waitForTimeout(300);
+      check(`${vp.key}: its back control returns to the main menu, never to the online hub`,
+        (await page.locator('#menu').isVisible()) && !(await page.locator('#online-hub').isVisible()));
       await context.close();
     }
   }

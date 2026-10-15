@@ -94,19 +94,25 @@
         <div class="menu-buttons">
           <!-- LOG IN (product channels only): its own button at the TOP, above PLAY, and hidden the
                moment the player is signed in. The accounts module reveals it (and hides it again)
-               from the one Google flow it already owns — no second sign-in path lives here. -->
+               from the one Google flow it already owns — no second sign-in path lives here. It is
+               quiet (ghost): PLAY is the menu's single leading action. -->
           <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
-          <!-- PLAY (product channels only) opens the submenu below. Revealed by main.ts, so no other
-               channel ever shows it. Its three entries are moved into #play-menu at boot. -->
+          <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
+               on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
+               entries (Play online / LEVEL n / Training) are MOVED into #play-actions at boot. -->
           <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
-          <button id="menu-continue" class="btn primary big" type="button" aria-label="Continue" hidden>Continue</button>
+          <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
+          <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
           <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
                so no other channel ever shows it. Its words come from src/strings.ts, and on the
                product menu it reads LEVEL <n> (the level the player is on). -->
           <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
-          <!-- The world map (product channels: shown when the build has an online endpoint). -->
+          <!-- The world map: a top-level destination of its own, in the main menu with Tutorial and
+               Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
+               submenu). Revealed by main.ts when the build has an online endpoint and the screen it
+               opens is live, so it can never be a dead entry. -->
           <button id="menu-world" class="btn ghost big" type="button" aria-label="The world map" hidden>The world map</button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
@@ -115,18 +121,22 @@
     </section>
 
     <!-- ===== PLAY submenu (product channels) ===== -->
-    <!-- The single doorway to the offline modes and the duel lobby. Modelled on the online hub: a
-         real `.screen` with a back button in its header, and the menu fully hidden while it is open.
+    <!-- The single doorway to the offline modes and the duel lobby, and a screen of its own: the
+         main menu is fully hidden while it is open. It is composed from the SAME components as the
+         menu and the campaign screen — `.levels-inner` (the shared centred column), `.levels-head`
+         (the back button + display heading) and `.menu-buttons` (the same buttons the menu uses) —
+         so it echoes the main menu exactly while reading as a submenu, not a second menu.
          Its three entries — Play online / LEVEL <n> / Training — are MOVED into #play-actions at
          boot by main.ts, so each keeps its one id, its one handler and its one set of words: no
-         second copy of the online or campaign wiring exists. -->
+         second copy of the online or campaign wiring exists. Only ONE of them leads (Play online,
+         or LEVEL <n> when this build has no online endpoint); the rest recede. -->
     <section id="play-menu" class="screen play-menu" aria-label="Play" hidden>
-      <div class="play-inner">
-        <header class="play-head">
+      <div class="levels-inner">
+        <header class="levels-head">
           <button id="play-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
           <h2 id="play-title">Play</h2>
         </header>
-        <div id="play-actions" class="menu-buttons play-actions"></div>
+        <div id="play-actions" class="menu-buttons"></div>
       </div>
     </section>
 

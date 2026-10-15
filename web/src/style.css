@@ -382,39 +382,6 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
-/* ---------- PLAY submenu (the product menu's single doorway) ---------- */
-/* One more surface of the same product as #menu / #levels / the online hub: the menu is hidden
-   while it is open, so it is a screen of its own (no panel, no frame, the menu's own background
-   behind it), and it repeats the same centred column, rhythm and heading as the screens above. */
-.play-menu {
-  display: grid;
-  place-items: center;
-  overflow-y: auto;
-}
-.play-inner {
-  /* Same column width as the main menu / difficulty pick, so Play online / LEVEL n / Training
-     read as the menu's own buttons rather than a second, differently-shaped list. */
-  width: min(420px, 100% - 32px);
-  padding: 32px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-}
-.play-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-}
-/* The back button keeps its full 44x44 tap target even when the title (flexes) needs the room. */
-.play-head > .icon-only { flex: 0 0 auto; }
-.play-head h2 {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  padding-top: 1px;
-}
 /* ---------- game layout ---------- */
 .game {
   display: grid;
@@ -2245,7 +2212,12 @@ svg.usable .hex-cell {
 }
 
 /* ---------- difficulty choice ---------- */
-.levels {
+/* #play-menu (the product menu's PLAY submenu) is the same full-screen view as this one: the menu
+   is hidden while it is open, so it only needs the same centring and scrolling. Its column, header
+   and buttons are the shared `.levels-inner` / `.levels-head` / `.menu-buttons`, so it echoes the
+   main menu instead of inventing a second style system. */
+.levels,
+#play-menu {
   display: grid;
   place-items: center;
   overflow-y: auto;

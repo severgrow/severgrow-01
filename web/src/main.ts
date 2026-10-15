@@ -180,6 +180,9 @@ import { NOTES_KEY, emptyNotes, noteEvent, notesSummary } from './logic/playnote
 import type { NoteEvent, Notes } from './logic/playnotes.js';
 import { NOTHING_TO_PLAY, emptyReason, opponentBeats, skipPlan } from './logic/emptyturn.js';
 import type { Beats } from './logic/emptyturn.js';
+// The product menu shows the world map only when this build really has an online endpoint to read
+// it from (the same predicate the lobby uses), so the entry can never open a dead screen.
+import { onlineBuildEnabled } from './online/config.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -583,12 +586,17 @@ function closePlayMenu() {
   $('play-menu').hidden = true;
 }
 function openPlayMenu() {
-  $('menu-play').hidden = false;
-  $('menu-play').classList.add('primary');
-  $('menu-play').classList.remove('ghost');
   $('play-menu').hidden = false;
   $('menu').hidden = true;
   shownScreen = null; // the menu is no longer the screen on show, so it re-renders on return
+}
+/**
+ * One leader per screen (owner direction, 2026-10-15): the ONE action that carries the cream fill,
+ * everything else the quiet ghost contour. No third button treatment exists on these screens.
+ */
+function setLead(btn: HTMLElement, lead: boolean) {
+  btn.classList.toggle('primary', lead);
+  btn.classList.toggle('ghost', !lead);
 }
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
@@ -619,45 +627,50 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
     $('menu-continue').textContent = continueLabel;
     $('menu-continue').setAttribute('aria-label', continueLabel);
+    // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
+    // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
+    // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
+    // under it.
+    const online = onlineBuildEnabled();
     $('menu-play').hidden = !FEATURES.campaign;
     $('menu-play').textContent = MENU.play;
     $('menu-play').setAttribute('aria-label', MENU.play);
-    $('menu-play').classList.toggle('primary', FEATURES.campaign);
-    $('menu-play').classList.toggle('ghost', !FEATURES.campaign);
     $('play-title').textContent = MENU.playTitle;
     $('menu-login').textContent = MENU.login;
     $('menu-login').setAttribute('aria-label', MENU.login);
     $('menu-world').textContent = MENU.world;
     $('menu-world').setAttribute('aria-label', MENU.world);
+    // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
+    // only when the build has an online endpoint to read the map from.
+    $('menu-world').hidden = !(FEATURES.campaign && online);
     if (FEATURES.campaign) {
-      // The product menu: PLAY carries the ONE cream fill (and Continue sits right under it as a
-      // quiet resume), and the offline/online entries live in the submenu as LEVEL <n> / Training.
-      $('menu-continue').classList.remove('primary');
-      $('menu-continue').classList.add('ghost');
+      setLead($('menu-play'), true);
+      setLead($('menu-continue'), false);
+      setLead($('menu-world'), false);
+      // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
+      // are the next tier down and the back control is the quietest of all. A build with no online
+      // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
       const cmp = $('menu-campaign');
       cmp.hidden = false;
-      cmp.classList.remove('primary');
-      cmp.classList.add('ghost');
-      // The campaign entry is the player's campaign progress: "LEVEL 1", then "LEVEL 2", "LEVEL 25"…
       const current = currentLevel(campaignProgress).number;
       cmp.textContent = MENU.level(current);
       cmp.setAttribute('aria-label', `${MENU.level(current)}, campaign. Open the campaign.`);
-      $('menu-new').classList.remove('primary');
-      $('menu-new').classList.add('ghost');
+      $('menu-online').hidden = !online;
+      setLead($('menu-online'), online);
+      setLead(cmp, !online);
       $('menu-new').textContent = MENU.training;
       $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
-      // The one emphasis inside PLAY is the duel lobby (it is hidden when the build has no API).
-      $('menu-online').classList.add('primary');
-      $('menu-online').classList.remove('ghost');
+      setLead($('menu-new'), false);
       $('levels-heading').textContent = MENU.trainingTitle;
     } else {
       // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
       // picker, and no submenu at all. Untouched, so their own suites need no change.
       $('menu-campaign').hidden = true;
-      $('menu-new').classList.toggle('primary', !canContinue);
-      $('menu-new').classList.toggle('ghost', canContinue);
+      $('menu-new').hidden = false;
       $('menu-new').textContent = 'Play offline';
       $('menu-new').setAttribute('aria-label', 'Play offline');
+      $('menu-new').classList.toggle('primary', !canContinue);
+      $('menu-new').classList.toggle('ghost', canContinue);
       $('levels-heading').textContent = 'Choose difficulty';
     }
     $('menu-tutorial').classList.remove('primary');

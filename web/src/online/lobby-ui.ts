@@ -52,6 +52,13 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export type OnlineLobbyController = {
   enabled: boolean;
   openHub(): Promise<void>;
+  /**
+   * The shared world map, opened as its own read-only view. `from` is where the player came from:
+   * the main menu (owner direction 2026-10-15 — the world map is a TOP-LEVEL menu entry, never in
+   * the PLAY submenu) or the online hub. The back control returns to exactly that place, so the
+   * main menu never bounces a player into the online hub.
+   */
+  openWorld(from: 'hub' | 'menu'): void;
   handleBootHash(): Promise<void>;
   refreshTitle(): void;
   /** Live duels: open one of my matches by id (web/src/online/live/). */
@@ -72,6 +79,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     return {
       enabled: false,
       openHub: async () => undefined,
+      openWorld: () => undefined,
       handleBootHash: async () => undefined,
       refreshTitle: () => undefined,
       rematch: async () => undefined,
@@ -111,6 +119,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   // first (an intentional asymmetry — a forwarded link may reach the wrong person).
   let joinMode: 'typed' | 'link' = 'typed';
   let linkCode: string | null = null;
+  /**
+   * Where the world map was opened from, so its back control returns there: the online hub, or the
+   * main menu's own top-level entry.
+   */
+  let worldFrom: 'hub' | 'menu' = 'hub';
 
   // Phase 7.5: the parked Find-opponent search. It is independent of the invite `waiting` screen
   // and keeps running (its own timer) while the player is on the board playing the computer.
@@ -746,12 +759,25 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
   });
   $('online-waiting-back').addEventListener('click', () => void openHub());
   $('online-join-back').addEventListener('click', () => void openHub());
-  $('online-world-back').addEventListener('click', () => void openHub());
-  document.getElementById('online-world')?.addEventListener('click', () => {
+  /**
+   * The world map is reachable from TWO places and its back control is honest about which one: the
+   * main menu entry (top-level, owner direction 2026-10-15) returns to the menu, the hub entry
+   * returns to the hub. `openWorld` never touches identity or matches — the map is a public read.
+   */
+  const openWorld = (from: 'hub' | 'menu') => {
+    worldFrom = from;
     fillCopy();
     show('world');
     void renderWorld();
+  };
+  document.getElementById('menu-world')?.addEventListener('click', () => openWorld('menu'));
+  $('online-world-back').addEventListener('click', () => {
+    if (worldFrom === 'hub') return void openHub();
+    show(null);
+    hooks.showMenu();
+    refreshTitle();
   });
+  document.getElementById('online-world')?.addEventListener('click', () => openWorld('hub'));
   $('online-create').addEventListener('click', () => void createMatch());
   document.getElementById('online-find')?.addEventListener('click', () => void findOpponent());
   $('online-join-open').addEventListener('click', () => {
@@ -884,7 +910,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     ($('online-join-code') as HTMLInputElement).focus();
   };
 
-  return { enabled: true, openHub, handleBootHash, refreshTitle, openMatch, rematch };
+  return { enabled: true, openHub, openWorld, handleBootHash, refreshTitle, openMatch, rematch };
 };
 
 const escapeHtml = (s: string) =>
