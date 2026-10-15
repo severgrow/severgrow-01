@@ -283,12 +283,17 @@ describe('the link-code help copy cannot drift from the configured length', () =
 // The real Postgres adapter. Skipped (loudly) without DATABASE_URL; pinned by REQUIRE_DATABASE=1.
 // ---------------------------------------------------------------------------------------------
 const DATABASE_URL = (process.env.DATABASE_URL ?? '').trim();
-const pgEnabled = DATABASE_URL.length > 0;
+// Same rule as postgres.integration.test.ts: vitest.config.ts loads `.env`, so presence of a URL
+// must not, on its own, open a connection to the REAL project from a default `npm run check`.
+// It connects only when the operator opts in (REQUIRE_DATABASE=1, set by the pinned check).
+const optedIn = process.env.REQUIRE_DATABASE === '1';
+const pgEnabled = DATABASE_URL.length > 0 && optedIn;
 
 if (!pgEnabled) {
-  console.warn('\n*** invite-code Postgres suite SKIPPED — DATABASE_URL is not set ***\n');
+  const why = DATABASE_URL.length === 0 ? 'DATABASE_URL is not set' : 'REQUIRE_DATABASE=1 is not set';
+  console.warn(`\n*** invite-code Postgres suite SKIPPED — ${why} (it talks to the REAL project) ***\n`);
 }
-if (!pgEnabled && process.env.REQUIRE_DATABASE === '1') {
+if (!pgEnabled && optedIn) {
   throw new Error('invite-code Postgres suite: DATABASE_URL is not set (REQUIRE_DATABASE=1).');
 }
 

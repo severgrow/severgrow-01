@@ -22,18 +22,24 @@ import type { Action } from '../../src/engine/index.js';
 import type { MatchRecord, MoveRecord, PlayerRecord, Storage } from '../../server/src/storage/types.js';
 
 const DATABASE_URL = (process.env.DATABASE_URL ?? '').trim();
-const enabled = DATABASE_URL.length > 0;
+// A URL alone is NOT enough to connect. `vitest.config.ts` loads `.env`, so a plain `npm run check`
+// on a developer machine used to run this suite against the REAL project (the incident: the Free
+// allowance was spent by tests, with zero players). It now connects only when the operator opts in
+// with REQUIRE_DATABASE=1 — which `npm run server:db-test` and `npm run server:verify` set.
+const optedIn = process.env.REQUIRE_DATABASE === '1';
+const enabled = DATABASE_URL.length > 0 && optedIn;
 
 const PLAYERS: string[] = [];
 const MATCHES: string[] = [];
 
 // Never skip silently: CI without DATABASE_URL stays green, but the console must shout.
 if (!enabled) {
-  console.warn('\n*** DATABASE TESTS SKIPPED — DATABASE_URL is not set ***\n');
-  console.warn('Pinned check: npm run server:db-test (requires DATABASE_URL in .env or the environment).\n');
+  const why = DATABASE_URL.length === 0 ? 'DATABASE_URL is not set' : 'REQUIRE_DATABASE=1 is not set';
+  console.warn(`\n*** DATABASE TESTS SKIPPED — ${why} (this suite talks to the REAL project) ***\n`);
+  console.warn('Pinned check: npm run server:db-test (sets REQUIRE_DATABASE=1; needs DATABASE_URL).\n');
 }
 // Explicit pin (`npm run server:db-test`) must not look green when nothing ran.
-if (!enabled && process.env.REQUIRE_DATABASE === '1') {
+if (!enabled && optedIn) {
   throw new Error('DATABASE TESTS SKIPPED — DATABASE_URL is not set (REQUIRE_DATABASE=1).');
 }
 

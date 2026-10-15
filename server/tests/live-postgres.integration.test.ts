@@ -22,10 +22,18 @@ import { migrate } from '../scripts/migrate.js';
 import { ENTRY, LIMIT, STALE, liveTestConfig, serverTestConfig } from './live-harness.js';
 
 const URL_ = (process.env.LIVE_DATABASE_URL ?? '').trim();
-const suite = describe.skipIf(URL_.length === 0);
-if (!URL_) console.warn('\n*** LIVE POSTGRES TESTS SKIPPED — LIVE_DATABASE_URL is not set ***\n');
+// In the shipped `.env` LIVE_DATABASE_URL is the SAME real project as DATABASE_URL (see
+// `.env.example`), so a URL alone must not connect from a default `npm run check`. Opt in with
+// REQUIRE_DATABASE=1 (`npm run server:live-db-test` sets it).
+const optedIn = process.env.REQUIRE_DATABASE === '1';
+const enabled = URL_.length > 0 && optedIn;
+const suite = describe.skipIf(!enabled);
+if (!enabled) {
+  const why = URL_.length === 0 ? 'LIVE_DATABASE_URL is not set' : 'REQUIRE_DATABASE=1 is not set';
+  console.warn(`\n*** LIVE POSTGRES TESTS SKIPPED — ${why} (this suite talks to the REAL project) ***\n`);
+}
 // Explicit pin (`npm run server:live-db-test`) must not look green when nothing ran.
-if (!URL_ && process.env.REQUIRE_DATABASE === '1') {
+if (!enabled && optedIn) {
   throw new Error('LIVE POSTGRES TESTS SKIPPED — LIVE_DATABASE_URL is not set (REQUIRE_DATABASE=1).');
 }
 

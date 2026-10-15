@@ -16,14 +16,15 @@
 //
 // It also reads the `?debug=timing` trace when the build carries it (`__severgrow.timing()`), so
 // the same script reports the per-segment table before and after the client fix.
-import { requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
+import { isLocalTarget, requireRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 import { chromium } from 'playwright-core';
 import type { BrowserContext, CDPSession, Page } from 'playwright-core';
 
 const LIVE_APP = process.env.LIVE_APP ?? 'https://severgrow.github.io/severgrow-01/futa0.5/';
 const LIVE_API = process.env.LIVE_API ?? 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
-// Pointed at the real Supabase project (the default), this spends its quota: opt-in only.
-if (LIVE_API.includes('.supabase.co')) requireRealProjectOptIn('online-live-smoothness');
+// Pointed at the real Supabase project (the default) this spends its quota; a non-loopback
+// LIVE_APP bakes that same API into the deployed bundle. Either way: opt-in only.
+if (LIVE_API.includes('.supabase.co') || !isLocalTarget(LIVE_APP)) requireRealProjectOptIn('online-live-smoothness');
 /** `TIMING=1` turns on the in-page `?debug=timing` trace (available on a build that carries it). */
 const QUERY = process.env.TIMING === '1' ? '?debug=timing' : '';
 const IDENTITY_KEY = 'severgrow.duel.identity.v1';

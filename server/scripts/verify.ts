@@ -13,10 +13,10 @@ import { startServer } from '../src/index.js';
 import { DuelClient } from '../src/client.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
-const run = (label: string, command: string, args: string[]): Promise<void> =>
+const run = (label: string, command: string, args: string[], env: Record<string, string | undefined> = process.env): Promise<void> =>
   new Promise((resolve, reject) => {
     console.log(`\n=== ${label} ===`);
-    const child = spawn(command, args, { stdio: 'inherit', env: process.env });
+    const child = spawn(command, args, { stdio: 'inherit', env });
     child.on('error', reject);
     child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${label} exited with code ${code}`))));
   });
@@ -102,12 +102,20 @@ const main = async (): Promise<void> => {
   console.log(`Verifying against ${redactUrl(url)}`);
 
   await run('apply migrations', 'node', ['--env-file-if-exists=.env', '--import', 'tsx', 'server/scripts/migrate.ts']);
-  await run('real-database integration tests', 'node', [
-    '--env-file-if-exists=.env',
-    './node_modules/vitest/vitest.mjs',
-    'run',
-    'server/tests/postgres.integration.test.ts',
-  ]);
+  // This is the deliberate real-database command (it already refused to run without DATABASE_URL
+  // above), so opt the spawned suite in: the integration tests now connect only with
+  // REQUIRE_DATABASE=1 (see the quota guard + docs/BACKEND.md).
+  await run(
+    'real-database integration tests',
+    'node',
+    [
+      '--env-file-if-exists=.env',
+      './node_modules/vitest/vitest.mjs',
+      'run',
+      'server/tests/postgres.integration.test.ts',
+    ],
+    { ...process.env, REQUIRE_DATABASE: '1' },
+  );
 
   console.log('\n=== end-to-end smoke (in-process server) ===');
   // Integration tests share the guest:ip:unknown rate-limit bucket on the real DB.

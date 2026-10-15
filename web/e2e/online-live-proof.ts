@@ -7,8 +7,12 @@
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, ConsoleMessage, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
+import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
+// The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
+// quota: refuse (exit 3) unless FUTASAKU_REAL_PROJECT=1. A 127.0.0.1/localhost target is free.
+requireLocalOrRealProjectOptIn('online-live-proof', BASE_URL);
 const CHROME =
   process.env.PW_CHROMIUM ??
   '/Users/patryk/Library/Caches/ms-playwright/chromium-1248/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';

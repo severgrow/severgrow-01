@@ -9,8 +9,13 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
+import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
+// The deployed site bakes the REAL Edge API into its bundle, so a non-loopback BASE_URL spends real
+// quota: refuse (exit 3) unless FUTASAKU_REAL_PROJECT=1. `online-ux-local.ts` sets BASE_URL to
+// 127.0.0.1 before importing this module, so the local run stays free.
+requireLocalOrRealProjectOptIn('online-ux-walk', BASE_URL);
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const CHROME =
   process.env.PW_CHROMIUM ??

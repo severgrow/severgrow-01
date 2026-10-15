@@ -22,7 +22,18 @@ import type { AuthProvider } from '../src/accounts/accounts.js';
 import { migrate } from '../scripts/migrate.js';
 
 const URL_ = (process.env.LIVE_DATABASE_URL ?? '').trim();
-const suite = describe.skipIf(URL_.length === 0);
+// Same rule as the live-duel suite: LIVE_DATABASE_URL is the real project in the shipped `.env`, so
+// connect only when the operator opts in (REQUIRE_DATABASE=1). Never from a default `npm run check`.
+const optedIn = process.env.REQUIRE_DATABASE === '1';
+const enabled = URL_.length > 0 && optedIn;
+const suite = describe.skipIf(!enabled);
+if (!enabled) {
+  const why = URL_.length === 0 ? 'LIVE_DATABASE_URL is not set' : 'REQUIRE_DATABASE=1 is not set';
+  console.warn(`\n*** ACCOUNTS POSTGRES TESTS SKIPPED — ${why} (this suite talks to the REAL project) ***\n`);
+}
+if (!enabled && optedIn) {
+  throw new Error('ACCOUNTS POSTGRES TESTS SKIPPED — LIVE_DATABASE_URL is not set (REQUIRE_DATABASE=1).');
+}
 
 const CREATED: string[] = [];
 const CLOCK = 1_800_000_000_000; // future timestamps no real row has, so cleanup is exact

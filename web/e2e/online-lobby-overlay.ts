@@ -25,8 +25,13 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { DEFAULT_SERVER_CONFIG } from '../../server/src/config.js';
+import { requireLocalOrRealProjectOptIn } from '../../server/scripts/real-project-guard.js';
 
 const BASE_URL = (process.env.BASE_URL ?? 'https://severgrow.github.io/severgrow-01/futa0.5/').replace(/\/?$/, '/');
+// The deployed site bakes the REAL Edge API into its bundle (STUB only intercepts the stub host, so
+// it does not protect a remote BASE_URL). A non-loopback target spends real quota: refuse (exit 3)
+// unless FUTASAKU_REAL_PROJECT=1. `BASE_URL=http://localhost:4207` stays free.
+requireLocalOrRealProjectOptIn('online-lobby-overlay', BASE_URL);
 const OUT = new URL('../../docs/screens/online/', import.meta.url).pathname;
 const PHASE = process.env.PHASE ?? 'after';
 const STUB = process.env.STUB === '1';
