@@ -110,4 +110,12 @@ describe.skipIf(!enabled)('Seeds and claims on real Postgres', () => {
     ]);
     for (const snapshot of observations) expect(snapshot.revision).toBe(snapshot.claims.length);
   });
+
+  it('keeps wallet and territory when a guest becomes an account', async () => {
+    const ownerId = (await world.world()).claims.find((claim) => claim.cellId === contestedCell)!.ownerId;
+    const before = await world.wallet(ownerId);
+    await pool.query("update players set kind='account', upgraded_at=$2 where id=$1", [ownerId, Date.now()]);
+    expect(await world.wallet(ownerId)).toEqual(before);
+    expect((await world.world()).claims.find((claim) => claim.cellId === contestedCell)?.ownerId).toBe(ownerId);
+  });
 });

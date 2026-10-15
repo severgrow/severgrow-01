@@ -98,7 +98,7 @@ export class WorldView {
     const occupied = new Map(world.claims.map((claim) => [claim.cellId, claim]));
     const own = new Set(world.claims.filter((claim) => claim.ownerId === this.identity?.playerId).map((claim) => claim.cellId));
     const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('role', 'img');
+    svg.setAttribute('role', 'group');
     svg.setAttribute('aria-label', 'Shared hexagonal world. Choose a tile to inspect it.');
     svg.classList.add('world-map-svg');
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -190,7 +190,13 @@ export class WorldView {
     } finally { this.busy = false; this.paintSelection(); }
   }
   private installPanZoom(svg: SVGSVGElement) {
-    const set = () => { if (this.box) svg.setAttribute('viewBox', this.box.join(' ')); };
+    const set = () => {
+      if (!this.box || !this.fit) return;
+      const [fx, fy, fw, fh] = this.fit;
+      this.box[0] = Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
+      this.box[1] = Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
+      svg.setAttribute('viewBox', this.box.join(' '));
+    };
     const zoom = (scale: number, x: number, y: number) => {
       if (!this.box || !this.fit) return;
       const [bx, by, bw, bh] = this.box;
@@ -204,7 +210,11 @@ export class WorldView {
     svg.addEventListener('wheel', (event) => {
       event.preventDefault(); zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
     }, { passive: false });
-    svg.addEventListener('pointerdown', (event) => { this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); this.dragged = false; });
+    svg.addEventListener('pointerdown', (event) => {
+      svg.setPointerCapture(event.pointerId);
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      this.dragged = false;
+    });
     svg.addEventListener('pointermove', (event) => {
       const old = this.pointers.get(event.pointerId);
       if (!old || !this.box) return;

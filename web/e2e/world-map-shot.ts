@@ -102,5 +102,19 @@ if (!claimedCell || !(await page.locator(`.world-hex[data-cell-id="${claimedCell
 }
 console.log('mobile claim: confirmed, balance 50, cell owned');
 
+// A second browser sees the same owner even if it cannot create a guest token. The map is public.
+const other = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+await other.route('**/v1/world', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
+await other.route('**/v1/guests*', (r) => r.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ ok: false, code: 'RATE_LIMITED' }) }));
+await other.goto('http://localhost:4199/', { waitUntil: 'load' });
+await other.click('#menu-world');
+await other.locator('.world-hex').first().waitFor({ state: 'attached' });
+if ((await other.locator('.world-hex').count()) !== 183 ||
+  !(await other.locator(`.world-hex[data-cell-id="${claimedCell}"].held`).count())) {
+  throw new Error('The second browser did not see the public updated territory.');
+}
+console.log('second browser: public map and new owner visible without sign-in');
+await other.close();
+
 await browser.close();
 server.close();
