@@ -202,7 +202,10 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A mirrored split with a gap on each side: read it quickly and commit.
   level(3, 27, 'c3-27', 'Split Decision', 95027, 5, board(['-2,0', '-1,0', '-1,-1', '2,0', '1,0', '1,1'], ['0,0', '0,-3', '0,3']), 'One split, two choices, no time to dither.'),
   // Breathing space with the sharpest bot yet: almost no stones, so play decides it.
-  level(3, 28, 'c3-28', 'Open Conflict', 95028, 6, board(['0,1', '-1,0'], RICH_PAIR_Q), 'Almost open; the best bot in the campaign.'),
+  // (Seed 95059, not the 95028 of the sequence: with 95028 the shipped deal is a four-turn Strangle
+  // — verified identical on the classic generated board, so it is the deal and not this board —
+  // which is not the open fight this level is meant to be. 95059 ships a close 24-turn game.)
+  level(3, 28, 'c3-28', 'Open Conflict', 95059, 6, board(['0,1', '-1,0'], RICH_PAIR_Q), 'Almost open; the best bot in the campaign.'),
   // A crossing: a wall across the middle with a gap top and bottom, and gold on both.
   level(3, 29, 'c3-29', 'The Crossing', 95029, 6, board(['-2,0', '-1,0', '1,0', '2,0', '0,1', '0,-1'], ['0,0', '-2,-1', '2,1', '0,-2', '0,2']), 'Cross at the centre or around the ends.'),
   // The finale: a stone heart around the gold centre, bot 6, and gold at the far poles.

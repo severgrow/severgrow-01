@@ -33,16 +33,19 @@ type CampaignLevel = {
 
 ## How to add a level
 
-One object in `CAMPAIGN_LEVELS` (`src/campaign/levels.ts`), using the local `board(rock, gold)`
-helper for an authored board. Then:
+One object in `CAMPAIGN_LEVELS` (`src/campaign/levels.ts`), using the local `board(rock, gold)` helper
+for an authored board. Then:
 
 1. `npx vitest run tests/campaign` — the validation test plays every level's board through
    `validateCampaign()` and asserts the campaign's shape (unique, contiguous ids/numbers).
 2. `npm run campaign:balance -- --games=20` — check the new level is not lop-sided or dull (below).
 3. If it opens a new chapter, add its title/subtitle to `CAMPAIGN.chapters` in `src/strings.ts`.
 
-No UI change is needed: the campaign screen is drawn from the level data, so levels 11-50 need no
-restructuring. (Chapter II+ will appear as soon as those levels exist.)
+No UI change is needed: the campaign screen is drawn from the level data, so levels 31-50 need no
+restructuring. (Chapter IV+ will appear as soon as those levels exist.)
+
+**As built:** Chapters I, II and III — levels 1-30 — are playable. Every board is hand-authored
+(`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
 
 ## Validation rules
 
@@ -259,11 +262,50 @@ Reading:
 - **No rock count or AI value was changed.** The only adjustment to the design pack was level 9's
   rich pair moving to the `r` axis, for legality.
 
+### Chapters I-III results (2026-10-16)
+
+`npm run campaign:balance -- --games=6 --ref-games=1 --baseline-games=6` — all 30 levels, six
+alternate deals each. A deliberately small, bounded run (the machine was shared); read it as
+directional, not significant. **No level was flagged with a defect.** The only flags were five
+small-sample seat-skew notes (six decided games — noise; the tool says so itself), and nothing was
+flagged LONG, SHORT, ONE-SIDED or NOT REPRODUCIBLE.
+
+| Chapter | Bots | Rocks | Gold | Sweep avg turns | Start-seat wins | vs L7 (seats swapped) |
+| --- | --- | --- | --- | --- | --- | --- |
+| I (1-10) | 1-3 | 0-3 | 1-3 | 46.4 | 24/60 (40%) | **0-20** |
+| II (11-20) | 3-5 | 1-5 | 3-5 | 33.5 | 31/60 (52%) | 5-15 |
+| III (21-30) | 4-6 | 2-6 | 3-5 | 27.4 | 30/60 (50%) | 5-15 |
+
+Classic-board baseline (same AI both seats, 6 deals): bot 1 → 4/2, 55.0 turns; bot 2 → 4/2, 52.7;
+bot 3 → 3/3, 42.2; bot 4 → 5/1, 30.3; bot 5 → 4/2, 26.0; bot 6 → 3/3, 19.3.
+
+Reading:
+
+- **Every board is legal, reproducible and inside the classic board's own seat spread** (bot 4 on the
+  *classic* board splits 5/1 all by itself, which is the same shape as the notes the tool raised).
+- **The AI ramp is real and measurable.** The Chapter I bots lose to the reference bot in every one of
+  their 20 games (0-20). The Chapter II and III bots win 5 of 20 each. The same-AI games also get
+  shorter as the bot improves (46 → 33 → 27 turns), matching the classic baseline's own 55 → 19 turns.
+- **A player-proxy probe (`npx tsx scripts/campaign-difficulty-probe.ts`, not part of the balance
+  tool)** makes the step up concrete: a fixed bot (level 4, the top of the EASY training tier) playing
+  each level from both seats wins **90% of Chapter I** games, **70% of Chapter II** and **40% of
+  Chapter III**. Chapter II is where it starts to lose games outright (15, 16, 22, 23, 24, 26, 28,
+  29). This mixes the board and the bot, which is exactly what a player meets — but it is bot-vs-bot
+  evidence, not proof of human difficulty.
+- **Review screenshots** come from `npx tsx scripts/campaign-chapter-shots.ts` (a Chapter I board, a
+  Chapter II board and a Chapter III board at 360x640 and 390x844, in `docs/screens/campaign/`).
+- **One seed was changed after measuring.** Level 28's shipped deal with seed 95028 is a four-turn
+  Strangle — verified identical on the *classic* board, so it is the deal and not this board — which
+  is not the open fight that level is for. It now uses 95059, which ships a close 24-turn game.
+- **Not measured here:** no level has been played by a human, and the 6-deal sweep is too small to
+  call any single level balanced. The larger 16-deal sweeps are worth re-running when the machine is
+  free.
+
 ## Tests
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed; design rock counts; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-3, 3 for the rest); no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
