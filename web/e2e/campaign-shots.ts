@@ -185,7 +185,10 @@ try {
     const finished = (await stateOf(page))!;
     assert.equal(finished.seed, level1.seed);
     const sub = await page.locator('#go-sub').textContent();
-    assert.match(sub ?? '', /^Level 1 · First Seed/, `finish subtitle was ${sub}`);
+    // The owner removed level and chapter NAMES from the finish screen (2026-10-16). The subtitle
+    // now carries only the one useful note — what the win unlocked — and must never name the level.
+    assert.equal(sub, 'Next level unlocked', `finish subtitle was ${sub}`);
+    assert.ok(!(sub ?? '').includes(level1.name), 'the subtitle must not name the level');
     await page.screenshot({ path: `${OUT}level-${level1.number}-finish-${vp.key}.png` });
 
     if (finished.result!.winner === 0) {

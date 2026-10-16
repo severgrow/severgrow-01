@@ -73,7 +73,10 @@ import { mountAppWindowButton } from './logic/app-window.js';
 import { STATS_KEY, parseStats, recordResult, statsLine } from './logic/stats.js';
 import { botSeed } from '../../src/bots/levels.js';
 import type { Level } from '../../src/bots/levels.js';
-import { LEVEL_INFO } from './logic/levels-ui.js';
+// LEVEL_INFO is deliberately NOT imported: its names (the classic bot levels' labels) were only
+// ever shown on the finish subtitle and in the game log, and the owner removed level and chapter
+// names everywhere on 2026-10-16. The module and its test remain until he decides whether to keep
+// the names for some future surface.
 import {
   DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from './logic/difficulty.js';
@@ -1451,8 +1454,8 @@ async function startGame(
   const state: State = opening;
   log = [
     campaign
-      ? `${CAMPAIGN.started(campaign.number, campaign.name)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
-      : `New game against Level ${level} (${LEVEL_INFO[level].name}). ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
+      ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
+      : `New game against Level ${level}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
@@ -1935,7 +1938,7 @@ function tutorialAfterPlay(p: Played, by: Player) {
 
 /** Resumes a saved campaign match as the level it belongs to (its board comes from the save's base). */
 function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachProgress> }) {
-  log = [CAMPAIGN.started(r.level.number, r.level.name)];
+  log = [CAMPAIGN.started(r.level.number)];
   watching = null;
   if (IS_TEST) {
     document.body.classList.remove('lab-watching');
@@ -5224,16 +5227,20 @@ function renderGameOver() {
   $('go-title').textContent = won
     ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(gameLevel)
     : resultTitle(r, HUMAN);
-  // The subtitle is context only (which level this was), the same rule the online finish screen
-  // follows — so it never repeats the outcome or the reason below it.
+  // The subtitle used to name the level ("Level 6 · Branching Out"). The owner removed level and
+  // chapter NAMES everywhere (2026-10-16): the title already says which level it was, so naming it
+  // again below was repetition, and "Branching Out" tells a player nothing they can use. What is
+  // left is the one genuinely useful note — what the win unlocked.
   if (campaign) {
-    // "Level 6 · Branching Out", plus one small note about what the win unlocked.
     const note = next
-      ? ` · ${CAMPAIGN.unlockedNext(next.name)}`
-      : won && !next ? ` · ${CAMPAIGN.chapterDone}` : '';
-    $('go-sub').textContent = `${CAMPAIGN.started(campaign.number, campaign.name)}${note}`;
+      ? CAMPAIGN.unlockedNext()
+      : won && !next ? CAMPAIGN.chapterDone : '';
+    $('go-sub').textContent = note;
+    $('go-sub').hidden = note === '';
   } else {
-    $('go-sub').textContent = `Level ${gameLevel} · ${LEVEL_INFO[gameLevel].name}`;
+    // A classic game: nothing to add. The title carries the outcome and the level number.
+    $('go-sub').textContent = '';
+    $('go-sub').hidden = true;
   }
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level

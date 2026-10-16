@@ -942,7 +942,7 @@ export const CAMPAIGN = Object.freeze({
   /** resume the campaign match exactly where it stopped */
   resumeHint: 'Your campaign match is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
-  started: (number: number, name: string): string => `Level ${number} · ${name}`,
+  started: (number: number): string => `Level ${number}`,
   /** the campaign finish title after a win: "Level 6 complete" */
   levelWon: (number: number): string => `Level ${number} complete`,
   /** the finish screen's secondary way out, back to the level list */
@@ -954,7 +954,7 @@ export const CAMPAIGN = Object.freeze({
    */
   nextLevel: 'Next level',
   /** the finish screen's small "next level unlocked" note after a campaign win */
-  unlockedNext: (name: string): string => `Next level unlocked: ${name}`,
+  unlockedNext: (): string => 'Next level unlocked',
   /** the finish screen's note after the last level of the campaign as built */
   chapterDone: 'Chapter complete. More levels are on the way.',
 });
