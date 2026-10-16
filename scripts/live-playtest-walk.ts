@@ -8,10 +8,19 @@
 import { chromium } from 'playwright-core';
 
 const BASE = 'https://www.futasaku.com/';
+// Phone first (that is what most testers will use), but desktop is one env var away:
+//   VP=1440x900 npx tsx scripts/live-playtest-walk.ts
+const [vpW, vpH] = (process.env.VP ?? '390x844').split('x').map(Number);
+console.log(`viewport ${vpW}x${vpH}`);
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );
-const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const page = await browser.newPage({
+  viewport: { width: vpW, height: vpH },
+  deviceScaleFactor: 2,
+  hasTouch: vpW < 500,
+  isMobile: vpW < 500,
+});
 
 const errors: string[] = [];
 const failedRequests: string[] = [];
