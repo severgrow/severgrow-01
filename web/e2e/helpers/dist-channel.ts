@@ -52,11 +52,14 @@ export const assertDistChannel = async (page: Page, expected: string = FUTA04_ST
   const actual = await resolveStoragePrefix(page);
   if (actual === expected) return;
   const hint = channelHintFor(actual);
+  const wanted = expected === ''
+    ? 'this suite\'s fixtures are UNPREFIXED (it targets the live channel, which installs no prefix)'
+    : `this suite seeds '${expected}'`;
   throw new Error(
     `e2e dist channel mismatch: the served build installs the storage prefix '${actual || '(none)'}'`
-    + ` but this suite seeds '${expected}'. Its fixtures write '${expected}severgrow.*', so the app`
+    + ` but ${wanted}. Its fixtures write '${expected}severgrow.*', so the app`
     + ` cannot see them; the suite would then die obscurely (e.g. #menu-continue stays hidden).`
     + (hint ? ` The dist looks like a '${hint}' build.` : '')
-    + ` Rebuild the dist for this channel first, e.g. \`CHANNEL=futa04 npm run web:build\`.`,
+    + ` Rebuild the dist for this channel first, e.g. \`CHANNEL=futa04 npm run web:build\`.`
   );
 };

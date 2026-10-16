@@ -8,7 +8,8 @@ import { openMenuEntry } from './helpers/menu-nav.js';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import type { Browser, Page } from 'playwright-core';
-import { servePreview } from './helpers/preview-port.js';
+import { serveLiveDist } from './helpers/live-dist.js';
+import { assertDistChannel } from './helpers/dist-channel.js';
 import type { State } from '../../src/engine/index.js';
 import { bigCutDemo, botCut, botReplace, cutDemo, endgame, goldCutDemo, tripleDemo } from './positions.js';
 import type { CutDemo } from './positions.js';
@@ -28,8 +29,12 @@ const check = (name: string, ok: boolean, note?: string) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 
+// The classic live channel, from smoke's OWN build (helpers/live-dist.ts) — NOT the shared
+// `web/dist`, which another worker may have rebuilt as `futa04`. This suite's fixtures are
+// UNPREFIXED (`severgrow.*`), so they only reach the app on the live channel, exactly as CI runs
+// it (`CHANNEL=live npm run web:build` for the non-`futa04-*` suites in .github/workflows/ci.yml).
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
-const { server, url: BASE } = await servePreview(4174, { logLevel: 'silent' });
+const { server, url: BASE } = await serveLiveDist(4174, { logLevel: 'silent' });
 const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 const demo = cutDemo();
@@ -43,13 +48,21 @@ const isBusy = (page: Page) => page.evaluate(() => (window as unknown as { __sev
 const stateJson = (page: Page) => page.evaluate(() => JSON.stringify((window as unknown as { __severgrow: Hook }).__severgrow.state()));
 const idle = async (page: Page, ms = 15000) => {
   await page.waitForFunction(() => {
-    const h = (window as unknown as { __severgrow: Hook }).__severgrow;
+    const h = (window as unknown as { __severgrow?: Hook }).__severgrow;
+    // BOOT FIRST. `state()` is null until main.ts has actually started a game, and the old
+    // `(!s || …)` treated that null as "nothing to wait for" — so on a loaded machine `idle()`
+    // returned before the game (and its HUD, hand and hint) existed, and the checks below read an
+    // un-built UI.
+    if (!h) return false;
     const s = h.state();
-    return !h.busy() && (!s || s.actor === 0 || s.phase === 'GAME_OVER');
+    if (!s) return false;
+    return !h.busy() && (s.actor === 0 || s.phase === 'GAME_OVER');
   }, undefined, { timeout: ms });
 };
 const boardTiles = (page: Page) => page.locator('.l-tiles .tile').count();
 const stateTiles = (page: Page) => page.evaluate(() => Object.values((window as unknown as { __severgrow: Hook }).__severgrow.state()!.board).filter((t) => t).length);
+/** One channel check for the whole run (see openPage). */
+let channelChecked = false;
 
 const openPage = async (theme: string, size: keyof typeof SIZES, settings: Record<string, unknown> = {}, save?: State, query = '') => {
   const page = await browser.newPage({ viewport: SIZES[size], deviceScaleFactor: 1 });
@@ -70,6 +83,14 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   );
   await page.goto(BASE + query);
   await page.waitForTimeout(250);
+  // Loud channel guard (helpers/dist-channel.ts): this suite's fixtures are unprefixed, so they
+  // only reach the app on the live build. If the served page is ever another channel (a `futa04`
+  // build installs `main2:`, and its infinite draw-pile breathe animation also makes `#deck`
+  // un-clickable), say so in one line instead of timing out obscurely 30s later.
+  if (!channelChecked) {
+    channelChecked = true;
+    await assertDistChannel(page, '');
+  }
   return { page, errors };
 };
 
