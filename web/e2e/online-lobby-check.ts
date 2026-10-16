@@ -41,7 +41,7 @@ try {
   // text was present.)
   check('the tagline string is still available to re-enable', ONLINE.tagline === 'GROW · CONNECT · CONQUER', ONLINE.tagline);
   // The DELETED tagline must leave no trace (no hidden placeholder, no leftovers). The deliberate
-  // beta 0.53 line reuses the `tagline` class (`web/src/feedback/mount.ts`), so it is excluded by
+  // beta line reuses the `tagline` class (`web/src/feedback/mount.ts`), so it is excluded by
   // id: this check still fails on an unremoved or half-removed `#menu-tagline`.
   check('the removed tagline element is gone (not a hidden placeholder)',
     (await page.locator('#menu .tagline:not(#menu-beta), #menu-tagline').count()) === 0);
@@ -85,7 +85,7 @@ try {
       ).toFixed(1),
     };
   });
-  // The owner removed the tagline on 2026-10-14 and ruled on 2026-10-15 that the beta 0.53 line
+  // The owner removed the tagline on 2026-10-14 and ruled on 2026-10-15 that the beta line
   // KEEPS its place between the wordmark and the buttons. So the rule is not "nothing may sit
   // there": it is "nothing DEAD sits there, and no pixel is unexplained". This still fails on an
   // unremoved tagline, a hidden placeholder or a leftover empty row.
@@ -93,7 +93,7 @@ try {
   check('anything between the wordmark and the buttons is a real, visible, non-empty element',
     dead.length === 0, menuColumn.slot.map((s) => `${s.id} ${s.visible ? 'visible' : 'HIDDEN'} "${s.text.slice(0, 30)}"`).join(' | ') || 'slot empty');
   // The deliberate beta line is a real feature, not a leftover: assert it is the thing in the slot.
-  check('the deliberate beta 0.53 line is the element in that slot',
+  check('the deliberate beta line is the element in that slot',
     menuColumn.slot.some((s) => s.id === 'menu-beta' && s.visible && s.text.length > 0),
     menuColumn.slot.map((s) => s.id).join(' | ') || 'slot empty');
   // No void: the wordmark stands the column rhythm from whatever sits in the slot, and the span

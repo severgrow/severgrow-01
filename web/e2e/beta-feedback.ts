@@ -16,6 +16,7 @@ import { MatchService } from '../../server/src/service.js';
 import { MemoryStorage } from '../../server/src/storage/memory.js';
 import { MemoryFeedbackStore, createFeedbackRouter } from '../../server/src/feedback/feedback.js';
 import { CHROME } from './helpers/local-duel.js';
+import { FEEDBACK } from '../../src/strings.js';
 
 const PORT = 4241;
 const SHOTS = process.env.SHOTS === '1';
@@ -76,7 +77,7 @@ try {
     const order = (await page.evaluate(`(() => { const t = document.querySelector('#menu .title').getBoundingClientRect(); const n = document.getElementById('menu-beta').getBoundingClientRect(); const b = document.querySelector('#menu .menu-buttons').getBoundingClientRect(); return t.bottom <= n.top && n.bottom <= b.top && n.left >= 0 && n.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; })()`)) as boolean;
     check(`${label}: it sits between the title and the buttons, inside the screen`, order);
     check(`${label}: every menu button stays on screen`, (await page.evaluate(`[...document.querySelectorAll('#menu .menu-buttons .btn')].filter(b => b.offsetParent).every(b => b.getBoundingClientRect().bottom <= innerHeight)`)) as boolean);
-    check(`${label}: it says version 0.53`, (await page.locator('#menu-beta').innerText()).includes('0.53'));
+    check(`${label}: it says the current version (${FEEDBACK.betaVersion})`, (await page.locator('#menu-beta').innerText()).includes(FEEDBACK.betaVersion));
     await shot(page, `menu-${label}`);
     await page.locator('#menu-beta button').click();
     check(`${label}: "let us know here" opens Report a problem`, await waitFor(() => page.locator('#fb-report').isVisible()));

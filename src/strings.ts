@@ -726,7 +726,7 @@ export const FEEDBACK = Object.freeze({
   guideLink: 'Tester guide',
   close: 'Close',
   /** The beta line on the main menu, between the wordmark and the buttons. */
-  betaVersion: '0.53',
+  betaVersion: '0.55',
   betaNote: (version: string) => `This is a beta version (${version}) of an evolving game. If you spot any problems or have suggestions for improvement,`,
   betaLink: 'let us know here.',
 });
