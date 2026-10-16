@@ -23,8 +23,10 @@ Live at **https://www.futasaku.com** — the real thing, a real server, real acc
 > 2. **PLAY → Training** for a game against the computer. Easy if you want to learn, Hard if you
 >    want to be beaten up.
 > 3. **PLAY → LEVEL 1–30** — a campaign. Starts very gentle and gets nasty around level 11.
-> 4. **PLAY → PLAY ONLINE → Create a duel.** Share the 4-character code with someone else testing,
+> 4. **PLAY → Play online → Create a duel.** Share the 4-character code with someone else testing,
 >    or send them the link. Then play your turns — you each get 24 hours, so you can take your time.
+>    *(The first time you tap "Play online" it asks whether to continue with Google or play as a guest.
+>    Either works, and it only asks once — if you already signed in above, you will not see it.)*
 > 5. **Real time** turns the same duel into a live game with a 60-second clock per turn. Good with
 >    two phones in the same room. **Leaving a real-time game forfeits it** — that's on purpose.
 > 6. **Win and you earn Seeds.** Then open **The world map** from the main menu and spend 100 Seeds
