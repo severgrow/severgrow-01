@@ -124,7 +124,7 @@ const cssSize = `${(1024 / DPR).toFixed(DPR === 3 ? 2 : 0)}px ${(1024 / DPR).toF
 const rows: { label: string; m: Awaited<ReturnType<typeof measure>> }[] = [];
 for (const bf of [0.5, 0.65, 0.7, 0.8]) {
   for (const oct of [3]) {
-    const m = await measure(tileFor(1024, bf, oct), '0.124', cssSize);
+    const m = await measure(tileFor(1024, bf, oct), '0.085', cssSize);
     const label = `NEW 1024px raster bf ${bf.toFixed(2)} oct ${oct}`;
     console.log(`  ${label}${' '.repeat(Math.max(0, 34 - label.length))}${m.sd.toFixed(3)}   ${m.nbr.toFixed(3)}   ${(m.nbr / m.sd).toFixed(3)}    ${m.c2.toFixed(3)}   ${m.c4.toFixed(3)}`);
     rows.push({ label, m });
@@ -142,5 +142,5 @@ better.sort((x, y) => (y.m.nbr / y.m.sd) - (x.m.nbr / x.m.sd));
 console.log(`\n  OLD blockiness reference: c2 ${oldM.c2.toFixed(3)} (well above zero = 2px repeats), c4 ${oldM.c4.toFixed(3)} (negative = the block period)`);
 console.log(`  variants FINER than old AND without block structure (|c2|,|c4| < 0.1): ${better.length}`);
 for (const b of better.slice(0, 3)) console.log(`    ${b.label}  (nbr/sd ${(b.m.nbr / b.m.sd).toFixed(3)} vs ${(oldM.nbr / oldM.sd).toFixed(3)}, c2 ${b.m.c2.toFixed(3)} vs ${oldM.c2.toFixed(3)})`);
-console.log(`\n  strength reference: OLD sd ${oldM.sd.toFixed(3)} at opacity .16; every NEW row is opacity .124 (12% below .16, twice)`);
+console.log(`\n  strength reference: OLD sd ${oldM.sd.toFixed(3)} at opacity .16; every NEW row is opacity .085 (the owner's single uniform value)`);
 await browser.close();

@@ -226,8 +226,9 @@ async function geometry(page: Page, width: number, height: number, label: string
   // `background-size` steps down as the pixel ratio rises (1024 / DPR). Accepting the ladder rather
   // than one literal is not a weakening - it is the actual requirement, and it is what stops the
   // source being upscaled into visible blocks on a retina screen (the chunky grain the owner
-  // reported). In-match opacity is 12% below what it was, twice (.19 -> .167 -> .147).
-  check(atmosphere.coverage && atmosphere.opacity === .147 && atmosphere.pointer === 'none' && atmosphere.static
+  // reported). ONE uniform opacity now, in and out of match (.085) - the owner removed the in-match
+  // bump, so this reads the same value the base rule sets.
+  check(atmosphere.coverage && atmosphere.opacity === .085 && atmosphere.pointer === 'none' && atmosphere.static
     && ['1024px 1024px', '512px 512px', '341.33px 341.33px'].includes(atmosphere.tile) && atmosphere.background,
     `${label}: deterministic static film grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,

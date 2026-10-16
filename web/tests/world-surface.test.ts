@@ -88,7 +88,7 @@ describe('the world map rests on the ONE shared page surface', () => {
     const grain = bodyOf(atmosphereTs, '#futa04-film-grain');
     expect(grain, 'the film grain rule must exist').not.toBeNull();
     expect(grain!, 'the grain is the same SVG noise it always was').toContain('feTurbulence');
-    expect(grain!, 'and the same opacity, lowered 12% twice (the owner asked for it twice)').toContain('.124');
+    expect(grain!, 'one value everywhere: the in-match bump was removed at the owner request').toContain('.085');
     // The page surface itself is unchanged: fixed, and at the bottom under every screen.
     const texture = bodyOf(styleCss, '#texture');
     expect(texture, 'the #texture rule must exist').not.toBeNull();
@@ -204,6 +204,35 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(held, '.world-hex.held must exist').not.toBeNull();
     expect(held!, 'owned tiles still derive their edge from --territory').toContain('var(--territory)');
     expect(held!, 'the gradient does the shading, so this rule paints no fill').not.toMatch(/fill\s*:/);
+  });
+
+  it('tile FILLS paint BELOW the tile EDGES, so a neighbour cannot bury a stroke', () => {
+    // Owner, 2026-10-16: "highlighting a tile is better but still looks wonky - uneven edges". Each
+    // tile's stroke was painted together with its own fill, so the NEXT neighbour's fill covered the
+    // shared edge — a cream highlight only where a tile met open ground, and no line at all between
+    // two highlighted tiles. The fix is two layers in world-view.ts: every FILL in a faces group
+    // that paints first, every EDGE in a lines group above it, and one accent path above both.
+    expect(worldView, 'the fills must live in their own group').toContain("faces.classList.add('world-faces')");
+    expect(worldView, 'the edges must live in their own group').toContain("lines.classList.add('world-lines')");
+    expect(worldView, 'the edge group must be appended after the fill group').toMatch(/svg\.append\(faces, lines\)/);
+    expect(worldView, 'the selection must draw last of all, above every edge').toMatch(/svg\.append\(accentGroup\)/);
+    // The fill layer MUST paint before the stroke layer, and a face must not swallow a tap.
+    const face = bodyOf(onlineCss, '.world-hex-face');
+    expect(face, '.world-hex-face must exist').not.toBeNull();
+    expect(face!, 'the face carries no stroke').not.toMatch(/stroke\s*:/);
+    expect(face!, 'the face must not swallow taps meant for the edge').toContain('pointer-events: none');
+    // The edge layer paints no surface of its own, owns the tap, and rounds its joins so a hex
+    // vertex cannot spike the way a miter join would.
+    const line = bodyOf(onlineCss, '.world-hex');
+    expect(line, '.world-hex must still exist').not.toBeNull();
+    expect(line!.replace(/\s+/g, ''), 'the edge paints no fill of its own').toContain('fill:none');
+    expect(line!, 'the edge owns every tap').toContain('pointer-events: all');
+    expect(line!, 'round joins keep a hex vertex from spiking').toContain('stroke-linejoin: round');
+    // The selection accent is the cream highlight, on top and pointer-transparent.
+    const accent = bodyOf(onlineCss, '.world-accent-line');
+    expect(accent, '.world-accent-line must exist').not.toBeNull();
+    expect(accent!, 'the accent is the selection cream').toMatch(/stroke:\s*#[0-9a-f]{3,8}/i);
+    expect(accent!, 'the accent must not take a tap').toContain('pointer-events: none');
   });
 });
 

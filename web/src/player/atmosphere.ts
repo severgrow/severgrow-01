@@ -34,7 +34,7 @@ export const ATMOSPHERE_CSS = `
    noise degenerates to flat grey - sd 0.61 - so .7 keeps a margin below the ceiling.) */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
-  opacity: .124; background-repeat: repeat; background-size: 1024px 1024px;
+  opacity: .085; background-repeat: repeat; background-size: 1024px 1024px;
   mix-blend-mode: normal; user-select: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
@@ -43,10 +43,13 @@ export const ATMOSPHERE_CSS = `
    341.33 is 1024/3, kept exact so a 3x phone lands on a whole number of device pixels. */
 @media (min-resolution: 2dppx) { #futa04-film-grain { background-size: 512px 512px; } }
 @media (min-resolution: 3dppx) { #futa04-film-grain { background-size: 341.33px 341.33px; } }
-/* In-match the grain rides above map + cockpit, a touch stronger so the analog flecks stay readable
-   on the board. (Owner lowered BOTH opacities by 12% twice: .16 -> .141 -> .124, and .19 -> .167 ->
-   .147. Measured strength tracks that exactly - the same texture, just quieter.) */
-body:has(#game:not([hidden])) #futa04-film-grain { opacity: .147; }
+/* ONE OPACITY EVERYWHERE (owner, 2026-10-16). There used to be a stronger in-match value
+   (body:has(#game:not([hidden])) #futa04-film-grain { opacity: ... }) so the flecks stayed
+   readable on the board. The owner asked for a single uniform value instead, so that rule is
+   DELETED rather than left at the same number - one value, one place, nothing to drift. Do not
+   reintroduce a per-screen bump. Lineage: .16 -> .141 -> .124 -> .085.
+   NOTE: this stylesheet lives in a JS template literal, so never use backticks in these comments -
+   they terminate the string and break the build. */
 /* Ink is flat near-black paper: no grain at all. */
 [data-theme='ink'] #futa04-film-grain { display: none; }
 #futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
