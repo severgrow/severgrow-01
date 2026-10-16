@@ -67,6 +67,19 @@ const browser = await chromium.launch(
 
 type Box = { x: number; y: number; width: number; height: number };
 
+// The WORLD's own drawn ink, derived from the frozen geometry exactly as `world-view.ts` draws it:
+// a hex reaches X/2*R in x and a full R in y (R = 10, X = sqrt(3)). The drawn cluster is very nearly
+// square, so this is the ratio the rendered ink box must reproduce — a stretch would move it.
+const WORLD_INK_RATIO = ((): number => {
+  const R = 10;
+  const X = Math.sqrt(3);
+  const xs = WORLD_CELLS.map((c) => X * (c.q + c.r / 2) * R);
+  const ys = WORLD_CELLS.map((c) => 1.5 * c.r * R);
+  const w = Math.max(...xs) - Math.min(...xs) + X * R;
+  const h = Math.max(...ys) - Math.min(...ys) + 2 * R;
+  return w / h;
+})();
+
 // A patch of the screen OUTSIDE the world's window and outside the menu's column: the shared page
 // surface and nothing else. Identical on both screens, so the two measurements are comparable.
 const PATCH = { x: 2, y: 300, width: 9, height: 200 };
@@ -247,6 +260,14 @@ try {
             windowAspect: wr.width / wr.height,
             inkWidth: right - left,
             inkHeight: bottom - top,
+            // ONE hexagon's own box. A regular pointy-top hex is sqrt(3)/2 as wide as it is tall, so
+            // this is the direct proof the map was not stretched: a non-uniform scale moves it.
+            hexRatio: (() => {
+              const one = w.querySelector('.world-hex');
+              if (!one) return 0;
+              const r = one.getBoundingClientRect();
+              return r.height > 0 ? r.width / r.height : 0;
+            })(),
             // The margin between the drawn map and its window, on the axis the letterboxing showed on.
             bandTop: top - wr.top,
             bandBottom: wr.bottom - bottom,
@@ -338,10 +359,15 @@ try {
       fit ? `top ${fit.bandTop.toFixed(1)}px vs bottom ${fit.bandBottom.toFixed(1)}px` : 'n/a');
     check(`[${tag}] the map fills the window's width too`, !!fit && m.grid !== null && fit.bandLeft <= m.grid.width * 0.06 && fit.bandRight <= m.grid.width * 0.06 && Math.abs(fit.bandLeft - fit.bandRight) <= 1.5,
       fit && m.grid ? `left ${fit.bandLeft.toFixed(1)}px, right ${fit.bandRight.toFixed(1)}px of ${m.grid.width.toFixed(1)}px` : 'n/a');
-    // Uniform only: the hexes keep their true shape. A stretched map would show it here (the map is
-    // very nearly square, so a non-square INK box means the hexes were distorted).
-    check(`[${tag}] the map is not stretched (the hexes keep their shape)`, !!fit && Math.abs(fit.inkWidth / fit.inkHeight - fit.viewBoxAspect) <= 0.02,
-      fit ? `ink ${fit.inkWidth.toFixed(1)}x${fit.inkHeight.toFixed(1)} = ${(fit.inkWidth / fit.inkHeight).toFixed(4)} vs ${fit.viewBoxAspect.toFixed(4)}` : 'n/a');
+    // Uniform only: the hexes keep their true shape. A regular pointy-top hexagon is sqrt(3)/2 as
+    // wide as it is tall, so one hex's own box is the direct proof the map was not stretched to fit
+    // (the owner's one definitely-wrong outcome); the ink box is the second, cross-check.
+    const HEX_RATIO = Math.sqrt(3) / 2;
+    check(`[${tag}] the hexes are unstretched (one hex is a true hexagon)`, !!fit && Math.abs(fit.hexRatio - HEX_RATIO) <= 0.02,
+      fit ? `hex w/h ${fit.hexRatio.toFixed(4)} vs a regular hex ${HEX_RATIO.toFixed(4)}` : 'n/a');
+    check(`[${tag}] the map's ink box reproduces the world's own geometry ratio`,
+      !!fit && Math.abs(fit.inkWidth / fit.inkHeight - WORLD_INK_RATIO) <= 0.01,
+      fit ? `ink ${fit.inkWidth.toFixed(1)}x${fit.inkHeight.toFixed(1)} = ${(fit.inkWidth / fit.inkHeight).toFixed(4)} vs world ${WORLD_INK_RATIO.toFixed(4)}` : 'n/a');
 
     // 7. The column still USES the screen (owner: "using nicely most of screen, especially on
     //    mobile"). The window hugs the map now, so on a TALL phone the width is the limiting
