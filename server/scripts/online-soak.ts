@@ -43,6 +43,7 @@ import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { createDraftEngine } from '../../web/src/online/draft.js';
 import { emptyClock, noteServerNow, remainingMs } from '../../web/src/online/clock.js';
 import { requireRealProjectOptIn } from './real-project-guard.js';
+import { markTestRowsOrFail } from './mark-test-data.js';
 
 // ----------------------------------------------------------------- constants
 
@@ -1872,6 +1873,17 @@ const main = async (): Promise<void> => {
   }
   const ids = emptyIds();
 
+  // Every row the soak creates is marked as test data (migration 0013). The run normally deletes its
+  // own rows on the way out, but an interrupted slice leaves residue — already marked, so it can
+  // never move a number on the admin dashboard even before the next cleanup.
+  const markTracked = async (): Promise<void> => {
+    const marked = await markTestRowsOrFail('online-soak', {
+      playerIds: [...ids.players, ...(ids.keepers ?? [])],
+      matchIds: ids.matches,
+    });
+    console.log(`  marked ${marked.players} player(s) and ${marked.matches} match(es) as test data`);
+  };
+
   let pool = poolFromUrl(url, { max: 8 });
   let storage = postgresStorage(pool);
   const clock = createClock(Date.now());
@@ -1935,6 +1947,7 @@ const main = async (): Promise<void> => {
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, inprocSpecs.length)) }, () => worker()));
   await persistChain;
+  await markTracked();
 
   const edgeToGo = buildPlan(edgeGames, edgeGames).filter((s) => !skip.has(gameKey('edge', 'edge', s.index + inprocTotal)));
   if (edgeGames > 0 && edgeToGo.length > 0) {
@@ -1976,6 +1989,7 @@ const main = async (): Promise<void> => {
     );
   }
 
+  await markTracked();
   const durationMs = performance.now() - started;
   const meta = { total, edgeGames, when: new Date().toISOString(), edgeBaseUrl: edgeUrl, durationMs };
   writeFileSync(docPath, renderDoc(report, meta, loadNarrative(narrativePath)));
@@ -1998,7 +2012,8 @@ const main = async (): Promise<void> => {
     await cleanup(url, ids);
     saveIds(idsPath, emptyIds());
   } else {
-    console.log(`--keep: test rows left in the database and tracked in ${idsPath}`);
+    await markTracked();
+    console.log(`--keep: test rows left in the database and tracked in ${idsPath} (marked as test data)`);
   }
   await (pool as unknown as { end?: () => Promise<void> }).end?.();
 };

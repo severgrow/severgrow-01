@@ -20,6 +20,7 @@ import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { botSeed } from '../../src/bots/levels.js';
 import { GreedyBot } from '../../src/bots/GreedyBot.js';
 import { worldNeighbours } from '../src/world.js';
+import { markTestRowsOrFail } from './mark-test-data.js';
 
 const BASE = process.env.BASE_URL ?? 'https://wbfrbeedlvjercrukngn.supabase.co/functions/v1/duel';
 const STATE_FILE = '/tmp/futa055-state.json';
@@ -160,6 +161,11 @@ const playTurn = async (h: Handle, verbose = false): Promise<'finished' | 'ok' |
 const newDuel = async (label0: string, label1: string) => {
   const a = await mintGuest(`${label0}`);
   const b = await mintGuest(`${label1}`);
+  // Keep these in the state file too (not just the `guests`/`burst` commands) so the end-of-run
+  // marking step below can flag them as test data.
+  const s = load();
+  s.tokens.push({ id: a.id, name: a.name, token: a.token }, { id: b.id, name: b.name, token: b.token });
+  save(s);
   const c = await call('POST', '/v1/matches', {}, a.token);
   const j = await call('POST', '/v1/matches/join', { inviteCode: c.json.match.inviteCode }, b.token);
   const h0: Handle = { label: label0, token: a.token, seat: c.json.player.seat, matchId: c.json.match.matchId };
@@ -391,5 +397,10 @@ const main = async () => {
     case 'campaign': await cmdCampaign(rest[0]!); break;
     default: console.log('unknown command');
   }
+  // Every command above creates (or acts with) real rows on the real project — guests, matches,
+  // wallets, claims. Mark them as test data so nothing reaches the admin dashboard (migration 0013).
+  // The tool does not store match ids, so the helper also marks any match these players are in.
+  const marked = await markTestRowsOrFail('verify-0.55-playtest --live', { playerIds: load().tokens.map((t) => t.id) });
+  console.log(`marked ${marked.players} player(s) and ${marked.matches} match(es) as test data`);
 };
 await main();

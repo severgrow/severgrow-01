@@ -51,6 +51,7 @@ import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
 import type { Action } from '../../src/engine/index.js';
 import type { MatchViewPayload, SubmitActionRequest } from '../src/protocol.js';
 import { requireRealProjectOptIn } from './real-project-guard.js';
+import { markTestRowsOrFail } from './mark-test-data.js';
 
 // ----------------------------------------------------------------- argument parsing
 
@@ -85,6 +86,12 @@ const OUT_PATH = argStr('out', `.tmp-loadtest-${RUN_ID}.json`);
 
 type Ids = { runId: string; players: string[]; matches: string[]; rateBuckets: string[] };
 const ids: Ids = { runId: RUN_ID, players: [], matches: [], rateBuckets: [] };
+
+/** Mark every row this run created as test data (migration 0013), so the admin dashboard stays clean. */
+const markTracked = async (): Promise<void> => {
+  const marked = await markTestRowsOrFail('load-test', { playerIds: ids.players, matchIds: ids.matches });
+  console.log(`  marked ${marked.players} player(s) and ${marked.matches} match(es) as test data`);
+};
 
 const memoryKv = (): KeyValue => {
   const map = new Map<string, string>();
@@ -457,6 +464,7 @@ const main = async (): Promise<void> => {
   }, 15_000);
 
   await Promise.all(Array.from({ length: CONCURRENCY }, (_, i) => lane(i)));
+  await markTracked();
   stop = true;
   clearInterval(progress);
   clearInterval(idsTicker);
@@ -468,6 +476,7 @@ const main = async (): Promise<void> => {
   console.log(`\nlocal load done in ${actualDurationS}s: created=${counters.created} finished=${counters.finished} stuck=${counters.stuck} error=${counters.error} peakConns=${peakConnections}`);
 
   await edgeProbe(EDGE_PROBE, EDGE_URL);
+  await markTracked();
 
   // --- storage measurement while the rows still exist, using only OUR tracked match ids
   const matchIds = ids.matches.filter((m) => m.length > 0);
@@ -621,7 +630,8 @@ const main = async (): Promise<void> => {
     console.log(`deleted ${allMatches.length} match(es), ${ids.players.length} player(s), ${rateBuckets.length} rate bucket(s)`);
     writeFileSync(IDS_PATH, JSON.stringify({ runId: RUN_ID, players: [], matches: [], rateBuckets: [] }));
   } else {
-    console.log(`--keep: rows left in the database, tracked in ${IDS_PATH}`);
+    await markTracked();
+    console.log(`--keep: rows left in the database (marked as test data), tracked in ${IDS_PATH}`);
   }
 
   clearInterval(monitor);

@@ -10,6 +10,12 @@ export type PlayerRecord = {
   displayName: string | null;
   createdAt: number;
   upgradedAt: number | null;
+  /**
+   * Permanent "test/verification traffic" marker (migration 0013). Read-only here: the game never
+   * sets it, the admin dashboard hides marked rows, and only `server/scripts` tooling flips it by
+   * direct SQL. Absent/false means a real player.
+   */
+  isTest?: boolean;
 };
 
 export type TokenRecord = {
@@ -60,6 +66,11 @@ export type MatchRecord = {
   openQueue: boolean;
   /** Live duels own this match's deadline (server/src/live/): the 24-hour grace/timeout rule skips it. */
   liveManaged?: boolean;
+  /**
+   * Permanent "test/verification traffic" marker (migration 0013). Same rules as
+   * `PlayerRecord.isTest`: never written by the game, only read by the admin dashboard.
+   */
+  isTest?: boolean;
 };
 
 export type Participant = {

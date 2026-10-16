@@ -186,6 +186,16 @@ const CLASSIFIED: Record<string, Protection> = {
   // traffic to the deployed Edge API — it needs the `--live` flag (exit 3 without it) and is
   // reachable only by running it on purpose. Never from check, test or CI.
   'server/scripts/verify-0.55-playtest.ts': 'explicit-command',
+  // Test-data marking + cleanup (added 2026-10-16). `mark-test-data.ts` is the shared helper every
+  // live-capable tool calls to stamp its own rows as test data (migration 0013); `clean-test-data.ts`
+  // is the one-off history cleanup. Both read DATABASE_URL, both are absent from default npm
+  // scripts, and both are reachable only by running them on purpose.
+  'server/scripts/mark-test-data.ts': 'explicit-command',
+  'server/scripts/clean-test-data.ts': 'explicit-command',
+  // The manual smoke is normally a loopback target, but `BASE_URL=<real>` points it at a real
+  // deployment. It now reads DATABASE_URL (so the real-capable detector flags it) purely to mark the
+  // rows it creates as test data; it stays out of every default npm script.
+  'server/scripts/smoke.ts': 'explicit-command',
 };
 
 describe('entry points cannot reach the real project by default', () => {

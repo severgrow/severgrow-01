@@ -6,9 +6,15 @@
 //   BASE_URL=https://duel.example npm run server:smoke
 import { DuelClient } from '../src/client.js';
 import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
+import { poolFromUrl } from '../src/storage/pg-pool.js';
+import { isLocalTarget } from './real-project-guard.js';
+import { databaseUrlForMarking, markTestRows } from './mark-test-data.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
 const baseUrl = process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 8787}`;
+// Test-data marker (migration 0013). Read here as well as in the helper because a run against a real
+// deployment MUST be able to mark the rows it creates — see the guard before the exit below.
+const databaseUrl = process.env.DATABASE_URL ?? databaseUrlForMarking();
 
 const memory = (): KeyValue => {
   const map = new Map<string, string>();
@@ -33,8 +39,11 @@ const main = async (): Promise<void> => {
   const guestA = await a.createGuest('Smoke A');
   const guestB = await b.createGuest('Smoke B');
   check('two guests can be created', guestA.ok && guestB.ok);
+  const testPlayerIds: string[] = [guestA.player.id, guestB.player.id];
+  const testMatchIds: string[] = [];
 
   const created = await a.createMatch(guestA.token);
+  testMatchIds.push(created.match.matchId);
   check('guest A creates a waiting match with an invite code', created.match.status === 'waiting' && created.match.inviteCode.length === DEFAULT_SERVER_CONFIG.inviteCodeLength, created.match.inviteCode);
 
   const joined = await b.joinMatch(guestB.token, created.match.inviteCode);
@@ -84,6 +93,7 @@ const main = async (): Promise<void> => {
 
   const outsider = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
   const outsiderGuest = await outsider.createGuest();
+  testPlayerIds.push(outsiderGuest.player.id);
   const denied = await outsider
     .getState(outsiderGuest.token, matchId)
     .then(() => 'allowed')
@@ -95,6 +105,23 @@ const main = async (): Promise<void> => {
     .then(() => 'allowed')
     .catch((error: unknown) => (error as { code?: string }).code ?? 'unknown');
   check('a bad token is rejected', badToken === 'UNAUTHORIZED', String(badToken));
+
+  // Mark every row this run created as test data (migration 0013) so it never reaches the admin
+  // dashboard. A real (non-loopback) target with no database to mark is a HARD failure: silently
+  // leaving unmarked test rows on the live project is exactly what this task exists to stop.
+  if (databaseUrl) {
+    const pool = poolFromUrl(databaseUrl, { max: 1 });
+    try {
+      const marked = await markTestRows(pool, { playerIds: testPlayerIds, matchIds: testMatchIds });
+      console.log(`\nmarked ${marked.players} player(s) and ${marked.matches} match(es) as test data`);
+    } finally {
+      await (pool as unknown as { end?: () => Promise<void> }).end?.();
+    }
+  } else if (!isLocalTarget(baseUrl)) {
+    check('test rows can be marked as test data', false, 'DATABASE_URL is not set, so this run against a real target cannot mark what it created');
+  } else {
+    console.log('\nloopback target and no DATABASE_URL: nothing to mark');
+  }
 
   console.log(failures === 0 ? '\nsmoke: all checks passed' : `\nsmoke: ${failures} check(s) failed`);
   process.exit(failures === 0 ? 0 : 1);

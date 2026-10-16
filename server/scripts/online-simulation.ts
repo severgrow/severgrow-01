@@ -21,6 +21,7 @@ import type { MatchRecord } from '../src/storage/types.js';
 import { CURRENT_RULES_VERSION, apply, applyAs, legalActions, mulberry32, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State, View } from '../../src/engine/index.js';
 import { playGame } from '../../src/sim/run.js';
+import { markTestRowsOrFail } from './mark-test-data.js';
 import { shadowFromView } from '../../web/src/online/shadow.js';
 import type { MatchViewPayload } from '../src/protocol.js';
 
@@ -358,6 +359,12 @@ if (LIVE) {
       const created = await c0.createMatch(g0.token);
       const joined = await c1.joinMatch(g1.token, created.match.inviteCode);
       const matchId = created.match.matchId;
+      // The live games create real rows on the real project: mark them as test data immediately
+      // (migration 0013) so a simulation run can never move a number on the admin dashboard.
+      await markTestRowsOrFail('online-simulation --live', {
+        playerIds: [g0.player.id, g1.player.id],
+        matchIds: [matchId],
+      });
       const world: World = {
         storage: null,
         fetch: liveFetch,

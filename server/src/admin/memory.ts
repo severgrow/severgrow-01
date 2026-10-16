@@ -53,6 +53,26 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
   const matches = (): MatchRecord[] => sources.storage.allMatches();
   const feedbackRows = () => sources.feedback?.rows ?? [];
   const economy = () => sources.economy ?? null;
+
+  // ------------------------------------------------------------ test-data visibility (0013)
+  // The EXACT rules the SQL store enforces, so the dev server and the tests can never drift from
+  // production: a PLAYER is judged by its own flag and nothing else; a MATCH is judged by its own
+  // flag OR by any participant being a marked player; an OWNED row (wallet, ledger entry, receipt,
+  // claim, report, identity link) is judged by the player it belongs to.
+  const testPlayerIds = (): Set<string> => new Set(players().filter((p) => p.isTest === true).map((p) => p.id));
+  const isMarked = (playerId: string | null | undefined): boolean =>
+    typeof playerId === 'string' && testPlayerIds().has(playerId);
+  const visiblePlayers = (): PlayerRecord[] => players().filter((p) => p.isTest !== true);
+  const matchVisible = async (match: MatchRecord): Promise<boolean> => {
+    if (match.isTest === true) return false;
+    const parts = await sources.storage.participantsOf(match.id);
+    return !parts.some((p) => isMarked(p.playerId));
+  };
+  const visibleMatches = async (): Promise<MatchRecord[]> => {
+    const out: MatchRecord[] = [];
+    for (const m of matches()) if (await matchVisible(m)) out.push(m);
+    return out;
+  };
   const walletOf = (playerId: string) => {
     const store = economy();
     const wallet = store?.wallets.get(playerId);
@@ -116,26 +136,27 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       seen.set(adminId, { adminPlayerId: adminId, seenAt: Math.max(previous, at) });
     },
     async countsSince(since) {
+      const visible = await visibleMatches();
       return {
-        reports: feedbackRows().filter((r) => r.createdAt > since && r.kind === 'report').length,
-        crashes: feedbackRows().filter((r) => r.createdAt > since && r.kind === 'crash').length,
-        claims: [...(economy()?.claims.values() ?? [])].filter((c) => c.claimedAt > since).length,
-        matches: matches().filter((m) => m.createdAt > since).length,
+        reports: feedbackRows().filter((r) => r.createdAt > since && r.kind === 'report' && !isMarked(r.playerId)).length,
+        crashes: feedbackRows().filter((r) => r.createdAt > since && r.kind === 'crash' && !isMarked(r.playerId)).length,
+        claims: [...(economy()?.claims.values() ?? [])].filter((c) => c.claimedAt > since && !isMarked(c.ownerId)).length,
+        matches: visible.filter((m) => m.createdAt > since).length,
       };
     },
 
     async overview(now) {
       const todayStart = Math.floor(now / DAY_MS) * DAY_MS;
       const weekAgo = now - 7 * DAY_MS;
-      const all = matches();
+      const all = await visibleMatches();
       const finished = all.filter((m) => m.status === 'finished' && m.finishedAt !== null);
       const count = (rows: MatchRecord[], mode: 'queue' | 'friend' | 'live') => rows.filter((m) => modeOf(m) === mode).length;
       const last7 = finished.filter((m) => (m.finishedAt ?? 0) >= weekAgo);
       const today = last7.filter((m) => (m.finishedAt ?? 0) >= todayStart);
       const days = lastDays(now, 7);
-      const reports = feedbackRows();
-      const seedRows = economy()?.ledger ?? [];
-      const claims = [...(economy()?.claims.values() ?? [])];
+      const reports = feedbackRows().filter((r) => !isMarked(r.playerId));
+      const seedRows = (economy()?.ledger ?? []).filter((l) => !isMarked(l.playerId));
+      const claims = [...(economy()?.claims.values() ?? [])].filter((c) => !isMarked(c.ownerId));
 
       const merged = new Map<string, AdminBuildRow>();
       for (const row of reports.filter((r) => r.createdAt >= weekAgo)) {
@@ -192,7 +213,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async reports(filter) {
       const limit = clampLimit(filter.limit);
-      let rows = feedbackRows().map(reportRow);
+      let rows = feedbackRows().filter((r) => !isMarked(r.playerId)).map(reportRow);
       if (filter.kind) rows = rows.filter((r) => r.kind === filter.kind);
       if (filter.status) rows = rows.filter((r) => r.status === filter.status);
       if (filter.build) rows = rows.filter((r) => r.buildKey === filter.build);
@@ -208,7 +229,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     },
 
     async triage(input) {
-      const exists = feedbackRows().some((r) => r.id === input.reportId);
+      // A report filed by a marked player is invisible, so it cannot be triaged either — the same
+      // "not found" the SQL store now returns.
+      const exists = feedbackRows().some((r) => r.id === input.reportId && !isMarked(r.playerId));
       if (!exists) return null;
       const previous = triage.get(input.reportId)?.status ?? null;
       triage.set(input.reportId, {
@@ -226,7 +249,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     },
 
     async stuck(now, windows) {
-      const all = matches();
+      const all = await visibleMatches();
       const participantCounts = new Map<string, number>();
       for (const match of all) participantCounts.set(match.id, (await sources.storage.participantsOf(match.id)).length);
       const dueOf = (m: MatchRecord) => (m.status === 'active' ? m.turnDeadlineAt : m.expiresAt);
@@ -250,7 +273,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         ...[...(economy()?.receipts.values() ?? [])].map((r) => r.input.playerId),
         ...[...(economy()?.claims.values() ?? [])].map((c) => c.ownerId),
       ]);
-      const cleanup = players().filter(
+      const cleanup = visiblePlayers().filter(
         (p) => p.kind === 'guest' && p.createdAt < now - windows.guestMaxAgeMs && !seededPlayers.has(p.id),
       );
       return {
@@ -263,14 +286,14 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async rulesVersionCounts() {
       const counts = new Map<string, number>();
-      for (const match of matches()) counts.set(match.rulesVersion, (counts.get(match.rulesVersion) ?? 0) + 1);
+      for (const match of await visibleMatches()) counts.set(match.rulesVersion, (counts.get(match.rulesVersion) ?? 0) + 1);
       return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([value, n]) => ({ value, n }));
     },
 
     async funnel(now) {
       const days = lastDays(now, 30);
       const byDay = new Map<string, { guests: number; accounts: number }>();
-      for (const player of players()) {
+      for (const player of visiblePlayers()) {
         const day = utcDay(player.createdAt);
         const entry = byDay.get(day) ?? { guests: 0, accounts: 0 };
         if (player.kind === 'account') entry.accounts += 1;
@@ -278,8 +301,11 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         byDay.set(day, entry);
       }
       const linkDays = new Map<string, number>();
-      for (const link of sources.links?.rows ?? []) linkDays.set(utcDay(link.createdAt), (linkDays.get(utcDay(link.createdAt)) ?? 0) + 1);
-      const all = players();
+      for (const link of sources.links?.rows ?? []) {
+        if (isMarked(link.playerId)) continue;
+        linkDays.set(utcDay(link.createdAt), (linkDays.get(utcDay(link.createdAt)) ?? 0) + 1);
+      }
+      const all = visiblePlayers();
       const accounts = all.filter((p) => p.kind === 'account');
       return {
         serverNow: now,
@@ -297,9 +323,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async economy(now) {
       const store = economy();
-      const wallets = [...(store?.wallets.values() ?? [])];
+      const wallets = [...(store?.wallets.entries() ?? [])].filter(([playerId]) => !isMarked(playerId)).map(([, wallet]) => wallet);
       const byCategory = new Map<string, { entries: number; minted: number; spent: number; net: number }>();
-      for (const row of store?.ledger ?? []) {
+      for (const row of (store?.ledger ?? []).filter((l) => !isMarked(l.playerId))) {
         const entry = byCategory.get(row.category) ?? { entries: 0, minted: 0, spent: 0, net: 0 };
         entry.entries += 1;
         if (row.delta > 0) entry.minted += row.delta;
@@ -307,7 +333,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         entry.net += row.delta;
         byCategory.set(row.category, entry);
       }
-      const receipts = [...(store?.receipts.values() ?? [])];
+      const receipts = [...(store?.receipts.values() ?? [])].filter((r) => !isMarked(r.input.playerId));
       const tally = (values: string[]) => {
         const counts = new Map<string, number>();
         for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
@@ -337,7 +363,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     },
 
     async playerLookup(query) {
-      const all = players();
+      const all = visiblePlayers();
       let player: PlayerRecord | null = null;
       let matchedBy: 'id' | 'name' | 'tag' = 'id';
       let tagScanLimit: number | null = null;
@@ -359,7 +385,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
       if (!player) return null;
       const id = player.id;
       const withSeat: { match: MatchRecord; seat: number }[] = [];
-      for (const match of matches()) {
+      for (const match of await visibleMatches()) {
         const seat = (await sources.storage.participantsOf(match.id)).find((p) => p.playerId === id)?.seat;
         if (seat !== undefined) withSeat.push({ match, seat });
       }
@@ -442,7 +468,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async matches(filter) {
       const limit = clampLimit(filter.limit);
-      const all = matches();
+      const all = await visibleMatches();
       let rows = [...all];
       if (filter.mode) rows = rows.filter((m) => modeOf(m) === filter.mode);
       if (filter.status) rows = rows.filter((m) => m.status === filter.status);
@@ -464,6 +490,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     async matchDetail(id, moveLimit) {
       const match = await sources.storage.matchById(id);
       if (!match) return null;
+      if (!(await matchVisible(match))) return null; // a marked match 404s, exactly as in SQL
       const limit = clampLimit(moveLimit, 200);
       const moves = await sources.storage.movesOf(id, 0);
       const detail: AdminMatchDetail = {
@@ -484,7 +511,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     async ledger(filter) {
       const limit = clampLimit(filter.limit);
       const names = new Map(players().map((p) => [p.id, p.displayName]));
-      let rows = (economy()?.ledger ?? []).map((row) => ({
+      let rows = (economy()?.ledger ?? []).filter((row) => !isMarked(row.playerId)).map((row) => ({
         id: row.id,
         playerId: row.playerId,
         playerName: names.get(row.playerId) ?? null,
@@ -507,7 +534,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
 
     async world(now) {
       const store = economy();
-      const claims = [...(store?.claims.values() ?? [])].sort((a, b) => a.claimedAt - b.claimedAt || a.cellId.localeCompare(b.cellId));
+      const claims = [...(store?.claims.values() ?? [])]
+        .filter((claim) => !isMarked(claim.ownerId))
+        .sort((a, b) => a.claimedAt - b.claimedAt || a.cellId.localeCompare(b.cellId));
       const names = new Map(players().map((p) => [p.id, p.displayName]));
       const byDay = new Map<string, { cellId: string; ownerId: string; claimedAt: number }[]>();
       for (const claim of claims) {
@@ -542,7 +571,9 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
     },
 
     async campaign() {
-      const receipts = [...(economy()?.receipts.values() ?? [])].filter((r) => r.input.mode === 'campaign');
+      const receipts = [...(economy()?.receipts.values() ?? [])].filter(
+        (r) => r.input.mode === 'campaign' && !isMarked(r.input.playerId),
+      );
       // The in-memory ledger does not keep the numeric level, but the RECEIPT does: the award path
       // recorded `campaignLevel` when it resolved the level, exactly as the SQL receipt path writes
       // it. So the paid-level map is built from the same recorded fact, not from a level table.

@@ -74,6 +74,30 @@ const requireAdminTables = async <T>(run: () => Promise<T>): Promise<T> => {
   }
 };
 
+// ---------------------------------------------------------------- test-data visibility (migration 0013)
+// The dashboard must show REAL activity only. `players.is_test` / `matches.is_test` permanently mark
+// rows created by verification/rehearsal/soak/simulation tooling (server/scripts/mark-test-data.ts).
+//
+// Two rules, deliberately different, because "a run cannot move ANY number" and "a real player is
+// never hidden" pull in opposite directions:
+//   * a PLAYER is judged by its OWN flag and nothing else — a real player is never hidden because a
+//     test match they happened to play, or a test opponent, exists;
+//   * a MATCH is judged by its own flag OR by any participant being a marked player, so a test guest
+//     who joined a real player's match cannot drag that match, its roster or its seat count into
+//     the dashboard. Only the MATCH is hidden; the real player's own row is untouched.
+//
+// Every read below uses these so the rule cannot drift from the query. A test asserts the SQL.
+/** A row that carries the flag itself (`players` / `matches`). */
+export const NOT_TEST = (alias: string): string => `${alias}.is_test = false`;
+/** A row that OWNS/REFERENCES a player by id (wallets, ledger, receipts, claims, reports, links). */
+export const PLAYER_OF_NOT_TEST = (expr: string): string =>
+  `not exists (select 1 from players vis_p where vis_p.id = ${expr} and vis_p.is_test)`;
+/** A match is visible only when neither it nor any of its participants is marked. */
+export const MATCH_VISIBLE = (alias: string): string =>
+  `${alias}.is_test = false and not exists (` +
+  `select 1 from match_participants vis_mp join players vis_pl on vis_pl.id = vis_mp.player_id ` +
+  `where vis_mp.match_id = ${alias}.id and vis_pl.is_test)`;
+
 export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
   const showMatch = (row: Record<string, unknown>): AdminMatchRow => ({
@@ -108,7 +132,10 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     left join players p on p.id = r.player_id`;
 
   const reportWhere = (filter: AdminReportFilter): { sql: string; values: unknown[] } => {
-    const clauses: string[] = [];
+    // A report filed by a marked (test) player is test data too — the live database literally held
+    // one message reading "Test testera testuje test". A report with NO player (an anonymous crash)
+    // is kept: there is no marked author to attribute it to.
+    const clauses: string[] = [PLAYER_OF_NOT_TEST('r.player_id')];
     const values: unknown[] = [];
     const add = (value: unknown): string => {
       values.push(value);
@@ -151,10 +178,10 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     async countsSince(since, _now) {
       const { rows } = await pool.query(
         `select
-           (select count(*)::int from feedback_reports where created_at > $1 and kind = 'report') as reports,
-           (select count(*)::int from feedback_reports where created_at > $1 and kind = 'crash') as crashes,
-           (select count(*)::int from world_claims where claimed_at > $1) as claims,
-           (select count(*)::int from matches where created_at > $1) as matches`,
+           (select count(*)::int from feedback_reports r where r.created_at > $1 and r.kind = 'report' and ${PLAYER_OF_NOT_TEST('r.player_id')}) as reports,
+           (select count(*)::int from feedback_reports r where r.created_at > $1 and r.kind = 'crash' and ${PLAYER_OF_NOT_TEST('r.player_id')}) as crashes,
+           (select count(*)::int from world_claims c where c.claimed_at > $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}) as claims,
+           (select count(*)::int from matches m where m.created_at > $1 and ${MATCH_VISIBLE('m')}) as matches`,
         [since],
       );
       const row = rows[0] ?? {};
@@ -175,50 +202,53 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
              count(*) filter (where finished_at >= $2 and open_queue and live_since is null) as week_queue,
              count(*) filter (where finished_at >= $2 and not open_queue and live_since is null) as week_friend,
              count(*) filter (where finished_at >= $2 and live_since is not null) as week_live
-           from matches where status = 'finished' and finished_at is not null and finished_at >= $2`,
+           from matches m where m.status = 'finished' and m.finished_at is not null and m.finished_at >= $2
+             and ${MATCH_VISIBLE('m')}`,
           [todayStart, weekAgo],
         ),
-        pool.query('select status, count(*)::int as n from matches group by status'),
+        pool.query(`select m.status, count(*)::int as n from matches m where ${MATCH_VISIBLE('m')} group by m.status`),
         pool.query(
           `select floor(finished_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
                   count(*) filter (where open_queue and live_since is null)::int as queue,
                   count(*) filter (where not open_queue and live_since is null)::int as friend,
                   count(*) filter (where live_since is not null)::int as live
-             from matches where status = 'finished' and finished_at >= $1 and finished_at <= $2
+             from matches m where m.status = 'finished' and m.finished_at >= $1 and m.finished_at <= $2
+               and ${MATCH_VISIBLE('m')}
             group by 1 order by 1`,
           [weekAgo, now],
         ),
         pool.query(
           `select
-             count(*) filter (where created_at >= $1)::int as today,
-             count(*) filter (where created_at >= $2)::int as week,
-             count(*) filter (where created_at >= $2 and kind = 'crash')::int as crashes,
-             count(*) filter (where created_at >= $2 and kind = 'report')::int as reports
-           from feedback_reports`,
+             count(*) filter (where r.created_at >= $1)::int as today,
+             count(*) filter (where r.created_at >= $2)::int as week,
+             count(*) filter (where r.created_at >= $2 and r.kind = 'crash')::int as crashes,
+             count(*) filter (where r.created_at >= $2 and r.kind = 'report')::int as reports
+           from feedback_reports r where ${PLAYER_OF_NOT_TEST('r.player_id')}`,
           [todayStart, weekAgo],
         ),
         pool.query(
           `select coalesce(build, '') as build, crashes, reports, total from (
-             select coalesce(build, '') as build,
-                    count(*) filter (where kind = 'crash')::int as crashes,
-                    count(*) filter (where kind = 'report')::int as reports,
+             select coalesce(r.build, '') as build,
+                    count(*) filter (where r.kind = 'crash')::int as crashes,
+                    count(*) filter (where r.kind = 'report')::int as reports,
                     count(*)::int as total
-               from feedback_reports where created_at >= $1 group by 1
+               from feedback_reports r where r.created_at >= $1 and ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1
            ) t order by total desc, build asc limit 100`,
           [weekAgo],
         ),
         pool.query(
-          `select floor(created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
-                  coalesce(sum(delta) filter (where delta > 0), 0)::int as earned,
-                  coalesce(sum(-delta) filter (where delta < 0), 0)::int as spent
-             from seed_ledger where created_at >= $1 and created_at <= $2 group by 1 order by 1`,
+          `select floor(l.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
+                  coalesce(sum(l.delta) filter (where l.delta > 0), 0)::int as earned,
+                  coalesce(sum(-l.delta) filter (where l.delta < 0), 0)::int as spent
+             from seed_ledger l where l.created_at >= $1 and l.created_at <= $2
+               and ${PLAYER_OF_NOT_TEST('l.player_id')} group by 1 order by 1`,
           [weekAgo, now],
         ),
         pool.query(
           `select count(*)::int as total,
-                  count(*) filter (where claimed_at >= $1)::int as recent,
-                  count(distinct owner_id)::int as owners
-             from world_claims`,
+                  count(*) filter (where c.claimed_at >= $1)::int as recent,
+                  count(distinct c.owner_id)::int as owners
+             from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`,
           [weekAgo],
         ),
       ]);
@@ -334,7 +364,10 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         const client = await pool.connect();
         try {
           await client.query('begin');
-          const exists = await client.query('select 1 from feedback_reports where id = $1', [input.reportId]);
+          const exists = await client.query(
+            `select 1 from feedback_reports r where r.id = $1 and ${PLAYER_OF_NOT_TEST('r.player_id')}`,
+            [input.reportId],
+          );
           if (exists.rows.length === 0) {
             await client.query('rollback');
             return null;
@@ -369,18 +402,20 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     async stuck(now, windows) {
       const [active, waiting, guests, sample] = await Promise.all([
         pool.query(
-          `select count(*)::int as n, min(turn_deadline_at) as oldest from matches
-            where status = 'active' and turn_deadline_at is not null and turn_deadline_at < $1`,
+          `select count(*)::int as n, min(m.turn_deadline_at) as oldest from matches m
+            where m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1
+              and ${MATCH_VISIBLE('m')}`,
           [now],
         ),
         pool.query(
-          `select count(*)::int as n, min(expires_at) as oldest from matches
-            where status = 'waiting' and expires_at is not null and expires_at < $1`,
+          `select count(*)::int as n, min(m.expires_at) as oldest from matches m
+            where m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1
+              and ${MATCH_VISIBLE('m')}`,
           [now],
         ),
         pool.query(
           `select count(*)::int as n, min(p.created_at) as oldest from players p
-            where p.kind = 'guest' and p.created_at < $1
+            where p.kind = 'guest' and p.created_at < $1 and ${NOT_TEST('p')}
               and not exists (select 1 from match_participants mp where mp.player_id = p.id)
               and not exists (select 1 from seed_wallets sw where sw.player_id = p.id and (sw.balance > 0 or sw.lifetime_earned > 0 or sw.lifetime_spent > 0))
               and not exists (select 1 from seed_reward_receipts sr where sr.player_id = p.id)
@@ -394,8 +429,9 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
                   coalesce(m.turn_deadline_at, m.expires_at) as due_at,
                   (select count(*)::int from match_participants p where p.match_id = m.id) as seats
              from matches m
-            where (m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1)
-               or (m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1)
+            where ((m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1)
+               or (m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1))
+              and ${MATCH_VISIBLE('m')}
             order by due_at asc limit 20`,
           [now],
         ),
@@ -426,7 +462,8 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
     async rulesVersionCounts() {
       const { rows } = await pool.query(
-        'select rules_version as value, count(*)::int as n from matches group by 1 order by n desc limit 50',
+        `select m.rules_version as value, count(*)::int as n from matches m
+          where ${MATCH_VISIBLE('m')} group by 1 order by n desc limit 50`,
       );
       return rows.map((row) => ({ value: str(row.value), n: num(row.n) }));
     },
@@ -434,25 +471,29 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     async funnel(now) {
       const [byDay, links, totals, oldest] = await Promise.all([
         pool.query(
-          `select floor(created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
-                  count(*) filter (where kind = 'guest')::int as guests,
-                  count(*) filter (where kind = 'account')::int as accounts
-             from players where created_at >= $1 group by 1 order by 1 limit 400`,
+          `select floor(p.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
+                  count(*) filter (where p.kind = 'guest')::int as guests,
+                  count(*) filter (where p.kind = 'account')::int as accounts
+             from players p where p.created_at >= $1 and ${NOT_TEST('p')} group by 1 order by 1 limit 400`,
           [now - 90 * DAY_MS],
         ),
         pool.query(
-          `select floor(created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
-             from player_identities where created_at >= $1 group by 1 order by 1 limit 400`,
+          `select floor(i.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
+             from player_identities i where i.created_at >= $1 and ${PLAYER_OF_NOT_TEST('i.player_id')}
+            group by 1 order by 1 limit 400`,
           [now - 90 * DAY_MS],
         ),
         pool.query(
           `select count(*)::int as players,
-                  count(*) filter (where kind = 'guest')::int as guests,
-                  count(*) filter (where kind = 'account')::int as accounts,
-                  count(*) filter (where kind = 'account' and upgraded_at is not null)::int as with_upgraded_at
-             from players`,
+                  count(*) filter (where p.kind = 'guest')::int as guests,
+                  count(*) filter (where p.kind = 'account')::int as accounts,
+                  count(*) filter (where p.kind = 'account' and p.upgraded_at is not null)::int as with_upgraded_at
+             from players p where ${NOT_TEST('p')}`,
         ),
-        pool.query(`select min(created_at) as first_created, count(*)::int as n from players where upgraded_at is null`),
+        pool.query(
+          `select min(p.created_at) as first_created, count(*)::int as n from players p
+            where p.upgraded_at is null and ${NOT_TEST('p')}`,
+        ),
       ]);
       const dayIndex = new Map(byDay.rows.map((r) => [utcDay(num(r.day_ms)), r]));
       const linkIndex = new Map(links.rows.map((r) => [utcDay(num(r.day_ms)), num(r.n)]));
@@ -482,30 +523,31 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       const [wallets, categories, receipts, denials, modes] = await Promise.all([
         pool.query(
           `select count(*)::int as wallets,
-                  coalesce(sum(balance), 0)::int as balance,
-                  coalesce(sum(lifetime_earned), 0)::bigint as earned,
-                  coalesce(sum(lifetime_spent), 0)::bigint as spent
-             from seed_wallets`,
+                  coalesce(sum(w.balance), 0)::int as balance,
+                  coalesce(sum(w.lifetime_earned), 0)::bigint as earned,
+                  coalesce(sum(w.lifetime_spent), 0)::bigint as spent
+             from seed_wallets w where ${PLAYER_OF_NOT_TEST('w.player_id')}`,
         ),
         pool.query(
-          `select category,
+          `select l.category,
                   count(*)::int as entries,
-                  coalesce(sum(delta) filter (where delta > 0), 0)::int as minted,
-                  coalesce(sum(-delta) filter (where delta < 0), 0)::int as spent,
-                  coalesce(sum(delta), 0)::int as net
-             from seed_ledger group by category order by entries desc limit 40`,
+                  coalesce(sum(l.delta) filter (where l.delta > 0), 0)::int as minted,
+                  coalesce(sum(-l.delta) filter (where l.delta < 0), 0)::int as spent,
+                  coalesce(sum(l.delta), 0)::int as net
+             from seed_ledger l where ${PLAYER_OF_NOT_TEST('l.player_id')} group by l.category order by entries desc limit 40`,
         ),
         pool.query(
-          `select count(*) filter (where awarded > 0)::int as awarded,
-                  count(*) filter (where awarded = 0)::int as denied
-             from seed_reward_receipts`,
+          `select count(*) filter (where r.awarded > 0)::int as awarded,
+                  count(*) filter (where r.awarded = 0)::int as denied
+             from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')}`,
         ),
         pool.query(
-          `select coalesce(denial, 'awarded') as value, count(*)::int as n
-             from seed_reward_receipts group by 1 order by n desc limit 40`,
+          `select coalesce(r.denial, 'awarded') as value, count(*)::int as n
+             from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
         ),
         pool.query(
-          `select mode as value, count(*)::int as n from seed_reward_receipts group by 1 order by n desc limit 40`,
+          `select r.mode as value, count(*)::int as n from seed_reward_receipts r
+            where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
         ),
       ]);
       const earned = num(wallets.rows[0]?.earned);
@@ -550,14 +592,17 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       let matchedBy: 'id' | 'name' | 'tag' = 'id';
       let tagScanLimit: number | null = null;
       if (query.id) {
-        const { rows } = await pool.query('select * from players where id = $1', [query.id]);
+        const { rows } = await pool.query(
+          `select * from players where id = $1 and ${NOT_TEST('players')}`,
+          [query.id],
+        );
         row = rows[0] ?? null;
       } else if (query.tag) {
         // The tag is an FNV-1a hash of the player id (src/player-tag.ts), so it cannot be indexed or
         // reversed: finding a tag means hashing candidate ids. Bounded to the most recent N players.
         tagScanLimit = TAG_SCAN_LIMIT;
         const { rows } = await pool.query(
-          `select * from players order by created_at desc limit ${TAG_SCAN_LIMIT}`,
+          `select * from players where ${NOT_TEST('players')} order by created_at desc limit ${TAG_SCAN_LIMIT}`,
         );
         row = rows.find((candidate) => playerTag(str(candidate.id)) === query.tag) ?? null;
         matchedBy = 'tag';
@@ -573,7 +618,8 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         // is at worst a sequential scan bounded by `limit 25` here (one account today); an expression
         // index on `lower(display_name)` would make it exact if the table ever grows.
         const { rows } = await pool.query(
-          `select * from players where lower(display_name) = lower($1) order by created_at desc limit 25`,
+          `select * from players where lower(display_name) = lower($1) and ${NOT_TEST('players')}
+            order by created_at desc limit 25`,
           [query.name],
         );
         row = rows[0] ?? null;
@@ -582,39 +628,52 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       if (!row) return null;
       const id = str(row.id);
 
+      // Every sub-read is scoped to a player already proven NOT marked, so the test filter here is
+      // belt-and-braces — but it keeps the rule uniform (and a source guard asserts it).
       const [providers, matchesOf, wallet, ledger, rewards, denied, tiles] = await Promise.all([
-        pool.query('select provider from player_identities where player_id = $1 limit 5', [id]),
+        pool.query(
+          `select i.provider from player_identities i where i.player_id = $1 and ${PLAYER_OF_NOT_TEST('i.player_id')} limit 5`,
+          [id],
+        ),
         pool.query(
           `select m.id, m.status, m.created_at, m.finished_at, m.open_queue, m.live_since, m.result, mp.seat,
                   (select pl.display_name from match_participants op join players pl on pl.id = op.player_id
                     where op.match_id = m.id and op.player_id <> $1 limit 1) as opponent_name
              from matches m join match_participants mp on mp.match_id = m.id and mp.player_id = $1
+            where ${MATCH_VISIBLE('m')}
             order by m.created_at desc limit 200`,
           [id],
         ),
-        pool.query('select * from seed_wallets where player_id = $1', [id]),
+        pool.query(
+          `select * from seed_wallets w where w.player_id = $1 and ${PLAYER_OF_NOT_TEST('w.player_id')}`,
+          [id],
+        ),
         pool.query(
           `select l.id, l.player_id, l.delta, l.balance_after, l.category, l.source_key, l.created_at, p.display_name as player_name
              from seed_ledger l left join players p on p.id = l.player_id
-            where l.player_id = $1 order by l.created_at desc limit 20`,
+            where l.player_id = $1 and ${PLAYER_OF_NOT_TEST('l.player_id')} order by l.created_at desc limit 20`,
           [id],
         ),
         pool.query(
-          `select count(*) filter (where awarded > 0)::int as awarded, count(*) filter (where awarded = 0)::int as denied
-             from seed_reward_receipts where player_id = $1`,
+          `select count(*) filter (where r.awarded > 0)::int as awarded, count(*) filter (where r.awarded = 0)::int as denied
+             from seed_reward_receipts r where r.player_id = $1 and ${PLAYER_OF_NOT_TEST('r.player_id')}`,
           [id],
         ),
         pool.query(
-          `select coalesce(denial, 'awarded') as value, count(*)::int as n from seed_reward_receipts
-            where player_id = $1 group by 1 order by n desc limit 20`,
+          `select coalesce(r.denial, 'awarded') as value, count(*)::int as n from seed_reward_receipts r
+            where r.player_id = $1 and ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 20`,
           [id],
         ),
         pool.query(
-          `select cell_id, claimed_at from world_claims where owner_id = $1 order by claimed_at desc limit 10`,
+          `select c.cell_id, c.claimed_at from world_claims c where c.owner_id = $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}
+            order by c.claimed_at desc limit 10`,
           [id],
         ),
       ]);
-      const tileCount = await pool.query('select count(*)::int as n from world_claims where owner_id = $1', [id]);
+      const tileCount = await pool.query(
+        `select count(*)::int as n from world_claims c where c.owner_id = $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}`,
+        [id],
+      );
 
       const rows = matchesOf.rows;
       const finished = rows.filter((r) => str(r.status) === 'finished');
@@ -679,7 +738,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
     async matches(filter) {
       const limit = clampLimit(filter.limit);
-      const clauses: string[] = [];
+      const clauses: string[] = [MATCH_VISIBLE('m')];
       const values: unknown[] = [];
       const add = (value: unknown): string => {
         values.push(value);
@@ -709,7 +768,9 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
     async matchDetail(id, moveLimit) {
       const [found, moves] = await Promise.all([
-        pool.query(`${MATCH_SELECT} where m.id = $1`, [id]),
+        // A marked match is not just hidden from the list: its detail page 404s, so a stale bookmark
+        // or a guessed id cannot surface test data either.
+        pool.query(`${MATCH_SELECT} where m.id = $1 and ${MATCH_VISIBLE('m')}`, [id]),
         pool.query(
           `select revision, seat, player_id, action->>'type' as action_type, created_at,
                   coalesce(jsonb_array_length(events), 0) as events
@@ -740,7 +801,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
     async ledger(filter) {
       const limit = clampLimit(filter.limit);
-      const clauses: string[] = [];
+      const clauses: string[] = [PLAYER_OF_NOT_TEST('l.player_id')];
       const values: unknown[] = [];
       const add = (value: unknown): string => {
         values.push(value);
@@ -782,21 +843,26 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     async world(now) {
       const [meta, total, owners, byDay, recent, all] = await Promise.all([
         pool.query('select revision from world_meta where version = $1', [WORLD_VERSION]),
-        pool.query('select count(*)::int as n from world_claims'),
-        pool.query('select count(distinct owner_id)::int as n from world_claims'),
+        pool.query(`select count(*)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`),
+        pool.query(`select count(distinct c.owner_id)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`),
         pool.query(
-          `select floor(claimed_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
-             from world_claims where claimed_at >= $1 group by 1 order by 1 limit 400`,
+          `select floor(c.claimed_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
+             from world_claims c where c.claimed_at >= $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}
+            group by 1 order by 1 limit 400`,
           [now - 90 * DAY_MS],
         ),
         pool.query(
           `select c.cell_id, c.owner_id, c.claimed_at, c.source, p.display_name as owner_name
              from world_claims c left join players p on p.id = c.owner_id
+            where ${PLAYER_OF_NOT_TEST('c.owner_id')}
             order by c.claimed_at desc limit 20`,
         ),
         // Bounded by design: the v1 world is 183 hexes, so every claim fits in one page. The limit
         // is a guard against a future expansion, not a silent truncation.
-        pool.query('select cell_id, owner_id, claimed_at from world_claims order by claimed_at asc, cell_id asc limit 400'),
+        pool.query(
+          `select c.cell_id, c.owner_id, c.claimed_at from world_claims c
+            where ${PLAYER_OF_NOT_TEST('c.owner_id')} order by c.claimed_at asc, c.cell_id asc limit 400`,
+        ),
       ]);
       const dayIndex = new Map(byDay.rows.map((r) => [utcDay(num(r.day_ms)), num(r.n)]));
       const days = lastDays(now, 30);
@@ -834,12 +900,12 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
       // wrote at the time it resolved the level (the Seeds store's `settle`).
       const [receipts, paid] = await Promise.all([
         pool.query(
-          `select source_key, awarded, denial, utc_day from seed_reward_receipts
-            where mode = 'campaign' order by created_at asc limit 5000`,
+          `select r.source_key, r.awarded, r.denial, r.utc_day from seed_reward_receipts r
+            where r.mode = 'campaign' and ${PLAYER_OF_NOT_TEST('r.player_id')} order by r.created_at asc limit 5000`,
         ),
         pool.query(
-          `select source_key, (metadata->>'campaignLevel') as level from seed_ledger
-            where category = 'campaign' limit 5000`,
+          `select l.source_key, (l.metadata->>'campaignLevel') as level from seed_ledger l
+            where l.category = 'campaign' and ${PLAYER_OF_NOT_TEST('l.player_id')} limit 5000`,
         ),
       ]);
       return shapeCampaign(

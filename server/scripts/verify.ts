@@ -11,6 +11,8 @@ import { spawn } from 'node:child_process';
 import { databaseUrlFromEnv, poolFromUrl, redactUrl } from '../src/storage/pg-pool.js';
 import { startServer } from '../src/index.js';
 import { DuelClient } from '../src/client.js';
+import { markTestRows } from './mark-test-data.js';
+import type { MarkInput } from './mark-test-data.js';
 import type { FetchLike, KeyValue } from '../src/client.js';
 
 const run = (label: string, command: string, args: string[], env: Record<string, string | undefined> = process.env): Promise<void> =>
@@ -26,8 +28,9 @@ const memory = (): KeyValue => {
   return { get: (k) => map.get(k) ?? null, set: (k, v) => void map.set(k, v), remove: (k) => void map.delete(k) };
 };
 
-/** The same checks as server/scripts/smoke.ts, in-process, against a freshly started server. */
-const smoke = async (baseUrl: string): Promise<void> => {
+/** The same checks as server/scripts/smoke.ts, in-process, against a freshly started server.
+ *  It returns the ids it created so `main` can mark them as test data (migration 0013). */
+const smoke = async (baseUrl: string): Promise<MarkInput> => {
   const fetchImpl = globalThis.fetch as unknown as FetchLike;
   const a = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
   const b = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
@@ -43,8 +46,11 @@ const smoke = async (baseUrl: string): Promise<void> => {
   const guestA = await a.createGuest('Verify A');
   const guestB = await b.createGuest('Verify B');
   check('two guests are created', guestA.ok && guestB.ok);
+  const playerIds: string[] = [guestA.player.id, guestB.player.id];
+  const matchIds: string[] = [];
 
   const created = await a.createMatch(guestA.token);
+  matchIds.push(created.match.matchId);
   check('guest A creates a waiting match', created.match.status === 'waiting', created.match.inviteCode);
   // Same as the real UI: persist the session so a page refresh can resume via `resume()`.
   a.saveSession({ token: guestA.token, matchId: created.match.matchId, seat: created.player.seat });
@@ -83,6 +89,7 @@ const smoke = async (baseUrl: string): Promise<void> => {
 
   const outsider = new DuelClient({ baseUrl, fetch: fetchImpl, storage: memory() });
   const outsiderGuest = await outsider.createGuest();
+  playerIds.push(outsiderGuest.player.id);
   const denied = await outsider
     .getState(outsiderGuest.token, matchId)
     .then(() => 'allowed')
@@ -91,6 +98,7 @@ const smoke = async (baseUrl: string): Promise<void> => {
 
   if (failures > 0) throw new Error(`${failures} end-to-end check(s) failed`);
   console.log('  all end-to-end checks passed');
+  return { playerIds, matchIds };
 };
 
 const main = async (): Promise<void> => {
@@ -126,10 +134,21 @@ const main = async (): Promise<void> => {
     await (cleanupPool as unknown as { end?: () => Promise<void> }).end?.();
   }
   const started = await startServer({ port: 0 });
+  let created: MarkInput = {};
   try {
-    await smoke(`http://127.0.0.1:${started.port}`);
+    created = await smoke(`http://127.0.0.1:${started.port}`);
   } finally {
     await started.close();
+  }
+
+  // The end-to-end smoke created real rows in the real database. Mark them as test data so a
+  // verification run can never move a number on the admin dashboard (migration 0013).
+  const markPool = poolFromUrl(url, { max: 1 });
+  try {
+    const marked = await markTestRows(markPool, created);
+    console.log(`\nmarked ${marked.players} player(s) and ${marked.matches} match(es) as test data`);
+  } finally {
+    await (markPool as unknown as { end?: () => Promise<void> }).end?.();
   }
 
   console.log('\nVERIFICATION PASSED');

@@ -59,6 +59,8 @@ const rowToPlayer = (row: PgRow): PlayerRecord => ({
   displayName: asNullableString(row.display_name),
   createdAt: asNumber(row.created_at),
   upgradedAt: asNullableNumber(row.upgraded_at),
+  // Migration 0013. `select *` now carries it; writes never touch it, so it survives updates.
+  isTest: row.is_test === true || row.is_test === 't',
 });
 
 const rowToMatch = (row: PgRow): MatchRecord => ({
@@ -86,6 +88,8 @@ const rowToMatch = (row: PgRow): MatchRecord => ({
   gracePeriods: asNumber(row.grace_periods ?? 1),
   graceExtensionMs: asNumber(row.grace_extension_ms ?? row.turn_timeout_ms ?? 86_400_000),
   liveManaged: row.live_since != null || row.live_tail_rev != null || row.live_autoplay_rev != null,
+  // Migration 0013. Like the player mapper: read-through only, never written by `persistMatch`.
+  isTest: row.is_test === true || row.is_test === 't',
 });
 
 const rowToParticipant = (row: PgRow): Participant => ({
