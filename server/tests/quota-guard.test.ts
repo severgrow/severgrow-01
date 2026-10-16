@@ -182,6 +182,10 @@ const CLASSIFIED: Record<string, Protection> = {
   // DATABASE_URL, exits without it, reachable only by running it on purpose
   // (`npm run admin:verify-reads`) - never from check, test or CI.
   'server/scripts/verify-admin-reads.ts': 'explicit-command',
+  // The 0.55 ten-tester rehearsal (added 2026-10-16, the night before a live playtest). Sends real
+  // traffic to the deployed Edge API — it needs the `--live` flag (exit 3 without it) and is
+  // reachable only by running it on purpose. Never from check, test or CI.
+  'server/scripts/verify-0.55-playtest.ts': 'explicit-command',
 };
 
 describe('entry points cannot reach the real project by default', () => {
