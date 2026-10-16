@@ -5,26 +5,19 @@
 // control that has no mirrored partner. Writes <out>/audit.json, <out>/audit.md and a screenshot
 // per viewport with the centre-line overlay.
 //   npx tsx web/e2e/align-audit.ts --out=docs/screens/align/before [--dist=web/dist]
-import { createServer } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { serveStaticDist } from './helpers/preview-port.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
 const OUT = resolve(opt('out') ?? 'docs/screens/align/after');
 mkdirSync(OUT, { recursive: true });
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' };
-const server = createServer((req, res) => {
-  const p = decodeURIComponent((req.url ?? '/').split('?')[0]!);
-  let f = join(DIST, p === '/' ? 'index.html' : p);
-  if (!existsSync(f)) f = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': TYPES[extname(f)] ?? 'application/octet-stream' });
-  res.end(readFileSync(f));
-});
-await new Promise<void>((r) => server.listen(4197, r));
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await serveStaticDist(DIST);
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 export const VIEWPORTS = [
@@ -53,7 +46,7 @@ const openGame = async (v: (typeof VIEWPORTS)[number]) => {
     localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
     localStorage.setItem('severgrow.ctools.seen', '1');
   });
-  await page.goto('http://localhost:4197/');
+  await page.goto(BASE);
   await page.waitForTimeout(700);
   await openMenuEntry(page, 'menu-new');
   await page.waitForTimeout(400);

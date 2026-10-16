@@ -1,15 +1,12 @@
 // Phase 4 — menu/lobby smoke (no API URL → Play online stays hidden; offline path intact).
 //   CHANNEL=futa04 npm run web:build && npx tsx web/e2e/online-lobby-check.ts
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { MENU, ONLINE } from '../../src/strings.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
 
-const server = await preview({
-  configFile: 'web/vite.config.ts',
-  preview: { port: 4201, strictPort: true },
-  logLevel: 'silent',
-});
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4201, { logLevel: 'silent' });
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM
     ? { executablePath: process.env.PW_CHROMIUM }
@@ -34,7 +31,7 @@ try {
       JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true }),
     );
   });
-  await page.goto('http://localhost:4201/');
+  await page.goto(BASE);
   await page.waitForSelector('#menu:not([hidden])');
   // The owner removed the menu tagline on 2026-10-14 (it read as clutter under the wordmark). The
   // words are deliberately KEPT and the element is rebuilt on demand, so this asserts every half of

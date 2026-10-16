@@ -1,25 +1,18 @@
 // Visual check for the shared world map view: opens the online hub, taps "The world map", and
 // screenshots the grid. Serves the pre-built `web/dist`.
 //   npx tsx web/e2e/world-map-shot.ts --out=docs/screens/online [--dist=web/dist]
-import { createServer } from 'node:http';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { serveStaticDist } from './helpers/preview-port.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
 const OUT = resolve(opt('out') ?? 'docs/screens/online');
 mkdirSync(OUT, { recursive: true });
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png' };
-const server = createServer((req, res) => {
-  const p = decodeURIComponent((req.url ?? '/').split('?')[0]!);
-  let f = join(DIST, p === '/' ? 'index.html' : p);
-  if (!existsSync(f)) f = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': TYPES[extname(f)] ?? 'application/octet-stream' });
-  res.end(readFileSync(f));
-});
-await new Promise<void>((r) => server.listen(4199, r));
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await serveStaticDist(DIST);
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
@@ -55,7 +48,7 @@ const errors: string[] = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 
-await page.goto('http://localhost:4199/', { waitUntil: 'load' });
+await page.goto(BASE, { waitUntil: 'load' });
 await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20000 });
 await page.waitForTimeout(600);
 await page.screenshot({ path: join(OUT, 'world-menu-390x844.png') });

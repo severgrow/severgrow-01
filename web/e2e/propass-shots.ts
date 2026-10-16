@@ -3,9 +3,8 @@
 //   npx tsx web/e2e/propass-shots.ts --dist=<old build> --label=before --old
 // "before" shoots the page as it was (main before this change: whole-state saves, key v6);
 // "after" shoots the new page, including the new pieces (homes, painting, pause, welcome).
-import { createServer } from 'node:http';
-import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { CURRENT_RULES_VERSION, coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
@@ -13,6 +12,7 @@ import type { Card, Player, State, Suit } from '../../src/engine/index.js';
 import { fixture } from '../../tests/helpers.js';
 import { clickKind, hexCenter } from './drawing.js';
 import { openMenuEntry } from './helpers/menu-nav.js';
+import { serveStaticDist } from './helpers/preview-port.js';
 
 const opt = (n: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const DIST = resolve(opt('dist') ?? 'web/dist');
@@ -21,16 +21,8 @@ const OLD = process.argv.includes('--old');
 const OUT = resolve(opt('out') ?? 'docs/screens/pro-pass');
 mkdirSync(OUT, { recursive: true });
 
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
-const server = createServer((req, res) => {
-  const path = decodeURIComponent((req.url ?? '/').split('?')[0]!);
-  let file = join(DIST, path === '/' ? 'index.html' : path);
-  if (!existsSync(file)) file = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-  res.end(readFileSync(file));
-});
-await new Promise<void>((r) => server.listen(4194, r));
-const BASE = 'http://localhost:4194/';
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await serveStaticDist(DIST);
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

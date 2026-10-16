@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { preview } from 'vite';
+import { servePreview } from './helpers/preview-port.js';
 import { legalActions, startingPlayerFor, viewFor } from '../../src/engine/index.js';
 import type { Action, Player, State } from '../../src/engine/index.js';
 
@@ -14,7 +14,8 @@ const BOOT_SEED = 219682080;
 const MENU_SEEDS = [100000002, 555555551];
 for (const seed of MENU_SEEDS) assert.equal(startingPlayerFor(seed), 0, `fixture seed ${seed} must be a human-first match`);
 
-const server = await preview({ configFile: 'web/vite.config.ts', preview: { port: 4201, strictPort: true }, logLevel: 'silent' });
+// A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
+const { server, url: BASE } = await servePreview(4201, { logLevel: 'silent' });
 const browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM ?? '/usr/bin/chromium', args: ['--no-sandbox'] });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -32,7 +33,7 @@ try {
       return real(array);
     };
   }, MENU_SEEDS);
-  await page.goto(`http://localhost:4201/?seed=${BOOT_SEED}`);
+  await page.goto(`${BASE}?seed=${BOOT_SEED}`);
 
   const state = () => page.evaluate(() => (window as any).__severgrow.state() as State | null);
   const playFor = (action: Action, who: Player) => page.evaluate((arg: { action: Action; who: Player }) => Boolean((window as any).__severgrow.playFor(arg.action, arg.who)), { action, who });
@@ -50,12 +51,14 @@ try {
   }, BOOT_SEED, { timeout: 20000 });
 
   // Start a fresh match and wait for the human's genuine turn with a legal move, from the live
-  // state — never a boot transient and never a fixed sleep.
+  // state — never a boot transient and never a fixed sleep. The tier is the EASIEST training tier:
+  // the five old tiers (Beginner…Pro) became EASY 3–4 / MEDIUM 5–7 / HARD 8–9, so the old
+  // `data-difficulty="beginner"` no longer exists (this was the one red CI job, futa04-critical).
   await click('#menu-new');
-  await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
+  await page.locator('#level-grid [data-difficulty="easy"]').waitFor({ state: 'attached' });
   const boot = await state();
   assert(boot);
-  await click('#level-grid [data-difficulty="beginner"]');
+  await click('#level-grid [data-difficulty="easy"]');
   const ready = async (previousSeed: number) => {
     await page.waitForFunction((prev: number) => {
       const game = (window as any).__severgrow;
@@ -106,8 +109,8 @@ try {
   // animation must not be able to write into it.
   await click('#hud-menu');
   await click('#gm-new');
-  await page.locator('#level-grid [data-difficulty="beginner"]').waitFor({ state: 'attached' });
-  await click('#level-grid [data-difficulty="beginner"]');
+  await page.locator('#level-grid [data-difficulty="easy"]').waitFor({ state: 'attached' });
+  await click('#level-grid [data-difficulty="easy"]');
   const restarted = await ready(scored.seed);
   assert.notEqual(restarted.seed, scored.seed);
   assert.equal(restarted.startingPlayer, startingPlayerFor(restarted.seed));
