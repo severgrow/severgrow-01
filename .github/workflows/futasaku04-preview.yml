@@ -92,6 +92,16 @@ jobs:
           npm run web:build
           node scripts/check-channel-assets.mjs
           echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
+      # The admin dashboard (futasaku.com/admin/). Its own build, so no player ever downloads it.
+      # Published only because the compose step below is handed `web/dist-admin`; remove that
+      # argument and the composed site is byte-identical to what shipped before.
+      - name: Build the admin dashboard
+        working-directory: futa05
+        env:
+          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+        run: |
+          test -n "$VITE_DUEL_API_URL" || { echo "Missing Actions Variable VITE_DUEL_API_URL (may fall back to FUTA05_API_URL)"; exit 1; }
+          npm run admin:build
       - name: Rebuild current published versions at their exact SHAs
         run: |
           cd live
@@ -112,7 +122,7 @@ jobs:
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
-          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)"
+          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
