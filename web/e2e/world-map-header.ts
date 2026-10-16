@@ -12,8 +12,8 @@
 // Follow-up (same day): the area BEHIND the map's contained window must be the SAME grained surface
 // the main menu rests on, and the column must use the viewport well.
 //
-// What this suite proves, at 320 (narrower than the owner's phone), 360 and 390px wide, plus a
-// 1280px-wide screen where the HEIGHT is the limiting dimension:
+// What this suite proves, at 320 (narrower than the owner's phone), 360, 390, a landscape phone and
+// a 1280px-wide screen:
 //   1. the title is ONE line — one range rect, the box exactly one line-height tall, and its ink
 //      narrower than the column so nowrap can never clip or ellipsise it;
 //   2. the back chevron and the wordmark share the title's top line (tops within 2px), so the header
@@ -22,14 +22,17 @@
 //      corner, at the same small size the game HUD uses;
 //   4. the surface behind the window is the MENU's: the screen paints no fill of its own, and a
 //      background patch measures the same grain as the identical patch on the main menu (pixel sd);
-//   5. the map FILLS its window — the window carries the world's own aspect ratio, so the only
-//      margin is the fit box's symmetric 6-unit padding and there is no letterbox band (this was
-//      65px at 360x640 and 144px at 390x844 before the fit), and the hexes are not stretched;
-//   6. the column uses the viewport — the map renders at the column's full width, the side gutters
-//      are the menu's own 16px, the controls anchor to the bottom edge, and there is no dead band;
-//   7. the map window keeps its contained surface (14px corner, radial inset surface, inset shadow).
-// It writes docs/screens/world/world-header-*.png (the screen) and world-surface-menu-*.png (the
-// main menu, for the side-by-side surface comparison) for the visual pass.
+//   5. the map FILLS its window — the view's aspect is the window's own, so there is no letterbox
+//      band, the hexes are never stretched (one hex is a true hexagon), and the surplus is cropped
+//      and pannable;
+//   6. no focus state paints a default ring (every hex is tabindex=0, so a pointer click focuses one
+//      without matching :focus-visible), and each tile is shaded by its own gradient with unclaimed
+//      ground the quietest of the three;
+//   7. the column uses the viewport — the side gutters are the menu's own 16px, the column reaches
+//      its bottom edge with or without a notice line, and the window never overflows the viewport;
+//   8. the map window keeps its contained surface (14px corner, radial inset surface, inset shadow).
+// It writes docs/screens/world/world-header-*.png (the screen at rest), world-select-*.png (a tile
+// selected) and world-surface-menu-*.png (the main menu, for the side-by-side surface comparison).
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -46,10 +49,14 @@ const { server, url: BASE } = await serveStaticDist(DIST);
 const SAMPLE = {
   ok: true,
   world: { version: 1, revision: 5, cost: 100, cells: WORLD_CELLS,
+    // ONE colour for every claim, on purpose: the owner's own tiles and another player's are then
+    // directly comparable, so "my territory is the brighter glass" is a real assertion rather than a
+    // comparison of two different hues. Two are mine (ownerId 'stub', the guest the stub API mints),
+    // three are another player's.
     claims: ['0,0', '1,0', '0,1', '-1,1', '-1,0'].map((cellId, index) => ({
-      cellId, ownerId: index % 2 ? 'b' : 'a', ownerName: index % 2 ? 'WillowBirch' : 'BloomHeron',
-      ownerTag: index % 2 ? '1002' : '1001', colour: index % 2 ? 'hsl(220 34% 49%)' : 'hsl(80 34% 49%)',
-      claimedAt: Date.now() - index * 60_000,
+      cellId, ownerId: index < 2 ? 'stub' : 'other',
+      ownerName: index < 2 ? 'Me' : 'WillowBirch', ownerTag: index < 2 ? '1001' : '1002',
+      colour: 'hsl(200 34% 49%)', claimedAt: Date.now() - index * 60_000,
     })) },
 };
 
@@ -117,6 +124,7 @@ try {
     { w: 320, h: 568, touch: true }, // narrower than the owner's phone: the title must still fit
     { w: 360, h: 640, touch: true },
     { w: 390, h: 844, touch: true },
+    { w: 844, h: 390, touch: true }, // a landscape phone: the column's chrome is a large share here
     { w: 1280, h: 800, touch: false }, // a WIDE screen: here the height, not the width, is limiting
   ] as const) {
     const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, hasTouch: size.touch, isMobile: size.touch });
@@ -138,6 +146,12 @@ try {
 
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
+    // Let the menu SETTLE before measuring its surface. Fonts arrive late and the beta line is added
+    // by a dynamic import, so a patch read during boot can catch a half-painted frame (it measured
+    // flat at 320x568 on the first iteration until this wait). The grain is the subject, so the
+    // measurement has to read the finished screen — the same reason online-lobby-check.ts waits here.
+    await page.evaluate(() => document.fonts?.ready ?? Promise.resolve()).catch(() => undefined);
+    await page.waitForSelector('#menu-beta', { timeout: 10_000 }).catch(() => undefined);
     await page.waitForTimeout(500);
     // The main menu, on the same surface: the reference shot and the reference measurement.
     const menuPatch = await patchStats(await page.screenshot({ clip: PATCH, type: 'png' }));
@@ -282,6 +296,47 @@ try {
 
     console.log(`\n[${tag}]`, JSON.stringify(m, null, 2));
 
+    // The things that need their own evaluation: the tile gradients, the focus ring, and the view's
+    // aspect against the window's (the fill proof).
+    const extra = await page.evaluate(() => {
+      const grid = document.getElementById('online-world-grid') as HTMLElement;
+      const svg = grid.querySelector('svg') as SVGSVGElement;
+      const vb = (svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
+      const wr = grid.getBoundingClientRect();
+      const hexes = [...grid.querySelectorAll('.world-hex')] as SVGGraphicsElement[];
+      const stopsOf = (el?: SVGGraphicsElement | null) => {
+        const fill = el ? getComputedStyle(el).fill : '';
+        const id = /url\("#?([^")]+)"?\)/.exec(fill)?.[1];
+        const g = id ? document.getElementById(id) : null;
+        return { fill, stops: g ? [...g.querySelectorAll('stop')].map((s) => getComputedStyle(s).stopColor) : [] };
+      };
+      // Focus a hex and read its paint, then blur so the screenshots stay at rest.
+      const probe = hexes[0]!;
+      probe.focus();
+      const fs = getComputedStyle(probe);
+      const focus = { outlineStyle: fs.outlineStyle, outlineWidth: fs.outlineWidth, stroke: fs.stroke };
+      probe.blur();
+      const boxes = hexes.map((h) => h.getBoundingClientRect());
+      return {
+        viewBoxAspect: vb[2]! / vb[3]!,
+        windowAspect: wr.width / wr.height,
+        focus,
+        gradientCount: grid.querySelectorAll('defs linearGradient').length,
+        empty: stopsOf(hexes.find((h) => !h.classList.contains('held') && !h.classList.contains('mine'))),
+        held: stopsOf(hexes.find((h) => h.classList.contains('held'))),
+        mine: stopsOf(hexes.find((h) => h.classList.contains('mine'))),
+        windowTop: wr.top, windowBottom: wr.bottom,
+        vh: innerHeight,
+        hexesInView: boxes.filter((b) => b.left < wr.right && b.right > wr.left && b.top < wr.bottom && b.bottom > wr.top).length,
+      };
+    });
+    const luma = (rgb: string): number => {
+      const [r = 0, g = 0, b = 0] = (rgb.match(/\d+/g) ?? []).map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const avgLuma = (stops: string[]) => stops.reduce((n, s) => n + luma(s), 0) / Math.max(1, stops.length);
+    const stopSpread = (stops: string[]) => Math.max(...stops.map(luma)) - Math.min(...stops.map(luma));
+
     // 1. ONE line: the title box is exactly one line-height tall, its text does not overflow, and it
     //    does not wrap into several client rects.
     check(`[${tag}] the title is ONE line (no wrap)`, m.titleLineRects === 1 && m.titleNowrap <= m.titleClient + 1,
@@ -344,21 +399,29 @@ try {
       menuPatch.sd > 0 && worldPatch.sd / menuPatch.sd >= 0.5 && Math.abs(worldPatch.mean - menuPatch.mean) <= 2,
       `world sd=${worldPatch.sd}/mean=${worldPatch.mean} vs menu sd=${menuPatch.sd}/mean=${menuPatch.mean} (ratio ${(worldPatch.sd / menuPatch.sd).toFixed(2)})`);
 
-    // 6. THE MAP FILLS ITS WINDOW (owner, 2026-10-16). The window carries the map's OWN aspect
-    //    ratio, so the SVG fills it instead of letterboxing; the only margin left is the fit box's
-    //    own 6-unit padding (2.2%), and it is SYMMETRIC. This is the regression that used to cost
-    //    65px of band at 360x640 and 144px at 390x844.
+    // 6. THE MAP FILLS ITS WINDOW (owner, 2026-10-16). He saw the previous version's void had simply
+    //    moved outside the window — a square map at the top of a tall column with half the screen
+    //    empty below — and chose a BIGGER map over centring, accepting a horizontal crop. So the
+    //    view's aspect is now the WINDOW's own: the SVG scales both axes equally and fills it, the
+    //    surplus is cropped and pannable, and there is no letterbox band anywhere.
     const fit = m.fit;
-    check(`[${tag}] the map window carries the map's own aspect ratio`, !!fit && Math.abs(fit.windowAspect - fit.viewBoxAspect) <= 0.01,
-      fit ? `window ${fit.windowAspect.toFixed(4)} vs map ${fit.viewBoxAspect.toFixed(4)}` : 'no viewBox');
+    check(`[${tag}] the view's aspect is the window's own (the map fills it)`,
+      Math.abs(extra.viewBoxAspect - extra.windowAspect) <= 0.01,
+      `viewBox ${extra.viewBoxAspect.toFixed(4)} vs window ${extra.windowAspect.toFixed(4)}`);
     const topBand = fit ? fit.bandTop / (m.grid?.height ?? 1) : 1;
     const bottomBand = fit ? fit.bandBottom / (m.grid?.height ?? 1) : 1;
     check(`[${tag}] there is NO letterbox band above or below the map`, topBand <= 0.04 && bottomBand <= 0.04,
       `top ${(topBand * 100).toFixed(1)}% (${fit?.bandTop.toFixed(1)}px), bottom ${(bottomBand * 100).toFixed(1)}% (${fit?.bandBottom.toFixed(1)}px)`);
     check(`[${tag}] the remaining margin is SYMMETRIC (a frame, not a band)`, !!fit && Math.abs(fit.bandTop - fit.bandBottom) <= 1.5,
       fit ? `top ${fit.bandTop.toFixed(1)}px vs bottom ${fit.bandBottom.toFixed(1)}px` : 'n/a');
-    check(`[${tag}] the map fills the window's width too`, !!fit && m.grid !== null && fit.bandLeft <= m.grid.width * 0.06 && fit.bandRight <= m.grid.width * 0.06 && Math.abs(fit.bandLeft - fit.bandRight) <= 1.5,
-      fit && m.grid ? `left ${fit.bandLeft.toFixed(1)}px, right ${fit.bandRight.toFixed(1)}px of ${m.grid.width.toFixed(1)}px` : 'n/a');
+    // The crop's successor to the old "fills the window's width too". On a wide screen the view IS
+    // the whole world's fit box, so the only margin is that box's own symmetric 6-unit pad (~2.2% of
+    // the window); on a phone the map is wider than the window and the margins go negative. So the
+    // rule is: never more margin than the shared pad, always symmetric, whichever way it resolves.
+    const sidePad = Math.max(fit?.bandLeft ?? 1, fit?.bandRight ?? 1) / (m.grid?.width ?? 1);
+    check(`[${tag}] the map covers the window's width (spanned, or cropped by it)`,
+      !!fit && m.grid !== null && sidePad <= 0.03 && Math.abs(fit.bandLeft - fit.bandRight) <= 1.5,
+      fit && m.grid ? `map ${fit.inkWidth.toFixed(1)}px over window ${m.grid.width.toFixed(1)}px, margins left ${fit.bandLeft.toFixed(1)} (${(fit.bandLeft / m.grid.width * 100).toFixed(1)}%) / right ${fit.bandRight.toFixed(1)}` : 'n/a');
     // Uniform only: the hexes keep their true shape. A regular pointy-top hexagon is sqrt(3)/2 as
     // wide as it is tall, so one hex's own box is the direct proof the map was not stretched to fit
     // (the owner's one definitely-wrong outcome); the ink box is the second, cross-check.
@@ -369,24 +432,54 @@ try {
       !!fit && Math.abs(fit.inkWidth / fit.inkHeight - WORLD_INK_RATIO) <= 0.01,
       fit ? `ink ${fit.inkWidth.toFixed(1)}x${fit.inkHeight.toFixed(1)} = ${(fit.inkWidth / fit.inkHeight).toFixed(4)} vs world ${WORLD_INK_RATIO.toFixed(4)}` : 'n/a');
 
-    // 7. The column still USES the screen (owner: "using nicely most of screen, especially on
-    //    mobile"). The window hugs the map now, so on a TALL phone the width is the limiting
-    //    dimension and the window spans the column; on a WIDE screen the height limits it and the
-    //    window is centred instead. Both are the same rule (the map's aspect), so both are measured;
-    //    either way the column spans the viewport with the controls on the bottom edge.
-    const viewportGap = m.vh - bottom(m.selection);
+    // 6b. THE FOCUS RING (owner, 2026-10-16: "highlighting tiles on world map looks weird af").
+    //     Every hex is tabindex=0 and a POINTER click focuses one without matching :focus-visible, so
+    //     a :focus-visible-only rule left the browser painting its own rounded blue ring. No focus
+    //     state may paint one; the indicator must be ours.
+    check(`[${tag}] a focused hex paints NO default focus ring`, extra.focus.outlineStyle === 'none',
+      `outline ${extra.focus.outlineStyle} ${extra.focus.outlineWidth}, stroke ${extra.focus.stroke}`);
+
+    // 6c. THE TILE SHADING (owner, 2026-10-16). Each tile is shaded by its own gradient, built from
+    //     the owner colour the server already sent — so territories read as coloured glass and no new
+    //     colour enters the palette. Unclaimed ground must stay the quietest of the three.
+    check(`[${tag}] every tile is shaded by its own gradient`,
+      extra.gradientCount > 0 && /^url\(/.test(extra.empty.fill) && /^url\(/.test(extra.held.fill) && /^url\(/.test(extra.mine.fill),
+      `${extra.gradientCount} gradients; empty ${extra.empty.fill}, held ${extra.held.fill}, mine ${extra.mine.fill}`);
+    check(`[${tag}] the gradient stops resolve to real colours (nothing fell back to black)`,
+      [...extra.empty.stops, ...extra.held.stops, ...extra.mine.stops].every((c) => /^rgb/.test(c) && c !== 'rgb(0, 0, 0)'),
+      `empty [${extra.empty.stops.join(' ')}] held [${extra.held.stops.join(' ')}] mine [${extra.mine.stops.join(' ')}]`);
+    check(`[${tag}] unclaimed ground stays recessive (dark, and the flattest of the three)`,
+      avgLuma(extra.empty.stops) < 60 && stopSpread(extra.empty.stops) < 30 && avgLuma(extra.empty.stops) < avgLuma(extra.held.stops),
+      `empty avg ${avgLuma(extra.empty.stops).toFixed(1)} spread ${stopSpread(extra.empty.stops).toFixed(1)} vs held avg ${avgLuma(extra.held.stops).toFixed(1)}`);
+    // The fixture gives every claim the SAME colour, so this is a like-for-like comparison: my own
+    // territory is the same hue, one step brighter, which is its whole distinguishing touch.
+    check(`[${tag}] your own territory is the brighter glass of the same colour`,
+      avgLuma(extra.mine.stops) > avgLuma(extra.held.stops) + 15,
+      `mine avg ${avgLuma(extra.mine.stops).toFixed(1)} vs held avg ${avgLuma(extra.held.stops).toFixed(1)}`);
+
+    // 7. The column still USES the screen. With the map larger, the window takes whatever height the
+    //    chrome leaves: on a phone the width frames it and the surplus height is cropped; on a wide
+    //    screen the height frames it and the whole world stays in view. Both are measured, and in
+    //    both the column reaches its bottom edge.
+    const columnBottom = Math.max(bottom(m.selection), (m.notice?.height ?? 0) > 0 ? bottom(m.notice) : 0);
+    const viewportGap = m.vh - columnBottom;
     const gx = m.grid?.x ?? 0;
     const gw = m.grid?.width ?? 0;
     const rightMargin = m.vw - (gx + gw);
     check(`[${tag}] the map renders at the column's full width`, !!fit && m.grid !== null && fit.inkWidth >= m.grid.width * 0.9,
       fit && m.grid ? `map ${fit.inkWidth.toFixed(1)} of column ${m.grid.width.toFixed(1)} (${((fit.inkWidth / m.grid.width) * 100).toFixed(1)}%)` : 'n/a');
     const spansColumn = gw >= m.vw - 32 - 1;
-    check(`[${tag}] the window either spans the column or is centred by the height`,
+    check(`[${tag}] the window either spans the column or is centred in it`,
       spansColumn ? Math.abs(gx - 16) <= 1 && Math.abs(rightMargin - 16) <= 1 : Math.abs(gx - rightMargin) <= 1,
       spansColumn ? `width-limited: ${gw.toFixed(1)} = the column (gutters ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`
-        : `height-limited: ${gw.toFixed(1)} wide, centred (margins ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`);
-    check(`[${tag}] the column reaches the bottom padding (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
-      `${viewportGap.toFixed(1)}px below the selection bar`);
+        : `framed narrower: ${gw.toFixed(1)} wide, centred (margins ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`);
+    check(`[${tag}] the column reaches its bottom edge (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
+      `${viewportGap.toFixed(1)}px below the last column element`);
+    // The dvh cap is a documented constant, so prove the window can never spill past the viewport —
+    // on the widest screen in the matrix and on a landscape phone, where the chrome is a big share.
+    check(`[${tag}] the map window never overflows the viewport`,
+      extra.windowTop >= 0 && extra.windowBottom <= m.vh + 0.5,
+      `window ${extra.windowTop.toFixed(1)}..${extra.windowBottom.toFixed(1)} of ${m.vh}`);
 
     // 8. The gutters are the MENU's 16px (owner, 2026-10-16), so the world's column edge is where
     //    #menu .menu-inner's edge is. On a phone that column is `100% - 32px`, so the two edges can
@@ -411,8 +504,49 @@ try {
       m.window.radius === '14px' && m.window.image === 'gradient' && m.window.shadow === 'shadow',
       JSON.stringify(m.window));
 
+    // 10. A NOTICE LINE. It adds ~28px of chrome below the controls — the one case that could clamp
+    //     the window and reintroduce a band. Measured with a real notice showing, on every size
+    //     including the landscape phone where the chrome is already a large share of the screen.
+    await page.evaluate(() => {
+      (document.getElementById('online-world-notice') as HTMLElement).textContent = 'The world could not refresh. Tap here to try again.';
+    });
+    await page.waitForTimeout(320);
+    const noticed = await page.evaluate(() => {
+      const grid = document.getElementById('online-world-grid') as HTMLElement;
+      const wr = grid.getBoundingClientRect();
+      const svg = grid.querySelector('svg') as SVGSVGElement;
+      const vb = (svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
+      const hexes = [...grid.querySelectorAll('.world-hex')].map((h) => h.getBoundingClientRect());
+      const sel = (document.getElementById('online-world-selection') as HTMLElement).getBoundingClientRect();
+      const notice = (document.getElementById('online-world-notice') as HTMLElement).getBoundingClientRect();
+      return {
+        viewBoxAspect: vb[2]! / vb[3]!, windowAspect: wr.width / wr.height,
+        bandTop: Math.min(...hexes.map((b) => b.top)) - wr.top,
+        bandBottom: wr.bottom - Math.max(...hexes.map((b) => b.bottom)),
+        windowH: wr.height, windowBottom: wr.bottom, vh: innerHeight,
+        columnBottom: Math.max(sel.bottom, notice.height > 0 ? notice.bottom : 0),
+        noticeHeight: notice.height,
+      };
+    });
+    check(`[${tag}] with a notice line the map still fills its window (no band)`,
+      Math.abs(noticed.viewBoxAspect - noticed.windowAspect) <= 0.01 &&
+      noticed.bandTop / noticed.windowH <= 0.04 && noticed.bandBottom / noticed.windowH <= 0.04,
+      `notice ${noticed.noticeHeight.toFixed(0)}px, window ${noticed.windowH.toFixed(1)}px, band ${noticed.bandTop.toFixed(1)}/${noticed.bandBottom.toFixed(1)}px`);
+    check(`[${tag}] with a notice line nothing spills past the viewport`,
+      noticed.windowBottom <= noticed.vh + 0.5 && noticed.columnBottom <= noticed.vh + 0.5,
+      `window bottom ${noticed.windowBottom.toFixed(1)}, column bottom ${noticed.columnBottom.toFixed(1)} of ${noticed.vh}`);
+
     await page.screenshot({ path: join(OUT, `world-header-${tag}.png`) });
-    console.log(`    screenshot: docs/screens/world/world-header-${tag}.png (+ world-surface-menu-${tag}.png)`);
+    // The shot the owner asks for: the map with a tile SELECTED (tap the middle of the window, which
+    // is inside the crop). The at-rest shot above already shows his own territory, another player's
+    // and unclaimed ground together — the fixture gives every claim one colour on purpose.
+    if (size.w === 360 || size.w === 390) {
+      const g = m.grid!;
+      await page.mouse.click(g.x + g.width / 2, g.y + g.height / 2);
+      await page.waitForTimeout(320);
+      await page.screenshot({ path: join(OUT, `world-select-${tag}.png`) });
+    }
+    console.log(`    screenshot: docs/screens/world/world-header-${tag}.png${size.w === 360 || size.w === 390 ? ` (+ world-select-${tag}.png)` : ''}`);
     if (errors.length) console.log('    page errors:', errors.slice(0, 4));
     await page.close();
   }
@@ -426,6 +560,6 @@ if (failed) {
   console.error(`\n${failed} world-map screen checks failed`);
   process.exit(1);
 }
-console.log('\nThe world map is one line in a corner-anchored header, fitted to its window, on the menu\'s grained surface.');
+console.log('\nThe world map is one line in a corner-anchored header, filling its window on the menu\'s grained surface.');
 
 type SVGWrap = SVGSVGElement;

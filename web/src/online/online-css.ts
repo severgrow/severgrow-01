@@ -390,39 +390,66 @@ export const ONLINE_CSS = `
   color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
 }
 .seed-icon { flex: none; color: #e8ddbe; }
-/* The map window HUGS the map (owner, 2026-10-16). The world's own bounding box is 274.49 x 272
-   units — very nearly square — so a window that FILLED a tall phone letterboxed it: 65px bands at
-   360x640 and 144px at 390x844, which is exactly what read as "a small card in a large area, just
-   inside the window". The window is now the largest box with the map's OWN aspect ratio that fits
-   the space between the column's header and its controls, so the map fills it at every viewport
-   instead of floating inside a tall panel. Uniform only: nothing is stretched, so the hexes keep
-   their true shape and the map keeps its scale.
-   The dvh term is the same size expressed against the viewport, which is what lets it hug on a
-   WIDE screen too — there the height, not the width, is the limiting dimension. Its 210px is the
+/* The map window FILLS the column (owner, 2026-10-16). He looked at the fitted screen and saw the
+   void had simply moved outside the window: the square map sat at the top of a tall column with
+   roughly half the screen empty below it. He chose to fill that space with a BIGGER map rather than
+   by centring, accepting a horizontal crop. So the window now takes the column's whole height and
+   the map scales up to it.
+   The world is very nearly square (274.49 x 272 units), so on a portrait phone filling the height
+   means the map is wider than the column and the surplus is cropped horizontally — the window shows
+   the world's middle and pans to the edges (world-view.ts frames the view to the window's own
+   aspect, clamped to the world's extent). Cropping, never stretching: the SVG scales uniformly, so
+   the hexes keep their true shape.
+   The width cap keeps a WIDE screen honest: there the height is not the limiting dimension, so the
+   window never grows wider than the map's aspect at the available height and the whole world stays
+   in view. flex: 1 1 0 is what makes the height take the leftover space; its 210px constant is the
    column's own fixed chrome, derived: padding 12 + 16, header 44, summary 18, Seeds row 30,
-   selection 58 and 4 x 8px column gaps = 209.7. max-height and the flex shrink are the
-   backstop: if that chrome ever grew, the cost is a few pixels of margin, never an overflow. */
+   selection 58 and 4 x 8px column gaps = 209.7. min-height 0 and max-height 100% are the backstop:
+   if that chrome ever grew (a notice line does exactly that), the window shrinks by that much
+   instead of overflowing the viewport. */
 .world-grid {
-  flex: 0 1 auto; min-height: 0;
+  position: relative;
+  flex: 1 1 0; min-height: 0;
   width: min(100%, 1100px, calc((100dvh - 210px) * 274.49 / 272));
-  aspect-ratio: 274.49 / 272;
   max-height: 100%; margin: 0 auto;
   display: grid; place-items: center; overflow: hidden;
   border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);
   box-shadow: inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
 }
+/* A faint vignette so the world feels CONTAINED inside its window, the same way the page's own
+   #texture::after holds the whole screen. Absolutely positioned and click-through, so it never
+   becomes a grid item and never takes a pan or a tile tap. */
+.world-grid::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 78% 72% at 50% 46%, transparent 42%, #070a08b8 100%);
+}
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
+/* Each tile's FILL comes from its own SVG gradient (see world-view.ts), so tiles read as physical
+   surfaces with a light from the top-left instead of flat paint. The class rules below carry the
+   STROKE — the tile's edge, its owner and its state — and the plain fill is only the fallback for a
+   tile that has not been painted a gradient yet. */
 .world-hex {
   fill: #252b26; stroke: #697267; stroke-width: .36; vector-effect: non-scaling-stroke;
   transition: fill 160ms ease, stroke 160ms ease, opacity 160ms ease; cursor: pointer;
 }
-.world-hex.held, .world-hex.mine { fill: color-mix(in srgb, var(--territory) 55%, #252b26); stroke: var(--territory); }
-.world-hex.mine { fill: color-mix(in srgb, var(--territory) 76%, #2b3027); }
+/* Owned tiles keep the OWNER colour — the gradient supplies it, so this rule paints only the edge. */
+.world-hex.held { stroke: var(--territory); }
+/* Your own territory: the same colour, one step brighter in the gradient (world-view.ts), plus a
+   quietly lifted edge. No new colour — the owner asked to spot his own at a glance, not to be told
+   by a different hue. */
+.world-hex.mine { stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
 .world-hex.available { stroke: #c9c89c; stroke-width: .65; }
 .world-hex.same-owner { stroke-width: 1.1; }
-.world-hex.selected { stroke: #f2e5c5; stroke-width: 1.2; filter: drop-shadow(0 0 2px #d4c28c80); }
-.world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.5; }
+.world-hex.selected { stroke: #f2e5c5; stroke-width: 1.6; filter: drop-shadow(0 0 3px #d4c28cb0); }
+/* NO DEFAULT RING, IN ANY FOCUS STATE (owner, 2026-10-16: "highlighting tiles on world map looks
+   weird af"). Every hex is tabindex=0, and a POINTER click on one focuses it WITHOUT matching
+   :focus-visible — so a rule that covered only :focus-visible left the browser painting its own
+   ring: the rounded blue bracket, clipped by the map edge, that the owner photographed. Turning the
+   outline off for every focus state is only half the fix; the other half is that keyboard users keep
+   a marker, so :focus-visible draws OUR hex-following cream stroke instead. */
+.world-hex:focus { outline: none; }
+.world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.7; }
 /* The controls anchor to the bottom of the column (owner, 2026-10-16). Now that the window hugs the
    map instead of filling the column, the leftover height would otherwise collect under the
    selection bar as dead space at the very bottom. Pushing the controls down keeps the column

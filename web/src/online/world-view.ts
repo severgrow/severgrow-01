@@ -13,6 +13,15 @@ const hexPath = (x: number, y: number) => {
   const points = [[0, -1], [X / 2, -0.5], [X / 2, 0.5], [0, 1], [-X / 2, 0.5], [-X / 2, -0.5]];
   return points.map(([dx, dy], index) => `${index ? 'L' : 'M'}${(x + dx! * R).toFixed(2)},${(y + dy! * R).toFixed(2)}`).join(' ') + 'Z';
 };
+/**
+ * An owner colour at a different lightness: `territoryColour` hands out `hsl(<h> 34% 49%)`, so one
+ * hue and saturation is all a tile's own gradient needs. Shading in JS from the colour the server
+ * already sent keeps the palette closed — no new tokens, and it cannot drift from `--territory`.
+ */
+const shade = (colour: string, lightness: number): string => {
+  const m = /hsl\(\s*([\d.]+)\s+([\d.]+)%\s+[\d.]+%/.exec(colour);
+  return m ? `hsl(${m[1]} ${m[2]}% ${lightness}%)` : colour;
+};
 
 /** One shared map, with a stable viewport and revision-only refresh. No game-state logic here. */
 export class WorldView {
@@ -27,6 +36,11 @@ export class WorldView {
   private svg: SVGSVGElement | null = null;
   private box: [number, number, number, number] | null = null;
   private fit: [number, number, number, number] | null = null;
+  /** The smallest view the window allows — the framed view; see `boundsFor`. */
+  private bounds: [number, number, number, number] | null = null;
+  /** True once the player has panned or zoomed, so a re-frame never throws their view away. */
+  private touched = false;
+  private observer: ResizeObserver | null = null;
   private pointers = new Map<number, { x: number; y: number }>();
   private dragged = false;
 
@@ -36,6 +50,10 @@ export class WorldView {
 
   async open() {
     this.active = true;
+    // A fresh visit starts FRAMED to the window (see `boundsFor`), not wherever the last visit was
+    // panned to, and re-frames itself if the window's shape changes.
+    this.touched = false;
+    this.box = null;
     this.notice('');
     // The world is public. A guest token may be slow, offline or rate-limited; it must never
     // prevent the player from seeing the map. Attach the private wallet when identity resolves.
@@ -101,6 +119,38 @@ export class WorldView {
     svg.setAttribute('role', 'group');
     svg.setAttribute('aria-label', 'Shared hexagonal world. Choose a tile to inspect it.');
     svg.classList.add('world-map-svg');
+    // Every tile is shaded by its OWN gradient, so a hex reads as a physical surface with a light
+    // from the top-left rather than as flat paint (owner, 2026-10-16: "give it some personality and
+    // some life"). One gradient per distinct owner colour, built from that colour's own hue and
+    // saturation, plus ONE deliberately flat dark one for unclaimed ground so empty tiles stay
+    // recessive. Nothing here changes geometry: the paths and the viewBox maths are untouched.
+    const defs = document.createElementNS(NS, 'defs');
+    let seq = 0;
+    const face = (from: string, mid: string, to: string): string => {
+      const id = `world-face-${seq++}`;
+      const g = document.createElementNS(NS, 'linearGradient');
+      g.setAttribute('id', id);
+      g.setAttribute('x1', '0'); g.setAttribute('y1', '0');
+      g.setAttribute('x2', '1'); g.setAttribute('y2', '1');
+      for (const [offset, colour] of [['0', from], ['.55', mid], ['1', to]] as const) {
+        const stop = document.createElementNS(NS, 'stop');
+        stop.setAttribute('offset', offset);
+        stop.setAttribute('stop-color', colour);
+        g.append(stop);
+      }
+      defs.append(g);
+      return `url(#${id})`;
+    };
+    const EMPTY_FACE = face('#2b322c', '#242a25', '#1a1f1b');
+    const heldFace = new Map<string, string>();
+    const mineFace = new Map<string, string>();
+    for (const claim of world.claims) {
+      if (!heldFace.has(claim.colour)) heldFace.set(claim.colour, face(shade(claim.colour, 60), shade(claim.colour, 49), shade(claim.colour, 34)));
+      // Your own territory: the same hue one step brighter, so it is spotted at a glance without a
+      // second colour entering the palette.
+      if (!mineFace.has(claim.colour)) mineFace.set(claim.colour, face(shade(claim.colour, 71), shade(claim.colour, 57), shade(claim.colour, 40)));
+    }
+    svg.append(defs);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const cell of world.cells) {
       const at = coords(cell.q, cell.r);
@@ -113,11 +163,17 @@ export class WorldView {
       path.setAttribute('data-owner-id', owner?.ownerId ?? '');
       path.classList.add('world-hex');
       if (owner) {
-        path.classList.add(owner.ownerId === this.identity?.playerId ? 'mine' : 'held');
+        const mine = owner.ownerId === this.identity?.playerId;
+        path.classList.add(mine ? 'mine' : 'held');
         path.style.setProperty('--territory', owner.colour);
-      } else if (this.wallet && this.wallet.balance >= world.cost &&
-        (!own.size || [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
-          .some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) path.classList.add('available');
+        // Inline, so it beats the stylesheet's flat fallback fill; the gradient carries the colour.
+        path.style.fill = (mine ? mineFace : heldFace).get(owner.colour)!;
+      } else {
+        path.style.fill = EMPTY_FACE;
+        if (this.wallet && this.wallet.balance >= world.cost &&
+          (!own.size || [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+            .some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) path.classList.add('available');
+      }
       path.classList.toggle('selected', this.selected === cell.id);
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
@@ -129,11 +185,31 @@ export class WorldView {
       svg.append(path);
     }
     if (!this.fit) this.fit = [minX - 6, minY - 6, maxX - minX + 12, maxY - minY + 12];
-    if (!this.box) this.box = [...this.fit];
+    // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
+    // surplus width and pans to the edges; a wide screen resolves to the whole world.
+    const rect = container.getBoundingClientRect();
+    this.bounds = this.boundsFor(rect.height > 0 ? rect.width / rect.height : 0);
+    if (!this.box || !this.touched) this.box = [...(this.bounds ?? this.fit)];
     svg.setAttribute('viewBox', this.box.join(' '));
+    this.observer?.disconnect();
     this.installPanZoom(svg);
     container.replaceChildren(svg);
     this.svg = svg;
+  }
+  /**
+   * The smallest view the window allows: the largest rect with the WINDOW's own aspect that fits
+   * inside the world's fit box. On a portrait phone that keeps the full height and takes a narrower
+   * width, so the map scales up to the window and the surplus is cropped, pannable to the edges
+   * because panning clamps to `fit`. On a wide screen it resolves to the whole world. Keeping the
+   * box's aspect equal to the window's is what makes the SVG scale both axes equally — the hexes
+   * stay true hexagons however the view is framed.
+   */
+  private boundsFor(aspect: number): [number, number, number, number] | null {
+    if (!this.fit || !Number.isFinite(aspect) || aspect <= 0) return null;
+    const [fx, fy, fw, fh] = this.fit;
+    let w = fh * aspect, h = fh;
+    if (w > fw) { w = fw; h = fw / aspect; }
+    return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
   }
   private select(cellId: string) {
     this.selected = cellId;
@@ -193,6 +269,14 @@ export class WorldView {
     const set = () => {
       if (!this.box || !this.fit) return;
       const [fx, fy, fw, fh] = this.fit;
+      // The framed view is BOTH zoom limits. Its width is the most zoomed-OUT view that still fills
+      // the window (any wider and the box's aspect leaves the window's, so the SVG would letterbox
+      // again); a quarter of it is as far in as the map goes. Height follows the box's own aspect, so
+      // the two axes always scale together and the hexes stay true.
+      const frame = this.bounds ?? this.fit;
+      const aspect = this.box[3] > 0 ? this.box[2] / this.box[3] : 1;
+      this.box[2] = Math.max(frame[2] / 4, Math.min(frame[2], this.box[2]));
+      this.box[3] = this.box[2] / aspect;
       this.box[0] = Math.max(fx, Math.min(fx + fw - this.box[2], this.box[0]));
       this.box[1] = Math.max(fy, Math.min(fy + fh - this.box[3], this.box[1]));
       svg.setAttribute('viewBox', this.box.join(' '));
@@ -202,9 +286,13 @@ export class WorldView {
       const [bx, by, bw, bh] = this.box;
       const rect = svg.getBoundingClientRect();
       const fx = (x - rect.left) / rect.width, fy = (y - rect.top) / rect.height;
-      const width = Math.max(this.fit[2] / 4, Math.min(this.fit[2], bw / scale));
-      const height = width * this.fit[3] / this.fit[2];
+      const frame = this.bounds ?? this.fit;
+      const width = Math.max(frame[2] / 4, Math.min(frame[2], bw / scale));
+      // Scaled by the box's OWN aspect (which is the window's), not the world's, so zooming keeps the
+      // view framed and the two axes scale equally at every zoom level.
+      const height = width * bh / bw;
       this.box = [bx + fx * (bw - width), by + fy * (bh - height), width, height];
+      this.touched = true;
       set();
     };
     svg.addEventListener('wheel', (event) => {
@@ -220,6 +308,7 @@ export class WorldView {
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) {
         this.dragged = true;
+        this.touched = true;
         // Capturing on pointerdown retargets a touch tap's click to the SVG,
         // so a tile never receives it. Capture only once the gesture is a pan.
         if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
@@ -239,5 +328,26 @@ export class WorldView {
     });
     const end = (event: PointerEvent) => { this.pointers.delete(event.pointerId); };
     svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
+    // Re-frame when the WINDOW changes shape (a phone rotating, the on-screen keyboard, a notice line
+    // changing the column's chrome). Untouched: the view follows the new frame exactly. Touched: the
+    // player's zoom level is kept and re-derived at the new aspect, so the view stays band-free.
+    if (typeof ResizeObserver === 'function') {
+      this.observer = new ResizeObserver(() => {
+        const r = svg.getBoundingClientRect();
+        const next = this.boundsFor(r.height > 0 ? r.width / r.height : 0);
+        if (!next || !this.box) return;
+        const prev = this.bounds;
+        this.bounds = next;
+        if (!this.touched || !prev) {
+          this.box = [...next];
+        } else {
+          const z = this.box[2] / prev[2];
+          this.box[2] = next[2] * z;
+          this.box[3] = next[3] * z;
+        }
+        set();
+      });
+      this.observer.observe(svg);
+    }
   }
 }

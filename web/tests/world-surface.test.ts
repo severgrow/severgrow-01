@@ -20,6 +20,7 @@ import { WORLD_CELLS } from '../../server/src/world.js';
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const styleCss = read('../src/style.css');
 const onlineCss = read('../src/online/online-css.ts');
+const worldView = read('../src/online/world-view.ts');
 const html = read('../index.html');
 
 /** Every flat rule of a stylesheet, preludes tidied (comments removed, whitespace collapsed). */
@@ -90,21 +91,25 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(grid!, 'the window keeps its inset shadow').toContain('inset');
   });
 
-  it('the map window HUGS the map instead of stretching to fill the column', () => {
-    // Owner, 2026-10-16: the map letterboxed inside a taller window (65px of band at 360x640, 144px
-    // at 390x844). The window now carries the map's OWN aspect ratio, so the SVG fills it; the flex
-    // basis must stay `auto` and the window must never GROW to take the column's spare height.
+  it('the map window FILLS the column’s height (a fixed CSS ratio would letterbox again)', () => {
+    // Owner, 2026-10-16. First the map letterboxed INSIDE a taller window (65px of band at 360x640,
+    // 144px at 390x844); the fix then sized the window to the map's aspect, which moved the void
+    // OUTSIDE the window. He chose a bigger map, so the window now takes the column's whole height
+    // and the view is framed to the WINDOW in JS instead. A CSS `aspect-ratio` here would pin the
+    // window to the map's shape again — exactly the letterboxing this replaced — so its absence is
+    // the point, and the flex must genuinely grow.
     const grid = bodyOf(onlineCss, '.world-grid');
     expect(grid, 'the .world-grid window rule must exist').not.toBeNull();
-    expect(grid!, 'the window must be sized by the map ratio').toMatch(/aspect-ratio:\s*[\d.]+ \/ [\d.]+/);
-    expect(grid!, 'the window must not grow to fill the column').not.toMatch(/flex:\s*1 1 auto/);
-    expect(grid!, 'the height is the ratio, so it must not be stretched').not.toMatch(/flex:\s*1\s*;/);
+    expect(grid!, 'the window must take the column’s leftover height').toMatch(/flex:\s*1 1 0/);
+    expect(grid!, 'a fixed CSS ratio would letterbox the map again').not.toMatch(/aspect-ratio\s*:/);
+    expect(grid!, 'the height must not be clamped to the map’s own shape').not.toMatch(/max-height:\s*calc\([^)]*\*[^)]*\)/);
   });
 
-  it('that ratio IS the world geometry, so a changed map cannot silently letterbox again', () => {
+  it('the world geometry drives the width cap, and the framing lives in the view', () => {
     // Mirrors the viewBox `web/src/online/world-view.ts` builds from the cells: R = 10, X = sqrt(3),
-    // and a 6-unit pad on every side. If the world's shape ever changes, this fails and the window's
-    // ratio has to move with it.
+    // and a 6-unit pad on every side. If the world's shape ever changes, this fails and the cap has
+    // to move with it. (The view itself is framed by the WINDOW’s aspect at runtime, which is why
+    // the ratio appears in the dvh cap and in world-view.ts, and no longer as a CSS aspect-ratio.)
     const R = 10;
     const X = Math.sqrt(3);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -114,16 +119,52 @@ describe('the world map rests on the ONE shared page surface', () => {
       minX = Math.min(minX, x - R); maxX = Math.max(maxX, x + R);
       minY = Math.min(minY, y - R); maxY = Math.max(maxY, y + R);
     }
-    const fitWidth = maxX - minX + 12;
-    const fitHeight = maxY - minY + 12;
+    const svgRatio = (maxX - minX + 12) / (maxY - minY + 12);
+    expect(svgRatio, `the world is nearly square: ${svgRatio.toFixed(4)}`).toBeGreaterThan(0.99);
+
     const grid = bodyOf(onlineCss, '.world-grid')!;
-    const declared = /aspect-ratio:\s*([\d.]+) \/ ([\d.]+)/.exec(grid);
-    expect(declared, 'the window must declare the map ratio').toBeTruthy();
-    const cssRatio = Number(declared![1]) / Number(declared![2]);
-    const svgRatio = fitWidth / fitHeight;
-    expect(Math.abs(cssRatio - svgRatio), `css ${cssRatio.toFixed(4)} vs world ${svgRatio.toFixed(4)}`).toBeLessThan(0.002);
-    // The same pair must drive the viewport-height cap, or a wide screen would letterbox again.
-    expect(grid!, 'the height cap must use the same ratio').toContain('274.49 / 272');
+    const cap = /calc\(\(100dvh - \d+px\) \* ([\d.]+) \/ ([\d.]+)\)/.exec(grid);
+    expect(cap, 'the width cap must express the map ratio against the viewport height').toBeTruthy();
+    const capRatio = Number(cap![1]) / Number(cap![2]);
+    expect(Math.abs(capRatio - svgRatio), `cap ${capRatio.toFixed(4)} vs world ${svgRatio.toFixed(4)}`).toBeLessThan(0.002);
+
+    // The framing rule: the view is sized to the WINDOW’s aspect, and the framed view is BOTH zoom
+    // limits, so zooming out can never widen the box back to the world and letterbox it.
+    expect(worldView, 'the view must frame itself to the window').toContain('boundsFor');
+    expect(worldView, 'the window’s aspect must come from its measured box')
+      .toMatch(/getBoundingClientRect\(\)[\s\S]{0,120}width \/ .{0,40}height/);
+    expect(worldView, 'zoom-out must stop at the framed view, not the whole world')
+      .toMatch(/Math\.max\(frame\[2\] \/ 4, Math\.min\(frame\[2\], bw \/ scale\)\)/);
+    expect(worldView, 'a resize must re-frame the view').toContain('ResizeObserver');
+  });
+
+  it('no focus state may paint a default ring, and the keyboard indicator stays ours', () => {
+    // Owner, 2026-10-16: a pointer click on a tabindex=0 hex focuses it WITHOUT matching
+    // :focus-visible, so a :focus-visible-only rule left the browser painting its own rounded blue
+    // ring — the "weird" bracket he photographed. Every focus state must be ring-free, and the
+    // keyboard marker must be OUR hex-following stroke (turning the outline off alone would have
+    // taken the only focus indicator away from keyboard users).
+    const anyFocus = bodyOf(onlineCss, '.world-hex:focus');
+    expect(anyFocus, '.world-hex:focus must exist (a pointer click focuses a hex)').not.toBeNull();
+    expect(anyFocus!, 'no focus state may keep the browser ring').toContain('outline: none');
+    const visible = bodyOf(onlineCss, '.world-hex:focus-visible');
+    expect(visible, '.world-hex:focus-visible must exist').not.toBeNull();
+    expect(visible!, 'the keyboard marker must be ours').toMatch(/stroke:\s*#[0-9a-f]{3,8}/i);
+    expect(visible!, 'and a slight bump, so it is visible').toMatch(/stroke-width:\s*[\d.]+/);
+  });
+
+  it('tile shading comes from the owner colour, so no new colour enters the palette', () => {
+    // Owner, 2026-10-16: "add some gradient ... but restrained ... FUTASAKU style". Each tile's fill
+    // is a gradient built in world-view.ts from the colour the server already sends, so the palette
+    // stays closed: the CSS must carry no new hex fill for the tiles, and the territory colour must
+    // still drive the stroke.
+    expect(worldView, 'the gradient must be derived from the owner colour').toContain('const shade');
+    expect(worldView, 'and built as an SVG linearGradient').toContain('linearGradient');
+    expect(worldView, 'the empty tiles need their own recessive face').toMatch(/EMPTY_FACE = face\(/);
+    const held = bodyOf(onlineCss, '.world-hex.held');
+    expect(held, '.world-hex.held must exist').not.toBeNull();
+    expect(held!, 'owned tiles still derive their edge from --territory').toContain('var(--territory)');
+    expect(held!, 'the gradient does the shading, so this rule paints no fill').not.toMatch(/fill\s*:/);
   });
 });
 
