@@ -675,7 +675,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
         cmp.hidden = false;
         const current = currentLevel(campaignProgress).number;
         cmp.textContent = MENU.level(current);
-        cmp.setAttribute('aria-label', `${MENU.level(current)}, campaign. Open the campaign.`);
+        cmp.setAttribute('aria-label', MENU.levelAria(current));
         $('menu-online').hidden = !online;
         setLead($('menu-online'), online);
         setLead(cmp, !online);
@@ -6040,8 +6040,13 @@ document.addEventListener('pointerdown', (e) => {
   if (!(e.target as Element | null)?.closest?.('.hud .score, #score-pop')) $('score-pop').hidden = true;
 });
 bind('levels-back', () => showScreen('menu'));
-// Campaign: the screen, its way back, and its one prominent action (resume, or the current level).
-bind('menu-campaign', () => showScreen('campaign'));
+// LEVEL <n> in the PLAY submenu goes STRAIGHT into the game (owner, 2026-10-16: "it should take you
+// straight to the game - dont show the whole levels and chapters"). It is the same entry the
+// tutorial hands off to and the campaign screen's own leading button uses: resume an unfinished
+// campaign match, otherwise open the player's current level. The chapters/levels list is still
+// reachable - the finish screen's "Back to campaign" opens it, which is where an old level is
+// replayed. There is deliberately no second way to START a level.
+bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft

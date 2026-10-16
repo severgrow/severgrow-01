@@ -517,6 +517,8 @@ export const HELP = Object.freeze({
 export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
+  /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
+  levelAria: (number: number): string => `Play campaign level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
   play: 'Play',
   /** the PLAY screen's heading */
