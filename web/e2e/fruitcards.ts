@@ -9,7 +9,7 @@
 import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { servePreview } from './helpers/preview-port.js';
+import { serveLiveDist } from './helpers/live-dist.js';
 import { isFruitCard } from '../../src/engine/index.js';
 import type { Player, State } from '../../src/engine/index.js';
 import { NINE_CHAIN, NINE_PAIR, fruitPosition } from './fruitcards-pos.js';
@@ -23,7 +23,7 @@ const check = (name: string, ok: boolean, note = '') => {
 };
 // DIST=/other/dir serves another build
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
-const { server, url: BASE } = await servePreview(4194, { ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), logLevel: 'silent' });
+const { server, url: BASE } = await serveLiveDist(4194, { ...(process.env.DIST ? { dist: process.env.DIST } : {}), logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 

@@ -5,7 +5,7 @@
 import { positionSave } from './position.js';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
-import { servePreview } from './helpers/preview-port.js';
+import { serveLiveDist } from './helpers/live-dist.js';
 import { stuckBoard } from './empty-positions.js';
 
 const results: { name: string; ok: boolean }[] = [];
@@ -15,7 +15,7 @@ const check = (name: string, ok: boolean, note?: string) => {
 };
 // DIST=/other/dir serves another build (so a long test on web/dist can keep running)
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
-const { server, url: BASE } = await servePreview(4193, { ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}), logLevel: 'silent' });
+const { server, url: BASE } = await serveLiveDist(4193, { ...(process.env.DIST ? { dist: process.env.DIST } : {}), logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const until = (page: Page, fn: string, ms = 8000) => page.waitForFunction(fn, undefined, { timeout: ms });
 const HOOK = '(window.__severgrow)';

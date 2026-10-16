@@ -8,7 +8,7 @@
 // Needs a built page (npm run web:build) and Chromium (PW_CHROMIUM=/path/to/chrome).
 import { chromium } from 'playwright-core';
 import type { CDPSession, Page } from 'playwright-core';
-import { servePreview } from './helpers/preview-port.js';
+import { serveLiveDist } from './helpers/live-dist.js';
 import { createCards, mulberry32 } from '../../src/engine/index.js';
 import type { State } from '../../src/engine/index.js';
 import { checkState } from '../../src/sim/invariants.js';
@@ -19,7 +19,7 @@ const STEPS = Number(arg('steps') ?? 400);
 const SEED = Number(arg('seed') ?? 7);
 const ONLY = arg('only'); // 'phone' or 'desktop'
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
-const { server, url: BASE } = await servePreview(4191, { logLevel: 'silent' });
+const { server, url: BASE } = await serveLiveDist(4191, { logLevel: 'silent' });
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const failures: string[] = [];
 

@@ -7,7 +7,7 @@
 //   npx tsx web/e2e/propass.ts      (needs a built page and PW_CHROMIUM)
 import { chromium } from 'playwright-core';
 import type { Browser, CDPSession, Page } from 'playwright-core';
-import { servePreview } from './helpers/preview-port.js';
+import { serveLiveDist } from './helpers/live-dist.js';
 import { coordKey, legalActions, newGame, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, State, Suit } from '../../src/engine/index.js';
 import { fixture } from '../../tests/helpers.js';
@@ -21,7 +21,7 @@ const check = (name: string, ok: boolean, note = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${note ? `  (${note})` : ''}`);
 };
 // A FREE port (helpers/preview-port.ts): two concurrent runs can never collide.
-const { server, url: BASE } = await servePreview(4191, { logLevel: 'silent' });
+const { server, url: BASE } = await serveLiveDist(4191, { logLevel: 'silent' });
 const browser: Browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const doneCoach = { step: 99, taught: [], known: [], choice: 0, summaryDone: true };
 
