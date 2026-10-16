@@ -61,6 +61,11 @@ const revealMs = await (async () => {
 })();
 check('PLAY appears without a long wait', revealMs >= 0 && revealMs < 1000, revealMs < 0 ? 'never appeared' : `${revealMs}ms after load`);
 await page.waitForTimeout(600);
+// LOG IN is revealed by the accounts module when its Google probe returns — a Supabase round trip
+// that PLAY deliberately does NOT wait for (web/src/main.ts). Wait for that settle before reading
+// the menu, so this checks the FINAL menu a tester sees rather than a mid-boot frame; PLAY's own
+// speed is what `revealMs` above measures, and it is not re-gated by this wait.
+await page.waitForFunction(() => document.getElementById('menu-login')?.hidden === false, undefined, { timeout: 15_000 }).catch(() => undefined);
 
 const menu = await page.evaluate(() => {
   const ids = ['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings'];
@@ -130,9 +135,9 @@ await page.evaluate(() => {
   for (const k of Object.keys(localStorage)) if (k.includes('severgrow')) localStorage.removeItem(k);
 });
 await page.reload({ waitUntil: 'load' });
-// Wait for the menu to actually REVEAL its product controls rather than guessing a delay: boot
-// awaits a network probe before showing them (the defect this walk found), so a fixed short wait
-// measured the delay instead of the game. Explicit waits keep this honest.
+// Wait for the menu to actually REVEAL its product controls rather than guessing a delay: PLAY is
+// revealed during boot (web/src/main.ts), and a fixed short wait could measure the wrong moment.
+// Explicit waits keep this honest.
 await page.waitForFunction(() => {
   const el = document.getElementById('menu-play');
   return !!el && !el.hidden;
