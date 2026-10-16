@@ -394,6 +394,17 @@ export class MemoryStorage implements Storage {
     return [...this.matches.values()].map(copy);
   }
 
+  /**
+   * Rewrite ONE match's turn deadline (and mark it active). A test/e2e helper for shaping "an
+   * overdue match" without waiting real time — the production deadline is owned by the service, and
+   * nothing in `src/` or `server/src/` outside tests calls this.
+   */
+  async setTurnDeadline(matchId: string, deadline: number): Promise<void> {
+    const match = this.matches.get(matchId);
+    if (!match) return;
+    this.matches.set(matchId, copy({ ...match, status: 'active', turnDeadlineAt: deadline }));
+  }
+
   async sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult> {
     let timedOut = 0;
     let expiredWaiting = 0;

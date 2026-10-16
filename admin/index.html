@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="ink">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#18191a" />
+    <!-- The dashboard is never indexed and never linked from the game (docs/ADMIN.md). These two
+         meta tags are the whole of its public announcement. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <title>FUTASAKU · Admin</title>
+    <link rel="stylesheet" href="./src/admin.css" />
+  </head>
+  <body>
+    <!-- Before the app boots: nothing but a plain loading line. A visitor who is not an admin must
+         never see a hint of the dashboard's shape, so this markup carries none. -->
+    <div id="boot" class="boot">
+      <p class="boot-line">Loading…</p>
+    </div>
+
+    <div id="admin" class="admin" hidden>
+      <header class="top">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <h1 class="brand-name">FUTASAKU</h1>
+          <span class="brand-sub">Admin</span>
+        </div>
+        <div class="who">
+          <span id="who-name" class="who-name"></span>
+          <span id="who-seen" class="muted small"></span>
+          <button id="sign-out" class="btn ghost small" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <nav id="nav" class="nav" aria-label="Dashboard sections"></nav>
+
+      <main id="view" class="view" tabindex="-1" aria-live="polite"></main>
+
+      <footer class="foot">
+        <p class="muted small">
+          Read-only except report triage. Figures are labelled exact or unavailable — the dashboard
+          never guesses a metric the database cannot measure.
+        </p>
+      </footer>
+    </div>
+
+    <!-- The token gate. Shown only when this browser holds no usable token; the player's own bearer
+         token is used, and it is never sent anywhere except the admin API. -->
+    <section id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title" hidden>
+      <div class="gate-card">
+        <h2 id="gate-title" class="gate-title">FUTASAKU Admin</h2>
+        <p id="gate-body" class="muted">
+          This dashboard uses your normal player token. It has not been found on this device, so
+          paste it below — or sign in to the game in this browser first.
+        </p>
+        <label class="field" for="gate-token">
+          <span>Player token</span>
+          <input id="gate-token" type="password" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="gate-actions">
+          <button id="gate-submit" class="btn primary" type="button">Continue</button>
+        </div>
+        <p id="gate-notice" class="notice" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <!-- The access-denied screen: plain, and identical for every reason. -->
+    <section id="denied" class="denied" role="alert" hidden>
+      <div class="denied-card">
+        <h2 class="denied-title">Access denied</h2>
+        <p class="muted">This page is not available for your account.</p>
+        <button id="denied-again" class="btn ghost small" type="button">Try again</button>
+      </div>
+    </section>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

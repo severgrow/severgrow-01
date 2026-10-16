@@ -8,12 +8,15 @@
     "node": ">=20.19"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p web",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p admin",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test",
     "web:dev": "vite --config web/vite.config.ts",
     "web:build": "vite build --config web/vite.config.ts",
+    "admin:dev": "vite --config admin/vite.config.ts",
+    "admin:build": "vite build --config admin/vite.config.ts",
+    "admin:preview": "vite preview --config admin/vite.config.ts",
     "web:preview": "vite preview --config web/vite.config.ts",
     "properties": "tsx src/sim/properties.ts",
     "sim": "tsx src/sim/sim.ts",

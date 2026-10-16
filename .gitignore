@@ -3,6 +3,8 @@ dist/
 coverage/
 sim-results.json
 web/dist/
+# The admin dashboard's own build output (the same rule as web/dist/): never committed.
+web/dist-admin/
 property-failure.json
 sweep-results.json
 grid-out/
