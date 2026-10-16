@@ -786,6 +786,57 @@ export const BETA_GUIDE = Object.freeze({
   ]),
 });
 
+/**
+ * The Settings sheet (`web/index.html` `#sheet-settings`). Every visible word lives here, so the
+ * screen can be re-organised without hunting through markup; `web/src/main.ts` fills them in from
+ * the `data-copy` keys (`applySettingsCopy`).
+ *
+ * The shape (test: web/tests/settings-sheet.test.ts) is "few rows on the surface, niche extras one
+ * tap away": the controls a player reaches for are plain rows, and the rest sit inside one
+ * collapsed `details` group each — nothing is removed, it is only folded.
+ *
+ * Accessibility rule, locked by that test: Reduce motion and Large text must stay OUTSIDE every
+ * group. For some players they are the difference between playable and not.
+ */
+export const SETTINGS = Object.freeze({
+  title: 'Settings',
+  lookHeading: 'Look',
+  colours: 'Colours',
+  materialDetail: 'Material detail',
+  topGlow: 'Top-rank glow',
+  lookGroup: 'More look options',
+  lookGroupHint: 'material detail and top-rank glow',
+  soundHeading: 'Sound and feel',
+  sound: 'Sound',
+  music: 'Music',
+  vibration: 'Vibration',
+  vibrationOff: 'Vibration (not available on this phone)',
+  soundGroup: 'Volumes and tests',
+  soundGroupHint: 'effects and music volume, test buttons',
+  sfxVolume: 'Effects volume',
+  musicVolume: 'Music volume',
+  testSound: 'Test sound',
+  testVibration: 'Test vibration',
+  motionHeading: 'Motion and comfort',
+  reduceMotion: 'Reduce motion',
+  largeText: 'Large text',
+  eyeCandy: 'Decorative effects',
+  motionGroup: 'More motion options',
+  motionGroupHint: 'animation speed and effects intensity',
+  speed: 'Speed',
+  effects: 'Effects',
+  playingHeading: 'Playing',
+  confirmMoves: 'Confirm moves',
+  autoSkip: 'Auto-skip empty turns',
+  coach: 'Coach',
+  helpGroup: 'Help seeing where to play',
+  helpGroupHint: 'placement list and weak spots',
+  placementList: 'Show the places to play',
+  weakSpots: 'Show weak spots',
+  weakPulse: 'Pulse my weakest link',
+  restartTutorial: 'Restart the coach with a new game',
+});
+
 /** Accounts: "Continue with Google" (web/src/accounts/, docs/ACCOUNTS.md). */
 export const ACCOUNT = Object.freeze({
   continueGoogle: 'Continue with Google',

@@ -285,7 +285,7 @@ for (const vp of VIEWPORTS) {
     root: '#sheet-settings',
     column: '#sheet-settings .sheet-body',
     heading: '#sheet-settings h2',
-    buttons: ['#sheet-settings #test-sound', '#sheet-settings #test-vibration', '#sheet-settings #restart-tutorial'],
+    buttons: ['#sheet-settings [data-setting="sound"]', '#sheet-settings [data-setting="reduceMotion"]', '#sheet-settings [data-setting="largeText"]'],
   });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);

@@ -429,37 +429,63 @@
     <div id="scrim" class="scrim" hidden></div>
 
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
-      <header class="sheet-head"><h2 id="settings-title">Settings</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
+      <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
-        <h3>Look</h3>
-        <div class="row"><span>Colours</span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
-        <div class="row"><span>Material detail</span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
-        <div class="row"><span>Top-rank glow</span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
-        <h3>Sound and feel</h3>
-        <label class="row"><span>Sound</span><input type="checkbox" data-setting="sound" /></label>
-        <label class="row slider"><span>Effects volume</span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
-        <label class="row"><span>Music (quiet hum)</span><input type="checkbox" data-setting="music" /></label>
-        <label class="row slider"><span>Music volume</span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
-        <label class="row"><span id="vibration-label">Vibration</span><input type="checkbox" data-setting="vibration" /></label>
-        <div class="test-row">
-          <button id="test-sound" class="btn ghost small" type="button">Test sound</button>
-          <button id="test-vibration" class="btn ghost small" type="button">Test vibration</button>
-        </div>
-        <p id="test-note" class="muted small"></p>
-        <h3>Animations</h3>
-        <label class="row"><span>Reduce motion</span><input type="checkbox" data-setting="reduceMotion" /></label>
-        <div class="row"><span>Speed</span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
-        <div class="row"><span>Effects</span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
-        <label class="row"><span>Eye candy (opening splash, home heartbeat, terrarium menu, drifting spores)</span><input type="checkbox" data-setting="eyeCandy" /></label>
-        <h3>Playing</h3>
-        <div class="row"><span>Confirm moves</span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
-        <label class="row"><span>Auto-skip when nothing to play</span><input type="checkbox" data-setting="autoSkip" /></label>
-        <label class="row"><span>Placement list (step through the places a bloom can go)</span><input type="checkbox" data-setting="placementList" /></label>
-        <label class="row"><span>Show weak spots</span><input type="checkbox" data-setting="weakSpots" /></label>
-        <label class="row"><span>Pulse my weakest link</span><input type="checkbox" data-setting="weakPulse" /></label>
-        <label class="row"><span>Large text</span><input type="checkbox" data-setting="largeText" /></label>
-        <label class="row"><span>Coach</span><input type="checkbox" data-setting="coach" /></label>
-        <button id="restart-tutorial" class="btn ghost small" type="button">Restart the coach with a new game</button>
+        <h3 data-copy="lookHeading"></h3>
+        <div class="row"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
+        <!-- Grouping (owner, 2026-10-16): the controls a player reaches for are plain rows; the
+             niche extras sit in one collapsed disclosure each, so nothing is removed, only folded.
+             The group markup reuses the Lab's disclosure styling (class "settings-lab" in
+             web/src/style.css) so the re-organisation needs no new CSS; the real Lab at the bottom
+             keeps its own id ("settings-lab") and sigil. Reduce motion and Large text MUST stay
+             outside every group — they are accessibility, not clutter. -->
+        <details class="settings-lab" id="settings-look">
+          <summary><span><strong data-copy="lookGroup"></strong><small data-copy="lookGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
+            <div class="row"><span data-copy="topGlow"></span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
+          </div>
+        </details>
+        <h3 data-copy="soundHeading"></h3>
+        <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
+        <label class="row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
+        <details class="settings-lab" id="settings-sound">
+          <summary><span><strong data-copy="soundGroup"></strong><small data-copy="soundGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
+            <label class="row slider"><span data-copy="musicVolume"></span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
+            <div class="test-row">
+              <button id="test-sound" class="btn ghost small" type="button" data-copy="testSound"></button>
+              <button id="test-vibration" class="btn ghost small" type="button" data-copy="testVibration"></button>
+            </div>
+            <p id="test-note" class="muted small"></p>
+          </div>
+        </details>
+        <h3 data-copy="motionHeading"></h3>
+        <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
+        <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
+        <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
+        <details class="settings-lab" id="settings-motion">
+          <summary><span><strong data-copy="motionGroup"></strong><small data-copy="motionGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
+          </div>
+        </details>
+        <h3 data-copy="playingHeading"></h3>
+        <div class="row"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
+        <label class="row"><span data-copy="coach"></span><input type="checkbox" data-setting="coach" /></label>
+        <details class="settings-lab" id="settings-help">
+          <summary><span><strong data-copy="helpGroup"></strong><small data-copy="helpGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
+          <div class="lab-inside">
+            <label class="row"><span data-copy="placementList"></span><input type="checkbox" data-setting="placementList" /></label>
+            <label class="row"><span data-copy="weakSpots"></span><input type="checkbox" data-setting="weakSpots" /></label>
+            <label class="row"><span data-copy="weakPulse"></span><input type="checkbox" data-setting="weakPulse" /></label>
+            <button id="restart-tutorial" class="btn ghost small" type="button" data-copy="restartTutorial"></button>
+          </div>
+        </details>
         <h3>Online</h3>
         <p id="online-storage-note" class="muted small">Your online matches live on this device until accounts exist.</p>
         <div id="online-link-block" class="online-link-block" hidden>

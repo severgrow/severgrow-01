@@ -175,7 +175,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONLINE, OPP, PILES, RESULT, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -935,11 +935,20 @@ function renderCampaignScreen() {
   );
 }
 
+/** Fills the Settings sheet's words from src/strings.ts (SETTINGS). The markup carries keys
+ * (`data-copy`), never copy, so the screen can be re-organised in one place (src/strings.ts). */
+function applySettingsCopy() {
+  for (const el of document.querySelectorAll<HTMLElement>('#sheet-settings [data-copy]')) {
+    const value = SETTINGS[el.dataset.copy as keyof typeof SETTINGS];
+    if (typeof value === 'string') el.textContent = value;
+  }
+}
+
 function syncSettingsForm() {
   // Phones whose browser cannot vibrate (all iPhones) get an honest label, not a dead switch.
   const vib = document.querySelector<HTMLInputElement>('[data-setting="vibration"]')!;
   vib.disabled = !('vibrate' in navigator);
-  $('vibration-label').textContent = vib.disabled ? 'Vibration (not available on this phone)' : 'Vibration';
+  $('vibration-label').textContent = vib.disabled ? SETTINGS.vibrationOff : SETTINGS.vibration;
   for (const input of document.querySelectorAll<HTMLInputElement>('[data-setting]')) {
     input.checked = !!settings[input.dataset.setting as keyof Settings];
   }
@@ -7007,6 +7016,7 @@ let appReady = false;
 // so a first-time tester sees a way to play WITH THE FIRST PAINT instead of after the async player
 // mounts. LOG IN is deliberately not one of them: it waits for the Google probe and is revealed by
 // the accounts module. Non-product channels keep their own flat menu (layoutMenu handles both).
+applySettingsCopy(); // the Settings sheet's words (src/strings.ts SETTINGS), before the first await
 layoutMenu(syncMenuResume());
 await mountPlayerEnhancements();
 fillIcons();

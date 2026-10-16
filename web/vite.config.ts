@@ -34,8 +34,7 @@ export default defineConfig({
       || process.env.CHANNEL === 'futa05' || !process.env.CHANNEL;
     return modern ? html
       .replace('<html lang="en"', '<html lang="en" class="test-typography-v2"')
-      .replace('    <div id="splash" class="splash" hidden aria-hidden="true"></div>\n', '')
-      .replace('Eye candy (opening splash, home heartbeat, terrarium menu, drifting spores)', 'Eye candy (home heartbeat, terrarium menu, drifting spores)') : html
+      .replace('    <div id="splash" class="splash" hidden aria-hidden="true"></div>\n', '') : html
       .replace('./futasaku-icon-192.png', './icon-192.png')
       .replace('./futasaku-icon-180.png', './icon-180.png')
       .replace('    <link rel="stylesheet" href="./src/fonts-futa04.css" />\n', '')
