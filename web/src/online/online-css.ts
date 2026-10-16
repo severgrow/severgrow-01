@@ -444,15 +444,27 @@ export const ONLINE_CSS = `
 }
 .world-map-svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .world-map-svg:active { cursor: grabbing; }
-/* Each tile's FILL comes from its own SVG gradient (see world-view.ts), so tiles read as physical
-   surfaces with a light from the top-left instead of flat paint. The class rules below carry the
-   STROKE — the tile's edge, its owner and its state — and the plain fill is only the fallback for a
-   tile that has not been painted a gradient yet. */
+/* THE TWO LAYERS (world-view.ts). Each tile is drawn TWICE: a FACE (its surface) and a LINE (its
+   edge, plus the whole touch target). Every face paints first, then every line, so a neighbour's
+   fill can never bury an edge — that was the owner's uneven highlight (2026-10-16: a cream edge
+   only where a tile met open ground, and no line at all between two highlighted tiles). The selected
+   tile then draws once more, last, in .world-accent-line, above every edge.
+
+   FACE — the fill only. The per-owner gradient is set inline (world-view.ts) so it beats this flat
+   fallback, which is only for a tile that has not been painted a gradient yet. Pointer-transparent:
+   the line above owns every tap. */
+.world-hex-face { fill: #252b26; pointer-events: none; transition: fill 160ms ease; }
+/* LINE — the edge, the owner and the state. fill: none paints no surface of its own;
+   pointer-events: all lets a tap anywhere inside the hex reach it. stroke-linejoin: round keeps
+   a hex vertex from spiking (a miter join would), and the non-scaling stroke keeps the line a true
+   hairline at every zoom. */
 .world-hex {
-  fill: #252b26; stroke: #697267; stroke-width: .36; vector-effect: non-scaling-stroke;
-  transition: fill 160ms ease, stroke 160ms ease, opacity 160ms ease; cursor: pointer;
+  fill: none; stroke: #697267; stroke-width: .36;
+  stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke; pointer-events: all;
+  transition: stroke 160ms ease, opacity 160ms ease; cursor: pointer;
 }
-/* Owned tiles keep the OWNER colour — the gradient supplies it, so this rule paints only the edge. */
+/* Owned tiles keep the OWNER colour — the gradient supplies the fill, so this rule paints only the edge. */
 .world-hex.held { stroke: var(--territory); }
 /* Your own territory: the same colour, one step brighter in the gradient (world-view.ts), plus a
    quietly lifted edge. No new colour — the owner asked to spot his own at a glance, not to be told
@@ -460,13 +472,21 @@ export const ONLINE_CSS = `
 .world-hex.mine { stroke: color-mix(in srgb, var(--territory) 62%, #e8ddc5); }
 .world-hex.available { stroke: #c9c89c; stroke-width: .65; }
 .world-hex.same-owner { stroke-width: 1.1; }
-.world-hex.selected { stroke: #f2e5c5; stroke-width: 1.6; filter: drop-shadow(0 0 3px #d4c28cb0); }
+/* THE SELECTION, drawn ONCE above every edge (the .world-accent group in world-view.ts), so no
+   neighbouring tile can cover half of it. The same cream the tile highlight always used, with round
+   joins so all six vertices stay crisp. */
+.world-accent-line {
+  fill: none; stroke: #f2e5c5; stroke-width: 1.6; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; pointer-events: none;
+  filter: drop-shadow(0 0 3px #d4c28cb0);
+}
 /* NO DEFAULT RING, IN ANY FOCUS STATE (owner, 2026-10-16: "highlighting tiles on world map looks
    weird af"). Every hex is tabindex=0, and a POINTER click on one focuses it WITHOUT matching
    :focus-visible — so a rule that covered only :focus-visible left the browser painting its own
    ring: the rounded blue bracket, clipped by the map edge, that the owner photographed. Turning the
    outline off for every focus state is only half the fix; the other half is that keyboard users keep
-   a marker, so :focus-visible draws OUR hex-following cream stroke instead. */
+   a marker, so :focus-visible draws OUR hex-following cream stroke instead. It rides the LINE layer,
+   which paints above every fill, so it can never be buried by a neighbour's surface. */
 .world-hex:focus { outline: none; }
 .world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.7; }
 /* The controls anchor to the bottom of the column (owner, 2026-10-16). Now that the window hugs the
@@ -491,7 +511,7 @@ export const ONLINE_CSS = `
 /* A short (640px) phone: one small, deliberate step tighter — 6px, not 3px crumbs — and a shallower
    selection bar, so the map keeps the room it needs without the column reading as cramped. */
 @media (max-height: 650px) { .online-world .online-inner { gap: 6px; } .world-selection { min-height: 48px; } }
-@media (prefers-reduced-motion: reduce) { .world-hex { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .world-hex, .world-hex-face { transition: none; } }
 
 .world-invitation {
   position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;

@@ -23,6 +23,9 @@ export class WorldEconomyService {
       version: WORLD_VERSION, revision: snapshot.revision, cells: WORLD_CELLS,
       claims: snapshot.claims.map((claim) => ({
         cellId: claim.cellId, ownerId: claim.ownerId, ownerName: claim.ownerName,
+        // Only a level NUMBER crosses the wire: no id, no email, no progress detail. `null` when the
+        // owner has no recorded campaign receipts, so the pane shows nothing rather than "LEVEL 1".
+        ownerLevel: claim.ownerLevel,
         ownerTag: playerTag(claim.ownerId), colour: territoryColour(claim.ownerId), claimedAt: claim.claimedAt,
       })),
       cost: SEED_ECONOMY.tileCost,

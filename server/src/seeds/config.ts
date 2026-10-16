@@ -18,3 +18,18 @@ export const campaignSeedReward = (level: number): { firstWin: number; chapter: 
 };
 
 export const utcDay = (epochMs: number): string => new Date(epochMs).toISOString().slice(0, 10);
+
+/**
+ * The Campaign level number inside a recorded settlement key (`campaign:c3-22` → 22), or `null`.
+ *
+ * The level id is treated as an OPAQUE STRING, exactly as the admin shaper does: nothing in the
+ * Seeds core imports the campaign definitions (docs/ADMIN.md, and the isolation guard in
+ * tests/campaign/isolation.test.ts), so the ordinal is read straight out of the stored key with a
+ * local pattern rather than a table lookup. The `campaign:c<chapter>-<level>` shape is the one the
+ * settle path builds (`server/src/seeds/service.ts`); a key without it has no level, which is how a
+ * player who never played the campaign honestly reports none.
+ */
+export const campaignLevelOfSourceKey = (sourceKey: string): number | null => {
+  const match = /^campaign:c\d+-(\d+)$/.exec(sourceKey);
+  return match ? Number(match[1]) : null;
+};

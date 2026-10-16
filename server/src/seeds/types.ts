@@ -8,6 +8,14 @@ export type WorldClaim = {
   cellId: string;
   ownerId: string;
   ownerName: string | null;
+  /**
+   * The owner's highest settled Campaign level, read from their recorded receipts, or `null` when
+   * they have none. A level id is an OPAQUE STRING here: the ordinal is parsed out of the recorded
+   * `campaign:c<chapter>-<level>` key, never looked up in the campaign tables (docs/ADMIN.md, and
+   * the guard in tests/campaign/isolation.test.ts). `null` rather than `1` so a player who never
+   * played the campaign is not shown a level they did not reach.
+   */
+  ownerLevel: number | null;
   claimedAt: number;
 };
 export type WorldSnapshot = { revision: number; claims: WorldClaim[] };

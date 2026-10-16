@@ -44,13 +44,30 @@ export const postgresWorldEconomyStore = (pool: PgPool): WorldEconomyStore => ({
       // A shared lock gives a revision and ownership list from the same committed claim state.
       // Claim writers take this row exclusively before inserting a claim.
       const meta = await client.query('select revision from world_meta where version = 1 for share');
-      const claims = await client.query(`select c.cell_id, c.owner_id, c.claimed_at, p.display_name as owner_name
-                    from world_claims c join players p on p.id = c.owner_id order by c.cell_id`);
+      // ONE query, whatever the map's size: the owner's highest settled Campaign level comes from a
+      // lateral subquery over their own receipts, so the world read stays a single round trip and no
+      // per-claim query is issued. The level id is OPAQUE here (docs/ADMIN.md and the isolation
+      // guard in tests/campaign/isolation.test.ts): the ordinal is parsed out of the recorded
+      // `campaign:c<chapter>-<level>` key, never looked up in the campaign tables. A key that does
+      // not match yields NULL → the claim carries no level, not a misleading 1. The lateral is
+      // indexed by the receipts' (player_id, source_key) primary key, so it stays cheap on a map
+      // every client polls.
+      const claims = await client.query(`select c.cell_id, c.owner_id, c.claimed_at, p.display_name as owner_name, lvl.level as owner_level
+                    from world_claims c
+                    join players p on p.id = c.owner_id
+                    left join lateral (
+                      select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as level
+                      from seed_reward_receipts r
+                      where r.player_id = c.owner_id and r.mode = 'campaign'
+                    ) lvl on true
+                    order by c.cell_id`);
       return {
         revision: number(meta.rows[0]?.revision),
         claims: claims.rows.map((r) => ({
           cellId: String(r.cell_id), ownerId: String(r.owner_id),
-          ownerName: r.owner_name == null ? null : String(r.owner_name), claimedAt: number(r.claimed_at),
+          ownerName: r.owner_name == null ? null : String(r.owner_name),
+          ownerLevel: r.owner_level == null ? null : number(r.owner_level),
+          claimedAt: number(r.claimed_at),
         })),
       };
     });

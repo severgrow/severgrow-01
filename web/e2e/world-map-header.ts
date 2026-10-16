@@ -56,6 +56,9 @@ const SAMPLE = {
     claims: ['0,0', '1,0', '0,1', '-1,1', '-1,0'].map((cellId, index) => ({
       cellId, ownerId: index < 2 ? 'stub' : 'other',
       ownerName: index < 2 ? 'Me' : 'WillowBirch', ownerTag: index < 2 ? '1001' : '1002',
+      // My own tile reports a level; the other player's does not, so the selection line can be
+      // checked both with and without it.
+      ownerLevel: index < 2 ? 22 : null,
       colour: 'hsl(200 34% 49%)', claimedAt: Date.now() - index * 60_000,
     })) },
 };
@@ -308,6 +311,10 @@ try {
       const vb = (svg.getAttribute('viewBox') ?? '').split(/\s+/).map(Number);
       const wr = grid.getBoundingClientRect();
       const hexes = [...grid.querySelectorAll('.world-hex')] as SVGGraphicsElement[];
+      // The tile FILL is painted by the .world-hex-face layer, not the .world-hex edge layer (two
+      // layers since 2026-10-16, so a neighbour's fill cannot bury an edge); the edge layer carries
+      // focus and geometry. Probe the faces for the gradient, the edges for the focus ring.
+      const faces = [...grid.querySelectorAll('.world-hex-face')] as SVGGraphicsElement[];
       const stopsOf = (el?: SVGGraphicsElement | null) => {
         const fill = el ? getComputedStyle(el).fill : '';
         const id = /url\("#?([^")]+)"?\)/.exec(fill)?.[1];
@@ -326,9 +333,9 @@ try {
         windowAspect: wr.width / wr.height,
         focus,
         gradientCount: grid.querySelectorAll('defs linearGradient').length,
-        empty: stopsOf(hexes.find((h) => !h.classList.contains('held') && !h.classList.contains('mine'))),
-        held: stopsOf(hexes.find((h) => h.classList.contains('held'))),
-        mine: stopsOf(hexes.find((h) => h.classList.contains('mine'))),
+        empty: stopsOf(faces.find((h) => !h.classList.contains('held') && !h.classList.contains('mine'))),
+        held: stopsOf(faces.find((h) => h.classList.contains('held'))),
+        mine: stopsOf(faces.find((h) => h.classList.contains('mine'))),
         windowTop: wr.top, windowBottom: wr.bottom,
         vh: innerHeight,
         hexesInView: boxes.filter((b) => b.left < wr.right && b.right > wr.left && b.top < wr.bottom && b.bottom > wr.top).length,

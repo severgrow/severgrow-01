@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { WORLD_CELLS, WORLD_CELL_IDS, legacyWorldCell, worldNeighbours } from '../src/world.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
-import { SEED_ECONOMY, campaignSeedReward } from '../src/seeds/config.js';
+import { SEED_ECONOMY, campaignLevelOfSourceKey, campaignSeedReward } from '../src/seeds/config.js';
 
 const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: string, now = Date.UTC(2026, 9, 15)) =>
   store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
@@ -79,5 +79,59 @@ describe('economy schedule and caps', () => {
       const reward = await store.settle({ ...input, sourceKey: `duel:${i}` });
       expect(reward.awarded).toBe(i < 4 ? 15 : 0);
     }
+  });
+});
+
+describe('the world read carries each owner’s highest settled Campaign level', () => {
+  // The exact keys the live settle path writes (`campaign:c3-22`), read back as OPAQUE strings —
+  // nothing in the Seeds core imports the campaign definitions (tests/campaign/isolation.test.ts).
+  const CAMPAIGN_KEYS = [
+    ...Array.from({ length: 10 }, (_, i) => `campaign:c1-${String(i + 1).padStart(2, '0')}`),
+    ...Array.from({ length: 10 }, (_, i) => `campaign:c2-${i + 11}`),
+    ...Array.from({ length: 2 }, (_, i) => `campaign:c3-${i + 21}`),
+  ];
+
+  /** A store with one claim per owner and their campaign receipts recorded in the given order. */
+  const storeWith = async (receipts: Record<string, string[]>): Promise<MemoryWorldEconomyStore> => {
+    const store = new MemoryWorldEconomyStore();
+    let index = 0;
+    let now = Date.UTC(2026, 9, 15);
+    for (const [ownerId, keys] of Object.entries(receipts)) {
+      const cellId = `${index},0`;
+      store.claims.set(cellId, { cellId, ownerId, ownerName: ownerId, ownerLevel: null, claimedAt: now });
+      for (const key of keys) {
+        await store.settle({ playerId: ownerId, sourceKey: key, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now: now++ });
+      }
+      index += 1;
+    }
+    return store;
+  };
+  const levelOf = async (store: MemoryWorldEconomyStore, ownerId: string): Promise<number | null> => {
+    const world = await store.world();
+    return world.claims.find((claim) => claim.ownerId === ownerId)?.ownerLevel ?? null;
+  };
+
+  it('reads the ordinal out of the recorded key, and gives nothing for a key without a level', () => {
+    expect(campaignLevelOfSourceKey('campaign:c3-22')).toBe(22);
+    expect(campaignLevelOfSourceKey('campaign:c1-01')).toBe(1);
+    expect(campaignLevelOfSourceKey('campaign:c10-50')).toBe(50);
+    expect(campaignLevelOfSourceKey('campaign:1')).toBeNull(); // the old test fixture's plain number
+    expect(campaignLevelOfSourceKey('training:abc')).toBeNull();
+    expect(campaignLevelOfSourceKey('duel:xyz')).toBeNull();
+  });
+
+  it('reports the HIGHEST level settled, and a player with no receipts reports none', async () => {
+    const store = await storeWith({ veteran: CAMPAIGN_KEYS, rookie: [] });
+    expect(await levelOf(store, 'veteran')).toBe(22);
+    // Never `LEVEL 1`: a player with no campaign receipts has no level to show.
+    expect(await levelOf(store, 'rookie')).toBeNull();
+  });
+
+  it('does not depend on the order the receipts were recorded in', async () => {
+    const forward = await storeWith({ veteran: CAMPAIGN_KEYS });
+    const reverse = await storeWith({ veteran: [...CAMPAIGN_KEYS].reverse() });
+    expect(await levelOf(forward, 'veteran')).toBe(22);
+    // Highest, not last: recorded c3-22 first, the answer is still 22.
+    expect(await levelOf(reverse, 'veteran')).toBe(22);
   });
 });

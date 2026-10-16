@@ -1,4 +1,4 @@
-import { SEED_ECONOMY, utcDay } from './config.js';
+import { SEED_ECONOMY, campaignLevelOfSourceKey, utcDay } from './config.js';
 import { newId } from '../ids.js';
 import { planSeedReward } from './rewards.js';
 import type { ClaimResult, RewardInput, RewardResult, SeedWallet, TrainingTicket, WorldClaim, WorldEconomyStore, WorldSnapshot } from './types.js';
@@ -29,8 +29,21 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     return wallet;
   }
   async wallet(playerId: string): Promise<SeedWallet> { return { ...this.current(playerId) }; }
+  /** Mirrors the Postgres read: each claim carries its owner's highest settled Campaign level. */
   async world(): Promise<WorldSnapshot> {
-    return { revision: this.revision, claims: [...this.claims.values()].map((v) => ({ ...v })) };
+    return {
+      revision: this.revision,
+      claims: [...this.claims.values()].map((v) => ({ ...v, ownerLevel: this.highestCampaignLevel(v.ownerId) })),
+    };
+  }
+  private highestCampaignLevel(playerId: string): number | null {
+    let highest: number | null = null;
+    for (const receipt of this.receipts.values()) {
+      if (receipt.input.playerId !== playerId || receipt.input.mode !== 'campaign') continue;
+      const level = campaignLevelOfSourceKey(receipt.input.sourceKey);
+      if (level !== null && (highest === null || level > highest)) highest = level;
+    }
+    return highest;
   }
   async claim(playerId: string, cellId: string, requestId: string, now: number): Promise<ClaimResult> {
     const wallet = this.current(playerId);
@@ -46,7 +59,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     wallet.balance -= SEED_ECONOMY.tileCost;
     wallet.lifetimeSpent += SEED_ECONOMY.tileCost;
     this.ledger.push({ id: newId(), playerId, delta: -SEED_ECONOMY.tileCost, category: 'world_claim', sourceKey: `world:${requestId}`, balanceAfter: wallet.balance, createdAt: now });
-    this.claims.set(cellId, { cellId, ownerId: playerId, ownerName: null, claimedAt: now });
+    this.claims.set(cellId, { cellId, ownerId: playerId, ownerName: null, ownerLevel: null, claimedAt: now });
     this.purchases.set(`${playerId}:${requestId}`, cellId);
     return { ok: true, cellId, revision: ++this.revision, wallet: { ...wallet }, replayed: false };
   }

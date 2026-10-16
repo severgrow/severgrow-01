@@ -165,7 +165,7 @@ export type WorldMapPayload = {
     version: number;
     revision: number;
     cells: { id: string; q: number; r: number }[];
-    claims: { cellId: string; ownerId: string; ownerName: string | null; ownerTag: string; colour: string; claimedAt: number }[];
+    claims: { cellId: string; ownerId: string; ownerName: string | null; ownerLevel: number | null; ownerTag: string; colour: string; claimedAt: number }[];
     cost: number;
   };
 };

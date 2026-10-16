@@ -2,6 +2,7 @@ import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
 import { seedIcon } from './seed-icon.js';
+import { ownerLine } from './world-selection.js';
 
 type Identity = { token: string; playerId: string };
 type World = WorldMapPayload['world'];
@@ -34,6 +35,8 @@ export class WorldView {
   private pendingRequest: string | null = null;
   private busy = false;
   private svg: SVGSVGElement | null = null;
+  /** The single top-most path that carries the selection highlight (see `paintAccent`). */
+  private accent: SVGPathElement | null = null;
   private box: [number, number, number, number] | null = null;
   private fit: [number, number, number, number] | null = null;
   /** The smallest view the window allows — the framed view; see `boundsFor`. */
@@ -151,29 +154,51 @@ export class WorldView {
       if (!mineFace.has(claim.colour)) mineFace.set(claim.colour, face(shade(claim.colour, 71), shade(claim.colour, 57), shade(claim.colour, 40)));
     }
     svg.append(defs);
+    // TWO LAYERS, so a stroke is never buried by a neighbour's fill — the cause of the owner's
+    // uneven highlight (2026-10-16: a cream edge only on the sides facing open ground, and no line
+    // at all between two highlighted tiles). Every FILL goes in `faces` and paints first; every
+    // STROKE, plus the whole touch target, goes in `lines` and paints ABOVE all fills, so a tile
+    // edge is always drawn over its neighbour's surface. The selected tile then draws once more,
+    // last of all, in `world-accent`, so its highlight is never half-eaten by a neighbour's edge.
+    // Each line is still the `world-hex` element (data, focus, pointer target), so nothing else
+    // about the map changes.
+    const faces = document.createElementNS(NS, 'g');
+    faces.classList.add('world-faces');
+    const lines = document.createElementNS(NS, 'g');
+    lines.classList.add('world-lines');
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const cell of world.cells) {
       const at = coords(cell.q, cell.r);
+      const d = hexPath(at.x, at.y);
       minX = Math.min(minX, at.x - R); maxX = Math.max(maxX, at.x + R);
       minY = Math.min(minY, at.y - R); maxY = Math.max(maxY, at.y + R);
       const owner = occupied.get(cell.id);
+      const mine = !!owner && owner.ownerId === this.identity?.playerId;
+      // The FACE: the tile's surface, and nothing else. Its fill is inline so it beats the
+      // stylesheet's flat fallback; the per-owner gradient carries the colour.
+      const face = document.createElementNS(NS, 'path');
+      face.setAttribute('d', d);
+      face.setAttribute('data-cell-id', cell.id);
+      face.classList.add('world-hex-face');
+      if (owner) {
+        face.classList.add(mine ? 'mine' : 'held');
+        face.style.fill = (mine ? mineFace : heldFace).get(owner.colour)!;
+      } else {
+        face.style.fill = EMPTY_FACE;
+      }
+      faces.append(face);
+      // The LINE: the tile's edge, its owner and its state — and the element the player touches.
       const path = document.createElementNS(NS, 'path');
-      path.setAttribute('d', hexPath(at.x, at.y));
+      path.setAttribute('d', d);
       path.setAttribute('data-cell-id', cell.id);
       path.setAttribute('data-owner-id', owner?.ownerId ?? '');
       path.classList.add('world-hex');
       if (owner) {
-        const mine = owner.ownerId === this.identity?.playerId;
         path.classList.add(mine ? 'mine' : 'held');
         path.style.setProperty('--territory', owner.colour);
-        // Inline, so it beats the stylesheet's flat fallback fill; the gradient carries the colour.
-        path.style.fill = (mine ? mineFace : heldFace).get(owner.colour)!;
-      } else {
-        path.style.fill = EMPTY_FACE;
-        if (this.wallet && this.wallet.balance >= world.cost &&
-          (!own.size || [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
-            .some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) path.classList.add('available');
-      }
+      } else if (this.wallet && this.wallet.balance >= world.cost &&
+        (!own.size || [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+          .some(([dq, dr]) => own.has(`${cell.q + dq!},${cell.r + dr!}`)))) path.classList.add('available');
       path.classList.toggle('selected', this.selected === cell.id);
       path.tabIndex = 0;
       path.setAttribute('aria-label', owner
@@ -182,8 +207,18 @@ export class WorldView {
       path.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.select(cell.id); }
       });
-      svg.append(path);
+      lines.append(path);
     }
+    svg.append(faces, lines);
+    // The accent: ONE path, above every outline, that carries the selection highlight.
+    const accentGroup = document.createElementNS(NS, 'g');
+    accentGroup.classList.add('world-accent');
+    const accent = document.createElementNS(NS, 'path');
+    accent.classList.add('world-accent-line');
+    accentGroup.append(accent);
+    svg.append(accentGroup);
+    this.accent = accent;
+    this.paintAccent();
     if (!this.fit) this.fit = [minX - 6, minY - 6, maxX - minX + 12, maxY - minY + 12];
     // Frame the view to the WINDOW, so the map scales up to fill it. A portrait phone crops the
     // surplus width and pans to the edges; a wide screen resolves to the whole world.
@@ -211,6 +246,14 @@ export class WorldView {
     if (w > fw) { w = fw; h = fw / aspect; }
     return [fx + (fw - w) / 2, fy + (fh - h) / 2, w, h];
   }
+  /** The selection highlight, drawn in the ONE accent path above every tile edge. */
+  private paintAccent() {
+    if (!this.accent) return;
+    const cell = this.selected ? this.world?.cells.find((candidate) => candidate.id === this.selected) : null;
+    if (!cell) { this.accent.removeAttribute('d'); return; }
+    const at = coords(cell.q, cell.r);
+    this.accent.setAttribute('d', hexPath(at.x, at.y));
+  }
   private select(cellId: string) {
     this.selected = cellId;
     this.pendingRequest = null;
@@ -219,6 +262,7 @@ export class WorldView {
       path.classList.toggle('selected', path.getAttribute('data-cell-id') === cellId);
       path.classList.toggle('same-owner', !!owner && path.getAttribute('data-owner-id') === owner);
     }
+    this.paintAccent();
     this.paintSelection();
   }
   private paintSelection(confirm = false) {
@@ -230,7 +274,7 @@ export class WorldView {
     }
     const tile = this.world.claims.find((claim) => claim.cellId === this.selected);
     if (tile) {
-      pane.textContent = `${tile.ownerName ?? 'Player'} #${tile.ownerTag}${tile.ownerId === this.identity?.playerId ? ' · YOUR TERRITORY' : ''}`;
+      pane.textContent = ownerLine(tile, tile.ownerId === this.identity?.playerId);
       return;
     }
     const label = document.createElement('span');
