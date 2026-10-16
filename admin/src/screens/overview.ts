@@ -4,9 +4,10 @@
 // users", retention or engagement figure: `players` has no last-seen column a dashboard may trust
 // (presence is live-duel state, not history), so the panel says so instead of inventing a number.
 import type { AdminOverview } from '../../../server/src/admin/types.js';
+import { ADMIN_MIGRATION_PENDING } from '../api.js';
 import type { OverviewResponse, WhatsNew } from '../types.js';
 import { formatAgo, formatDateTime, formatDay, formatNumber } from '../format.js';
-import { bars, button, card, errorBox, honesty, kv, loading, screenTitle, stat, table, el, type Ctx } from '../ui.js';
+import { bars, button, card, errorBox, honesty, kv, loading, noticeBox, screenTitle, stat, table, el, type Ctx } from '../ui.js';
 
 const modeRow = (row: { queue: number; friend: number; live: number }): string =>
   `Find opponent ${formatNumber(row.queue)} · Invite ${formatNumber(row.friend)} · Live ${formatNumber(row.live)}`;
@@ -46,6 +47,17 @@ const renderWhatsNew = async (host: HTMLElement, ctx: Ctx): Promise<void> => {
   const result = await ctx.api.get<WhatsNew & { ok: true }>('/v1/admin/whats-new');
   if (!result.ok) {
     if (result.status === 401 || result.status === 403) return ctx.denied();
+    // The seen-cursor lives in `admin_seen` (migration 0012). If it is missing, the counters are
+    // UNKNOWN, not zero — say that plainly rather than show a card of zeroes or a raw error.
+    if (result.code === ADMIN_MIGRATION_PENDING) {
+      host.replaceChildren(
+        noticeBox(
+          'Triage is not enabled yet',
+          'The seen-cursor table (migration 0012) is missing on this database, so “since you last looked” cannot be counted. Unknown, not zero — the owner needs to apply the migration.',
+        ),
+      );
+      return;
+    }
     host.replaceChildren(errorBox(result.message));
     return;
   }

@@ -514,6 +514,49 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   await context.close();
 }
 
+// ---------------------------------------------------------------------------- (c) the migration guard
+
+// A screen whose query cannot run must not present as an empty table. When migration 0012 is not
+// applied, `reports()` LEFT JOINs a missing `feedback_triage` and the seen-cursor reads a missing
+// `admin_seen`; the live API answers 503 with code ADMIN_MIGRATION_PENDING. The response is stubbed
+// here so this UI state is pinned without needing a real database (the memory store never fails).
+{
+  const { context, page } = await openAs(seeded.adminToken, seeded.playerId, 'RYK');
+  const pending = {
+    status: 503,
+    contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ ok: false, code: 'ADMIN_MIGRATION_PENDING', message: 'Triage is not enabled yet: the admin tables (migration 0012) are missing on this database.' }),
+  };
+  await page.route('**/v1/admin/reports**', (route) => route.fulfill(pending));
+  await page.route('**/v1/admin/whats-new', (route) => route.fulfill(pending));
+
+  await goto(page, '/reports');
+  await tick(800);
+  const reportsText = await textOf(page);
+  // The `.setup` class is what makes this a distinct STATE rather than the generic error box: a
+  // regression that fell back to `errorBox(message)` would still show the server's wording, so the
+  // classes (and the absence of the empty-list text) are what this check must pin.
+  const reportsNotice = await page.locator('.state.setup').count();
+  const reportsError = await page.locator('.state.error').count();
+  check(
+    'an unapplied migration renders a plain "triage is not enabled" state, not an error or an empty list',
+    reportsNotice > 0 && reportsError === 0 && !/No reports/.test(reportsText) && !/of 0 reports/.test(reportsText),
+    `notice=${reportsNotice} error=${reportsError} · ${reportsText.replace(/\n+/g, ' ').slice(0, 80)}`,
+  );
+  await page.screenshot({ path: `${OUT}reports-migration-pending.png`, fullPage: true });
+
+  await goto(page, '/overview');
+  await tick(800);
+  const overviewText = await textOf(page);
+  const overviewNotice = await page.locator('.state.setup').count();
+  check(
+    'the seen-counters say "not enabled" (never a card of fabricated zeroes)',
+    overviewNotice > 0 && /Triage is not enabled yet/.test(overviewText) && !/New reports/.test(overviewText),
+    `notice=${overviewNotice} · ${overviewText.replace(/\n+/g, ' ').slice(0, 80)}`,
+  );
+  await context.close();
+}
+
 await browser.close();
 await new Promise<void>((resolve) => served.server.close(() => resolve()));
 await seeded.close();

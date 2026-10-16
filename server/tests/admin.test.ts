@@ -19,6 +19,8 @@ import { createFeedbackRouter } from '../src/feedback/feedback.js';
 import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
 import { MemoryIdentityLinkStore } from '../src/accounts/accounts.js';
 import { memoryAdminStore } from '../src/admin/memory.js';
+import { postgresAdminStore } from '../src/admin/postgres.js';
+import type { PgPool } from '../src/storage/postgres.js';
 import { createAdminRouter, csvCell, reportsToCsv } from '../src/admin/router.js';
 import { normalizeBuild } from '../src/admin/types.js';
 import { shapeCampaign, chapterBoundaries, chapterOf, levelIdOfSourceKey } from '../src/admin/campaign.js';
@@ -508,6 +510,74 @@ describe('the metric shapes report what the data supports', () => {
     // (the UI helper, unit-tested for "a later day never shows fewer tiles") match the stored rows.
     expect(world.claimsByDayIndex[0]!.claims.every((claim) => claim.claimedAt <= Date.parse(`${dayOf(dayA)}T23:59:59.999Z`))).toBe(true);
     expect(world.claimsByDayIndex[1]!.claims.every((claim) => claim.claimedAt > Date.parse(`${dayOf(dayA)}T23:59:59.999Z`))).toBe(true);
+  });
+});
+
+describe('a nickname lookup is case-insensitive (the live search box)', () => {
+  it('finds the account whatever the capitals, and still misses a genuinely different name', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'RYK');
+    // The exact capitals used to work and every other spelling missed: 'ryk' returned null on the
+    // live database while 'RYK' found the account. A search box is typed, so this was the feature
+    // failing its one obvious input.
+    for (const q of ['RYK', 'ryk', 'Ryk', 'rYk']) {
+      const res = await call(t.app, 'GET', `/v1/admin/player?q=${q}`, admin.token);
+      expect(res.status, `query “${q}”`).toBe(200);
+      const body = (await res.json()) as { player: { id: string } | null; matchedBy: string };
+      expect(body.player?.id, `query “${q}”`).toBe(ADMIN_ID);
+      expect(body.matchedBy, `query “${q}”`).toBe('name');
+    }
+    // Case-insensitivity is NOT a wildcard: a different name is still a miss.
+    const miss = (await (await call(t.app, 'GET', '/v1/admin/player?q=Nobody', admin.token)).json()) as { player: unknown };
+    expect(miss.player).toBeNull();
+  });
+
+  it('the SQL normalises both sides, so the in-memory stand-in cannot drift from the live query', () => {
+    // Nothing pinned the SQL before: the in-memory store is a separate implementation, so its own
+    // behaviour could not catch a case-sensitive live query. This asserts the real `playerLookup`
+    // name branch uses `lower(display_name) = lower($1)`.
+    const sql = readFileSync(`${root}server/src/admin/postgres.ts`, 'utf8');
+    expect(sql).toMatch(/lower\(\s*display_name\s*\)\s*=\s*lower\(\s*\$\d+\s*\)/);
+  });
+});
+
+describe('an unapplied migration is a state, not an empty list', () => {
+  /** A pool whose every query fails the way Postgres does when a table is missing (SQLSTATE 42P01). */
+  const missingTablePool = (relation: string): PgPool => {
+    const fail = (): never => {
+      throw Object.assign(new Error(`relation "${relation}" does not exist`), { code: '42P01' });
+    };
+    return {
+      query: async () => fail(),
+      connect: async () => ({ query: async () => fail() }),
+    };
+  };
+
+  it('maps a missing feedback_triage / admin_seen to ADMIN_MIGRATION_PENDING on all four paths', async () => {
+    const pending = { code: 'ADMIN_MIGRATION_PENDING', status: 503 };
+    // `reports()` LEFT JOINs feedback_triage, so it fails outright without the migration…
+    const triageStore = postgresAdminStore(missingTablePool('feedback_triage'));
+    await expect(triageStore.reports({ limit: 5 })).rejects.toMatchObject(pending);
+    await expect(
+      triageStore.triage({ reportId: '00000000-0000-4000-8000-000000000001', status: 'resolved', note: '', actorId: ADMIN_ID, now: NOW }),
+    ).rejects.toMatchObject(pending);
+    // …and the seen-cursor lives in admin_seen.
+    const seenStore = postgresAdminStore(missingTablePool('admin_seen'));
+    await expect(seenStore.readSeen(ADMIN_ID)).rejects.toMatchObject(pending);
+    await expect(seenStore.writeSeen(ADMIN_ID, NOW)).rejects.toMatchObject(pending);
+  });
+
+  it('does not swallow a different database failure as "migration pending"', async () => {
+    const down: PgPool = {
+      query: async () => {
+        throw new Error('connection terminated unexpectedly');
+      },
+      connect: async () => {
+        throw new Error('connection terminated unexpectedly');
+      },
+    };
+    const store = postgresAdminStore(down);
+    await expect(store.reports({ limit: 5 })).rejects.toThrow('connection terminated unexpectedly');
   });
 });
 

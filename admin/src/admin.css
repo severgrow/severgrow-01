@@ -257,6 +257,9 @@ td.wrap { white-space: pre-wrap; word-break: break-word; max-width: 44ch; }
 
 .state { border: 1px dashed var(--c-line); border-radius: var(--radius); padding: calc(var(--pad) * 1.25); color: var(--c-muted); }
 .state.error { border-color: var(--c-danger); color: var(--c-text); }
+/* "Not enabled yet": a setup fact, not a failure and not an empty result. */
+.state.setup { border-style: solid; border-color: var(--c-gold); color: var(--c-text); }
+.state.setup strong { color: var(--c-gold); }
 .spinner { display: inline-block; width: 10px; height: 10px; border-radius: var(--pill); background: var(--c-muted); animation: pulse 900ms var(--ease-out) infinite alternate; }
 @keyframes pulse { from { opacity: 0.35; } to { opacity: 1; } }
 

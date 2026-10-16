@@ -31,6 +31,9 @@ export type ApiErrorCode =
   | 'UNSUPPORTED_RULES'
   // infrastructure
   | 'DB_UNAVAILABLE'
+  // setup: the admin tables (migration 0012) are not present yet. Distinct from DB_UNAVAILABLE so
+  // the dashboard can say "triage is not enabled yet" instead of "the database is unreachable".
+  | 'ADMIN_MIGRATION_PENDING'
   // everything else
   | 'INTERNAL';
 
@@ -58,6 +61,9 @@ const STATUS: Record<ApiErrorCode, number> = {
   // A transient database-connection failure. 503 (not 500) so a client/retry layer can tell it
   // apart from a genuine server bug and back off instead of treating it as a crash.
   DB_UNAVAILABLE: 503,
+  // 503: the feature exists but its schema is not deployed yet, so it is temporarily unavailable —
+  // not a client error, and not the catch-all 500 that hides the cause.
+  ADMIN_MIGRATION_PENDING: 503,
   INTERNAL: 500,
 };
 

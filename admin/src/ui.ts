@@ -69,6 +69,20 @@ export const errorBox = (message: string, retry?: () => void): HTMLElement =>
 
 export const emptyBox = (message: string): HTMLElement => el('div', { class: 'state', text: message });
 
+/**
+ * A "not switched on yet" state. Deliberately neither an error box nor an empty list: when a screen's
+ * query cannot run (e.g. the admin tables of migration 0012 are missing), saying so plainly is the
+ * only honest answer — an empty table would read as "there is nothing here", which is a different,
+ * false claim.
+ */
+export const noticeBox = (title: string, message: string): HTMLElement =>
+  el(
+    'div',
+    { class: 'state setup', role: 'status' },
+    el('p', {}, el('strong', { text: title })),
+    el('p', { class: 'muted small', text: message }),
+  );
+
 /** An honest note about what the data cannot tell us. Never a chart, never a guess. */
 export const honesty = (title: string, lines: readonly string[]): HTMLElement =>
   el(

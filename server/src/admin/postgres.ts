@@ -7,6 +7,7 @@
 // types.ts are the whitelist; nothing here can widen them.
 import { WORLD_CELLS, WORLD_VERSION } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
+import { ApiError } from '../errors.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
 import type { PgPool } from '../storage/postgres.js';
@@ -42,6 +43,36 @@ import {
 } from './util.js';
 
 const page = pageOf;
+
+// Migration 0012 adds `feedback_triage` and `admin_seen`. Until it is applied, the four paths that
+// touch them fail with Postgres 'undefined_table' (SQLSTATE 42P01): `reports()` LEFT JOINs
+// `feedback_triage`, so the Reports screen cannot load at all, and the seen-cursor throws.
+//
+// On the wire a thrown pg error becomes a generic 500 ("Something went wrong on the server."). That
+// is indistinguishable from a real bug, and a Reports screen that answers with a blank list reads as
+// "no reports" — a lie. So an undefined_admin_table is translated into ONE stable code the dashboard
+// renders as a plain "not enabled yet" state instead of an error or an empty list.
+const MISSING_ADMIN_TABLES = ['feedback_triage', 'admin_seen'] as const;
+
+const isMissingAdminTable = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, message } = error as { code?: unknown; message?: unknown };
+  const text = typeof message === 'string' ? message : '';
+  // Match on either the SQLSTATE or the message: a fake pool used in a unit test can only set one.
+  return (code === '42P01' || /does not exist/i.test(text)) && MISSING_ADMIN_TABLES.some((table) => text.includes(table));
+};
+
+/** Run an admin query, mapping "migration 0012 is not applied" to a code the dashboard understands. */
+const requireAdminTables = async <T>(run: () => Promise<T>): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    if (isMissingAdminTable(error)) {
+      throw new ApiError('ADMIN_MIGRATION_PENDING', 'Triage is not enabled yet: the admin tables (migration 0012) are missing on this database.');
+    }
+    throw error;
+  }
+};
 
 export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
@@ -101,15 +132,19 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
   return {
     async readSeen(adminId) {
-      const { rows } = await pool.query('select seen_at from admin_seen where admin_player_id = $1', [adminId]);
+      const { rows } = await requireAdminTables(() =>
+        pool.query('select seen_at from admin_seen where admin_player_id = $1', [adminId]),
+      );
       return rows[0] ? num(rows[0].seen_at) : null;
     },
 
     async writeSeen(adminId, at) {
-      await pool.query(
-        `insert into admin_seen (admin_player_id, seen_at) values ($1, $2)
-         on conflict (admin_player_id) do update set seen_at = greatest(admin_seen.seen_at, excluded.seen_at)`,
-        [adminId, at],
+      await requireAdminTables(() =>
+        pool.query(
+          `insert into admin_seen (admin_player_id, seen_at) values ($1, $2)
+           on conflict (admin_player_id) do update set seen_at = greatest(admin_seen.seen_at, excluded.seen_at)`,
+          [adminId, at],
+        ),
       );
     },
 
@@ -258,16 +293,18 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     async reports(filter) {
       const limit = clampLimit(filter.limit);
       const where = reportWhere(filter);
-      const [rows, total] = await Promise.all([
-        pool.query(
-          `${REPORT_SELECT}${where.sql} order by r.created_at desc, r.id desc limit ${limit}`,
-          where.values,
-        ),
-        pool.query(
-          `select count(*)::int as n from feedback_reports r left join feedback_triage t on t.report_id = r.id${where.sql}`,
-          where.values,
-        ),
-      ]);
+      const [rows, total] = await requireAdminTables(() =>
+        Promise.all([
+          pool.query(
+            `${REPORT_SELECT}${where.sql} order by r.created_at desc, r.id desc limit ${limit}`,
+            where.values,
+          ),
+          pool.query(
+            `select count(*)::int as n from feedback_reports r left join feedback_triage t on t.report_id = r.id${where.sql}`,
+            where.values,
+          ),
+        ]),
+      );
       const mapped: AdminReportRow[] = rows.rows.map((row) => {
         const parsed = normalizeBuild(nstr(row.build));
         const playerId = nstr(row.player_id);
@@ -293,30 +330,32 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     },
 
     async triage(input) {
-      const client = await pool.connect();
-      try {
-        await client.query('begin');
-        const exists = await client.query('select 1 from feedback_reports where id = $1', [input.reportId]);
-        if (exists.rows.length === 0) {
-          await client.query('rollback');
-          return null;
+      return requireAdminTables(async () => {
+        const client = await pool.connect();
+        try {
+          await client.query('begin');
+          const exists = await client.query('select 1 from feedback_reports where id = $1', [input.reportId]);
+          if (exists.rows.length === 0) {
+            await client.query('rollback');
+            return null;
+          }
+          const prior = await client.query('select status from feedback_triage where report_id = $1 for update', [input.reportId]);
+          const previous = prior.rows[0] ? (str(prior.rows[0].status) as AdminTriageStatus) : null;
+          await client.query(
+            `insert into feedback_triage (report_id, status, note, updated_at, updated_by) values ($1,$2,$3,$4,$5)
+             on conflict (report_id) do update set status = excluded.status, note = excluded.note,
+               updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+            [input.reportId, input.status, input.note, input.now, input.actorId],
+          );
+          await client.query('commit');
+          return { changed: previous !== input.status, previous };
+        } catch (error) {
+          await client.query('rollback').catch(() => undefined);
+          throw error;
+        } finally {
+          client.release?.();
         }
-        const prior = await client.query('select status from feedback_triage where report_id = $1 for update', [input.reportId]);
-        const previous = prior.rows[0] ? (str(prior.rows[0].status) as AdminTriageStatus) : null;
-        await client.query(
-          `insert into feedback_triage (report_id, status, note, updated_at, updated_by) values ($1,$2,$3,$4,$5)
-           on conflict (report_id) do update set status = excluded.status, note = excluded.note,
-             updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-          [input.reportId, input.status, input.note, input.now, input.actorId],
-        );
-        await client.query('commit');
-        return { changed: previous !== input.status, previous };
-      } catch (error) {
-        await client.query('rollback').catch(() => undefined);
-        throw error;
-      } finally {
-        client.release?.();
-      }
+      });
     },
 
     async audit(entry: AdminAuditEntry) {
@@ -523,8 +562,18 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         row = rows.find((candidate) => playerTag(str(candidate.id)) === query.tag) ?? null;
         matchedBy = 'tag';
       } else if (query.name) {
+        // CASE-INSENSITIVE, and deliberately still an EXACT match. A search box is how this is typed,
+        // so `lower()` on both sides is required: a plain `display_name = $1` made 'ryk' miss while
+        // 'RYK' hit, which is the whole feature failing its one obvious input.
+        //
+        // It is NOT a LIKE '%…%' substring search, on purpose. `playerLookup` returns ONE player
+        // (`row = rows[0]`) and labels it `matchedBy: 'name'`; a partial match would silently pick
+        // the newest of several players and present it as the match — a wrong account shown as exact.
+        // A substring scan is also unindexable (`%…%` is always a full-table scan). `lower(x) = lower(y)`
+        // is at worst a sequential scan bounded by `limit 25` here (one account today); an expression
+        // index on `lower(display_name)` would make it exact if the table ever grows.
         const { rows } = await pool.query(
-          `select * from players where display_name = $1 order by created_at desc limit 25`,
+          `select * from players where lower(display_name) = lower($1) order by created_at desc limit 25`,
           [query.name],
         );
         row = rows[0] ?? null;

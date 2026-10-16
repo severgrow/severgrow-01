@@ -3,11 +3,22 @@
 // The list, the filters and the CSV export all go through the SAME authorized endpoint and the same
 // field allowlist. The CSV is capped (`limits.csvMaxRows`, 5000) and says so on screen.
 import type { AdminReportRow, AdminTriageStatus } from '../../../server/src/admin/types.js';
-import type { Page } from '../api.js';
+import { ADMIN_MIGRATION_PENDING, type Page } from '../api.js';
 import { formatAgo, formatDateTime, formatNumber, shortId } from '../format.js';
-import { button, card, controls, downloadCsv, el, emptyBox, errorBox, honesty, loading, pager, screenTitle, statusTag, table, type Ctx } from '../ui.js';
+import { button, card, controls, downloadCsv, el, emptyBox, errorBox, honesty, loading, noticeBox, pager, screenTitle, statusTag, table, type Ctx } from '../ui.js';
 
 const TRIAGE: readonly AdminTriageStatus[] = ['new', 'reviewing', 'resolved'];
+
+/**
+ * The Reports screen reads `feedback_triage` (a LEFT JOIN). If migration 0012 is not applied the query
+ * cannot run at all, so this screen says exactly that — it must NOT fall back to an empty table,
+ * which would read as "no reports".
+ */
+const triageNotEnabled = (): HTMLElement =>
+  noticeBox(
+    'Triage is not enabled yet',
+    'The admin tables this screen needs (migration 0012) are missing on this database, so reports cannot be listed or triaged. This is not “no reports” — the owner needs to apply the migration.',
+  );
 
 const contextLines = (context: Record<string, unknown>): string => {
   const entries = Object.entries(context).filter(([, value]) => value !== null && value !== undefined && value !== '');
@@ -66,6 +77,10 @@ export const renderReports = async (host: HTMLElement, ctx: Ctx, params: URLSear
             since: filters.since ? Date.parse(`${filters.since}T00:00:00.000Z`) : undefined,
           });
           if (!result.ok) {
+            if (result.code === ADMIN_MIGRATION_PENDING) {
+              listHost.replaceChildren(triageNotEnabled());
+              return;
+            }
             listHost.prepend(errorBox(`Export failed: ${result.message}`));
             return;
           }
@@ -89,6 +104,12 @@ export const renderReports = async (host: HTMLElement, ctx: Ctx, params: URLSear
     });
     if (!result.ok) {
       if (result.status === 401 || result.status === 403) return ctx.denied();
+      // A screen whose query could not run must not present as an empty table (which reads as "no
+      // reports"). When the reason is the unapplied migration, say so plainly instead.
+      if (result.code === ADMIN_MIGRATION_PENDING) {
+        listHost.replaceChildren(triageNotEnabled());
+        return;
+      }
       listHost.replaceChildren(errorBox(result.message, () => void fetchPage(null)));
       return;
     }

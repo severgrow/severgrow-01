@@ -347,8 +347,14 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         matchedBy = 'tag';
         player = [...all].sort((a, b) => b.createdAt - a.createdAt).slice(0, TAG_SCAN_LIMIT).find((p) => playerTag(p.id) === query.tag) ?? null;
       } else if (query.name) {
+        // Mirrors the SQL store's `lower(display_name) = lower($1)`: a case-insensitive EXACT match.
+        // It must match on purpose — if this stayed a `===` check, a case-sensitivity regression in
+        // the real query would keep passing here while the live search stayed broken.
         matchedBy = 'name';
-        player = all.filter((p) => p.displayName === query.name).sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+        const wanted = query.name.toLowerCase();
+        player = all
+          .filter((p) => (p.displayName ?? '').toLowerCase() === wanted)
+          .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
       }
       if (!player) return null;
       const id = player.id;

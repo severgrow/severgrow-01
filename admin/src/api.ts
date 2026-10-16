@@ -11,6 +11,14 @@ export type ApiOk<T> = { ok: true; data: T };
 export type ApiErr = { ok: false; status: number; code: string; message: string };
 export type ApiResult<T> = ApiOk<T> | ApiErr;
 
+/**
+ * The server's code when migration 0012 (the admin tables `feedback_triage` / `admin_seen`) has not
+ * been applied. It is NOT an empty result and NOT a bug: the screens show a plain "not enabled yet"
+ * state instead of an error or a list that would read as "there is nothing here".
+ * (Server side: `ApiErrorCode` in server/src/errors.ts.)
+ */
+export const ADMIN_MIGRATION_PENDING = 'ADMIN_MIGRATION_PENDING';
+
 /** The client version the API handshake expects (server/src/config.ts `minClientVersion`). */
 const CLIENT_VERSION = '0.5.0';
 
