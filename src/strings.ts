@@ -525,6 +525,8 @@ export const MENU = Object.freeze({
   playTitle: 'Play',
   /** the main menu entry that opens the shared world map */
   world: 'The world map',
+  /** the quiet PLAY entry that browses the level list (LEVEL <n> starts a level outright) */
+  levels: 'Levels',
   /** the PLAY entry that opens the three training tiers */
   training: 'Training',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */

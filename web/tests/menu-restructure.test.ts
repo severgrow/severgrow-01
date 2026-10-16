@@ -55,15 +55,14 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
   });
 });
 
-describe('PLAY holds exactly the three product entries, moved not copied', () => {
-  it('moves Play online / LEVEL n / Training into #play-actions on a product channel', () => {
-    expect(mainSource).toMatch(/const PLAY_MENU_ENTRIES = \['menu-online', 'menu-campaign', 'menu-new'\] as const/);
+describe('PLAY holds exactly the four product entries, moved not copied', () => {
+  it('moves Play online / LEVEL n / Levels / Training into #play-actions on a product channel', () => {
+    expect(mainSource).toMatch(/const PLAY_MENU_ENTRIES = \['menu-online', 'menu-campaign', 'menu-levels', 'menu-new'\] as const/);
     expect(mainSource).toMatch(/if \(FEATURES\.campaign\) \{[\s\S]*?actions\.append\(\$\(id\)\)/);
     // Each entry keeps its ONE id, so there is no second copy of the online or campaign wiring.
-    expect(menuSection.match(/id="menu-online"/g) ?? []).toHaveLength(1);
-    expect(html.match(/id="menu-online"/g) ?? []).toHaveLength(1);
-    expect(html.match(/id="menu-campaign"/g) ?? []).toHaveLength(1);
-    expect(html.match(/id="menu-new"/g) ?? []).toHaveLength(1);
+    for (const id of ['menu-online', 'menu-campaign', 'menu-levels', 'menu-new']) {
+      expect(html.match(new RegExp(`id="${id}"`, 'g')) ?? []).toHaveLength(1);
+    }
   });
 });
 

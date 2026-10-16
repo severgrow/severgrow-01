@@ -77,7 +77,9 @@ try {
     // ("LEVEL 1") — main.ts, owner direction 2026-10-15 — so assert that word and reach it the
     // way a player does.
     assert.equal(await page.locator('#menu-campaign').textContent(), MENU.level(1), 'the PLAY entry names the current campaign level');
-    await openMenuEntry(page, 'menu-campaign');
+    // LEVEL <n> now starts the game outright (owner, 2026-10-16), so the LIST is opened by the
+    // quiet "Levels" entry beside it. Reach it the way a player does.
+    await openMenuEntry(page, 'menu-levels');
     await page.locator('#campaign-chapters .campaign-tile').first().waitFor({ state: 'visible' });
     assert.equal(await page.locator('#campaign').isVisible(), true);
     const tiles = page.locator('#campaign .campaign-tile');
@@ -110,13 +112,21 @@ try {
     assert.equal(typography.clipped, 0, 'no level number is clipped');
     assert.equal(typography.names, 0, 'no level tile shows a name any more');
     assert.equal(typography.overflowY, 'auto', 'the campaign screen can scroll');
-    // The screen must stay usable at 50 levels, not just 10: clone the tiles to 50 and scroll.
+    // The screen must stay usable well past the authored 30 levels: clone the tiles and scroll.
     const scroll = await page.evaluate(() => {
       const screen = document.getElementById('campaign')!;
       const grid = screen.querySelector('.campaign-grid')!;
       const tile = grid.querySelector('.campaign-tile')!;
-      const original = grid.querySelectorAll('.campaign-tile').length;
-      for (let i = 0; i < 40; i++) grid.append(tile.cloneNode(true));
+      // Keep the CLONE NODES and remove exactly those afterwards. Removing by index across the whole
+      // screen was wrong: `original` counts one chapter's grid (10) while the loop walked every tile
+      // on the screen (30 real + 40 clones), so it deleted 20 REAL tiles from the later chapters and
+      // the screen was left claiming 10 levels. That held only while the campaign had one chapter.
+      const clones: Element[] = [];
+      for (let i = 0; i < 40; i++) {
+        const clone = tile.cloneNode(true) as Element;
+        grid.append(clone);
+        clones.push(clone);
+      }
       const overflows = screen.scrollHeight > screen.clientHeight;
       screen.scrollTop = 99999;
       const scrolled = screen.scrollTop > 0;
@@ -125,9 +135,8 @@ try {
       // Back to the top: the heading must be reachable, never clipped above the screen.
       screen.scrollTop = 0;
       const headerTop = document.getElementById('campaign-heading')!.getBoundingClientRect().top;
-      // Undo the clones so every later screenshot and assertion sees the real 10 levels.
-      const all = screen.querySelectorAll('.campaign-tile');
-      for (let i = all.length - 1; i >= original; i--) all[i]!.remove();
+      // Undo the clones so every later screenshot and assertion sees the real levels.
+      for (const clone of clones) clone.remove();
       return { overflows, scrolled, lastVisible, headerTop };
     });
     assert.equal(scroll.overflows, true, '50 levels make the list taller than the phone');
@@ -201,7 +210,10 @@ try {
       const progress = JSON.parse(stored ?? '{}') as { unlocked?: number; completed?: string[] };
       assert.equal(progress.unlocked, 2, 'the win unlocked level 2');
       assert.deepEqual(progress.completed, [level1.id]);
-      assert.match(sub ?? '', /Next level unlocked: New Growth/, `finish note was ${sub}`);
+      // The note no longer names the unlocked level (owner, 2026-10-16: no level names anywhere).
+      // It must still say a level was unlocked, and must not name it.
+      assert.equal(sub, 'Next level unlocked', `finish note was ${sub}`);
+      assert.ok(!(sub ?? '').includes('New Growth'), 'the finish note must not name the next level');
       await click(page, '#go-other'); // "Back to campaign"
       await page.locator('#campaign-chapters .campaign-tile').first().waitFor({ state: 'visible' });
       assert.equal(await tiles.nth(0).getAttribute('data-state'), 'completed');

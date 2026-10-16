@@ -687,6 +687,13 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
         $('menu-online').hidden = !online;
         setLead($('menu-online'), online);
         setLead(cmp, !online);
+        // The quiet way back to the level list. LEVEL <n> starts a level outright, so this is the
+        // only browse/replay route outside the finish screen. Deliberately never the lead.
+        const levelsBtn = $('menu-levels');
+        levelsBtn.hidden = false;
+        levelsBtn.textContent = MENU.levels;
+        levelsBtn.setAttribute('aria-label', MENU.levels);
+        setLead(levelsBtn, false);
         $('menu-new').textContent = MENU.training;
         $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
         setLead($('menu-new'), false);
@@ -6066,7 +6073,7 @@ const bind = (id: string, fn: () => void) =>
  * campaign screen binding, and the training picker below. The legacy channels never see the submenu
  * and keep the flat menu they are used to, so their own tests are untouched.
  */
-const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-levels', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
@@ -6074,6 +6081,9 @@ if (FEATURES.campaign) {
 
 bind('menu-play', openPlayMenu);
 bind('play-back', () => showScreen('menu'));
+// The quiet way back to the level list: LEVEL <n> starts a level outright, so this is how a player
+// browses or replays one. Same screen the finish card's "Back to campaign" opens.
+bind('menu-levels', () => showScreen('campaign'));
 // The hub takes over the whole screen; the submenu must not stay behind it.
 $('menu-online').addEventListener('click', closePlayMenu);
 

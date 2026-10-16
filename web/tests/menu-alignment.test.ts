@@ -118,14 +118,14 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     expect(menu.indexOf('id="menu-world"')).toBeLessThan(menu.indexOf('id="menu-tutorial"'));
   });
 
-  it('PLAY holds exactly Play online / LEVEL n / Training, in that order', () => {
+  it('PLAY holds Play online / LEVEL n / Levels / Training, in that order', () => {
     const main = read('../src/main.ts');
     const list = /const PLAY_MENU_ENTRIES = \[([^\]]*)\] as const;/.exec(main);
     expect(list, 'PLAY_MENU_ENTRIES must exist').toBeTruthy();
-    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-online,menu-campaign,menu-new');
-    // All three are real buttons in the menu markup, so the move can never append a missing node.
+    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-online,menu-campaign,menu-levels,menu-new');
+    // Every one is a real button in the menu markup, so the move can never append a missing node.
     const menu = sectionById('menu');
-    for (const id of ['menu-online', 'menu-campaign', 'menu-new']) expect(menu).toContain(`id="${id}"`);
+    for (const id of ['menu-online', 'menu-campaign', 'menu-levels', 'menu-new']) expect(menu).toContain(`id="${id}"`);
   });
 });
 
