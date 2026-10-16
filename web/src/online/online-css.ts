@@ -326,9 +326,17 @@ export const ONLINE_CSS = `
 #duel-hud .live-chip { display: none !important; }
 /* The real-time control is now the bolt in the rail under the wordmark (live/ui.ts), not in this lane. */
 
-/* The world uses the whole safe viewport; the other online screens retain their narrow column. */
+/* The world uses the whole safe viewport; the other online screens retain their narrow column.
+   NO BACKGROUND FILL (owner, 2026-10-16): the world map is the ONE online screen that stands on
+   the shared surface instead of blanking it. #texture (web/src/style.css) already paints the
+   page background — the soil radial gradient, the grain and the vignette — at z-index 0, and every
+   .screen is transparent over it, which is exactly how the main menu and the game screen sit on
+   it. This rule used to paint var(--c-bg) here, a FLAT fill at z-index 3 that covered the grain
+   only on this screen (measured: background luminance sd 0.42px here vs 3.80 on the same patch of
+   the menu) — the screen read as a different product. The map's own contained window is untouched:
+   it is the .world-grid panel below, which keeps its bounded inset surface. */
 .online-world {
-  display: grid; place-items: stretch; z-index: 3; background: var(--c-bg);
+  display: grid; place-items: stretch; z-index: 3; background: none;
   overflow: hidden; overscroll-behavior: contain;
 }
 .online-world .online-inner {

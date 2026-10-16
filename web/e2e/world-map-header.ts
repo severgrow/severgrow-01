@@ -1,4 +1,4 @@
-// FUTASAKU 0.5 — the WORLD MAP header: one-line title, corners aligned like the in-game HUD.
+// FUTASAKU 0.5 — the WORLD MAP screen: a one-line corner-anchored header, on the shared surface.
 //
 //   CHANNEL=futa04 VITE_DUEL_API_URL=https://duel-stub.invalid/v1 npm run web:build
 //   npx tsx web/e2e/world-map-header.ts [--dist=web/dist]
@@ -9,6 +9,8 @@
 //
 // Owner direction (2026-10-16): in the world map the menu control and the logo must sit in the top
 // corners exactly like the in-game header, and "THE WORLD MAP" must ALWAYS read on ONE line.
+// Follow-up (same day): the area BEHIND the map's contained window must be the SAME grained surface
+// the main menu rests on, and the column must use the viewport well.
 //
 // What this suite proves, at 320 (narrower than the owner's phone), 360 and 390px wide:
 //   1. the title is ONE line — one range rect, the box exactly one line-height tall, and its ink
@@ -16,8 +18,13 @@
 //   2. the back chevron and the wordmark share the title's top line (tops within 2px), so the header
 //      reads as one row of corner chrome, not three floating pieces;
 //   3. the world map carries the SAME small in-game wordmark (#hud-brand asset) in its top-right
-//      corner, at the same small size the game HUD uses.
-// It writes docs/screens/world/world-header-*.png for the visual pass.
+//      corner, at the same small size the game HUD uses;
+//   4. the surface behind the window is the MENU's: the screen paints no fill of its own, and a
+//      background patch measures the same grain as the identical patch on the main menu (pixel sd);
+//   5. the column uses the viewport (the window owns most of the height, the selection bar reaches
+//      the bottom padding, no dead band), and the map window keeps its contained surface.
+// It writes docs/screens/world/world-header-*.png (the screen) and world-surface-menu-*.png (the
+// main menu, for the side-by-side surface comparison) for the visual pass.
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -55,6 +62,38 @@ const browser = await chromium.launch(
 
 type Box = { x: number; y: number; width: number; height: number };
 
+// A patch of the screen OUTSIDE the world's window and outside the menu's column: the shared page
+// surface and nothing else. Identical on both screens, so the two measurements are comparable.
+const PATCH = { x: 2, y: 300, width: 9, height: 200 };
+
+/**
+ * Mean and standard deviation of luminance over a freshly captured PNG patch. The page grain is
+ * SVG noise, so it reads as a real spread (sd); a flat background fill reads as ~0. This is the
+ * measurement that tells "the same grained surface as the menu" from "an opaque block".
+ */
+const decoder = await browser.newPage();
+const patchStats = async (png: Buffer): Promise<{ mean: number; sd: number }> => {
+  await decoder.setContent(`<img id="i" src="data:image/png;base64,${png.toString('base64')}">`);
+  await decoder.waitForFunction(`document.getElementById('i').complete`);
+  // Built as a STRING: tsx/esbuild would otherwise rewrite the closure with a `__name` helper that
+  // does not exist in the page.
+  return decoder.evaluate(`(() => {
+    const img = document.getElementById('i');
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    let n = 0, sum = 0, sum2 = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      n++; sum += lum; sum2 += lum * lum;
+    }
+    const mean = sum / n;
+    return { mean: +mean.toFixed(3), sd: +Math.sqrt(Math.max(0, sum2 / n - mean * mean)).toFixed(3) };
+  })()`) as Promise<{ mean: number; sd: number }>;
+};
+
 try {
   for (const size of [
     { w: 320, h: 568 }, // narrower than the owner's phone: the title must still fit on one line
@@ -80,10 +119,15 @@ try {
 
     await page.goto(BASE, { waitUntil: 'load' });
     await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20_000 });
+    await page.waitForTimeout(500);
+    // The main menu, on the same surface: the reference shot and the reference measurement.
+    const menuPatch = await patchStats(await page.screenshot({ clip: PATCH, type: 'png' }));
+    await page.screenshot({ path: join(OUT, `world-surface-menu-${size.w}x${size.h}.png`) });
     await page.click('#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
     await page.waitForTimeout(700);
+    const worldPatch = await patchStats(await page.screenshot({ clip: PATCH, type: 'png' }));
 
     const tag = `${size.w}x${size.h}`;
     const rect = (b: Box | null) => (b ? `x${b.x.toFixed(1)} y${b.y.toFixed(1)} w${b.width.toFixed(1)} h${b.height.toFixed(1)}` : 'none');
@@ -135,6 +179,36 @@ try {
         selection: box('#online-world-selection'),
         notice: box('#online-world-notice'),
         gap: Number.parseFloat(getComputedStyle(document.querySelector('.online-world .online-inner') as HTMLElement).gap) || 0,
+        // The shared page surface: the screen must paint nothing of its own, and the ONE global
+        // grain element must still be there painting it.
+        screenSurface: (() => {
+          const s = getComputedStyle(document.getElementById('online-world-screen') as HTMLElement);
+          return { color: s.backgroundColor, image: s.backgroundImage };
+        })(),
+        texture: (() => {
+          const el = document.getElementById('texture') as HTMLElement;
+          if (!el) return null;
+          const s = getComputedStyle(el);
+          const before = getComputedStyle(el, '::before');
+          return {
+            display: s.display,
+            z: s.zIndex,
+            grain: before.backgroundImage === 'none' ? 'none' : 'data-uri',
+            grainOpacity: Number.parseFloat(before.opacity) || 0,
+          };
+        })(),
+        // The map's contained window: it must keep its own bounded surface.
+        window: (() => {
+          const w = document.getElementById('online-world-grid') as HTMLElement;
+          const s = getComputedStyle(w);
+          return {
+            radius: s.borderTopLeftRadius,
+            image: s.backgroundImage === 'none' ? 'none' : 'gradient',
+            shadow: s.boxShadow === 'none' ? 'none' : 'shadow',
+          };
+        })(),
+        vh: innerHeight,
+        vw: innerWidth,
       };
     });
 
@@ -182,20 +256,53 @@ try {
     check(`[${tag}] the small in-game wordmark is in the header`, (m.brand?.height ?? 0) >= 14 && (m.brand?.height ?? 0) <= 30,
       `brand ${rect(m.brand)}`);
 
+    // 5. THE SHARED SURFACE (owner, 2026-10-16). The screen paints no fill of its own, the ONE
+    //    global grain element is still painting it, and a patch of the background measures the same
+    //    grain as the identical patch of the main menu. A flat fill collapses that sd to ~0, which
+    //    is exactly the bug this replaced.
+    check(`[${tag}] the world screen paints no fill of its own`,
+      m.screenSurface.color === 'rgba(0, 0, 0, 0)' && m.screenSurface.image === 'none',
+      `bg=${m.screenSurface.color} image=${m.screenSurface.image}`);
+    check(`[${tag}] the ONE global grain is still painting the background`,
+      !!m.texture && m.texture.display !== 'none' && m.texture.grain === 'data-uri' && m.texture.grainOpacity > 0.05,
+      m.texture ? `z=${m.texture.z} grain=${m.texture.grain} opacity=${m.texture.grainOpacity}` : 'missing #texture');
+    check(`[${tag}] the surface behind the window is GRAINED, not flat`, worldPatch.sd >= 1.5,
+      `world patch sd=${worldPatch.sd} (flat would be <0.5)`);
+    check(`[${tag}] that grain is the MENU's grain (same patch, same surface)`,
+      menuPatch.sd > 0 && worldPatch.sd / menuPatch.sd >= 0.5 && Math.abs(worldPatch.mean - menuPatch.mean) <= 2,
+      `world sd=${worldPatch.sd}/mean=${worldPatch.mean} vs menu sd=${menuPatch.sd}/mean=${menuPatch.mean} (ratio ${(worldPatch.sd / menuPatch.sd).toFixed(2)})`);
+
+    // 6. The column USES the viewport (owner: "using nicely most of screen, especially on mobile"):
+    //    the window owns most of the height, it spans the column, the selection bar reaches the
+    //    bottom padding, and there is no dead band under it.
+    const viewportGap = m.vh - bottom(m.selection);
+    check(`[${tag}] the map window owns most of the viewport height`, (m.grid?.height ?? 0) / m.vh >= 0.6,
+      `window ${m.grid?.height?.toFixed(1)} of ${m.vh} = ${((m.grid?.height ?? 0) / m.vh * 100).toFixed(1)}%`);
+    check(`[${tag}] the map window spans the column`, (m.grid?.width ?? 0) >= m.vw - 28,
+      `window ${m.grid?.width?.toFixed(1)} of ${m.vw}`);
+    check(`[${tag}] the column reaches the bottom padding (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
+      `${viewportGap.toFixed(1)}px below the selection bar`);
+
+    // 7. The map keeps its CONTAINED window (owner: "let's keep as it is").
+    check(`[${tag}] the map window keeps its own bounded surface`,
+      m.window.radius === '14px' && m.window.image === 'gradient' && m.window.shadow === 'shadow',
+      JSON.stringify(m.window));
+
     await page.screenshot({ path: join(OUT, `world-header-${tag}.png`) });
-    console.log(`    screenshot: docs/screens/world/world-header-${tag}.png`);
+    console.log(`    screenshot: docs/screens/world/world-header-${tag}.png (+ world-surface-menu-${tag}.png)`);
     if (errors.length) console.log('    page errors:', errors.slice(0, 4));
     await page.close();
   }
 } finally {
+  await decoder.close();
   await browser.close();
   await server.close();
 }
 
 if (failed) {
-  console.error(`\n${failed} world-map header checks failed`);
+  console.error(`\n${failed} world-map screen checks failed`);
   process.exit(1);
 }
-console.log('\nThe world map header is one line, corner-anchored, with the in-game mark.');
+console.log('\nThe world map header is one line and corner-anchored, on the menu\'s own grained surface.');
 
 type SVGWrap = SVGSVGElement;
