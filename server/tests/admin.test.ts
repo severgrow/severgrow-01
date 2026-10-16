@@ -432,6 +432,83 @@ describe('the metric shapes report what the data supports', () => {
     expect(shaped.byLevel).toEqual([{ levelId: 'c3-21', level: null, firstClears: 0, awarded: 0, attempts: 1, denials: 1 }]);
     expect(shaped.byChapter).toEqual([]); // it cannot be placed in a chapter, so it is not guessed
   });
+
+  it('the ledger reconciles against the authoritative wallet, entry by entry', async () => {
+    // The requirement is a reconciliation, not a spot check: every number the dashboard shows about
+    // Seeds must be traceable to the wallet the game debits and credits.
+    const t = setup();
+    const playerId = '00000000-0000-4000-8000-00000000aaaa';
+    // Distinct timestamps, so the ledger's newest entry is unambiguous: the claim below is last.
+    // (Real rows carry real clocks; a test that gives them all one instant would be ordering by luck.)
+    for (let i = 0; i < 3; i += 1) {
+      await t.economy.settle({ playerId, sourceKey: `reconcile-queue-${i}`, mode: 'queue', outcome: 'win', opponentId: null, now: t.now - 4_000 + i });
+    }
+    await t.economy.settle({ playerId, sourceKey: 'campaign:c1-01', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 1_000, campaignLevel: 1 });
+    const claim = await t.economy.claim(playerId, '0,0', 'reconcile-claim', t.now);
+    expect(claim.ok, 'the wallet must have funded the tile').toBe(true);
+    // A REPEAT clear is the same settlement key, so it replays the first receipt and moves nothing.
+    const repeat = await t.economy.settle({ playerId, sourceKey: 'campaign:c1-01', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 500, campaignLevel: 1 });
+    expect(repeat.replayed).toBe(true);
+    // A zero-award receipt still records WHY (a level the economy cannot price).
+    await t.economy.settle({ playerId, sourceKey: 'campaign:unpriced', mode: 'campaign', outcome: 'win', opponentId: null, now: t.now - 400, campaignLevel: 99 });
+
+    const wallet = await t.economy.wallet(playerId);
+    const ledger = await t.store.ledger({ playerId, limit: 200 });
+    const economy = await t.store.economy(t.now);
+    const earned = ledger.rows.filter((row) => row.delta > 0).reduce((sum, row) => sum + row.delta, 0);
+    const spent = ledger.rows.filter((row) => row.delta < 0).reduce((sum, row) => sum - row.delta, 0);
+
+    // 3 queue wins (30 each) + a campaign first clear (50) = 140; one tile = 100.
+    expect(earned).toBe(140);
+    expect(spent).toBe(100);
+    expect(wallet).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
+    // The ledger IS the wallet's history: its deltas sum to the wallet's own lifetime totals, and
+    // the newest entry's balance_after is the balance the wallet reports now.
+    expect(earned - spent).toBe(wallet.balance);
+    expect(ledger.rows[0]!.balanceAfter).toBe(wallet.balance);
+    // The economy panel reads the same store, so it cannot disagree with either.
+    expect(economy.totals).toMatchObject({ lifetimeEarned: 140, lifetimeSpent: 100, balance: 40 });
+    expect(economy.inflationRatio).toBeCloseTo(1.4, 5);
+    const categories = new Map(economy.byCategory.map((row) => [row.category, row]));
+    expect(categories.get('queue')).toMatchObject({ minted: 90, spent: 0, net: 90 });
+    expect(categories.get('campaign')).toMatchObject({ minted: 50, spent: 0, net: 50 });
+    expect(categories.get('world_claim')).toMatchObject({ minted: 0, spent: 100, net: -100 });
+    // And the denial is recorded with a reason, at zero Seeds.
+    expect(economy.receipts.byDenial).toContainEqual({ value: 'not_a_first_clear', n: 1 });
+    // The repeat clear is NOT a denial and NOT a payment: it is the same receipt, replayed.
+    expect(economy.receipts.denied).toBe(1);
+  });
+
+  it('the world replay is the stored claims, bucketed by the day each was recorded', async () => {
+    const t = setup();
+    const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+    const dayA = t.now - 2 * 86_400_000;
+    const dayB = t.now - 86_400_000;
+    const alice = '00000000-0000-4000-8000-00000000000a';
+    const bob = '00000000-0000-4000-8000-00000000000b';
+    // Each owner needs 100 Seeds before a tile can be bought, exactly as in the game.
+    await t.economy.settle({ playerId: alice, sourceKey: 'replay-fund-a', mode: 'queue', outcome: 'win', opponentId: null, now: dayA });
+    await t.economy.settle({ playerId: alice, sourceKey: 'replay-fund-a2', mode: 'queue', outcome: 'win', opponentId: null, now: dayA });
+    await t.economy.settle({ playerId: alice, sourceKey: 'replay-fund-a3', mode: 'queue', outcome: 'win', opponentId: null, now: dayA });
+    await t.economy.settle({ playerId: alice, sourceKey: 'replay-fund-a4', mode: 'queue', outcome: 'win', opponentId: null, now: dayA });
+    await t.economy.settle({ playerId: bob, sourceKey: 'replay-fund-b', mode: 'queue', outcome: 'win', opponentId: null, now: dayB });
+    await t.economy.settle({ playerId: bob, sourceKey: 'replay-fund-b2', mode: 'queue', outcome: 'win', opponentId: null, now: dayB });
+    await t.economy.settle({ playerId: bob, sourceKey: 'replay-fund-b3', mode: 'queue', outcome: 'win', opponentId: null, now: dayB });
+    await t.economy.settle({ playerId: bob, sourceKey: 'replay-fund-b4', mode: 'queue', outcome: 'win', opponentId: null, now: dayB });
+    expect((await t.economy.claim(alice, '0,0', 'replay-claim-a', dayA)).ok).toBe(true);
+    expect((await t.economy.claim(bob, '1,0', 'replay-claim-b', dayB)).ok).toBe(true);
+
+    const world = await t.store.world(t.now);
+    expect(world.totalClaims).toBe(2);
+    expect(world.replayDays).toEqual([dayOf(dayA), dayOf(dayB)]); // the two recorded days, oldest first
+    expect(world.claimsByDayIndex.map((day) => day.claims.map((claim) => claim.cellId))).toEqual([['0,0'], ['1,0']]);
+    // Every claim appears in exactly one bucket, and the buckets together are the whole map.
+    expect(world.claimsByDayIndex.flatMap((day) => day.claims)).toHaveLength(world.totalClaims);
+    // A bucket only holds claims RECORDED on that day — which is what makes the cumulative replay
+    // (the UI helper, unit-tested for "a later day never shows fewer tiles") match the stored rows.
+    expect(world.claimsByDayIndex[0]!.claims.every((claim) => claim.claimedAt <= Date.parse(`${dayOf(dayA)}T23:59:59.999Z`))).toBe(true);
+    expect(world.claimsByDayIndex[1]!.claims.every((claim) => claim.claimedAt > Date.parse(`${dayOf(dayA)}T23:59:59.999Z`))).toBe(true);
+  });
 });
 
 describe('no secret or hidden state can reach an admin payload', () => {
