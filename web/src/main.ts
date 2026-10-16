@@ -5151,9 +5151,11 @@ function renderGameOver() {
     // used to sit in this slot. Back to matches and Menu stay, as secondary ways out
     // (`bind('go-rematch')` starts the rematch; `bind('go-other')` is Back to matches).
     $('go-rematch').textContent = ONLINE.rematch;
+    $('go-rematch').setAttribute('aria-label', ONLINE.rematch);
     const other = $('go-other');
     other.hidden = false;
     other.textContent = ONLINE.backToMatches;
+    other.setAttribute('aria-label', ONLINE.backToMatches);
     $('go-share').textContent = RESULT.share;
     go.className = `gameover ${won ? 'won' : draw ? 'draw' : 'lost'}`;
     // A fresh finish starts folded: the card shows the result and the ways forward, nothing else.
@@ -5202,7 +5204,9 @@ function renderGameOver() {
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
   // same thing (the online rematch keeps its own secondary, untouched).
   other.hidden = lead === 'back-to-campaign';
-  other.textContent = campaign ? CAMPAIGN.back : 'Change difficulty';
+  const otherWord = campaign ? CAMPAIGN.back : 'Change difficulty';
+  other.textContent = otherWord;
+  other.setAttribute('aria-label', otherWord);
   go.className = `gameover ${r.winner === HUMAN ? 'won' : r.winner === null ? 'draw' : 'lost'}`;
   $('go-score').innerHTML = `<span class="you">${r.scores[HUMAN]}</span><span class="dash">–</span><span class="bot">${r.scores[BOT]}</span>`;
   // overhaul item 20: the final score counts up once, calmly (not with Reduce motion or Speed Off)

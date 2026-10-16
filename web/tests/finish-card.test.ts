@@ -62,6 +62,14 @@ describe('the last level is decided by the DATA, never a hardcoded count', () =>
     expect(mainSource).toMatch(/if \(campaignLevel && wonNow\) \{[\s\S]{0,200}const next = nextCampaignLevel\(campaignLevel\.number\)/);
     expect(mainSource).toMatch(/if \(next\) return startCampaignLevel\(next\)/);
   });
+
+  it('every mode labels both of its buttons for a screen reader, not just for the eye', () => {
+    // The offline branch sets the label from the same word it shows; so does the online branch.
+    expect(mainSource).toMatch(/\$\('go-rematch'\)\.setAttribute\('aria-label', leadWord\)/);
+    expect(mainSource).toMatch(/\$\('go-rematch'\)\.setAttribute\('aria-label', ONLINE\.rematch\)/);
+    expect(mainSource).toMatch(/other\.setAttribute\('aria-label', otherWord\)/);
+    expect(mainSource).toMatch(/other\.setAttribute\('aria-label', ONLINE\.backToMatches\)/);
+  });
 });
 
 describe('the card is one screen: the result leads, the rest waits behind "More"', () => {

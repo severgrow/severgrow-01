@@ -31,6 +31,3 @@ export const finishLead = ({ online, campaign, won, hasNext }: FinishContext): F
   if (campaign && won) return hasNext ? 'next-level' : 'back-to-campaign';
   return won ? 'play-again' : 'try-again';
 };
-
-/** The modes that lead with a level the player has not played yet (the card's "next level"). */
-export const leadsToNextLevel = (lead: FinishLead): boolean => lead === 'next-level';
