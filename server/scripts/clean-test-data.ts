@@ -4,14 +4,20 @@
 //   node --env-file-if-exists=.env --import tsx server/scripts/clean-test-data.ts            # dry run
 //   node --env-file-if-exists=.env --import tsx server/scripts/clean-test-data.ts --commit   # do it
 //
-// Why it is written this way:
-//   * MARK FIRST, then delete. The mark makes the operation auditable and gives a second, gentler
-//     lever (the dashboard hides marked rows anyway) if a delete has to be deferred.
-//   * The OWNER is whoever is on the admin allow-list (`ADMIN_PLAYER_IDS`, falling back to the
-//     founding owner id). His account, wallet, ledger, claims and matches are never touched.
-//   * A test player who played the owner (entangled with one of HIS matches) is MARKED but KEPT:
-//     `match_moves.player_id` is ON DELETE NO ACTION, so deleting them would either fail or corrupt
-//     the owner's match. Nothing of the owner's is given up to make the tables tidy.
+// What counts as real, and what is test:
+//   * EVERY `kind = 'account'` row is kept and left unmarked. An account is a signed-in or upgraded
+//     person — and a real Google sign-in can appear at ANY moment (one did, mid-task). Deleting a
+//     real person's account is irreversible, so accounts are never deleted here.
+//   * Every `kind = 'guest'` row is generated traffic (a test guest and a real guest are created by
+//     the same generator). Guests are MARKED as test; a guest is deleted unless it is "entangled" —
+//     a participant in one of the accounts' matches. Those entangled guests are marked but kept,
+//     because `match_moves.player_id` is ON DELETE NO ACTION: deleting them would break the
+//     account's match, and no account's data is given up to make the tables tidy.
+//   * A match is kept when any of its participants is a keeper; every other (all-guest) match goes.
+//     A kept account match that contains a marked guest becomes marked too, so the dashboard's
+//     "any test participant ⇒ test match" rule hides it without touching the row.
+//   * MARK FIRST, then delete: the mark makes the operation auditable, and gives a gentler lever if
+//     a delete has to be deferred.
 //   * Everything is inside ONE transaction with explicit before/after counts, and it ROLLS BACK
 //     unless the owner's numbers are identical afterwards. Never a TRUNCATE, never a wildcard: every
 //     statement is scoped by an explicit id set.
@@ -98,22 +104,21 @@ const main = async (): Promise<void> => {
     await client.query('begin');
 
     // ---- plan ----------------------------------------------------------------
-    // The owner's matches define an "entangled" set: players who shared a match with him are kept
-    // (their rows are needed intact for his match to stay valid) but still marked as test.
+    const accounts = await ids(client, `select id::text as id from players where kind = 'account' order by created_at`);
+    const guestIds = await ids(client, `select id::text as id from players where kind = 'guest' order by created_at`);
+    // "Entangled": a guest seated in a match one of the accounts is in — kept so that account match
+    // stays valid (`match_moves.player_id` is NO ACTION).
     const entangled = await ids(
       client,
       `select distinct mp.player_id::text as id
          from match_participants mp
         where mp.match_id in (select match_id from match_participants where player_id = any($1::uuid[]))
-          and mp.player_id <> any($1::uuid[])`,
-      [owners],
+          and mp.player_id <> all($1::uuid[])`,
+      [accounts],
     );
-    const keep = [...new Set([...owners, ...entangled])];
-    const deletablePlayers = await ids(
-      client,
-      `select id::text as id from players where id <> all($1::uuid[]) order by created_at`,
-      [keep],
-    );
+    const keep = [...new Set([...accounts, ...entangled])];
+    const entangledSet = new Set(entangled);
+    const deletablePlayers = guestIds.filter((id) => !entangledSet.has(id));
     const deletableMatches = await ids(
       client,
       `select id::text as id from matches m
@@ -125,10 +130,10 @@ const main = async (): Promise<void> => {
     const ownerBefore = await ownerCounts(client, owners);
 
     console.log('\nplan:');
-    console.log(`  owner player(s) kept:      ${owners.length}`);
-    console.log(`  entangled player(s) kept:  ${entangled.length}  (played an owner match; cannot be deleted without breaking it)`);
-    console.log(`  players to mark + delete:  ${deletablePlayers.length}`);
-    console.log(`  matches to mark + delete:  ${deletableMatches.length}  (plus any owner match that contains a marked player, marked but kept)`);
+    console.log(`  accounts kept unmarked:    ${accounts.length}  (never deleted: a signed-in person)`);
+    console.log(`  entangled guests kept:     ${entangled.length}  (in an account match; cannot be deleted without breaking it)`);
+    console.log(`  guests to mark + delete:   ${deletablePlayers.length}`);
+    console.log(`  matches to mark + delete:  ${deletableMatches.length}  (kept account matches with a marked guest are marked, not deleted)`);
     console.log(`  before: ${JSON.stringify(before)}`);
     console.log(`  owner before: ${JSON.stringify(ownerBefore)}`);
     if (deletablePlayers.length > 0) {
@@ -146,13 +151,14 @@ const main = async (): Promise<void> => {
     }
 
     // ---- mark (auditable, and the dashboard would already be clean if the delete were deferred) --
-    // EVERY non-owner player is marked, including the entangled ones that are kept: every one of
-    // them is test/verification traffic. Then any match with a marked participant is marked too
-    // (which includes an owner match that a test guest joined — marked, kept, and hidden).
-    await client.query('update players set is_test = true where id <> all($1::uuid[])', [owners]);
+    // Every guest is marked, including the entangled ones that are kept. Any match with a marked
+    // participant is marked too, so an account match a test guest joined is hidden without being
+    // deleted. Accounts are never marked.
+    await client.query('update players set is_test = true where id = any($1::uuid[]) and is_test = false', [guestIds]);
     await client.query(
       `update matches set is_test = true
-        where exists (select 1 from match_participants mp join players p on p.id = mp.player_id
+        where is_test = false
+          and exists (select 1 from match_participants mp join players p on p.id = mp.player_id
                        where mp.match_id = matches.id and p.is_test)`,
     );
 
@@ -177,9 +183,13 @@ const main = async (): Promise<void> => {
     if (!ownerUnchanged) {
       throw new Error(`owner data changed: before ${JSON.stringify(ownerBefore)} after ${JSON.stringify(ownerAfter)}`);
     }
-    const stillTest = (await client.query(`select count(*)::int as n from players where is_test = false and id <> all($1::uuid[])`, [owners])).rows[0];
-    if (Number((stillTest as { n?: unknown }).n ?? -1) !== 0) {
-      throw new Error('some non-owner players were left unmarked; refusing to commit');
+    const accountsAfter = (await client.query(`select count(*)::int as n from players where kind = 'account'`)).rows[0];
+    if (Number((accountsAfter as { n?: unknown }).n ?? -1) !== accounts.length) {
+      throw new Error('an account was removed; refusing to commit');
+    }
+    const unmarkedGuests = (await client.query(`select count(*)::int as n from players where kind = 'guest' and is_test = false`)).rows[0];
+    if (Number((unmarkedGuests as { n?: unknown }).n ?? -1) !== 0) {
+      throw new Error('some guests were left unmarked; refusing to commit');
     }
 
     await client.query('commit');
