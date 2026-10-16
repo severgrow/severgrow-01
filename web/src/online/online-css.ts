@@ -334,7 +334,10 @@ export const ONLINE_CSS = `
    it. This rule used to paint var(--c-bg) here, a FLAT fill at z-index 3 that covered the grain
    only on this screen (measured: background luminance sd 0.42px here vs 3.80 on the same patch of
    the menu) — the screen read as a different product. The map's own contained window is untouched:
-   it is the .world-grid panel below, which keeps its bounded inset surface. */
+   it is the .world-grid panel below, which keeps its bounded inset surface.
+   GUTTERS (owner, 2026-10-16): the side gutters are the menu column's own 16px, so the world's
+   column edge sits exactly where #menu .menu-inner's does (that column is 100% - 32px). The
+   4px difference (12px here) was the last edge that did not line up with the menu. */
 .online-world {
   display: grid; place-items: stretch; z-index: 3; background: none;
   overflow: hidden; overscroll-behavior: contain;
@@ -342,8 +345,8 @@ export const ONLINE_CSS = `
 .online-world .online-inner {
   box-sizing: border-box;
   width: 100%; max-width: none; height: 100dvh; min-height: 0;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   gap: 8px;
 }
 /* The world header IS the in-game header (owner, 2026-10-16): ONE 44px row with the back control
@@ -387,8 +390,23 @@ export const ONLINE_CSS = `
   color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
 }
 .seed-icon { flex: none; color: #e8ddbe; }
+/* The map window HUGS the map (owner, 2026-10-16). The world's own bounding box is 274.49 x 272
+   units — very nearly square — so a window that FILLED a tall phone letterboxed it: 65px bands at
+   360x640 and 144px at 390x844, which is exactly what read as "a small card in a large area, just
+   inside the window". The window is now the largest box with the map's OWN aspect ratio that fits
+   the space between the column's header and its controls, so the map fills it at every viewport
+   instead of floating inside a tall panel. Uniform only: nothing is stretched, so the hexes keep
+   their true shape and the map keeps its scale.
+   The dvh term is the same size expressed against the viewport, which is what lets it hug on a
+   WIDE screen too — there the height, not the width, is the limiting dimension. Its 210px is the
+   column's own fixed chrome, derived: padding 12 + 16, header 44, summary 18, Seeds row 30,
+   selection 58 and 4 x 8px column gaps = 209.7. max-height and the flex shrink are the
+   backstop: if that chrome ever grew, the cost is a few pixels of margin, never an overflow. */
 .world-grid {
-  flex: 1 1 auto; min-height: 0; width: min(100%, 1100px); margin: 0 auto;
+  flex: 0 1 auto; min-height: 0;
+  width: min(100%, 1100px, calc((100dvh - 210px) * 274.49 / 272));
+  aspect-ratio: 274.49 / 272;
+  max-height: 100%; margin: 0 auto;
   display: grid; place-items: center; overflow: hidden;
   border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);
   box-shadow: inset 0 0 0 1px rgba(232,221,190,.04), inset 0 20px 65px #090c0b69;
@@ -405,8 +423,15 @@ export const ONLINE_CSS = `
 .world-hex.same-owner { stroke-width: 1.1; }
 .world-hex.selected { stroke: #f2e5c5; stroke-width: 1.2; filter: drop-shadow(0 0 2px #d4c28c80); }
 .world-hex:focus-visible { outline: none; stroke: #fff4d3; stroke-width: 1.5; }
+/* The controls anchor to the bottom of the column (owner, 2026-10-16). Now that the window hugs the
+   map instead of filling the column, the leftover height would otherwise collect under the
+   selection bar as dead space at the very bottom. Pushing the controls down keeps the column
+   spanning the viewport and keeps the one real action (CLAIM HEX) at thumb height, where it
+   already was before. The header -> summary -> Seeds -> window steps above stay on the column's own
+   rhythm; this is the ONE deliberate break in it, and it is the bottom anchor, not a gap. */
 .world-selection {
-  min-height: 58px; width: min(100%, 720px); margin: 0 auto;
+  margin-top: auto;
+  min-height: 58px; width: min(100%, 720px); margin-inline: auto;
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
   color: #e8ddbe; border-top: 1px solid #d9cba632; font-size: .83rem; letter-spacing: .04em;
 }

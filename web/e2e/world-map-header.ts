@@ -12,7 +12,8 @@
 // Follow-up (same day): the area BEHIND the map's contained window must be the SAME grained surface
 // the main menu rests on, and the column must use the viewport well.
 //
-// What this suite proves, at 320 (narrower than the owner's phone), 360 and 390px wide:
+// What this suite proves, at 320 (narrower than the owner's phone), 360 and 390px wide, plus a
+// 1280px-wide screen where the HEIGHT is the limiting dimension:
 //   1. the title is ONE line — one range rect, the box exactly one line-height tall, and its ink
 //      narrower than the column so nowrap can never clip or ellipsise it;
 //   2. the back chevron and the wordmark share the title's top line (tops within 2px), so the header
@@ -21,8 +22,12 @@
 //      corner, at the same small size the game HUD uses;
 //   4. the surface behind the window is the MENU's: the screen paints no fill of its own, and a
 //      background patch measures the same grain as the identical patch on the main menu (pixel sd);
-//   5. the column uses the viewport (the window owns most of the height, the selection bar reaches
-//      the bottom padding, no dead band), and the map window keeps its contained surface.
+//   5. the map FILLS its window — the window carries the world's own aspect ratio, so the only
+//      margin is the fit box's symmetric 6-unit padding and there is no letterbox band (this was
+//      65px at 360x640 and 144px at 390x844 before the fit), and the hexes are not stretched;
+//   6. the column uses the viewport — the map renders at the column's full width, the side gutters
+//      are the menu's own 16px, the controls anchor to the bottom edge, and there is no dead band;
+//   7. the map window keeps its contained surface (14px corner, radial inset surface, inset shadow).
 // It writes docs/screens/world/world-header-*.png (the screen) and world-surface-menu-*.png (the
 // main menu, for the side-by-side surface comparison) for the visual pass.
 import { mkdirSync } from 'node:fs';
@@ -96,11 +101,12 @@ const patchStats = async (png: Buffer): Promise<{ mean: number; sd: number }> =>
 
 try {
   for (const size of [
-    { w: 320, h: 568 }, // narrower than the owner's phone: the title must still fit on one line
-    { w: 360, h: 640 },
-    { w: 390, h: 844 },
+    { w: 320, h: 568, touch: true }, // narrower than the owner's phone: the title must still fit
+    { w: 360, h: 640, touch: true },
+    { w: 390, h: 844, touch: true },
+    { w: 1280, h: 800, touch: false }, // a WIDE screen: here the height, not the width, is limiting
   ] as const) {
-    const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+    const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, hasTouch: size.touch, isMobile: size.touch });
     await page.addInitScript(() => localStorage.clear());
     // tsx/esbuild rewrites named inner functions with a `__name` helper that does not exist in the
     // page; define it up front so `page.evaluate` closures with inner arrow functions run.
@@ -123,6 +129,15 @@ try {
     // The main menu, on the same surface: the reference shot and the reference measurement.
     const menuPatch = await patchStats(await page.screenshot({ clip: PATCH, type: 'png' }));
     await page.screenshot({ path: join(OUT, `world-surface-menu-${size.w}x${size.h}.png`) });
+    // The menu column's own edges, so the world column can be held against them (the owner's ask:
+    // "consistent with menu"). #menu .menu-inner is `width: min(420px, 100% - 32px)`, i.e. a 16px
+    // gutter on a phone and a 420px centred column on a wide screen.
+    const menuColumn = await page.evaluate(() => {
+      const el = document.querySelector('#menu .menu-inner') as HTMLElement | null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x, width: r.width };
+    });
     await page.click('#menu-world');
     await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 20_000 });
     await page.locator('.world-hex').first().waitFor({ state: 'attached', timeout: 45_000 });
@@ -179,6 +194,11 @@ try {
         selection: box('#online-world-selection'),
         notice: box('#online-world-notice'),
         gap: Number.parseFloat(getComputedStyle(document.querySelector('.online-world .online-inner') as HTMLElement).gap) || 0,
+        // The column's own side gutters (the owner aligned them to the menu's 16px).
+        gutters: (() => {
+          const s = getComputedStyle(document.querySelector('.online-world .online-inner') as HTMLElement);
+          return { left: Number.parseFloat(s.paddingLeft) || 0, right: Number.parseFloat(s.paddingRight) || 0 };
+        })(),
         // The shared page surface: the screen must paint nothing of its own, and the ONE global
         // grain element must still be there painting it.
         screenSurface: (() => {
@@ -205,6 +225,33 @@ try {
             radius: s.borderTopLeftRadius,
             image: s.backgroundImage === 'none' ? 'none' : 'gradient',
             shadow: s.boxShadow === 'none' ? 'none' : 'shadow',
+          };
+        })(),
+        // Is the map FITTED to its window? The window must carry the map's own aspect ratio (so the
+        // SVG fills it exactly) and the rendered hexes must leave no letterbox band. The world's own
+        // bounding box is what the SVG's viewBox is, so that is the ratio to compare against.
+        fit: (() => {
+          const w = document.getElementById('online-world-grid') as HTMLElement;
+          const svg = w.querySelector('svg') as SVGSVGElement | null;
+          const vb = (svg?.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+          const viewBoxAspect = vb.length === 4 ? vb[2]! / vb[3]! : 0;
+          const wr = w.getBoundingClientRect();
+          const hexes = [...w.querySelectorAll('.world-hex')].map((e) => e.getBoundingClientRect());
+          if (!hexes.length || !viewBoxAspect) return null;
+          const left = Math.min(...hexes.map((h) => h.left));
+          const top = Math.min(...hexes.map((h) => h.top));
+          const right = Math.max(...hexes.map((h) => h.right));
+          const bottom = Math.max(...hexes.map((h) => h.bottom));
+          return {
+            viewBoxAspect,
+            windowAspect: wr.width / wr.height,
+            inkWidth: right - left,
+            inkHeight: bottom - top,
+            // The margin between the drawn map and its window, on the axis the letterboxing showed on.
+            bandTop: top - wr.top,
+            bandBottom: wr.bottom - bottom,
+            bandLeft: left - wr.left,
+            bandRight: wr.right - right,
           };
         })(),
         vh: innerHeight,
@@ -237,18 +284,22 @@ try {
     check(`[${tag}] chevron, title and wordmark share ONE top edge`, spread <= 2,
       `spread=${spread.toFixed(1)}px (chevron ${backTop.toFixed(1)} · title ${titleTop.toFixed(1)} · mark ${brandTop.toFixed(1)})`);
 
-    // 3. ONE deliberate column: header → summary → Seeds → map → selection share one rhythm, and an
-    //    empty notice leaves no dead row at the bottom.
+    // 3. ONE deliberate column. The header -> summary -> Seeds -> map steps share the column's own
+    //    rhythm. The selection bar is the ONE deliberate break: it is anchored to the BOTTOM edge
+    //    (owner, 2026-10-16), so its distance from the window is whatever the viewport leaves and is
+    //    measured by the bottom-anchor check below, not by this rhythm. An empty notice leaves no
+    //    dead row at the very bottom.
     const bottom = (b: Box | null) => (b ? b.y + b.height : 0);
     const steps = [
       (m.summary?.y ?? 0) - bottom(m.head),
       (m.wallet?.y ?? 0) - bottom(m.summary),
       (m.grid?.y ?? 0) - bottom(m.wallet),
-      (m.selection?.y ?? 0) - bottom(m.grid),
     ];
     const stepSpread = Math.max(...steps) - Math.min(...steps);
-    check(`[${tag}] the column's vertical steps are ONE rhythm`, stepSpread <= 1,
+    check(`[${tag}] the header → summary → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
       `steps=${steps.map((s) => s.toFixed(1)).join(', ')} column gap=${m.gap}`);
+    check(`[${tag}] the controls sit below the map window`, (m.selection?.y ?? 0) >= bottom(m.grid),
+      `selection y=${m.selection?.y?.toFixed(1)} window ends ${bottom(m.grid).toFixed(1)}`);
     check(`[${tag}] an empty notice leaves no dead row`, (m.notice?.height ?? 0) === 0,
       `notice ${m.notice?.height ?? 0}x${m.notice?.width ?? 0}`);
 
@@ -272,18 +323,64 @@ try {
       menuPatch.sd > 0 && worldPatch.sd / menuPatch.sd >= 0.5 && Math.abs(worldPatch.mean - menuPatch.mean) <= 2,
       `world sd=${worldPatch.sd}/mean=${worldPatch.mean} vs menu sd=${menuPatch.sd}/mean=${menuPatch.mean} (ratio ${(worldPatch.sd / menuPatch.sd).toFixed(2)})`);
 
-    // 6. The column USES the viewport (owner: "using nicely most of screen, especially on mobile"):
-    //    the window owns most of the height, it spans the column, the selection bar reaches the
-    //    bottom padding, and there is no dead band under it.
+    // 6. THE MAP FILLS ITS WINDOW (owner, 2026-10-16). The window carries the map's OWN aspect
+    //    ratio, so the SVG fills it instead of letterboxing; the only margin left is the fit box's
+    //    own 6-unit padding (2.2%), and it is SYMMETRIC. This is the regression that used to cost
+    //    65px of band at 360x640 and 144px at 390x844.
+    const fit = m.fit;
+    check(`[${tag}] the map window carries the map's own aspect ratio`, !!fit && Math.abs(fit.windowAspect - fit.viewBoxAspect) <= 0.01,
+      fit ? `window ${fit.windowAspect.toFixed(4)} vs map ${fit.viewBoxAspect.toFixed(4)}` : 'no viewBox');
+    const topBand = fit ? fit.bandTop / (m.grid?.height ?? 1) : 1;
+    const bottomBand = fit ? fit.bandBottom / (m.grid?.height ?? 1) : 1;
+    check(`[${tag}] there is NO letterbox band above or below the map`, topBand <= 0.04 && bottomBand <= 0.04,
+      `top ${(topBand * 100).toFixed(1)}% (${fit?.bandTop.toFixed(1)}px), bottom ${(bottomBand * 100).toFixed(1)}% (${fit?.bandBottom.toFixed(1)}px)`);
+    check(`[${tag}] the remaining margin is SYMMETRIC (a frame, not a band)`, !!fit && Math.abs(fit.bandTop - fit.bandBottom) <= 1.5,
+      fit ? `top ${fit.bandTop.toFixed(1)}px vs bottom ${fit.bandBottom.toFixed(1)}px` : 'n/a');
+    check(`[${tag}] the map fills the window's width too`, !!fit && m.grid !== null && fit.bandLeft <= m.grid.width * 0.06 && fit.bandRight <= m.grid.width * 0.06 && Math.abs(fit.bandLeft - fit.bandRight) <= 1.5,
+      fit && m.grid ? `left ${fit.bandLeft.toFixed(1)}px, right ${fit.bandRight.toFixed(1)}px of ${m.grid.width.toFixed(1)}px` : 'n/a');
+    // Uniform only: the hexes keep their true shape. A stretched map would show it here (the map is
+    // very nearly square, so a non-square INK box means the hexes were distorted).
+    check(`[${tag}] the map is not stretched (the hexes keep their shape)`, !!fit && Math.abs(fit.inkWidth / fit.inkHeight - fit.viewBoxAspect) <= 0.02,
+      fit ? `ink ${fit.inkWidth.toFixed(1)}x${fit.inkHeight.toFixed(1)} = ${(fit.inkWidth / fit.inkHeight).toFixed(4)} vs ${fit.viewBoxAspect.toFixed(4)}` : 'n/a');
+
+    // 7. The column still USES the screen (owner: "using nicely most of screen, especially on
+    //    mobile"). The window hugs the map now, so on a TALL phone the width is the limiting
+    //    dimension and the window spans the column; on a WIDE screen the height limits it and the
+    //    window is centred instead. Both are the same rule (the map's aspect), so both are measured;
+    //    either way the column spans the viewport with the controls on the bottom edge.
     const viewportGap = m.vh - bottom(m.selection);
-    check(`[${tag}] the map window owns most of the viewport height`, (m.grid?.height ?? 0) / m.vh >= 0.6,
-      `window ${m.grid?.height?.toFixed(1)} of ${m.vh} = ${((m.grid?.height ?? 0) / m.vh * 100).toFixed(1)}%`);
-    check(`[${tag}] the map window spans the column`, (m.grid?.width ?? 0) >= m.vw - 28,
-      `window ${m.grid?.width?.toFixed(1)} of ${m.vw}`);
+    const gx = m.grid?.x ?? 0;
+    const gw = m.grid?.width ?? 0;
+    const rightMargin = m.vw - (gx + gw);
+    check(`[${tag}] the map renders at the column's full width`, !!fit && m.grid !== null && fit.inkWidth >= m.grid.width * 0.9,
+      fit && m.grid ? `map ${fit.inkWidth.toFixed(1)} of column ${m.grid.width.toFixed(1)} (${((fit.inkWidth / m.grid.width) * 100).toFixed(1)}%)` : 'n/a');
+    const spansColumn = gw >= m.vw - 32 - 1;
+    check(`[${tag}] the window either spans the column or is centred by the height`,
+      spansColumn ? Math.abs(gx - 16) <= 1 && Math.abs(rightMargin - 16) <= 1 : Math.abs(gx - rightMargin) <= 1,
+      spansColumn ? `width-limited: ${gw.toFixed(1)} = the column (gutters ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`
+        : `height-limited: ${gw.toFixed(1)} wide, centred (margins ${gx.toFixed(1)}/${rightMargin.toFixed(1)})`);
     check(`[${tag}] the column reaches the bottom padding (no dead band)`, viewportGap >= 0 && viewportGap <= 32,
       `${viewportGap.toFixed(1)}px below the selection bar`);
 
-    // 7. The map keeps its CONTAINED window (owner: "let's keep as it is").
+    // 8. The gutters are the MENU's 16px (owner, 2026-10-16), so the world's column edge is where
+    //    #menu .menu-inner's edge is. On a phone that column is `100% - 32px`, so the two edges can
+    //    be held against each other directly; on a wide screen the menu column is its own 420px
+    //    centred block, so what is checked is the world's own 16px gutter.
+    check(`[${tag}] the column's side gutters are the menu's 16px`,
+      Math.abs(m.gutters.left - 16) <= 1 && Math.abs(m.gutters.right - 16) <= 1,
+      `padding ${m.gutters.left}px / ${m.gutters.right}px`);
+    const menuIsFullBleed = !!menuColumn && Math.abs(menuColumn.width - (m.vw - 32)) <= 2;
+    if (menuIsFullBleed && menuColumn) {
+      check(`[${tag}] the world column's left edge is the menu column's left edge`,
+        spansColumn && Math.abs(gx - menuColumn.x) <= 1,
+        `world ${gx.toFixed(1)} vs menu ${menuColumn.x.toFixed(1)}`);
+    } else {
+      check(`[${tag}] on a wide screen the menu's own column is 420px, so the gutter is the shared edge`,
+        !!menuColumn && Math.abs(menuColumn.width - 420) <= 2,
+        menuColumn ? `menu column ${menuColumn.width.toFixed(1)}px` : 'missing #menu .menu-inner');
+    }
+
+    // 9. The map keeps its CONTAINED window (owner: "let's keep as it is").
     check(`[${tag}] the map window keeps its own bounded surface`,
       m.window.radius === '14px' && m.window.image === 'gradient' && m.window.shadow === 'shadow',
       JSON.stringify(m.window));
@@ -303,6 +400,6 @@ if (failed) {
   console.error(`\n${failed} world-map screen checks failed`);
   process.exit(1);
 }
-console.log('\nThe world map header is one line and corner-anchored, on the menu\'s own grained surface.');
+console.log('\nThe world map is one line in a corner-anchored header, fitted to its window, on the menu\'s grained surface.');
 
 type SVGWrap = SVGSVGElement;
