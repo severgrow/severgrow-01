@@ -338,12 +338,45 @@ export const ONLINE_CSS = `
     max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   gap: 8px;
 }
-.online-world .online-head { max-width: 720px; width: 100%; margin-inline: auto; }
-.online-world .online-head h2 { font-size: 1.05rem; letter-spacing: 0.08em; text-transform: uppercase; }
-.online-world #online-world-summary { text-align: center; margin: 0; opacity: .58; }
+/* The world header IS the in-game header (owner, 2026-10-16): ONE 44px row with the back control
+   anchored in the left corner and the wordmark in the right, exactly like #hud-menu / #hud-brand.
+   A three-column grid with centred items is what puts the two corners and the single-line title on
+   the SAME line; the chevron no longer floats centred against a tall two-line block. */
+.online-world .online-head {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  min-height: 44px;
+  max-width: 720px; width: 100%; margin-inline: auto;
+}
+.online-world .online-head > .icon-only { justify-self: start; }
+/* The title reads on ONE line at 360px and wider. It uses the world screen's own small UI caps —
+   the size this rule always asked for; it silently lost the cascade to the typography stylesheet
+   (equal specificity, injected later), so it is scoped by id now. nowrap plus a size that genuinely
+   fits the narrowest phone keeps it a title: it never wraps, clips or ellipsises.
+   Line-height 22px matches the wordmark's own height, so chevron, title and mark share one top. */
+#online-world-screen .online-head h2 {
+  min-width: 0;
+  padding-top: 0;
+  font-family: var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  font-size: 1.05rem;
+  line-height: 22px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+}
+/* One deliberate column: the status line, the Seeds balance, the selection bar and the notice share
+   the header's 720px axis, so on a wide screen the screen's text reads down one line and the map is
+   the only thing that widens. */
+.online-world #online-world-summary {
+  text-align: center; margin: 0; opacity: .58; max-width: 720px; width: 100%; margin-inline: auto;
+}
 .world-wallet {
   display: flex; align-items: center; justify-content: center; gap: 7px;
-  min-height: 30px; color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
+  min-height: 30px; max-width: 720px; width: 100%; margin-inline: auto;
+  color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;
 }
 .seed-icon { flex: none; color: #e8ddbe; }
 .world-grid {
@@ -376,7 +409,9 @@ export const ONLINE_CSS = `
 }
 .world-claim-button:active { transform: translateY(1px); }
 .online-world .online-notice { min-height: 20px; max-width: 720px; width: 100%; margin: 0 auto; }
-@media (max-height: 650px) { .online-world .online-inner { gap: 3px; } .world-selection { min-height: 48px; } }
+/* A short (640px) phone: one small, deliberate step tighter — 6px, not 3px crumbs — and a shallower
+   selection bar, so the map keeps the room it needs without the column reading as cramped. */
+@media (max-height: 650px) { .online-world .online-inner { gap: 6px; } .world-selection { min-height: 48px; } }
 @media (prefers-reduced-motion: reduce) { .world-hex { transition: none; } }
 
 .world-invitation {
