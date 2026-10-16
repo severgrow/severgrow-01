@@ -138,8 +138,14 @@ try {
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    await page.waitForFunction(() => document.getElementById('smart-led-text')?.textContent?.trim() === '0:0', undefined, { timeout: 8000 });
-    check((await page.locator('#smart-led-text').innerText()) === '0:0', `${width}: score remains after Draw`);
+    // Wait on the SAME property the assertion reads. innerText depends on layout and returns '' for
+    // an element that is not rendered, while textContent does not — so polling textContent and then
+    // asserting innerText could catch the LED mid-re-render and fail with a blank read. This was an
+    // intermittent CI failure ("1440: score remains after Draw") that passes 168/168 locally; the
+    // engine assertion above already proves the Draw itself was applied, so the race was in the
+    // readout only. A genuinely blank LED now times out here instead of failing one line later.
+    await page.waitForFunction(() => (document.getElementById('smart-led-text') as HTMLElement | null)?.innerText?.trim() === '0:0', undefined, { timeout: 8000 });
+    check((await page.locator('#smart-led-text').innerText()).trim() === '0:0', `${width}: score remains after Draw`);
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
     const cockpit = await page.evaluate(() => {
       const rect=(id:string)=>document.getElementById(id)!.getBoundingClientRect();
