@@ -239,13 +239,39 @@ and the report list will read as if every report were `new` — the read screens
 1. **Apply `0012_admin.sql`** (owner approval).
 2. **Set `ADMIN_PLAYER_IDS`** if the owner wants anyone besides themselves (optional; the default is
    already the owner's id).
-3. **Deploy the admin build** into the composed `site/` tree as `/admin/`:
-   - `npm run admin:build` with `VITE_DUEL_API_URL` set (the workflow already has that variable as
-     `VITE_DUEL_API_URL` / `vars.FUTA05_API_URL`);
-   - `scripts/compose-futa05-preview.mjs` copies `web/dist-admin` into `site/admin/`. The change is
-     additive: `/admin` joins `SIBLING_ROUTES` so the root promotion and the "move Main to
-     /firststep/" step cannot sweep it away, and the root worker's sibling guard is extended to match.
-   - `pages.yml` (**the locked main line's** workflow) is not touched.
+3. **Publish the dashboard at `/admin/`.** The composer side is **already in place and tested**
+   (`scripts/compose-futa05-preview.mjs` takes an optional fourth argument, `adminDist`);
+   the CI side is deliberately **NOT applied**, because the preview workflow runs on every push and
+   applying it would publish the dashboard without the approval above.
+
+   The exact change to `futasaku04-preview.yml` (in the `futa05` build job) when the owner approves:
+
+```yaml
+      - name: Build the admin dashboard
+        working-directory: futa05
+        env:
+          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+        run: npm run admin:build          # → futa05/web/dist-admin
+
+      # In the existing "Compose routes…" step, pass the admin build as the 4th argument:
+      #   node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin
+```
+
+   With that line absent (today's state), the composer prints `/admin/ = not included` and the site
+   is **byte-identical** to what it deploys now — asserted by `tests/compose-futa05-preview.test.ts`
+   ("does NOT publish /admin/ unless a build is passed to the composer").
+
+   When it is present, the composer: copies the build to `site/admin/`; adds `admin` to
+   `SIBLING_ROUTES` so the "move Main to /firststep/" step cannot sweep it away; teaches the **root**
+   worker to ignore `/admin/` (without that, a visit to `/admin/` would be cached as the root's
+   offline index); and refuses a build that would not work from a subdirectory (an absolute asset
+   path, a missing entry file, or a service-worker registration).
+
+   Each deploy recomposes the whole site from scratch, so **whichever branch pushes last decides
+   whether `/admin/` is present**. While only the futa0.5-online workflow carries the step, a
+   `futa0.4` push would drop `/admin/` until the next `futa0.5-online` deploy. Enabling it on both
+   lines therefore means one small commit on `futa0.4` too — the owner's call, and not part of this
+   change.
 4. **Verify after deploy:** `https://www.futasaku.com/admin/` loads, the owner's token is accepted,
    and the same URL with a normal player token shows *Access denied*.
 
@@ -260,6 +286,7 @@ and the report list will read as if every report were `new` — the read screens
 | `server/tests/admin.test.ts` | authorization on **every** endpoint (no token → 401, player → 403, admin → 200); the empty allow-list locking everything; a second id in the list; the allow-list parser (and that junk can never become an admin); triage + audit; filters, keyset pagination, the limit clamp; the CSV header/cap/formula hardening; `normalizeBuild`; the economy ratio with no denominator; the campaign shaper (recorded rows, opaque ids, incomplete list); and that no secret or hidden-state column can reach a payload |
 | `admin/tests/format.test.ts` | the pure formatting/replay logic; **no game source imports `admin/`**; the dashboard carries no key or connection string; its own Vite root and output; and a stylesheet check that it introduces no colour, radius or shadow outside the app's own tokens |
 | `web/e2e/admin-dashboard.ts` | the built page in Chromium against a real local API: the access-denied screen for a normal player, all six screens plus Health & ops, "since you last looked", triage + the note really stored, CSV 200/403, the 183-hex map and a cumulative replay, keyboard navigation, and no horizontal overflow at 390 px |
+| `tests/compose-futa05-preview.test.ts` | the composer publishes `/admin/` **only** when handed a build, puts it at the site root (never inside `/firststep/`), teaches the root worker to ignore it, and refuses a build that could not work from a subdirectory |
 
 ```sh
 npm run check                                    # includes both unit suites

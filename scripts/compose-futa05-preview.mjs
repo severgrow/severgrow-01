@@ -21,6 +21,12 @@
 // futa0.4 (`futa05` = futa0.5-online HEAD). So the root map below is applied identically for both
 // trigger refs, and the workflow file itself needs no edit on either branch. That is the only
 // arrangement here that cannot produce two different roots.
+//
+// THE ADMIN DASHBOARD (docs/ADMIN.md) IS OPT-IN, AND THAT IS DELIBERATE.
+// `adminDist` is an OPTIONAL fourth argument. The workflow does not pass it unless the repository
+// variable ADMIN_ROUTE is '1', so a plain push composes a byte-identical site and cannot publish
+// /admin/ by accident. When it IS passed, the dashboard's own build is copied to /admin/ and the
+// route joins SIBLING_ROUTES so neither the root promotion nor the worker guards can sweep it away.
 import assert from 'node:assert/strict';
 import {
   cpSync,
@@ -35,8 +41,8 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [site, dist, commit] = process.argv.slice(2);
-assert(site && dist && /^[0-9a-f]{40}$/.test(commit ?? ''), 'Usage: site dist fullCommitSha');
+const [site, dist, commit, adminDist] = process.argv.slice(2);
+assert(site && dist && /^[0-9a-f]{40}$/.test(commit ?? ''), 'Usage: site dist fullCommitSha [adminDist]');
 assert(existsSync(join(dist, 'index.html')), `missing ${dist}/index.html`);
 assert(
   readFileSync(join(dist, 'index.html'), 'utf8').includes('./assets/'),
@@ -44,7 +50,7 @@ assert(
 );
 
 /** Routes that live beside the root and must never be swept into /firststep/. */
-const SIBLING_ROUTES = ['firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5'];
+const SIBLING_ROUTES = ['admin', 'firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5'];
 
 /**
  * Main's own worker must not treat a sibling route as its offline index. compose-pages.mjs and
@@ -54,10 +60,14 @@ const SIBLING_ROUTES = ['firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'f
 const patchMainWorker = (path) => {
   if (!existsSync(path)) return;
   const worker = readFileSync(path, 'utf8');
-  const excludedNow = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test)(\\/|$)/';
+  const excludedNow = '/\\/(?:test2?|futa0[.]4|futa0[.]5|futa-test|admin)(\\/|$)/';
   const excludedBefore = '/\\/(?:test2?|futa0[.]4|futa-test)(\\/|$)/';
   const excludedFirst = '/\\/(?:test2?|futa0[.]4)(\\/|$)/';
   const original = '/\\/test2?(\\/|$)/';
+  // The early return stays keyed on `futa0[.]5`: a worker that already mentions it was patched by an
+  // earlier copy of this script, and re-deriving the exact old text to add `admin` would risk an
+  // assert in a live deploy. Main's worker is scoped to /firststep/ after the move, so it can never
+  // serve /admin/ — the guard that must know about /admin/ is the ROOT worker (see patchRootWorker).
   if (worker.includes(excludedNow) || worker.includes('futa0[.]5')) return;
   // Replacer functions, not strings: these patterns contain `$`, which a replacement string mangles.
   if (worker.includes(excludedBefore)) writeFileSync(path, worker.replace(excludedBefore, () => excludedNow));
@@ -76,7 +86,9 @@ const patchMainWorker = (path) => {
 const patchRootWorker = (path) => {
   assert(existsSync(path), `missing ${path}`);
   const worker = readFileSync(path, 'utf8');
-  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test)(\/|$)/.test(url.pathname)) return; // a sibling channel is never this worker's page`;
+  // `/admin/` is in this guard because the dashboard is served from the ROOT's scope: without the
+  // early return, a visit to /admin/ would be cached by this worker as the root's offline index.
+  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin)(\/|$)/.test(url.pathname)) return; // a sibling channel is never this worker's page`;
   if (worker.includes(guard)) return;
   const anchor = String.raw`  if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;`;
   assert(worker.includes(anchor), 'Review the changed FUTASAKU 0.5 worker before publishing it at the root');
@@ -168,6 +180,33 @@ patchRootWorker(join(site, 'futa04-sw.js'));
 mkdirSync(join(site, 'futa0.5'), { recursive: true });
 writeFileSync(join(site, 'futa0.5', 'index.html'), REDIRECT_HTML);
 writeFileSync(join(site, 'futa0.5', 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit, movedTo: '/' }, null, 2) + '\n');
+
+// 6b. The ADMIN DASHBOARD at /admin/ — OPT-IN (docs/ADMIN.md §7).
+//
+// Nothing here runs unless the workflow passes a fourth argument, which it does only when the
+// repository variable ADMIN_ROUTE is '1'. A plain push therefore composes exactly the site it
+// composed before, and cannot publish the dashboard by accident.
+//
+// The build is verified rather than trusted: it must use RELATIVE asset paths (base './'), which is
+// the one property that decides whether the page works from a subdirectory at all.
+if (adminDist) {
+  const source = resolve(adminDist);
+  assert(existsSync(join(source, 'index.html')), `the admin build passed to the composer has no index.html: ${adminDist}`);
+  const target = join(site, 'admin');
+  rmSync(target, { recursive: true, force: true });
+  cpSync(source, target, { recursive: true });
+  const adminHtml = readFileSync(join(target, 'index.html'), 'utf8');
+  assert(adminHtml.includes('./admin.js'), 'the admin build must reference its entry relatively (base: "./")');
+  assert(adminHtml.includes('./admin.css'), 'the admin build must reference its stylesheet relatively (base: "./")');
+  assert(existsSync(join(target, 'admin.js')) && existsSync(join(target, 'admin.css')), 'the admin build is missing its entry files');
+  // It must never register a service worker: the root's worker owns this origin, and a second
+  // registration at the same scope would fight it.
+  assert(!adminHtml.includes('serviceWorker'), 'the admin build must not register a service worker');
+  writeFileSync(join(target, 'release.json'), JSON.stringify({ channel: 'FUTASAKU Admin', commit }, null, 2) + '\n');
+  console.log(`/admin/  = the admin dashboard (${adminDist})`);
+} else {
+  console.log('/admin/  = not included (no admin build was passed; set ADMIN_ROUTE=1 to publish it)');
+}
 
 // 7. The workflow's parity guard still expects Main at the root. Install the guard that knows where
 //    Main went — the workflow line itself is untouched, so a push to futa0.4 (which runs its own

@@ -82,6 +82,29 @@ const run = () => {
   return root;
 };
 
+/** The admin build the composer may be handed as a fourth argument (opt-in, docs/ADMIN.md §7). */
+const ADMIN_HTML = '<!doctype html><title>FUTASAKU · Admin</title><script type="module" src="./admin.js"></script><link rel="stylesheet" href="./admin.css">';
+
+const withAdmin = (
+  root: string,
+  admin: { html?: string; entry?: boolean; css?: boolean } = {},
+): string => {
+  write(join(root, 'dist-admin', 'index.html'), admin.html ?? ADMIN_HTML);
+  if (admin.entry !== false) write(join(root, 'dist-admin', 'admin.js'), 'admin entry');
+  if (admin.css !== false) write(join(root, 'dist-admin', 'admin.css'), 'admin style');
+  write(join(root, 'dist-admin', 'admin.woff2'), 'font');
+  return root;
+};
+
+const runWithAdmin = (admin: { html?: string; entry?: boolean; css?: boolean } = {}): string => {
+  const root = mkdtempSync(join(tmpdir(), 'compose-admin-'));
+  written.push(root);
+  composed(root);
+  withAdmin(root, admin);
+  execFileSync(process.execPath, [script, 'site', 'dist', FUTA05_SHA, 'dist-admin'], { cwd: root, encoding: 'utf8' });
+  return root;
+};
+
 const read = (root: string, ...parts: string[]) => readFileSync(join(root, ...parts), 'utf8');
 
 afterAll(() => {
@@ -146,6 +169,12 @@ describe('compose-futa05-preview: the site root map', () => {
     expect(guard).toContain("status('firststep/index.html')");
   });
 
+  it('does NOT publish /admin/ unless a build is passed to the composer', () => {
+    // The default path is the whole safety story: a plain push composes exactly the site it composed
+    // before, so the dashboard cannot go live by accident (docs/ADMIN.md §7).
+    expect(existsSync(join(root, 'site', 'admin'))).toBe(false);
+  });
+
   it('refuses to publish when the preview guard changed without this composer knowing', () => {
     const dirty = mkdtempSync(join(tmpdir(), 'compose-futa05-'));
     written.push(dirty);
@@ -154,5 +183,35 @@ describe('compose-futa05-preview: the site root map', () => {
     expect(() =>
       execFileSync(process.execPath, [script, 'site', 'dist', FUTA05_SHA], { cwd: dirty, encoding: 'utf8' }),
     ).toThrowError(/port the change into scripts\/check-pages-parity-root\.mjs/);
+  });
+});
+
+describe('compose-futa05-preview: the admin route is opt-in', () => {
+  it('publishes the dashboard at /admin/ when a build is passed, and nowhere else', () => {
+    const withAdminRoot = runWithAdmin();
+    expect(read(withAdminRoot, 'site', 'admin', 'index.html')).toBe(ADMIN_HTML);
+    expect(read(withAdminRoot, 'site', 'admin', 'admin.js')).toBe('admin entry');
+    expect(read(withAdminRoot, 'site', 'admin', 'admin.css')).toBe('admin style');
+    expect(JSON.parse(read(withAdminRoot, 'site', 'admin', 'release.json')).channel).toBe('FUTASAKU Admin');
+    // The Main move must not have swept the dashboard into /firststep/ (that is what SIBLING_ROUTES
+    // is for), and the root must still be the game.
+    expect(existsSync(join(withAdminRoot, 'site', 'firststep', 'admin'))).toBe(false);
+    expect(read(withAdminRoot, 'site', 'index.html')).toBe(FUTA05_HTML);
+  });
+
+  it('teaches the root worker to leave /admin/ alone', () => {
+    const withAdminRoot = runWithAdmin();
+    const worker = read(withAdminRoot, 'site', 'futa04-sw.js');
+    // Without this, a visit to /admin/ would be cached as the root's offline index.
+    expect(worker).toContain('firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin');
+  });
+
+  it('refuses a build that could not work from a subdirectory', () => {
+    // An absolute asset path is the classic way a page works at one address and 404s at another.
+    expect(() => runWithAdmin({ html: '<script src="/admin.js"></script>' })).toThrowError(/relative|relative asset paths/);
+    expect(() => runWithAdmin({ entry: false })).toThrowError(/relative|missing its entry files/);
+    expect(() => runWithAdmin({ html: '<script src="./admin.js"></script><link rel="stylesheet" href="./admin.css"><script>navigator.serviceWorker.register("./sw.js")</script>' })).toThrowError(
+      /must not register a service worker/,
+    );
   });
 });
