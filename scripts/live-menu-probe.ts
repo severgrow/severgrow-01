@@ -2,7 +2,10 @@
 // Reports the real computed state of each control and screenshots the menu to look at.
 import { chromium } from 'playwright-core';
 
-const BASE = 'https://www.futasaku.com/';
+const BASE = process.env.BASE ?? 'https://www.futasaku.com/';
+// Print it FIRST, not only in the summary: a mistargeted run must be obvious at a glance rather than
+// discovered after reading the results.
+console.log(`base: ${BASE}`);
 const browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
 

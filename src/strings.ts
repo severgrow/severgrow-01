@@ -538,7 +538,9 @@ export const MENU = Object.freeze({
   /** the main menu entry that opens the shared world map */
   world: 'The world map',
   /** the quiet PLAY entry that browses the level list (LEVEL <n> starts a level outright) */
-  levels: 'Levels',
+  // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
+  // player is not given access to every level - MENU.level(n) starts the next one they have not
+  // completed. Kept out of strings.ts entirely rather than left as a string nothing reads.
   /** the PLAY entry that opens the three training tiers */
   training: 'Training',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */

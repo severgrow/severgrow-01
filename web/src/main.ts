@@ -672,13 +672,10 @@ function layoutMenu(canContinue: boolean) {
     $('menu-online').hidden = !online;
     setLead($('menu-online'), online);
     setLead(cmp, !online);
-    // The quiet way back to the level list. LEVEL <n> starts a level outright, so this is the
-    // only browse/replay route outside the finish screen. Deliberately never the lead.
-    const levelsBtn = $('menu-levels');
-    levelsBtn.hidden = false;
-    levelsBtn.textContent = MENU.levels;
-    levelsBtn.setAttribute('aria-label', MENU.levels);
-    setLead(levelsBtn, false);
+    // There is deliberately NO "Levels" entry (owner, 2026-10-16): the player does not get access to
+    // the whole list. LEVEL <n> above starts the next level they have NOT completed, and that is the
+    // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
+    // hands off to it once no next level is left.
     $('menu-new').textContent = MENU.training;
     $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
     setLead($('menu-new'), false);
@@ -6085,7 +6082,7 @@ const bind = (id: string, fn: () => void) =>
  * campaign screen binding, and the training picker below. The legacy channels never see the submenu
  * and keep the flat menu they are used to, so their own tests are untouched.
  */
-const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-levels', 'menu-new'] as const;
+const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));
@@ -6093,9 +6090,6 @@ if (FEATURES.campaign) {
 
 bind('menu-play', openPlayMenu);
 bind('play-back', () => showScreen('menu'));
-// The quiet way back to the level list: LEVEL <n> starts a level outright, so this is how a player
-// browses or replays one. Same screen the finish card's "Back to campaign" opens.
-bind('menu-levels', () => showScreen('campaign'));
 // The hub takes over the whole screen; the submenu must not stay behind it.
 $('menu-online').addEventListener('click', closePlayMenu);
 
@@ -6119,9 +6113,9 @@ bind('levels-back', () => showScreen('menu'));
 // LEVEL <n> in the PLAY submenu goes STRAIGHT into the game (owner, 2026-10-16: "it should take you
 // straight to the game - dont show the whole levels and chapters"). It is the same entry the
 // tutorial hands off to and the campaign screen's own leading button uses: resume an unfinished
-// campaign match, otherwise open the player's current level. The chapters/levels list is still
-// reachable - the finish screen's "Back to campaign" opens it, which is where an old level is
-// replayed. There is deliberately no second way to START a level.
+// campaign match, otherwise open the player's current level. The owner then removed the "Levels"
+// entry (2026-10-16), so this is now the ONLY way to start a level and the list is reached only from
+// the finish card once the campaign runs out of next levels.
 bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());

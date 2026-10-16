@@ -109,10 +109,12 @@
                product menu it reads LEVEL <n> (the level the player is on). -->
           <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
-          <!-- The quiet way back to the level list. LEVEL <n> starts a level outright (owner,
-               2026-10-16), so without this the list would be reachable only from the finish
-               screen — you could not go back and replay an earlier level. -->
-          <button id="menu-levels" class="btn ghost big" type="button" aria-label="Levels" hidden>Levels</button>
+          <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
+               chapter/level list. The owner's rule is that the player does not need access to every
+               level - the LEVEL <n> entry above starts the next level they have NOT completed, and
+               that is the only way in. The list still exists and still renders; it is now reached
+               only from the finish card's "Back to campaign", which is where the campaign hands the
+               player off once there is no next level left. -->
           <!-- The world map: a top-level destination of its own, in the main menu with Tutorial and
                Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
                submenu). Revealed by main.ts when the build has an online endpoint and the screen it

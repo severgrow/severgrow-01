@@ -7,7 +7,10 @@
 // asset requests, and whether each screen the owner is about to hand to ten people actually renders.
 import { chromium } from 'playwright-core';
 
-const BASE = 'https://www.futasaku.com/';
+// Overridable with BASE, like the other probes here. It used to be hardcoded to the live site, which
+// meant a "local" run silently measured PRODUCTION instead - and reported a menu the local build no
+// longer had. A tool that cannot be pointed at the thing you are testing is worse than no tool.
+const BASE = process.env.BASE ?? 'https://www.futasaku.com/';
 // Phone first (that is what most testers will use), but desktop is one env var away:
 //   VP=1440x900 npx tsx scripts/live-playtest-walk.ts
 const [vpW, vpH] = (process.env.VP ?? '390x844').split('x').map(Number);
@@ -88,12 +91,16 @@ for (const [id, state] of Object.entries(menu.out)) {
 await page.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement | null)?.click());
 await page.waitForTimeout(500);
 const play = await page.evaluate(() => {
-  const ids = ['menu-online', 'menu-campaign', 'menu-levels', 'menu-new'];
+  // Three entries since the "Levels" list was removed (owner, 2026-10-16): the player is not offered
+  // the whole level list, LEVEL <n> opens the next uncompleted level instead.
+  const ids = ['menu-online', 'menu-campaign', 'menu-new'];
   const out: Record<string, string> = {};
   for (const id of ids) {
     const el = document.getElementById(id) as HTMLElement | null;
     out[id] = !el ? 'MISSING' : el.hidden ? 'hidden' : `"${(el.textContent ?? '').trim().slice(0, 20)}"`;
   }
+  // A removed entry must be GONE from the DOM, not merely hidden, so nothing can append it back.
+  out['menu-levels(absent)'] = document.getElementById('menu-levels') ? 'STILL PRESENT' : 'absent';
   return out;
 });
 for (const [id, state] of Object.entries(play)) {

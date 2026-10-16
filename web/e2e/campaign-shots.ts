@@ -77,9 +77,29 @@ try {
     // ("LEVEL 1") — main.ts, owner direction 2026-10-15 — so assert that word and reach it the
     // way a player does.
     assert.equal(await page.locator('#menu-campaign').textContent(), MENU.level(1), 'the PLAY entry names the current campaign level');
-    // LEVEL <n> now starts the game outright (owner, 2026-10-16), so the LIST is opened by the
-    // quiet "Levels" entry beside it. Reach it the way a player does.
-    await openMenuEntry(page, 'menu-levels');
+    // THE "Levels" ENTRY IS GONE (owner, 2026-10-16: "remove LEVELS - we don't need player to have
+    // access to all levels"). LEVEL <n> opens the next uncompleted level, so the LIST is no longer
+    // reachable from the menu at all. It is still shown - it is where the campaign hands the player
+    // off once no next level is left - so this tool reaches it the only way a player now can: finish
+    // a campaign game and take the finish card's "Back to campaign".
+    // Played WITHOUT growing (Draw + EndAct only) on purpose: a human who never grows scores 0 and
+    // therefore cannot WIN, so the level stays incomplete and the fresh-player assertions below
+    // still describe the screen honestly (tile 1 current, "0 of N complete").
+    await openMenuEntry(page, 'menu-campaign');
+    await page.waitForFunction(() => !!(window as any).__severgrow?.state(), undefined, { timeout: 20000 });
+    await waitIdle(page);
+    for (let guard = 0; guard < 80; guard++) {
+      const s = await stateOf(page);
+      if (!s || s.phase === 'GAME_OVER') break;
+      const legal = legalActions(viewFor(s, 0));
+      const action = s.phase === 'DRAW'
+        ? (legal.find((a) => a.t === 'Draw') ?? legal[0]!)
+        : (legal.find((a) => a.t === 'EndAct') ?? legal.find((a) => a.t === 'Discard') ?? legal[0]!);
+      await page.evaluate((a: Action) => Boolean((window as any).__severgrow.playFor(a, 0)), action as never);
+      await waitIdle(page);
+    }
+    assert.equal((await stateOf(page))?.phase, 'GAME_OVER', 'the passed level reached a finish');
+    await click(page, '#go-other');
     await page.locator('#campaign-chapters .campaign-tile').first().waitFor({ state: 'visible' });
     assert.equal(await page.locator('#campaign').isVisible(), true);
     const tiles = page.locator('#campaign .campaign-tile');
