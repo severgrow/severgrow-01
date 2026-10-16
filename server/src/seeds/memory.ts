@@ -1,16 +1,23 @@
 import { SEED_ECONOMY, utcDay } from './config.js';
+import { newId } from '../ids.js';
 import { planSeedReward } from './rewards.js';
 import type { ClaimResult, RewardInput, RewardResult, SeedWallet, TrainingTicket, WorldClaim, WorldEconomyStore, WorldSnapshot } from './types.js';
 import { emptyWallet } from './types.js';
 import { WORLD_CELL_IDS, worldNeighbours } from '../world.js';
 
 type Receipt = { input: RewardInput; awarded: number; reason: string | null };
+/**
+ * One in-memory ledger entry. `id`/`category`/`createdAt` were added for the admin dashboard
+ * (docs/ADMIN.md) so the dev store can answer the same questions the Postgres table can; the
+ * existing fields keep their meaning.
+ */
+type LedgerEntry = { id: string; playerId: string; delta: number; category: string; sourceKey: string; balanceAfter: number; createdAt: number };
 
 /** Synchronous critical sections under Node's event loop; the Postgres store uses row locks. */
 export class MemoryWorldEconomyStore implements WorldEconomyStore {
   readonly claims = new Map<string, WorldClaim>();
   readonly receipts = new Map<string, Receipt>();
-  readonly ledger: { playerId: string; delta: number; sourceKey: string; balanceAfter: number }[] = [];
+  readonly ledger: LedgerEntry[] = [];
   readonly tickets = new Map<string, TrainingTicket>();
   readonly purchases = new Map<string, string>();
   readonly wallets = new Map<string, SeedWallet>();
@@ -38,7 +45,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     if (wallet.balance < SEED_ECONOMY.tileCost) return fail('NO_FUNDS');
     wallet.balance -= SEED_ECONOMY.tileCost;
     wallet.lifetimeSpent += SEED_ECONOMY.tileCost;
-    this.ledger.push({ playerId, delta: -SEED_ECONOMY.tileCost, sourceKey: `world:${requestId}`, balanceAfter: wallet.balance });
+    this.ledger.push({ id: newId(), playerId, delta: -SEED_ECONOMY.tileCost, category: 'world_claim', sourceKey: `world:${requestId}`, balanceAfter: wallet.balance, createdAt: now });
     this.claims.set(cellId, { cellId, ownerId: playerId, ownerName: null, claimedAt: now });
     this.purchases.set(`${playerId}:${requestId}`, cellId);
     return { ok: true, cellId, revision: ++this.revision, wallet: { ...wallet }, replayed: false };
@@ -66,7 +73,7 @@ export class MemoryWorldEconomyStore implements WorldEconomyStore {
     if (decision.amount) {
       wallet.balance += decision.amount;
       wallet.lifetimeEarned += decision.amount;
-      this.ledger.push({ playerId: input.playerId, delta: decision.amount, sourceKey: input.sourceKey, balanceAfter: wallet.balance });
+      this.ledger.push({ id: newId(), playerId: input.playerId, delta: decision.amount, category: input.mode, sourceKey: input.sourceKey, balanceAfter: wallet.balance, createdAt: input.now });
     }
     return { awarded: decision.amount, reason: decision.reason, wallet: { ...wallet }, replayed: false };
   }

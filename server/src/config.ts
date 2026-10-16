@@ -72,6 +72,18 @@ export type ServerConfig = {
    * Set with the `SWEEP_CRON_TOKEN` environment variable / Edge secret.
    */
   sweepCronToken?: string | null;
+  /**
+   * Player ids allowed to call the `/v1/admin/*` endpoints (docs/ADMIN.md).
+   *
+   * The check is SERVER-SIDE on every admin request, against the authenticated player's id — never
+   * a client flag, a URL path, or an email. The allow-list is read from the `ADMIN_PLAYER_IDS`
+   * environment variable (comma-separated player ids) so a second admin can be added by setting
+   * that variable, with no code change and no redeploy of new code.
+   *
+   * An EMPTY list is a valid, deliberate state: it locks every admin endpoint. It is never
+   * interpreted as "allow everyone".
+   */
+  adminPlayerIds: readonly string[];
   /** Rate limits (Postgres-backed). */
   rateLimits: {
     guestPerIpPerHour: number;
@@ -124,6 +136,44 @@ export const DEFAULT_PRODUCTION_CORS_ORIGINS: readonly string[] = Object.freeze(
 ]);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The founding admin: the owner's own player account (display name `RYK`, linked through Google).
+ * It is only the DEFAULT — `ADMIN_PLAYER_IDS` replaces it entirely when set, so this constant is
+ * never the thing that has to change to add or remove an admin.
+ */
+export const DEFAULT_ADMIN_PLAYER_IDS: readonly string[] = Object.freeze([
+  '37e3d4d0-a34c-45b3-bc61-992fcf392912',
+]);
+
+/**
+ * Parse a comma-separated admin allow-list into normalised player ids.
+ *
+ * Ids are compared as lowercase uuids, so an id pasted with capitals still matches the value in
+ * the database. Anything that is not shaped like a uuid is DROPPED rather than kept: a stray word
+ * (an email, a name, a truncated paste) must never accidentally become an admin, and a list that
+ * parses to nothing locks the endpoints instead of opening them.
+ */
+export const parseAdminPlayerIds = (raw: string | null | undefined): string[] => {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  for (const entry of raw.split(',')) {
+    const value = entry.trim().toLowerCase().replace(/^["']|["']$/g, '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)) continue;
+    seen.add(value);
+  }
+  return [...seen];
+};
+
+/**
+ * The effective admin allow-list: `ADMIN_PLAYER_IDS` when it parses to at least one id, otherwise
+ * the founding owner. Example Edge secret / env var:
+ *   ADMIN_PLAYER_IDS=37e3d4d0-a34c-45b3-bc61-992fcf392912
+ */
+export const adminPlayerIdsFromEnv = (): string[] => {
+  const fromEnv = parseAdminPlayerIds(envStr('ADMIN_PLAYER_IDS'));
+  return fromEnv.length > 0 ? fromEnv : [...DEFAULT_ADMIN_PLAYER_IDS];
+};
 
 /** Reads an environment variable from Node (process.env) or Deno (Deno.env), without logging it. */
 const readEnv = (name: string): string | undefined => {
@@ -228,6 +278,7 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = Object.freeze({
   minClientVersion: '0.5.0',
   maxBatchActions: 12,
   sweepCronToken: envStr('SWEEP_CRON_TOKEN'),
+  adminPlayerIds: Object.freeze(adminPlayerIdsFromEnv()),
   // Per-IP limits are deliberately generous: a household/cafe/office/carrier NAT shares one public
   // address, so tight per-IP budgets punished real players. The per-PLAYER limits (keyed by token)
   // are the real anti-abuse control because they cannot be shared between players. Every value is

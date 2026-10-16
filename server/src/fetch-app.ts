@@ -15,7 +15,7 @@ export type FetchAppDeps = {
   live?: (req: Request, path: string) => Promise<Outcome | null>;
 };
 
-type Outcome = { status: number; body: unknown };
+type Outcome = { status: number; body?: unknown; raw?: { contentType: string; text: string } };
 
 const bearer = (header: string | null): string | null => {
   if (typeof header !== 'string') return null;
@@ -251,6 +251,14 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
     try {
       const outcome = await handle(req, path, url);
       logger(`${req.method} ${path} ${outcome.status} ${Date.now() - started}ms`);
+      // A router may return a raw body instead of JSON (the admin CSV export). It is written
+      // verbatim with its own content type; `no-store` still comes from the CORS headers.
+      if (outcome.raw) {
+        return new Response(outcome.raw.text, {
+          status: outcome.status,
+          headers: { ...corsFor(req), 'content-type': outcome.raw.contentType },
+        });
+      }
       return new Response(JSON.stringify(outcome.body), {
         status: outcome.status,
         headers: { ...corsFor(req), 'content-type': 'application/json; charset=utf-8' },

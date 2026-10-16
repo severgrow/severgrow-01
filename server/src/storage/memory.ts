@@ -381,6 +381,19 @@ export class MemoryStorage implements Storage {
     return copy(next);
   }
 
+  /**
+   * Admin/dev-only listings. Deliberately NOT part of the `Storage` port: the game never lists
+   * every player or every match, and widening the port for a dashboard would invite exactly that.
+   * Used by the in-memory admin store (`server/src/admin/memory.ts`) and the local dev server.
+   */
+  allPlayers(): PlayerRecord[] {
+    return [...this.players.values()].map(copy);
+  }
+
+  allMatches(): MatchRecord[] {
+    return [...this.matches.values()].map(copy);
+  }
+
   async sweep(now: number, guestMaxAgeMs: number): Promise<SweepResult> {
     let timedOut = 0;
     let expiredWaiting = 0;

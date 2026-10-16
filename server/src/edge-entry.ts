@@ -5,7 +5,7 @@
 /// <reference path="./edge-deno.d.ts" />
 import postgres from 'postgres';
 import { CURRENT_RULES_VERSION } from '../../src/engine/index.js';
-import { DEFAULT_SERVER_CONFIG, productionCorsOrigins } from './config.js';
+import { DEFAULT_SERVER_CONFIG, adminPlayerIdsFromEnv, productionCorsOrigins } from './config.js';
 import type { ServerConfig } from './config.js';
 import { corsHeadersForRequest } from './cors.js';
 import { ApiError } from './errors.js';
@@ -22,6 +22,8 @@ import { poolFromPostgresJs } from './storage/postgres-js-pool.js';
 import { postgresWorldEconomyStore } from './seeds/postgres.js';
 import { WorldEconomyService } from './seeds/service.js';
 import { createWorldEconomyRouter } from './seeds/router.js';
+import { postgresAdminStore } from './admin/postgres.js';
+import { createAdminRouter } from './admin/router.js';
 import {
   classifyDatabaseUrl,
   edgePoolOptions,
@@ -40,6 +42,9 @@ const edgeConfig: ServerConfig = {
   ...DEFAULT_SERVER_CONFIG,
   rulesVersion: CURRENT_RULES_VERSION,
   corsOrigins,
+  // The admin allow-list, from the `ADMIN_PLAYER_IDS` Edge secret (comma-separated player ids).
+  // Unset means the founding owner; a set-but-empty value locks every admin route.
+  adminPlayerIds: Object.freeze(adminPlayerIdsFromEnv()),
 };
 
 // Preflight + early error/health responses must allow the client's custom headers, or the browser
@@ -142,7 +147,7 @@ const buildRuntime = async (): Promise<EdgeRuntime> => {
     authenticate: (t) => service.authenticate(t),
     now: () => service.serverNow(),
   });
-  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts) });
+  const app = createFetchApp({ service, config: edgeConfig, logger: log, live: chainRouters(live.router(service), createWorldEconomyRouter({ economy, authenticate: (t) => service.authenticate(t) }), createFeedbackRouter({ store: postgresFeedbackStore(pool), storage: live.storage, authenticate: (t) => service.authenticate(t), now: () => service.serverNow() }), accounts, createAdminRouter({ store: postgresAdminStore(pool), authenticate: (t) => service.authenticate(t), config: edgeConfig, now: () => service.serverNow(), rulesVersion: service.rulesVersion, storage: live.storage, pingDb: () => service.pingStorage(), log })) });
   return { app, service, dbInfo: classifyDatabaseUrl(databaseUrl) };
 };
 

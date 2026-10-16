@@ -139,9 +139,20 @@ export const createFeedbackRouter = (deps: {
   };
 };
 
-/** Several routers behind the one fetch-app hook: the first that owns the path answers. */
+/**
+ * Several routers behind the one fetch-app hook: the first that owns the path answers.
+ *
+ * Every router answers the same minimal shape — a status plus EITHER a JSON `body` OR a `raw`
+ * payload (the admin CSV export) — so any router may be chained here. A router that does not own
+ * the path returns null and the next one is asked.
+ */
+export type ChainedRouter = (
+  req: Request,
+  path: string,
+) => Promise<{ status: number; body?: unknown; raw?: { contentType: string; text: string } } | null>;
+
 export const chainRouters =
-  (...routers: FeedbackRouter[]): FeedbackRouter =>
+  (...routers: ChainedRouter[]): ChainedRouter =>
   async (req, path) => {
     for (const r of routers) {
       const out = await r(req.clone(), path);

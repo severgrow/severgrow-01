@@ -6,10 +6,11 @@ import type { Storage } from '../storage/types.js';
 import { MemoryIdentityLinkStore, createAccountsRouter, postgresIdentityLinkStore, supabaseAuthProvider } from './accounts.js';
 import type { AccountsRouter, IdentityLinkStore } from './accounts.js';
 
-export const accountsRouterNode = async (storage: Storage, service: MatchService, databaseUrl: string | null, env: NodeJS.ProcessEnv = process.env): Promise<AccountsRouter> => {
+export const accountsRouterNode = async (storage: Storage, service: MatchService, databaseUrl: string | null, env: NodeJS.ProcessEnv = process.env, injectedLinks?: IdentityLinkStore | null): Promise<AccountsRouter> => {
   const { MemoryStorage } = await import('../storage/memory.js');
   let links: IdentityLinkStore;
-  if (storage instanceof MemoryStorage || !databaseUrl) {
+  if (injectedLinks) links = injectedLinks;
+  else if (storage instanceof MemoryStorage || !databaseUrl) {
     links = new MemoryIdentityLinkStore(storage instanceof MemoryStorage ? (p, k, n) => storage.revokeTokensOfPlayer(p, k, n) : undefined);
   } else {
     const { poolFromUrl } = await import('../storage/pg-pool.js');
