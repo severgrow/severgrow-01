@@ -32,7 +32,16 @@ for (const prefix of ['', 'test/', 'test2/']) {
 `;
 
 const MAIN_HTML = '<!doctype html><title>Severor</title><script src="./assets/index-MAIN.js"></script>';
-const FUTA05_HTML = '<!doctype html><title>Futasaku</title><script src="./assets/index-F05.js"></script>';
+const FUTA05_HTML = [
+  '<!doctype html><html lang="en"><head><meta charset="utf-8" />',
+  '<title>Futasaku</title>',
+  '<meta property="og:title" content="Futasaku" />',
+  '<meta property="og:description" content="Grow your network. Keep it joined to your home. Cut your opponent\'s links." />',
+  '<meta property="og:image" content="https://www.futasaku.com/og.jpg?v=2" />',
+  '<meta name="twitter:card" content="summary_large_image" />',
+  '<meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=2" />',
+  '</head><body><script src="./assets/index-F05.js"></script></body></html>',
+].join('\n');
 // The real file's fetch guard, which the composer anchors its sibling-route line to.
 const WORKER = [
   "self.addEventListener('fetch', (e) => {",
@@ -152,6 +161,20 @@ describe('compose-futa05-preview: the site root map', () => {
     expect(redirect).toContain("location.replace('/' + location.search + location.hash)");
     expect(redirect).toContain('http-equiv="refresh"');
     expect(JSON.parse(read(root, 'site', 'futa0.5', 'release.json')).commit).toBe(FUTA05_SHA);
+  });
+
+  it('gives the /futa0.5/ forwarding page the root build\'s own share tags', () => {
+    // A link shared while the game still lived at /futa0.5/ hits this page, and a scraper reads it
+    // before any script runs: without the tags that link previews with no picture at all. They are
+    // LIFTED from the promoted build so the forwarding page can never carry stale words or a stale
+    // image address of its own.
+    const redirect = read(root, 'site', 'futa0.5', 'index.html');
+    expect(redirect).toContain('<title>Futasaku</title>');
+    expect(redirect).toContain('property="og:image" content="https://www.futasaku.com/og.jpg?v=2"');
+    expect(redirect).toContain('name="twitter:image" content="https://www.futasaku.com/og.jpg?v=2"');
+    expect(redirect).toContain('property="og:title" content="Futasaku"');
+    // and still noindex: it is a doorway, never the page a search engine should keep.
+    expect(redirect).toContain('content="noindex"');
   });
 
   it('retires the old root worker and keeps the new one inside its own routes', () => {

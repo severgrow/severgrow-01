@@ -48,13 +48,28 @@
     <meta name="description" content="Futasaku: grow your network, keep it joined to your home, cut your opponent's links." />
     <title>Futasaku</title>
     <link rel="icon" type="image/png" href="./futasaku-icon-192.png" />
+    <!-- The share card. og:image MUST be ABSOLUTE: the Open Graph spec requires it, and real
+         scrapers (WhatsApp, iMessage, Slack) drop a relative path rather than resolving it — which
+         is how a link preview ends up with no picture, or with a stale one. The `?v=` is a
+         cache-buster: the file keeps the path /og.jpg across deploys, so the query is what tells a
+         cache that the artwork changed. Regenerate the picture with
+         `npx tsx web/e2e/og-image.ts` (and bump `?v=` in the same commit). -->
     <meta property="og:title" content="Futasaku" />
     <meta property="og:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="./og.png" />
+    <meta property="og:site_name" content="Futasaku" />
+    <meta property="og:url" content="https://www.futasaku.com/" />
+    <meta property="og:image" content="https://www.futasaku.com/og.jpg?v=2" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
+    <!-- X/Twitter does not read the og:* tags for a large-image card; it needs its own. -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Futasaku" />
+    <meta name="twitter:description" content="Grow your network. Keep it joined to your home. Cut your opponent's links." />
+    <meta name="twitter:image" content="https://www.futasaku.com/og.jpg?v=2" />
+    <meta name="twitter:image:alt" content="A Futasaku duel board: green growth around your home, the opponent's red pushing in, with the Futasaku wordmark." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./futasaku-icon-180.png" />
     <link rel="preload" href="./src/fonts/v2/besley-wght.woff2" as="font" type="font/woff2" crossorigin />

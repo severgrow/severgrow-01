@@ -114,14 +114,29 @@ self.addEventListener('activate', (event) => {
 });
 `;
 
-/** Shared /futa0.5/ links keep working: the app moved to the root, so this is a forwarding page. */
-const REDIRECT_HTML = `<!doctype html>
+/**
+ * Shared /futa0.5/ links keep working: the app moved to the root, so this is a forwarding page.
+ *
+ * It carries the root's OWN share metadata (lifted from the build it forwards to) so a link that was
+ * shared while the game still lived at /futa0.5/ still previews correctly: a scraper reads this page
+ * before any script runs, and without the tags it would find no picture at all. Reusing the build's
+ * tags — rather than repeating the words here — is what keeps the two from drifting apart.
+ */
+const shareMeta = (html) => {
+  const tags = [...html.matchAll(/<meta\s+(?:property|name)="(?:og:[^"]+|twitter:[^"]+)"[^>]*>/g)].map((m) => m[0]);
+  const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? 'FUTASAKU';
+  return { title, tags };
+};
+const redirectHtml = (distHtml) => {
+  const { title, tags } = shareMeta(distHtml);
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>FUTASAKU</title>
+    <title>${title}</title>
     <meta name="robots" content="noindex" />
     <link rel="canonical" href="https://www.futasaku.com/" />
+${tags.map((tag) => `    ${tag}`).join('\n')}
     <script>
       // Invite links look like /futa0.5/#/join/CODE: keep the query string and the hash.
       location.replace('/' + location.search + location.hash);
@@ -134,6 +149,7 @@ const REDIRECT_HTML = `<!doctype html>
   </body>
 </html>
 `;
+};
 
 // 1. Make Main's worker safe while it is still at the root.
 patchMainWorker(join(site, 'sw.js'));
@@ -178,7 +194,10 @@ patchRootWorker(join(site, 'futa04-sw.js'));
 
 // 6. /futa0.5/ forwards to the root so every shared link keeps working.
 mkdirSync(join(site, 'futa0.5'), { recursive: true });
-writeFileSync(join(site, 'futa0.5', 'index.html'), REDIRECT_HTML);
+// The publisher reads the FUTASAKU 0.5 build it just promoted to the root, so the forwarding page
+// carries that build's own share tags (title, og:image, twitter:image) — a link shared while the
+// game lived at /futa0.5/ still previews with the current card.
+writeFileSync(join(site, 'futa0.5', 'index.html'), redirectHtml(readFileSync(join(site, 'index.html'), 'utf8')));
 writeFileSync(join(site, 'futa0.5', 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit, movedTo: '/' }, null, 2) + '\n');
 
 // 6b. The ADMIN DASHBOARD at /admin/ — OPT-IN (docs/ADMIN.md §7).

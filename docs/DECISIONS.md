@@ -1,5 +1,44 @@
 # Decisions (Bloom, layout, homes, polish: v0.7; UI pass: v0.8)
 
+## 2026-10-16 — The shared link preview showed the old name (owner report; fixed)
+
+Owner: "when sending a link with an invite to game - the graphic that shows up is an outdated severor
+one". Two separate faults, both on the share path.
+
+- **The picture itself was stale.** `web/public/og.png` was drawn by `web/e2e/og-image.ts` on
+  2026-10-04, two days BEFORE the rename (`GAME_TITLE` was `Severor` then), and the file was never
+  regenerated. It literally rendered the old wordmark. Nothing caught it because the generator is a
+  hand-run script and the file is committed.
+- **`og:image` was relative** (`./og.png`). The Open Graph spec requires an absolute URL and
+  WhatsApp / iMessage / Slack drop a relative one rather than resolving it.
+
+So the card is no longer hand-drawn. `npx tsx web/e2e/og-image.ts` now renders the REAL game (the
+built `web/dist`) in Chromium at exactly 1200x630, plays a fixed seeded opening, screenshots it, and
+lays the app's own marks (`futasaku-emblem.webp` / `futasaku-white.webp`, tinted `--c-accent` with the
+same alpha-mask recipe `branding.ts` uses) over the top band, with the words lifted from
+`web/index.html`'s own `og:title` / `og:description`. Palette, type and board therefore come from the
+product and cannot drift from it again. The file is `web/public/og.jpg`, not `.png`: the picture is
+photographic and lossless PNG weighed ~930 KB against ~200 KB at JPEG q92 — five times the bytes on
+every unfurl. The script also verifies the share path it feeds (absolute url, real file, exact size,
+no stale name, current icons); a fast unit guard (`web/tests/share-preview.test.ts`) re-checks the
+metadata on every `npm run check`.
+
+Metadata added: `og:site_name`, `og:url`, `og:image:type`, `og:image:alt`, `og:image:v`, and the
+`twitter:title` / `twitter:description` / `twitter:image` set X needs (only `twitter:card` was there).
+`/futa0.5/` — where share links pointed until 2026-10-14 — is a forwarding page, and it now carries
+the root build's own share tags (lifted from that build, never repeated by hand) so old links preview
+too.
+
+**Cache, and what the owner has to do.** Every invite link is `https://www.futasaku.com/#/join/CODE`,
+and a fragment is never sent to a server, so scrapers see the SAME page URL for every invite and cache
+its preview as one object (WhatsApp and Slack hold these for weeks). A `?v=2` query was added to
+`og:image` — it makes the image address change when the artwork does, which protects CDNs and
+browsers — but it cannot bust a page-URL cache that already holds the old card. To see the new one on
+a link that was already shared: re-scrape it with Facebook's Sharing Debugger ("Scrape Again", which
+WhatsApp reads), or share it once as a NEW address (any extra query, e.g.
+`https://www.futasaku.com/?v=2#/join/CODE`); a fresh invite CODE does NOT help, because the fragment is
+stripped. Bump `?v=` in `web/index.html` in the same commit whenever the picture changes again.
+
 ## 2026-10-15 — Seeds/world v1 implementation boundary
 
 The isolated `futa0.5-world-seeds` branch adds a server-owned Seeds ledger and a 183-cell shared world while preserving the current engine. No merge or deployment is included. The historical automatic map-award path is removed in source and historical owners are copied in the new migration. The online owner must coordinate schema, Edge and web activation so no old awards are missed between copy and cutover. Details: [WORLD-MAP.md](WORLD-MAP.md).
