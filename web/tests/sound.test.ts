@@ -153,6 +153,9 @@ const CUES: readonly [string, (s: Sound) => void][] = [
   ['fanfare', (s) => s.fanfare(true)],
   ['lose', (s) => s.lose()],
   ['finalTurns', (s) => s.finalTurns()],
+  // Listed LAST on purpose: the deterministic jitter counter walks the list in order, so a new cue
+  // inserted earlier would change every cue after it and make this inventory lie about the others.
+  ['seedTick', (s) => s.seedTick(2, true)],
 ];
 
 describe('sound palette', () => {

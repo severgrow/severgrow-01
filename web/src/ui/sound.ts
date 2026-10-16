@@ -295,6 +295,14 @@ export class Sound {
     this.tone(b * 2.4 * (1 + i * 0.14), 0.03, { wave: 'square', gain: 0.028, attack: 0.002, lowpass: 3200 });
   }
 
+  /** seedTick: one very small wood tick per counted Seed, stepping up as the number settles. The
+   *  last one is a touch firmer and rounder, so the count has a landing. Never a fanfare: at its
+   *  loudest it is quieter than a place. */
+  seedTick(step = 0, last = false) {
+    const b = this.base * (1 + Math.min(Math.max(step, 0), 6) * 0.07);
+    this.woodTick(b * 1.15, 0, last ? 0.062 : 0.034, last ? 0.075 : 0.045, step % 3);
+  }
+
   /** fruit: a short hollow pop. */
   fruit() {
     const { detune } = this.pick('fruit', 2);

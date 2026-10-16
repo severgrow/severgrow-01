@@ -148,6 +148,7 @@ const look = () => materialLook(settings.palette, settings.materialDetail, setti
 import { opportunities, weakSpots } from './logic/weakspots.js';
 import { BoardView, NO_OVERLAY, S, centerOf } from './ui/board.js';
 import { glintSeedStone, setSeedStoneStrength } from './ui/seedstone.js';
+import { paintSeedReward, seedReward } from './ui/seed-reveal.js';
 let DesignView: typeof BoardView = BoardView;
 const branding = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05')
   ? await import('./player/branding.js') : null;
@@ -1102,6 +1103,8 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   finalShown = false;
   lastDeckSeen = -1;
   goCounted = false;
+  goSeedSettled = false;
+  goSeedShown = null;
   replaying = false;
   coach = c ? { ...c, choice: 0 } : freshCoach(); // the coach shows only its best move
   queue = new AnimQueue(state.board);
@@ -2081,8 +2084,9 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
             const verified = results.find((entry) => entry.key === key)?.reward;
             if (!verified) return;
             seedRewardMessage = verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
-            const line = document.getElementById('go-seeds');
-            if (line && !$('gameover').hidden) { line.textContent = seedRewardMessage; line.hidden = false; }
+            // The reward can land while the finish card is already up: the SAME line repaints in
+            // place (no reflow), and the award gets its one moment here rather than a silent swap.
+            if (!$('gameover').hidden) paintGoSeeds();
           }).catch(() => { /* The saved proof remains pending for the next menu visit. */ });
         }
       }
@@ -3399,6 +3403,10 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
 
 /** the result screen's count-up plays once per game */
 let goCounted = false;
+/** the Seeds award's one moment plays once per game (a later re-render repaints it still) */
+let goSeedSettled = false;
+/** the reward message the card's seed line is currently showing (null until this game paints it) */
+let goSeedShown: string | null = null;
 
 /** the final-turns banner shows once per game */
 let finalShown = false;
@@ -5160,6 +5168,35 @@ function setGoExtrasOpen(open: boolean) {
   syncGoExtras();
 }
 
+/** Paints the shared Seeds line empty: a mode that pays no Seeds (a duel) shows no line at all. */
+function clearGoSeeds(): void {
+  goSeedShown = null;
+  paintSeedReward($('go-seeds'), { kind: 'none' }, { animate: false });
+}
+
+/**
+ * The finish card's Seeds line — the ONE place it is painted, for every mode and every path
+ * (the first render, and the reward that arrives later from the server). The reward is not always
+ * earned (a resignation or a timeout pays nothing, a win can be capped) and the number is verified
+ * AFTER the card is on screen, so `paintSeedReward` owns all three states; here we only decide
+ * whether its one moment may play, and it plays at most once per game (a re-render repaints still).
+ */
+function paintGoSeeds(): void {
+  // The card re-renders (a resize, a late history fetch, the board toggle). Repainting the same
+  // line would rebuild the row and snap a running count to its end, so the message is the guard:
+  // unchanged means "already on the card", and only a real change paints again.
+  if (goSeedShown === seedRewardMessage) return;
+  goSeedShown = seedRewardMessage;
+  const view = seedReward(seedRewardMessage);
+  const fresh = view.kind === 'award' && !goSeedSettled;
+  if (view.kind === 'award') goSeedSettled = true;
+  paintSeedReward($('go-seeds'), view, {
+    animate: fresh && timeScale() > 0 && !settings.reduceMotion,
+    scale: Math.max(timeScale(), 0.35),
+    tick: (step, last) => { if (settings.sound) sound.seedTick(step, last); },
+  });
+}
+
 function renderGameOver() {
   const go = $('gameover');
   if (isOnlineDuel()) {
@@ -5172,6 +5209,9 @@ function renderGameOver() {
     const show = !!info && !gameOverDismissed && !$('game').hidden;
     go.hidden = !show;
     if (!show || !info || !os) return;
+    // A duel settles its own wallet server-side and this card has never carried a seed line; clear
+    // the paragraph the three modes SHARE, so an offline award cannot leak onto a duel's result.
+    clearGoSeeds();
     // The match's whole public history is one fetch; when it lands, re-render so the highlights are
     // the real ones (offline's are computed from the same event list). Fetched at most once.
     if (!os.historyLoaded && !os.historyLoading) {
@@ -5268,8 +5308,7 @@ function renderGameOver() {
   const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
-  $('go-seeds').textContent = seedRewardMessage;
-  $('go-seeds').hidden = !seedRewardMessage;
+  paintGoSeeds();
   const other = $('go-other');
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
   // same thing (the online rematch keeps its own secondary, untouched).
@@ -6949,6 +6988,17 @@ let appReady = false;
   /** Tests/screenshots: the install invitation's memory (games counted) and a way to show it. */
   install: () => installPrompt.memory(),
   showInstall: () => installPrompt.showNow(),
+  /**
+   * Tests/screenshots only: pay an award on the finish card's own Seeds line, through the very
+   * paint path a win uses (so the suite measures what the player would get, not a copy of it).
+   */
+  seedReveal: (amount: number) => {
+    seedRewardMessage = `+${Math.max(0, Math.floor(amount))} Seeds`;
+    goSeedSettled = false;
+    goSeedShown = null; // a test may ask for the same award twice; each ask is a fresh paint
+    paintGoSeeds();
+    return seedRewardMessage;
+  },
 };
 
 // The product menu's own controls (PLAY, the world map, Tutorial, Settings and the saved-game

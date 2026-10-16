@@ -146,6 +146,46 @@ const waitFinish = async (page: Page) => {
 const stateSeed = (page: Page): Promise<number | null> =>
   page.evaluate('(() => { const h = window.__severgrow; const s = h && h.state(); return s ? s.seed : null; })()') as Promise<number | null>;
 
+/** The reward line as the player sees it: '' when there is no line at all (which is the answer for
+ *  a game that paid nothing — absence, never a zero). */
+const seedLine = (page: Page): Promise<string> =>
+  page.evaluate('(() => { const el = document.getElementById("go-seeds"); return el && el.getClientRects().length ? (el.textContent || "").trim() : ""; })()') as Promise<string>;
+
+/**
+ * The Seeds reveal's own measurement, taken on the real card. `animations` is what proves the two
+ * settings differ: the count-up has beats running, the reduced form has NONE (and never will — no
+ * rAF loop, nothing left behind).
+ */
+const MEASURE_SEEDS = `(() => {
+  const host = document.getElementById('go-seeds');
+  const card = document.querySelector('#gameover .go-card');
+  const screen = document.getElementById('gameover');
+  const row = host && host.querySelector('.seed-gain');
+  const num = row && row.querySelector('.seed-gain-num');
+  const label = host && host.querySelector('.sr-only');
+  const shown = (el) => !!el && el.getClientRects().length > 0;
+  const r = row ? row.getBoundingClientRect() : null;
+  return {
+    shown: shown(row),
+    number: num ? (num.textContent || '') : null,
+    label: label ? (label.textContent || '').trim() : null,
+    lines: host && shown(host) ? Math.round(host.getBoundingClientRect().height) : 0,
+    rowHeight: r ? Math.round(r.height) : null,
+    animations: row ? row.getAnimations({ subtree: true }).length : 0,
+    inside: !!r && r.top >= -1 && r.bottom <= window.innerHeight + 1 && r.left >= -1 && r.right <= window.innerWidth + 1,
+    cardOverflow: card ? card.scrollHeight - card.clientHeight : null,
+    screenOverflow: screen ? screen.scrollHeight - screen.clientHeight : null,
+  };
+})()`;
+
+type SeedMeasure = {
+  shown: boolean; number: string | null; label: string | null; lines: number;
+  rowHeight: number | null; animations: number; inside: boolean;
+  cardOverflow: number | null; screenOverflow: number | null;
+};
+
+const seedMeasure = (page: Page) => page.evaluate(MEASURE_SEEDS) as Promise<SeedMeasure>;
+
 /**
  * Dismiss the install invitation if it is on screen. It is a timed sheet that may open OVER the
  * finish card (by design — it counts the games this device has played), and it takes pointer events
@@ -171,16 +211,21 @@ const clickThrough = async (page: Page, selector: string, tries = 30): Promise<b
   return false;
 };
 
-const bootScreen = async (browser: Browser, vp: { width: number; height: number }) => {
+/**
+ * A phone with the finish card's own settings. Reduce motion / Speed off is the default (the strict
+ * case: it is the setting where nothing may move), and ONE caller asks for the moving version so the
+ * Seeds reveal's count-up can be watched here too.
+ */
+const bootScreen = async (browser: Browser, vp: { width: number; height: number }, moving = false) => {
   const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 1, hasTouch: vp.width < 800, isMobile: vp.width < 800 });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.addInitScript(() => {
+  await page.addInitScript((animated: boolean) => {
     if (sessionStorage.getItem('finish-fit-seeded')) return;
     sessionStorage.setItem('finish-fit-seeded', '1');
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: 'skip', reduceMotion: true, autoSkip: false, confirmPolicy: 'always' }));
-  });
+    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, speed: animated ? 'normal' : 'skip', reduceMotion: !animated, autoSkip: false, confirmPolicy: 'always' }));
+  }, moving);
   return { context, page, errors };
 };
 
@@ -225,6 +270,9 @@ try {
       const classicWon = (await page.textContent('#go-title')) === RESULT.won;
       const m = await report('classic', vp.key, page, errors, classicWon ? 'Play again' : 'Try again');
       check(`classic ${vp.key}: a plain offline game never offers a next level`, !m.buttons.some((b) => b.label === 'Next level'));
+      // A plain offline game pays nothing, and nothing is exactly what it must show: no line, no
+      // zero, no empty row waiting for a number (the reward line lives on the online build).
+      check(`classic ${vp.key}: the reward line is absent, not a zero`, (await seedLine(page)) === '', await seedLine(page));
       seen[`classic-${vp.key}`] = m.visibleParts;
       await context.close();
     }
@@ -237,8 +285,15 @@ try {
       await page.click('#menu-play');
       await page.waitForSelector('#play-menu:not([hidden])', { timeout: 10_000 });
       await page.click('#menu-campaign');
-      await page.waitForSelector('#campaign:not([hidden])', { timeout: 10_000 });
-      await page.click('#campaign-continue');
+      // The campaign's one entry point hands STRAIGHT into the current level (there is no level list
+      // to pick from any more), so this waits for whichever comes up: the screen if the list ever
+      // returns, the board today. Waiting only on the screen made this block time out.
+      await page.waitForFunction(
+        `(() => { const h = window.__severgrow; return !!h.state() || !document.getElementById('campaign').hidden; })()`,
+        undefined,
+        { timeout: 20_000 },
+      );
+      if (await page.locator('#campaign-continue').isVisible().catch(() => false)) await page.click('#campaign-continue');
       await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
       // The campaign's own leading button IS the campaign entry point the tutorial now uses, so this
       // also proves the handoff lands in a REAL level: a fresh profile opens level 1 (its own seed).
@@ -249,6 +304,11 @@ try {
       await waitFinish(page);
       const wonIt = (await page.textContent('#go-title')) === CAMPAIGN.levelWon(CAMPAIGN_LEVELS[0]!.number);
       const m = await report('campaign', vp.key, page, errors, wonIt ? CAMPAIGN.nextLevel : undefined);
+      // A campaign win can pay Seeds, but the number is verified after the card is up and it is not
+      // always earned. Whatever the build: the line is either absent or the game's own calm sentence
+      // — never a bare number, and never a zero (a zero is not a state the player is shown).
+      const line = await seedLine(page);
+      check(`campaign ${vp.key}: the reward line is a notice or absent, never a zero`, line === '' || !/^[+\d]/.test(line), line);
       seen[`campaign-${vp.key}`] = m.visibleParts;
       // A WON level leads with the next one, and tapping it really opens that level — the whole point
       // of the owner's rule: no walk back to the level list to pick it.
@@ -268,6 +328,51 @@ try {
           await page.screenshot({ path: `${OUT}finish-campaign-next-level-${vp.key}.png` });
         }
       }
+      await context.close();
+    }
+  }
+
+  // ---- EARNING SEEDS: the reward line, on the same card, in both motion settings ----
+  //
+  // The reward is painted into the card's own `#go-seeds` line (the same slot the old muted sentence
+  // used), so the only honest way to prove it cannot break the one-screen rule is to measure it
+  // here. `moving` is the setting the count-up may play in; `static` is Reduce motion, where the
+  // line must be the finished line at once, with NO animation running at all.
+  if (MODES.includes('classic')) {
+    for (const moving of [true, false]) {
+      const label = moving ? 'moving' : 'static';
+      const vp = VIEWPORTS[0]!; // 360x640: the tightest real phone, the one the rule is about
+      const { context, page, errors } = await bootScreen(browser, vp, moving);
+      await page.goto(`${origin}/?seed=219682080`);
+      await page.waitForFunction('(() => { const h = window.__severgrow; return !!h.state() && !h.busy(); })()', undefined, { timeout: 40_000 });
+      const ended = await toGameOver(page);
+      check(`seeds ${label}: the game reached its end`, ended === 'ended', ended);
+      await waitFinish(page);
+      check(`seeds ${label}: nothing is on the reward line before a reward lands`, (await seedLine(page)) === '');
+      // Exactly the paint path a win takes, so this measures the real thing, not a copy of it.
+      await page.evaluate('(() => { window.__severgrow.seedReveal(50); })()');
+      const first = await seedMeasure(page);
+      check(`seeds ${label}: the award's line is on screen`, first.shown, JSON.stringify(first));
+      check(`seeds ${label}: the emblem and the amount are one line, never a block`, first.rowHeight !== null && first.rowHeight <= 24 && first.lines <= 26, `row ${first.rowHeight}px, host ${first.lines}px`);
+      check(`seeds ${label}: the line is inside the viewport`, first.inside);
+      check(`seeds ${label}: the reader is told the plain sentence, "+50 Seeds"`, first.label === '+50 Seeds', String(first.label));
+      check(`seeds ${label}: the card still does not scroll`, (first.cardOverflow ?? 1) <= 0, `overflow ${first.cardOverflow}px`);
+      check(`seeds ${label}: the screen behind it still does not scroll`, (first.screenOverflow ?? 1) <= 0, `overflow ${first.screenOverflow}px`);
+      if (moving) {
+        check(`seeds moving: the number starts at zero and is counting`, first.number === '+0', String(first.number));
+        check(`seeds moving: the moment is actually running`, first.animations >= 3, `${first.animations}`);
+      } else {
+        check(`seeds static: Reduce motion shows the finished number at once`, first.number === '+50', String(first.number));
+        check(`seeds static: nothing is left animating (no loop, nothing to clean up)`, first.animations === 0, `${first.animations}`);
+      }
+      await page.waitForTimeout(900); // the count is over well inside this
+      const settled = await seedMeasure(page);
+      check(`seeds ${label}: it lands exactly on the amount`, settled.number === '+50', String(settled.number));
+      check(`seeds ${label}: nothing is still running once it lands`, settled.animations === 0, `${settled.animations}`);
+      check(`seeds ${label}: still no scrolling after it settles`, (settled.cardOverflow ?? 1) <= 0 && (settled.screenOverflow ?? 1) <= 0, `card ${settled.cardOverflow}px / screen ${settled.screenOverflow}px`);
+      check(`seeds ${label}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '));
+      await page.screenshot({ path: `${OUT}seed-reveal-${label}-360x640.png` });
+      console.log(`    shot: docs/screens/finish/seed-reveal-${label}-360x640.png`);
       await context.close();
     }
   }
