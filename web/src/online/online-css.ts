@@ -341,6 +341,15 @@ export const ONLINE_CSS = `
 .online-world {
   display: grid; place-items: stretch; z-index: 3; background: none;
   overflow: hidden; overscroll-behavior: contain;
+  /* THE SCREEN ITSELF MUST NOT RESERVE THE SAFE AREAS. The shared .screen rule (web/src/style.css)
+     pads every screen by env(safe-area-inset-*), and .online-inner below pads by the same insets
+     again. Both were in force, so on an iPhone 15 Pro the inset was applied TWICE: the inner started
+     59px down AND was 100dvh tall, putting its bottom at 911 on an 852px screen. Because this screen
+     is overflow:hidden, the last 59px was silently CUT - which is the owner's "choose a tile to see
+     who holds it is not visible" (measured: the selection bar at 819-877, and the header row at
+     118 = 59 + 59, i.e. 59px of dead space at the top).
+     The inner owns the insets for this screen, so this one is zeroed. */
+  padding: 0;
 }
 .online-world .online-inner {
   box-sizing: border-box;
@@ -362,6 +371,16 @@ export const ONLINE_CSS = `
   max-width: 720px; width: 100%; margin-inline: auto;
 }
 .online-world .online-head > .icon-only { justify-self: start; }
+/* THE WORDMARK SITS WHERE THE LIVE GAME PUTS IT (owner, 2026-10-16: "logo on top right sitting
+   where normally during live game"). The game's #hud-brand is align-self:start with margin-top:18px
+   (web/src/player/branding.ts), NOT centred in its row - so its top is safe-area-top + 18. Centring
+   it in this 44px row instead put it at safe-top + 11: measured 52px too low before the double-inset
+   fix above, and 7px too low after it. Repeating the game's two declarations is what makes the two
+   headers agree exactly rather than approximately. */
+.online-world .online-head > .online-brand {
+  align-self: start;
+  margin-top: 18px;
+}
 /* The title reads on ONE line at 360px and wider. It uses the world screen's own small UI caps —
    the size this rule always asked for; it silently lost the cascade to the typography stylesheet
    (equal specificity, injected later), so it is scoped by id now. nowrap plus a size that genuinely

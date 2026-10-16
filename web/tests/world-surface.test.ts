@@ -96,6 +96,32 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(texture!, 'the page surface sits at z-index 0, under every screen').toContain('z-index: 0');
   });
 
+  it('the world screen applies the safe-area inset EXACTLY ONCE', () => {
+    // REGRESSION (owner's iPhone 15 Pro, 2026-10-16): the shared `.screen` rule pads by
+    // env(safe-area-inset-*) and the world's own `.online-inner` pads by the same insets again. Both
+    // were in force, so on a notched phone the column started 59px down AND was 100dvh tall, putting
+    // its bottom at 911 on an 852px screen - and `.online-world` is `overflow: hidden`, so the last
+    // 59px was silently cut. The owner saw it as "choose a tile to see who holds it is not visible".
+    // So the screen must NOT reserve the insets; the inner owns them.
+    const world = bodyOf(onlineCss, '.online-world');
+    expect(world, 'the .online-world rule must exist').not.toBeNull();
+    expect(world!.replace(/\s+/g, ''), 'the screen must not pad by the safe-area insets - that double-counts them')
+      .toContain('padding:0');
+    const inner = bodyOf(onlineCss, '.online-world .online-inner');
+    expect(inner, 'the world column rule must exist').not.toBeNull();
+    expect(inner!, 'the column is where the insets belong').toContain('env(safe-area-inset-top)');
+    expect(inner!, 'and the bottom one too').toContain('env(safe-area-inset-bottom)');
+  });
+
+  it('the world wordmark sits where the live game puts it', () => {
+    // The game's #hud-brand is align-self:start + margin-top:18px (not centred in its row), so its
+    // top is safe-top + 18. Centring it in the world's 44px row instead put it 7px low.
+    const brand = bodyOf(onlineCss, '.online-world .online-head > .online-brand');
+    expect(brand, 'the world wordmark rule must exist').not.toBeNull();
+    expect(brand!, 'must not centre in the row').toContain('align-self: start');
+    expect(brand!.replace(/\s+/g, ''), 'must carry the game own 18px offset').toContain('margin-top:18px');
+  });
+
   it('the map keeps its contained window (a bounded inset surface, not a bare area)', () => {
     const grid = bodyOf(onlineCss, '.world-grid');
     expect(grid, 'the .world-grid window rule must exist').not.toBeNull();
