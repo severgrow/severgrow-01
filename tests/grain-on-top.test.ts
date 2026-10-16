@@ -44,7 +44,12 @@ const filmCss = (): string => {
   expect(found.map((f) => f.file), 'exactly one file should define the film').toEqual([
     'player/atmosphere.ts',
   ]);
-  return found[0].text;
+  // The expect above already guarantees exactly one match; this narrows it for the type-checker
+  // (noUncheckedIndexedAccess makes found[0] possibly undefined, and a missing film must fail the
+  // test rather than throw an unrelated TypeError).
+  const only = found[0];
+  expect(only, 'the film definition must exist').toBeTruthy();
+  return only!.text;
 };
 
 /** The film's own rule block (the first `#futa04-film-grain { ... }`). */
