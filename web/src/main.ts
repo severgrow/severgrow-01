@@ -631,6 +631,75 @@ function syncMenuResume(): boolean {
   btn.setAttribute('aria-label', continueLabel);
   return canContinue;
 }
+/**
+ * Every control of the product menu that depends only on compile-time channel flags, the saved-game
+ * storage and `src/strings.ts` — never the network. Extracted from `showScreen` so boot can lay the
+ * menu out in its SYNCHRONOUS prefix (before the first `await`): a first-time tester then sees a way
+ * to play with the first paint, not after the async player mounts. LOG IN is deliberately NOT here:
+ * it depends on the Google probe and is revealed by the accounts module when that returns.
+ * `canContinue` is the saved-game resume decision (see `syncMenuResume`), passed in so the caller
+ * keeps recomputing it on every menu show.
+ */
+function layoutMenu(canContinue: boolean) {
+  // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
+  // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
+  // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
+  // under it.
+  const online = onlineBuildEnabled();
+  $('menu-play').hidden = !FEATURES.campaign;
+  $('menu-play').textContent = MENU.play;
+  $('menu-play').setAttribute('aria-label', MENU.play);
+  $('play-title').textContent = MENU.playTitle;
+  $('menu-login').textContent = MENU.login;
+  $('menu-login').setAttribute('aria-label', MENU.login);
+  $('menu-world').textContent = MENU.world;
+  $('menu-world').setAttribute('aria-label', MENU.world);
+  // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
+  // only when the build has an online endpoint to read the map from.
+  $('menu-world').hidden = !(FEATURES.campaign && online);
+  if (FEATURES.campaign) {
+    setLead($('menu-play'), true);
+    setLead($('menu-continue'), false);
+    setLead($('menu-world'), false);
+    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
+    // are the next tier down and the back control is the quietest of all. A build with no online
+    // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
+    const cmp = $('menu-campaign');
+    cmp.hidden = false;
+    const current = currentLevel(campaignProgress).number;
+    cmp.textContent = MENU.level(current);
+    cmp.setAttribute('aria-label', MENU.levelAria(current));
+    $('menu-online').hidden = !online;
+    setLead($('menu-online'), online);
+    setLead(cmp, !online);
+    // The quiet way back to the level list. LEVEL <n> starts a level outright, so this is the
+    // only browse/replay route outside the finish screen. Deliberately never the lead.
+    const levelsBtn = $('menu-levels');
+    levelsBtn.hidden = false;
+    levelsBtn.textContent = MENU.levels;
+    levelsBtn.setAttribute('aria-label', MENU.levels);
+    setLead(levelsBtn, false);
+    $('menu-new').textContent = MENU.training;
+    $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
+    setLead($('menu-new'), false);
+    $('levels-heading').textContent = MENU.trainingTitle;
+  } else {
+    // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
+    // picker, and no submenu at all. Untouched, so their own suites need no change.
+    $('menu-campaign').hidden = true;
+    $('menu-new').hidden = false;
+    $('menu-new').textContent = 'Play offline';
+    $('menu-new').setAttribute('aria-label', 'Play offline');
+    $('menu-new').classList.toggle('primary', !canContinue);
+    $('menu-new').classList.toggle('ghost', canContinue);
+    $('levels-heading').textContent = 'Choose difficulty';
+  }
+  $('menu-tutorial').classList.remove('primary');
+  $('menu-tutorial').classList.add('ghost');
+  // Rename the one tutorial entry from src/strings.ts (single source).
+  $('menu-tutorial').textContent = HELP.tutorial;
+  $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+}
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
   shownScreen = name;
@@ -656,64 +725,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
     const canContinue = syncMenuResume();
     if (!same) {
       // ---- the menu's own layout: re-rendered only when the screen actually changed ----
-      // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
-      // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
-      // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
-      // under it.
-      const online = onlineBuildEnabled();
-      $('menu-play').hidden = !FEATURES.campaign;
-      $('menu-play').textContent = MENU.play;
-      $('menu-play').setAttribute('aria-label', MENU.play);
-      $('play-title').textContent = MENU.playTitle;
-      $('menu-login').textContent = MENU.login;
-      $('menu-login').setAttribute('aria-label', MENU.login);
-      $('menu-world').textContent = MENU.world;
-      $('menu-world').setAttribute('aria-label', MENU.world);
-      // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
-      // only when the build has an online endpoint to read the map from.
-      $('menu-world').hidden = !(FEATURES.campaign && online);
-      if (FEATURES.campaign) {
-        setLead($('menu-play'), true);
-        setLead($('menu-continue'), false);
-        setLead($('menu-world'), false);
-        // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
-        // are the next tier down and the back control is the quietest of all. A build with no online
-        // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
-        const cmp = $('menu-campaign');
-        cmp.hidden = false;
-        const current = currentLevel(campaignProgress).number;
-        cmp.textContent = MENU.level(current);
-        cmp.setAttribute('aria-label', MENU.levelAria(current));
-        $('menu-online').hidden = !online;
-        setLead($('menu-online'), online);
-        setLead(cmp, !online);
-        // The quiet way back to the level list. LEVEL <n> starts a level outright, so this is the
-        // only browse/replay route outside the finish screen. Deliberately never the lead.
-        const levelsBtn = $('menu-levels');
-        levelsBtn.hidden = false;
-        levelsBtn.textContent = MENU.levels;
-        levelsBtn.setAttribute('aria-label', MENU.levels);
-        setLead(levelsBtn, false);
-        $('menu-new').textContent = MENU.training;
-        $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
-        setLead($('menu-new'), false);
-        $('levels-heading').textContent = MENU.trainingTitle;
-      } else {
-        // Every other channel keeps the flat menu it is used to: one "Play offline" that opens the
-        // picker, and no submenu at all. Untouched, so their own suites need no change.
-        $('menu-campaign').hidden = true;
-        $('menu-new').hidden = false;
-        $('menu-new').textContent = 'Play offline';
-        $('menu-new').setAttribute('aria-label', 'Play offline');
-        $('menu-new').classList.toggle('primary', !canContinue);
-        $('menu-new').classList.toggle('ghost', canContinue);
-        $('levels-heading').textContent = 'Choose difficulty';
-      }
-      $('menu-tutorial').classList.remove('primary');
-      $('menu-tutorial').classList.add('ghost');
-      // Rename the one tutorial entry from src/strings.ts (single source).
-      $('menu-tutorial').textContent = HELP.tutorial;
-      $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
+      layoutMenu(canContinue);
     }
   }
   $('gameover').hidden = true;
@@ -6945,6 +6957,13 @@ let appReady = false;
   showInstall: () => installPrompt.showNow(),
 };
 
+// The product menu's own controls (PLAY, the world map, Tutorial, Settings and the saved-game
+// Continue) depend only on compile-time channel flags, strings and storage — never the network. Lay
+// them out here, in boot's SYNCHRONOUS prefix (the first `await` below is the boot's first yield),
+// so a first-time tester sees a way to play WITH THE FIRST PAINT instead of after the async player
+// mounts. LOG IN is deliberately not one of them: it waits for the Google probe and is revealed by
+// the accounts module. Non-product channels keep their own flat menu (layoutMenu handles both).
+layoutMenu(syncMenuResume());
 await mountPlayerEnhancements();
 fillIcons();
 // The install invitation: a timed prompt after a played game (no menu button any more). The words
