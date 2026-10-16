@@ -89,7 +89,7 @@ for (const d of DEVICES) {
     // No function assignments in here: tsx injects __name(...) for those and the page has no such
     // helper, which throws ReferenceError. Loops and plain values only.
     const out: Record<string, any> = {};
-    for (const id of ['online-world-summary', 'online-world-wallet', 'online-world-grid', 'online-world-selection', 'online-world-notice', 'online-brand']) {
+    for (const id of ['online-world-wallet', 'online-world-grid', 'online-world-selection', 'online-world-notice', 'online-brand']) {
       const el = document.getElementById(id) as HTMLElement | null;
       if (!el) { out[id] = null; continue; }
       const box = el.getBoundingClientRect();

@@ -106,13 +106,14 @@ export class WorldView {
       if (this.active) this.notice('The world could not refresh. Tap here to try again.');
     } finally { this.schedule(); }
   }
-  private paintWallet() {
-    const node = document.getElementById('online-world-wallet')!;
-    node.replaceChildren();
-    node.append(seedIcon(22), document.createTextNode(this.wallet ? `${this.wallet.balance} SEEDS` : 'SIGN IN TO GROW'));
-    const summary = document.getElementById('online-world-summary')!;
-    summary.textContent = this.world ? `${this.world.claims.length} / ${this.world.cells.length} grown · one shared world` : '';
-  }
+    private paintWallet() {
+      const node = document.getElementById('online-world-wallet')!;
+      node.replaceChildren();
+      node.append(seedIcon(22), document.createTextNode(this.wallet ? `${this.wallet.balance} SEEDS` : 'SIGN IN TO GROW'));
+      // The old "N / 183 grown - one shared world" caption is GONE (owner, 2026-10-16): the map shows
+      // the world, so a caption counting it was noise. The element no longer exists in the markup, and
+      // this method no longer writes to it.
+    }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
     const world = this.world!;

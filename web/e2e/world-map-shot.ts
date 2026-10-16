@@ -69,7 +69,6 @@ await page.screenshot({ path: join(OUT, 'world-map-390x844.png') });
 // What actually rendered
 const report = await page.evaluate(() => {
   const grid = document.getElementById('online-world-grid');
-  const summary = document.getElementById('online-world-summary');
   const notice = document.getElementById('online-world-notice');
   const cells = grid ? grid.querySelectorAll('.world-hex') : null;
   const held = grid ? grid.querySelectorAll('.world-hex.held') : null;
@@ -77,7 +76,8 @@ const report = await page.evaluate(() => {
     screenVisible: !(document.getElementById('online-world-screen') as HTMLElement | null)?.hidden,
     cells: cells ? cells.length : 0,
     held: held ? held.length : 0,
-    summary: summary?.textContent ?? '',
+    // The tile-count caption was REMOVED (owner, 2026-10-16) - report that it is gone, not its text.
+    summaryGone: !document.getElementById('online-world-summary'),
     notice: notice?.textContent ?? '',
     firstTile: grid?.querySelector('.world-hex')?.getAttribute('aria-label') ?? '',
   };

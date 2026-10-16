@@ -192,7 +192,10 @@
           <button id="online-world-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
           <h2 id="online-world-title">The world map</h2>
         </header>
-        <p id="online-world-summary" class="muted small"></p>
+        <!-- NO SUMMARY LINE (owner, 2026-10-16: "remove completely '5 / 183 grown · one shared
+             world'"). The map shows the world; a caption counting the tiles was noise on every
+             screen, and the line is deleted from the markup rather than hidden so nothing can
+             repaint it. The wallet above it carries the one number that matters. -->
         <div id="online-world-wallet" class="world-wallet" aria-live="polite"></div>
         <div id="online-world-grid" class="world-grid"></div>
         <div id="online-world-selection" class="world-selection" aria-live="polite"></div>

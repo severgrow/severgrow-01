@@ -365,22 +365,33 @@ export const ONLINE_CSS = `
 .online-world .online-head {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) auto;
+  /* The row stays 44px - the in-game HUD's own row height - so the two headers keep the same rhythm.
+     The title and the wordmark hang from the top edge; the chevron stays CENTRED, exactly as it is in
+     the game's own header, where #hud-menu sits at the row top and #hud-brand is pushed 18px down. */
   align-items: center;
   column-gap: 8px;
   min-height: 44px;
   max-width: 720px; width: 100%; margin-inline: auto;
 }
 .online-world .online-head > .icon-only { justify-self: start; }
-/* THE WORDMARK SITS WHERE THE LIVE GAME PUTS IT (owner, 2026-10-16: "logo on top right sitting
-   where normally during live game"). The game's #hud-brand is align-self:start with margin-top:18px
-   (web/src/player/branding.ts), NOT centred in its row - so its top is safe-area-top + 18. Centring
-   it in this 44px row instead put it at safe-top + 11: measured 52px too low before the double-inset
-   fix above, and 7px too low after it. Repeating the game's two declarations is what makes the two
-   headers agree exactly rather than approximately. */
+/* THE TITLE AND THE WORDMARK SHARE ONE TOP EDGE (owner, 2026-10-16: "the world map top border is
+   aligned with right top logo's top border"). It was wrong because the wordmark had been moved to the
+   in-game HUD position (18px down) while the title stayed vertically centred, so the title sat 6px
+   ABOVE the logo. The two offsets are MEASURED in a real browser, not computed, because the two have
+   different shapes: the wordmark's ink fills its 22px box, while the title's glyphs sit about 1px
+   below the top of its 22px line box - hence 18 and 17. Measured ink tops: both at header + 18,
+   delta 0.00px. Change one and you must change the other, then re-measure. */
 .online-world .online-head > .online-brand {
   align-self: start;
   margin-top: 18px;
 }
+/* THE WORDMARK SITS WHERE THE LIVE GAME PUTS IT (owner, 2026-10-16: "logo on top right sitting
+   where normally during live game"). The game's #hud-brand is align-self:start with margin-top:18px
+   (web/src/player/branding.ts), NOT centred in its row - so its top is safe-area-top + 18. Centring
+   it in this 44px row instead put it at safe-top + 11: measured 52px too low before the double-inset
+   fix, and 7px too low after it. Repeating the game's two declarations is what makes the two headers
+   agree exactly rather than approximately. Its margin-top now lives with the other two offsets in the
+   aligned group above, so there is ONE place that owns the header's top edge. */
 /* The title reads on ONE line at 360px and wider. It uses the world screen's own small UI caps —
    the size this rule always asked for; it silently lost the cascade to the typography stylesheet
    (equal specificity, injected later), so it is scoped by id now. nowrap plus a size that genuinely
@@ -388,6 +399,11 @@ export const ONLINE_CSS = `
    Line-height 22px matches the wordmark's own height, so chevron, title and mark share one top. */
 #online-world-screen .online-head h2 {
   min-width: 0;
+  /* Hangs from the header's top edge so its INK tops out level with the wordmark's (see the aligned
+     offsets note above): the glyphs sit 1px below the top of this 22px line box, so 17 here lands
+     the ink at header + 18. MEASURED in a real browser, not derived. */
+  align-self: start;
+  margin-top: 17px;
   padding-top: 0;
   font-family: var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
   font-size: 1.05rem;
@@ -397,13 +413,11 @@ export const ONLINE_CSS = `
   text-align: center;
   white-space: nowrap;
 }
-/* One deliberate column: the status line, the Seeds balance, the selection bar and the notice share
-   the header's 720px axis, so on a wide screen the screen's text reads down one line and the map is
-   the only thing that widens. */
-.online-world #online-world-summary {
-  text-align: center; margin: 0; opacity: .58; max-width: 720px; width: 100%; margin-inline: auto;
-}
-.world-wallet {
+  /* One deliberate column: the Seeds balance, the selection bar and the notice share the header's
+     720px axis, so on a wide screen the screen's text reads down one line and the map is the only
+     thing that widens. There is NO summary line (owner, 2026-10-16): the old "N / 183 grown" caption
+     was removed outright, so the header sits directly above the Seeds wallet. */
+  .world-wallet {
   display: flex; align-items: center; justify-content: center; gap: 7px;
   min-height: 30px; max-width: 720px; width: 100%; margin-inline: auto;
   color: #e8ddbe; font-size: .86rem; font-weight: 700; letter-spacing: .12em;

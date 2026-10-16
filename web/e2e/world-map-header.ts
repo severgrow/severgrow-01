@@ -193,8 +193,12 @@ try {
       const range = document.createRange();
       range.selectNodeContents(title);
       const titleLineRects = range.getClientRects().length;
-      const titleInkWidth = range.getBoundingClientRect().width;
-      const titleInkHeight = range.getBoundingClientRect().height;
+      // The INK rect (not the element box): the line box carries leading above the glyphs, and the
+      // owner's alignment request is about what the eye sees, so the top edge is compared in ink.
+      const titleInkRect = range.getBoundingClientRect();
+      const titleInkWidth = titleInkRect.width;
+      const titleInkHeight = titleInkRect.height;
+      const titleInkTop = titleInkRect.top;
       range.detach();
       const back = document.getElementById('online-world-back') as HTMLElement;
       const backIcon = back?.querySelector<SVGGraphicsElement>('.i, .i svg, svg');
@@ -208,6 +212,7 @@ try {
         titleLineRects,
         titleInkWidth,
         titleInkHeight,
+        titleInk: { y: titleInkTop, height: titleInkHeight },
         titleHeight: title.getBoundingClientRect().height,
         titleLineHeight: Number.parseFloat(font.lineHeight) || (Number.parseFloat(font.fontSize) * 1.15),
         titleFont: font.fontSize,
@@ -218,7 +223,6 @@ try {
         brand: brand ? (() => { const r = brand.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })() : null,
         brandHref: brand?.querySelector('image')?.getAttribute('href') ?? '',
         head: box('.online-world .online-head'),
-        summary: box('#online-world-summary'),
         wallet: box('#online-world-wallet'),
         grid: box('#online-world-grid'),
         selection: box('#online-world-selection'),
@@ -359,31 +363,39 @@ try {
       `h=${m.title?.height?.toFixed(1)} line=${m.titleLineHeight.toFixed(1)}`);
     check(`[${tag}] the title reads "THE WORLD MAP" in full`, (m.titleText ?? '').trim().toUpperCase() === 'THE WORLD MAP', m.titleText ?? '');
 
-    // 2. The corner chrome shares the title's top line.
-    const titleTop = m.title?.y ?? 0;
-    const backTop = m.backIcon?.y ?? m.back?.y ?? 0;
+    // 2. The title and the wordmark share the SAME top edge (owner, 2026-10-16: "the world map top
+    //    border is aligned with right top logo's top border"). The chevron is deliberately NOT in
+    //    this group: in the game's own header #hud-menu sits at the row top while #hud-brand is
+    //    pushed 18px down, so the leading control is higher than the mark - this screen matches that.
+    //    The title's BOX top differs from its INK top by the line box's leading, so the comparison
+    //    uses the measured ink rect, which is what the eye actually sees.
+    const titleInkTop = m.titleInk?.y ?? m.title?.y ?? 0;
     const brandTop = m.brand?.y ?? 0;
-    check(`[${tag}] the chevron ink top aligns with the title top`, Math.abs(backTop - titleTop) <= 2,
-      `chevron y=${backTop.toFixed(1)} title y=${titleTop.toFixed(1)} (Δ${(backTop - titleTop).toFixed(1)})`);
-    check(`[${tag}] the wordmark top aligns with the title top`, Math.abs(brandTop - titleTop) <= 2,
-      `brand y=${brandTop.toFixed(1)} title y=${titleTop.toFixed(1)} (Δ${(brandTop - titleTop).toFixed(1)})`);
-    const spread = Math.max(backTop, titleTop, brandTop) - Math.min(backTop, titleTop, brandTop);
-    check(`[${tag}] chevron, title and wordmark share ONE top edge`, spread <= 2,
-      `spread=${spread.toFixed(1)}px (chevron ${backTop.toFixed(1)} · title ${titleTop.toFixed(1)} · mark ${brandTop.toFixed(1)})`);
+    check(`[${tag}] the wordmark's top edge aligns with the title's`, Math.abs(brandTop - titleInkTop) <= 1,
+      `brand y=${brandTop.toFixed(1)} title ink y=${titleInkTop.toFixed(1)} (Δ${(brandTop - titleInkTop).toFixed(1)})`);
+    // ...and the leading control stays vertically centred in the 44px row, so it cannot drift.
+    const backTop = m.backIcon?.y ?? m.back?.y ?? 0;
+    const backBottom = m.backIcon ? m.backIcon.y + m.backIcon.height : (m.back ? m.back.y + m.back.height : 0);
+    const rowMid = (m.head?.y ?? 0) + (m.head?.height ?? 0) / 2;
+    const backMid = (backTop + backBottom) / 2;
+    check(`[${tag}] the chevron is centred in the header row`, Math.abs(backMid - rowMid) <= 1.5,
+      `chevron mid ${backMid.toFixed(1)} row mid ${rowMid.toFixed(1)} (Δ${(backMid - rowMid).toFixed(1)})`);
+    check(`[${tag}] the header row keeps the in-game HUD's 44px height`, Math.abs((m.head?.height ?? 0) - 44) <= 1,
+      `head h=${m.head?.height?.toFixed(1)}`);
 
-    // 3. ONE deliberate column. The header -> summary -> Seeds -> map steps share the column's own
-    //    rhythm. The selection bar is the ONE deliberate break: it is anchored to the BOTTOM edge
-    //    (owner, 2026-10-16), so its distance from the window is whatever the viewport leaves and is
-    //    measured by the bottom-anchor check below, not by this rhythm. An empty notice leaves no
-    //    dead row at the very bottom.
+    // 3. ONE deliberate column. The header -> Seeds -> map steps share the column's own rhythm.
+    //    The old "N / 183 grown" caption that used to sit between the header and the Seeds wallet was
+    //    REMOVED (owner, 2026-10-16), so the first step starts at the wallet. The selection bar is the
+    //    ONE deliberate break: it is anchored to the BOTTOM edge (owner, 2026-10-16), so its distance
+    //    from the window is whatever the viewport leaves and is measured by the bottom-anchor check
+    //    below, not by this rhythm. An empty notice leaves no dead row at the very bottom.
     const bottom = (b: Box | null) => (b ? b.y + b.height : 0);
     const steps = [
-      (m.summary?.y ?? 0) - bottom(m.head),
-      (m.wallet?.y ?? 0) - bottom(m.summary),
+      (m.wallet?.y ?? 0) - bottom(m.head),
       (m.grid?.y ?? 0) - bottom(m.wallet),
     ];
     const stepSpread = Math.max(...steps) - Math.min(...steps);
-    check(`[${tag}] the header → summary → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
+    check(`[${tag}] the header → Seeds → map steps are ONE rhythm`, stepSpread <= 1,
       `steps=${steps.map((s) => s.toFixed(1)).join(', ')} column gap=${m.gap}`);
     check(`[${tag}] the controls sit below the map window`, (m.selection?.y ?? 0) >= bottom(m.grid),
       `selection y=${m.selection?.y?.toFixed(1)} window ends ${bottom(m.grid).toFixed(1)}`);

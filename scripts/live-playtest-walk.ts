@@ -114,13 +114,15 @@ await page.evaluate(() => (document.getElementById('menu-world') as HTMLButtonEl
 await page.waitForTimeout(2500);
 const world = await page.evaluate(() => {
   const hexes = document.querySelectorAll('.world-hex').length;
-  const summary = document.getElementById('online-world-summary')?.textContent ?? '';
   const notice = document.getElementById('online-world-notice')?.textContent ?? '';
   const svg = !!document.querySelector('.world-map-svg');
-  return { hexes, summary, notice, svg };
+  // The summary caption ("N / 183 grown ...") was REMOVED (owner, 2026-10-16), so this asserts the
+  // element is GONE rather than reading it - a caption can never silently come back.
+  const summaryGone = !document.getElementById('online-world-summary');
+  return { hexes, notice, svg, summaryGone };
 });
 check('world map renders hexes', world.hexes > 100, `${world.hexes} hexes, svg=${world.svg}`);
-check('world summary reads', !world.notice, world.summary || world.notice);
+check('no tile-count caption on the world map', world.summaryGone, world.summaryGone ? 'absent' : 'STILL PRESENT');
 await page.screenshot({ path: '/tmp/live-walk-world.png' });
 
 // ---- 5. the tutorial is reachable (a first-time tester's on-ramp) -----------------------------
