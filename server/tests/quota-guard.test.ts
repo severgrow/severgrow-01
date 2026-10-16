@@ -172,6 +172,12 @@ const CLASSIFIED: Record<string, Protection> = {
   'server/scripts/verify.ts': 'explicit-command',
   'server/scripts/verify-security.ts': 'explicit-command',
   'server/scripts/online-simulation.ts': 'explicit-command',
+  // The owner's own tools, added 2026-10-16. Both read the real database, both refuse to start
+  // without DATABASE_URL (exit 2 with a plain message), and both are reachable only by running them
+  // on purpose (`npm run server:backup`, `npm run feedback:recent`) - never from check, test, CI or
+  // any default command. This registry caught them the moment they landed, which is the point.
+  'server/scripts/backup-db.ts': 'explicit-command',
+  'server/scripts/feedback-recent.ts': 'explicit-command',
 };
 
 describe('entry points cannot reach the real project by default', () => {
