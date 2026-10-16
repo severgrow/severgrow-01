@@ -4,10 +4,17 @@
 // under main menu etc ... everything alligned really well, consistent with menu and the duel game".
 //
 // The page background is ONE global element (`#texture` in web/src/style.css) which paints the soil
-// radial gradient, the SVG grain and the vignette at z-index 0. Every `.screen` is transparent over
-// it, which is exactly how the main menu and the game screen rest on it. The world map screen used
-// to paint its own flat `var(--c-bg)` fill at z-index 3, covering the grain on that one screen
-// (measured: background luminance sd 0.42 vs 3.80 on the same patch of the menu).
+// radial gradient and the vignette at z-index 0. Every `.screen` is transparent over it, which is
+// exactly how the main menu and the game screen rest on it. The world map screen used to paint its
+// own flat `var(--c-bg)` fill at z-index 3, covering that surface on that one screen (measured:
+// background luminance sd 0.42 vs 3.80 on the same patch of the menu).
+//
+// The GRAIN moved OFF this element on 2026-10-16 (owner: "always on top top top layer - even when we
+// add new things"). It is now the analogue film, `#futa04-film-grain` in web/src/player/atmosphere.ts,
+// which sits above every layer - so it covers the interface, instead of the interface being cut out
+// of it. It must NOT come back here: #texture sets a z-index, so it is a stacking context, and grain
+// inside it could only ever rise above the background, never above the app.
+// `tests/grain-on-top.test.ts` owns the layering rule; this file owns the surface.
 //
 // `web/e2e/world-map-header.ts` measures the built page, pixels included. This test guards the CSS
 // that produces it, so a rename or a stray override fails `npm run check` immediately instead of
@@ -21,6 +28,7 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 const styleCss = read('../src/style.css');
 const onlineCss = read('../src/online/online-css.ts');
 const worldView = read('../src/online/world-view.ts');
+const atmosphereTs = read('../src/player/atmosphere.ts');
 const html = read('../index.html');
 
 /** Every flat rule of a stylesheet, preludes tidied (comments removed, whitespace collapsed). */
@@ -63,20 +71,25 @@ describe('the world map rests on the ONE shared page surface', () => {
     expect(body!, '.screen must not paint a background').not.toMatch(/background\s*:/);
   });
 
-  it('the world map defines no grain of its own (there is ONE definition, in style.css)', () => {
+  it('the world map defines no grain of its own (there is ONE definition, on the film)', () => {
     expect(onlineCss, 'online-css.ts must not carry a noise data-URI').not.toContain('feTurbulence');
     expect(onlineCss, 'online-css.ts must not carry an inline SVG background').not.toContain('data:image/svg+xml');
   });
 
-  it('the global grain still lives once on #texture, on the soil theme', () => {
-    // The ONE element, in the page markup.
+  it('the grain lives ONCE, on the film above everything, and NOT on the background', () => {
+    // The ONE page-surface element, in the page markup.
     expect((html.match(/id="texture"/g) ?? []).length, 'exactly one #texture element').toBe(1);
-    // The grain itself: the soil treatment of that element's ::before pseudo.
-    const grain = bodyOf(styleCss, "[data-theme='soil'] #texture::before");
-    expect(grain, "the soil grain rule must exist").not.toBeNull();
-    expect(grain!).toContain('feTurbulence');
-    expect(grain!).toContain('0.16');
-    // Painted by the one global element, under everything else.
+    // The surface must NOT carry the grain any more. Same strength as before: the grain rule must
+    // still exist with the same noise and the same opacity, it has simply moved UP a layer.
+    expect(
+      bodyOf(styleCss, "[data-theme='soil'] #texture::before"),
+      'the background must not paint the grain again - it would be cut out by the interface',
+    ).toBeNull();
+    const grain = bodyOf(atmosphereTs, '#futa04-film-grain');
+    expect(grain, 'the film grain rule must exist').not.toBeNull();
+    expect(grain!, 'the grain is the same SVG noise it always was').toContain('feTurbulence');
+    expect(grain!, 'and the same opacity').toContain('.16');
+    // The page surface itself is unchanged: fixed, and at the bottom under every screen.
     const texture = bodyOf(styleCss, '#texture');
     expect(texture, 'the #texture rule must exist').not.toBeNull();
     expect(texture!).toContain('position: fixed');

@@ -79,38 +79,38 @@ button {
 }
 
 #texture {
-  /* The page background, made in code and static (no cost per frame). Each palette
-     picks its own treatment below. */
+  /* The page BACKGROUND only: the page colour plus each palette's own glow, below. Nothing else.
+     Its background is OPAQUE, so it must stay at the bottom (z-index 0) - lifting this element
+     would hide the whole app.
+     The GRAIN is deliberately NOT here any more. It lives on #futa04-film-grain
+     (web/src/player/atmosphere.ts), which sits above every layer, so the grain covers the interface
+     instead of the interface being cut out of the grain (owner's rule, 2026-10-16). */
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
   background: var(--c-bg);
 }
-#texture::before,
 #texture::after {
   content: '';
   position: absolute;
   inset: 0;
 }
-/* Soil: a fine, neutral coal-grey grain (SVG noise) and a soft vignette. */
+/* Soil: a soft glow behind the board. The fine coal-grey grain that used to be drawn here is now
+   the film, so it also covers the interface. */
 [data-theme='soil'] #texture {
   background: radial-gradient(ellipse 85% 70% at 50% 40%, color-mix(in srgb, var(--c-text) 4%, var(--c-bg)) 0%, var(--c-bg) 75%);
-}
-[data-theme='soil'] #texture::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  opacity: 0.16;
 }
 /* Moss night: a soft green glow pooled under the board. */
 [data-theme='moss'] #texture {
   background: radial-gradient(ellipse 70% 48% at 50% 44%, color-mix(in srgb, var(--c-you) calc(var(--board-glow) * 9%), var(--c-bg)) 0%, var(--c-bg) 78%);
 }
-/* A vignette, darker at the edges (Soil and Moss night). */
+/* A vignette, darker at the edges (Soil and Moss night). It stays on the BACKGROUND on purpose: it
+   is part of the surface, not the film, so it must not darken the interface sitting on top of it. */
 #texture::after {
   background: radial-gradient(ellipse 120% 95% at 50% 45%, transparent 55%, color-mix(in srgb, #000 calc(var(--vignette) * 70%), transparent) 100%);
 }
-/* Ink: flat near-black paper, nothing else. */
-[data-theme='ink'] #texture::before,
+/* Ink: flat near-black paper, nothing else (the film hides itself for this theme, below). */
 [data-theme='ink'] #texture::after {
   display: none;
 }

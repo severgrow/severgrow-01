@@ -1,15 +1,31 @@
-// Futa04-only presentation. Both grain and rim are baked once; no live noise/blur filter,
-// animation clock, gameplay input, state or per-frame drawing.
+// Futa04-only presentation. The grain is a static CSS background and the rim is baked once; no live
+// noise/blur filter, animation clock, gameplay input, state or per-frame drawing.
 import { cornerPts, S } from '../ui/geom.js';
 export const ATMOSPHERE_CSS = `
-/* Above every chrome layer (glass, sheets, easter, bloom demo). Never captures taps. */
+/* THE ANALOGUE FILM GRAIN. This is the ONE grain in the app, and it goes on top of EVERYTHING,
+   always (owner's rule, 2026-10-16: "always on top top top layer - even when we add new things").
+   Every line here is load-bearing; do not tidy them away:
+   - z-index one below the maximum, above every other layer in the app (the highest is 96);
+   - mountAtmosphere keeps it as the LAST body child (pinGrain), so a later sibling cannot sit above
+     it at an equal z-index - that is what makes the rule survive new UI;
+   - pointer-events: none, or a full-screen layer would swallow every tap in the app;
+   - NORMAL blending, not soft-light. It used to be soft-light, and soft-light over these near-black
+     surfaces is effectively invisible - which is why the grain read as a background texture with
+     the interface cut out of it, the exact thing the owner asked to stop. The noise below is the
+     same SVG the background used, so the texture itself is unchanged, only its layer.
+   - the grain must NOT go back on #texture::before: #texture sets a z-index, so it is a stacking
+     context and anything inside it can only ever rise above the background, never above the app. */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
-  opacity: .14; background-repeat: repeat; background-size: 128px 128px;
-  mix-blend-mode: soft-light; user-select: none;
+  opacity: .16; background-repeat: repeat; background-size: 220px 220px;
+  mix-blend-mode: normal; user-select: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
-/* In-match the grain rides above map + cockpit so the analog flecks stay readable. */
+/* In-match the grain rides above map + cockpit, a touch stronger so the analog flecks stay readable
+   on the board. */
 body:has(#game:not([hidden])) #futa04-film-grain { opacity: .19; }
+/* Ink is flat near-black paper: no grain at all. */
+[data-theme='ink'] #futa04-film-grain { display: none; }
 #futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
 body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
 #futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
@@ -38,23 +54,10 @@ export function mountAtmosphere(): OutcomeLight {
   const grain = document.createElement('div');
   grain.id = 'futa04-film-grain';
   grain.setAttribute('aria-hidden', 'true');
-  const tile = document.createElement('canvas');
-  tile.width = tile.height = 128;
-  const ctx = tile.getContext('2d');
-  if (ctx) {
-    const pixels = ctx.createImageData(128, 128);
-    let seed = 0x46555441;
-    const random = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) / 4294967296; };
-    for (let i = 0; i < pixels.data.length; i += 4) {
-      // Soft mid-grey flecks + soft-light blend read as analog film over dark UI.
-      const tone = Math.round((random() + random() + random()) * 255 / 3);
-      pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = tone;
-      pixels.data[i + 3] = Math.round(48 + random() * 90);
-    }
-    ctx.putImageData(pixels, 0, 0);
-    grain.style.backgroundImage = `url(${tile.toDataURL()})`;
-    document.body.append(grain);
-  }
+  // The noise is a CSS background-image in ATMOSPHERE_CSS rather than a canvas painted here: it is
+  // the same SVG the background grain used, so the film and the old background texture are visibly
+  // identical, and there is nothing to build on mount.
+  document.body.append(grain);
   // Keep the grain as the last body child so it stays above later fixed UI layers.
   // Debounce: body childList fires often during board/hand rebuilds.
   let pinGrainTimer = 0;

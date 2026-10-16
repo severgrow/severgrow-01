@@ -232,16 +232,20 @@ try {
           const s = getComputedStyle(document.getElementById('online-world-screen') as HTMLElement);
           return { color: s.backgroundColor, image: s.backgroundImage };
         })(),
+        // The ONE grain: it is the analogue film, painted above every layer (it used to be a
+        // `::before` on #texture, which put it BEHIND the interface - owner, 2026-10-16). What this
+        // check cares about is that the grained surface is still painted at all, so the patch
+        // measurement below distinguishes "the same grained surface as the menu" from "an opaque
+        // block", which was the original bug.
         texture: (() => {
-          const el = document.getElementById('texture') as HTMLElement;
+          const el = document.getElementById('futa04-film-grain') as HTMLElement;
           if (!el) return null;
           const s = getComputedStyle(el);
-          const before = getComputedStyle(el, '::before');
           return {
             display: s.display,
             z: s.zIndex,
-            grain: before.backgroundImage === 'none' ? 'none' : 'data-uri',
-            grainOpacity: Number.parseFloat(before.opacity) || 0,
+            grain: s.backgroundImage === 'none' ? 'none' : 'data-uri',
+            grainOpacity: Number.parseFloat(s.opacity) || 0,
           };
         })(),
         // The map's contained window: it must keep its own bounded surface.
@@ -390,9 +394,9 @@ try {
     check(`[${tag}] the world screen paints no fill of its own`,
       m.screenSurface.color === 'rgba(0, 0, 0, 0)' && m.screenSurface.image === 'none',
       `bg=${m.screenSurface.color} image=${m.screenSurface.image}`);
-    check(`[${tag}] the ONE global grain is still painting the background`,
+    check(`[${tag}] the ONE grain is still painting the surface`,
       !!m.texture && m.texture.display !== 'none' && m.texture.grain === 'data-uri' && m.texture.grainOpacity > 0.05,
-      m.texture ? `z=${m.texture.z} grain=${m.texture.grain} opacity=${m.texture.grainOpacity}` : 'missing #texture');
+      m.texture ? `z=${m.texture.z} grain=${m.texture.grain} opacity=${m.texture.grainOpacity}` : 'missing #futa04-film-grain');
     check(`[${tag}] the surface behind the window is GRAINED, not flat`, worldPatch.sd >= 1.5,
       `world patch sd=${worldPatch.sd} (flat would be <0.5)`);
     check(`[${tag}] that grain is the MENU's grain (same patch, same surface)`,

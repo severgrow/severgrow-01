@@ -202,7 +202,7 @@ async function geometry(page: Page, width: number, height: number, label: string
     const backdrop = getComputedStyle(document.querySelector('#futa04-board-backdrop')!);
     return { coverage: box.left === 0 && box.top === 0 && box.width === innerWidth && box.height === innerHeight,
       opacity: Number(css.opacity), pointer: css.pointerEvents, static: css.animationName === 'none' && css.filter === 'none',
-      tile: css.backgroundSize, background: css.backgroundImage.startsWith('url("data:image/png'),
+      tile: css.backgroundSize, background: css.backgroundImage.startsWith('url("data:image/svg+xml'),
       darker: backdrop.display !== 'none' && Number(backdrop.opacity) === .235,
       loaded: image.complete && image.naturalWidth > 0, bounded: Math.max(image.naturalWidth,image.naturalHeight) <= 1024,
       behind: !!(rim.compareDocumentPosition(document.querySelector('#board .l-base')!) & Node.DOCUMENT_POSITION_FOLLOWING),
@@ -217,7 +217,12 @@ async function geometry(page: Page, width: number, height: number, label: string
     });
   });
   check(emptyLighting, `${label}: only empty normal hexes are 15% brighter; owned, rock and gold rendering stays unchanged`);
-  check(atmosphere.coverage && atmosphere.opacity === .19 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '128px 128px' && atmosphere.background,
+  // The film grain is unchanged in KIND and strength - static, full coverage, never capturing input,
+  // stronger in-match - but two expected values moved with it (owner, 2026-10-16, "always on top top
+  // top layer"): it is now NORMAL blending and carries the same SVG noise the background used, so the
+  // tile is 220px (the SVG's own size) and the source is a data:image/svg+xml, not the old 128px
+  // canvas PNG. Soft-light was dropped on purpose: over these near-black surfaces it is invisible.
+  check(atmosphere.coverage && atmosphere.opacity === .19 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '220px 220px' && atmosphere.background,
     `${label}: deterministic static film grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);
