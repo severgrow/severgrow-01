@@ -156,8 +156,15 @@ try {
     await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
     await page.waitForTimeout(250);
   }
-  await page.waitForFunction(()=>!document.getElementById('menu')!.hidden,undefined,{timeout:15000});
-  assert.equal(await page.locator('#menu-continue').isVisible(),false,'finished tutorial is not retained as a live match');
+  // Finishing the guided run no longer returns to the menu: since 2026-10-16 (owner direction,
+  // "after tutorial it takes you to level 1") it hands the player straight into a REAL campaign
+  // level through the campaign's own entry point. So assert the hand-off, not a menu visit — and
+  // assert the tutorial save is not retained as a live match, which was the original intent.
+  await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===95001,undefined,{timeout:20000});
+  assert.equal(await page.locator('#campaign').isVisible(),false,'the tutorial lands in the level, not the chapter list');
+  s=await state();
+  assert.equal(s.config.boardRadius,2,'the tutorial hands off to campaign level 1, which uses the small map');
+  assert.equal(await page.locator('#gameover').isVisible(),false,'no finish card is shown straight after the tutorial');
 
   await page.goto(base+'?seed=219682080');
   await page.waitForFunction(()=>!!document.getElementById('smart-panel')&&(window as any).__severgrow?.state()?.seed===219682080);
