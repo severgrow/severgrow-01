@@ -1,207 +1,83 @@
-// The shared world map (the seed spike): a finished duel leaves ONE permanent mark.
-//
-// This is deliberately NOT a territory system — no regions, no income, no claim/defend. These
-// tests pin only what the spike promises:
-//   * win a duel and you earn exactly ONE tile, and the same duel can never award twice;
-//   * placement is decided ENTIRELY on the server from data the server owns, so a client cannot
-//     steer a cell (there is no endpoint that accepts one, and the hash input is the server-minted
-//     match id);
-//   * beat a player who holds a tile and you TAKE that tile from them (the challenge rule);
-//   * the map is a PUBLIC read — no account needed to look at it.
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SERVER_CONFIG } from '../src/config.js';
-import type { ServerConfig } from '../src/config.js';
-import { createFetchApp } from '../src/fetch-app.js';
-import { MatchService } from '../src/service.js';
-import { MemoryStorage } from '../src/storage/memory.js';
-import { WORLD_MAP_CELLS, planWorldPlacement, worldMapCell } from '../src/world.js';
+import { WORLD_CELLS, WORLD_CELL_IDS, legacyWorldCell, worldNeighbours } from '../src/world.js';
+import { MemoryWorldEconomyStore } from '../src/seeds/memory.js';
+import { SEED_ECONOMY, campaignSeedReward } from '../src/seeds/config.js';
 
-const config = (overrides: Partial<ServerConfig> = {}): ServerConfig => ({
-  ...DEFAULT_SERVER_CONFIG,
-  turnTimeoutMs: 10_000,
-  waitingExpireMs: 3_600_000,
-  rateLimits: {
-    ...DEFAULT_SERVER_CONFIG.rateLimits,
-    guestPerIpPerHour: 10_000,
-    joinPerPlayerPerHour: 10_000,
-    joinPerIpPerHour: 10_000,
-    createPerPlayerPerHour: 10_000,
-    createPerIpPerHour: 10_000,
-    worldPerIpPerHour: 10_000,
-  },
-  ...overrides,
+const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: string, now = Date.UTC(2026, 9, 15)) =>
+  store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
+
+describe('frozen shared hex world', () => {
+  it('contains 183 unique connected cells with no one-cell tails', () => {
+    expect(WORLD_CELLS).toHaveLength(183);
+    expect(WORLD_CELL_IDS.size).toBe(183);
+    const seen = new Set<string>([WORLD_CELLS[0]!.id]);
+    const queue = [WORLD_CELLS[0]!.id];
+    while (queue.length) for (const id of worldNeighbours(queue.shift()!)) if (!seen.has(id)) { seen.add(id); queue.push(id); }
+    expect(seen.size).toBe(183);
+    expect(WORLD_CELLS.every((c) => worldNeighbours(c.id).length >= 2)).toBe(true);
+  });
+  it('keeps all 64 historical tile coordinates in the expanded map', () => {
+    for (let oldCell = 0; oldCell < 64; oldCell++) expect(WORLD_CELL_IDS.has(legacyWorldCell(oldCell))).toBe(true);
+  });
 });
 
-const harness = (overrides: Partial<ServerConfig> = {}) => {
-  const storage = new MemoryStorage();
-  const cfg = config(overrides);
-  const service = new MatchService({ storage, config: cfg, now: () => 1_000_000 });
-  return { storage, service, cfg };
-};
-
-const guest = async (service: MatchService, name: string) => {
-  const created = await service.createGuest(name);
-  return { token: created.token, player: await service.authenticate(created.token) };
-};
-
-/** Drive a real duel to a finish by resigning: the resigning player loses, the other wins. */
-const duelWhere = async (
-  service: MatchService,
-  winner: Awaited<ReturnType<typeof guest>>,
-  loser: Awaited<ReturnType<typeof guest>>,
-) => {
-  const created = await service.createMatch(winner.player);
-  await service.joinMatch(loser.player, created.match.inviteCode);
-  await service.resign(loser.player, created.match.matchId);
-  return created.match.matchId;
-};
-
-describe('planWorldPlacement (pure)', () => {
-  it('is deterministic: the same input always plans the same cell', () => {
-    const input = { matchId: 'match-abc', winnerId: 'w', loserId: 'l', tiles: [] };
-    const first = planWorldPlacement(input);
-    const second = planWorldPlacement(input);
-    expect(first).toEqual(second);
+describe('Seed purchases', () => {
+  it('first claim can be anywhere, then requires adjacency and charges exactly 100', async () => {
+    const store = new MemoryWorldEconomyStore();
+    await grant(store, 'a', 'campaign:1');
+    await grant(store, 'a', 'campaign:2');
+    const first = await store.claim('a', '0,0', 'request-0001', 1);
+    expect(first).toMatchObject({ ok: true, cellId: '0,0', replayed: false, wallet: { balance: 0 } });
+    expect((await store.claim('a', '0,0', 'request-0001', 2))).toMatchObject({ ok: true, replayed: true, wallet: { balance: 0 } });
+    await grant(store, 'a', 'campaign:3');
+    await grant(store, 'a', 'campaign:4');
+    expect(await store.claim('a', '4,0', 'request-0002', 2)).toMatchObject({ ok: false, code: 'NOT_ADJACENT' });
+    expect(await store.claim('a', '1,0', 'request-0003', 2)).toMatchObject({ ok: true, wallet: { balance: 0 } });
+    expect(store.ledger.filter((x) => x.delta < 0)).toHaveLength(2);
   });
-
-  it('derives the free cell from the match id, so two matches differ', () => {
-    const a = planWorldPlacement({ matchId: 'match-a', winnerId: 'w', loserId: 'l', tiles: [] });
-    const b = planWorldPlacement({ matchId: 'match-b', winnerId: 'w', loserId: 'l', tiles: [] });
-    expect(a.kind).toBe('claim');
-    expect(b.kind).toBe('claim');
-    // Not a hard guarantee for every pair, but these two ids must not collide.
-    expect(worldMapCell('match-a')).not.toBe(worldMapCell('match-b'));
+  it('two buyers cannot acquire the same tile and rejected claims never debit', async () => {
+    const store = new MemoryWorldEconomyStore();
+    await grant(store, 'a', 'a1'); await grant(store, 'a', 'a2');
+    await grant(store, 'b', 'b1'); await grant(store, 'b', 'b2');
+    const [a, b] = await Promise.all([
+      store.claim('a', '0,0', 'request-a000', 1), store.claim('b', '0,0', 'request-b000', 1),
+    ]);
+    expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
+    expect((await store.wallet(a.ok ? 'b' : 'a')).balance).toBe(100);
   });
+});
 
-  it('TAKES the beaten opponent\'s tile before claiming a free one', () => {
-    // The loser holds cell 5; the winner holds nothing.
-    const plan = planWorldPlacement({
-      matchId: 'match-a',
-      winnerId: 'w',
-      loserId: 'l',
-      tiles: [{ cell: 5, ownerId: 'l' }],
-    });
-    expect(plan).toEqual({ kind: 'takeover', cell: 5 });
+describe('economy schedule and caps', () => {
+  it('matches all first-clear and chapter reward values', () => {
+    expect(campaignSeedReward(1)).toEqual({ firstWin: 50, chapter: 0 });
+    expect(campaignSeedReward(3)).toEqual({ firstWin: 50, chapter: 0 });
+    expect(campaignSeedReward(10)).toEqual({ firstWin: 15, chapter: 50 });
+    expect(campaignSeedReward(20)).toEqual({ firstWin: 15, chapter: 60 });
+    expect(campaignSeedReward(30)).toEqual({ firstWin: 20, chapter: 75 });
+    expect(campaignSeedReward(40)).toEqual({ firstWin: 20, chapter: 90 });
+    expect(campaignSeedReward(50)).toEqual({ firstWin: 25, chapter: 125 });
   });
-
-  it('never returns a cell outside the fixed grid', () => {
-    const plan = planWorldPlacement({ matchId: 'match-a', winnerId: 'w', loserId: 'l', tiles: [] });
-    expect(plan.kind).toBe('claim');
-    if (plan.kind === 'claim') {
-      expect(plan.cell).toBeGreaterThanOrEqual(0);
-      expect(plan.cell).toBeLessThan(WORLD_MAP_CELLS);
+  it('caps queue matches and resets at the server UTC boundary', async () => {
+    const store = new MemoryWorldEconomyStore();
+    const day = Date.UTC(2026, 9, 15, 23, 59);
+    for (let i = 0; i < 25; i++) {
+      const reward = await store.settle({ playerId: 'a', sourceKey: `duel:${i}`, mode: 'queue', outcome: 'win',
+        opponentId: `opponent:${i}`, now: day });
+      expect(reward.awarded).toBe(i < 20 ? 30 : 0);
     }
+    expect((await store.wallet('a')).balance).toBe(SEED_ECONOMY.utcDailyRepeatableCap);
+    expect((await store.settle({ playerId: 'a', sourceKey: 'duel:next', mode: 'queue', outcome: 'loss',
+      opponentId: 'new', now: day + 60_000 })).awarded).toBe(8);
   });
-
-  it('awards nothing when the map is full and the opponent holds no tile', () => {
-    const full = Array.from({ length: WORLD_MAP_CELLS }, (_, cell) => ({ cell, ownerId: `other-${cell}` }));
-    const plan = planWorldPlacement({ matchId: 'match-a', winnerId: 'w', loserId: 'l', tiles: full });
-    expect(plan).toEqual({ kind: 'none' });
-  });
-});
-
-describe('worldMapCell', () => {
-  it('is stable for a given match id and inside the grid', () => {
-    const cell = worldMapCell('match-abc');
-    expect(worldMapCell('match-abc')).toBe(cell);
-    expect(cell).toBeGreaterThanOrEqual(0);
-    expect(cell).toBeLessThan(WORLD_MAP_CELLS);
-  });
-});
-
-describe('winning a duel awards one tile', () => {
-  it('a won duel puts exactly one tile on the shared map, held by the winner', async () => {
-    const { service } = harness();
-    const a = await guest(service, 'Winner');
-    const b = await guest(service, 'Loser');
-
-    expect((await service.worldMap()).filled).toBe(0);
-    await duelWhere(service, a, b);
-
-    const map = await service.worldMap();
-    expect(map.filled).toBe(1);
-    expect(map.tiles).toHaveLength(1);
-    // Guests get a generated nature name, so assert against the winner's REAL display name.
-    expect(map.tiles[0]!.ownerName).toBe(a.player.displayName);
-    expect(map.tiles[0]!.tookOver).toBe(false);
-    expect(map.cells).toBe(WORLD_MAP_CELLS);
-  });
-
-  it('never awards the SAME duel twice, however often the finish is observed', async () => {
-    const { service, storage } = harness();
-    const a = await guest(service, 'Winner');
-    const b = await guest(service, 'Loser');
-    const matchId = await duelWhere(service, a, b);
-
-    // Re-running the award for the same finished match must be a no-op (match_id is unique).
-    const finished = await storage.matchById(matchId);
-    expect(finished).not.toBeNull();
-    await service.awardDuelTile(finished!);
-    await service.awardDuelTile(finished!);
-
-    expect((await service.worldMap()).filled).toBe(1);
-  });
-
-  it('the challenge rule: beating a tile holder TAKES their tile rather than adding a new one', async () => {
-    const { service } = harness();
-    const a = await guest(service, 'A');
-    const b = await guest(service, 'B');
-
-    // A beats B: A claims the first tile.
-    await duelWhere(service, a, b);
-    const afterFirst = await service.worldMap();
-    expect(afterFirst.filled).toBe(1);
-    const claimedCell = afterFirst.tiles[0]!.cell;
-    expect(afterFirst.tiles[0]!.ownerName).toBe(a.player.displayName);
-
-    // B beats A: B takes A's tile. The map does NOT grow.
-    await duelWhere(service, b, a);
-    const afterSecond = await service.worldMap();
-    expect(afterSecond.filled).toBe(1);
-    expect(afterSecond.tiles[0]!.cell).toBe(claimedCell);
-    expect(afterSecond.tiles[0]!.ownerName).toBe(b.player.displayName);
-    expect(afterSecond.tiles[0]!.tookOver).toBe(true);
-  });
-});
-
-describe('a client cannot place a tile', () => {
-  it('GET /v1/world is a public read that needs no account', async () => {
-    const { service, cfg } = harness();
-    const app = createFetchApp({ service, config: cfg });
-    const a = await guest(service, 'Winner');
-    const b = await guest(service, 'Loser');
-    await duelWhere(service, a, b);
-
-    const res = await app(new Request('http://localhost/v1/world'));
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; filled: number; tiles: unknown[] };
-    expect(body.ok).toBe(true);
-    expect(body.filled).toBe(1);
-    expect(body.tiles).toHaveLength(1);
-  });
-
-  it('there is no endpoint that writes a tile — a POST is not routed', async () => {
-    const { service, cfg } = harness();
-    const app = createFetchApp({ service, config: cfg });
-    const res = await app(
-      new Request('http://localhost/v1/world', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ cell: 3, ownerId: 'me' }),
-      }),
-    );
-    expect(res.status).not.toBe(200);
-    // Nothing was written.
-    expect((await service.worldMap()).filled).toBe(0);
-  });
-
-  it('an unplayed match awards nothing (only a FINISHED duel with a winner counts)', async () => {
-    const { service, storage } = harness();
-    const a = await guest(service, 'A');
-    const created = await service.createMatch(a.player);
-    const active = await storage.matchById(created.match.matchId);
-    expect(active).not.toBeNull();
-    expect(await service.awardDuelTile(active!)).toBeNull();
-    expect((await service.worldMap()).filled).toBe(0);
+  it('never pays repeated results or an excessive friend pair', async () => {
+    const store = new MemoryWorldEconomyStore();
+    const input = { playerId: 'a', sourceKey: 'duel:one', mode: 'friend' as const,
+      outcome: 'win' as const, opponentId: 'b', now: 1_000_000 };
+    expect((await store.settle(input)).awarded).toBe(15);
+    expect((await store.settle(input)).replayed).toBe(true);
+    for (let i = 2; i <= 4; i++) {
+      const reward = await store.settle({ ...input, sourceKey: `duel:${i}` });
+      expect(reward.awarded).toBe(i < 4 ? 15 : 0);
+    }
   });
 });

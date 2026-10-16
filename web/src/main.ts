@@ -186,6 +186,8 @@ import type { Beats } from './logic/emptyturn.js';
 // The product menu shows the world map only when this build really has an online endpoint to read
 // it from (the same predicate the lobby uses), so the entry can never open a dead screen.
 import { onlineBuildEnabled } from './online/config.js';
+import { queueSeedProof } from './online/seed-rewards.js';
+import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 
 const HUMAN: Player = 0;
 const BOT: Player = 1;
@@ -581,6 +583,9 @@ let openSheet: HTMLElement | null = null;
 /** The screen last shown. Boot finishes after `load` (it awaits async UI mounts), so a late
  *  redundant `showScreen('menu')` must not reset a menu the player has already interacted with. */
 let shownScreen: 'menu' | 'levels' | 'campaign' | 'game' | null = null;
+const TRAINING_REWARD_TICKET_KEY = 'severgrow.seeds.training-ticket.v1';
+let trainingRewardTicketId: string | null = null;
+let seedRewardMessage = '';
 /**
  * The PLAY submenu (product menu only). It is not one of the four screens: it is a doorway that
  * replaces the menu, exactly as the online hub does. Opening anything else closes it.
@@ -703,6 +708,7 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   }
   $('gameover').hidden = true;
   render();
+  if (name === 'menu') window.dispatchEvent(new Event('futasaku:menu'));
 }
 
 function syncTutorialMenuExit() {
@@ -1404,6 +1410,21 @@ async function startGame(
    */
   difficulty: DifficultyId | null = null,
 ) {
+  // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
+  // with its local seed, but cannot claim spendable Seeds without a prior ticket.
+  let ticketId: string | null = null;
+  if (difficulty && onlineBuildEnabled() && !IS_TEST) {
+    const ticket = await Promise.race([
+      onlineLobbyCtl?.trainingSeedTicket(level) ?? Promise.resolve(null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+    ]);
+    if (ticket) { seed = ticket.seed; ticketId = ticket.id; }
+  }
+  trainingRewardTicketId = ticketId;
+  if (ticketId) store.set(TRAINING_REWARD_TICKET_KEY, JSON.stringify({ seed, id: ticketId }));
+  else store.remove(TRAINING_REWARD_TICKET_KEY);
+  seedRewardMessage = difficulty && onlineBuildEnabled() && !ticketId
+    ? 'Seed rewards unavailable for this match' : '';
   drawPileAnchorKey = '';
   watching = IS_TEST ? watch : null;
   thumbOverlap = 0;
@@ -1957,6 +1978,10 @@ function continueGame() {
   gameLevel = saved.level;
   // A resumed training game keeps its tier, so finishing it still earns the one-game carry-over.
   gameDifficulty = saved.difficulty ?? null;
+  try {
+    const ticket = JSON.parse(store.get(TRAINING_REWARD_TICKET_KEY) ?? 'null') as { seed?: number; id?: string } | null;
+    trainingRewardTicketId = gameDifficulty && ticket?.seed === saved.seed && typeof ticket.id === 'string' ? ticket.id : null;
+  } catch { trainingRewardTicketId = null; }
   campaignLevel = null; // a resumed classic match is never a campaign match
   store.set(LAST_MODE_KEY, 'classic');
   beginSession(saved.state, saved.coach, saved.actions, saved.base);
@@ -2021,6 +2046,25 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
           turns: p.after.turnNumber,
         });
         saveCampaignProgress();
+      }
+      if (onlineBuildEnabled() && session) {
+        const proof = campaignLevel && p.after.result.winner === HUMAN
+          ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+          : gameDifficulty && trainingRewardTicketId
+            ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+            : null;
+        if (proof) {
+          queueSeedProof(store, proof);
+          seedRewardMessage = 'Seeds pending verification';
+          const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
+          void onlineLobbyCtl?.syncSeedRewards().then((results) => {
+            const verified = results.find((entry) => entry.key === key)?.reward;
+            if (!verified) return;
+            seedRewardMessage = verified.awarded ? `+${verified.awarded} Seeds` : 'Seed limit reached today';
+            const line = document.getElementById('go-seeds');
+            if (line && !$('gameover').hidden) { line.textContent = seedRewardMessage; line.hidden = false; }
+          }).catch(() => { /* The saved proof remains pending for the next menu visit. */ });
+        }
       }
     }
   }
@@ -5200,6 +5244,8 @@ function renderGameOver() {
   const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
+  $('go-seeds').textContent = seedRewardMessage;
+  $('go-seeds').hidden = !seedRewardMessage;
   const other = $('go-other');
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
   // same thing (the online rematch keeps its own secondary, untouched).
@@ -6938,7 +6984,12 @@ if (SHOW_MENU_TAGLINE) {
 }
 
 // Phase 4–5: online lobby + duel on the shared board (Draw / draft / Throw / resign).
-type OnlineLobbyCtl = { openHub(): Promise<void>; rematch(): Promise<void> };
+type OnlineLobbyCtl = {
+  openHub(): Promise<void>;
+  rematch(): Promise<void>;
+  trainingSeedTicket(level: number): Promise<{ id: string; seed: number } | null>;
+  syncSeedRewards(): Promise<{ key: string; reward: { awarded: number } }[]>;
+};
 let onlineLobbyCtl: OnlineLobbyCtl | null = null;
 /** Set while an online duel is open; the pause menu's Resign calls it (one confirm). */
 let onlineResign: (() => void) | null = null;

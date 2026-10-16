@@ -21,8 +21,6 @@ import type {
   Storage,
   SweepResult,
   TokenRecord,
-  WorldTile,
-  WorldTileClaim,
 } from './types.js';
 
 /** Every read and write crosses a copy boundary, so callers can never mutate stored state. */
@@ -433,41 +431,6 @@ export class MemoryStorage implements Storage {
     if (!row || row.usedAt !== null || now > row.expiresAt) return null;
     this.linkCodes.set(codeHash, { ...row, usedAt: now });
     return { playerId: row.playerId };
-  }
-
-  // ---- the shared world map (the world-map seed spike) ----
-
-  /** Stored tile: no name (the current display name is projected on read, never copied). */
-  private readonly worldTiles = new Map<number, Omit<WorldTile, 'ownerName'>>();
-
-  async listWorldTiles(): Promise<WorldTile[]> {
-    return [...this.worldTiles.values()]
-      .sort((a, b) => a.cell - b.cell)
-      .map((tile) => ({ ...copy(tile), ownerName: this.players.get(tile.ownerId)?.displayName ?? null }));
-  }
-
-  async worldTileForMatch(matchId: string): Promise<WorldTile | null> {
-    const tile = [...this.worldTiles.values()].find((t) => t.matchId === matchId);
-    if (!tile) return null;
-    return { ...copy(tile), ownerName: this.players.get(tile.ownerId)?.displayName ?? null };
-  }
-
-  async claimWorldTile(claim: WorldTileClaim): Promise<'placed' | 'conflict'> {
-    // One cell per tile AND one tile per match: either collision is a lost race, not an error.
-    if (this.worldTiles.has(claim.cell)) return 'conflict';
-    if ([...this.worldTiles.values()].some((t) => t.matchId === claim.matchId)) return 'conflict';
-    this.worldTiles.set(claim.cell, copy(claim));
-    return 'placed';
-  }
-
-  async takeOverWorldTile(claim: WorldTileClaim, fromOwnerId: string): Promise<'placed' | 'conflict'> {
-    const current = this.worldTiles.get(claim.cell);
-    if (!current || current.ownerId !== fromOwnerId) return 'conflict';
-    if (current.matchId !== claim.matchId && [...this.worldTiles.values()].some((t) => t.matchId === claim.matchId)) {
-      return 'conflict';
-    }
-    this.worldTiles.set(claim.cell, copy(claim));
-    return 'placed';
   }
 
   /** Live duels (server/src/live/memory.ts): a synchronous read and clock write for its atomic step. */

@@ -25,6 +25,8 @@ import type {
   UpgradeResponse,
   WorldMapPayload,
 } from './protocol.js';
+import type { ClaimResult, RewardResult, SeedWallet } from './seeds/types.js';
+import type { Action } from '../../src/engine/index.js';
 
 /** Protocol version the browser/build reports (P-5 handshake). */
 export const DUEL_CLIENT_VERSION = '0.5.0';
@@ -276,6 +278,35 @@ export class DuelClient {
    */
   async worldMap(): Promise<WorldMapPayload> {
     return await this.request<WorldMapPayload>('GET', '/v1/world');
+  }
+
+  async seedWallet(token: string): Promise<SeedWallet> {
+    const response = await this.request<{ wallet: SeedWallet }>('GET', '/v1/seeds/wallet', { token });
+    return response.wallet;
+  }
+
+  async claimWorld(token: string, cellId: string, requestId: string): Promise<ClaimResult> {
+    const response = await this.request<{ claim: ClaimResult }>('POST', '/v1/world/claims', { token, body: { cellId, requestId } });
+    return response.claim;
+  }
+
+  async acknowledgeWorldInvitation(token: string): Promise<void> {
+    await this.request('POST', '/v1/world/invitation', { token, body: {} });
+  }
+
+  async issueTrainingTicket(token: string, botLevel: number): Promise<{ id: string; seed: number; botLevel: number; expiresAt: number }> {
+    const response = await this.request<{ ticket: { id: string; seed: number; botLevel: number; expiresAt: number } }>(
+      'POST', '/v1/seeds/training/tickets', { token, body: { botLevel } });
+    return response.ticket;
+  }
+
+  async submitSeedProof(token: string, source: { levelId: string } | { ticketId: string }, actions: readonly Action[], botVersion: string): Promise<RewardResult> {
+    const campaign = 'levelId' in source;
+    const response = await this.request<{ reward: RewardResult }>(
+      'POST', campaign ? '/v1/seeds/campaign' : '/v1/seeds/training',
+      { token, body: { ...source, actions, botVersion } },
+    );
+    return response.reward;
   }
 
   // ---- transport ----

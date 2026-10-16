@@ -1,8 +1,8 @@
 // CAMPAIGN MODE — the HARD SEPARATION between the campaign and online play. A campaign level's
 // authored config must never reach online board generation or the shared multiplayer rules. This is
 // pinned two ways: behaviourally (the online opening is built with no campaign config and the shared
-// rules version carries no board) and structurally (no engine, server or online source file reads a
-// campaign level at all).
+// rules version carries no board) and structurally (the online match core never reads a Campaign
+// board; only the isolated Seeds proof verifier may reconstruct one to validate an offline win).
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -46,8 +46,8 @@ describe('the shared rules version never carries a campaign board', () => {
   });
 });
 
-describe('no engine, server or online source reads a campaign level', () => {
-  const forbidden = /(campaign|CAMPAIGN|campaignOpening|CampaignLevel)/;
+describe('Campaign boards stay outside the shared match rules and online renderer', () => {
+  const forbidden = /(campaignLevelById|campaignOpening|CAMPAIGN_LEVELS|src\/campaign)/;
 
   it('src/engine/ is untouched by the campaign', () => {
     for (const file of sourceFiles('/src/engine')) {
@@ -55,13 +55,13 @@ describe('no engine, server or online source reads a campaign level', () => {
     }
   });
 
-  it('the server never reads a campaign level', () => {
-    for (const file of sourceFiles('/server/src')) {
+  it('the online server core never reads a Campaign board', () => {
+    for (const file of sourceFiles('/server/src').filter((file) => !file.startsWith('/server/src/seeds/'))) {
       expect(readFileSync(`${root}${file}`, 'utf8'), file).not.toMatch(forbidden);
     }
   });
 
-  it('the online client never reads a campaign level', () => {
+  it('the online client never reads authored Campaign boards', () => {
     for (const file of sourceFiles('/web/src/online')) {
       expect(readFileSync(`${root}${file}`, 'utf8'), file).not.toMatch(forbidden);
     }

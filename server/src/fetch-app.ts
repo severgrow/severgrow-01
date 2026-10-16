@@ -157,13 +157,6 @@ export const createFetchApp = (deps: FetchAppDeps): ((req: Request) => Promise<R
       return { status: 200, body: { ok: true, ...cancelled, serverNow: service.serverNow() } };
     }
 
-    // The shared world map is a PUBLIC read: it carries no player ids and no match ids, so it needs
-    // no bearer token. Abuse is still bounded by the per-IP bucket inside the service.
-    if (method === 'GET' && path === '/v1/world') {
-      const map = await service.worldMap(clientIpOf(req));
-      return { status: 200, body: { ok: true, ...map, serverNow: service.serverNow() } };
-    }
-
     if (method === 'POST' && path === '/v1/sweep') {
       await readJson(req, config.maxBodyBytes);
       // Routine sweeps run from cron/CI from a shared or changing address. When the caller presents

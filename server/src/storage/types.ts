@@ -91,31 +91,6 @@ export type DeviceLinkCode = {
   usedAt: number | null;
 };
 
-/**
- * One tile on the SHARED world map (the world-map seed spike, server/src/world.ts).
- *
- * `ownerName` is a READ-TIME projection of the owner's current display name, never a stored copy:
- * the map always shows who holds the cell right now.
- */
-export type WorldTile = {
-  cell: number;
-  matchId: string;
-  ownerId: string;
-  ownerName: string | null;
-  awardedAt: number;
-  /** True when this tile was TAKEN from the opponent by beating them (the challenge rule). */
-  tookOver: boolean;
-};
-
-/** A claim to be written: the placement decision has already been made by the service. */
-export type WorldTileClaim = {
-  cell: number;
-  matchId: string;
-  ownerId: string;
-  awardedAt: number;
-  tookOver: boolean;
-};
-
 export type Fail = { ok: false; code: string; reason: string };
 
 /**
@@ -292,23 +267,6 @@ export interface Storage {
   createLinkCode(code: DeviceLinkCode): Promise<void>;
   /** Redeem a valid unused code; returns player id or null (same error for wrong/expired). */
   redeemLinkCode(codeHash: string, now: number): Promise<{ playerId: string } | null>;
-
-  // ---- the shared world map (the world-map seed spike) ----
-
-  /** Every tile on the shared map, ordered by cell, with the owner's current display name. */
-  listWorldTiles(): Promise<WorldTile[]>;
-  /** The tile a finished duel earned, or null. The idempotency read (unique `match_id`). */
-  worldTileForMatch(matchId: string): Promise<WorldTile | null>;
-  /**
-   * Claim a free cell for the winner. Returns `conflict` when the cell was taken by another
-   * writer (or this match already earned a tile) — the caller re-reads and re-plans.
-   */
-  claimWorldTile(claim: WorldTileClaim): Promise<'placed' | 'conflict'>;
-  /**
-   * Take a cell over from the player the winner just beat. Returns `conflict` when that player no
-   * longer holds the cell (a racing writer got there first).
-   */
-  takeOverWorldTile(claim: WorldTileClaim, fromOwnerId: string): Promise<'placed' | 'conflict'>;
 
   /** A real round-trip used by `/v1/health?db=1` (keep-alive / pause detection). */
   ping(): Promise<void>;

@@ -175,21 +175,22 @@ try {
     //         online hub) ----
     {
       const { context, page } = await device(vp, false, `world-${vp.key}`);
-      await page.route('**/v1/world*', (r) => r.fulfill({
+      await page.route('**/v1/world', (r) => r.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          ok: true, cols: 8, rows: 8, cells: 64, filled: 2, serverNow: Date.now(),
-          tiles: [
-            { cell: 9, ownerName: 'BloomHeron', awardedAt: Date.now() - 3_600_000, tookOver: false },
-            { cell: 10, ownerName: 'WillowBirch', awardedAt: Date.now() - 1_800_000, tookOver: true },
-          ],
+          ok: true, world: { version: 1, revision: 2, cost: 100,
+            cells: [{ id: '0,0', q: 0, r: 0 }, { id: '1,0', q: 1, r: 0 }],
+            claims: [
+              { cellId: '0,0', ownerId: 'a', ownerName: 'BloomHeron', ownerTag: '1001', colour: 'hsl(80 34% 49%)', claimedAt: Date.now() },
+              { cellId: '1,0', ownerId: 'b', ownerName: 'WillowBirch', ownerTag: '1002', colour: 'hsl(220 34% 49%)', claimedAt: Date.now() },
+            ] },
         }),
       }));
       await page.click('#menu-world');
       await page.waitForSelector('#online-world-screen:not([hidden])', { timeout: 10_000 });
       await page.waitForTimeout(500);
-      const held = await page.locator('#online-world-grid .world-cell[data-held="true"]').count();
+      const held = await page.locator('#online-world-grid .world-hex.held').count();
       check(`${vp.key}: the world map opens from the main menu with the map drawn`, held === 2, `${held} held cells`);
       await page.click('#online-world-back');
       await page.waitForTimeout(300);

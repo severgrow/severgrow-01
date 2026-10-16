@@ -1,5 +1,7 @@
 # FUTASAKU online duels — start here
 
+> The proposed Seeds wallet and 183-cell shared world are documented in [WORLD-MAP.md](WORLD-MAP.md); the published duel contract remains unchanged until coordinated rollout.
+
 **Status: built and shipped** on the `/futa0.5/` preview (branch `futa0.5-online`). This page is the
 index, so a future reader lands on the current document first instead of a dated report. Online duels
 and live duels are built, deployed and playable; the locked `futa0.4` build and `main`/`dev` are
