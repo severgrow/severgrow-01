@@ -88,7 +88,7 @@ describe('the world map rests on the ONE shared page surface', () => {
     const grain = bodyOf(atmosphereTs, '#futa04-film-grain');
     expect(grain, 'the film grain rule must exist').not.toBeNull();
     expect(grain!, 'the grain is the same SVG noise it always was').toContain('feTurbulence');
-    expect(grain!, 'and the same opacity').toContain('.16');
+    expect(grain!, 'and the same opacity, 12% below what it was').toContain('.141');
     // The page surface itself is unchanged: fixed, and at the bottom under every screen.
     const texture = bodyOf(styleCss, '#texture');
     expect(texture, 'the #texture rule must exist').not.toBeNull();

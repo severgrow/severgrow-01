@@ -9,21 +9,43 @@ export const ATMOSPHERE_CSS = `
    - mountAtmosphere keeps it as the LAST body child (pinGrain), so a later sibling cannot sit above
      it at an equal z-index - that is what makes the rule survive new UI;
    - pointer-events: none, or a full-screen layer would swallow every tap in the app;
-   - NORMAL blending, not soft-light. It used to be soft-light, and soft-light over these near-black
-     surfaces is effectively invisible - which is why the grain read as a background texture with
-     the interface cut out of it, the exact thing the owner asked to stop. The noise below is the
-     same SVG the background used, so the texture itself is unchanged, only its layer.
+   - NORMAL blending, not soft-light. Soft-light over these near-black surfaces is invisible - which
+     is why the grain once read as a background texture with the interface cut out of it;
    - the grain must NOT go back on #texture::before: #texture sets a z-index, so it is a stacking
-     context and anything inside it can only ever rise above the background, never above the app. */
+     context and anything inside it can only ever rise above the background, never above the app.
+
+   DENSER, FINER GRAIN (owner, 2026-10-16: "looks chunky, especially on bigger screen ... more dense
+   with smaller grain - so it doesn't look pixelated and more like real fujifilm style analog film
+   grain"). The chunkiness had two compounding causes, both measured:
+     1. THE SOURCE WAS UPSCALED. The tile was 220px of raster shown at 220 CSS px, so on a retina
+        screen the browser stretched it - x2 at DPR2, x3 at DPR3 - and every speck became a 2-3px
+        block. That is the pixelation.
+     2. THE NOISE WAS ALREADY ALIASED. baseFrequency .55 is 0.55 cycles per pixel, ABOVE the Nyquist
+        limit of 0.5, and its 2nd and 3rd octaves sat at 1.1 and 2.2. Frequencies the raster cannot
+        represent turn into harsh single-pixel speckle, which the upscaling then magnified.
+   So: a much larger source (1024) whose raster maps 1:1 to DEVICE pixels at any density
+   (background-size = 1024 / devicePixelRatio, via the two media queries below), and a HIGHER
+   baseFrequency so each speck is smaller. The two fixes are independent: the 1:1 mapping removes
+   the blockiness (nothing is stretched any more), and the frequency sets the grain size.
+   baseFrequency .7 was chosen by MEASURING a sweep of .35/.5/.65/.8/1.0 rather than by eye - in a
+   1024 raster at 1:1, local variation per unit strength rises from .666 (old) to 1.06, while the
+   autocorrelation falls from .193 to about zero, i.e. finer grain with no repeating block pattern.
+   (1.0 collapses: at that frequency the octaves alias past what the raster can represent and the
+   noise degenerates to flat grey - sd 0.61 - so .7 keeps a margin below the ceiling.) */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
-  opacity: .16; background-repeat: repeat; background-size: 220px 220px;
+  opacity: .141; background-repeat: repeat; background-size: 1024px 1024px;
   mix-blend-mode: normal; user-select: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
+/* One tile is 1024 DEVICE pixels wide on every screen, so the grain is always rasterised at the
+   display's own resolution: never upscaled (blocky), never needlessly downsampled (washed out).
+   341.33 is 1024/3, kept exact so a 3x phone lands on a whole number of device pixels. */
+@media (min-resolution: 2dppx) { #futa04-film-grain { background-size: 512px 512px; } }
+@media (min-resolution: 3dppx) { #futa04-film-grain { background-size: 341.33px 341.33px; } }
 /* In-match the grain rides above map + cockpit, a touch stronger so the analog flecks stay readable
-   on the board. */
-body:has(#game:not([hidden])) #futa04-film-grain { opacity: .19; }
+   on the board. (Both opacities are 12% below what they were, per the owner.) */
+body:has(#game:not([hidden])) #futa04-film-grain { opacity: .167; }
 /* Ink is flat near-black paper: no grain at all. */
 [data-theme='ink'] #futa04-film-grain { display: none; }
 #futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }

@@ -106,9 +106,9 @@ export class WorldView {
   private paintWallet() {
     const node = document.getElementById('online-world-wallet')!;
     node.replaceChildren();
-    node.append(seedIcon(22), document.createTextNode(this.wallet ? `${this.wallet.balance} SEEDS` : 'SIGN IN TO CLAIM'));
+    node.append(seedIcon(22), document.createTextNode(this.wallet ? `${this.wallet.balance} SEEDS` : 'SIGN IN TO GROW'));
     const summary = document.getElementById('online-world-summary')!;
-    summary.textContent = this.world ? `${this.world.claims.length} / ${this.world.cells.length} claimed · one shared world` : '';
+    summary.textContent = this.world ? `${this.world.claims.length} / ${this.world.cells.length} grown · one shared world` : '';
   }
   private paint() {
     const container = document.getElementById('online-world-grid')!;
@@ -235,13 +235,16 @@ export class WorldView {
     }
     const label = document.createElement('span');
     const available = this.svg?.querySelector(`.world-hex[data-cell-id="${this.selected}"]`)?.classList.contains('available');
-    label.textContent = available ? `FREE HEX · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TERRITORY';
+    // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
+    // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
+    // the game's own Grow action, so the world map and the board speak the same language.
+    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TERRITORY';
     pane.append(label);
     if (!available || this.busy) return;
     const action = document.createElement('button');
     action.type = 'button';
     action.className = 'world-claim-button';
-    action.textContent = confirm ? 'CONFIRM CLAIM' : 'CLAIM HEX';
+    action.textContent = confirm ? 'CONFIRM GROW' : 'GROW A TILE';
     action.addEventListener('click', () => {
       if (!confirm) return this.paintSelection(true);
       void this.claim();
@@ -260,7 +263,7 @@ export class WorldView {
       this.pendingRequest = null;
       await this.refresh(true);
     } catch {
-      this.notice('That hex may have changed. The map has refreshed; no Seeds were taken.');
+      this.notice('That tile may have changed. The map has refreshed; no Seeds were taken.');
       this.pendingRequest = null;
       await this.refresh(true);
     } finally { this.busy = false; this.paintSelection(); }

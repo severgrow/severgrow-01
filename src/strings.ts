@@ -73,7 +73,7 @@ export const ONLINE = Object.freeze({
   worldEmpty: 'No tiles yet. Win a duel to place the first one.',
   worldTaken: 'taken',
   worldYou: 'You',
-  worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles claimed`,
+  worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles grown`,
   worldError: 'Could not read the map. Try again.',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',

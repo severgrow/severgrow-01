@@ -90,8 +90,8 @@ if (!report.screenVisible || report.cells !== 183 || report.held !== 5) throw ne
 const free = page.locator('.world-hex.available').first();
 const claimedCell = await free.getAttribute('data-cell-id');
 await free.click();
-await page.getByRole('button', { name: 'CLAIM HEX' }).click();
-await page.getByRole('button', { name: 'CONFIRM CLAIM' }).click();
+await page.getByRole('button', { name: 'GROW A TILE' }).click();
+await page.getByRole('button', { name: 'CONFIRM GROW' }).click();
 await page.waitForFunction(() => document.getElementById('online-world-wallet')?.textContent?.includes('50 SEEDS'));
 if (claimedCell) await page.locator(`.world-hex[data-cell-id="${claimedCell}"].mine`).waitFor();
 if (!claimedCell || !(await page.locator(`.world-hex[data-cell-id="${claimedCell}"].mine`).count())) {

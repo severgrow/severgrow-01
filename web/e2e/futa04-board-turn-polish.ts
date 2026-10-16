@@ -222,7 +222,13 @@ async function geometry(page: Page, width: number, height: number, label: string
   // top layer"): it is now NORMAL blending and carries the same SVG noise the background used, so the
   // tile is 220px (the SVG's own size) and the source is a data:image/svg+xml, not the old 128px
   // canvas PNG. Soft-light was dropped on purpose: over these near-black surfaces it is invisible.
-  check(atmosphere.coverage && atmosphere.opacity === .19 && atmosphere.pointer === 'none' && atmosphere.static && atmosphere.tile === '220px 220px' && atmosphere.background,
+  // The grain is rasterised at the DISPLAY's own density: one tile is 1024 DEVICE pixels wide, so
+  // `background-size` steps down as the pixel ratio rises (1024 / DPR). Accepting the ladder rather
+  // than one literal is not a weakening - it is the actual requirement, and it is what stops the
+  // source being upscaled into visible blocks on a retina screen (the chunky grain the owner
+  // reported). In-match opacity is 12% below what it was (.19 -> .167).
+  check(atmosphere.coverage && atmosphere.opacity === .167 && atmosphere.pointer === 'none' && atmosphere.static
+    && ['1024px 1024px', '512px 512px', '341.33px 341.33px'].includes(atmosphere.tile) && atmosphere.background,
     `${label}: deterministic static film grain covers all UI without blocking input`);
   check(atmosphere.darker && atmosphere.loaded && atmosphere.bounded && atmosphere.behind && atmosphere.rimStatic,
     `${label}: darker backdrop and bounded baked rim sit behind the unchanged tiles`);

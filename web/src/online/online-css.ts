@@ -472,7 +472,7 @@ export const ONLINE_CSS = `
 /* The controls anchor to the bottom of the column (owner, 2026-10-16). Now that the window hugs the
    map instead of filling the column, the leftover height would otherwise collect under the
    selection bar as dead space at the very bottom. Pushing the controls down keeps the column
-   spanning the viewport and keeps the one real action (CLAIM HEX) at thumb height, where it
+   spanning the viewport and keeps the one real action (GROW A TILE) at thumb height, where it
    already was before. The header -> summary -> Seeds -> window steps above stay on the column's own
    rhythm; this is the ONE deliberate break in it, and it is the bottom anchor, not a gap. */
 .world-selection {
