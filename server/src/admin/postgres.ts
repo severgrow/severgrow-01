@@ -98,6 +98,23 @@ export const MATCH_VISIBLE = (alias: string): string =>
   `select 1 from match_participants vis_mp join players vis_pl on vis_pl.id = vis_mp.player_id ` +
   `where vis_mp.match_id = ${alias}.id and vis_pl.is_test)`;
 
+/**
+ * Run the query thunks ONE AT A TIME, in order.
+ *
+ * Through the deployed Edge runtime (postgres.js against the transaction pooler) a PARALLEL batch of
+ * this many statements hangs the request until the platform's 150s idle timeout, while one at a time
+ * always answers (~300ms each). Reproduced with the pre-filter SQL too, so it is a runtime quirk, not
+ * the test filter. After `world`, `economy` and `stuck` each get their own `Promise.all` replaced
+ * here; the smaller/simple batches (`overview`, `ledger`, `matches`, `campaign`, …) are unaffected.
+ */
+const sequential = async <T extends Record<string, () => Promise<unknown>>>(
+  thunks: T,
+): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> => {
+  const out: Record<string, unknown> = {};
+  for (const [key, thunk] of Object.entries(thunks)) out[key] = await thunk();
+  return out as never;
+};
+
 export const postgresAdminStore = (pool: PgPool): AdminStore => {
 
   const showMatch = (row: Record<string, unknown>): AdminMatchRow => ({
@@ -400,42 +417,46 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     },
 
     async stuck(now, windows) {
-      const [active, waiting, guests, sample] = await Promise.all([
-        pool.query(
-          `select count(*)::int as n, min(m.turn_deadline_at) as oldest from matches m
-            where m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1
-              and ${MATCH_VISIBLE('m')}`,
-          [now],
-        ),
-        pool.query(
-          `select count(*)::int as n, min(m.expires_at) as oldest from matches m
-            where m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1
-              and ${MATCH_VISIBLE('m')}`,
-          [now],
-        ),
-        pool.query(
-          `select count(*)::int as n, min(p.created_at) as oldest from players p
-            where p.kind = 'guest' and p.created_at < $1 and ${NOT_TEST('p')}
-              and not exists (select 1 from match_participants mp where mp.player_id = p.id)
-              and not exists (select 1 from seed_wallets sw where sw.player_id = p.id and (sw.balance > 0 or sw.lifetime_earned > 0 or sw.lifetime_spent > 0))
-              and not exists (select 1 from seed_reward_receipts sr where sr.player_id = p.id)
-              and not exists (select 1 from seed_ledger sl where sl.player_id = p.id)
-              and not exists (select 1 from training_seed_tickets st where st.player_id = p.id)
-              and not exists (select 1 from world_claims wc where wc.owner_id = p.id)`,
-          [now - windows.guestMaxAgeMs],
-        ),
-        pool.query(
-          `select m.id, m.status, m.open_queue, m.live_since, m.created_at,
-                  coalesce(m.turn_deadline_at, m.expires_at) as due_at,
-                  (select count(*)::int from match_participants p where p.match_id = m.id) as seats
-             from matches m
-            where ((m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1)
-               or (m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1))
-              and ${MATCH_VISIBLE('m')}
-            order by due_at asc limit 20`,
-          [now],
-        ),
-      ]);
+      const { active, waiting, guests, sample } = await sequential({
+        active: () =>
+          pool.query(
+            `select count(*)::int as n, min(m.turn_deadline_at) as oldest from matches m
+              where m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1
+                and ${MATCH_VISIBLE('m')}`,
+            [now],
+          ),
+        waiting: () =>
+          pool.query(
+            `select count(*)::int as n, min(m.expires_at) as oldest from matches m
+              where m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1
+                and ${MATCH_VISIBLE('m')}`,
+            [now],
+          ),
+        guests: () =>
+          pool.query(
+            `select count(*)::int as n, min(p.created_at) as oldest from players p
+              where p.kind = 'guest' and p.created_at < $1 and ${NOT_TEST('p')}
+                and not exists (select 1 from match_participants mp where mp.player_id = p.id)
+                and not exists (select 1 from seed_wallets sw where sw.player_id = p.id and (sw.balance > 0 or sw.lifetime_earned > 0 or sw.lifetime_spent > 0))
+                and not exists (select 1 from seed_reward_receipts sr where sr.player_id = p.id)
+                and not exists (select 1 from seed_ledger sl where sl.player_id = p.id)
+                and not exists (select 1 from training_seed_tickets st where st.player_id = p.id)
+                and not exists (select 1 from world_claims wc where wc.owner_id = p.id)`,
+            [now - windows.guestMaxAgeMs],
+          ),
+        sample: () =>
+          pool.query(
+            `select m.id, m.status, m.open_queue, m.live_since, m.created_at,
+                    coalesce(m.turn_deadline_at, m.expires_at) as due_at,
+                    (select count(*)::int from match_participants p where p.match_id = m.id) as seats
+               from matches m
+              where ((m.status = 'active' and m.turn_deadline_at is not null and m.turn_deadline_at < $1)
+                 or (m.status = 'waiting' and m.expires_at is not null and m.expires_at < $1))
+                and ${MATCH_VISIBLE('m')}
+              order by due_at asc limit 20`,
+            [now],
+          ),
+      });
       const rows = sample.rows.map((row) => ({
         id: str(row.id),
         status: str(row.status),
@@ -469,32 +490,36 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     },
 
     async funnel(now) {
-      const [byDay, links, totals, oldest] = await Promise.all([
-        pool.query(
-          `select floor(p.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
-                  count(*) filter (where p.kind = 'guest')::int as guests,
-                  count(*) filter (where p.kind = 'account')::int as accounts
-             from players p where p.created_at >= $1 and ${NOT_TEST('p')} group by 1 order by 1 limit 400`,
-          [now - 90 * DAY_MS],
-        ),
-        pool.query(
-          `select floor(i.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
-             from player_identities i where i.created_at >= $1 and ${PLAYER_OF_NOT_TEST('i.player_id')}
-            group by 1 order by 1 limit 400`,
-          [now - 90 * DAY_MS],
-        ),
-        pool.query(
-          `select count(*)::int as players,
-                  count(*) filter (where p.kind = 'guest')::int as guests,
-                  count(*) filter (where p.kind = 'account')::int as accounts,
-                  count(*) filter (where p.kind = 'account' and p.upgraded_at is not null)::int as with_upgraded_at
-             from players p where ${NOT_TEST('p')}`,
-        ),
-        pool.query(
-          `select min(p.created_at) as first_created, count(*)::int as n from players p
-            where p.upgraded_at is null and ${NOT_TEST('p')}`,
-        ),
-      ]);
+      const { byDay, links, totals, oldest } = await sequential({
+        byDay: () =>
+          pool.query(
+            `select floor(p.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms,
+                    count(*) filter (where p.kind = 'guest')::int as guests,
+                    count(*) filter (where p.kind = 'account')::int as accounts
+               from players p where p.created_at >= $1 and ${NOT_TEST('p')} group by 1 order by 1 limit 400`,
+            [now - 90 * DAY_MS],
+          ),
+        links: () =>
+          pool.query(
+            `select floor(i.created_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
+               from player_identities i where i.created_at >= $1 and ${PLAYER_OF_NOT_TEST('i.player_id')}
+              group by 1 order by 1 limit 400`,
+            [now - 90 * DAY_MS],
+          ),
+        totals: () =>
+          pool.query(
+            `select count(*)::int as players,
+                    count(*) filter (where p.kind = 'guest')::int as guests,
+                    count(*) filter (where p.kind = 'account')::int as accounts,
+                    count(*) filter (where p.kind = 'account' and p.upgraded_at is not null)::int as with_upgraded_at
+               from players p where ${NOT_TEST('p')}`,
+          ),
+        oldest: () =>
+          pool.query(
+            `select min(p.created_at) as first_created, count(*)::int as n from players p
+              where p.upgraded_at is null and ${NOT_TEST('p')}`,
+          ),
+      });
       const dayIndex = new Map(byDay.rows.map((r) => [utcDay(num(r.day_ms)), r]));
       const linkIndex = new Map(links.rows.map((r) => [utcDay(num(r.day_ms)), num(r.n)]));
       const days = lastDays(now, 30);
@@ -520,36 +545,41 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     },
 
     async economy(now) {
-      const [wallets, categories, receipts, denials, modes] = await Promise.all([
-        pool.query(
-          `select count(*)::int as wallets,
-                  coalesce(sum(w.balance), 0)::int as balance,
-                  coalesce(sum(w.lifetime_earned), 0)::bigint as earned,
-                  coalesce(sum(w.lifetime_spent), 0)::bigint as spent
-             from seed_wallets w where ${PLAYER_OF_NOT_TEST('w.player_id')}`,
-        ),
-        pool.query(
-          `select l.category,
-                  count(*)::int as entries,
-                  coalesce(sum(l.delta) filter (where l.delta > 0), 0)::int as minted,
-                  coalesce(sum(-l.delta) filter (where l.delta < 0), 0)::int as spent,
-                  coalesce(sum(l.delta), 0)::int as net
-             from seed_ledger l where ${PLAYER_OF_NOT_TEST('l.player_id')} group by l.category order by entries desc limit 40`,
-        ),
-        pool.query(
-          `select count(*) filter (where r.awarded > 0)::int as awarded,
-                  count(*) filter (where r.awarded = 0)::int as denied
-             from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')}`,
-        ),
-        pool.query(
-          `select coalesce(r.denial, 'awarded') as value, count(*)::int as n
-             from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
-        ),
-        pool.query(
-          `select r.mode as value, count(*)::int as n from seed_reward_receipts r
-            where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
-        ),
-      ]);
+      const { wallets, categories, receipts, denials, modes } = await sequential({
+        wallets: () =>
+          pool.query(
+            `select count(*)::int as wallets,
+                    coalesce(sum(w.balance), 0)::int as balance,
+                    coalesce(sum(w.lifetime_earned), 0)::bigint as earned,
+                    coalesce(sum(w.lifetime_spent), 0)::bigint as spent
+               from seed_wallets w where ${PLAYER_OF_NOT_TEST('w.player_id')}`,
+          ),
+        categories: () =>
+          pool.query(
+            `select l.category,
+                    count(*)::int as entries,
+                    coalesce(sum(l.delta) filter (where l.delta > 0), 0)::int as minted,
+                    coalesce(sum(-l.delta) filter (where l.delta < 0), 0)::int as spent,
+                    coalesce(sum(l.delta), 0)::int as net
+               from seed_ledger l where ${PLAYER_OF_NOT_TEST('l.player_id')} group by l.category order by entries desc limit 40`,
+          ),
+        receipts: () =>
+          pool.query(
+            `select count(*) filter (where r.awarded > 0)::int as awarded,
+                    count(*) filter (where r.awarded = 0)::int as denied
+               from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')}`,
+          ),
+        denials: () =>
+          pool.query(
+            `select coalesce(r.denial, 'awarded') as value, count(*)::int as n
+               from seed_reward_receipts r where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
+          ),
+        modes: () =>
+          pool.query(
+            `select r.mode as value, count(*)::int as n from seed_reward_receipts r
+              where ${PLAYER_OF_NOT_TEST('r.player_id')} group by 1 order by n desc limit 40`,
+          ),
+      });
       const earned = num(wallets.rows[0]?.earned);
       const spent = num(wallets.rows[0]?.spent);
       const economy: AdminEconomy = {
@@ -841,29 +871,32 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
     },
 
     async world(now) {
-      const [meta, total, owners, byDay, recent, all] = await Promise.all([
-        pool.query('select revision from world_meta where version = $1', [WORLD_VERSION]),
-        pool.query(`select count(*)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`),
-        pool.query(`select count(distinct c.owner_id)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`),
-        pool.query(
-          `select floor(c.claimed_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
-             from world_claims c where c.claimed_at >= $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}
-            group by 1 order by 1 limit 400`,
-          [now - 90 * DAY_MS],
-        ),
-        pool.query(
-          `select c.cell_id, c.owner_id, c.claimed_at, c.source, p.display_name as owner_name
-             from world_claims c left join players p on p.id = c.owner_id
-            where ${PLAYER_OF_NOT_TEST('c.owner_id')}
-            order by c.claimed_at desc limit 20`,
-        ),
-        // Bounded by design: the v1 world is 183 hexes, so every claim fits in one page. The limit
-        // is a guard against a future expansion, not a silent truncation.
-        pool.query(
-          `select c.cell_id, c.owner_id, c.claimed_at from world_claims c
-            where ${PLAYER_OF_NOT_TEST('c.owner_id')} order by c.claimed_at asc, c.cell_id asc limit 400`,
-        ),
-      ]);
+      // SEQUENTIAL on purpose. Through the deployed Edge runtime (postgres.js against the
+      // transaction pooler) issuing this particular six-query batch in PARALLEL hangs the request
+      // until the platform's 150s idle timeout. It was reproduced with the PRE-filter SQL as well,
+      // so it is a pre-existing runtime quirk, not the test filter — and one query at a time always
+      // answers (~1.5s). Same rows, same order, no pipelining.
+      const meta = await pool.query('select revision from world_meta where version = $1', [WORLD_VERSION]);
+      const total = await pool.query(`select count(*)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
+      const owners = await pool.query(`select count(distinct c.owner_id)::int as n from world_claims c where ${PLAYER_OF_NOT_TEST('c.owner_id')}`);
+      const byDay = await pool.query(
+        `select floor(c.claimed_at / ${DAY_MS})::bigint * ${DAY_MS} as day_ms, count(*)::int as n
+           from world_claims c where c.claimed_at >= $1 and ${PLAYER_OF_NOT_TEST('c.owner_id')}
+          group by 1 order by 1 limit 400`,
+        [now - 90 * DAY_MS],
+      );
+      const recent = await pool.query(
+        `select c.cell_id, c.owner_id, c.claimed_at, c.source, p.display_name as owner_name
+           from world_claims c left join players p on p.id = c.owner_id
+          where ${PLAYER_OF_NOT_TEST('c.owner_id')}
+          order by c.claimed_at desc limit 20`,
+      );
+      // Bounded by design: the v1 world is 183 hexes, so every claim fits in one page. The limit
+      // is a guard against a future expansion, not a silent truncation.
+      const all = await pool.query(
+        `select c.cell_id, c.owner_id, c.claimed_at from world_claims c
+          where ${PLAYER_OF_NOT_TEST('c.owner_id')} order by c.claimed_at asc, c.cell_id asc limit 400`,
+      );
       const dayIndex = new Map(byDay.rows.map((r) => [utcDay(num(r.day_ms)), num(r.n)]));
       const days = lastDays(now, 30);
       const byDayIndex = new Map<string, { cellId: string; ownerId: string; claimedAt: number }[]>();

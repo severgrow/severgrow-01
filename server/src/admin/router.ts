@@ -230,15 +230,18 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
     }
 
     if (req.method === 'GET' && path === '/v1/admin/ops') {
-      const [stuck, rulesDrift] = await Promise.all([
-        deps.store.stuck(now, {
-          guestMaxAgeMs: 30 * 24 * 60 * 60 * 1000,
-          waitingExpireMs: deps.config.waitingExpireMs,
-          turnTimeoutMs: deps.config.turnTimeoutMs,
-        }),
-        deps.store.rulesVersionCounts(),
-      ]);
-      const [builds, funnel] = await Promise.all([deps.store.overview(now), deps.store.funnel(now)]);
+      // SEQUENTIAL, not Promise.all: two store methods in flight at once is the same parallel batch
+      // that hangs the deployed Edge runtime (postgres.js + the transaction pooler) for the other
+      // admin screens — see the `sequential` note in admin/postgres.ts. The Ops screen is the only
+      // route that aggregates four store reads, so it is the only one that needs this here.
+      const stuck = await deps.store.stuck(now, {
+        guestMaxAgeMs: 30 * 24 * 60 * 60 * 1000,
+        waitingExpireMs: deps.config.waitingExpireMs,
+        turnTimeoutMs: deps.config.turnTimeoutMs,
+      });
+      const rulesDrift = await deps.store.rulesVersionCounts();
+      const builds = await deps.store.overview(now);
+      const funnel = await deps.store.funnel(now);
       return {
         status: 200,
         body: {
