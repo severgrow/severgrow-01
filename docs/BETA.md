@@ -34,10 +34,39 @@ separate page as the game's offline copy.
 
 ## Reading reports
 
-Supabase dashboard → your project → **Table Editor** (left menu) → **feedback_reports**. Newest
-first: click the `created_at` column header to sort descending. `kind` is `report` or `crash`;
-`message` is what the tester wrote (or the error); `context` holds the details above; `build` says
-which release they had. Filter `kind = crash` to see only crashes.
+**From the terminal, newest first:**
+
+```sh
+npm run feedback:recent                 # the newest 20
+npm run feedback:recent -- --limit=50   # more
+npm run feedback:recent -- --kind=crash # crashes only
+npm run feedback:recent -- --json       # raw records, for scripting
+```
+
+It prints how many arrived **since you last looked** (a timestamp in
+`~/.futasaku-feedback-last-seen`) and marks those rows `NEW`, so "check the reports" is a one-command
+habit rather than a dashboard visit. It only records the "seen" mark on an unfiltered run, so
+glancing at `--kind=crash` cannot silently hide fresh bug reports.
+
+**In the dashboard** (for the full context of one report): Supabase dashboard → your project →
+**Table Editor** (left menu) → **feedback_reports**. Newest first: click the `created_at` column
+header to sort descending. `kind` is `report` or `crash`; `message` is what the tester wrote (or the
+error); `context` holds the details above; `build` says which release they had. Filter `kind = crash`
+to see only crashes.
+
+**Nothing notifies you.** There is no email, webhook or push when a report arrives — the row is
+written and waits. That is deliberate for now (one owner, one database) but it means *nobody knows
+until they look*, so the habit above is what makes the feature worth having.
+
+**Planned: `futasaku.com/admin`.** The owner's next project is an admin dashboard for managing
+players, maps and feedback. When it is built, reuse `postgresFeedbackStore(pool).recent()` in
+`server/src/feedback/feedback.ts` — it is already the one reader, and `feedback-recent.ts` is only a
+thin CLI over it. The dashboard is also the right home for a **DB-backed** seen flag, since that
+should work from any machine, not just one laptop's home directory.
+
+**Who may read them:** nobody but the owner. `feedback_reports` is under RLS with `anon` and
+`authenticated` revoked (migration `0009_feedback.sql`), so reports are reachable only through the
+service role — the tooling above — and never from the public API.
 
 ## What a person must do to switch it on
 
