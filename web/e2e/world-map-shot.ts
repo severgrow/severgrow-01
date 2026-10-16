@@ -3,7 +3,6 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright-core';
-import { openMenuEntry } from './helpers/menu-nav.js';
 import { serveStaticDist } from './helpers/preview-port.js';
 import { WORLD_CELLS } from '../../server/src/world.js';
 
@@ -88,7 +87,7 @@ console.log('errors:', errors.length ? errors.slice(0, 5) : 'none');
 if (!report.screenVisible || report.cells !== 183 || report.held !== 5) throw new Error('The shared world did not render correctly.');
 
 // A mobile first-claim gesture must select, confirm, debit and appear in the refreshed world.
-const free = page.locator('.world-hex:not(.held)').first();
+const free = page.locator('.world-hex.available').first();
 const claimedCell = await free.getAttribute('data-cell-id');
 await free.click();
 await page.getByRole('button', { name: 'CLAIM HEX' }).click();
@@ -106,7 +105,7 @@ console.log('mobile claim: confirmed, balance 50, cell owned');
 const other = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 await other.route('**/v1/world', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE) }));
 await other.route('**/v1/guests*', (r) => r.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ ok: false, code: 'RATE_LIMITED' }) }));
-await other.goto('http://localhost:4199/', { waitUntil: 'load' });
+await other.goto(BASE, { waitUntil: 'load' });
 await other.click('#menu-world');
 await other.locator('.world-hex').first().waitFor({ state: 'attached' });
 if ((await other.locator('.world-hex').count()) !== 183 ||

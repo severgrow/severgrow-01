@@ -211,7 +211,6 @@ export class WorldView {
       event.preventDefault(); zoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
     }, { passive: false });
     svg.addEventListener('pointerdown', (event) => {
-      svg.setPointerCapture(event.pointerId);
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.dragged = false;
     });
@@ -219,7 +218,12 @@ export class WorldView {
       const old = this.pointers.get(event.pointerId);
       if (!old || !this.box) return;
       const dx = event.clientX - old.x, dy = event.clientY - old.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3) this.dragged = true;
+      if (Math.abs(dx) + Math.abs(dy) > 3) {
+        this.dragged = true;
+        // Capturing on pointerdown retargets a touch tap's click to the SVG,
+        // so a tile never receives it. Capture only once the gesture is a pan.
+        if (!svg.hasPointerCapture(event.pointerId)) svg.setPointerCapture(event.pointerId);
+      }
       const rect = svg.getBoundingClientRect();
       if (this.pointers.size === 1) {
         this.box[0] -= dx / rect.width * this.box[2]; this.box[1] -= dy / rect.height * this.box[3]; set();
