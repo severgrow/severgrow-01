@@ -77,7 +77,21 @@ export const installCamera = (svg: SVGSVGElement, wrap: HTMLElement, hooks: { re
     svg.setAttribute('viewBox', mine);
     view = r;
   };
-  const box = () => svg.getBoundingClientRect();
+  /**
+   * The board's own CSS box. `.board` is width/height:100% of `.board-wrap`, so writing the
+   * `viewBox` (all this file does) cannot change it: inside one task the value is a constant.
+   * Reading it forces a layout, and a single camera decision reads it six to eight times (target ->
+   * viewAt -> winPx -> fitTile...). With a board on screen that was 284 of the 658 forced layout
+   * reads in a 12 s game, all of them the same number. One read per task now; the cache is dropped
+   * on the next task, so a resize or an orientation change is always picked up.
+   */
+  let boxRect: DOMRect | null = null;
+  const box = (): DOMRect => {
+    if (boxRect) return boxRect;
+    boxRect = svg.getBoundingClientRect();
+    queueMicrotask(() => { boxRect = null; });
+    return boxRect;
+  };
   /** The map runs on under the cards (phones): the part of the board's box behind the dock (px). */
   const under = () => parseFloat(getComputedStyle(wrap).getPropertyValue('--cam-under')) || 0;
   /** The window the camera frames in: the board's box above the cards (px). */

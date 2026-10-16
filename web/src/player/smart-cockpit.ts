@@ -573,6 +573,8 @@ export function mountSmartCockpit() {
   let lastMotif: DisplayFrame['motif'];
   let lastFlash: DisplayFrame['flash'];
   let motifTimer = 0;
+  /** The running motif painter, so the interval can be stopped while the page is hidden. */
+  let motifPaint: (() => void) | null = null;
   let flashTimer = 0;
   let lastReduced = document.documentElement.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion:reduce)').matches;
   let reel: Animation[] = [];
@@ -660,9 +662,14 @@ export function mountSmartCockpit() {
           drawLedCells(cells,picture,false,mode);
           drawLedCells(spillCells,picture,false,mode);
         };
+        motifPaint = paint;
         paint();
-        motifTimer = window.setInterval(paint,88);
+        window.clearInterval(motifTimer);
+        // Not while the page is hidden: the motif is an 11 fps canvas repaint and a phone in a
+        // pocket has nobody looking at it (the same rule world-view.ts follows for its 12 s poll).
+        motifTimer = document.hidden ? 0 : window.setInterval(paint,88);
       } else {
+        motifPaint = null;
         drawLedCells(cells,shown,scrolling,mode);
         drawLedCells(spillCells,shown,scrolling,mode);
       }
@@ -697,6 +704,16 @@ export function mountSmartCockpit() {
       }
     });
   };
+  // The motif animation (an 11 fps canvas repaint) stops with the page: nothing is looking at it,
+  // and a phone in a pocket must not keep painting the LED cells.
+  document.addEventListener('visibilitychange', () => {
+    window.clearInterval(motifTimer);
+    motifTimer = 0;
+    if (!document.hidden && motifPaint) {
+      motifPaint();
+      motifTimer = window.setInterval(motifPaint, 88);
+    }
+  });
   // Hold times follow Speed (--anim); skip/0 floors inside DisplayMachine.
   const machine = new DisplayMachine(setText, () => {
     const raw = Number.parseFloat(document.documentElement.style.getPropertyValue('--anim'));

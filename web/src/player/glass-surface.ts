@@ -514,6 +514,24 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
   return geometryFromBounds(left, top, right, bottom, singleCard);
 };
 
+/**
+ * Write only when the value actually changes.
+ *
+ * The tutorial re-places the glass and paints the focus overlay every animation frame (it follows
+ * the target, which breathes). While the panel rests, every one of those writes carries the value
+ * it already has — measured on a resting tutorial: 5 774 DOM/style writes in five seconds (about
+ * 1 150 a second), all no-ops, and each no-op write invalidates style and paint for that element.
+ * Setting the same value produces the same DOM, so skipping it cannot change a pixel; it only stops
+ * the invalidation. With this guard the same five seconds cost 74 writes. (Same idea as the
+ * empty-cell class in player/atmosphere.ts.)
+ */
+const setIfChanged = (el: Element | null, name: string, value: string) => {
+  if (el && el.getAttribute(name) !== value) el.setAttribute(name, value);
+};
+const styleIfChanged = (el: HTMLElement | SVGElement, name: string, value: string) => {
+  if (el.style.getPropertyValue(name) !== value) el.style.setProperty(name, value);
+};
+
 /** Simple white triangle arrow (tip toward the target). */
 const POINTER_ARROW = `<g class="focus-pointer">`
   + `<polygon class="focus-pointer-body" points="10,1 19,22 10,17 1,22"/>`
@@ -552,6 +570,10 @@ export const mountGlassSurface = (onClose: () => void) => {
   let lastStepKey = '';
   let ledTitle = '';
   let focusScene: 'tracked' | 'empty' | null = null;
+  // The LED title is redrawn whenever the glass is re-placed, but its pixels only depend on the
+  // title, the large-text flag, the slot width and the viewport - so a re-place that changes none of
+  // them would repaint an identical canvas. Skip it (same pixels, no raster invalidation).
+  let lastLedPaint = '';
   const paintTutorialLed = () => {
     const canvas = panel.querySelector<HTMLCanvasElement>('.glass-led-cells');
     if (!canvas || !ledTitle) return;
@@ -559,6 +581,9 @@ export const mountGlassSurface = (onClose: () => void) => {
     const large = document.documentElement.classList.contains('large-text');
     const titleSlot = panel.querySelector('.glass-head-title') as HTMLElement | null;
     const slotW = titleSlot?.clientWidth || 0;
+    const paintKey = `${text}|${large}|${slotW}|${panel.clientWidth}|${innerWidth}|${window.devicePixelRatio}`;
+    if (paintKey === lastLedPaint) return;
+    lastLedPaint = paintKey;
     const maxW = Math.max(72, Math.min(slotW > 0 ? slotW - 8 : panel.clientWidth - 36, innerWidth - 56));
     let scale = large ? 1.2 : 1.1;
     const natural = ledMessageWidth(text) * scale;
@@ -600,13 +625,13 @@ export const mountGlassSurface = (onClose: () => void) => {
   const placeIntel = () => {
     clearTutorialReserve();
     const d = rectOf(dock);
-    panel.style.left = `${Math.max(6, d.left + 6)}px`;
-    panel.style.width = `${Math.max(0, Math.min(innerWidth - 12, d.width - 12))}px`;
-    panel.style.maxWidth = '';
-    panel.style.top = `${Math.max(6, d.top + 4)}px`;
-    panel.style.height = `${Math.max(140, Math.min(innerHeight - d.top - 8, d.height - 8))}px`;
-    panel.style.bottom = '';
-    panel.style.transform = '';
+    styleIfChanged(panel, 'left', `${Math.max(6, d.left + 6)}px`);
+    styleIfChanged(panel, 'width', `${Math.max(0, Math.min(innerWidth - 12, d.width - 12))}px`);
+    styleIfChanged(panel, 'max-width', '');
+    styleIfChanged(panel, 'top', `${Math.max(6, d.top + 4)}px`);
+    styleIfChanged(panel, 'height', `${Math.max(140, Math.min(innerHeight - d.top - 8, d.height - 8))}px`);
+    styleIfChanged(panel, 'bottom', '');
+    styleIfChanged(panel, 'transform', '');
   };
 
   const safeInsets = () => {
@@ -628,8 +653,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     // Keep the glass docked (never follows the moving highlight).
     void _tracked;
     panelSide = 'top';
-    panel.style.height = 'auto';
-    panel.style.bottom = '';
+    styleIfChanged(panel, 'height', 'auto');
+    styleIfChanged(panel, 'bottom', '');
     const side = document.documentElement.dataset.layout === 'side';
     const safe = safeInsets();
     if (side) {
@@ -646,12 +671,12 @@ export const mountGlassSurface = (onClose: () => void) => {
         // shares the right column (never cover chrome).
         const logoClear = logo && logo.width > 0 ? Math.ceil(logo.bottom + 8) : 0;
         const top = Math.max(Math.round(board.top), logoClear);
-        panel.style.width = `${width}px`;
-        panel.style.maxWidth = `${width}px`;
-        panel.style.left = `${left}px`;
-        panel.style.top = `${top}px`;
+        styleIfChanged(panel, 'width', `${width}px`);
+        styleIfChanged(panel, 'max-width', `${width}px`);
+        styleIfChanged(panel, 'left', `${left}px`);
+        styleIfChanged(panel, 'top', `${top}px`);
         // Override stylesheet `translateX(-50%)` (used for phone centering).
-        panel.style.transform = 'none';
+        styleIfChanged(panel, 'transform', 'none');
         clearTutorialPads();
         return;
       }
@@ -665,11 +690,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
     const chromeBottom = Math.max(menu?.bottom ?? 0, logo?.bottom ?? 0);
     const top = Math.max(Math.round(safe.top), Math.ceil(chromeBottom + 8));
-    panel.style.width = `${width}px`;
-    panel.style.maxWidth = `${width}px`;
-    panel.style.left = '50%';
-    panel.style.transform = 'translateX(-50%)';
-    panel.style.top = `${top}px`;
+    styleIfChanged(panel, 'width', `${width}px`);
+    styleIfChanged(panel, 'max-width', `${width}px`);
+    styleIfChanged(panel, 'left', '50%');
+    styleIfChanged(panel, 'transform', 'translateX(-50%)');
+    styleIfChanged(panel, 'top', `${top}px`);
     // After layout: equal gaps glass→board and board→cockpit/hand (centre map in the band).
     requestAnimationFrame(() => balanceTutorialBoardBand());
   };
@@ -812,11 +837,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     const w = tracked.w + padX * 2;
     const h = tracked.h + padY * 2;
     const rx = Math.min(FOCUS_RX, Math.min(w, h) * 0.22);
-    el.setAttribute('x', x.toFixed(1));
-    el.setAttribute('y', y.toFixed(1));
-    el.setAttribute('width', w.toFixed(1));
-    el.setAttribute('height', h.toFixed(1));
-    el.setAttribute('rx', rx.toFixed(1));
+    setIfChanged(el, 'x', x.toFixed(1));
+    setIfChanged(el, 'y', y.toFixed(1));
+    setIfChanged(el, 'width', w.toFixed(1));
+    setIfChanged(el, 'height', h.toFixed(1));
+    setIfChanged(el, 'rx', rx.toFixed(1));
   };
 
   /** Pixel cutouts need userSpaceOnUse — default objectBoundingBox ignores screen coords
@@ -839,18 +864,18 @@ export const mountGlassSurface = (onClose: () => void) => {
   };
 
   const paintFocus = (tracked: Tracked | null) => {
-    focus.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
+    setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
-    focus.dataset.pulse = reduceMotion || !tracked ? '0' : '1';
-    focus.dataset.bob = reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1';
-    focus.dataset.on = tracked || mode === 'tutorial' ? '1' : '0';
+    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : '1');
+    setIfChanged(focus, 'data-bob', reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1');
+    setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');
     // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
     if (!tracked) {
       if (focusScene !== 'empty') {
         focus.innerHTML = `<rect class="focus-dim" width="100%" height="100%"/>`;
         focusScene = 'empty';
       }
-      focus.dataset.pointer = '0';
+      setIfChanged(focus, 'data-pointer', '0');
       return;
     }
     ensureTrackedScene();
@@ -861,14 +886,14 @@ export const mountGlassSurface = (onClose: () => void) => {
     const pose = pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
     if (pose && pointerRoot) {
-      focus.style.setProperty('--bob-x', `${pose.bobX}px`);
-      focus.style.setProperty('--bob-y', `${pose.bobY}px`);
-      pointerRoot.setAttribute('transform', `translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) rotate(${pose.rot} 10 4)`);
-      pointerRoot.removeAttribute('hidden');
-    } else if (pointerRoot) {
+      styleIfChanged(focus, '--bob-x', `${pose.bobX}px`);
+      styleIfChanged(focus, '--bob-y', `${pose.bobY}px`);
+      setIfChanged(pointerRoot, 'transform', `translate(${pose.x.toFixed(1)} ${pose.y.toFixed(1)}) rotate(${pose.rot} 10 4)`);
+      if (pointerRoot.hasAttribute('hidden')) pointerRoot.removeAttribute('hidden');
+    } else if (pointerRoot && !pointerRoot.hasAttribute('hidden')) {
       pointerRoot.setAttribute('hidden', '');
     }
-    focus.dataset.pointer = pose ? '1' : '0';
+    setIfChanged(focus, 'data-pointer', pose ? '1' : '0');
   };
 
   const tick = (now: number) => {

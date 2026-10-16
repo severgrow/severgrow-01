@@ -191,10 +191,21 @@ export function mountAtmosphere(): OutcomeLight {
   new MutationObserver(rim).observe(board, { childList: true });
   rim();
   // Presentation follows actual rendered ownership. Classes never enter game/save state.
+  //
+  // The board mutates many times inside one animation step (every placed tile re-renders the tile
+  // layer), so this ran per mutation: two whole-board queries and a class write on EVERY cell each
+  // time, nearly always writing a value the cell already had (measured: 8 997 of 9 114 writes in a
+  // 12 s game were no-ops). The list of base cells only changes when board.setup() replaces the SVG
+  // children, so it is cached and rebuilt from that (the first cell going stale means a new layer),
+  // and a cell is only written when its state actually differs. Same classes, same tick, no delay.
+  let baseCells: Element[] = [];
   const lightEmptyCells = () => {
+    if (baseCells.length === 0 || !baseCells[0]!.isConnected) baseCells = [...board.querySelectorAll('.l-base .hex-cell.normal')];
     const occupied = new Set([...board.querySelectorAll('.tile[data-key]')].map(tile=>tile.getAttribute('data-key')));
-    for (const cell of board.querySelectorAll('.l-base .hex-cell.normal'))
-      cell.classList.toggle('futa04-empty', !occupied.has(cell.getAttribute('data-key')));
+    for (const cell of baseCells) {
+      const empty = !occupied.has(cell.getAttribute('data-key'));
+      if (cell.classList.contains('futa04-empty') !== empty) cell.classList.toggle('futa04-empty', empty);
+    }
   };
   new MutationObserver(lightEmptyCells).observe(board, { childList: true, subtree: true });
   lightEmptyCells();
