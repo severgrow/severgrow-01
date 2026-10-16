@@ -153,7 +153,11 @@ export const ONLINE = Object.freeze({
   firstCardLines: Object.freeze([
     'Play in real time when both of you are here, or take turns over time.',
     'Your opponent only sees your turn after you Throw.',
-    'Each turn has 24 hours. Miss it and you lose.',
+    // Accurate, not scarier than the rule. It used to say "Miss it and you lose", but the server
+    // gives ONE grace period per player (gracePeriodsPerPlayer: 1, and the in-match line already
+    // reads "Time ran out — one more chance"). Overstating it could make a tester abandon a duel
+    // they would have survived.
+    'Each turn has 24 hours. Run out of time and you get one more chance; run out twice and you lose.',
   ] as const),
   firstCardOk: 'Got it',
   storageNote:
@@ -177,6 +181,14 @@ export const ONLINE = Object.freeze({
   errAlreadyJoined: 'You are already in that duel.',
   errTooMany: 'Too many open duels. Finish or cancel one first.',
   errRateLimited: 'Too many tries. Wait a moment and try again.',
+  // A duel that was already over. Distinct from errBadOrExpired, which says the CODE was wrong -
+  // here the code was fine and the game had already ended, which is what a tester sees when two
+  // people finish and one taps the code again.
+  errFinished: 'That duel has already finished.',
+  // The server is briefly unable to reach its database (`DB_UNAVAILABLE`). Truthful, and calm - the
+  // retry genuinely works. It used to fall through to errGeneric, which reads as "the app is broken".
+  // NOT `errBusy`: that one already exists above and means the PLAYER is busy, a different thing.
+  errDbBusy: 'The duel service is briefly busy. Try again in a moment.',
   errClientTooOld: 'Reload to update FUTASAKU.',
   errGeneric: 'Something went wrong. Try again.',
   errNoApi: 'Online play is not configured in this build.',

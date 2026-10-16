@@ -1,5 +1,8 @@
 // Phase 4 — lobby helpers (sort, buckets, join hash, titles, errors).
 import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { MatchListEntry } from '../../server/src/protocol.js';
 import {
   friendlyJoinError,
@@ -168,11 +171,13 @@ describe('invite share and errors', () => {
     expect(shareInviteText('ABCD1234', 'https://severgrow.github.io/futa0.5')).toContain(link);
   });
 
-  it('maps join errors to the same friendly line for wrong/expired', () => {
-    expect(friendlyJoinError('BAD_CODE')).toBe(ONLINE.errBadOrExpired);
-    expect(friendlyJoinError('EXPIRED')).toBe(ONLINE.errBadOrExpired);
+  it('maps the wrong-or-expired codes the server really sends to one line', () => {
+    // These were the DEAD spellings `BAD_CODE`/`EXPIRED`/`OWN_MATCH` - replaced with the codes the
+    // join path in server/src/service.ts actually raises.
+    expect(friendlyJoinError('MATCH_NOT_FOUND')).toBe(ONLINE.errBadOrExpired);
+    expect(friendlyJoinError('MATCH_EXPIRED')).toBe(ONLINE.errBadOrExpired);
     expect(friendlyJoinError('NOT_FOUND')).toBe(ONLINE.errBadOrExpired);
-    expect(friendlyJoinError('OWN_MATCH')).toBe(ONLINE.errOwnCode);
+    expect(friendlyJoinError('INVALID_REQUEST')).toBe(ONLINE.errBadOrExpired);
   });
 });
 
@@ -223,6 +228,93 @@ describe('the open-duel cap shows the SPECIFIC message the server really sends',
     // must never come back as the mapping key.
     expect(friendlyJoinError('TOO_MANY_MATCHES')).toBe(ONLINE.errTooMany);
     expect(friendlyJoinError('RATE_LIMITED')).toBe(ONLINE.errRateLimited);
+  });
+});
+
+// REGRESSION: the join screen mapped SIX spellings the server has never emitted (`BAD_CODE`,
+// `EXPIRED`, `FULL`, `OWN_MATCH`, plus `NOT_FOUND`/`ALREADY_JOINED` which exist but are not what the
+// join path sends) while missing all THREE the join path really sends. So every failed join - by far
+// the likeliest thing to go wrong at a playtest - showed "Something went wrong. Try again." The unit
+// test above pinned the DEAD spellings, which is why it stayed green. These two tests close that:
+// one drives the REAL service, the other refuses to let a dead spelling back in.
+describe('joining a duel shows the SPECIFIC message the server really sends', () => {
+  const setup = async () => {
+    const storage = new MemoryStorage();
+    const service = new MatchService({ storage, config: DEFAULT_SERVER_CONFIG });
+    const a = await service.authenticate((await service.createGuest()).token);
+    const b = await service.authenticate((await service.createGuest()).token);
+    const c = await service.authenticate((await service.createGuest()).token);
+    return { service, a, b, c };
+  };
+
+  /** The code the REAL service raises, or null if it unexpectedly succeeded. */
+  const codeOf = async (run: () => Promise<unknown>): Promise<string | null> => {
+    try {
+      await run();
+      return null;
+    } catch (error) {
+      expect(error, 'a join failure must be an ApiError').toBeInstanceOf(ApiError);
+      return (error as ApiError).code;
+    }
+  };
+
+  it('a wrong code asks the player to check the code, not to "try again"', async () => {
+    const { service, b } = await setup();
+    const code = await codeOf(() => service.joinMatch(b, 'ZZZZ'));
+    expect(code).toBe('MATCH_NOT_FOUND');
+    expect(friendlyJoinError(code!)).toBe(ONLINE.errBadOrExpired);
+    expect(friendlyJoinError(code!), 'must not be the generic line').not.toBe(ONLINE.errGeneric);
+    // An empty code is rejected by the same path and deserves the same clear line.
+    expect(friendlyJoinError('INVALID_REQUEST')).toBe(ONLINE.errBadOrExpired);
+  });
+
+  it('an already-full duel says it is full, which is what the second tester sees', async () => {
+    const { service, a, b, c } = await setup();
+    const { match } = await service.createMatch(a);
+    await service.joinMatch(b, match.inviteCode);
+    const code = await codeOf(() => service.joinMatch(c, match.inviteCode));
+    expect(code).toBe('MATCH_FULL');
+    expect(friendlyJoinError(code!)).toBe(ONLINE.errFull);
+  });
+
+  it('a finished duel says it has finished, rather than blaming the code', async () => {
+    const { service, a, b, c } = await setup();
+    const { match } = await service.createMatch(a);
+    await service.joinMatch(b, match.inviteCode);
+    // `matchId`, not `id` — MatchSummary has no `id` field, and passing undefined makes the service
+    // raise a generic "Unknown match." that looks like a real failure.
+    await service.resign(a, match.matchId);
+    const code = await codeOf(() => service.joinMatch(c, match.inviteCode));
+    expect(code).toBe('MATCH_FINISHED');
+    expect(friendlyJoinError(code!)).toBe(ONLINE.errFinished);
+    // A separate, truthful line - not the "your code is wrong" one, which would be a lie here.
+    expect(friendlyJoinError(code!)).not.toBe(ONLINE.errBadOrExpired);
+  });
+
+  it('a briefly unreachable database says so instead of "something went wrong"', () => {
+    expect(friendlyJoinError('DB_UNAVAILABLE')).toBe(ONLINE.errDbBusy);
+    expect(friendlyJoinError('DB_UNAVAILABLE')).not.toBe(ONLINE.errGeneric);
+  });
+
+  it('maps only codes the server can actually emit', () => {
+    // The anti-rot guard. Every `case` in the mapping must be a code string that appears somewhere
+    // in server/src - so a dead spelling (the exact bug above) fails this immediately. It is
+    // deliberately a whole-directory scan: codes are raised from the service, storage and routers,
+    // and listing them by hand is how the client drifted from the server in the first place.
+    const here = fileURLToPath(new URL('../src/online/lobby.ts', import.meta.url));
+    const source = readFileSync(here, 'utf8');
+    const body = source.slice(source.indexOf('friendlyJoinError'));
+    const cases = [...body.matchAll(/case '([A-Z_]+)'/g)].map((m) => m[1]!);
+    expect(cases.length, 'expected several mapped codes').toBeGreaterThan(5);
+    const serverDir = fileURLToPath(new URL('../../server/src', import.meta.url));
+    const serverText = readdirSync(serverDir, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => readFileSync(join(serverDir, f), 'utf8'))
+      .join('\n');
+    for (const code of cases) {
+      expect(serverText, `the client maps '${code}', but no server path emits it`).toContain(`'${code}'`);
+    }
   });
 });
 

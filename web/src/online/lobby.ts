@@ -162,15 +162,24 @@ export const pageTitleForLobby = (yourTurns: number, base = ONLINE.pageTitleBase
 
 export const friendlyJoinError = (code: string): string => {
   switch (code) {
+    // THE CODES THE SERVER ACTUALLY SENDS. Every case below is a code some server path can emit;
+    // `web/tests/lobby.test.ts` drives the REAL service to produce them and fails if a case here is
+    // not a code the server knows. That guard exists because this function was silently dead: it
+    // keyed on `BAD_CODE` / `FULL` / `EXPIRED` / `OWN_MATCH`, NONE of which the server has ever
+    // emitted, so every failed join - a wrong code, an already-full duel, a finished one - fell
+    // through to the generic "Something went wrong. Try again." A wrong invite code is the single
+    // most likely thing to go wrong at a playtest, and it must never read as a broken app.
+    case 'INVALID_REQUEST': // joinMatch: an empty code
+    case 'MATCH_NOT_FOUND': // joinMatch: no duel has that code (wrong, or expired before a move)
     case 'NOT_FOUND':
-    case 'BAD_CODE':
-    case 'EXPIRED':
+    case 'MATCH_EXPIRED':
       return ONLINE.errBadOrExpired;
-    case 'OWN_MATCH':
-      return ONLINE.errOwnCode;
-    case 'FULL':
+    case 'MATCH_FULL': // joinMatch: two players already in it
       return ONLINE.errFull;
-    case 'ALREADY_JOINED':
+    case 'MATCH_FINISHED': // joinMatch: the duel is over, and it kept its result
+    case 'MATCH_NOT_ACTIVE':
+      return ONLINE.errFinished;
+    case 'ALREADY_JOINED': // storage-level race: you were added while the request was in flight
       return ONLINE.errAlreadyJoined;
     case 'TOO_MANY_MATCHES':
       // The code the server ACTUALLY emits when a player is at the open-match cap
@@ -180,6 +189,9 @@ export const friendlyJoinError = (code: string): string => {
       return ONLINE.errTooMany;
     case 'RATE_LIMITED':
       return ONLINE.errRateLimited;
+    case 'DB_UNAVAILABLE':
+      // Transiently unreachable database. The retry works, so say so rather than implying a bug.
+      return ONLINE.errDbBusy;
     case 'CLIENT_TOO_OLD':
       return ONLINE.errClientTooOld;
     default:
