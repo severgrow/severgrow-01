@@ -58,20 +58,18 @@ Live at **https://www.futasaku.com** — the real thing, a real server, real acc
    npm run feedback:recent                  # newest 20, marks anything new since you last looked
    npm run feedback:recent -- --kind=crash  # crashes only
    ```
-3. **The admin dashboard** (see below — it is not published yet).
+3. **The admin dashboard**: https://www.futasaku.com/admin/ — sign in with Google as **RYK**.
 4. **The world map** at https://www.futasaku.com → The world map, to watch claims appear.
 
-### The admin dashboard, right now
+### The admin dashboard
 
-It is **built and its database migration is applied**, but publishing it needs a GitHub workflow
-change I could not push — the token lacks `workflow` scope. Two options:
+**It is live: https://www.futasaku.com/admin/**. Sign in with Google as **RYK** and you are in —
+the allow-list already defaults to your account, so there is nothing to configure. It is marked
+`noindex` and is not linked from the game, so only you will find it.
 
-- **Run it locally** (works fine today): `npm run admin:dev`, then open the URL it prints. It talks
-  to the live API, so it shows real data. Only you can see it, and only while it runs.
-- **Or publish it properly**: add `workflow` scope to the GitHub token (GitHub → Settings →
-  Developer settings → Personal access tokens → your token → tick `workflow`), then say so and I
-  will push `f33163d`, the one commit that is already written and waiting. `docs/ADMIN.md` §7 has the
-  exact text if you would rather paste it yourself.
+Worth a look while people play: **Reports** (what they have filed), **Overview** (players, matches,
+Seeds, world), and **Economy** if you want to see the Seeds totals move. `npm run admin:dev` also
+runs it locally against the same live data if you would rather.
 
 ### Things worth watching for, in the order they usually matter
 
@@ -97,17 +95,19 @@ Know these before they do. None of them should stop a game being played.
 
 | # | Thing | State |
 |---|---|---|
-| 1 | **`/admin/` is not published** | Migration applied and the dashboard works; the one-line CI change is written but unpushable without `workflow` scope. Run it locally today. |
-| 2 | **Player-name search in the dashboard is case-sensitive** | Being fixed now. Searching `ryk` finds nothing; `RYK` works. Only affects the dashboard, not the game. |
+| 1 | **`/admin/` is LIVE** | `https://www.futasaku.com/admin/` — sign in with Google as **RYK**. Nothing to set up; the allow-list already defaults to your account. (`npm run admin:dev` still runs it locally if you prefer.) |
+| 2 | **Player-name search in the dashboard** | Fixed — case-insensitive, so `ryk` finds you. Not a wildcard search: it matches the whole name exactly, because the lookup returns ONE player and a partial match could silently show the wrong account as "the" match. |
 | 3 | **The `#tag` is not shown next to names in the match list** | So two players with the same generated name can look identical. Accepted **for the playtest**; a per-player report/block flow is the real fix, and it is not built. Worth knowing if a tester says "who am I playing?". |
 | 4 | **Campaign balance is measured, not felt** | Levels 1–3 are deliberately gentle, 4–10 ramp, 11–20 step up visibly, 21–30 are the hardest built. The numbers came from bot-vs-bot games: a fixed bot wins **90% / 70% / 40%** across the three chapters. No human has played it. Ask testers whether the step from 10 to 11 actually feels like one. |
-| 5 | **The world map is nearly empty** | It started fresh again today — expect a small number of claims, not a busy map. |
-| 6 | **Four bot test suites are slow enough to flake under load** | Test-only. They pass when the machine is quiet; it does not affect players. |
-| 7 | **The public world map has NO rate limit at all** | I checked this because ten testers on one wifi share a per-IP budget, and the world view polls every 12 seconds while visible. **Good news: the world read is not rate-limited** — `GET /v1/world` returns before any limiter (`server/src/seeds/router.ts:27`), and it needs no account. So the one-wifi arithmetic that worried me (3,000 requests/hour for ten viewers against a 600/hour cap) **does not apply**. **But it leaves two real observations:** (a) `worldPerIpPerHour` in `server/src/config.ts` is **dead config** — documented as the world's cap, defined as 600, and never applied anywhere, so it reads like a control that does not exist; (b) the endpoint does a Postgres transaction per call (`for share` on `world_meta`), so it is unmetered database work. Fine for 10 testers; a flood surface at scale. **Deliberately not changed tonight** — adding a limiter hours before a playtest risks breaking the playtest, and the current state is safe at this scale. |
-| 7b | **The other per-IP limits do apply to the group** | Ten in one house share: **create 120/hour** (12 duels each), **join 400/hour** (40 each), **guests 200/hour**. Generous for a playtest, but if two testers on the same wifi both see a rate-limit message at once, that is why. |
+| 5 | **The world map carries 2 tiles, not zero** | Both are **yours** (RYK), from your own duels. All the test tiles were removed today, so the 183-hex map is otherwise fresh and waiting for the testers. Say the word if you would rather it started completely empty. |
+| 6 | **Four bot test suites are slow enough to flake under load** | Test-only. They pass when the machine is quiet; it does not affect players. One (`bloom-bands`) has a 60s timeout it can exceed on a busy machine — that is the suite, not the game. |
+| 7 | **The public world map has NO rate limit at all** | The world read is not rate-limited — `GET /v1/world` returns before any limiter (`server/src/seeds/router.ts:27`) and needs no account, so ten testers all viewing it is fine. Two honest observations: (a) `worldPerIpPerHour` in `server/src/config.ts` is **dead config** — documented as the world's cap, defined as 600, applied nowhere, so it reads like a control that does not exist; (b) the endpoint does a Postgres transaction per call, so it is unmetered database work. Safe at ten people. **Deliberately not changed** — adding a limiter hours before a playtest risks breaking the thing it protects. |
+| 7b | **The other per-IP limits do apply to the group** | Ten in one house share: **create 120/hour** (12 duels each), **join 400/hour** (40 each), **guests 200/hour**. Generous — and measured tonight: 11 creates + 21 guests + 20 joins from one IP in one hour, no refusals. Only a rematch marathon would reach the create ceiling. |
 | 8 | **No accounts beyond Google, and no password reset by design** | If someone clears their browser data without an account, their guest identity is gone. Sign in with Google first and this cannot happen. |
-| 9 | **The main menu can take 1–3 seconds to show a way to play** | Measured on live: PLAY appears **594ms, 1282ms, and 1.5–3s** across runs. Until it does, a tester sees the wordmark, an empty gap, and only Tutorial and Settings — it looks like a menu with no game in it. The cause is traced: the product buttons are revealed only after boot awaits a network round-trip to Supabase (`accounts/mount.ts` probes whether Google is on), which none of PLAY / World map / the beta line actually need. **Being fixed right now.** If a tester says "the site is broken / there's no play button", this is what they saw; a refresh or a two-second wait clears it. |
+| 9 | **A wrong invite code used to say "Something went wrong"** | **Fixed.** The join screen was mapping six error codes the server has never sent and missing all three it does send, so every failed join — the likeliest thing to go wrong tomorrow — read as a broken app. Now: a wrong code says "*That code is wrong or has expired*", a full duel says it is full, a finished one says it has finished. Two regression tests hold it: one drives the real server, one fails if the client ever maps a code the server cannot emit. Tests passed while the feature was broken, which is why this is now guarded rather than trusted. |
 | 10 | **A native browser confirm when you start a new game over a saved one** | Clicking **Training** with a saved game asks `window.confirm("Start a new game? The saved game will be lost.")`. It works, but it is the **only** piece of the app that looks like a browser alert instead of FUTASAKU. Cosmetic; not worth risking a change before the playtest. |
+| 11 | **On a tall phone the world map cannot zoom out to the whole world** | You chose a map that fills the column, and the world is nearly square — so filling the height on a portrait phone crops the width. You see ~151 of 183 tiles and can **pan** to the rest (verified: it clamps at the world edge). Zoom-*out* stops at the framed view, so the entire map at once is desktop/landscape only. A deliberate trade for "no empty bands"; it can be changed back if seeing all 183 at a glance matters more. |
+| 12 | **Old test rows are still in the database** | ~228 throwaway guests and ~101 matches from testing, all auto-generated nature names. **Invisible to testers** (matches are per-player) — the only thing you would notice is inflated numbers on the admin dashboard. I left them in place deliberately: tidying them needs a multi-table delete against `RESTRICT` foreign keys, and I would rather not do that hours before a playtest. Say so and I will sweep them cleanly. |
 
 ---
 
