@@ -178,6 +178,10 @@ const CLASSIFIED: Record<string, Protection> = {
   // any default command. This registry caught them the moment they landed, which is the point.
   'server/scripts/backup-db.ts': 'explicit-command',
   'server/scripts/feedback-recent.ts': 'explicit-command',
+  // Verifies the admin dashboard's read SQL against the REAL schema. Same category: needs
+  // DATABASE_URL, exits without it, reachable only by running it on purpose
+  // (`npm run admin:verify-reads`) - never from check, test or CI.
+  'server/scripts/verify-admin-reads.ts': 'explicit-command',
 };
 
 describe('entry points cannot reach the real project by default', () => {
