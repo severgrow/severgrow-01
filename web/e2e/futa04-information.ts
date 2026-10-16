@@ -138,14 +138,23 @@ try {
     await page.locator('#deck').click({ force: true });
     await page.waitForFunction(() => !(window as any).__severgrow.busy());
     check(JSON.stringify(await page.evaluate(() => (window as any).__severgrow.state())) === JSON.stringify(apply(before, { t: 'Draw', from: 'deck' })), `${width}: draw still matches engine`);
-    // Wait on the SAME property the assertion reads. innerText depends on layout and returns '' for
-    // an element that is not rendered, while textContent does not — so polling textContent and then
-    // asserting innerText could catch the LED mid-re-render and fail with a blank read. This was an
-    // intermittent CI failure ("1440: score remains after Draw") that passes 168/168 locally; the
-    // engine assertion above already proves the Draw itself was applied, so the race was in the
-    // readout only. A genuinely blank LED now times out here instead of failing one line later.
-    await page.waitForFunction(() => (document.getElementById('smart-led-text') as HTMLElement | null)?.innerText?.trim() === '0:0', undefined, { timeout: 8000 });
-    check((await page.locator('#smart-led-text').innerText()).trim() === '0:0', `${width}: score remains after Draw`);
+    // Assert on the value the WAIT observed, not a second, later read. The old form waited for
+    // '0:0' and then re-read the node; if the LED text changed in between (a moment/flavour line
+    // taking the display over), the wait passed and the assertion failed on a different value. That
+    // is what made this fail intermittently in CI while passing locally, and it was never about the
+    // score: the engine assertion above already proves the Draw was applied.
+    // `#smart-led-text` is a 0x0 clipped node carrying the value for tests and screen readers (the
+    // visible score is drawn on the #smart-led-cells canvas), so `textContent` is the right property
+    // and is exactly what the cockpit sets. The captured value is printed in the failure message so
+    // the next failure diagnoses itself instead of needing another investigation.
+    const led = await page
+      .waitForFunction(() => {
+        const t = document.getElementById('smart-led-text')?.textContent?.trim();
+        return t === '0:0' ? t : false;
+      }, undefined, { timeout: 8000 })
+      .then((h) => h.jsonValue() as Promise<string | null>)
+      .catch(() => null);
+    check(led === '0:0', `${width}: score remains after Draw (led read ${JSON.stringify(led)})`);
     check(await page.locator('#board .coach-ring').count() === 0, `${width}: automatic suggestions leave no white tile circles`);
     const cockpit = await page.evaluate(() => {
       const rect=(id:string)=>document.getElementById(id)!.getBoundingClientRect();
