@@ -114,7 +114,7 @@ try {
       check(`${vp.key}: LOG IN sits above PLAY`, !!loginBox && !!playBox && loginBox.y < playBox.y);
       const order = await page.evaluate(() => [...document.querySelectorAll('#menu .menu-buttons > .btn')]
         .filter((b) => (b as HTMLElement).getClientRects().length > 0).map((b) => b.id));
-      check(`${vp.key}: the menu reads LOG IN / PLAY / World map / Tutorial / Settings`,
+      check(`${vp.key}: the menu reads LOG IN / PLAY / Territory / Tutorial / Settings`,
         JSON.stringify(order) === JSON.stringify(['menu-login', 'menu-play', 'menu-world', 'menu-tutorial', 'menu-settings']), order.join(' | '));
       check(`${vp.key}: exactly one filled button on the menu, and it is PLAY`,
         JSON.stringify(await leaders(page, '#menu')) === JSON.stringify(['menu-play']), (await leaders(page, '#menu')).join(' | '));

@@ -1,4 +1,4 @@
-// The world map's selection line: `NAME #TAG · LEVEL 22 · YOUR TERRITORY`.
+// The Territory's selection line: `NAME #TAG · LEVEL 22 · YOURS`.
 //
 // Owner (2026-10-16): selecting a tile should show the holder's campaign level. The level comes from
 // the server (its ownerLevel field), read from recorded campaign receipts, so the client only has to
@@ -28,9 +28,9 @@ describe('the world selection line', () => {
     expect(ownerLine(claim({ ownerLevel: null }), false)).toBe('RYK #VJJM');
   });
 
-  it('keeps YOUR TERRITORY, with the level in front of it', () => {
-    expect(ownerLine(claim(), true)).toBe('RYK #VJJM · LEVEL 22 · YOUR TERRITORY');
-    expect(ownerLine(claim({ ownerLevel: null }), true)).toBe('RYK #VJJM · YOUR TERRITORY');
+  it('keeps YOURS, with the level in front of it', () => {
+    expect(ownerLine(claim(), true)).toBe('RYK #VJJM · LEVEL 22 · YOURS');
+    expect(ownerLine(claim({ ownerLevel: null }), true)).toBe('RYK #VJJM · YOURS');
   });
 
   it('falls back to a neutral name when the server has no display name', () => {

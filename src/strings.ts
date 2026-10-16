@@ -66,15 +66,19 @@ export const ONLINE = Object.freeze({
   pageTitleBase: 'FUTASAKU',
   hubTitle: 'Play online',
   hubBack: 'Back',
-  // The shared world map: one tile per won duel, the same map for everyone.
-  worldMap: 'The world map',
-  worldTitle: 'The world map',
+  // The shared Territory: one tile per won duel, the same map for everyone. Read as "Territory"
+  // everywhere (owner, 2026-10-16); the field names stay `world*` for compatibility. The screen
+  // title is uppercased by CSS, so these store the mixed-case form, never TERRITORY.
+  worldMap: 'Territory',
+  worldTitle: 'Territory',
   worldLoading: 'Reading the map',
   worldEmpty: 'No tiles yet. Win a duel to place the first one.',
   worldTaken: 'taken',
   worldYou: 'You',
   worldHeld: (filled: number, cells: number) => `${filled} of ${cells} tiles grown`,
   worldError: 'Could not read the map. Try again.',
+  /** the Seeds invitation card's button that opens the Territory (uppercase, like its LATER sibling) */
+  worldInviteOpen: 'OPEN TERRITORY',
   playWithFriend: 'Play with a friend',
   findOpponent: 'Find opponent',
   // No baked-in dots: the UI appends the SHARED animated ellipsis (web/src/online/live/wait-dots.ts).
@@ -535,8 +539,8 @@ export const MENU = Object.freeze({
   play: 'Play',
   /** the PLAY screen's heading */
   playTitle: 'Play',
-  /** the main menu entry that opens the shared world map */
-  world: 'The world map',
+  /** the main menu entry that opens the shared Territory */
+  world: 'Territory',
   /** the quiet PLAY entry that browses the level list (LEVEL <n> starts a level outright) */
   // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
   // player is not given access to every level - MENU.level(n) starts the next one they have not

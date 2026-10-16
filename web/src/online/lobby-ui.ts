@@ -255,7 +255,11 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
     $('online-join-open').textContent = ONLINE.join;
     const worldBtn = document.getElementById('online-world') as HTMLButtonElement | null;
     if (worldBtn) worldBtn.textContent = ONLINE.worldMap;
+    // The Territory's heading AND its spoken name come from the one string (owner, 2026-10-16:
+    // the shared screen is called Territory). It opens from two places - the menu and the hub - and
+    // both must name the same screen.
     $('online-world-title').textContent = ONLINE.worldTitle;
+    $('online-world-screen').setAttribute('aria-label', ONLINE.worldTitle);
     $('online-matches-title').textContent = ONLINE.yourMatches;
     $('online-matches-empty').textContent = ONLINE.emptyMatches;
     // The waiting TITLE is owned by `setWaitingTitle` (it carries the shared animated dots), so it
@@ -798,7 +802,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       line.textContent = 'Your place in the world is waiting.';
       const actions = document.createElement('div');
       const open = document.createElement('button');
-      open.textContent = 'OPEN WORLD MAP';
+      open.textContent = ONLINE.worldInviteOpen;
       const later = document.createElement('button');
       later.textContent = 'LATER';
       const finish = (go: boolean) => {

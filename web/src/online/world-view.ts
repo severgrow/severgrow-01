@@ -283,7 +283,7 @@ export class WorldView {
     // OWNER WORDING (2026-10-16): "when placing a tile dont say 'claim hex' say grow a tile
     // everywhere". The verb is GROW and the noun is TILE throughout this screen - it also matches
     // the game's own Grow action, so the world map and the board speak the same language.
-    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TERRITORY';
+    label.textContent = available ? `FREE TILE · ${this.world.cost} SEEDS` : this.wallet && this.wallet.balance < this.world.cost ? '100 SEEDS NEEDED' : 'GROW NEXT TO YOUR TILES';
     pane.append(label);
     if (!available || this.busy) return;
     const action = document.createElement('button');

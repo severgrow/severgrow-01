@@ -134,7 +134,7 @@
                Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
                submenu). Revealed by main.ts when the build has an online endpoint and the screen it
                opens is live, so it can never be a dead entry. -->
-          <button id="menu-world" class="btn ghost big" type="button" aria-label="The world map" hidden>The world map</button>
+          <button id="menu-world" class="btn ghost big" type="button" hidden></button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
         </div>
@@ -177,7 +177,7 @@
           <button id="online-create" class="btn primary big" type="button">Create a duel</button>
           <button id="online-find" class="btn ghost big" type="button" hidden>Find opponent</button>
           <button id="online-join-open" class="btn ghost big" type="button">Join with a code</button>
-          <button id="online-world" class="btn ghost big" type="button">The world map</button>
+          <button id="online-world" class="btn ghost big" type="button"></button>
         </div>
         <h3 class="online-section" id="online-matches-title">Your online matches</h3>
         <p id="online-matches-empty" class="muted" hidden>No online matches yet.</p>
@@ -186,11 +186,11 @@
       </div>
     </section>
 
-    <section id="online-world-screen" class="screen online-world" aria-label="The world map" hidden>
+    <section id="online-world-screen" class="screen online-world" hidden>
       <div class="online-inner">
         <header class="online-head">
           <button id="online-world-back" class="icon-only" type="button" aria-label="Back"><span class="i" data-icon="back"></span></button>
-          <h2 id="online-world-title">The world map</h2>
+          <h2 id="online-world-title"></h2>
         </header>
         <!-- NO SUMMARY LINE (owner, 2026-10-16: "remove completely '5 / 183 grown · one shared
              world'"). The map shows the world; a caption counting the tiles was noise on every

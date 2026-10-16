@@ -8,7 +8,7 @@
 // `world-header` job, which builds exactly that way.
 //
 // Owner direction (2026-10-16): in the world map the menu control and the logo must sit in the top
-// corners exactly like the in-game header, and "THE WORLD MAP" must ALWAYS read on ONE line.
+// corners exactly like the in-game header, and "TERRITORY" must ALWAYS read on ONE line.
 // Follow-up (same day): the area BEHIND the map's contained window must be the SAME grained surface
 // the main menu rests on, and the column must use the viewport well.
 //
@@ -361,7 +361,7 @@ try {
       `ink=${m.titleInkWidth.toFixed(1)} client=${m.titleClient} slack=${(m.titleClient - m.titleInkWidth).toFixed(1)}`);
     check(`[${tag}] the title box is one line-height tall`, Math.abs((m.title?.height ?? 0) - m.titleLineHeight) <= 2,
       `h=${m.title?.height?.toFixed(1)} line=${m.titleLineHeight.toFixed(1)}`);
-    check(`[${tag}] the title reads "THE WORLD MAP" in full`, (m.titleText ?? '').trim().toUpperCase() === 'THE WORLD MAP', m.titleText ?? '');
+    check(`[${tag}] the title reads "TERRITORY" in full`, (m.titleText ?? '').trim().toUpperCase() === 'TERRITORY', m.titleText ?? '');
 
     // 2. The title and the wordmark share the SAME top edge (owner, 2026-10-16: "the world map top
     //    border is aligned with right top logo's top border"). The chevron is deliberately NOT in

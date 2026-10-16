@@ -33,8 +33,8 @@ describe('the product menu is LOG IN above PLAY', () => {
     expect(mainSource).toContain("$('menu-play').hidden = !FEATURES.campaign");
   });
 
-  it('keeps the world map entry, revealed only by the online build', () => {
-    expect(MENU.world).toBe('The world map');
+  it('keeps the Territory entry, revealed only by the online build', () => {
+    expect(MENU.world).toBe('Territory');
     expect(menuSection).toMatch(/id="menu-world"[^>]*hidden/);
   });
 });
