@@ -227,6 +227,8 @@ export type AdminWorld = {
   serverNow: number;
   revision: number;
   cellsTotal: number;
+  /** Every cell id in the frozen v1 landmass, so the map can draw hexes nobody has claimed. */
+  cellIds: string[];
   totalClaims: number;
   owners: number;
   claimsByDay: AdminDayCount[];

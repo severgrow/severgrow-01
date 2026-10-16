@@ -763,6 +763,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
         serverNow: now,
         revision: num(meta.rows[0]?.revision),
         cellsTotal: WORLD_CELLS.length,
+        cellIds: WORLD_CELLS.map((cell) => cell.id),
         totalClaims: num(total.rows[0]?.n),
         owners: num(owners.rows[0]?.n),
         claimsByDay: days.map((day) => ({ day, n: dayIndex.get(day) ?? 0 })),

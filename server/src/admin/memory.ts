@@ -515,6 +515,7 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         serverNow: now,
         revision: store?.revision ?? 0,
         cellsTotal: WORLD_CELLS.length,
+        cellIds: WORLD_CELLS.map((cell) => cell.id),
         totalClaims: claims.length,
         owners: new Set(claims.map((c) => c.ownerId)).size,
         claimsByDay: days.map((day) => ({ day, n: byDay.get(day)?.length ?? 0 })),
