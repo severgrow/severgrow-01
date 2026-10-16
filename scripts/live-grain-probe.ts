@@ -53,6 +53,12 @@ const report = async (label: string) => {
       filmPointer: filmStyle?.pointerEvents ?? '-',
       filmDisplay: filmStyle?.display ?? '-',
       filmIsLastBodyChild: !!film && document.body.lastElementChild === film,
+      // The exact values the e2e suites assert, so they can be checked against a real browser.
+      filmBgSize: filmStyle?.backgroundSize ?? '-',
+      filmBgKind: filmStyle && filmStyle.backgroundImage !== 'none'
+        ? (filmStyle.backgroundImage.startsWith('url("data:image/svg') ? 'svg'
+          : filmStyle.backgroundImage.startsWith('url("data:image/png') ? 'png' : 'other')
+        : 'none',
       // The topmost *declared* z-index anywhere in the document (excluding the film itself).
       highestOtherZ: Math.max(
         0,
@@ -64,14 +70,17 @@ const report = async (label: string) => {
           }),
       ),
       textureZ: texture ? getComputedStyle(texture).zIndex : '-',
+      theme: document.documentElement.dataset.theme ?? '(unset)',
       centreTop: at ? `${at.tagName.toLowerCase()}${at.id ? '#' + at.id : ''}.${(at.className || '').toString().split(' ')[0]}` : 'none',
     };
   });
   console.log(`\n  --- ${label} ---`);
   console.log(`    film grain present : ${r.filmPresent}${r.filmPresent ? `  z=${r.filmZ} opacity=${r.filmOpacity} blend=${r.filmBlend} pointer=${r.filmPointer} display=${r.filmDisplay}` : ''}`);
   if (r.filmPresent) console.log(`    film is last child: ${r.filmIsLastBodyChild}`);
+  if (r.filmPresent) console.log(`    film background    : size=${r.filmBgSize} kind=${r.filmBgKind}`);
   console.log(`    highest other z    : ${r.highestOtherZ}`);
   console.log(`    #texture z         : ${r.textureZ}`);
+  console.log(`    theme              : ${r.theme}`);
   console.log(`    topmost at centre  : ${r.centreTop}`);
   return r;
 };
@@ -79,6 +88,10 @@ const report = async (label: string) => {
 const results: Record<string, Awaited<ReturnType<typeof report>>> = {};
 results.menu = await report('MAIN MENU');
 await page.screenshot({ path: '/tmp/grain-menu.png' });
+// Again after the theme has definitely settled: the first reading can catch the boot default.
+await page.waitForTimeout(2500);
+results.menuSettled = await report('MAIN MENU (settled, +2.5s)');
+await page.screenshot({ path: '/tmp/grain-menu-settled.png' });
 
 // PLAY submenu
 await page.evaluate(() => (document.getElementById('menu-play') as HTMLButtonElement | null)?.click());
