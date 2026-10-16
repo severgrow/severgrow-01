@@ -57,9 +57,13 @@ for (const d of DEVICES) {
   // Serve the world read locally so the map renders with real cells and claims. A RegExp, not a
   // glob: the client appends a query (`?forceFunctionRegion=...`), and a glob of the bare path would
   // silently not match - which is exactly what happened first time round, leaving 0 hexes.
-  await page.route(/\/v1\/world(\?|$)/, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: worldJson }),
-  );
+  // Against the real site the API works from its own origin, so NO_FIXTURE=1 skips this and measures
+  // the genuine payload instead.
+  if (!process.env.NO_FIXTURE) {
+    await page.route(/\/v1\/world(\?|$)/, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: worldJson }),
+    );
+  }
 
   await page.goto(BASE, { waitUntil: 'load', timeout: 30000 });
   await page.waitForFunction(() => { const el = document.getElementById('menu-play'); return !!el && !el.hidden; }, undefined, { timeout: 20000 });
