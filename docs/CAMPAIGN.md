@@ -99,14 +99,15 @@ Notes when authoring:
 | 3 | Two Directions | 1 | 1 | centre + pair | 2 | One harmless edge rock |
 | 4 | The Clearing | 2 | 0 | centre + pair | 3 | Open board, slightly better bot |
 | 5 | Stone in the Grass | 2 | 2 | centre + pair | 3 | Scattered rocks away from central routes |
-| 6 | Branching Out | 2 | 1 | centre + pair | 3 | Encourage multiple directions |
-| 7 | First Obstacle | 2 | 2 | centre + pair | 3 | Small rock cluster near a flank |
+| 6 | Branching Out | 3 | 1 | centre + pair | 3 | Encourage multiple directions |
+| 7 | First Obstacle | 3 | 2 | centre + pair | 3 | Small rock cluster near a flank |
 | 8 | The Open Field | 3 | 0 | centre + flank pair | 3 | Stronger opponent, forgiving terrain |
-| 9 | Around the Stone | 3 | 3 | centre + pair (other axis) | 3 | A short detour around blocked hexes |
-| 10 | The First Grove | 3 | 3 | centre + pair | 3 | Chapter finale testing the fundamentals |
+| 9 | Around the Stone | 4 | 3 | centre + pair (other axis) | 3 | A short detour around blocked hexes |
+| 10 | The First Grove | 4 | 3 | centre + pair | 3 | Chapter finale testing the fundamentals |
 
-Every level's rock count and AI matches the design pack exactly. Two adjustments were made for
-legality, neither of which changed a level's intent: **level 9's rich pair moved from the `q` axis to
+Every level's rock count matches the design pack exactly; the bot (`AI`) column is the approved
+difficulty ladder (see *The bot ladder* below), not the design pack's original suggestion. Two terrain
+adjustments were made for legality, neither of which changed a level's intent: **level 9's rich pair moved from the `q` axis to
 the `r` axis** (the design's three-hex wall sits on the `q` axis, so `-2,0` would have been both rock
 and gold), and **level 3's single edge rock moved from `-3,0` to `-2,0`** when the level moved to the
 radius-2 map (`-3,0` is not on that board).
@@ -136,16 +137,16 @@ terrain the player has to read and the better bots behind it.
 
 | Lv | Name | AI | Rocks | Gold | Open hexes | Intent |
 | --- | --- | --- | --- | --- | --- | --- |
-| 11 | Pebble Trail | 3 | 2 | 3 | 35 | A mirrored pebble pair beside the trail; still wide open |
-| 12 | Split Meadow | 3 | 3 | 3 | 34 | A short wall across the centre; two lanes to pick |
-| 13 | The Detour | 3 | 4 | 3 | 33 | A four-hex arc to route around |
-| 14 | Open Horizon | 4 | 1 | 3 | 36 | Breathing space: one lone stone, a clearly better bot |
-| 15 | Twin Stones | 4 | 4 | 3 | 33 | Twin wings plus a central pair: two threats at once |
-| 16 | Broken Crossing | 4 | 4 | 3 | 33 | A broken wall with two crossings |
-| 17 | The Long Way | 4 | 5 | 3 | 32 | Both inner lanes close early; go the long way |
-| 18 | Quiet Clearing | 4 | 2 | 3 | 35 | Breathing space: fewer stones, a sharper bot |
-| 19 | Stone Garden | 4 | 5 | 3 | 32 | Five scattered stones, five small choices |
-| 20 | The Broken Grove | 5 | 5 | 5 | 32 | Chapter finale: bot 5 and five gold |
+| 11 | Pebble Trail | 4 | 2 | 3 | 35 | A mirrored pebble pair beside the trail; still wide open |
+| 12 | Split Meadow | 5 | 3 | 3 | 34 | A short wall across the centre; two lanes to pick |
+| 13 | The Detour | 5 | 4 | 3 | 33 | A four-hex arc to route around |
+| 14 | Open Horizon | 5 | 1 | 3 | 36 | Breathing space: one lone stone, a clearly better bot |
+| 15 | Twin Stones | 6 | 4 | 3 | 33 | Twin wings plus a central pair: two threats at once |
+| 16 | Broken Crossing | 6 | 4 | 3 | 33 | A broken wall with two crossings |
+| 17 | The Long Way | 6 | 5 | 3 | 32 | Both inner lanes close early; go the long way |
+| 18 | Quiet Clearing | 7 | 2 | 3 | 35 | Breathing space: fewer stones, a sharper bot |
+| 19 | Stone Garden | 7 | 5 | 3 | 32 | Five scattered stones, five small choices |
+| 20 | The Broken Grove | 7 | 5 | 5 | 32 | Chapter finale: bot 7 and five gold |
 
 ## Chapter III — Narrow Paths (levels 21-30)
 
@@ -155,24 +156,54 @@ the attack, so the board narrows the choice rather than dictating it.
 
 | Lv | Name | AI | Rocks | Gold | Open hexes | Intent |
 | --- | --- | --- | --- | --- | --- | --- |
-| 21 | The Passage | 4 | 4 | 3 | 33 | Two offset walls leave one diagonal passage |
-| 22 | Forked Path | 4 | 5 | 3 | 32 | Choose a fork; the wings reopen behind it |
-| 23 | Central Ground | 5 | 4 | 3 | 33 | The centre is a fortress with two doors |
-| 24 | The Side Route | 5 | 5 | 3 | 32 | A long ridge; the short way is walled, the side route is not |
-| 25 | The Bottleneck | 5 | 6 | 3 | 31 | Two blobs with a narrow neck between them |
-| 26 | Four Corners | 5 | 4 | 3 | 33 | The four outer corners are spoken for |
-| 27 | Split Decision | 5 | 6 | 3 | 31 | One split, two choices, no time to dither |
-| 28 | Open Conflict | 6 | 2 | 3 | 35 | Breathing space with the sharpest bot in the campaign |
-| 29 | The Crossing | 6 | 6 | 5 | 31 | Cross at the centre or round the ends; gold on both |
-| 30 | Heart of Stone | 6 | 6 | 3 | 31 | The finale: a stone heart round the gold centre |
+| 21 | The Passage | 8 | 4 | 3 | 33 | Two offset walls leave one diagonal passage |
+| 22 | Forked Path | 8 | 5 | 3 | 32 | Choose a fork; the wings reopen behind it |
+| 23 | Central Ground | 8 | 4 | 3 | 33 | The centre is a fortress with two doors |
+| 24 | The Side Route | 8 | 5 | 3 | 32 | A long ridge; the short way is walled, the side route is not |
+| 25 | The Bottleneck | 9 | 6 | 3 | 31 | Two blobs with a narrow neck between them |
+| 26 | Four Corners | 9 | 4 | 3 | 33 | The four outer corners are spoken for |
+| 27 | Split Decision | 9 | 6 | 3 | 31 | One split, two choices, no time to dither |
+| 28 | Open Conflict | 9 | 2 | 3 | 35 | Breathing space with the sharpest bot in the campaign |
+| 29 | The Crossing | 9 | 6 | 5 | 31 | Cross at the centre or round the ends; gold on both |
+| 30 | Heart of Stone | 9 | 6 | 3 | 31 | The finale: a stone heart round the gold centre |
 
 Both chapters are built **entirely from authored boards** (`config.board`): the generator places
-point-symmetric pairs only, so it cannot make a fork, a corridor or a ridge. Rock counts and AI levels
-match the design pack exactly. **Gold is used as the second difficulty lever**: two boundaries carry a
+point-symmetric pairs only, so it cannot make a fork, a corridor or a ridge. Rock counts match the
+design pack exactly; the bots come from the approved difficulty ladder (*The bot ladder*, below).
+**Gold is used as the second difficulty lever**: two boundaries carry a
 second rich pair — level 20 and the level 29 crossing, five gold each — while levels 2 and 16 put
 their pair right beside the centre and levels 8 and 23 put it on the wings, both of which pull the two
 players toward the same fights. The curve is deliberately not "one more rock each time": 14, 18 and 28
 are the breathing-space levels, each more open than its neighbours but against a stronger bot.
+
+### The bot ladder (2026-10-16 rebalance)
+
+Owner-approved difficulty ladder, applied as a **data-only** change to each level's `botLevel`. No
+board, seed, name or id moved, and no bot was retuned — a level only names a different existing bot.
+Beta feedback was that levels 4-10 "felt like we were not playing against anyone", and the campaign
+never used bots 7-9 at all. Each rung is a large step (one bot beats its neighbour roughly 63-72% of
+the time; level 7 beats level 1 in 99.4%), so the ladder climbs in short runs rather than one step per
+level:
+
+| Levels | Bot |
+| --- | --- |
+| 1-3 | 1 |
+| 4-5 | 2 |
+| 6-8 | 3 |
+| 9-11 | 4 |
+| 12-14 | 5 |
+| 15-17 | 6 |
+| 18-20 | 7 |
+| 21-24 | 8 |
+| 25-30 | 9 |
+
+Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,5,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
+
+The ladder is pinned by a **guard test**, not a comment: `tests/campaign/levels.test.ts` asserts the
+bot level never decreases as the level number rises, that it starts at 1 and ends at 9, and the exact
+sequence above. The old curve rose to bot 5 at level 20 then dropped back to bot 4 at level 21, and
+nothing caught it, because the previous test allowed a one-step fall. Existing player progress is
+untouched — campaign progress is stored per level **id**, and no id changed.
 
 ## Progress and saving
 
@@ -262,7 +293,11 @@ Reading:
 - **No rock count or AI value was changed.** The only adjustment to the design pack was level 9's
   rich pair moving to the `r` axis, for legality.
 
-### Chapters I-III results (2026-10-16)
+### Chapters I-III results (2026-10-16, before the bot rebalance)
+
+> **Historical — measured on the OLD bot ladder (Chapter I tops at bot 3, II at 5, III at 6).** These
+> figures describe the campaign *before* the 2026-10-16 bot rebalance above. The re-measured numbers
+> for the shipped ladder follow in the next subsection; do not read these as current.
 
 `npm run campaign:balance -- --games=6 --ref-games=1 --baseline-games=6` — all 30 levels, six
 alternate deals each. A deliberately small, bounded run (the machine was shared); read it as
@@ -301,11 +336,49 @@ Reading:
   call any single level balanced. The larger 16-deal sweeps are worth re-running when the machine is
   free.
 
+### Chapters I-III results after the bot rebalance (2026-10-16)
+
+The ladder above was **re-measured** with the same small, bounded run: `npm run campaign:balance --
+--games=6 --ref-games=1 --baseline-games=6` (six alternate deals per level, plus the classic-board
+baseline below). Directional, not significant. **No level was flagged with a defect — no LONG, SHORT,
+ONE-SIDED or NOT REPRODUCIBLE.** The only flags were nine small-sample seat-skew notes (L3, L7, L13,
+L15, L20, L23, L24, L25, L26 — six decided games, so noise; the tool says so itself).
+
+| Chapter | Bots | Rocks | Gold | Sweep avg turns | Start-seat wins | vs L7 (seats swapped) |
+| --- | --- | --- | --- | --- | --- | --- |
+| I (1-10) | 1-4 | 0-3 | 1-3 | 41.8 | 26/60 (43%) | **0-20** |
+| II (11-20) | 4-7 | 1-5 | 3-5 | 22.7 | 29/60 (48%) | 3-20 |
+| III (21-30) | 8-9 | 2-6 | 3-5 | 19.7 | 31/60 (52%) | 14-20 |
+
+Classic-board baseline (same AI both seats, 6 deals): bot 1 → 4/2, 55.0 turns; bot 2 → 4/2, 52.7;
+bot 3 → 3/3, 42.2; bot 4 → 5/1, 30.3; bot 5 → 4/2, 26.0; bot 6 → 3/3, 19.3; bot 7 → 3/3, 19.7;
+bot 8 → 4/2, 19.5; bot 9 → 4/2, 18.7.
+
+Reading:
+
+- **The ramp is real, steep and now reaches the top of the ladder.** The Chapter I bots lose to the
+  reference bot in every one of their 20 games (0-20), Chapter II wins 3 of 20, and Chapter III wins
+  14 of 20 — bots 8-9 now beat the level-7 reference most of the time, exactly the ceiling the old
+  campaign never used.
+- **Same-AI games shorten as the bot rises** (42 → 23 → 20 turns), matching the classic baseline's own
+  55 → 19 turns. No level stuck LONG as the old levels 1-3 did.
+- **Every board stays legal, reproducible and inside the classic board's own seat spread** (bot 4 on
+  the *classic* board splits 5/1 all by itself, the same shape as the notes the tool raised).
+- **Player-proxy probe** (`npx tsx scripts/campaign-difficulty-probe.ts`; a fixed bot level 4 — the top
+  of the EASY training tier — playing each level from both seats): wins **85% of Chapter I** games,
+  **15% of Chapter II** and **15% of Chapter III** (20 games each). The flip is deliberate: with the
+  ladder, bot 4 is the Chapter I ceiling but below every Chapter II and III opponent, so the proxy
+  loses most of the later games. This mixes board and bot, which is what a player meets — but it is
+  bot-vs-bot evidence, not proof of human difficulty. (Before the rebalance the same probe read
+  90/70/40; that figure is **stale** and described the old ladder.)
+- **Still not measured:** no human has played the rebalanced campaign, and the 6-deal sweep is too
+  small to call any single level balanced.
+
 ## Tests
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-3, 3 for the rest); no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the bot ladder never decreases, starts at 1, ends at 9, and matches the approved sequence exactly**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |

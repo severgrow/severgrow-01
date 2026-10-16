@@ -111,13 +111,36 @@ describe('campaign levels: the definition is well formed', () => {
     }
   });
 
-  it('keeps the difficulty ramp readable: the bot level never drops by more than one between chapters', () => {
+  it('keeps the difficulty ramp NON-DECREASING: the bot only ever gets stronger as levels rise', () => {
     const bots = CAMPAIGN_LEVELS.map((l) => l.botLevel);
-    // Chapter I tops out at 3; Chapter II reaches 5 and never sits below 3; Chapter III tops at 6.
-    expect(Math.max(...bots.slice(0, 10))).toBe(3);
-    expect(Math.max(...bots.slice(10, 20))).toBe(5);
-    expect(Math.max(...bots.slice(20))).toBe(6);
-    for (let i = 11; i < 30; i++) expect(bots[i]! - bots[i - 1]!, `level ${i + 1}`).toBeLessThanOrEqual(1);
+    // The conceptual guard. The old curve rose to bot 5 at level 20 and then dropped back to bot 4
+    // at level 21 — a silently descending difficulty curve, invisible in code and obvious to a
+    // player, which nothing pinned. A campaign bot level may never fall as the level number rises.
+    for (let i = 1; i < bots.length; i++) {
+      expect(
+        bots[i]!,
+        `level ${i + 1} (bot ${bots[i]}) is easier than level ${i} (bot ${bots[i - 1]})`,
+      ).toBeGreaterThanOrEqual(bots[i - 1]!);
+    }
+    // Anchored at both ends: the campaign opens on the easiest bot and tops out on the hardest.
+    expect(bots[0]).toBe(1);
+    expect(bots.at(-1)).toBe(9);
+  });
+
+  it('ships the approved bot ladder exactly, so the rebalance cannot be quietly undone', () => {
+    // Owner-approved 2026-10-16: L1-3 the deliberately easy intro, then short rungs of 2-6 levels,
+    // each step worth roughly 63-72% to the stronger bot, up to bot 9 at the top.
+    expect(CAMPAIGN_LEVELS.map((l) => l.botLevel)).toEqual([
+      1, 1, 1,
+      2, 2,
+      3, 3, 3,
+      4, 4, 4,
+      5, 5, 5,
+      6, 6, 6,
+      7, 7, 7,
+      8, 8, 8, 8,
+      9, 9, 9, 9, 9, 9,
+    ]);
   });
 
   it('levels 1-3 use the tutorial small map (radius 2); levels 4-30 the product hexagon (radius 3)', () => {

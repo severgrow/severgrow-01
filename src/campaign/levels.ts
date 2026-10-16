@@ -150,66 +150,66 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // Two stones on opposite flanks, mirror images: neither home is favoured, the middle stays open.
   level(1, 5, 'c1-05', 'Stone in the Grass', 95005, 2, board(['-3,1', '3,-1'], RICH_PAIR_Q), 'Scattered rocks away from central routes.'),
   // One stone just off the diagonal: nudge around it, in either direction.
-  level(1, 6, 'c1-06', 'Branching Out', 95006, 2, board(['0,1'], RICH_PAIR_Q), 'Encourage multiple directions.'),
+  level(1, 6, 'c1-06', 'Branching Out', 95006, 3, board(['0,1'], RICH_PAIR_Q), 'Encourage multiple directions.'),
   // A two-hex cluster on the left flank: the first real shape to route around.
-  level(1, 7, 'c1-07', 'First Obstacle', 95007, 2, board(['-3,0', '-3,1'], RICH_PAIR_Q), 'Small rock cluster near a flank.'),
+  level(1, 7, 'c1-07', 'First Obstacle', 95007, 3, board(['-3,0', '-3,1'], RICH_PAIR_Q), 'Small rock cluster near a flank.'),
   // The strongest Chapter I opponent on a wide-open field: pure play, gold waiting on both wings.
   level(1, 8, 'c1-08', 'The Open Field', 95008, 3, board([], RICH_PAIR_FLANK), 'Stronger opponent, forgiving terrain; flank gold.'),
   // A short three-hex wall to walk around; the rich pair moved to the other axis so nothing overlaps.
-  level(1, 9, 'c1-09', 'Around the Stone', 95009, 3, board(['-2,-1', '-2,0', '-1,-1'], RICH_PAIR_R), 'A short detour around blocked hexes.'),
+  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,-1', '-2,0', '-1,-1'], RICH_PAIR_R), 'A short detour around blocked hexes.'),
   // The finale: a compact grove off-centre, the strongest Chapter I bot, everything so far at once.
-  level(1, 10, 'c1-10', 'The First Grove', 95010, 3, board(['-1,0', '-1,-1', '0,-1'], RICH_PAIR_Q), 'Chapter finale testing the fundamentals.'),
+  level(1, 10, 'c1-10', 'The First Grove', 95010, 4, board(['-1,0', '-1,-1', '0,-1'], RICH_PAIR_Q), 'Chapter finale testing the fundamentals.'),
 
   // ---------- CHAPTER II — BROKEN GROUND (11-20): learn to navigate ----------
   // The theme: rocks make decisions, not walls. Every board keeps a wide open middle and both
   // flanks usable, so Bloom and networks still have room; the step up is real but readable.
   // A few pebbles beside the trail, a mirrored pair: the gentlest way into broken ground.
-  level(2, 11, 'c2-11', 'Pebble Trail', 95011, 3, board(['-1,-1', '1,1'], RICH_PAIR_Q), 'Two pebbles beside the trail; still wide open.'),
+  level(2, 11, 'c2-11', 'Pebble Trail', 95011, 4, board(['-1,-1', '1,1'], RICH_PAIR_Q), 'Two pebbles beside the trail; still wide open.'),
   // A short wall flanks the centre: two ways round it — over the top or under the bottom.
-  level(2, 12, 'c2-12', 'Split Meadow', 95012, 3, board(['-1,0', '1,0', '-1,-1'], RICH_PAIR_R), 'A split down the middle; pick a lane.'),
+  level(2, 12, 'c2-12', 'Split Meadow', 95012, 5, board(['-1,0', '1,0', '-1,-1'], RICH_PAIR_R), 'A split down the middle; pick a lane.'),
   // The first real detour: a four-hex arc off the centre-left to walk around.
-  level(2, 13, 'c2-13', 'The Detour', 95013, 3, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
+  level(2, 13, 'c2-13', 'The Detour', 95013, 5, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
   // Breathing space: one lone stone, a stronger opponent, and a second gold pair to race for.
-  level(2, 14, 'c2-14', 'Open Horizon', 95014, 4, board(['0,1'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
+  level(2, 14, 'c2-14', 'Open Horizon', 95014, 5, board(['0,1'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
   // Twin crystals on opposite wings plus a central pair: two threats to answer at once.
-  level(2, 15, 'c2-15', 'Twin Stones', 95015, 4, board(['-3,1', '3,-1', '-1,0', '1,0'], RICH_PAIR_R), 'Twin flanks and a central pair.'),
+  level(2, 15, 'c2-15', 'Twin Stones', 95015, 6, board(['-3,1', '3,-1', '-1,0', '1,0'], RICH_PAIR_R), 'Twin flanks and a central pair.'),
   // A broken line across the middle with two gaps: cross at the centre or slip through the notch.
-  level(2, 16, 'c2-16', 'Broken Crossing', 95016, 4, board(['-2,0', '-1,0', '2,0', '3,0'], RICH_PAIR_INNER), 'A broken wall with two crossings.'),
+  level(2, 16, 'c2-16', 'Broken Crossing', 95016, 6, board(['-2,0', '-1,0', '2,0', '3,0'], RICH_PAIR_INNER), 'A broken wall with two crossings.'),
   // A long wall on both inner flanks: the straight line is shut, so take the long way round.
-  level(2, 17, 'c2-17', 'The Long Way', 95017, 4, board(['-1,0', '-1,-1', '-1,-2', '1,1', '1,2'], RICH_PAIR_R), 'Both inner lanes close early; go the long way.'),
+  level(2, 17, 'c2-17', 'The Long Way', 95017, 6, board(['-1,0', '-1,-1', '-1,-2', '1,1', '1,2'], RICH_PAIR_R), 'Both inner lanes close early; go the long way.'),
   // Breathing space again: a thin central pair only, so the better bot has room to out-play you.
-  level(2, 18, 'c2-18', 'Quiet Clearing', 95018, 4, board(['-1,0', '1,0'], RICH_PAIR_Q), 'Open again: fewer stones, a sharper bot.'),
+  level(2, 18, 'c2-18', 'Quiet Clearing', 95018, 7, board(['-1,0', '1,0'], RICH_PAIR_Q), 'Open again: fewer stones, a sharper bot.'),
   // A garden of five scattered stones, each one a small decision, none of them a wall.
-  level(2, 19, 'c2-19', 'Stone Garden', 95019, 4, board(['-3,0', '-1,-1', '0,1', '1,1', '2,0'], RICH_PAIR_R), 'Five scattered stones, five small choices.'),
+  level(2, 19, 'c2-19', 'Stone Garden', 95019, 7, board(['-3,0', '-1,-1', '0,1', '1,1', '2,0'], RICH_PAIR_R), 'Five scattered stones, five small choices.'),
   // The chapter climax: a broken grove round the centre, the strongest Chapter II bot, five gold.
-  level(2, 20, 'c2-20', 'The Broken Grove', 95020, 5, board(['-2,0', '-1,0', '0,-1', '1,0', '2,0'], ['0,0', '-2,-1', '2,1', '0,-3', '0,3']), 'Chapter finale: a broken grove, bot 5, five gold.'),
+  level(2, 20, 'c2-20', 'The Broken Grove', 95020, 7, board(['-2,0', '-1,0', '0,-1', '1,0', '2,0'], ['0,0', '-2,-1', '2,1', '0,-3', '0,3']), 'Chapter finale: a broken grove, bot 7, five gold.'),
 
   // ---------- CHAPTER III — NARROW PATHS (21-30): fight for space ----------
   // The theme: contested hexes and corridors. No level leaves a single hex that decides the game:
   // every wall has at least two openings, and a defensive route always exists alongside the attack.
   // Two offset walls make one diagonal passage — the first real squeeze.
-  level(3, 21, 'c3-21', 'The Passage', 95021, 4, board(['-2,0', '-1,0', '1,1', '2,1'], RICH_PAIR_R), 'Two offset walls leave a diagonal passage.'),
+  level(3, 21, 'c3-21', 'The Passage', 95021, 8, board(['-2,0', '-1,0', '1,1', '2,1'], RICH_PAIR_R), 'Two offset walls leave a diagonal passage.'),
   // A fork: a central stone with lanes either side, then the flanks widen again behind it.
-  level(3, 22, 'c3-22', 'Forked Path', 95022, 4, board(['-1,0', '1,0', '-1,-1', '1,1', '0,-1'], RICH_PAIR_Q), 'Choose a fork; the flanks reopen behind it.'),
+  level(3, 22, 'c3-22', 'Forked Path', 95022, 8, board(['-1,0', '1,0', '-1,-1', '1,1', '0,-1'], RICH_PAIR_Q), 'Choose a fork; the flanks reopen behind it.'),
   // A ring around the centre gold: the prize is real, but its approaches are only two.
-  level(3, 23, 'c3-23', 'Central Ground', 95023, 5, board(['-1,0', '1,0', '0,1', '0,-1'], RICH_PAIR_FLANK), 'The centre is a fortress with two doors.'),
+  level(3, 23, 'c3-23', 'Central Ground', 95023, 8, board(['-1,0', '1,0', '0,1', '0,-1'], RICH_PAIR_FLANK), 'The centre is a fortress with two doors.'),
   // A ridge down one axis: the short way is walled, the side route stays open and safe.
-  level(3, 24, 'c3-24', 'The Side Route', 95024, 5, board(['-1,-2', '-1,-1', '-1,0', '-1,3', '-2,0'], RICH_PAIR_R), 'A long ridge; take the side route.'),
+  level(3, 24, 'c3-24', 'The Side Route', 95024, 8, board(['-1,-2', '-1,-1', '-1,0', '-1,3', '-2,0'], RICH_PAIR_R), 'A long ridge; take the side route.'),
   // Two blobs with a narrow neck between them: the obvious attack is a bottleneck.
-  level(3, 25, 'c3-25', 'The Bottleneck', 95025, 5, board(['-3,1', '-3,0', '-2,0', '-2,-1', '2,0', '3,0'], RICH_PAIR_R), 'Two blobs and a narrow neck.'),
+  level(3, 25, 'c3-25', 'The Bottleneck', 95025, 9, board(['-3,1', '-3,0', '-2,0', '-2,-1', '2,0', '3,0'], RICH_PAIR_R), 'Two blobs and a narrow neck.'),
   // Stones in all four outer corners: the wide wings you had are gone.
-  level(3, 26, 'c3-26', 'Four Corners', 95026, 5, board(['-3,0', '3,0', '-3,1', '3,-1'], RICH_PAIR_Q), 'The four corners are spoken for.'),
+  level(3, 26, 'c3-26', 'Four Corners', 95026, 9, board(['-3,0', '3,0', '-3,1', '3,-1'], RICH_PAIR_Q), 'The four corners are spoken for.'),
   // A mirrored split with a gap on each side: read it quickly and commit.
-  level(3, 27, 'c3-27', 'Split Decision', 95027, 5, board(['-2,0', '-1,0', '-1,-1', '2,0', '1,0', '1,1'], ['0,0', '0,-3', '0,3']), 'One split, two choices, no time to dither.'),
+  level(3, 27, 'c3-27', 'Split Decision', 95027, 9, board(['-2,0', '-1,0', '-1,-1', '2,0', '1,0', '1,1'], ['0,0', '0,-3', '0,3']), 'One split, two choices, no time to dither.'),
   // Breathing space with the sharpest bot yet: almost no stones, so play decides it.
   // (Seed 95059, not the 95028 of the sequence: with 95028 the shipped deal is a four-turn Strangle
   // — verified identical on the classic generated board, so it is the deal and not this board —
   // which is not the open fight this level is meant to be. 95059 ships a close 24-turn game.)
-  level(3, 28, 'c3-28', 'Open Conflict', 95059, 6, board(['0,1', '-1,0'], RICH_PAIR_Q), 'Almost open; the best bot in the campaign.'),
+  level(3, 28, 'c3-28', 'Open Conflict', 95059, 9, board(['0,1', '-1,0'], RICH_PAIR_Q), 'Almost open; the best bot in the campaign.'),
   // A crossing: a wall across the middle with a gap top and bottom, and gold on both.
-  level(3, 29, 'c3-29', 'The Crossing', 95029, 6, board(['-2,0', '-1,0', '1,0', '2,0', '0,1', '0,-1'], ['0,0', '-2,-1', '2,1', '0,-2', '0,2']), 'Cross at the centre or around the ends.'),
-  // The finale: a stone heart around the gold centre, bot 6, and gold at the far poles.
-  level(3, 30, 'c3-30', 'Heart of Stone', 95030, 6, board(['-1,0', '1,0', '0,1', '0,-1', '-1,-1', '1,1'], ['0,0', '0,-3', '0,3']), 'The campaign finale: a stone heart round the gold centre.'),
+  level(3, 29, 'c3-29', 'The Crossing', 95029, 9, board(['-2,0', '-1,0', '1,0', '2,0', '0,1', '0,-1'], ['0,0', '-2,-1', '2,1', '0,-2', '0,2']), 'Cross at the centre or around the ends.'),
+  // The finale: a stone heart around the gold centre, bot 9, and gold at the far poles.
+  level(3, 30, 'c3-30', 'Heart of Stone', 95030, 9, board(['-1,0', '1,0', '0,1', '0,-1', '-1,-1', '1,1'], ['0,0', '0,-3', '0,3']), 'The campaign finale: a stone heart round the gold centre.'),
 ]);
 
 export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
