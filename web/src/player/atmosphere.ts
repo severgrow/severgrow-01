@@ -34,7 +34,7 @@ export const ATMOSPHERE_CSS = `
    noise degenerates to flat grey - sd 0.61 - so .7 keeps a margin below the ceiling.) */
 #futa04-film-grain {
   position: fixed; inset: 0; z-index: 2147483646; pointer-events: none !important;
-  opacity: .141; background-repeat: repeat; background-size: 1024px 1024px;
+  opacity: .124; background-repeat: repeat; background-size: 1024px 1024px;
   mix-blend-mode: normal; user-select: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .75  0 0 0 0 .75  0 0 0 0 .75  0 0 0 1.1 -.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
 }
@@ -44,8 +44,9 @@ export const ATMOSPHERE_CSS = `
 @media (min-resolution: 2dppx) { #futa04-film-grain { background-size: 512px 512px; } }
 @media (min-resolution: 3dppx) { #futa04-film-grain { background-size: 341.33px 341.33px; } }
 /* In-match the grain rides above map + cockpit, a touch stronger so the analog flecks stay readable
-   on the board. (Both opacities are 12% below what they were, per the owner.) */
-body:has(#game:not([hidden])) #futa04-film-grain { opacity: .167; }
+   on the board. (Owner lowered BOTH opacities by 12% twice: .16 -> .141 -> .124, and .19 -> .167 ->
+   .147. Measured strength tracks that exactly - the same texture, just quieter.) */
+body:has(#game:not([hidden])) #futa04-film-grain { opacity: .147; }
 /* Ink is flat near-black paper: no grain at all. */
 [data-theme='ink'] #futa04-film-grain { display: none; }
 #futa04-board-backdrop { position: absolute; inset: 0; background: #000; opacity: .235; display: none; }
