@@ -88,7 +88,7 @@ try {
       assert.equal(await tiles.nth(i).getAttribute('data-state'), 'locked', `tile ${i + 1}`);
       assert.equal(await tiles.nth(i).isDisabled(), true, `tile ${i + 1} disabled`);
     }
-    assert.equal(await page.locator('#campaign-progress').textContent(), '0 of 10 complete');
+    assert.equal(await page.locator('#campaign-progress').textContent(), `0 of ${CAMPAIGN_LEVELS.length} complete`);
     // Mobile-first: readable sizes, comfortable tap targets, no clipping and no sideways scroll.
     const first = await tiles.nth(0).boundingBox();
     assert.ok(first && first.height >= 44, `tile height ${first?.height} is a comfortable target`);
@@ -201,7 +201,7 @@ try {
       assert.equal(await tiles.nth(0).getAttribute('data-state'), 'completed');
       assert.equal(await tiles.nth(1).getAttribute('data-state'), 'current');
       assert.equal(await tiles.nth(2).getAttribute('data-state'), 'locked');
-      assert.equal(await page.locator('#campaign-progress').textContent(), '1 of 10 complete');
+      assert.equal(await page.locator('#campaign-progress').textContent(), `1 of ${CAMPAIGN_LEVELS.length} complete`);
       assert.equal(await page.locator('#campaign-continue').textContent(), 'Continue');
       await page.screenshot({ path: `${OUT}campaign-progress-${vp.key}.png` });
       // Replaying a campaign level restarts THE SAME level from its fixed start.
