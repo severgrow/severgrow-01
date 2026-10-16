@@ -856,11 +856,10 @@ function campaignTile(level: CampaignLevel, currentId: string): HTMLButtonElemen
   const num = document.createElement('span');
   num.className = 'ct-num';
   num.textContent = String(level.number).padStart(2, '0');
-  const name = document.createElement('span');
-  name.className = 'ct-name';
-  name.textContent = level.name;
-  b.append(num, name);
-  const label = CAMPAIGN.levelLabel(level.number, level.name);
+  // Level NAMES are gone (owner, 2026-10-16: numbers only). The tile is the number alone; the name
+  // span is not created at all, so no empty node is left behind for CSS to size around.
+  b.append(num);
+  const label = CAMPAIGN.levelLabel(level.number);
   if (completed) {
     const mark = document.createElement('span');
     mark.className = 'ct-mark';
@@ -903,7 +902,9 @@ function renderCampaignScreen() {
       const words = CAMPAIGN.chapters[chapter.id];
       const name = document.createElement('h3');
       name.className = 'campaign-chapter-name';
-      name.textContent = `${CAMPAIGN.chapterName(chapter.number)} · ${words?.title ?? ''}`;
+      // Chapter TITLES are gone too (owner, 2026-10-16): the chapter number only. The subtitle keeps
+      // describing the ground ahead without naming it.
+      name.textContent = CAMPAIGN.chapterName(chapter.number);
       const sub = document.createElement('p');
       sub.className = 'campaign-chapter-sub';
       sub.textContent = words?.subtitle ?? '';

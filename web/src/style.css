@@ -2349,16 +2349,14 @@ svg.usable .hex-cell {
 .campaign-tile {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
+  place-items: center;
   min-height: 56px;
   padding: 9px 12px;
   border: 0;
   border-radius: var(--radius);
   background: var(--fu-cream-14);
   color: var(--fu-cream);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   font-family: var(--font-ui);
   transition: transform 0.12s, background-color 0.15s, color 0.15s;
@@ -2366,19 +2364,15 @@ svg.usable .hex-cell {
 .campaign-tile:active { transform: translateY(1px); }
 .campaign-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .campaign-tile .ct-num {
-  min-width: 1.7em;
   font-size: 1.02rem;
   font-weight: var(--w-ui-medium, 500);
   line-height: 1;
   letter-spacing: 0.02em;
   color: var(--fu-cream-70);
 }
-.campaign-tile .ct-name {
-  font-size: 0.86rem;
-  line-height: 1.15;
-  letter-spacing: 0.01em;
-  overflow-wrap: anywhere;
-}
+/* `.ct-name` was removed with the level names (owner, 2026-10-16: numbers only). The tile is now a
+   single centred number, so the old two-column grid and its second cell are gone with it. */
+.campaign-tile[data-state='current'] .ct-num { color: inherit; }
 .campaign-tile .ct-mark {
   position: absolute;
   top: 6px;

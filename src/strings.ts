@@ -937,8 +937,9 @@ export const CAMPAIGN = Object.freeze({
       subtitle: 'Ten narrow levels where space must be won.',
     }),
   }) as Readonly<Record<string, { title: string; subtitle: string }>>,
-  /** a locked level's spoken/greyed label, e.g. "Level 4, Locked" */
-  levelLabel: (number: number, name: string): string => `Level ${number}, ${name}`,
+  /** a level's spoken label. The owner removed level and chapter NAMES everywhere (2026-10-16), so
+   *  this is the number alone: "Level 4". */
+  levelLabel: (number: number): string => `Level ${number}`,
   /** resume the campaign match exactly where it stopped */
   resumeHint: 'Your campaign match is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */

@@ -92,20 +92,23 @@ try {
     // Mobile-first: readable sizes, comfortable tap targets, no clipping and no sideways scroll.
     const first = await tiles.nth(0).boundingBox();
     assert.ok(first && first.height >= 44, `tile height ${first?.height} is a comfortable target`);
-    assert.ok(first && first.width >= 150, `tile width ${first?.width} fits its name`);
+    assert.ok(first && first.width >= 60, `tile width ${first?.width} is a comfortable target`);
     assert.equal(await page.locator('#campaign-continue').isVisible(), true);
     assert.equal(await page.locator('#campaign-heading').isVisible(), true);
     const typography = await page.evaluate(() => ({
-      name: Number.parseFloat(getComputedStyle(document.querySelector('#campaign .ct-name')!).fontSize),
       num: Number.parseFloat(getComputedStyle(document.querySelector('#campaign .ct-num')!).fontSize),
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      clipped: [...document.querySelectorAll('#campaign .ct-name')].filter((el) => el.scrollWidth > el.clientWidth + 1).length,
+      // Level NAMES were removed (owner, 2026-10-16: numbers only), so the tile carries no second
+      // cell to clip. What matters now is that the NUMBER is complete, never a cut-off "0…".
+      clipped: [...document.querySelectorAll('#campaign .ct-num')].filter((el) => el.scrollWidth > el.clientWidth + 1).length,
+      // and that no tile still renders a name.
+      names: document.querySelectorAll('#campaign .ct-name').length,
       overflowY: getComputedStyle(document.getElementById('campaign')!).overflowY,
     }));
-    assert.ok(typography.name >= 12, `level name ${typography.name}px is readable`);
     assert.ok(typography.num >= 14, `level number ${typography.num}px is readable`);
     assert.ok(typography.overflow <= 1, `no horizontal overflow (${typography.overflow}px)`);
-    assert.equal(typography.clipped, 0, 'no level name is clipped');
+    assert.equal(typography.clipped, 0, 'no level number is clipped');
+    assert.equal(typography.names, 0, 'no level tile shows a name any more');
     assert.equal(typography.overflowY, 'auto', 'the campaign screen can scroll');
     // The screen must stay usable at 50 levels, not just 10: clone the tiles to 50 and scroll.
     const scroll = await page.evaluate(() => {
