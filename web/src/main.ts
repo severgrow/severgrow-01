@@ -4774,7 +4774,7 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen || (IS_FUTA04 && openSheet?.id !== 'sheet-futa04-help' && (!myTurn() || busy() || v.phase !== 'ACT'));
+  card.hidden = !tipOpen || (IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;

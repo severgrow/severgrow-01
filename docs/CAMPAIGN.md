@@ -151,6 +151,12 @@ Supporting rules, all from the same pass:
 Tests: `web/tests/onboarding.test.ts` pins the curve and the silence; `web/e2e/onboarding.ts` drives
 Level 1 on a 390×844 phone (window content, board padding, lit hexes, quieted controls, no lottery).
 
+**Where the Fruit/Strengthen "first tip" went.** The dock tip stays inside the Help sheet, as it
+always did: lifting it onto the game surface passed its own check but broke the smart-cockpit layout
+suite in a way nobody could explain, so it was put back. The guided levels do not depend on it — Fruit
+and Bloom are taught in the top window at the moment they can be played, and Strengthen is the level-5
+lesson. The sheet's "Learn to play" page still carries the long explanations.
+
 - **Levels 4-10 moved onto the tutorial's small map** (radius 2 → 19 hexes). Rock counts are unchanged
   from the design pack (0, 2, 1, 2, 0, 3, 3), so the table above still matches it; the stones were
   re-placed on hexes the radius-2 board actually has, outside both root zones. No level id, seed, name
