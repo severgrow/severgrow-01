@@ -1147,6 +1147,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (options.howToHtml !== undefined) howToHtml = options.howToHtml;
     if (options.tab) intelTab = options.tab;
     mode = 'intel'; stopLoop(); smooth = null;
+    delete panel.dataset.kicker;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
@@ -1157,6 +1158,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const guidance = (line: string) => {
     const same = mode === 'guidance' && ledTitle === line && !panel.hidden;
     mode = 'guidance'; stopLoop(); smooth = null;
+    delete panel.dataset.kicker;
     panel.dataset.mode = 'guidance'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Turn guidance'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');

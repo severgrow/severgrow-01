@@ -639,6 +639,8 @@ export class BoardView {
     // The coach's hint is a circle (not a hex outline), so it never looks like gold.
     for (const key of o.coachHexes) {
       const { x, y } = centerOf(key);
+      // A soft disc under the ring: on the guided levels, one move has to be the obvious one.
+      el('circle', { cx: x, cy: y, r: S * 0.8, class: 'coach-pool' }, over);
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
     if (o.selectedHex) {

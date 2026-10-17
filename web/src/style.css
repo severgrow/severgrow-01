@@ -1046,6 +1046,21 @@ html.reduce-motion .available,
   transform-box: fill-box;
   transform-origin: center;
 }
+/* A soft pool of light under the coach's ring, so the suggested tile reads as THE move. Only on
+   the guided levels: elsewhere the ring alone is the hint. */
+.coach-pool { fill: var(--c-accent); opacity: 0; pointer-events: none; }
+html[data-onboard] .coach-pool { opacity: 0.24; animation: coach-pool 2.2s ease-in-out infinite; }
+/* On the guided levels the suggestion is the one move that should win the eye: a stronger ring
+   and a brighter pool under it. */
+html[data-onboard] .coach-ring { stroke-width: 2.8; }
+@keyframes coach-pool {
+  0%, 100% { opacity: 0.18; }
+  50% { opacity: 0.3; }
+}
+html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
+@media (prefers-reduced-motion: reduce) {
+  html[data-onboard] .coach-pool { animation: none; opacity: 0.24; }
+}
 .target.coached { animation:none !important; }
 @keyframes coach-breathe {
   50% {
