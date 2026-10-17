@@ -115,6 +115,12 @@ radius-2 map (`-3,0` is not on that board).
 
 ### The 2026-10-17 onboarding pass
 
+**Where it ships:** this line is published at **https://www.futasaku.com/2/**, beside the released
+game at the root (owner direction, 2026-10-17). The root keeps the pre-onboarding campaign; `/2/` is
+where this work is played and iterated. A push to `futa0.5-onboarding` rebuilds `/2/` automatically —
+the preview workflow checks this branch out, builds it and composes it into the Pages site. `/2/` is
+never merged into the root build without an explicit decision.
+
 Owner brief (2026-10-17): the Campaign is the game's tutorial, so the first ten levels teach on the
 small map and Level 11 is where the board grows. Terrain-only change, plus the guidance work below.
 
