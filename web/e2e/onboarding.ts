@@ -94,6 +94,36 @@ try {
 
   assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
   console.log('\nOnboarding: the top window, the lit board and the quiet cockpit all work on a phone.');
+
+  // Desktop keeps the same window, docked in the cockpit's column, never over the map.
+  const desk = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  desk.on('pageerror', (error) => errors.push(error.message));
+  await desk.goto(`${served.url}?onboarding=desk`, { waitUntil: 'networkidle' });
+  await desk.waitForSelector('#menu-play:not([hidden])', { timeout: 15000 });
+  await desk.evaluate(() => document.getElementById('menu-play')?.click());
+  await desk.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
+  await desk.evaluate(() => document.getElementById('menu-campaign')?.click());
+  await desk.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+  await desk.waitForTimeout(900);
+  const desktop = await desk.evaluate(() => {
+    const panel = document.getElementById('futasaku-glass')!.getBoundingClientRect();
+    const hits = [...document.querySelectorAll('.hex-cell')].some((cell) => {
+      const r = cell.getBoundingClientRect();
+      return panel.left < r.right && r.left < panel.right && panel.top < r.bottom && r.top < panel.bottom;
+    });
+    return {
+      mode: document.getElementById('futasaku-glass')?.dataset.mode,
+      title: document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim(),
+      hits,
+      placedUnderChrome: panel.top > 0,
+    };
+  });
+  check(desktop.mode === 'tutorial', 'desktop uses the same window');
+  check(desktop.title === 'DRAW', `desktop says DRAW (${desktop.title})`);
+  check(desktop.placedUnderChrome, 'desktop window is placed below the chrome, not at the very top');
+  check(!desktop.hits, 'desktop window never covers a playable hex');
+  assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+  console.log('Onboarding: desktop docks the same window beside the board, clear of it.');
 } finally {
   await browser.close();
   await served.server.close();
