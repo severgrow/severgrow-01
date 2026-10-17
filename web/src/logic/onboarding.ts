@@ -72,11 +72,16 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
   if (s.phase === 'GAME_OVER') return null;
   const intensity = intensityFor(s.level);
   const lesson = ONBOARD.lessons[s.level];
-  const firstTurn = s.turn <= 2;
+  // Whose turn it is alternates strictly, so the match's first two turns are exactly MY first
+  // acting turn — whether I start (turn 1) or the opponent does (turn 2). Keying a lesson to
+  // "turn 1" silently skipped it on every level the opponent opens.
+  const opening = s.turn <= 2;
+  const firstTurn = opening;
 
-  // Their turn: only the first levels say anything, and only to name what is happening.
+  // Their turn: the guided levels say what is happening, so an inert board is never a mystery.
+  // Levels 8-10 stay quiet — by then a waiting turn needs no caption.
   if (!s.mine) {
-    return intensity === 1 && firstTurn
+    return intensity <= 2 && opening
       ? { title: ONBOARD.theirTurn, line: ONBOARD.theirTurnLine, focus: 'none' }
       : null;
   }
@@ -89,12 +94,12 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
     // Fruit and Bloom are never described hypothetically: if the moment is not here, say nothing.
     if (s.level === 8 || s.level === 9) return null;
     // Gold is on the board from the first turn, so its one line belongs there.
-    if (s.level === 10 && s.turn === 1) {
+    if (s.level === 10 && opening) {
       return { title: ONBOARD.lessons[10]!.title, line: ONBOARD.lessons[10]!.line, focus: s.picked ? 'none' : 'hand' };
     }
   }
-  // Levels 4-7 introduce their idea on the opening turn, then leave the player alone.
-  if (lesson && s.phase === 'ACT' && s.turn === 1) {
+  // Levels 4-7 introduce their idea on my opening turn, then leave the player alone.
+  if (lesson && s.phase === 'ACT' && opening) {
     return { title: lesson.title, line: lesson.line, focus: s.picked ? 'none' : 'hand' };
   }
 

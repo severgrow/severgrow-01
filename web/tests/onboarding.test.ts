@@ -68,9 +68,17 @@ describe('level 1 says exactly one thing, and then the next', () => {
     expect(say({ phase: 'DISCARD' })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'discard' });
   });
 
-  it('names the opponent turn on the first turns only', () => {
+  it('names the opponent turn on the opening turns, and only while the level is guided', () => {
     expect(say({ mine: false })).toEqual({ title: ONBOARD.theirTurn, line: ONBOARD.theirTurnLine, focus: 'none' });
     expect(say({ mine: false, turn: 6 })).toBeNull();
+    // A level that opens with the bot's move still says so: 4, 5, 8 start that way.
+    for (const level of [4, 5, 7]) {
+      expect(say({ level, mine: false, turn: 2 }), `L${level}`).toEqual({
+        title: ONBOARD.theirTurn, line: ONBOARD.theirTurnLine, focus: 'none',
+      });
+    }
+    // The targeted levels need no caption for a waiting turn.
+    for (const level of [8, 9, 10]) expect(say({ level, mine: false, turn: 2 }), `L${level}`).toBeNull();
   });
 
   it('never speaks over a finished game', () => {
@@ -113,6 +121,21 @@ describe('guidance fades as the levels rise', () => {
     expect(say({ level: 9, phase: 'ACT', bloomReady: false })).toBeNull();
     expect(say({ level: 9, phase: 'ACT', bloomReady: true }))
       .toEqual({ title: ONBOARD.lessons[9]!.title, line: ONBOARD.lessons[9]!.line, focus: 'hand' });
+  });
+
+  it('4-7 introduce their idea on their FIRST acting turn, whichever seat starts', () => {
+    // A level the opponent opens starts that turn at 1 and mine at 2; keying the lesson to turn 1
+    // silently skipped it on every one of those levels (level 4 was the reported case).
+    for (const level of [4, 5, 6, 7]) {
+      const mineAtTwo = say({ level, phase: 'ACT', turn: 2, mine: true });
+      expect(mineAtTwo, `L${level}`).toEqual({
+        title: ONBOARD.lessons[level]!.title,
+        line: ONBOARD.lessons[level]!.line,
+        focus: 'hand',
+      });
+      // ...and it is not repeated on a later turn.
+      expect(say({ level, phase: 'ACT', turn: 5, mine: true }), `L${level} later`).toBeNull();
+    }
   });
 
   it('each of 4-7 and 10 introduces its own idea on the first turn', () => {

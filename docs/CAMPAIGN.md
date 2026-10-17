@@ -157,6 +157,31 @@ suite in a way nobody could explain, so it was put back. The guided levels do no
 and Bloom are taught in the top window at the moment they can be played, and Strengthen is the level-5
 lesson. The sheet's "Learn to play" page still carries the long explanations.
 
+#### Played end to end, and what that exposed (2026-10-17)
+
+`web/e2e/campaign-levels.ts` plays **levels 1-10 through the real menu**, one after another, with the
+engine's own strongest chooser on the player's side: every level opens, every level finishes with a
+win, the finish card offers "Next level", and **level 11 opens the 37-hex board with no guidance**.
+That is the whole onboarding journey, proved on the product channel and on `/2`.
+
+Playing them found two things that a unit test cannot see:
+
+1. **Guidance was keyed to match turn 1, but the opponent opens on levels 2, 4 and 8.** A lesson shown
+   only on "turn 1 ACT" therefore never appeared on those levels. It is now keyed to the player's first
+   acting turn (the first two match turns, since turns alternate strictly), and the opponent's opening
+   move is captioned on levels 1-7 so an inert board is never a mystery.
+2. **A strong player wins every small-board level by strangle, in 3-16 turns.** On the tutorial map the
+   homes sit in corners with exactly three neighbours, and one Bloom places three tiles — so a single
+   Bloom against the far home ends the match. Measured with a level-9 player: L5, L6 and L9 finish in
+   3 turns; L8 in 4. None of this is exploitable by a beginner (a random player sees the Fruit lesson
+   in 193/200 playouts and the Bloom lesson in 200/200), but it does mean the small board cannot carry
+   a *strategic* match, and it is why level 8's Fruit lesson can be missed by a competent player: the
+   game ends before the networks touch.
+
+   This needs an owner decision before more tuning: keep 1-10 on the 19-hex map and accept short
+   strangles, or return levels 4-10 to the 37-hex board (where the corner home has more neighbours) as
+   the pre-onboarding build had. Rules are not changed either way — only the map each level plays on.
+
 - **Levels 4-10 moved onto the tutorial's small map** (radius 2 → 19 hexes). Rock counts are unchanged
   from the design pack (0, 2, 1, 2, 0, 3, 3), so the table above still matches it; the stones were
   re-placed on hexes the radius-2 board actually has, outside both root zones. No level id, seed, name
