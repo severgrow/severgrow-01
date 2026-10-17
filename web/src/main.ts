@@ -1187,6 +1187,9 @@ function fillMenuStatus() {
   const turn = $('gm-turn');
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
+  // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
+  const title = document.getElementById('gm-title');
+  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;

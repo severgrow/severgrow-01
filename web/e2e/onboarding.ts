@@ -100,6 +100,14 @@ try {
   check((await count('.available')) === 0, 'the quiet rings give way once a card is picked');
   check((await count('.target')) > 0, 'the picked card’s legal tiles are lit');
 
+  // 7. The pause menu says which level this is, not just "Paused".
+  await page.evaluate(() => document.getElementById('hud-menu')?.click());
+  await page.waitForTimeout(400);
+  const pausedTitle = await page.evaluate(() => document.getElementById('gm-title')?.textContent?.trim() ?? '');
+  check(/level\s*1/i.test(pausedTitle), `the pause menu names the level (${pausedTitle})`);
+  await page.evaluate(() => document.querySelector('#sheet-menu [data-close]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await page.waitForTimeout(300);
+
   checkNoErrors(errors);
   console.log('\nOnboarding: the top window, the lit board and the quiet cockpit all work on a phone.');
 
