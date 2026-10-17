@@ -23,6 +23,10 @@ const check = (ok: boolean, what: string) => {
   console.log(`  ok  ${what}`);
 };
 
+/** A helper, not a bare deepEqual: comparing `errors` directly narrows it to never[] in TS. */
+const checkNoErrors = (list: readonly string[]) =>
+  assert.deepEqual([...list], [], `no page errors: ${list.join(' | ')}`);
+
 const title = () => page.evaluate(() => document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() ?? '');
 const line = () => page.evaluate(() => document.querySelector('#futasaku-glass .glass-why')?.textContent?.trim() ?? '');
 const count = (selector: string) => page.evaluate((s) => document.querySelectorAll(s).length, selector);
@@ -92,7 +96,7 @@ try {
   check((await count('.available')) === 0, 'the quiet rings give way once a card is picked');
   check((await count('.target')) > 0, 'the picked card’s legal tiles are lit');
 
-  assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+  checkNoErrors(errors);
   console.log('\nOnboarding: the top window, the lit board and the quiet cockpit all work on a phone.');
 
   // Desktop keeps the same window, docked in the cockpit's column, never over the map.
@@ -122,7 +126,7 @@ try {
   check(desktop.title === 'DRAW', `desktop says DRAW (${desktop.title})`);
   check(desktop.placedUnderChrome, 'desktop window is placed below the chrome, not at the very top');
   check(!desktop.hits, 'desktop window never covers a playable hex');
-  assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+  checkNoErrors(errors);
   console.log('Onboarding: desktop docks the same window beside the board, clear of it.');
 } finally {
   await browser.close();
