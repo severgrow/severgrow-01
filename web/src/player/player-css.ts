@@ -774,6 +774,54 @@ html[data-guide='off'] .step-cue {
     opacity: 1;
   }
 }
+
+/* ---- why a tap did nothing: one short line at the hex, then gone. A tap that can do nothing is
+   the most common way the game feels broken, so it answers where the finger landed: a small
+   smoked-glass plate in the same cream as the step cue, no arrow, no colour, no blocking. ---- */
+.tap-why {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, -140%);
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--gd-cream), 0.2);
+  background: rgba(18, 16, 14, 0.84);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #f6f1e4;
+  font-family: var(--font-display, inherit);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tap-why-out 1700ms ease-out forwards;
+}
+.tap-why.rise {
+  animation: tap-why-rise 1700ms ease-out forwards;
+}
+@keyframes tap-why-out {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes tap-why-rise {
+  0% { opacity: 0; transform: translate(-50%, -104%); }
+  12% { opacity: 1; transform: translate(-50%, -140%); }
+  72% { opacity: 1; transform: translate(-50%, -140%); }
+  100% { opacity: 0; transform: translate(-50%, -162%); }
+}
+/* Reduce motion: the line still appears and leaves, without travelling. */
+.reduce-motion .tap-why,
+.reduce-motion .tap-why.rise {
+  animation: tap-why-out 1700ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tap-why,
+  .tap-why.rise {
+    animation: tap-why-out 1700ms ease-out forwards;
+  }
+}
 /* three step pips: done (soft), now (lit, breathing), next (hollow) */
 .cue-pips {
   display: flex;

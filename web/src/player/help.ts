@@ -143,7 +143,10 @@ export const mountHelp = (hooks: HelpHooks) => {
   tipPanel.className = 'futa04-help-panel futa04-help-tip';
   const coachPanel = document.createElement('div');
   coachPanel.className = 'futa04-help-panel futa04-help-coach';
-  tipPanel.append(firstTip);
+  // The in-play tip STAYS on the game surface: `#first-tip` is a dock overlay, and moving it into a
+  // closed sheet made every first-time Fruit/Strengthen lesson invisible during a level. The single
+  // node is carried into this sheet only while the sheet is open, then put back where it belongs.
+  const tipHome = document.querySelector('.dock-overlays');
   coachPanel.append(coach);
   body.append(tipPanel, coachPanel);
   dialog.append(header, body);
@@ -181,6 +184,8 @@ export const mountHelp = (hooks: HelpHooks) => {
   };
   const closeHelp = () => {
     if (dialog.hidden) return;
+    // The lesson goes back to the game surface before the sheet hides, so it can be shown in play.
+    if (tipPanel.contains(firstTip)) tipHome?.append(firstTip);
     hooks.sheet(null);
     trigger.setAttribute('aria-expanded', 'false');
     wasOpen = false;
@@ -189,6 +194,7 @@ export const mountHelp = (hooks: HelpHooks) => {
   const open = (requested: HelpKind = kind) => {
     if (!available(requested)) return;
     kind = requested;
+    if (requested === 'tip') tipPanel.append(firstTip);
     showKind();
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : trigger;
     hooks.sheet(HELP_SHEET_ID);
@@ -233,6 +239,7 @@ export const mountHelp = (hooks: HelpHooks) => {
     trigger.setAttribute('aria-expanded', String(!dialog.hidden));
     if (wasOpen && dialog.hidden) {
       wasOpen = false;
+      if (tipPanel.contains(firstTip)) tipHome?.append(firstTip);
       restoreFocus();
     }
   });

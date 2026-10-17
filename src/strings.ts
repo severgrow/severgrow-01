@@ -504,12 +504,25 @@ export const BLAST = Object.freeze({
 /** The test copy's step guidance: the plate on the map when a step starts (at most ~24 letters). */
 export const STEP_CUE = Object.freeze({
   draw: 'Draw a card',
-  grow: 'Play or skip',
+  grow: 'Play a card',
   throw: 'Throw one card',
   opp: OPP.label,
   /** the small line above the words */
   kicker: Object.freeze({ draw: 'Step 1 of 3', grow: 'Step 2 of 3', throw: 'Step 3 of 3' }),
   kickerOpp: 'Their turn',
+});
+
+/**
+ * Why a tap did nothing: one short line, said at the touched hex, always read from the engine's own
+ * state (the terrain, the phase, the legal moves) — never a second rule book. Sentence case; the
+ * plate uppercases it.
+ */
+export const TAP_WHY = Object.freeze({
+  draw: 'Draw a card first',
+  rock: 'Blocked by rock',
+  connect: 'Connect to your tree',
+  pick: 'Pick a card',
+  target: 'Not this hex',
 });
 
 /** FUTASAKU 0.5 menu + Match Intel labels. One place to rename the single tutorial entry
@@ -534,7 +547,7 @@ export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
   /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
-  levelAria: (number: number): string => `Play campaign level ${number}`,
+  levelAria: (number: number): string => `Play level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
   play: 'Play',
   /** the PLAY screen's heading */
@@ -975,8 +988,9 @@ export const CAMPAIGN = Object.freeze({
   title: 'Campaign',
   /** the main menu entry that keeps the old difficulty picker */
   classic: 'Classic vs AI',
-  /** the campaign screen heading */
-  heading: 'Campaign',
+  /** the level screen heading. The player-facing progression is never called "Campaign": the game
+   *  simply has LEVEL 1, LEVEL 2, … (owner brief, 2026-10-17). */
+  heading: 'Levels',
   /** the prominent button that resumes an unfinished campaign match */
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
@@ -1009,13 +1023,13 @@ export const CAMPAIGN = Object.freeze({
    *  this is the number alone: "Level 4". */
   levelLabel: (number: number): string => `Level ${number}`,
   /** resume the campaign match exactly where it stopped */
-  resumeHint: 'Your campaign match is unfinished.',
+  resumeHint: 'Your level is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
   started: (number: number): string => `Level ${number}`,
   /** the campaign finish title after a win: "Level 6 complete" */
   levelWon: (number: number): string => `Level ${number} complete`,
   /** the finish screen's secondary way out, back to the level list */
-  back: 'Back to campaign',
+  back: 'Back to levels',
   /**
    * The finish screen's LEADING action after a won level (owner direction, 2026-10-16): the next
    * level starts straight away, so the player never has to walk back to the list to pick it. The

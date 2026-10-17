@@ -132,9 +132,11 @@ const level = (
  * — a lever the first pass barely used — while staying open and gentle. Rock counts and bots are
  * untouched (design-exact); only gold counts and positions changed. Level 1 stays a single gold centre.
  *
- * Levels 1-3 also play on the TUTORIAL's small map (radius 2 → 19 hexes) by owner direction: the same
- * ground the tutorial teaches on, so the first three campaign levels stay small, quick and welcoming.
- * Levels 4-30 keep the full product hexagon (radius 3 → 37 hexes).
+ * Levels 1-10 also play on the TUTORIAL's small map (radius 2 → 19 hexes) by owner direction: the same
+ * ground the tutorial teaches on, so the first ten levels stay small, quick and readable while the
+ * player learns the turn, connection, strength, cutting, Fruit and Bloom. Level 11 opens the full
+ * product hexagon (radius 3 → 37 hexes) as its own teaching moment — the map simply gets bigger, with
+ * no new mechanic on the same level. Levels 12-30 stay on the full board.
  */
 export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A completely open board: a clean first win, no obstacle at all — the tutorial's own map and its
@@ -146,19 +148,19 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // The first stone, on the small map: one harmless edge hex, far from both homes and the centre.
   level(1, 3, 'c1-03', 'Two Directions', 95003, 1, board(['-2,0'], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'One harmless edge rock.', TUTORIAL_BOARD_RADIUS),
   // Open again, one step better: a stronger opponent on forgiving ground, now with gold off-centre.
-  level(1, 4, 'c1-04', 'The Clearing', 95004, 2, board([], RICH_PAIR_Q), 'Open board, slightly better bot; gold on the q axis.'),
+  level(1, 4, 'c1-04', 'The Clearing', 95004, 2, board([], RICH_PAIR_Q, TUTORIAL_BOARD_RADIUS), 'Connected territory: open small board, gold on the q axis.', TUTORIAL_BOARD_RADIUS),
   // Two stones on opposite flanks, mirror images: neither home is favoured, the middle stays open.
-  level(1, 5, 'c1-05', 'Stone in the Grass', 95005, 2, board(['-3,1', '3,-1'], RICH_PAIR_Q), 'Scattered rocks away from central routes.'),
+  level(1, 5, 'c1-05', 'Stone in the Grass', 95005, 2, board(['-1,0', '1,0'], RICH_PAIR_Q, TUTORIAL_BOARD_RADIUS), 'Tile numbers and strength: a mirrored pair to grow across.', TUTORIAL_BOARD_RADIUS),
   // One stone just off the diagonal: nudge around it, in either direction.
-  level(1, 6, 'c1-06', 'Branching Out', 95006, 3, board(['0,1'], RICH_PAIR_Q), 'Encourage multiple directions.'),
+  level(1, 6, 'c1-06', 'Branching Out', 95006, 3, board(['-1,0'], RICH_PAIR_Q, TUTORIAL_BOARD_RADIUS), 'Defending connected territory: one stone splits the middle.', TUTORIAL_BOARD_RADIUS),
   // A two-hex cluster on the left flank: the first real shape to route around.
-  level(1, 7, 'c1-07', 'First Obstacle', 95007, 3, board(['-3,0', '-3,1'], RICH_PAIR_Q), 'Small rock cluster near a flank.'),
+  level(1, 7, 'c1-07', 'First Obstacle', 95007, 3, board(['-2,0', '-1,-1'], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'Cutting a connection: a small rock cluster near a flank.', TUTORIAL_BOARD_RADIUS),
   // The strongest Chapter I opponent on a wide-open field: pure play, gold waiting on both wings.
-  level(1, 8, 'c1-08', 'The Open Field', 95008, 3, board([], RICH_PAIR_FLANK), 'Stronger opponent, forgiving terrain; flank gold.'),
+  level(1, 8, 'c1-08', 'The Open Field', 95008, 3, board([], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'Fruit: open field, an early touch between the networks.', TUTORIAL_BOARD_RADIUS),
   // A short three-hex wall to walk around; the rich pair moved to the other axis so nothing overlaps.
-  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,-1', '-2,0', '-1,-1'], RICH_PAIR_R), 'A short detour around blocked hexes.'),
+  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,0', '-1,-1', '-1,0'], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'Bloom: a short wall to paint around, room for three in a row.', TUTORIAL_BOARD_RADIUS),
   // The finale: a compact grove off-centre, the strongest Chapter I bot, everything so far at once.
-  level(1, 10, 'c1-10', 'The First Grove', 95010, 4, board(['-1,0', '-1,-1', '0,-1'], RICH_PAIR_Q), 'Chapter finale testing the fundamentals.'),
+  level(1, 10, 'c1-10', 'The First Grove', 95010, 4, board(['-1,-1', '0,1', '1,1'], RICH_PAIR_Q, TUTORIAL_BOARD_RADIUS), 'Chapter finale on the small map: gold and every lesson so far.', TUTORIAL_BOARD_RADIUS),
 
   // ---------- CHAPTER II — BROKEN GROUND (11-20): learn to navigate ----------
   // The theme: rocks make decisions, not walls. Every board keeps a wide open middle and both

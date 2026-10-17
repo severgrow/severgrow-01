@@ -23,6 +23,7 @@ import { gameHighlights } from './logic/highlights.js';
 import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
+import { whyNotTap } from './logic/tap-why.js';
 import {
   DESK_IDLE,
   comboFor,
@@ -4688,7 +4689,7 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen || (IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
+  card.hidden = !tipOpen || (IS_FUTA04 && openSheet?.id !== 'sheet-futa04-help' && (!myTurn() || busy() || v.phase !== 'ACT'));
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
@@ -5960,6 +5961,53 @@ function bloomStepBack(): boolean {
   return false;
 }
 
+/** How long the same reason stays quiet, so hammering a stone never turns into a chant. */
+const WHY_QUIET_MS = 4500;
+let whyEl: HTMLElement | null = null;
+let whyReason = '';
+let whyAt = 0;
+let whyTimer = 0;
+
+/**
+ * Says, at the tapped hex and for a moment, why nothing happened. One line at a time, never over the
+ * hand or the cockpit, never blocking the next tap, and a plain fade with Reduce motion.
+ */
+function sayWhy(key: string, reason: string) {
+  if (!IS_FUTA04 || document.hidden || !session) return;
+  const now = performance.now();
+  if (whyReason === reason && now - whyAt < WHY_QUIET_MS) return;
+  whyAt = now;
+  whyReason = reason;
+  whyEl?.remove();
+  const el = document.createElement('div');
+  el.className = 'tap-why';
+  el.dataset.reason = reason;
+  // A spoken status, not decoration: a player using a screen reader gets the same answer.
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  el.textContent = reason;
+  const p = boardWrapPoint(key);
+  el.style.left = `${p.x}px`;
+  el.style.top = `${p.y}px`;
+  if (!(settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches)) el.classList.add('rise');
+  // NOT #captions: the product cockpit hides the board's caption layer by design, so the answer
+  // lives on the board itself, where the finger landed.
+  const host = $('board-wrap');
+  host.append(el);
+  // Never off the board's edge or under the header: the plate is centred on the hex, then pulled in.
+  const half = el.offsetWidth / 2;
+  const lift = el.offsetHeight * 1.4;
+  const box = host.getBoundingClientRect();
+  el.style.left = `${Math.min(Math.max(p.x, half + 6), box.width - half - 6)}px`;
+  el.style.top = `${Math.max(p.y, lift + 8)}px`;
+  whyEl = el;
+  clearTimeout(whyTimer);
+  whyTimer = window.setTimeout(() => {
+    el.remove();
+    if (whyEl === el) whyEl = null;
+  }, 1700);
+}
+
 function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
@@ -5980,6 +6028,10 @@ function onHexTap(key: string) {
       if (bloomStepBack()) return;
     }
   }
+  // A tap that can do nothing says why, at the hex. It never blocks the tap: the same tap still
+  // unpicks, inspects or boinks exactly as before.
+  const why = session ? whyNotTap(session.view, session.legal, session.sel, key) : null;
+  if (why) sayWhy(key, why);
   const idleGrowSpot = IS_FUTA04 && myTurn() && session.view.phase === 'ACT' &&
     session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
     session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);

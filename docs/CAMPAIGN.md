@@ -45,7 +45,8 @@ No UI change is needed: the campaign screen is drawn from the level data, so lev
 restructuring. (Chapter IV+ will appear as soon as those levels exist.)
 
 **As built:** Chapters I, II and III — levels 1-30 — are playable. Every board is hand-authored
-(`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
+(`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-10 and 3 for the rest, so the
+first ten levels teach on the small map and Level 11 makes the bigger board its own lesson.
 
 ## Validation rules
 
@@ -83,9 +84,9 @@ Notes when authoring:
   They stay at their defaults; `resolveConfig` still requires `rockCount` even and `richCount` odd.
 - Keep stones off the home-to-home diagonal (the central routes) and outside both root zones unless
   the level is *meant* to squeeze a flank.
-- Levels 1-3 play on the **tutorial's small map** (`config.boardRadius: TUTORIAL_BOARD_RADIUS`, a
+- Levels 1-10 play on the **tutorial's small map** (`config.boardRadius: TUTORIAL_BOARD_RADIUS`, a
   radius-2 hexagon of 19 hexes, imported from `web/src/logic/tutorial-script.ts` so there is one
-  source of truth for that size). Levels 4-30 use the product radius 3 (37 hexes).
+  source of truth for that size). Levels 11-30 use the product radius 3 (37 hexes).
 
 ## Chapter I
 
@@ -97,13 +98,13 @@ Notes when authoring:
 | 1 | First Seed | 1 | 0 | centre | 2 | Completely open, welcoming; the tutorial's own opening |
 | 2 | New Growth | 1 | 0 | centre + inner pair | 2 | Reinforce the basics; a first taste of contested gold |
 | 3 | Two Directions | 1 | 1 | centre + pair | 2 | One harmless edge rock |
-| 4 | The Clearing | 2 | 0 | centre + pair | 3 | Open board, slightly better bot |
-| 5 | Stone in the Grass | 2 | 2 | centre + pair | 3 | Scattered rocks away from central routes |
-| 6 | Branching Out | 3 | 1 | centre + pair | 3 | Encourage multiple directions |
-| 7 | First Obstacle | 3 | 2 | centre + pair | 3 | Small rock cluster near a flank |
-| 8 | The Open Field | 3 | 0 | centre + flank pair | 3 | Stronger opponent, forgiving terrain |
-| 9 | Around the Stone | 4 | 3 | centre + pair (other axis) | 3 | A short detour around blocked hexes |
-| 10 | The First Grove | 4 | 3 | centre + pair | 3 | Chapter finale testing the fundamentals |
+| 4 | The Clearing | 2 | 0 | centre + pair | 2 | Connected territory: open ground, gold on one axis |
+| 5 | Stone in the Grass | 2 | 2 | centre + pair | 2 | Tile numbers and strength: a mirrored pair to grow across |
+| 6 | Branching Out | 3 | 1 | centre + pair | 2 | Defending connected territory: one stone splits the middle |
+| 7 | First Obstacle | 3 | 2 | centre + pair (other axis) | 2 | Cutting a connection: a small cluster near a flank |
+| 8 | The Open Field | 3 | 0 | centre + pair (other axis) | 2 | Fruit: an open field where the networks can touch early |
+| 9 | Around the Stone | 4 | 3 | centre + pair (other axis) | 2 | Bloom: a short wall to paint around, room for three in a row |
+| 10 | The First Grove | 4 | 3 | centre + pair | 2 | Chapter finale on the small map: every lesson so far |
 
 Every level's rock count matches the design pack exactly; the bot (`AI`) column is the approved
 difficulty ladder (see *The bot ladder* below), not the design pack's original suggestion. Two terrain
@@ -111,6 +112,37 @@ adjustments were made for legality, neither of which changed a level's intent: *
 the `r` axis** (the design's three-hex wall sits on the `q` axis, so `-2,0` would have been both rock
 and gold), and **level 3's single edge rock moved from `-3,0` to `-2,0`** when the level moved to the
 radius-2 map (`-3,0` is not on that board).
+
+### The 2026-10-17 onboarding pass
+
+Owner brief (2026-10-17): the Campaign is the game's tutorial, so the first ten levels teach on the
+small map and Level 11 is where the board grows. Terrain-only change, plus the guidance work below.
+
+- **Levels 4-10 moved onto the tutorial's small map** (radius 2 → 19 hexes). Rock counts are unchanged
+  from the design pack (0, 2, 1, 2, 0, 3, 3), so the table above still matches it; the stones were
+  re-placed on hexes the radius-2 board actually has, outside both root zones. No level id, seed, name
+  or bot level changed. An unfinished saved match keeps the board it was opened with (the save carries
+  the whole position), so nobody's in-progress game shifts under them. Campaign win proofs replay the
+  seed alone (`verifyGame` → `newGame`), so a board change cannot invalidate a win. **Level 11 now
+  introduces the full 37-hex map** as its own moment: the board gets bigger, with no new mechanic on
+  the same level.
+- **The first ten levels keep the game's existing guidance language**, and nothing new competes with
+  it: the draw/throw piles halo at their step, playable cards are outlined in the hand, and a picked
+  card lights its legal hexes on the board. The cockpit's LED still owns the turn's word (GROW!,
+  THROW!, WAIT), so the board carries no second instruction plate.
+- **An invalid tap answers where the finger landed** ("Blocked by rock", "Connect to your tree",
+  "Draw a card first", "Pick a card", "Not this hex"). Every reason is read from the engine's own
+  state — terrain, phase, legal actions — never a second rule book, and repeated taps on the same
+  reason stay quiet for 4.5 s.
+- **The in-play first-time tip was unreachable**: `#first-tip` had been moved into the closed Help
+  sheet, so Fruit and Strengthen lessons could never appear during a level. The tip now stays on the
+  game surface and is carried into the sheet only while the sheet is open.
+- **Already-earned Seeds still pay out.** A Campaign win is verified by replaying its actions on the
+  level's opening, so changing terrain under an existing level could reject a proof that was queued
+  before the change (or produced by a server bundle built before it). `src/campaign/frozen.ts` keeps
+  the pre-change opening for levels 4-10; `verifyCampaignProof` tries today's opening and then the
+  archived one. **Any future terrain change must add the old opening there and rebuild the edge
+  bundle** (`npm run server:build-edge`).
 
 ### The 2026-10-16 refinement
 
@@ -122,12 +154,11 @@ Two changes, both owner direction, both terrain-only:
   pulled toward the same fights — and the first pass barely used it. Level 1 is deliberately left with
   a single gold centre: it is the first board a player ever sees. No rock count, level name, seed or
   bot level changed.
-- **Levels 1-3 moved onto the tutorial's small map** (radius 2 → 19 hexes, `TUTORIAL_BOARD_RADIUS`).
-  They are the first three levels ever and the tutorial's own ground, so the opening chapter stays
+- **Levels 1-3 moved onto the tutorial's small map** (radius 2 → 19 hexes, `TUTORIAL_BOARD_RADIUS`).  They are the first three levels ever and the tutorial's own ground, so the opening chapter stays
   small, quick and legible. A smaller board is *less* forgiving in one respect (fewer places to grow)
   and *more* forgiving in another (the two homes are closer, the whole map is visible at once), so the
   level 3 rock was re-placed and every board re-validated; the boards keep 19, 19 and 18 open hexes of
-  19. Levels 4-30 stay on the product hexagon.
+  19. Levels 4-10 later joined them (2026-10-17, above); levels 11-30 stay on the product hexagon.
 
 ## Chapter II — Broken Ground (levels 11-20)
 
@@ -378,7 +409,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the bot ladder never decreases, starts at 1, ends at 9, and matches the approved sequence exactly**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-10, 3 for the rest); **the bot ladder never decreases, starts at 1, ends at 9, and matches the approved sequence exactly**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
