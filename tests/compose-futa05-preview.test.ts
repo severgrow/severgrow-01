@@ -209,6 +209,62 @@ describe('compose-futa05-preview: the site root map', () => {
   });
 });
 
+describe('compose-futa05-preview: /2/ is the onboarding line, published beside the root', () => {
+  const ONBOARDING_SHA = 'e'.repeat(40);
+  const onboarding = (root: string, html = FUTA05_HTML) => {
+    write(join(root, 'dist-onboarding', 'index.html'), html);
+    write(join(root, 'dist-onboarding', 'assets', 'index-ONB.js'), 'onboarding entry');
+    write(join(root, 'dist-onboarding', 'futa04-sw.js'), WORKER);
+    return root;
+  };
+  const runOnboarding = (html?: string): string => {
+    const root = mkdtempSync(join(tmpdir(), 'compose-onboarding-'));
+    written.push(root);
+    composed(root);
+    onboarding(root, html);
+    // The workflow passes the admin build AND the onboarding build in the same run, so the test
+    // does too: /2/ must not disturb /admin/ or the root.
+    withAdmin(root);
+    execFileSync(
+      process.execPath,
+      [script, 'site', 'dist', FUTA05_SHA, 'dist-admin', 'dist-onboarding', ONBOARDING_SHA],
+      { cwd: root, encoding: 'utf8' },
+    );
+    return root;
+  };
+
+  it('is not published when no onboarding build is passed', () => {
+    // The default path is the safety story: a push to futa0.4 composes exactly the site it did before.
+    expect(existsSync(join(run(), 'site', '2'))).toBe(false);
+  });
+
+  it('publishes the teaching build at /2/ and leaves the released root untouched', () => {
+    const withOnboarding = runOnboarding();
+    expect(read(withOnboarding, 'site', '2', 'index.html')).toBe(FUTA05_HTML);
+    expect(read(withOnboarding, 'site', '2', 'assets', 'index-ONB.js')).toBe('onboarding entry');
+    expect(read(withOnboarding, 'site', '2', 'futa04-sw.js')).toBe(WORKER);
+    expect(JSON.parse(read(withOnboarding, 'site', '2', 'release.json')).commit).toBe(ONBOARDING_SHA);
+    // The root is still the released build: /2/ must never displace it.
+    expect(read(withOnboarding, 'site', 'index.html')).toBe(FUTA05_HTML);
+    expect(read(withOnboarding, 'site', 'assets', 'index-F05.js')).toBe('futa05 entry');
+    // ...and joining the site must not sweep it into /firststep/.
+    expect(existsSync(join(withOnboarding, 'site', 'firststep', '2'))).toBe(false);
+  });
+
+  it('teaches the root worker to leave /2/ alone, replacing the old guard instead of doubling it', () => {
+    const withOnboarding = runOnboarding();
+    const worker = read(withOnboarding, 'site', 'futa04-sw.js');
+    // Without this, a /2/ page would be cached as the ROOT's offline index.
+    expect(worker).toContain('futa-test|admin|2');
+    // Exactly one guard, however many times the composer has run: the route list keeps growing.
+    expect(worker.split("// a sibling channel is never this worker's page")).toHaveLength(2);
+  });
+
+  it('refuses a /2/ build that could not work from a subdirectory', () => {
+    expect(() => runOnboarding('<script src="/assets/index.js"></script>')).toThrowError(/relative asset paths/);
+  });
+});
+
 describe('compose-futa05-preview: the admin route is opt-in', () => {
   it('publishes the dashboard at /admin/ when a build is passed, and nowhere else', () => {
     const withAdminRoot = runWithAdmin();
