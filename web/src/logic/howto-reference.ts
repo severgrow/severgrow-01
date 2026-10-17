@@ -12,7 +12,7 @@ export const howToReferenceHtml = (config?: RulesConfig): string => {
   const words = SPROUT;
   const limit = config && config.maxTurnsPerPlayer > 0 ? ` or after ${config.maxTurnsPerPlayer} turns each` : '';
   return [
-    `<p><b>Goal:</b> have more points than ${OPP.the} at the end. Each tile scores 1 point, or 2 on a gold hex.</p>`,
+    `<p><b>Goal:</b> surround ${OPP.theirs} home, or have more points when the Draw pile runs out. Each tile scores 1 point, or 2 on a gold hex.</p>`,
     '<p><b>Your turn:</b> draw a card, play cards to grow tiles, then throw one card.</p>',
     `<p><b>Grow:</b>${BLOOM.howto}${sprout ? words.howto : ''}</p>`,
     `<p><b>Painting a bloom:</b> ${TIPS.draw.text} For numbers in a row, the lowest goes on the first hex you paint; “Reverse” flips it. <button type="button" class="link" data-tip="draw">Show tip</button></p>`,
@@ -25,7 +25,7 @@ export const howToReferenceHtml = (config?: RulesConfig): string => {
       : []),
     `<p>${BLAST.howto.trim()}</p>`,
     '<p><b>Stay joined:</b> every tile must link back to your home (your tree). Lose a link and everything past it is cut off: tiles cut off from your home wither.</p>',
-    `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)} (all 6 sides).</p>`,
+    `<p><b>Win early:</b> ${HOME.surround.charAt(0).toLowerCase()}${HOME.surround.slice(1)}: every open side of their home becomes yours. (A home in a corner has fewer sides to take.)</p>`,
     `<p><b>The end:</b> when the Draw pile runs out, both players finish with equal turns${limit}. Higher score wins; equal scores go to the stronger tiles, then a real draw.</p>`,
     '<p class="legend"><span class="lg lg-gold">2</span> gold hex (×2) · <span class="lg lg-coach"></span> coach tip · <span class="lg lg-ghost"></span> preview · <span class="lg lg-weak">−4</span> weak link</p>',
     '<p class="legend">A bushier tile or hotter lava means a stronger tile.</p>',

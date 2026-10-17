@@ -23,6 +23,8 @@ const base: GuideInput = {
   fruitReady: false,
   bloomReady: false,
   grew: false,
+  theirOpen: 6,
+  canWinNow: false,
 };
 
 const at = (patch: Partial<GuideInput>): GuideInput => ({ ...base, ...patch });
@@ -45,9 +47,70 @@ describe('the learning curve', () => {
   });
 });
 
+describe('the objective comes before the turn', () => {
+  it('level 1 opens with the goal, and still points at the Draw pile', () => {
+    expect(say({ level: 1, phase: 'DRAW' })).toEqual({
+      title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck',
+    });
+    // It is the opening beat only: once the player has drawn, the turn takes over.
+    expect(say({ level: 1, phase: 'ACT' })?.title).toBe(ONBOARD.pick);
+  });
+
+  it('level 2 gives both routes to a win', () => {
+    expect(say({ level: 2, phase: 'DRAW' })).toEqual({
+      title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'deck',
+    });
+  });
+
+  it('says the goal once per level, not on every later draw', () => {
+    for (const level of [1, 2]) {
+      const later = say({ level, phase: 'DRAW', turn: 5 });
+      expect(['THE GOAL', 'HOW TO WIN'], `L${level}`).not.toContain(later?.title);
+    }
+  });
+
+  it('levels 3+ never spend a step on the goal', () => {
+    for (const level of [3, 4, 8]) {
+      expect(say({ level, phase: 'DRAW' })?.title, `L${level}`).not.toBe('THE GOAL');
+      expect(say({ level, phase: 'DRAW' })?.title, `L${level}`).not.toBe('HOW TO WIN');
+    }
+  });
+
+  it('states both real win conditions, in the engine terms', () => {
+    // Surrounding the home ends the game (strangle); otherwise the higher score wins when the deck
+    // runs out. The words must not promise anything the engine does not do.
+    expect(ONBOARD.goalLine.toLowerCase()).toContain('surround');
+    expect(ONBOARD.howToWinLine.toLowerCase()).toContain('surround');
+    expect(ONBOARD.howToWinLine.toLowerCase()).toContain('more ground');
+  });
+});
+
+describe('the win is taught where it is actionable', () => {
+  it('says YOU CAN WIN only when one move really surrounds their home', () => {
+    expect(say({ canWinNow: true, theirOpen: 1 })).toEqual({
+      title: ONBOARD.oneMore, line: ONBOARD.oneMoreLine, focus: 'none',
+    });
+    // Sides left but no single move covers them: the ordinary guidance, never a taunt.
+    expect(say({ canWinNow: false, theirOpen: 1 })?.title).not.toBe(ONBOARD.oneMore);
+    expect(say({ canWinNow: false, theirOpen: 3 })?.title).not.toBe(ONBOARD.oneMore);
+  });
+
+  it('outranks every other line, because it is the win', () => {
+    // Even mid-lesson, and even for a level that would otherwise be quiet.
+    expect(say({ canWinNow: true, level: 4, phase: 'ACT', turn: 1, picked: true, targetCount: 2 })?.title).toBe(ONBOARD.oneMore);
+    expect(say({ canWinNow: true, level: 9, phase: 'ACT', picked: true, targetCount: 3 })?.title).toBe(ONBOARD.oneMore);
+  });
+
+  it('never speaks over their turn', () => {
+    expect(say({ canWinNow: true, mine: false })?.title).not.toBe(ONBOARD.oneMore);
+  });
+});
+
 describe('level 1 says exactly one thing, and then the next', () => {
   it('opens on the Draw pile with the plainest words in the game', () => {
-    expect(say({})).toEqual({ title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' });
+    // The opening beat now carries the objective; the draw instruction returns on the next turn.
+    expect(say({})).toEqual({ title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck' });
+    expect(say({ turn: 3 })).toEqual({ title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' });
   });
 
   it('asks for a card once the draw is done', () => {

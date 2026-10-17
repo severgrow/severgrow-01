@@ -22,6 +22,20 @@ export const actionHexKeys = (a: Action): string[] => {
   }
 };
 
+/**
+ * The hexes an action would put MY tile on. Not the same as `actionHexKeys`: a Bomb touches a hex to
+ * REMOVE a tile from it, and a rotation pick touches one without placing anything — neither can ever
+ * surround a home, so anything reasoning about the strangle must use this.
+ */
+export const placedHexKeys = (a: Action): string[] => {
+  switch (a.t) {
+    case 'Sprout': return [coordKey(a.coord)];
+    case 'PlayFruit': return [coordKey(a.target)];
+    case 'Bloom': return a.hexes.map(coordKey);
+    default: return [];
+  }
+};
+
 /** Does one of my tiles sit next to `key`? Growth must connect to your own network. */
 export const touchesMine = (v: View, key: string): boolean =>
   allNeighbors(parseKey(key)).some((n) => v.board[coordKey(n)]?.owner === v.player);

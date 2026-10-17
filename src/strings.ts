@@ -416,9 +416,10 @@ export const HOME = Object.freeze({
   danger: 'Home in danger',
   cutOff: 'Tiles cut off from your home wither',
   surround: `Surround ${OPP.theirs} home to win at once`,
-  /** the tile card when a home is tapped */
-  tapMine: (blocked: number) => `Your home: everything you own must stay connected to it. ${blocked} of 6 sides blocked.`,
-  tapTheirs: (blocked: number) => `Surround all 6 sides to win at once. ${blocked} of 6 sides blocked.`,
+  /** the tile card when a home is tapped: how many of its REAL sides are taken (a corner home has
+   *  fewer than six, so "all 6" would be a lie there) */
+  tapMine: (taken: number, open: number) => `Your home: everything you own must stay connected to it. ${taken} of ${open} sides taken.`,
+  tapTheirs: (taken: number, open: number) => `Take every side of this home to win at once. ${taken} of ${open} taken.`,
   /** the Strangle captions */
   mineSurrounded: 'Your tree is surrounded!',
   theirsSurrounded: `${OPPONENT_LABEL}'s volcano is surrounded!`,
@@ -531,6 +532,22 @@ export const TAP_WHY = Object.freeze({
  * touch, never the whole rule book, and they never say "tutorial".
  */
 export const ONBOARD = Object.freeze({
+  /**
+   * The objective, said before anything else. Beta feedback (2026-10-17): players could not tell
+   * what winning looked like, even after playing. Levels 1 and 2 spend their opening draw on it —
+   * level 1 the decisive win, level 2 both routes — while the window still points at the deck, so
+   * the goal never hides the next action.
+   */
+  goal: 'THE GOAL',
+  goalLine: 'Surround their home to win. Tap the Draw pile.',
+  howToWin: 'HOW TO WIN',
+  howToWinLine: 'Surround their home, or hold more ground.',
+  /**
+   * The win, said at the one moment it is concrete: their home has a single side left to take and
+   * a legal move would take it. This is how the objective is actually learned — not from a paragraph.
+   */
+  oneMore: 'YOU CAN WIN',
+  oneMoreLine: 'Surround their home now and it is over.',
   draw: 'DRAW',
   drawLine: 'Tap the Draw pile to start your turn.',
   take: 'TAKE A CARD',

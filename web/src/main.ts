@@ -6,7 +6,7 @@ import { runRematch } from './online/rematch.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
+import { allNeighbors, apply, bloomGroups, coordKey, hexDistance, homeCoord, isStrangled, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -24,7 +24,7 @@ import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
 import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
-import { whyNotTap } from './logic/tap-why.js';
+import { whyNotTap, placedHexKeys } from './logic/tap-why.js';
 import {
   DESK_IDLE,
   comboFor,
@@ -3679,6 +3679,27 @@ function hideOnboardingWindow() {
   if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide();
 }
 
+/**
+ * How close the WIN is. Rather than re-state the strangle rule, this asks the ENGINE: it plays each
+ * candidate move on a copy of the state and checks `isStrangled`. That matters because a move does
+ * not simply "fill" sides — a Bloom overgrows, severs, and can leave a hex EMPTY — and only the
+ * engine knows the result. The guide must never promise a win it cannot see.
+ *
+ * `theirOpen` is only a count for the words: the sides of their home that are still not mine.
+ */
+function theirHomeState(v: View, legal: readonly Action[]): { theirOpen: number; canWinNow: boolean } {
+  if (!session) return { theirOpen: 6, canWinNow: false };
+  const home = homeCoord(BOT, v.config);
+  const around = new Set(allNeighbors(home).map(coordKey));
+  const theirOpen = [...around]
+    .filter((k) => k in v.board && v.terrain[k] !== 'rock' && v.board[k]?.owner !== HUMAN).length;
+  // Only a PLACEMENT that touches their home can strangle it, so the simulation stays cheap and the
+  // promise stays exact: the line says "surround their home", so the engine must say strangled.
+  const candidates = legal.filter((a) => placedHexKeys(a).some((k) => around.has(k)));
+  const canWinNow = candidates.some((a) => isStrangled(apply(session!.state, a), BOT));
+  return { theirOpen, canWinNow };
+}
+
 let onboardKey = '';
 function renderOnboardingGuide(v: View) {
   if (!glassSurface) return;
@@ -3707,6 +3728,7 @@ function renderOnboardingGuide(v: View) {
     fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
     bloomReady: document.documentElement.dataset.futa04BloomReady === 'true',
     grew: (st.sproutsThisTurn ?? 0) > 0,
+    ...theirHomeState(v, session!.legal),
   });
   const key = guideKey(level, st.turnNumber, picked, guide);
   if (key === onboardKey) return;
@@ -4457,7 +4479,7 @@ function renderTooltip(v: View) {
     const who = mine ? 'Your' : OPP.Label;
     if (t.root) {
       const sides = homeSides(v, t.owner);
-      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.blocked)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.blocked)}</span>`;
+      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.taken, sides.openSides)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.taken, sides.openSides)}</span>`;
     }
     else {
       const loss = cutLoss(v, key).length;

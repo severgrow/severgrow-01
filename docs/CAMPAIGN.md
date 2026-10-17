@@ -132,9 +132,26 @@ what it says, from the live position only:
 
 | Levels | Intensity | What the window does |
 | --- | --- | --- |
-| 1-3 | very high | every step: draw → pick a card → tap a lit tile → throw; level 1 for the whole level, 2-3 only the opening turns |
-| 4-7 | medium | the level's new idea on turn 1 (connected, strength, defend, cut), then silence |
-| 8-10 | targeted | Fruit only when a Fruit card is playable, Bloom only when a Bloom is legal, gold once on turn 1 |
+| 1-2 | very high | **the objective first**: level 1 "THE GOAL — Surround their home to win. Tap the Draw pile."; level 2 "HOW TO WIN — Surround their home, or hold more ground." Then the turn: draw → pick a card → tap a lit tile → throw |
+| 3 | very high | the turn, with "TWO WAYS" when more than one place works; guidance fades after the opening turns |
+| 4-7 | medium | the level's new idea on the player's first acting turn (connected, strength, defend, cut), then silence |
+| 8-10 | targeted | Fruit only when a Fruit card is playable, Bloom only when a Bloom is legal, gold once on the first turn |
+
+**Why the objective needed its own step (beta feedback, 2026-10-17).** Testers said they could not
+tell how to win or what the point was, even after playing: the only explanation lived in the Help
+sheet, which nobody opens. Level 1 and level 2 now spend their opening draw on it — the decisive win
+first, then both routes — while the window still points at the Draw pile, so knowing *why* never
+hides *what to press*.
+
+**The win is also taught where it is actionable.** Whenever one legal move would surround the
+opponent's home, the window says **YOU CAN WIN — Surround their home now and it is over.** This is
+the one line that makes a promise, so it is not re-derived by hand: the page plays each candidate
+move on a copy of the state and asks the engine (`isStrangled`). That matters because a move does not
+simply "fill" sides — a Bloom overgrows and severs, and can leave a hex empty; their own tiles around
+their home do not count as blocked. `web/tests/win-moment.test.ts` proves the promise on every level
+where it fires: it plays the offered move, finishes the turn, and requires a real strangle win.
+(Nine of the ten guided levels produce the moment for a strong player; level 4 legitimately ends on
+score instead.)
 
 Supporting rules, all from the same pass:
 

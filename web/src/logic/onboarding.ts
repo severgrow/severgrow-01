@@ -61,6 +61,10 @@ export type GuideInput = {
   bloomReady: boolean;
   /** I have already grown this turn, so the only move left is to throw. */
   grew: boolean;
+  /** How many sides of THEIR home are still takeable (on the board, not rock, empty). */
+  theirOpen: number;
+  /** A legal move right now would take their last open side — the win. */
+  canWinNow: boolean;
 };
 
 /**
@@ -86,6 +90,10 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
       : null;
   }
 
+  // The win, the moment it is one move away. Highest priority of anything the guide can say: it is
+  // the objective itself, made concrete. Offered on every guided level, at any turn.
+  if (s.canWinNow) return { title: ONBOARD.oneMore, line: ONBOARD.oneMoreLine, focus: 'none' };
+
   // A new mechanic, said once, at the moment it is actually usable. This is the whole of levels
   // 8-10's guidance: Fruit when a Fruit card can be played, Bloom when a Bloom is legal.
   if (s.phase === 'ACT') {
@@ -104,6 +112,13 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
   }
 
   if (s.phase === 'DRAW') {
+    // The objective comes first: a player who does not know what winning is cannot use any of the
+    // rest. Levels 1 and 2 spend their opening draw on it (level 1 one route, level 2 both).
+    if (opening && s.level <= 2) {
+      return s.level === 1
+        ? { title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck' }
+        : { title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'deck' };
+    }
     // 1-3: always. 4-7: the first turns. 8-10: not at all — by now drawing is automatic.
     if (intensity === 3) return null;
     if (intensity === 2 && !firstTurn) return null;

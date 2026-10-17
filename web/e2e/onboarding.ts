@@ -66,7 +66,8 @@ try {
   await page.waitForSelector('#futasaku-glass:not([hidden])', { timeout: 10000 });
   const mode = await page.evaluate(() => document.getElementById('futasaku-glass')?.dataset.mode);
   check(mode === 'tutorial', `the guidance uses the tutorial window (${mode})`);
-  check((await title()) === 'DRAW', `step 1 says DRAW (${await title()})`);
+  check((await title()) === 'THE GOAL', `step 1 states the objective (${await title()})`);
+  check(/surround/i.test(await line()), `the objective names how to win (${await line()})`);
   check((await line()).length > 0, `step 1 has one line under it (${await line()})`);
 
   // 3. The window reserves the top of the map, so it never sits on the board.
@@ -123,7 +124,7 @@ try {
     };
   });
   check(desktop.mode === 'tutorial', 'desktop uses the same window');
-  check(desktop.title === 'DRAW', `desktop says DRAW (${desktop.title})`);
+  check(desktop.title === 'THE GOAL', `desktop states the objective (${desktop.title})`);
   check(desktop.placedUnderChrome, 'desktop window is placed below the chrome, not at the very top');
   check(!desktop.hits, 'desktop window never covers a playable hex');
   checkNoErrors(errors);
