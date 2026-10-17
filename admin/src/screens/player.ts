@@ -5,6 +5,7 @@
 // which is what "account type" means on screen.
 import type { AdminPlayerResult } from '../../../server/src/admin/types.js';
 import { formatAgo, formatDateTime, formatDelta, formatNumber, modeLabel } from '../format.js';
+import { campaignKeysOnDevice, clearCampaignOnDevice, devicePlayer } from '../game-campaign.js';
 import { button, card, el, emptyBox, errorBox, honesty, loading, screenTitle, stat, table, type Ctx } from '../ui.js';
 
 const nameOf = (player: { displayName: string | null; tag: string }): string => `${player.displayName ?? '(no name)'} #${player.tag}`;
@@ -119,6 +120,8 @@ export const renderPlayer = async (host: HTMLElement, ctx: Ctx, params: URLSearc
           ),
     ]),
 
+    campaignResetCard(player),
+
     card('World tiles', [
       found.tiles.recent.length === 0
         ? emptyBox('No tiles owned.')
@@ -142,3 +145,63 @@ export const renderPlayer = async (host: HTMLElement, ctx: Ctx, params: URLSearc
 };
 
 type AdminValueCountRow = { value: string; n: number };
+
+/** The game's own storage on this origin, or null when the browser blocks it. */
+const gameStorage = (): Storage | null => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * CAMPAIGN RESET (owner, 2026-10-17: "in the admin dashboard — but reset ONLY my own account").
+ *
+ * Campaign progress is the one player record the server does not hold: the game keeps it in the
+ * browser (see admin/src/game-campaign.ts). So this action clears the CAMPAIGN RECORD OF THE BROWSER
+ * THE DASHBOARD IS OPEN IN, and it is offered only when that browser is signed in as the player
+ * being looked at — an admin typing somebody else's name cannot clear that person's campaign.
+ */
+const campaignResetCard = (player: AdminPlayerResult['player']): HTMLElement => {
+  const store = gameStorage();
+  const title = 'Campaign progress (this browser)';
+  if (!store) {
+    return card(title, [emptyBox('This browser blocks storage, so the game keeps no campaign record here to reset.')]);
+  }
+  const device = devicePlayer(store);
+  if (!device) {
+    return card(title, [
+      emptyBox('This browser has no FUTASAKU player saved. The campaign is stored per browser, not on the account, so it can only be reset on a device where the game has been played.'),
+    ]);
+  }
+  if (device.playerId !== player.id) {
+    return card(title, [
+      emptyBox(`This browser is signed in as ${device.displayName ?? 'a different player'}. The campaign reset clears only the browser you are playing in, so it is not offered for another player.`),
+      el('p', { class: 'muted small', text: 'Open the game in the browser you play on, then use this screen there.' }),
+    ]);
+  }
+
+  const body = el('div', {});
+  const paint = (): void => {
+    const present = campaignKeysOnDevice(store);
+    const what = el('p', {
+      class: 'muted small',
+      text: present.length === 0
+        ? 'No campaign record is stored in this browser: it is already at the start.'
+        : `This browser holds ${formatNumber(present.length)} campaign record(s). Resetting clears them, so the campaign starts again at level 1.`,
+    });
+    const action = button('Reset campaign progress', () => {
+      if (!window.confirm('Start the campaign again on this device?\n\nThis clears the unlocked levels, the best attempt per level and any unfinished campaign match. Seeds already earned stay in your wallet. It cannot be undone.')) return;
+      const { removed } = clearCampaignOnDevice(store);
+      body.replaceChildren(
+        el('p', { class: 'good', text: removed.length === 0 ? 'Nothing to clear — the campaign was already at the start.' : `Cleared ${formatNumber(removed.length)} campaign record(s). Reload futasaku.com to start from level 1.` }),
+        el('p', { class: 'muted small', text: 'Seeds already paid for first clears are untouched, and so is this dashboard.' }),
+        button('Check again', paint, { small: true }),
+      );
+    }, { small: true, title: 'Clears the campaign progress stored in this browser' });
+    body.replaceChildren(what, ...(present.length === 0 ? [] : [el('div', { class: 'controls' }, action)]));
+  };
+  paint();
+  return card(title, [body]);
+};

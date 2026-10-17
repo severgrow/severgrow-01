@@ -201,6 +201,25 @@ by that rule (a test asserts the literal message still appears in JSON).
 | Worst-build view | Overview + Health & ops | `feedback_reports` grouped on the normalised build, crashes vs reports |
 | CSV export | Reports | the same authorized endpoint and field list, capped at 5,000 |
 | Report triage | Reports | the single mutation, with `admin_audit` |
+| Campaign reset (this browser) | Player | the game's own local campaign record — see §5a |
+
+### 5a. Campaign reset — the one thing no server can reset
+
+Campaign progress is the single piece of player state the database does not hold. Unlocked levels,
+the best attempt per level and the unfinished campaign match live in the player's browser
+(`severgrow.campaign.progress.v1`, `severgrow.campaign.save.v1`, `severgrow.lastmode.v1`; see
+`src/campaign/progress.ts`). The server records only the Seeds a first clear paid.
+
+So the Player screen offers **“Reset campaign progress”**, which clears those keys in **the browser
+the dashboard is open in** — it is same-origin with the game, so that storage is the game's own. It
+refuses unless the browser's saved identity is the player being looked at, so an admin cannot clear
+someone else's campaign by typing a name. Nothing server-side is written; the Seeds already paid are
+untouched, and so is every other stored key. Seeds for a first clear are not re-payable until their
+`seed_reward_receipts` row is removed (a separate, deliberate database action).
+
+A server flag could not do better: there is no progress row to update, so it could only ask a
+browser to clear itself on a later visit, and would still reset whichever device opened the game.
+
 
 Windows actually found in the code (not guessed): the sweeper deletes a guest older than **30 days**
 with no match, no Seeds, no ticket and no tile (`GUEST_MAX_AGE_MS` in `server/src/service.ts`); a
