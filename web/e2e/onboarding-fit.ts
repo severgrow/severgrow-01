@@ -17,8 +17,7 @@ const check = (ok: boolean, what: string) => {
 };
 
 try {
-  for (const [w, h] of [[320, 568], [568, 320], [844, 390]] as const) {
-    const page = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+  for (const [w, h] of [[320, 568], [568, 320], [844, 390]] as const) {    const page = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
     await page.goto(`${served.url}?fit=${w}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('#menu-play:not([hidden])', { timeout: 15000 });
     await page.evaluate(() => document.getElementById('menu-play')?.click());
@@ -46,6 +45,32 @@ try {
     check(m.hit === 0, `${w}x${h}: the window covers no playable hex (${m.hit} of ${m.cells})`);
     check(m.deck.w >= 36 && m.deck.h >= 36, `${w}x${h}: the Draw pile stays tappable (${Math.round(m.deck.w)}px)`);
     await page.screenshot({ path: `/tmp/ob-shots/fit-${w}x${h}.png` });
+    await page.close();
+  }
+
+  // Large text: the window's own type grows, so the smallest phone must still keep the board clear.
+  {
+    const w = 360, h = 640;
+    const page = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+    await page.goto(`${served.url}?fit=large`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('#menu-play:not([hidden])', { timeout: 15000 });
+    await page.evaluate(() => document.getElementById('menu-play')?.click());
+    await page.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
+    await page.evaluate(() => document.getElementById('menu-campaign')?.click());
+    await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
+    await page.evaluate(() => document.documentElement.classList.add('large-text'));
+    await page.waitForTimeout(1200);
+    const m = await page.evaluate(() => {
+      const panel = document.getElementById('futasaku-glass')!.getBoundingClientRect();
+      const hit = [...document.querySelectorAll('.hex-cell')].filter((c) => {
+        const r = c.getBoundingClientRect();
+        return panel.left < r.right && r.left < panel.right && panel.top < r.bottom && r.top < panel.bottom;
+      }).length;
+      return { w: panel.width, h: panel.height, hit, vw: innerWidth };
+    });
+    check(m.w > 0 && m.w <= m.vw, `${w}x${h} large text: the window fits the width (${Math.round(m.w)}px)`);
+    check(m.hit === 0, `${w}x${h} large text: the window covers no playable hex (${m.hit})`);
+    await page.screenshot({ path: '/tmp/ob-shots/fit-large-text.png' });
     await page.close();
   }
 } finally {
