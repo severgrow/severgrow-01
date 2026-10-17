@@ -5438,10 +5438,14 @@ function renderGameOver() {
     $('go-sub').hidden = true;
   }
   // What this level was teaching, said back to the player once they have won it: the "you did it,
-  // and here is what you just learned" beat. Only on a guided level, only on a win.
+  // and here is what you just learned" beat. Only on a guided level, only on a win. Guarded by id:
+  // a stale cached shell without the line must not break the finish card.
   const learned = campaign && won ? ONBOARD.recap(campaign.number) : '';
-  $('go-learned').textContent = learned;
-  $('go-learned').hidden = learned === '';
+  const learnedEl = document.getElementById('go-learned');
+  if (learnedEl) {
+    learnedEl.textContent = learned;
+    learnedEl.hidden = learned === '';
+  }
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level
   // has no next, so that same button becomes the honest way out (the level list) rather than a dead
