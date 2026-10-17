@@ -31,7 +31,7 @@ export type RevealTier = 1 | 2 | 3;
  */
 export const revealTierFor = (level: number): RevealTier => (level <= 3 ? 1 : level <= 7 ? 2 : 3);
 
-export type GuideFocus = 'deck' | 'discard' | 'hand' | 'none';
+export type GuideFocus = 'deck' | 'discard' | 'hand' | 'their-home' | 'end' | 'none';
 
 export type OnboardGuide = {
   /** The LED title in the top window (short, caps). */
@@ -113,11 +113,14 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
 
   if (s.phase === 'DRAW') {
     // The objective comes first: a player who does not know what winning is cannot use any of the
-    // rest. Levels 1 and 2 spend their opening draw on it (level 1 one route, level 2 both).
+    // rest. Levels 1 and 2 spend their opening draw on it (level 1 one route, level 2 both), and the
+    // window points at THEIR home while it says it — the word "home" is useless until the player can
+    // see which thing it is. The Draw pile still haloes itself at this step, so nothing competes:
+    // the pill teaches the goal, the pile shows the touch.
     if (opening && s.level <= 2) {
       return s.level === 1
-        ? { title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck' }
-        : { title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'deck' };
+        ? { title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'their-home' }
+        : { title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'their-home' };
     }
     // 1-3: always. 4-7: the first turns. 8-10: not at all — by now drawing is automatic.
     if (intensity === 3) return null;
@@ -129,8 +132,9 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
   }
 
   if (s.phase === 'ACT') {
-    // Grown and still holding the turn: the only thing left is to end it.
-    if (s.grew && !s.picked) return { title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'none' };
+    // Grown and still holding the turn: the only thing left is to end it. The window points at the
+    // end-turn control, because "done" is the exact moment a beginner stops and wonders what now.
+    if (s.grew && !s.picked) return { title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'end' };
     // Levels 2-3 repeat the turn with fewer prompts: the opening turns are guided, then the player
     // is trusted with the same steps they have just taken. Level 1 keeps guiding throughout.
     const soft = s.level >= 2 && s.turn > 2;

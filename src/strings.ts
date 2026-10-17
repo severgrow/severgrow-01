@@ -527,6 +527,23 @@ export const TAP_WHY = Object.freeze({
 });
 
 /**
+ * What each guided level taught, in three or four words, for the finish card. Deliberately concrete:
+ * the player should recognise the thing they just did, not a chapter title.
+ */
+const RECAP: Readonly<Record<number, string>> = Object.freeze({
+  1: 'Draw · Grow · Throw',
+  2: 'Your turn, again',
+  3: 'More than one way',
+  4: 'Stay connected',
+  5: 'Numbers are strength',
+  6: 'Defend your link',
+  7: 'Cut their link',
+  8: 'Fruit takes a tile',
+  9: 'Three in a row: Bloom',
+  10: 'Gold is worth two',
+});
+
+/**
  * The campaign's first ten levels teach through the game, so their words are short, concrete and
  * in the game's own voice: an LED title (≤ 12 characters) and ONE line under it. They name the next
  * touch, never the whole rule book, and they never say "tutorial".
@@ -548,7 +565,19 @@ export const ONBOARD = Object.freeze({
    */
   oneMore: 'YOU CAN WIN',
   oneMoreLine: 'Surround their home now and it is over.',
-  draw: 'DRAW',
+  /**
+   * The word "home" is useless until the player can see WHICH thing it is. On levels 1-2, after the
+   * goal is stated, the window points at the opponent's landmark and names it once. After that the
+   * word means something.
+   */
+  theirHome: 'THEIR HOME',
+  theirHomeLine: 'This one. Surround it to win.',
+  /**
+   * What the level was teaching, said back to the player on the finish card after a win: the "you
+   * did it, and this is what you just learned" beat. Empty past the guided levels, so a normal
+   * match's finish card is unchanged.
+   */
+  recap: (level: number): string => RECAP[level] ?? '',  draw: 'DRAW',
   drawLine: 'Tap the Draw pile to start your turn.',
   take: 'TAKE A CARD',
   takeLine: 'Tap the Draw pile, or the Throw pile card.',

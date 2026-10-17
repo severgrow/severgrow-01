@@ -68,6 +68,9 @@ try {
   check(mode === 'tutorial', `the guidance uses the tutorial window (${mode})`);
   check((await title()) === 'THE GOAL', `step 1 states the objective (${await title()})`);
   check(/surround/i.test(await line()), `the objective names how to win (${await line()})`);
+  // A tiny "LEVEL 1" line above the instruction: where this is in the journey.
+  const kicker = await page.evaluate(() => document.getElementById('futasaku-glass')?.dataset.kicker ?? '');
+  check(/level\s*1/i.test(kicker), `the window says which level this is (${kicker})`);
   check((await line()).length > 0, `step 1 has one line under it (${await line()})`);
 
   // 3. The window reserves the top of the map, so it never sits on the board.

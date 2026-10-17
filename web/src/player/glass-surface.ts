@@ -36,6 +36,11 @@ export type TutorialFocusOptions = {
   stepKey?: string;
   /** Soft mid-screen set + run card examples (bloom explain). */
   bloomDemo?: boolean;
+  /**
+   * A tiny tracked-out line above the title, e.g. "LEVEL 1". It answers "where am I in this
+   * journey?" without spending any of the one-line instruction budget. Campaign guidance only.
+   */
+  kicker?: string;
 };
 
 /** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
@@ -96,6 +101,23 @@ html.futa04-tutorial:not([data-layout='side']) .play {
   overflow: visible;
 }
 html.futa04-tutorial .cam-fade { opacity: 0 !important; }
+/* The campaign's little "LEVEL 1" line: quiet, tracked out, above the instruction. It answers
+   "where am I?" without taking any of the one-line instruction budget. */
+#futasaku-glass[data-mode='tutorial'][data-kicker]::before {
+  content: attr(data-kicker);
+  display: block;
+  padding: 6px 12px 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(243, 230, 196, 0.62);
+}
+.large-text #futasaku-glass[data-mode='tutorial'][data-kicker]::before {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
 /* One head row: PREVIOUS | title | NEXT/TAP, with full-size touch targets. */
@@ -1047,9 +1069,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.hidden = false;
     showFocus(true);
     setBloomDemo(!!options.bloomDemo);
-    panel.setAttribute('aria-label', 'Tutorial guidance');
+    panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
+    if (options.kicker) panel.dataset.kicker = options.kicker;
+    else delete panel.dataset.kicker;
     const stepKey = options.stepKey ?? `${chapter}:${text}`;
     const stepped = stepKey !== lastStepKey;
     lastStepKey = stepKey;

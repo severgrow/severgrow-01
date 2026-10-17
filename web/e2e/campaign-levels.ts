@@ -119,6 +119,14 @@ try {
 
     const end = await playToEnd(page, level.number);
     check(end.winner === 0, `L${level.number} is winnable (winner ${end.winner} via ${end.reason})`);
+
+    // The finish card says what the level taught, once you have won it.
+    await page.waitForSelector('#gameover:not([hidden])', { timeout: 30000 });
+    const learned = await page.evaluate(() => {
+      const el = document.getElementById('go-learned');
+      return el && !el.hidden ? el.textContent?.trim() ?? '' : '';
+    });
+    check(learned.length > 0, `L${level.number} says what it taught (${learned})`);
     results.push({ level: level.number, first: first || 'quiet', reason: end.reason, winner: end.winner });
   }
 

@@ -2349,6 +2349,20 @@ html.reduce-motion .available,
   color: var(--c-muted);
 }
 
+/* What the level taught, said back after a win (guided levels only). Small, warm, and above the
+   buttons so it reads as a full stop rather than another instruction. */
+.go-learned {
+  margin: 10px 0 0;
+  font-family: var(--font-mono, var(--font-display, inherit));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(243, 230, 196, 0.72);
+}
+.go-learned[hidden] { display: none; }
+.large-text .go-learned { font-size: 13px; letter-spacing: 0.1em; }
+
 /* ---------- campaign (the primary offline mode) ---------- */
 .campaign {
   display: grid;

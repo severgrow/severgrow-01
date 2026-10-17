@@ -777,18 +777,26 @@ html[data-guide='off'] .step-cue {
 
 /* ---- onboarding: the first levels keep the whole cockpit, and quiet the shortcuts that are not
    today's lesson. Nothing legal is removed — a beginner simply does not need them yet, and the
-   tools come back by level rather than being hidden by a level number. ---- */
-html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort) {
-  opacity: 0.26;
+   tools come back by level rather than being hidden by a level number.
+   The !important is deliberate: the smart cockpit (player/smart-cockpit.ts) sets these slots to
+   opacity 1 with two ids, and that presentation must not win over the teaching one. ---- */
+html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort, #futa04-help-button) {
+  opacity: 0.26 !important;
 }
-html[data-onboard='2'] :is(#tool-replay, #hud-history) {
-  opacity: 0.55;
+html[data-onboard='2'] :is(#tool-replay, #hud-history, #futa04-help-button) {
+  opacity: 0.55 !important;
+}
+/* A round button with no action is the classic "looks clickable, does nothing". On the guided
+   levels it is invisible rather than blank, and it keeps its slot so the grid never jumps. */
+html[data-onboard] #smart-context[data-action=''] {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 html[data-onboard='1'] .available {
   stroke-opacity: 0.48;
 }
-.reduce-motion html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort),
-.reduce-motion html[data-onboard='2'] :is(#tool-replay, #hud-history) {
+.reduce-motion html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort, #futa04-help-button),
+.reduce-motion html[data-onboard='2'] :is(#tool-replay, #hud-history, #futa04-help-button) {
   transition: none;
 }
 
@@ -817,6 +825,11 @@ html[data-onboard='1'] .available {
 }
 .tap-why.rise {
   animation: tap-why-rise 1700ms ease-out forwards;
+}
+/* A card in the hand sits outside the board's box, so its answer is placed against the viewport. */
+.tap-why.fixed {
+  position: fixed;
+  z-index: 60;
 }
 @keyframes tap-why-out {
   0%, 72% { opacity: 1; }

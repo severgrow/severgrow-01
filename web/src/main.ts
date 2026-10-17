@@ -177,7 +177,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -3714,6 +3714,12 @@ function renderOnboardingGuide(v: View) {
   const level = campaignLevel!.number;
   // The interface reveals itself by level; CSS keys off this one attribute.
   document.documentElement.dataset.onboard = String(revealTierFor(level));
+  // The old help bulb (Match Intel) is an advanced tool: on the first levels it steps back rather
+  // than competing with the lesson. Opacity is animated by the cockpit's own transition, so the
+  // quieting is done with a filter — it applies at once and cannot fight that transition.
+  const bulb = $('futa04-help-button');
+  if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
+  else bulb.style.removeProperty('filter');
 
   const st = session!.state;
   const picked = session!.sel.card !== null || session!.sel.kind !== null;
@@ -3740,11 +3746,15 @@ function renderOnboardingGuide(v: View) {
   const selector = guide.focus === 'deck' ? ['#deck']
     : guide.focus === 'discard' ? ['#discard']
     : guide.focus === 'hand' ? ['#hand']
+    : guide.focus === 'their-home' ? ['.lm-volcano']
+    : guide.focus === 'end' ? ['#smart-context[data-action="skip"]']
     : [];
   glassSurface.tutorial(guide.title, 0, selector, {
     shape: selector.length ? 'pill' : 'none',
     stepKey: key,
     why: guide.line,
+    // Where this is in the journey, quietly: "LEVEL 1" above the instruction.
+    kicker: CAMPAIGN.levelLabel(level),
     reduceMotion: settings.reduceMotion,
     buttons: { previous: false, next: false },
   });
@@ -4335,7 +4345,14 @@ function renderBoard(v: View, advice: Advice | null) {
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
-      coachHexes: advice && !anySel && (!IS_FUTA04 || onboardingActive()) ? advice.hexes.map(coordKey) : [],
+      // A guided level offers the coach's own pick as a stronger ring — but only where the picked
+      // card can actually go. Pointing at a hex the current card cannot use would be a lie, and
+      // three equally-lit rings make a beginner choose blind.
+      coachHexes: advice
+        ? (onboardingActive()
+          ? advice.hexes.map(coordKey).filter((k) => targets?.has(k))
+          : (!anySel && !IS_FUTA04 ? advice.hexes.map(coordKey) : []))
+        : [],
       // Before a card is picked, the guided levels show every hex that card could use: the game
       // offering the moves, so a beginner never has to guess a tap and wait for a rejection.
       available: !pending && !anySel && onboardingActive()
@@ -5416,6 +5433,11 @@ function renderGameOver() {
     $('go-sub').textContent = '';
     $('go-sub').hidden = true;
   }
+  // What this level was teaching, said back to the player once they have won it: the "you did it,
+  // and here is what you just learned" beat. Only on a guided level, only on a win.
+  const learned = campaign && won ? ONBOARD.recap(campaign.number) : '';
+  $('go-learned').textContent = learned;
+  $('go-learned').hidden = learned === '';
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level
   // has no next, so that same button becomes the honest way out (the level list) rather than a dead
@@ -5580,6 +5602,14 @@ function onCardTap(id: number) {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   if (!myTurn()) return;
+  // Before the draw a card cannot be used yet. It used to be selected silently, so the tap looked
+  // broken; now it says why, at the card.
+  if (IS_FUTA04 && !coach.tutorial && session.view.phase === 'DRAW') {
+    const card = document.querySelector<HTMLElement>(`.hand .card[data-card="${id}"]`);
+    const r = card?.getBoundingClientRect();
+    if (r) sayWhyAtPoint(r.left + r.width / 2, r.top + r.height / 2, TAP_WHY.draw, document.body);
+    return;
+  }
   if (IS_FUTA04 && session.view.phase === 'ACT') {
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
@@ -6081,32 +6111,43 @@ let whyTimer = 0;
  */
 function sayWhy(key: string, reason: string) {
   if (!IS_FUTA04 || document.hidden || !session) return;
+  const p = boardWrapPoint(key);
+  sayWhyAtPoint(p.x, p.y, reason, $('board-wrap'));
+}
+
+/**
+ * The same answer, placed anywhere (a card in the hand sits outside the board's box, so its plate is
+ * fixed to the viewport). Shared by the hex and the card paths so the wording and the quiet period
+ * are one rule.
+ */
+function sayWhyAtPoint(x: number, y: number, reason: string, host: HTMLElement | null) {
+  if (!IS_FUTA04 || document.hidden || !session) return;
   const now = performance.now();
   if (whyReason === reason && now - whyAt < WHY_QUIET_MS) return;
   whyAt = now;
   whyReason = reason;
   whyEl?.remove();
   const el = document.createElement('div');
-  el.className = 'tap-why';
+  el.className = host && host.id !== 'board-wrap' ? 'tap-why fixed' : 'tap-why';
   el.dataset.reason = reason;
   // A spoken status, not decoration: a player using a screen reader gets the same answer.
   el.setAttribute('role', 'status');
   el.setAttribute('aria-live', 'polite');
   el.textContent = reason;
-  const p = boardWrapPoint(key);
-  el.style.left = `${p.x}px`;
-  el.style.top = `${p.y}px`;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
   if (!(settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches)) el.classList.add('rise');
   // NOT #captions: the product cockpit hides the board's caption layer by design, so the answer
   // lives on the board itself, where the finger landed.
-  const host = $('board-wrap');
-  host.append(el);
-  // Never off the board's edge or under the header: the plate is centred on the hex, then pulled in.
+  (host ?? $('board-wrap')).append(el);
+  // Never off the edge or under the header: the plate is centred, then pulled in.
   const half = el.offsetWidth / 2;
   const lift = el.offsetHeight * 1.4;
-  const box = host.getBoundingClientRect();
-  el.style.left = `${Math.min(Math.max(p.x, half + 6), box.width - half - 6)}px`;
-  el.style.top = `${Math.max(p.y, lift + 8)}px`;
+  const box = (host ?? $('board-wrap')).getBoundingClientRect();
+  const minX = (host?.id === 'board-wrap' ? 0 : box.left) + half + 6;
+  const maxX = (host?.id === 'board-wrap' ? box.width : box.right) - half - 6;
+  el.style.left = `${Math.min(Math.max(x, minX), maxX)}px`;
+  el.style.top = `${Math.max(y, lift + 8)}px`;
   whyEl = el;
   clearTimeout(whyTimer);
   whyTimer = window.setTimeout(() => {

@@ -48,9 +48,11 @@ describe('the learning curve', () => {
 });
 
 describe('the objective comes before the turn', () => {
-  it('level 1 opens with the goal, and still points at the Draw pile', () => {
+  it('level 1 opens with the goal, and points at THEIR home while it says it', () => {
+    // The pill teaches the concept; the Draw pile haloes itself at this step, so the next touch is
+    // still obvious and nothing competes.
     expect(say({ level: 1, phase: 'DRAW' })).toEqual({
-      title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck',
+      title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'their-home',
     });
     // It is the opening beat only: once the player has drawn, the turn takes over.
     expect(say({ level: 1, phase: 'ACT' })?.title).toBe(ONBOARD.pick);
@@ -58,7 +60,7 @@ describe('the objective comes before the turn', () => {
 
   it('level 2 gives both routes to a win', () => {
     expect(say({ level: 2, phase: 'DRAW' })).toEqual({
-      title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'deck',
+      title: ONBOARD.howToWin, line: ONBOARD.howToWinLine, focus: 'their-home',
     });
   });
 
@@ -108,8 +110,9 @@ describe('the win is taught where it is actionable', () => {
 
 describe('level 1 says exactly one thing, and then the next', () => {
   it('opens on the Draw pile with the plainest words in the game', () => {
-    // The opening beat now carries the objective; the draw instruction returns on the next turn.
-    expect(say({})).toEqual({ title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'deck' });
+    // The opening beat now carries the objective (pointing at their home); the draw instruction
+    // returns on the next turn, pointing at the pile.
+    expect(say({})).toEqual({ title: ONBOARD.goal, line: ONBOARD.goalLine, focus: 'their-home' });
     expect(say({ turn: 3 })).toEqual({ title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' });
   });
 
@@ -127,7 +130,7 @@ describe('level 1 says exactly one thing, and then the next', () => {
   });
 
   it('moves to throwing when the board refuses a grow, and when the turn is spent', () => {
-    expect(say({ phase: 'ACT', grew: true })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'none' });
+    expect(say({ phase: 'ACT', grew: true })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'end' });
     expect(say({ phase: 'DISCARD' })).toEqual({ title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'discard' });
   });
 
