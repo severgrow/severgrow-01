@@ -1,13 +1,13 @@
 // The ONE doorway into a folded Settings group (owner restructure, 2026-10-16).
 //
-// The Settings sheet (`web/index.html`, `#sheet-settings`) folds its niche controls into collapsed
-// `<details>` groups — `#settings-look`, `#settings-sound`, `#settings-motion`, `#settings-help`
-// and the Lab, `#settings-lab`. None of them carries `open`, so every group starts CLOSED. A
-// control inside a closed `<details>` has no layout box at all: it is in the DOM and a Playwright
-// locator RESOLVES, but a bare `page.click('#speed-seg .seg-btn')` waits for visibility forever and
-// dies with `element is not visible` after 30s. That is exactly how the `browser (smoke)` job went
-// red on 9af8581 (ANIMATION SPEED moved behind "More motion options") and stayed red — the failure
-// looked like a flake only because the locator resolved.
+// The Settings sheet (`web/index.html`, `#sheet-settings`) folds its extras into two collapsed
+// `<details>` groups — `#settings-look` ("More options") and `#settings-help` ("More playing
+// options") — plus the Lab, `#settings-lab`. None of them carries `open`, so every group starts
+// CLOSED. A control inside a closed `<details>` has no layout box at all: it is in the DOM and a
+// Playwright locator RESOLVES, but a bare `page.click('#speed-seg .seg-btn')` waits for visibility
+// forever and dies with `element is not visible` after 30s. That is exactly how the `browser
+// (smoke)` job went red on 9af8581 (ANIMATION SPEED moved behind a disclosure) and stayed red — the
+// failure looked like a flake only because the locator resolved.
 //
 // A control behind a disclosure is not unreachable — the test just has to open it first, the way a
 // player does: click the group's `<summary>`, which toggles the `<details>`. That dance lives here

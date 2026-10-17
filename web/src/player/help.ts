@@ -90,7 +90,7 @@ export const mountHelp = (hooks: HelpHooks) => {
       touch-action: manipulation;
     }
     #sheet-futa04-help .coach-actions { gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-    #sheet-futa04-help .coach-actions .btn, #sheet-futa04-help #coach-hide { padding: 10px 12px; }
+    #sheet-futa04-help .coach-actions .btn { padding: 10px 12px; }
     #sheet-futa04-help .draw-demo { margin: 12px auto; }
   `;
   document.head.append(style);
@@ -156,12 +156,6 @@ export const mountHelp = (hooks: HelpHooks) => {
   }
   coach.classList.add('futa04-help-content');
   firstTip.classList.add('futa04-help-content');
-  const coachHide = document.getElementById('coach-hide');
-  if (coachHide) {
-    coachHide.classList.remove('icon-only');
-    coachHide.classList.add('btn', 'ghost');
-    coachHide.textContent = 'Turn coach off';
-  }
 
   let kind: HelpKind = 'coach';
   let blocked = true;
@@ -206,7 +200,7 @@ export const mountHelp = (hooks: HelpHooks) => {
 
   // Closing first lets the existing "Show me where" handler place its arrow on the board.
   // Acknowledgements still run the original persistence and coach-state handlers afterwards.
-  for (const id of ['coach-show', 'coach-hide', 'coach-summary-ok', 'first-tip-ok']) {
+  for (const id of ['coach-show', 'coach-summary-ok', 'first-tip-ok']) {
     document.getElementById(id)?.addEventListener('click', closeHelp, { capture: true });
   }
 

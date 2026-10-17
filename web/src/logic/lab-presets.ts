@@ -41,7 +41,7 @@ export const LAB_PRESETS: readonly LabPreset[] = [
   { id: 'big-print', category: 'focus', title: 'Big Print', note: 'Give the words a little more space.', readout: 'LARGE TEXT', values: { largeText: true } },
   { id: 'route-notes', category: 'focus', title: 'Route Notes', note: 'Keep the legal placement list close.', readout: 'PLACEMENT LIST ON', values: { placementList: true } },
   { id: 'deliberate-tap', category: 'focus', title: 'Deliberate Tap', note: 'Pause before each move; skip nothing for you.', readout: 'CONFIRM ALWAYS · AUTO-SKIP OFF', values: { confirmPolicy: 'always', autoSkip: false } },
-  { id: 'freehand', category: 'focus', title: 'Freehand', note: 'Let safe moves happen as you choose them.', readout: 'CONFIRM NEVER · COACH OFF', values: { confirmPolicy: 'never', coach: false } },
+  { id: 'freehand', category: 'focus', title: 'Freehand', note: 'Let safe moves happen as you choose them.', readout: 'CONFIRM NEVER', values: { confirmPolicy: 'never' } },
 ];
 
 export const withLabPreset = (base: Settings, preset: LabPreset): Settings => ({ ...base, ...preset.values });

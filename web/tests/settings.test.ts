@@ -12,7 +12,6 @@ describe('settings (saved in the browser)', () => {
       speed: 'normal',
       weakSpots: false,
       largeText: false,
-      coach: true,
       palette: 'soil',
       weakPulse: true,
       effects: 'normal',

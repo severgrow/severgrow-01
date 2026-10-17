@@ -1,9 +1,13 @@
-// The Settings sheet, locked at the source (owner, 2026-10-16): "there are too many settings in
-// settings — strip down to what's actually needed / very useful".
+// The Settings sheet, locked at the source.
 //
-// The rule the screen follows now: FOLD AND ORGANISE BEFORE YOU DELETE. Nothing is removed from the
-// model (settings.test.ts still pins every value); the controls a player reaches for are plain
-// rows, and the niche extras sit in one collapsed `details` group each — available, not in the way.
+// Owner, 2026-10-16: "there are too many settings in settings — strip down to what's actually
+// needed / very useful". Owner, 2026-10-17, after using it on a phone: "settings should hold only
+// essentials" — and the Coach switch should go, because its advice is always on in Match Intel.
+//
+// The rule the screen follows now: a short surface of the things a player changes while playing,
+// and EVERYTHING else behind two folded groups — "More options" (look, motion and volume detail)
+// and "More playing options" (the teaching aids). Only the Coach switch was removed from the model
+// (the advice is always on); every other setting still exists and is still reachable.
 //
 // Two things are NON-NEGOTIABLE and this file fails if they move:
 //   * Reduce motion and Large text are accessibility, so they stay visible, OUTSIDE every group.
@@ -29,12 +33,13 @@ for (const group of section.matchAll(/<details\b[^>]*>([\s\S]*?)<\/details>/g)) 
 const groupIds = [...section.matchAll(/<details\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]!).sort();
 const copyKeys = [...section.matchAll(/data-copy="([^"]+)"/g)].map((m) => m[1]!);
 
-describe('Settings sheet: few rows on the surface, the niche extras folded', () => {
-  it('keeps every setting the model has — nothing was removed', () => {
+describe('Settings sheet: essentials on the surface, everything else in two groups', () => {
+  it('the Coach switch is gone (its advice is always on), every other setting stays', () => {
     expect(settingIds).toEqual([
-      'autoSkip', 'coach', 'eyeCandy', 'largeText', 'music',
+      'autoSkip', 'eyeCandy', 'largeText', 'music',
       'placementList', 'reduceMotion', 'sound', 'vibration', 'weakPulse', 'weakSpots',
     ]);
+    expect(section, 'no Coach row may come back').not.toContain('data-setting="coach"');
   });
 
   it('accessibility stays visible, outside every group (Reduce motion, Large text)', () => {
@@ -48,13 +53,22 @@ describe('Settings sheet: few rows on the surface, the niche extras folded', () 
     for (const id of ['sound', 'music', 'vibration']) expect(folded.has(id), id).toBe(false);
   });
 
-  it('the teaching aids are folded into one group, with Coach kept on the surface', () => {
-    expect(folded.has('coach'), 'Coach is the main one — it stays visible').toBe(false);
-    for (const id of ['placementList', 'weakSpots', 'weakPulse']) expect(folded.has(id), id).toBe(true);
+  it('Confirm moves and Auto-skip stay on the surface (the two playing choices)', () => {
+    expect(section, 'the Confirm moves row must be a plain row').toContain('id="confirm-seg"');
+    expect(folded.has('autoSkip'), 'autoSkip stays visible').toBe(false);
   });
 
-  it('the look, sound, motion and help groups exist (and the Lab keeps its own id)', () => {
-    expect(groupIds).toEqual(['settings-help', 'settings-lab', 'settings-look', 'settings-motion', 'settings-sound']);
+  it('the extras are folded into two groups: More options and More playing options', () => {
+    expect(groupIds).toEqual(['settings-help', 'settings-lab', 'settings-look']);
+    // the look/motion/volume detail
+    for (const id of ['eyeCandy']) expect(folded.has(id), id).toBe(true);
+    for (const seg of ['detail-seg', 'glow-seg', 'speed-seg', 'effects-seg']) {
+      expect(section.indexOf(seg), `${seg} must exist`).toBeGreaterThan(-1);
+      const look = section.slice(section.indexOf('id="settings-look"'), section.indexOf('</details>', section.indexOf('id="settings-look"')));
+      expect(look, `${seg} belongs to the "More options" group`).toContain(seg);
+    }
+    // the teaching aids
+    for (const id of ['placementList', 'weakSpots', 'weakPulse']) expect(folded.has(id), id).toBe(true);
   });
 
   it('the labels are short, not paragraphs', () => {
@@ -66,7 +80,7 @@ describe('Settings sheet: few rows on the surface, the niche extras folded', () 
   });
 
   it('every word comes from src/strings.ts (SETTINGS), and every key it names exists', () => {
-    expect(copyKeys.length).toBeGreaterThan(20);
+    expect(copyKeys.length).toBeGreaterThan(18);
     const table = SETTINGS as unknown as Record<string, unknown>;
     for (const key of copyKeys) {
       expect(Object.prototype.hasOwnProperty.call(table, key), `SETTINGS is missing "${key}"`).toBe(true);

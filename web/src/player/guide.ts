@@ -70,7 +70,12 @@ export const mountGuide = (hooks: { reduceMotion: () => boolean }) => {
       }),
     );
   paint();
-  const host = document.querySelector('#sheet-settings .thumb-settings') ?? document.querySelector('#sheet-settings .sheet-body');
+  // Owner, 2026-10-17 ("settings should hold only essentials"): the step guidance is a teaching aid,
+  // so its row lives in the folded "More playing options" group with the other aids. It still
+  // belongs beside the phone-layout rows when that group is missing (an older shell).
+  const host = document.querySelector('#settings-help .lab-inside')
+    ?? document.querySelector('#sheet-settings .thumb-settings')
+    ?? document.querySelector('#sheet-settings .sheet-body');
   host?.append(row);
 
   // ---------- the piles' effects: a cream halo and one ring (decorations only) ----------

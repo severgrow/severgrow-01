@@ -360,12 +360,12 @@ for (const theme of THEMES) {
     const midBusy = await isBusy(page);
     await page.click('#hud-menu');
     await page.click('#gm-settings');
-    // Animation speed now lives in the collapsed "More motion options" group
+    // Animation speed now lives in the collapsed "More options" group
     // (helpers/settings-nav.ts). Pin WHICH group it is in, then open it the way a player does — the
     // control is still reachable, it just costs a tap. The check keeps the assertion strict: a
     // future regrouping that moves speed out of this named group fails here, not by silence.
-    check(`${theme}: Animation speed is reachable inside the "More motion options" group`, await settingsControlIsInGroup(page, 'settings-motion', '#speed-seg'));
-    await openSettingsGroup(page, 'settings-motion');
+    check(`${theme}: Animation speed is reachable inside the "More options" group`, await settingsControlIsInGroup(page, 'settings-look', '#speed-seg'));
+    await openSettingsGroup(page, 'settings-look');
     await page.locator('#speed-seg .seg-btn', { hasText: 'Off' }).click();
     await page.click('#sheet-settings [data-close]');
     await page.waitForTimeout(100);

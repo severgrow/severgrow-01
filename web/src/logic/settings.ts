@@ -31,7 +31,6 @@ export type Settings = {
   speed: Speed;
   weakSpots: boolean;
   largeText: boolean;
-  coach: boolean;
   palette: ThemeId;
   weakPulse: boolean; // pulse my most dangerous weak link with its "-4"
   effects: Effects; // how big the satisfying effects are
@@ -63,7 +62,6 @@ export const DEFAULT_SETTINGS: Settings = {
   speed: 'normal',
   weakSpots: false,
   largeText: false,
-  coach: true,
   palette: DEFAULT_THEME,
   weakPulse: true,
   effects: 'normal',
@@ -103,7 +101,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'coach', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   for (const k of ['sfxVolume', 'musicVolume'] as const) {

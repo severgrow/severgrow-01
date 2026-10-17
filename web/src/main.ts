@@ -196,7 +196,6 @@ import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 const HUMAN: Player = 0;
 const BOT: Player = 1;
 if (IS_FUTA04) setFixedBoardOrient('flat');
-const COACH_KEY_OLD = 'severgrow.coach.enabled';
 const BOOT_PARAMS = new URLSearchParams(location.search);
 // the test copy's DESIGN version (Lab -> DESIGN): the same game, drawn with the V2 illustrated skin
 const DESIGN_MODE = IS_TEST && BOOT_PARAMS.get('design') === '1';
@@ -238,7 +237,6 @@ let cardPinned = false;
 /** v0.5: first-time tips for Fruit and Strengthen, remembered in the browser. */
 let tipsSeen = parseTips(store.get(TIPS_KEY));
 let tipOpen: FirstTip | null = null;
-if (store.get(SETTINGS_KEY) === null && store.get(COACH_KEY_OLD) === '0') settings = { ...settings, coach: false };
 const saveSettings = () => store.set(SETTINGS_KEY, JSON.stringify(settings));
 const LAB_BASE_KEY = 'severgrow.lab.base.v1';
 const LAB_ACTIVE_KEY = 'severgrow.lab.active.v1';
@@ -2025,9 +2023,11 @@ let adviceMemo: { key: string; state: State; advice: Advice | null } | null = nu
 function currentAdvice(): Advice | null {
   if (isOnlineDuel()) return null; // tutorial coach / hidden-deck hints off online
   if (!session || coach.tutorial || session.state.actor !== HUMAN || session.state.phase === 'GAME_OVER') return null;
-  const key = `${coach.choice}|${settings.coach}|${coach.step}`;
+  const key = `${coach.choice}|${coach.step}`;
   if (adviceMemo && adviceMemo.state === session.state && adviceMemo.key === key) return adviceMemo.advice;
-  const advice = coachAdvice({ view: session.view, step: coach.step, enabled: settings.coach, taught: coach.taught, known: coach.known }, coach.choice);
+  // The coach is part of the teaching, not a preference (owner, 2026-10-17: "keep the advice
+  // always on in Match Intel"). Its switch is gone from Settings, so nothing can turn it off.
+  const advice = coachAdvice({ view: session.view, step: coach.step, enabled: true, taught: coach.taught, known: coach.known }, coach.choice);
   adviceMemo = { key, state: session.state, advice };
   return advice;
 }
@@ -5120,7 +5120,7 @@ function renderPiles(v: View, advice: Advice | null) {
 
 function renderCoach(advice: Advice | null) {
   const box = $('coach');
-  const showSummary = settings.coach && coach.step >= COACH_STEPS && !coach.summaryDone && session?.state.phase !== 'GAME_OVER';
+  const showSummary = coach.step >= COACH_STEPS && !coach.summaryDone && session?.state.phase !== 'GAME_OVER';
   box.hidden = !(advice || showSummary) || busy() || (IS_FUTA04 && !myTurn());
   $('coach-advice').hidden = !advice;
   $('coach-summary').hidden = !showSummary || !!advice;
@@ -6272,8 +6272,6 @@ bind('go-other', () => {
 bind('menu-continue', () => continueGame());
 bind('menu-tutorial', () => {
   if (!IS_FUTA04) {
-    settings={...settings,coach:true};
-    saveSettings();
     startGame(TUTORIAL_SEED,7);
     return;
   }
@@ -6329,8 +6327,6 @@ bind('gm-main', () => {
 });
 bind('restart-tutorial', () => {
   if (!IS_FUTA04) {
-    settings={...settings,coach:true};
-    saveSettings();
     sheet(null);
     startGame(randomSeed());
     return;
@@ -6704,11 +6700,6 @@ bind('go-share', () => {
   }).then(onSaved);
 });
 
-bind('coach-hide', () => {
-  settings = { ...settings, coach: false };
-  saveSettings();
-  render();
-});
 bind('coach-show', () => {
   // "Show me where": an arrow points at each thing to tap, one step at a time.
   const advice = currentAdvice();

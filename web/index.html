@@ -396,7 +396,6 @@
               <span class="i" data-icon="coach"></span>
               <b>Coach</b>
               <span id="coach-step" class="muted small"></span>
-              <button id="coach-hide" class="icon-only small" type="button" aria-label="Turn the coach off"><span class="i" data-icon="close"></span></button>
             </div>
             <div id="coach-advice">
               <p id="coach-suggested" class="coach-main"></p>
@@ -431,28 +430,34 @@
     <section id="sheet-settings" class="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
       <header class="sheet-head"><h2 id="settings-title" data-copy="title"></h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
       <div class="sheet-body">
+        <!-- OWNER DIRECTION (2026-10-17): "settings should hold only essentials". The surface is
+             now the things a player changes while playing — colours, sound, comfort, and the two
+             playing choices. EVERYTHING else sits in two folded groups: "More options" (look, motion
+             and volume detail) and "More playing options" (the teaching aids). Nothing was deleted
+             except the Coach switch, which is gone because the coach is always on now (see
+             main.ts currentAdvice). Reduce motion and Large text MUST stay outside every group —
+             they are accessibility, not clutter. The phone layout rows are injected at the top of
+             this body by player/thumb.ts. -->
         <h3 data-copy="lookHeading"></h3>
         <div class="row"><span data-copy="colours"></span><div class="seg" role="radiogroup" aria-label="Colours" id="palette-seg"></div></div>
-        <!-- Grouping (owner, 2026-10-16): the controls a player reaches for are plain rows; the
-             niche extras sit in one collapsed disclosure each, so nothing is removed, only folded.
-             The group markup reuses the Lab's disclosure styling (class "settings-lab" in
-             web/src/style.css) so the re-organisation needs no new CSS; the real Lab at the bottom
-             keeps its own id ("settings-lab") and sigil. Reduce motion and Large text MUST stay
-             outside every group — they are accessibility, not clutter. -->
+        <h3 data-copy="soundHeading"></h3>
+        <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
+        <label class="row"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
+        <label class="row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
+        <h3 data-copy="motionHeading"></h3>
+        <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
+        <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
+        <h3 data-copy="playingHeading"></h3>
+        <div class="row"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
+        <label class="row"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
         <details class="settings-lab" id="settings-look">
           <summary><span><strong data-copy="lookGroup"></strong><small data-copy="lookGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
             <div class="row"><span data-copy="materialDetail"></span><div class="seg" role="radiogroup" aria-label="Material detail" id="detail-seg"></div></div>
             <div class="row"><span data-copy="topGlow"></span><div class="seg" role="radiogroup" aria-label="Top-rank glow" id="glow-seg"></div></div>
-          </div>
-        </details>
-        <h3 data-copy="soundHeading"></h3>
-        <label class="row"><span data-copy="sound"></span><input type="checkbox" data-setting="sound" /></label>
-        <label class="row"><span data-copy="music"></span><input type="checkbox" data-setting="music" /></label>
-        <label class="row"><span id="vibration-label"></span><input type="checkbox" data-setting="vibration" /></label>
-        <details class="settings-lab" id="settings-sound">
-          <summary><span><strong data-copy="soundGroup"></strong><small data-copy="soundGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
-          <div class="lab-inside">
+            <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
+            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
+            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
             <label class="row slider"><span data-copy="sfxVolume"></span><input type="range" min="0" max="100" step="5" data-volume="sfxVolume" aria-label="Effects volume" /></label>
             <label class="row slider"><span data-copy="musicVolume"></span><input type="range" min="0" max="100" step="5" data-volume="musicVolume" aria-label="Music volume" /></label>
             <div class="test-row">
@@ -462,24 +467,10 @@
             <p id="test-note" class="muted small"></p>
           </div>
         </details>
-        <h3 data-copy="motionHeading"></h3>
-        <label class="row"><span data-copy="reduceMotion"></span><input type="checkbox" data-setting="reduceMotion" /></label>
-        <label class="row"><span data-copy="largeText"></span><input type="checkbox" data-setting="largeText" /></label>
-        <label class="row"><span data-copy="eyeCandy"></span><input type="checkbox" data-setting="eyeCandy" /></label>
-        <details class="settings-lab" id="settings-motion">
-          <summary><span><strong data-copy="motionGroup"></strong><small data-copy="motionGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
-          <div class="lab-inside">
-            <div class="row"><span data-copy="speed"></span><div class="seg" role="radiogroup" aria-label="Animation speed" id="speed-seg"></div></div>
-            <div class="row"><span data-copy="effects"></span><div class="seg" role="radiogroup" aria-label="Effects intensity" id="effects-seg"></div></div>
-          </div>
-        </details>
-        <h3 data-copy="playingHeading"></h3>
-        <div class="row"><span data-copy="confirmMoves"></span><div class="seg" role="radiogroup" aria-label="Confirm drawn moves" id="confirm-seg"></div></div>
-        <label class="row"><span data-copy="autoSkip"></span><input type="checkbox" data-setting="autoSkip" /></label>
-        <label class="row"><span data-copy="coach"></span><input type="checkbox" data-setting="coach" /></label>
         <details class="settings-lab" id="settings-help">
           <summary><span><strong data-copy="helpGroup"></strong><small data-copy="helpGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
+            <!-- the Step guidance row is injected here by player/guide.ts -->
             <label class="row"><span data-copy="placementList"></span><input type="checkbox" data-setting="placementList" /></label>
             <label class="row"><span data-copy="weakSpots"></span><input type="checkbox" data-setting="weakSpots" /></label>
             <label class="row"><span data-copy="weakPulse"></span><input type="checkbox" data-setting="weakPulse" /></label>
