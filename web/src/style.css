@@ -1611,6 +1611,21 @@ svg.usable .hex-cell {
   gap: 12px;
   border-bottom: 1px solid var(--c-line);
 }
+/* A row must never push one of its options off the sheet (found 2026-10-17: with Large text on,
+   "Confirm moves" lost its Never button and "Step guidance" its Off button past the right edge on
+   a 390px and a 320px phone). The label keeps its line; when the pair no longer fits, the control
+   drops to a second line, right-aligned, instead of overflowing. Nothing is hidden or shrunk. */
+.row {
+  flex-wrap: wrap;
+}
+.row > span {
+  min-width: 0;
+}
+.row > .seg,
+.row > .slider,
+.row > input {
+  margin-left: auto;
+}
 .row input[type='checkbox'] {
   appearance: none;
   width: 48px;
