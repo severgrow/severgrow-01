@@ -10,6 +10,10 @@
 const PREFIX = cachePrefix();
 function cachePrefix() {
   const url = new URL(self.registration.scope);
+  // The onboarding line, published beside the released game at /2/. It is its own scope and must
+  // never share a cache with the root or with Main: without this branch it would fall through to
+  // Main's prefix, and could answer an offline /2/ navigation with Main's page.
+  if (url.pathname.includes('/2/')) return 'futa05onboarding-';
   if (url.pathname.includes('/futa0.5/')) return 'futa05-';
   if (url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/')) return 'futa04-';
   return 'severor-main2-';
