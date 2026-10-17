@@ -257,4 +257,12 @@ describe('the world column shares the menu column edge', () => {
     expect(selection, 'the selection rule must exist').not.toBeNull();
     expect(selection!, 'the controls must anchor to the bottom').toContain('margin-top: auto');
   });
+
+  it('nothing draws a rule above the “Choose a tile” hint', () => {
+    // Owner, 2026-10-17: a line under the map, between it and "Choose a tile to see who holds it",
+    // was redundant. The bar's own height separates it from the map, so it must carry no border.
+    const selection = bodyOf(onlineCss, '.world-selection');
+    expect(selection, 'the selection rule must exist').not.toBeNull();
+    expect(selection!, 'the selection bar must not draw a divider').not.toMatch(/border(-top)?\s*:/);
+  });
 });

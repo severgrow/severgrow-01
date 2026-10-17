@@ -513,7 +513,10 @@ export const ONLINE_CSS = `
   margin-top: auto;
   min-height: 58px; width: min(100%, 720px); margin-inline: auto;
   display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  color: #e8ddbe; border-top: 1px solid #d9cba632; font-size: .83rem; letter-spacing: .04em;
+  /* NO RULE ABOVE THE HINT (owner, 2026-10-17: a line under the map, between it and "Choose a
+     tile to see who holds it", was redundant). The bar is separated from the map by its own
+     min-height alone; the space does the dividing, so nothing draws a divider. */
+  color: #e8ddbe; font-size: .83rem; letter-spacing: .04em;
 }
 .world-claim-button {
   min-height: 44px; padding: 0 17px; flex: none;
