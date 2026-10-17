@@ -2,7 +2,7 @@ import { apply, newMatch, viewFor } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
-import { campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
+import { ALTERNATE_OPENINGS, campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
 export type VerifiedOffline = { winner: 0 | 1 | null; actionCount: number; result: State['result'] };
@@ -40,7 +40,15 @@ export const verifyOfflineMatch = (
 
 export const verifyCampaignProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null => {
   const level = campaignLevelById(levelId);
-  return level ? verifyOfflineMatch(campaignOpening(level), level.botLevel, { actions, botVersion }) : null;
+  if (!level) return null;
+  // The level's CURRENT opening first. Then the alternate one: since 2026-10-17 both the released
+  // campaign and the /2/ onboarding line are live against this single Edge function, and they play
+  // levels 4-10 on different boards. See src/campaign/frozen.ts.
+  const current = verifyOfflineMatch(campaignOpening(level), level.botLevel, { actions, botVersion });
+  if (current) return current;
+  const alternate = ALTERNATE_OPENINGS[level.id];
+  if (!alternate) return null;
+  return verifyOfflineMatch(newMatch(level.seed, { ...level.config, ...alternate }), level.botLevel, { actions, botVersion });
 };
 
 export const verifyTrainingProof = (seed: number, botLevel: number, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null =>

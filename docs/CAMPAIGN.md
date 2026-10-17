@@ -205,6 +205,19 @@ sequence above. The old curve rose to bot 5 at level 20 then dropped back to bot
 nothing caught it, because the previous test allowed a one-step fall. Existing player progress is
 untouched — campaign progress is stored per level **id**, and no id changed.
 
+## Two boards for the same levels (the /2/ onboarding line)
+
+Since 2026-10-17 the site publishes the game twice: the root (`www.futasaku.com`) keeps the released
+campaign, and `/2/` carries the onboarding work. Levels 4-10 are played on the **37-hex** map at the
+root and on the **19-hex** tutorial map in `/2/`. Both submit Seed proofs to one Edge function, so
+`src/campaign/frozen.ts` records the `/2/` opening for each of those levels and
+`verifyCampaignProof` tries the level's current opening and then that alternate. A win on either board
+pays.
+
+This is also the rule for any future terrain change: **add the old opening to
+`ALTERNATE_OPENINGS` and rebuild the Edge bundle** (`npm run server:build-edge`). A proof queued on a
+device, or produced by a bundle built before the change, must never be refused because a level moved.
+
 ## Progress and saving
 
 - Level 1 is open by default. **Winning** a level unlocks the next. A loss removes nothing. A
