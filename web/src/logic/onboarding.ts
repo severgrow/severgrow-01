@@ -1,0 +1,147 @@
+// ONBOARDING — the campaign's first ten levels are the game's tutorial.
+//
+// This module answers one question, from the game's OWN state: *what is the one thing to do next?*
+// It is pure (no DOM, no clock, no random) so the same position always gives the same line, and the
+// tests can pin every branch. The campaign screen renders the answer in the tutorial's own top
+// window; nothing here draws anything.
+//
+// The learning structure (owner brief 2026-10-17):
+//   levels 1-3  DISCOVER   very high guidance: every step, one action, minimum clutter
+//   levels 4-7  CONNECT    medium: the new idea once, then only where a player stalls
+//   levels 8-10 COMBINE    targeted: Fruit, Bloom and gold only
+// Later levels (11+) are not this module's business and get no campaign guidance.
+import { ONBOARD } from '../../../src/strings.js';
+
+/** Levels 1-10 are the guided stretch. Level 11 is where the board grows and guidance stops. */
+export const ONBOARDING_LEVELS = 10;
+
+/** 1 = very high guidance, 2 = medium, 3 = targeted. */
+export type GuidanceIntensity = 1 | 2 | 3;
+
+export const intensityFor = (level: number): GuidanceIntensity =>
+  level <= 3 ? 1 : level <= 7 ? 2 : 3;
+
+/** Which controls the interface shows plainly. 1 = fewest, 3 = everything, as in a normal game. */
+export type RevealTier = 1 | 2 | 3;
+
+/**
+ * The interface reveals itself by level, not by hiding legal moves: tier 1 keeps the cockpit but
+ * quiets the secondary tools (sort, replay, history), tier 2 brings sort back, tier 3 is the normal
+ * game. Nothing a player may legally need is ever removed.
+ */
+export const revealTierFor = (level: number): RevealTier => (level <= 3 ? 1 : level <= 7 ? 2 : 3);
+
+export type GuideFocus = 'deck' | 'discard' | 'hand' | 'none';
+
+export type OnboardGuide = {
+  /** The LED title in the top window (short, caps). */
+  title: string;
+  /** One line under it: the same instruction in plain words. */
+  line: string;
+  /** What the window's pill points at, when it points at anything. */
+  focus: GuideFocus;
+};
+
+/** Everything the guide may look at — all of it comes from the live game, never from a script. */
+export type GuideInput = {
+  level: number;
+  /** 1-based turn number of the whole match. */
+  turn: number;
+  mine: boolean;
+  phase: 'DRAW' | 'ACT' | 'DISCARD' | 'GAME_OVER' | 'KNOCK' | 'ROT_PICK';
+  /** A card (or a move kind) is picked, so the next touch is a tile. */
+  picked: boolean;
+  /** How many tiles the picked card could legally use right now. */
+  targetCount: number;
+  /** How many tiles could be grown on if nothing were picked (the lit places on the board). */
+  availableCount: number;
+  /** A Fruit card is in hand and can be played now. */
+  fruitReady: boolean;
+  /** A Bloom is legal right now. */
+  bloomReady: boolean;
+  /** I have already grown this turn, so the only move left is to throw. */
+  grew: boolean;
+};
+
+/**
+ * The next thing to do, or null when the guide should stay quiet. Silence is a feature: the brief
+ * asks guidance to fade, so a null answer means "nothing to say — play".
+ */
+export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
+  if (s.level < 1 || s.level > ONBOARDING_LEVELS) return null;
+  if (s.phase === 'GAME_OVER') return null;
+  const intensity = intensityFor(s.level);
+  const lesson = ONBOARD.lessons[s.level];
+  const firstTurn = s.turn <= 2;
+
+  // Their turn: only the first levels say anything, and only to name what is happening.
+  if (!s.mine) {
+    return intensity === 1 && firstTurn
+      ? { title: ONBOARD.theirTurn, line: ONBOARD.theirTurnLine, focus: 'none' }
+      : null;
+  }
+
+  // A new mechanic, said once, at the moment it is actually usable. This is the whole of levels
+  // 8-10's guidance: Fruit when a Fruit card can be played, Bloom when a Bloom is legal.
+  if (s.phase === 'ACT') {
+    if (s.level === 8 && s.fruitReady) return { title: ONBOARD.lessons[8]!.title, line: ONBOARD.lessons[8]!.line, focus: 'hand' };
+    if (s.level === 9 && s.bloomReady) return { title: ONBOARD.lessons[9]!.title, line: ONBOARD.lessons[9]!.line, focus: 'hand' };
+    // Fruit and Bloom are never described hypothetically: if the moment is not here, say nothing.
+    if (s.level === 8 || s.level === 9) return null;
+    // Gold is on the board from the first turn, so its one line belongs there.
+    if (s.level === 10 && s.turn === 1) {
+      return { title: ONBOARD.lessons[10]!.title, line: ONBOARD.lessons[10]!.line, focus: s.picked ? 'none' : 'hand' };
+    }
+  }
+  // Levels 4-7 introduce their idea on the opening turn, then leave the player alone.
+  if (lesson && s.phase === 'ACT' && s.turn === 1) {
+    return { title: lesson.title, line: lesson.line, focus: s.picked ? 'none' : 'hand' };
+  }
+
+  if (s.phase === 'DRAW') {
+    // 1-3: always. 4-7: the first turns. 8-10: not at all — by now drawing is automatic.
+    if (intensity === 3) return null;
+    if (intensity === 2 && !firstTurn) return null;
+    // The very first action a player ever takes gets the plainest possible words.
+    return s.level === 1
+      ? { title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' }
+      : { title: ONBOARD.take, line: ONBOARD.takeLine, focus: 'deck' };
+  }
+
+  if (s.phase === 'ACT') {
+    // Grown and still holding the turn: the only thing left is to end it.
+    if (s.grew && !s.picked) return { title: ONBOARD.throwTitle, line: ONBOARD.throwDone, focus: 'none' };
+    // Levels 2-3 repeat the turn with fewer prompts: the opening turns are guided, then the player
+    // is trusted with the same steps they have just taken. Level 1 keeps guiding throughout.
+    const soft = s.level >= 2 && s.turn > 2;
+    if (s.picked) {
+      if (s.targetCount === 0) return null; // nothing can use this card: the tap feedback explains it
+      if (intensity >= 2 || soft) {
+        // Later levels say it only on the opening turns.
+        if (intensity >= 2 && !firstTurn) return null;
+        if (soft) return null;
+      }
+      return { title: ONBOARD.grow, line: ONBOARD.growLine, focus: 'none' };
+    }
+    // Level 3's own lesson: there is more than one place to go, and choosing is the point.
+    if (s.level === 3 && s.turn === 1 && s.availableCount >= 2) {
+      return { title: ONBOARD.twoWays, line: ONBOARD.twoWaysLine, focus: 'none' };
+    }
+    if (soft) return null;
+    if (intensity === 1) return { title: ONBOARD.pick, line: ONBOARD.pickLine, focus: 'hand' };
+    if (intensity === 2 && firstTurn) return { title: ONBOARD.pick, line: ONBOARD.pickLine, focus: 'hand' };
+    return null;
+  }
+
+  if (s.phase === 'DISCARD') {
+    if (intensity === 3) return null;
+    if (intensity === 2 && !firstTurn) return null;
+    return { title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'discard' };
+  }
+
+  return null;
+};
+
+/** A stable key for the current guide, so the window only repaints when the words change. */
+export const guideKey = (level: number, turn: number, picked: boolean, guide: OnboardGuide | null): string =>
+  guide ? `${level}:${turn}:${picked ? 1 : 0}:${guide.title}:${guide.line}` : `${level}:${turn}:quiet`;

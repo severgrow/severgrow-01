@@ -775,6 +775,23 @@ html[data-guide='off'] .step-cue {
   }
 }
 
+/* ---- onboarding: the first levels keep the whole cockpit, and quiet the shortcuts that are not
+   today's lesson. Nothing legal is removed — a beginner simply does not need them yet, and the
+   tools come back by level rather than being hidden by a level number. ---- */
+html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort) {
+  opacity: 0.26;
+}
+html[data-onboard='2'] :is(#tool-replay, #hud-history) {
+  opacity: 0.55;
+}
+html[data-onboard='1'] .available {
+  stroke-opacity: 0.48;
+}
+.reduce-motion html[data-onboard='1'] :is(#tool-replay, #hud-history, #hand-sort),
+.reduce-motion html[data-onboard='2'] :is(#tool-replay, #hud-history) {
+  transition: none;
+}
+
 /* ---- why a tap did nothing: one short line at the hex, then gone. A tap that can do nothing is
    the most common way the game feels broken, so it answers where the finger landed: a small
    smoked-glass plate in the same cream as the step cue, no arrow, no colour, no blocking. ---- */

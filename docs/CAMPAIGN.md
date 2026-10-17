@@ -124,6 +124,33 @@ never merged into the root build without an explicit decision.
 Owner brief (2026-10-17): the Campaign is the game's tutorial, so the first ten levels teach on the
 small map and Level 11 is where the board grows. Terrain-only change, plus the guidance work below.
 
+#### How the first ten levels teach (2026-10-17, second pass)
+
+The campaign borrows the **Tutorial's own top window** — the same panel, the same LED type, the same
+pill that points at a control — rather than adding a second overlay. `logic/onboarding.ts` decides
+what it says, from the live position only:
+
+| Levels | Intensity | What the window does |
+| --- | --- | --- |
+| 1-3 | very high | every step: draw → pick a card → tap a lit tile → throw; level 1 for the whole level, 2-3 only the opening turns |
+| 4-7 | medium | the level's new idea on turn 1 (connected, strength, defend, cut), then silence |
+| 8-10 | targeted | Fruit only when a Fruit card is playable, Bloom only when a Bloom is legal, gold once on turn 1 |
+
+Supporting rules, all from the same pass:
+
+- **The board shows the moves.** With nothing picked, every hex a card could grow on gets a quiet
+  dashed ring (`.available`); the coach's suggested hex keeps its stronger ring. Picking a card turns
+  them into the card's real targets.
+- **The interface reveals itself by level** (`html[data-onboard="1|2|3"]`): levels 1-3 quiet sort,
+  replay and history; 4-7 bring sort back; 8-10 are the normal game. Nothing legal is ever removed.
+- **No lottery** on a campaign level: the seed fixes who starts, so the player is in the game
+  immediately. Classic and online keep the draw.
+- **The player can switch it off**: Settings → Step guidance → Off silences the window
+  (`severgrow-guide` in local storage), exactly as it does in the Tutorial.
+
+Tests: `web/tests/onboarding.test.ts` pins the curve and the silence; `web/e2e/onboarding.ts` drives
+Level 1 on a 390×844 phone (window content, board padding, lit hexes, quieted controls, no lottery).
+
 - **Levels 4-10 moved onto the tutorial's small map** (radius 2 → 19 hexes). Rock counts are unchanged
   from the design pack (0, 2, 1, 2, 0, 3, 3), so the table above still matches it; the stones were
   re-placed on hexes the radius-2 board actually has, outside both root zones. No level id, seed, name

@@ -23,6 +23,7 @@ import { gameHighlights } from './logic/highlights.js';
 import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
+import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
 import { whyNotTap } from './logic/tap-why.js';
 import {
   DESK_IDLE,
@@ -751,7 +752,9 @@ function syncResignMenu() {
 
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
-  const on = !!coach.tutorial;
+  // The onboarding levels borrow the tutorial's own window and its board band, so the same chrome
+  // class applies: it pads the map between the glass and the cockpit and keeps the menu reachable.
+  const on = !!coach.tutorial || onboardingActive();
   document.documentElement.classList.toggle('futa04-tutorial', on);
   syncTutorialMenuExit();
 }
@@ -1477,7 +1480,9 @@ async function startGame(
   const opponentStarts = opening.startingPlayer === BOT;
   if (IS_FUTA04) {
     showScreen('game');
-    await runStarterLottery(opponentStarts);
+    // A campaign level's opening is fixed by its seed, so there is no draw to watch. The guided
+    // levels get straight into the game; every other offline match keeps the lottery courtesy.
+    if (!campaign) await runStarterLottery(opponentStarts);
   }
   const state: State = opening;
   log = [
@@ -3591,6 +3596,7 @@ function render() {
     guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
+  renderOnboardingGuide(v);
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
@@ -3646,6 +3652,80 @@ function freeTurnGuideNow(): { title: string; line: string } {
 
 function freePlayGuidanceLine(): string {
   return freeTurnGuideNow().line;
+}
+
+/** The player can turn step guidance off (Settings → Step guidance). Respect it here too. */
+function guidanceOff(): boolean {
+  try {
+    return localStorage.getItem('severgrow-guide') === 'off';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Campaign levels 1-10 ARE the game's tutorial, so they borrow the tutorial's own top window and
+ * its board band — never a second overlay system. The window only appears while the level is
+ * guided, and it is the SAME panel the Tutorial uses, so a player who has seen one recognises the
+ * other. Guidance is derived from the live position (logic/onboarding.ts), never scripted.
+ */
+function onboardingActive(): boolean {
+  return FEATURES.guidance && !guidanceOff() && !coach.tutorial && !!campaignLevel
+    && campaignLevel.number <= ONBOARDING_LEVELS && !!session && !watching;
+}
+
+/** Hides our own window only: Match Intel and the real Tutorial are not ours to close. */
+function hideOnboardingWindow() {
+  if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide();
+}
+
+let onboardKey = '';
+function renderOnboardingGuide(v: View) {
+  if (!glassSurface) return;
+  if (!onboardingActive()) {
+    if (onboardKey) {
+      onboardKey = '';
+      delete document.documentElement.dataset.onboard;
+      hideOnboardingWindow();
+    }
+    return;
+  }
+  const level = campaignLevel!.number;
+  // The interface reveals itself by level; CSS keys off this one attribute.
+  document.documentElement.dataset.onboard = String(revealTierFor(level));
+
+  const st = session!.state;
+  const picked = session!.sel.card !== null || session!.sel.kind !== null;
+  const guide = openSheet || st.phase === 'GAME_OVER' ? null : onboardGuide({
+    level,
+    turn: st.turnNumber,
+    mine: st.actor === HUMAN,
+    phase: st.phase,
+    picked,
+    targetCount: picked ? targetHexes(v, session!.legal, session!.sel).size : 0,
+    availableCount: session!.legal.filter((a) => a.t === 'Sprout').length,
+    fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
+    bloomReady: document.documentElement.dataset.futa04BloomReady === 'true',
+    grew: (st.sproutsThisTurn ?? 0) > 0,
+  });
+  const key = guideKey(level, st.turnNumber, picked, guide);
+  if (key === onboardKey) return;
+  onboardKey = key;
+  if (!guide) {
+    hideOnboardingWindow();
+    return;
+  }
+  const selector = guide.focus === 'deck' ? ['#deck']
+    : guide.focus === 'discard' ? ['#discard']
+    : guide.focus === 'hand' ? ['#hand']
+    : [];
+  glassSurface.tutorial(guide.title, 0, selector, {
+    shape: selector.length ? 'pill' : 'none',
+    stepKey: key,
+    why: guide.line,
+    reduceMotion: settings.reduceMotion,
+    buttons: { previous: false, next: false },
+  });
 }
 
 function updateFuta04Help() {
@@ -4233,7 +4313,12 @@ function renderBoard(v: View, advice: Advice | null) {
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
-      coachHexes: advice && !anySel && !IS_FUTA04 ? advice.hexes.map(coordKey) : [],
+      coachHexes: advice && !anySel && (!IS_FUTA04 || onboardingActive()) ? advice.hexes.map(coordKey) : [],
+      // Before a card is picked, the guided levels show every hex that card could use: the game
+      // offering the moves, so a beginner never has to guess a tap and wait for a rejection.
+      available: !pending && !anySel && onboardingActive()
+        ? new Set(session.legal.filter((a) => a.t === 'Sprout').map((a) => coordKey((a as Extract<Action, { t: 'Sprout' }>).coord)))
+        : null,
       usable: true,
     };
     if (sel.kind?.startsWith('bloom-mega-')) {

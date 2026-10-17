@@ -525,6 +525,39 @@ export const TAP_WHY = Object.freeze({
   target: 'Not this hex',
 });
 
+/**
+ * The campaign's first ten levels teach through the game, so their words are short, concrete and
+ * in the game's own voice: an LED title (≤ 12 characters) and ONE line under it. They name the next
+ * touch, never the whole rule book, and they never say "tutorial".
+ */
+export const ONBOARD = Object.freeze({
+  draw: 'DRAW',
+  drawLine: 'Tap the Draw pile to start your turn.',
+  take: 'TAKE A CARD',
+  takeLine: 'Tap the Draw pile, or the Throw pile card.',
+  pick: 'PICK A CARD',
+  pickLine: 'Tap any card in your hand.',
+  grow: 'GROW',
+  growLine: 'Tap a lit tile.',
+  throwTitle: 'THROW',
+  throwLine: 'Tap a card twice to throw it.',
+  throwDone: 'Tap » when you are done.',
+  twoWays: 'TWO WAYS',
+  twoWaysLine: 'More than one tile works. Pick one.',
+  theirTurn: 'THEIR TURN',
+  theirTurnLine: 'Watch where they grow.',
+  /** The one new idea each level introduces (levels 4-10), shown once on its first turn. */
+  lessons: Object.freeze({
+    4: Object.freeze({ title: 'CONNECTED', line: 'Every tile must join your tree.' }),
+    5: Object.freeze({ title: 'STRONGER', line: 'A higher number is harder to take.' }),
+    6: Object.freeze({ title: 'DEFEND', line: 'A joined tile is harder to cut.' }),
+    7: Object.freeze({ title: 'CUT', line: 'Take a tile to break their link.' }),
+    8: Object.freeze({ title: 'FRUIT', line: 'A Fruit card takes any neighbour.' }),
+    9: Object.freeze({ title: 'BLOOM', line: 'Three in a row makes a bloom.' }),
+    10: Object.freeze({ title: 'GOLD', line: 'Gold is worth two at the end.' }),
+  } as Readonly<Record<number, { title: string; line: string }>>),
+});
+
 /** FUTASAKU 0.5 menu + Match Intel labels. One place to rename the single tutorial entry
  *  and the two Match Intel tabs. The moves reference text itself lives in SPROUT / BLOOM /
  *  FRUIT / BLAST and HOME above (the same shared rule words the game uses). */
