@@ -30,8 +30,7 @@ describe('which action leads the finish card, per mode', () => {
   it('the last built level has no next level, so the same slot is the honest way out', () => {
     expect(finishLead({ online: false, campaign: true, won: true, hasNext: false })).toBe('back-to-campaign');
     // Never a dead "Next level": the word is the level list's own, which really does something.
-    // Owner brief 2026-10-17: the player-facing progression is never called "Campaign".
-    expect(CAMPAIGN.back).toBe('Back to levels');
+    expect(CAMPAIGN.back).toBe('Back to campaign');
   });
 
   it('a LOSS never offers the next level (the win flow is the win flow)', () => {

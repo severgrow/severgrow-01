@@ -122,13 +122,13 @@
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
                so no other channel ever shows it. Its words come from src/strings.ts, and on the
                product menu it reads LEVEL <n> (the level the player is on). -->
-          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Campaign</button>
+          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
                chapter/level list. The owner's rule is that the player does not need access to every
                level - the LEVEL <n> entry above starts the next level they have NOT completed, and
                that is the only way in. The list still exists and still renders; it is now reached
-               only from the finish card's "Back to levels", which is where the campaign hands the
+               only from the finish card's "Back to campaign", which is where the campaign hands the
                player off once there is no next level left. -->
           <!-- The world map: a top-level destination of its own, in the main menu with Tutorial and
                Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
@@ -264,11 +264,11 @@
     <!-- ===== Campaign (the primary offline mode) ===== -->
     <!-- The chapter list and level tiles are drawn from the level data by main.ts, so a level is
          never duplicated here. Everything a player reads comes from src/strings.ts and the level. -->
-    <section id="campaign" class="screen campaign" aria-label="Levels" hidden>
+    <section id="campaign" class="screen campaign" aria-label="Campaign" hidden>
       <div class="campaign-inner levels-inner">
         <header class="levels-head">
           <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2 id="campaign-heading">Levels</h2>
+          <h2 id="campaign-heading">Campaign</h2>
         </header>
         <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue">Continue</button>
         <p id="campaign-resume-hint" class="campaign-hint muted small" hidden></p>

@@ -63,9 +63,8 @@ describe('campaign levels: the definition is well formed', () => {
     for (const [id, c] of checks) {
       const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
       // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
-      // hexes it may lose to rock. Levels 1-10 teach on it; levels 11-30 keep the product board's
-      // original floor of 20.
-      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 10 ? 15 : 20);
+      // hexes it may lose to rock. Levels 4-30 keep the product board's original floor of 20.
+      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
     }
   });
@@ -144,13 +143,12 @@ describe('campaign levels: the definition is well formed', () => {
     ]);
   });
 
-  it('levels 1-10 use the tutorial small map (radius 2); levels 11-30 the product hexagon (radius 3)', () => {
+  it('levels 1-3 use the tutorial small map (radius 2); levels 4-30 the product hexagon (radius 3)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      // Owner direction 2026-10-17 (Campaign-as-tutorial brief): the first ten levels teach on the
-      // SAME map the tutorial does, and Level 11 makes the bigger board its own lesson. Exact per
-      // level, not a range.
-      const small = level.number <= 10;
+      // Owner direction 2026-10-16: the first three levels are played on the SAME map the tutorial
+      // teaches on. This is a deliberate narrowing, not a range: the split is exact per level.
+      const small = level.number <= 3;
       const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
       const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
       const expectedHomes = small ? CAMPAIGN_SMALL_HOMES : CAMPAIGN_HOMES;
@@ -168,8 +166,8 @@ describe('campaign levels: the definition is well formed', () => {
 
 describe('campaign levels: the validation layer fails loudly and specifically', () => {
   // A product-board (radius 3) level as the base: these checks are about OTHER rules, so the board
-  // must not trip the radius/hexagon check first. Level 11 is the first full-hexagon level.
-  const base = CAMPAIGN_LEVELS.find((l) => l.number === 11)!;
+  // must not trip the radius/hexagon check first.
+  const base = CAMPAIGN_LEVELS[3]!; // level 4, the product hexagon
   const withBoard = (rock: string[], gold: string[] = ['0,0'], homes = [...CAMPAIGN_HOMES] as [string, string]) => ({
     ...base,
     id: 'broken',
@@ -259,10 +257,10 @@ describe('campaign levels: reproducible', () => {
   it('the opening is on the authored board (homes are the authored homes, rock is rock)', () => {
     const level = CAMPAIGN_LEVELS[6]!; // First Obstacle, two rocks
     const s = campaignOpening(level);
-    expect(s.config.board!.rock).toEqual(['-2,0', '-1,-1']);
-    expect(s.terrain['-2,0']).toBe('rock');
+    expect(s.config.board!.rock).toEqual(['-3,0', '-3,1']);
+    expect(s.terrain['-3,0']).toBe('rock');
     expect(s.terrain['0,0']).toBe('rich');
-    for (const home of CAMPAIGN_SMALL_HOMES) {
+    for (const home of CAMPAIGN_HOMES) {
       expect(s.board[home]?.root).toBe(true);
       expect(s.terrain[home]).toBe('normal');
     }
