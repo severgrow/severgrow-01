@@ -128,9 +128,9 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
     if (intensity === 3) return null;
     if (intensity === 2 && !firstTurn) return null;
     // The very first action a player ever takes gets the plainest possible words.
-    return s.level === 1
-      ? { title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' }
-      : { title: ONBOARD.take, line: ONBOARD.takeLine, focus: 'deck' };
+    if (s.level === 1) return { title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' };
+    // One option while the turn is still being learned (see ONBOARD.takeLine).
+    return { title: ONBOARD.take, line: ONBOARD.takeLine, focus: 'deck' };
   }
 
   if (s.phase === 'ACT') {

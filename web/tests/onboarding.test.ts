@@ -117,6 +117,24 @@ describe('level 1 says exactly one thing, and then the next', () => {
     expect(say({ turn: 3 })).toEqual({ title: ONBOARD.draw, line: ONBOARD.drawLine, focus: 'deck' });
   });
 
+  it('offers one pile, not two, while the turn is being learned', () => {
+    // The Throw pile's top card can be a Fruit card, which is not taught until level 8, so the
+    // line names the Draw pile only. Levels 8-10 say nothing at the draw step at all.
+    // Levels 2-3 guide every turn, so the line is checked on a later turn; 4-7 only on the opening.
+    for (const level of [2, 3]) {
+      expect(say({ level, phase: 'DRAW', turn: 3 }), `L${level}`).toEqual({
+        title: ONBOARD.take, line: ONBOARD.takeLine, focus: 'deck',
+      });
+    }
+    for (const level of [4, 7]) {
+      expect(say({ level, phase: 'DRAW', turn: 2 }), `L${level}`).toEqual({
+        title: ONBOARD.take, line: ONBOARD.takeLine, focus: 'deck',
+      });
+    }
+    expect(ONBOARD.takeLine.toLowerCase()).not.toContain('throw pile');
+    for (const level of [8, 9, 10]) expect(say({ level, phase: 'DRAW', turn: 3 }), `L${level}`).toBeNull();
+  });
+
   it('asks for a card once the draw is done', () => {
     expect(say({ phase: 'ACT' })).toEqual({ title: ONBOARD.pick, line: ONBOARD.pickLine, focus: 'hand' });
   });

@@ -580,7 +580,11 @@ export const ONBOARD = Object.freeze({
   recap: (level: number): string => RECAP[level] ?? '',  draw: 'DRAW',
   drawLine: 'Tap the Draw pile to start your turn.',
   take: 'TAKE A CARD',
-  takeLine: 'Tap the Draw pile, or the Throw pile card.',
+  /**
+   * Levels 2-7: ONE pile, because a beginner has not learned either yet, and the Throw pile's top
+   * card can be a Fruit card — which is not taught until level 8.
+   */
+  takeLine: 'Tap the Draw pile.',
   pick: 'PICK A CARD',
   pickLine: 'Tap any card in your hand.',
   grow: 'GROW',
