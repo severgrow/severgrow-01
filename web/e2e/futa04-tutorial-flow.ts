@@ -82,7 +82,19 @@ try {
     await page.waitForSelector('#futasaku-glass [data-tut="next"]');
     await tap('#futasaku-glass [data-tut="next"]');
   }
-  await page.waitForFunction(() => !document.getElementById('menu')!.hidden, undefined, { timeout: 15000 });
+  // Owner direction (2026-10-16): finishing the guided run hands the player to a REAL level
+  // through the campaign's own entry point, so the end of the tour opens level 1 — not the menu.
+  await page.waitForFunction(
+    () => !(window as any).__severgrow.tutorial() && !document.getElementById('game')!.hidden,
+    undefined,
+    { timeout: 20000 },
+  );
+  const handoff = await page.evaluate(() => ({
+    hud: (document.querySelector('.hud')?.textContent ?? '').replace(/\s+/g, ' '),
+    phase: (window as any).__severgrow.state()?.phase ?? null,
+  }));
+  assert.match(handoff.hud, /Level 1/, 'the tutorial hands the player to level 1');
+  assert(handoff.phase, 'the handed-off level has a live game');
   for (const [width, height] of [[320, 568], [360, 640], [390, 844], [430, 932], [844, 390], [900, 700], [1280, 800], [1920, 1080]] as const) {
     await page.setViewportSize({ width, height });
     await page.goto(`${BASE}?tutorial=1&chapter=1`);

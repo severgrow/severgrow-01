@@ -55,11 +55,25 @@ try {
   await desktop.goto(base);await desktop.waitForSelector('#deck.ready');
   const wide=await desktop.evaluate(()=>{
     const rect=(s:string)=>document.querySelector(s)!.getBoundingClientRect();
-    return {boardRight:rect('#board-wrap').right,dockLeft:rect('#dock').left,dockWidth:rect('#dock').width,
+    const dock=rect('#dock');
+    const cards=[...document.querySelectorAll('#hand .card')].map(c=>c.getBoundingClientRect());
+    const tiles=[...document.querySelectorAll('#board .tile, #board .hex-cell')].map(t=>t.getBoundingClientRect());
+    // A tile counts as covered only when its centre is under a card: the dock's outer box reaches
+    // left of its contents since the cockpit is centred in the free space, so the box's own left
+    // edge says nothing about what a player can see.
+    const covered=tiles.filter(t=>cards.some(c=>{
+      const cx=t.x+t.width/2, cy=t.y+t.height/2;
+      return cx>c.left&&cx<c.right&&cy>c.top&&cy<c.bottom;
+    })).length;
+    return {boardRight:rect('#board-wrap').right,dockWidth:dock.width,
+      deckLeft:rect('#deck').left,cockpitLeft:rect('#smart-context').left,covered,
       control:rect('#smart-context').width,card:parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw'))};
   });
-  assert(wide.boardRight<1150 && wide.dockLeft>1000 && wide.dockWidth>=750,'board and right instrument area share the screen');
-  assert.equal(wide.control,64,'cockpit uses larger full-desktop controls');
+  assert(wide.boardRight<1150,'the board keeps the left stage');
+  assert(wide.dockWidth>=750,'the cards keep a generous right-hand area');
+  assert(wide.deckLeft>wide.boardRight && wide.cockpitLeft>wide.boardRight,'deck and cockpit sit clear of the board');
+  assert.equal(wide.covered,0,'no board tile sits under a card');
+  assert.equal(wide.control,72,'cockpit uses larger full-desktop controls');
   assert(wide.card>=110,'cards are visibly larger on full desktop');
   await desktop.close();
   console.log('Standalone viewport, Safari isolation, resize and desktop composition passed.');
