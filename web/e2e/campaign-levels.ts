@@ -112,14 +112,17 @@ try {
     if (level.number <= 7) check(first.length > 0, `L${level.number} opens with guidance (${first})`);
     else check(true, `L${level.number} opens quiet or with its mechanic (${first || 'quiet'})`);
     const board = await page.evaluate(() => document.querySelectorAll('.hex-cell').length);
-    check(board === 19, `L${level.number} plays on the 19-hex tutorial map (${board} hexes)`);
+    // The three discovery levels use the tutorial's map; from level 4 the board is the full hexagon,
+    // which is also where a corner home stops being stranglable in one Bloom.
+    const expectedHexes = level.number <= 3 ? 19 : 37;
+    check(board === expectedHexes, `L${level.number} plays on ${expectedHexes} hexes (${board})`);
 
     const end = await playToEnd(page, level.number);
     check(end.winner === 0, `L${level.number} is winnable (winner ${end.winner} via ${end.reason})`);
     results.push({ level: level.number, first: first || 'quiet', reason: end.reason, winner: end.winner });
   }
 
-  // Level 11 is the whole point of the ten: the board grows, and guidance stops.
+  // Level 11 keeps the full board and gets no guidance: the teaching is done.
   await page.waitForSelector('#gameover:not([hidden])', { timeout: 30000 });
   check((await page.textContent('#go-rematch'))?.trim() === 'Next level', 'after level 10 the next level is still offered');
   await dismissInstall();
@@ -127,7 +130,7 @@ try {
   await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
   await page.waitForTimeout(700);
   const big = await page.evaluate(() => document.querySelectorAll('.hex-cell').length);
-  check(big === 37, `level 11 opens the full board (${big} hexes)`);
+  check(big === 37, `level 11 plays the full board (${big} hexes)`);
   check((await title(page)) === '', 'level 11 gets no campaign guidance: the teaching is done');
 
   assert.deepEqual([...errors], [], `no page errors: ${errors.join(' | ')}`);
