@@ -41,8 +41,8 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [site, dist, commit, adminDist] = process.argv.slice(2);
-assert(site && dist && /^[0-9a-f]{40}$/.test(commit ?? ''), 'Usage: site dist fullCommitSha [adminDist]');
+const [site, dist, commit, adminDist, onboardingDist, onboardingSha] = process.argv.slice(2);
+assert(site && dist && /^[0-9a-f]{40}$/.test(commit ?? ''), 'Usage: site dist fullCommitSha [adminDist] [onboardingDist onboardingSha]');
 assert(existsSync(join(dist, 'index.html')), `missing ${dist}/index.html`);
 assert(
   readFileSync(join(dist, 'index.html'), 'utf8').includes('./assets/'),
@@ -50,7 +50,7 @@ assert(
 );
 
 /** Routes that live beside the root and must never be swept into /firststep/. */
-const SIBLING_ROUTES = ['admin', 'firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5'];
+const SIBLING_ROUTES = ['admin', 'firststep', 'test', 'test2', 'futa0.4', 'futa-test', 'futa0.5', '2'];
 
 /**
  * Main's own worker must not treat a sibling route as its offline index. compose-pages.mjs and
@@ -78,6 +78,9 @@ const patchMainWorker = (path) => {
   }
 };
 
+/** The marker every route guard carries, so a later run can replace it instead of doubling it. */
+const GUARD_COMMENT = "// a sibling channel is never this worker's page";
+
 /**
  * FUTASAKU 0.5 owns scope "/" from the root. Its worker may only answer for its own routes: the
  * navigate handler caches whatever page it served under the root index, so without this a visit to
@@ -88,12 +91,17 @@ const patchRootWorker = (path) => {
   const worker = readFileSync(path, 'utf8');
   // `/admin/` is in this guard because the dashboard is served from the ROOT's scope: without the
   // early return, a visit to /admin/ would be cached by this worker as the root's offline index.
-  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin)(\/|$)/.test(url.pathname)) return; // a sibling channel is never this worker's page`;
-  if (worker.includes(guard)) return;
+  // `/2/` is the onboarding line: it registers its own worker under its own scope, and the root's
+  // worker must never treat one of its pages as the root's offline copy.
+  const guard = String.raw`  if (/^\/(?:firststep|test2?|futa0[.]4|futa0[.]5|futa-test|admin|2)(\/|$)/.test(url.pathname)) return; ${GUARD_COMMENT}`;
+  // A guard installed by an earlier copy of this script is REPLACED, never doubled: the route list
+  // grows over time, and appending a second guard line would leave the old one in place forever.
+  const without = worker.split('\n').filter((line) => !line.includes(GUARD_COMMENT)).join('\n');
   const anchor = String.raw`  if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;`;
-  assert(worker.includes(anchor), 'Review the changed FUTASAKU 0.5 worker before publishing it at the root');
+  assert(without.includes(anchor), 'Review the changed FUTASAKU 0.5 worker before publishing it at the root');
   // A replacer function, not a string: the guard contains `$`, which a replacement string mangles.
-  writeFileSync(path, worker.replace(anchor, () => `${anchor}\n${guard}`));
+  const next = without.replace(anchor, () => `${anchor}\n${guard}`);
+  if (next !== worker) writeFileSync(path, next);
 };
 
 /**
@@ -200,6 +208,34 @@ mkdirSync(join(site, 'futa0.5'), { recursive: true });
 writeFileSync(join(site, 'futa0.5', 'index.html'), redirectHtml(readFileSync(join(site, 'index.html'), 'utf8')));
 writeFileSync(join(site, 'futa0.5', 'release.json'), JSON.stringify({ channel: 'Futasaku0.5', commit, movedTo: '/' }, null, 2) + '\n');
 
+// 6c. /2/ — the ONBOARDING line (owner direction, 2026-10-17).
+//
+// The root keeps the released campaign, exactly as it shipped. The teaching work — levels 1-10 on the
+// small map, the tap feedback — is built from the `futa0.5-onboarding` branch and published beside the
+// root, so it can be played on a real phone at futasaku.com/2 without changing what everyone else
+// gets at futasaku.com. Optional: a run without the argument composes exactly the site it composed
+// before, so a push to futa0.4 cannot publish a half-built /2 by accident.
+if (onboardingDist) {
+  assert(/^[0-9a-f]{40}$/.test(onboardingSha ?? ''), 'the /2 build must be published with its exact commit');
+  const source = resolve(onboardingDist);
+  assert(existsSync(join(source, 'index.html')), `the /2 build has no index.html: ${onboardingDist}`);
+  // The one property that decides whether a page works from a subdirectory at all.
+  assert(
+    readFileSync(join(source, 'index.html'), 'utf8').includes('./assets/'),
+    'the /2 build must use relative asset paths to work at /2/',
+  );
+  const target = join(site, '2');
+  rmSync(target, { recursive: true, force: true });
+  cpSync(source, target, { recursive: true });
+  writeFileSync(
+    join(target, 'release.json'),
+    JSON.stringify({ channel: 'FUTASAKU onboarding (campaign as the tutorial)', commit: onboardingSha }, null, 2) + '\n',
+  );
+  console.log(`/2/      = the onboarding line (${onboardingSha.slice(0, 7)})`);
+} else {
+  console.log('/2/      = not included (no onboarding build was passed)');
+}
+
 // 6b. The ADMIN DASHBOARD at /admin/ — OPT-IN (docs/ADMIN.md §7).
 //
 // Nothing here runs unless the workflow passes a fourth argument, which it does only when the
@@ -245,4 +281,4 @@ if (installed !== guardSource) {
   writeFileSync(guardTarget, guardSource);
 }
 
-console.log(`Root = FUTASAKU 0.5 ${commit}; /firststep/ = Main ${release.main}; /futa0.5/ -> /`);
+console.log(`Root = FUTASAKU 0.5 ${commit}; /firststep/ = Main ${release.main}; /futa0.5/ -> /${onboardingDist ? '; /2/ = onboarding' : ''}`);
