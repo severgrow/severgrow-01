@@ -587,6 +587,7 @@ export const ONBOARD = Object.freeze({
   growLine: 'Tap a lit tile.',
   throwTitle: 'THROW',
   throwLine: 'Tap a card twice to throw it.',
+  throwAgain: 'Tap the same card again.',
   throwDone: 'Tap » when you are done.',
   twoWays: 'TWO WAYS',
   twoWaysLine: 'More than one tile works. Pick one.',

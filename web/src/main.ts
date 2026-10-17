@@ -3734,6 +3734,7 @@ function renderOnboardingGuide(v: View) {
     fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
     bloomReady: document.documentElement.dataset.futa04BloomReady === 'true',
     grew: (st.sproutsThisTurn ?? 0) > 0,
+    throwPending: session!.pending?.t === 'Discard',
     ...theirHomeState(v, session!.legal),
   });
   const key = guideKey(level, st.turnNumber, picked, guide);

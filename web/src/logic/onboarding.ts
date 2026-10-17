@@ -61,6 +61,8 @@ export type GuideInput = {
   bloomReady: boolean;
   /** I have already grown this turn, so the only move left is to throw. */
   grew: boolean;
+  /** A card is picked and waiting for its second tap to be thrown. */
+  throwPending: boolean;
   /** How many sides of THEIR home are still takeable (on the board, not rock, empty). */
   theirOpen: number;
   /** A legal move right now would take their last open side — the win. */
@@ -160,7 +162,11 @@ export const onboardGuide = (s: GuideInput): OnboardGuide | null => {
   if (s.phase === 'DISCARD') {
     if (intensity === 3) return null;
     if (intensity === 2 && !firstTurn) return null;
-    return { title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'discard' };
+    // The line says "tap a card twice", so the window points at the HAND, not the pile. Once a card
+    // is waiting for its second tap, the next touch is the same card again.
+    return s.throwPending
+      ? { title: ONBOARD.throwTitle, line: ONBOARD.throwAgain, focus: 'hand' }
+      : { title: ONBOARD.throwTitle, line: ONBOARD.throwLine, focus: 'hand' };
   }
 
   return null;

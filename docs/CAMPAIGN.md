@@ -157,7 +157,8 @@ Supporting rules, all from the same pass:
 
 - **The board shows the moves.** With nothing picked, every hex a card could grow on gets a quiet
   dashed ring (`.available`); the coach's suggested hex keeps its stronger ring. Picking a card turns
-  them into the card's real targets.
+  them into the card's real targets, and the suggested one — when the picked card can actually use it —
+  gets a soft pool of light under a heavier ring, so one tile is the obvious one to tap.
 - **The interface reveals itself by level** (`html[data-onboard="1|2|3"]`): levels 1-3 quiet sort,
   replay and history; 4-7 bring sort back; 8-10 are the normal game. Nothing legal is ever removed.
 - **No lottery** on a campaign level: the seed fixes who starts, so the player is in the game
@@ -165,8 +166,27 @@ Supporting rules, all from the same pass:
 - **The player can switch it off**: Settings → Step guidance → Off silences the window
   (`severgrow-guide` in local storage), exactly as it does in the Tutorial.
 
+Second clarity pass (2026-10-17, after the objective landed):
+
+- The window carries a quiet **LEVEL n** line above the instruction, and says the same in its
+  `aria-label`, so a player always knows where they are in the journey.
+- The goal beat **points at the opponent's home** while it says "surround their home" — the word is
+  useless without a referent. The Draw pile haloes itself at that step, so the next touch is still
+  obvious.
+- When the only thing left is to finish the turn, the window **points at the end-turn control**.
+  In the throw phase it points at the **hand**, because the line says "tap a card twice"; once a card
+  waits for its second tap the line becomes "tap the same card again".
+- A dead tap is answered everywhere it can happen: a hex (rock, connection, wrong phase) *and* a card
+  before the draw ("Draw a card first"), placed at the tapped thing.
+- A round cockpit button with no action is invisible on the guided levels instead of blank — a
+  control that looks live but does nothing is worse than an absent one.
+- Winning a guided level ends with **what it taught** ("Draw · Grow · Throw", "Numbers are strength",
+  "Three in a row: Bloom", …). A normal match's finish card is unchanged.
+
 Tests: `web/tests/onboarding.test.ts` pins the curve and the silence; `web/e2e/onboarding.ts` drives
-Level 1 on a 390×844 phone (window content, board padding, lit hexes, quieted controls, no lottery).
+Level 1 on a 390×844 phone and a 1280×800 desktop (window content, level kicker, board padding, lit
+hexes, quieted controls, no lottery); `web/e2e/campaign-levels.ts` plays 1-10 through the menu and
+checks the recap after each win.
 
 **Where the Fruit/Strengthen "first tip" went.** The dock tip stays inside the Help sheet, as it
 always did: lifting it onto the game surface passed its own check but broke the smart-cockpit layout
