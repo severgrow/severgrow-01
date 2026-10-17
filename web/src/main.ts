@@ -1190,6 +1190,14 @@ function fillMenuStatus() {
   // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
   const title = document.getElementById('gm-title');
   if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
+  // In a campaign level this button leaves for the level list, and the match is SAVED (Resume brings
+  // it back), so it is not a "New game" and nothing is lost.
+  const leave = document.getElementById('gm-new');
+  if (leave) {
+    const words = campaignLevel ? CAMPAIGN.back : 'New game';
+    leave.textContent = words;
+    leave.setAttribute('aria-label', words);
+  }
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
@@ -6514,7 +6522,8 @@ bind('gm-new', () => {
     showScreen('levels');
     return;
   }
-  if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
+  // A campaign level is saved as it is played, so leaving it loses nothing and asks nothing.
+  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
   sheet(null);
   showScreen(campaignLevel ? 'campaign' : 'levels');
 });

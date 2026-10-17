@@ -105,6 +105,10 @@ try {
   await page.waitForTimeout(400);
   const pausedTitle = await page.evaluate(() => document.getElementById('gm-title')?.textContent?.trim() ?? '');
   check(/level\s*1/i.test(pausedTitle), `the pause menu names the level (${pausedTitle})`);
+  // Leaving a campaign level returns to the list and keeps the match (Resume), so the button is not
+  // offered as a destructive "New game".
+  const leaveWords = await page.evaluate(() => document.getElementById('gm-new')?.textContent?.trim() ?? '');
+  check(/back to levels/i.test(leaveWords), `the exit says what it does (${leaveWords})`);
   await page.evaluate(() => document.querySelector('#sheet-menu [data-close]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await page.waitForTimeout(300);
 
