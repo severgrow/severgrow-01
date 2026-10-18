@@ -56,6 +56,15 @@ describe('economy schedule and caps', () => {
     expect(campaignSeedReward(30)).toEqual({ firstWin: 20, chapter: 75 });
     expect(campaignSeedReward(40)).toEqual({ firstWin: 20, chapter: 90 });
     expect(campaignSeedReward(50)).toEqual({ firstWin: 25, chapter: 125 });
+    // 31-70 (added 2026-10-18): a level past the old cap of 50 used to return null, which reads as
+    // "no reward" rather than an error. The cap and the two new chapter bonuses are pinned here.
+    expect(campaignSeedReward(41)).toEqual({ firstWin: 25, chapter: 0 });
+    expect(campaignSeedReward(60)).toEqual({ firstWin: 25, chapter: 150 });
+    expect(campaignSeedReward(69)).toEqual({ firstWin: 25, chapter: 0 });
+    expect(campaignSeedReward(70)).toEqual({ firstWin: 25, chapter: 200 });
+    // Past the last authored level it is honestly "no reward", not silently zero.
+    expect(campaignSeedReward(71)).toBeNull();
+    expect(campaignSeedReward(0)).toBeNull();
   });
   it('caps queue matches and resets at the server UTC boundary', async () => {
     const store = new MemoryWorldEconomyStore();

@@ -41,11 +41,13 @@ for an authored board. Then:
 2. `npm run campaign:balance -- --games=20` — check the new level is not lop-sided or dull (below).
 3. If it opens a new chapter, add its title/subtitle to `CAMPAIGN.chapters` in `src/strings.ts`.
 
-No UI change is needed: the campaign screen is drawn from the level data, so levels 31-50 need no
-restructuring. (Chapter IV+ will appear as soon as those levels exist.)
+No UI change is needed: the campaign screen is drawn from the level data, so further levels need no
+restructuring.
 
-**As built:** Chapters I, II and III — levels 1-30 — are playable. Every board is hand-authored
+**As built:** Chapters I-IV — levels 1-40 — are playable. Every board is hand-authored
 (`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
+Levels 41-70 are planned (four more chapters, `docs/CAMPAIGN-31-70.md`) and will land the same way,
+one chapter at a time.
 
 ## Validation rules
 
@@ -176,6 +178,44 @@ their pair right beside the centre and levels 8 and 23 put it on the wings, both
 players toward the same fights. The curve is deliberately not "one more rock each time": 14, 18 and 28
 are the breathing-space levels, each more open than its neighbours but against a stronger bot.
 
+## Chapter IV — Hollow Ground (levels 31-40)
+
+The teaching chapters (1-30) use the bot ladder to raise difficulty, and it tops out at 9. There is no
+stronger AI, so **31-70 put the difficulty in the board**. Rules are unchanged — same maxRank 9, one
+sprout, strengthen and expanded Bloom on, four Fruit cards — and only terrain, gold and the seed vary.
+
+Chapter IV's question: *can you read a large shape and find the route that still exists?* Terrain
+pressure rises from 7 to 15 (rocks + gold) and is authored in named shapes rather than scattered stones.
+
+| Lv | Name | Bot | Rocks | Gold | Shape | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 31 | First Light | **8** | 4 | 3 | shoulders | gold slot through the middle; soft re-entry after 30 |
+| 32 | The Knot | 9 | 4 | 3 | pips | two diagonal pairs; read which lanes survive |
+| 33 | Outliers | 9 | 6 | 3 | outliers | corners taken, centre open |
+| 34 | Crosswinds | 9 | 6 | 5 | cross | an X of lanes, gold down the arms |
+| 35 | The Gate | 9 | 6 | 3 | gate | two wide crossings, one diagonal |
+| 36 | Sparrow Stones | 9 | 8 | 5 | scatter | eight single stones, every hex a choice |
+| 37 | Twin Anvils | 9 | 8 | 3 | anvils | two blocks; route around, not through |
+| 38 | Gold Under Grass | **8** | 4 | 7 | pasture | gold almost everywhere; fight for value |
+| 39 | Gated Ring | 9 | 8 | 5 | ring | the centre is gated, not sealed |
+| 40 | Hollow Crown | 9 | 10 | 5 | crown | dense ring, gold spine; chapter finale |
+
+Every board is **point-symmetric** (mirror `q,r → -q,-r`), so both seats get the same ground. Mirror
+symmetry is also why rock counts are even and gold counts odd: gold is the centre plus pairs.
+
+**The bot rule changes from 31 on.** Bot 9 everywhere except deliberate **breathers**, flagged in the
+data (`breather: true`) so the choice is reviewed rather than an invisible curve: 31 (re-entry after
+the level-30 finale) and 38 (the gold-heavy breather). The tests allow bot 8 only on a flagged
+breather, never twice in a row, and never on more than a quarter of the extension. The 1-30 ladder
+keeps its original "never decreases" rule, unchanged.
+
+**Two terrains, two jobs.** Rock takes space; gold creates value. A chapter leans on one, which is
+what makes IV (rock-led), V (planned: gold-led), VI (rock-heavy, gold-light) and VII (both) feel
+different rather than like the same board with more stones.
+
+Balance evidence for this chapter (24 deals per level plus a versus-reference read) is in the commit
+that added it; the seat split is re-measured over 60 deals per level before 41-50 are authored.
+
 ### The bot ladder (2026-10-16 rebalance)
 
 Owner-approved difficulty ladder, applied as a **data-only** change to each level's `botLevel`. No
@@ -200,10 +240,17 @@ level:
 Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,5,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
 
 The ladder is pinned by a **guard test**, not a comment: `tests/campaign/levels.test.ts` asserts the
-bot level never decreases as the level number rises, that it starts at 1 and ends at 9, and the exact
-sequence above. The old curve rose to bot 5 at level 20 then dropped back to bot 4 at level 21, and
-nothing caught it, because the previous test allowed a one-step fall. Existing player progress is
-untouched — campaign progress is stored per level **id**, and no id changed.
+bot level never decreases as the level number rises **through the teaching chapters (1-30)**, that it
+starts at 1 and ends at 9, and the exact sequence above. The old curve rose to bot 5 at level 20 then
+dropped back to bot 4 at level 21, and nothing caught it, because the previous test allowed a one-step
+fall. Existing player progress is untouched — campaign progress is stored per level **id**, and no id
+changed.
+
+**From 31 the rule changes, deliberately.** There is no bot above 9, so the late campaign raises
+difficulty through terrain and allows an occasional bot 8 as a *breather*. That is a reviewed design
+choice, so it is declared in the data (`breather: true`) and the test is stricter than "it may drop":
+bot 8 is legal only on a flagged breather, never twice in a row, and never on more than a quarter of
+the extension. The 1-30 rule above is unchanged.
 
 ## Two boards for the same levels (the /2/ onboarding line)
 
@@ -391,7 +438,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across all three chapters; the design rock counts (1-30) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the bot ladder never decreases, starts at 1, ends at 9, and matches the approved sequence exactly**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-40) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |

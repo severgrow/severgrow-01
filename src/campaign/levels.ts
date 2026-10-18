@@ -12,6 +12,9 @@ import type { Level } from '../bots/levels.js';
 // The tutorial's map size, imported rather than re-typed: levels 1-3 play on the SAME small map the
 // tutorial teaches on, and there stays exactly ONE source of truth for how big that map is.
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
+// Chapters IV-VII live in their own file: 40 authored boards would make every merge with the
+// parallel onboarding work a fight. Type-only import there, so there is no runtime cycle.
+import { CHAPTER_4_LEVELS } from './levels-late.js';
 
 export type CampaignLevel = {
   /** Stable id, never reused or renumbered once published. */
@@ -31,6 +34,12 @@ export type CampaignLevel = {
   seed: number;
   /** The existing bot level (1-9). There is no separate campaign AI. */
   botLevel: Level;
+  /**
+   * A deliberate easier level (bot 8) placed where the terrain spikes, so the chapter changes gear
+   * without dropping the player into a wall. Levels 31-70 only; never two in a row, at most six in
+   * the whole extension. The campaign tests read this flag instead of trusting an invisible curve.
+   */
+  breather?: boolean;
   /**
    * Engine `RulesConfig` overrides. `resolveConfig` validates these and THROWS on an impossible
    * board — that throw is the validation layer. A hand-authored `config.board` is the only way to
@@ -210,6 +219,9 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   level(3, 29, 'c3-29', 'The Crossing', 95029, 9, board(['-2,0', '-1,0', '1,0', '2,0', '0,1', '0,-1'], ['0,0', '-2,-1', '2,1', '0,-2', '0,2']), 'Cross at the centre or around the ends.'),
   // The finale: a stone heart around the gold centre, bot 9, and gold at the far poles.
   level(3, 30, 'c3-30', 'Heart of Stone', 95030, 9, board(['-1,0', '1,0', '0,1', '0,-1', '-1,-1', '1,1'], ['0,0', '0,-3', '0,3']), 'The campaign finale: a stone heart round the gold centre.'),
+  // Levels 31-70 live in their own file (levels-late.ts) so this list stays small and the parallel
+  // onboarding work never has to merge 40 boards. Difficulty there comes from terrain, not a bot.
+  ...CHAPTER_4_LEVELS,
 ]);
 
 export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
@@ -227,6 +239,11 @@ export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
     number: 3,
     id: 'narrow-paths',
     levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 3)),
+  }),
+  Object.freeze({
+    number: 4,
+    id: 'hollow-ground',
+    levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 4)),
   }),
 ]);
 

@@ -17,18 +17,19 @@
 // So `levelId` is treated as an OPAQUE STRING here. The one thing that cannot be derived from
 // recorded rows — the level number for a level nobody has ever cleared — is simply absent, and the
 // screen says so rather than inventing it (`completeLevelListKnown: false`).
-import { campaignSeedReward } from '../seeds/config.js';
+import { CAMPAIGN_LEVEL_REWARD_MAX, campaignSeedReward } from '../seeds/config.js';
 import type { AdminCampaign, AdminValueCount } from './types.js';
 
 /**
- * The levels the Seed economy already pays a CHAPTER bonus at (10, 20, 30, 40, 50 today).
+ * The levels the Seed economy already pays a CHAPTER bonus at (10, 20, … 70 today).
  *
  * Read from `campaignSeedReward` — the same constant the award path uses — rather than hardcoded,
  * so this rollup cannot drift from what the economy actually pays. It is a reward constant, not a
- * campaign board: nothing here describes terrain, bots or seeds.
+ * campaign board: nothing here describes terrain, bots or seeds. The range comes from the economy's
+ * own cap: it used to be a literal 50, which silently filed levels 51-70 under the sixth chapter.
  */
 export const chapterBoundaries = (): number[] =>
-  Array.from({ length: 50 }, (_, index) => index + 1).filter((level) => (campaignSeedReward(level)?.chapter ?? 0) > 0);
+  Array.from({ length: CAMPAIGN_LEVEL_REWARD_MAX }, (_, index) => index + 1).filter((level) => (campaignSeedReward(level)?.chapter ?? 0) > 0);
 
 /** 1-based chapter for a recorded level number, from the economy's own chapter boundaries. */
 export const chapterOf = (level: number, boundaries: readonly number[]): number => {

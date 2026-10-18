@@ -1,7 +1,15 @@
 # Campaign levels 31-70 — design and implementation plan
 
 **Branch:** `futa0.5-levels-31-70`, cut from `origin/futa0.5-online` (`8bdfbeb`).
-**Status:** PLAN. No level data written yet. Decisions marked **DECIDE** need an owner answer.
+**Status:** Chapter IV (31-40) is BUILT and tested. Chapters V-VII remain planned.
+
+**Decisions taken 2026-10-18 (owner):**
+1. **Board size:** stay on radius 3 (37 hexes) for 31-70; terrain is the only axis. A 61-hex board
+   was probed and works, but at 360 px it gives ~36 px hexes — under the 44 px tap target.
+2. **Breathers:** bot 8 is allowed on levels flagged `breather: true`, never twice in a row, at most a
+   quarter of the extension. The 1-30 ladder keeps its original rule.
+3. **Economy:** extend the Seeds cap to 70; 25 per first clear from 41; chapter bonuses at 60 (150)
+   and 70 (200). Implemented in `server/src/seeds/config.ts`, with one shared constant for the cap.
 
 This plan extends the campaign from 30 to 70 levels. Levels 1-30 are untouched. The other
 active line (`futa0.5-onboarding`, published at `/2`, and the from-scratch rework at `/3`)
@@ -121,17 +129,17 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 
 | # | Name (proposal) | Bot | Rock | Gold | Shape | Intent |
 | --- | --- | --- | --- | --- | --- | --- |
-| **IV — Hollow Ground** | | | | | | |
-| 31 | First Light | **8** | 4 | 3 | Notched wall | welcoming re-entry; new scale, no new pressure |
-| 32 | The Notch | 9 | 5 | 3 | Notched wall, wider | read the gap |
-| 33 | Twin Hollows | 9 | 6 | 3 | Twin hollows | choose a lane early |
-| 34 | Long Shelf | 9 | 6 | 5 | Long shelf | one side is richer |
-| 35 | The Gate | 9 | 7 | 3 | Double gate | commit to a gate |
-| 36 | Sparrow Stones | 9 | 7 | 5 | scattered pairs | many small decisions |
-| 37 | The Anvil | 9 | 8 | 3 | anvil | the short way is closed |
-| 38 | Gold Under Grass | **8** | 4 | 7 | scattered, gold-heavy | breather: value over space |
-| 39 | Ridgeline | 9 | 8 | 5 | ridgeline | two passes, one wide |
-| 40 | Hollow Crown | 9 | 9 | 5 | hollow crown | chapter finale: three ways in |
+| **IV — Hollow Ground** (BUILT) | | | | | | |
+| 31 | First Light | **8** | 4 | 3 | shoulders | gold slot through the middle; soft re-entry after 30 |
+| 32 | The Knot | 9 | 4 | 3 | pips | two diagonal pairs; polar lanes stay open |
+| 33 | Outliers | 9 | 6 | 3 | outliers | corners taken, centre open |
+| 34 | Crosswinds | 9 | 6 | 5 | cross | an X of lanes, gold down the arms |
+| 35 | The Gate | 9 | 6 | 3 | gate | two wide crossings, one diagonal |
+| 36 | Sparrow Stones | 9 | 8 | 5 | scatter | eight single stones, every hex a choice |
+| 37 | Twin Anvils | 9 | 8 | 3 | anvils | two blocks; route around, not through |
+| 38 | Gold Under Grass | **8** | 4 | 7 | pasture | gold almost everywhere; fight for value |
+| 39 | Gated Ring | 9 | 8 | 5 | ring | the centre is gated, not sealed |
+| 40 | Hollow Crown | 9 | 10 | 5 | crown | dense ring, gold spine; chapter finale |
 | **V — Gold Country** | | | | | | |
 | 41 | Gold Seam | 9 | 3 | 7 | gold seam | first pure economy board |
 | 42 | The Rush | 9 | 2 | 9 | open, nine gold | almost no rock; greed |
@@ -166,8 +174,47 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 69 | The Turning | 9 | 14 | 7 | lattice + teeth | turn the board around |
 | 70 | Last Light | 9 | 14 | 9 | composed finale | the campaign's hardest board |
 
-Breathers: **31, 38, 46, 55, 63** (five of forty). No two consecutive; each sits where the
-previous level spiked, and each introduces or consolidates something rather than being filler.
+Breathers: **31, 38** so far (of the five planned: 31, 38, 46, 55, 63). Never two consecutive; each
+sits where the previous level spiked.
+
+**Authoring note learned while building IV:** point symmetry forces even rock counts (every shape is a
+pair), while gold is naturally odd because it is the centre plus pairs. The plan's original counts for
+chapter IV were odd in places and were adjusted to the drawn shapes; the design intent (pressure rising
+7 → 15) held.
+
+### Chapter IV — measured, not assumed
+
+60 deals per level, bot 9 in both seats, the level's own board:
+
+| Lv | seat 0 | seat 1 | draws | avg turns |
+| --- | --- | --- | --- | --- |
+| 31 | 32 | 28 | 0 | 19.8 |
+| 32 | 32 | 27 | 1 | 19.1 |
+| 33 | 34 | 26 | 0 | 19.4 |
+| 34 | 28 | 32 | 0 | 18.6 |
+| 35 | 25 | 35 | 0 | 18.9 |
+| 36 | 33 | 27 | 0 | 18.9 |
+| 37 | 27 | 33 | 0 | 18.3 |
+| 38 | 32 | 28 | 0 | 20.3 |
+| 39 | 36 | 24 | 0 | 19.4 |
+| 40 | 27 | 33 | 0 | 18.8 |
+
+No level is visibly one-sided: the widest split is 36/60 (60%), inside the noise of a 60-game sample.
+Average length is 18-20 turns, i.e. the deck runs out at about the same pace across the chapter, so the
+boards vary the *shape* of the game rather than its length. Finish mix is mostly score (deck
+exhaustion) with a strangle in roughly one game in eight; bot 9 defends well, which is what makes the
+terrain matter.
+
+A versus-reference read (this bot against bot 7, seats swapped) showed bot 9 winning most levels from
+both seats. One level (37) lost both at a single sample; re-measured over 12 deals per seat it is
+6/12 and 6/12, so that was noise, not a broken board. **Do not treat a one-game versus-reference
+result as evidence** — the 24-deal table above is the one to read.
+
+Found during the browser pass, NOT fixed here (it is released-line behaviour, and the `/3` rework may
+touch the same entry point): the menu entry shows `LEVEL <current>` (here LEVEL 40) but tapping it
+resumes an unfinished match from an earlier level (here 31), because `enterCampaign()` prefers
+`campaignResume()` without saying so. With 40+ levels that mismatch is easier to hit. Proposed fix:
+when a save exists, label the entry with the saved level, or show "Resume" as the label.
 
 ---
 

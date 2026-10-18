@@ -10,10 +10,26 @@ export const SEED_ECONOMY = Object.freeze({
   },
 } as const);
 
+/**
+ * The last Campaign level the economy pays for. One constant, because three places must agree: the
+ * award guard here, the admin's chapter rollup, and the campaign data. It moved 50 → 70 on
+ * 2026-10-18 when chapters IV-VII were added.
+ */
+export const CAMPAIGN_LEVEL_REWARD_MAX = 70;
+
+/**
+ * The Campaign's first-clear payment and the chapter bonus at every tenth level.
+ *
+ * Levels 31-70 were added 2026-10-18. The cap moved from 50 to 70 in the same change, because a
+ * level past the cap would have paid NOTHING and returned null — a "no reward" answer that looks
+ * like a bug to the player and like a decision to the next reader. The tiers below are the owner's:
+ * 50 for the three intro levels, then 15 / 20 / 25 as the levels get longer, with chapter bonuses
+ * at every tenth level (60 and 70 are new, and larger: the late campaign is the long haul).
+ */
 export const campaignSeedReward = (level: number): { firstWin: number; chapter: number } | null => {
-  if (!Number.isInteger(level) || level < 1 || level > 50) return null;
+  if (!Number.isInteger(level) || level < 1 || level > CAMPAIGN_LEVEL_REWARD_MAX) return null;
   const firstWin = level <= 3 ? 50 : level <= 20 ? 15 : level <= 40 ? 20 : 25;
-  const chapter = ({ 10: 50, 20: 60, 30: 75, 40: 90, 50: 125 } as Record<number, number>)[level] ?? 0;
+  const chapter = ({ 10: 50, 20: 60, 30: 75, 40: 90, 50: 125, 60: 150, 70: 200 } as Record<number, number>)[level] ?? 0;
   return { firstWin, chapter };
 };
 

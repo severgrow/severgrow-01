@@ -420,12 +420,19 @@ describe('the metric shapes report what the data supports', () => {
 
   it('chapter boundaries come from the economy that pays them, not from a guess', () => {
     const boundaries = chapterBoundaries();
-    expect(boundaries).toEqual([10, 20, 30, 40, 50]);
+    // 31-70 were added 2026-10-18 and the economy pays chapter bonuses at 60 and 70 too. The range
+    // is read from the economy's own cap, so a level past 50 can no longer be filed under chapter 6
+    // by a hardcoded loop bound.
+    expect(boundaries).toEqual([10, 20, 30, 40, 50, 60, 70]);
     expect(chapterOf(1, boundaries)).toBe(1);
     expect(chapterOf(10, boundaries)).toBe(1);
     expect(chapterOf(11, boundaries)).toBe(2);
     expect(chapterOf(50, boundaries)).toBe(5);
+    expect(chapterOf(51, boundaries)).toBe(6);
+    expect(chapterOf(61, boundaries)).toBe(7);
+    expect(chapterOf(70, boundaries)).toBe(7);
     expect(levelIdOfSourceKey('campaign:c2-11')).toBe('c2-11');
+    expect(levelIdOfSourceKey('campaign:c4-37')).toBe('c4-37');
     expect(levelIdOfSourceKey('training:abc')).toBe('training:abc');
   });
 
