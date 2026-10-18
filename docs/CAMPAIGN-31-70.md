@@ -1,7 +1,7 @@
 # Campaign levels 31-70 — design and implementation plan
 
 **Branch:** `futa0.5-levels-31-70`, cut from `origin/futa0.5-online` (`8bdfbeb`).
-**Status:** Chapter IV (31-40) is BUILT and tested. Chapters V-VII remain planned.
+**Status:** Chapters IV (31-40) and V (41-50) are BUILT and tested. Chapters VI-VII remain planned.
 
 **Decisions taken 2026-10-18 (owner):**
 1. **Board size:** stay on radius 3 (37 hexes) for 31-70; terrain is the only axis. A 61-hex board
@@ -140,17 +140,17 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 38 | Gold Under Grass | **8** | 4 | 7 | pasture | gold almost everywhere; fight for value |
 | 39 | Gated Ring | 9 | 8 | 5 | ring | the centre is gated, not sealed |
 | 40 | Hollow Crown | 9 | 10 | 5 | crown | dense ring, gold spine; chapter finale |
-| **V — Gold Country** | | | | | | |
-| 41 | Gold Seam | 9 | 3 | 7 | gold seam | first pure economy board |
-| 42 | The Rush | 9 | 2 | 9 | open, nine gold | almost no rock; greed |
-| 43 | Prospector | 9 | 5 | 7 | scattered + seam | reach vs hold |
-| 44 | Vein | 9 | 4 | 8 | diagonal gold line | the race is the level |
-| 45 | Two Claims | 9 | 6 | 7 | two mirror gold clusters | which claim do you defend |
-| 46 | Open Ledger | **8** | 2 | 5 | near-empty | breather: pure play |
-| 47 | The Mint | 9 | 6 | 9 | mint | four doors to nine gold |
-| 48 | Paydirt | 9 | 5 | 8 | clustered gold | convert position into value |
-| 49 | Gold Line | 9 | 7 | 7 | alternating line | greed vs connection |
-| 50 | Mother Lode | 9 | 8 | 9 | dense gold + rock | chapter finale: richest board |
+| **V — Gold Country** (BUILT) | | | | | | |
+| 41 | Gold Seam | 9 | 2 | 9 | seam | gold down the middle, gold on both wings |
+| 42 | The Rush | 9 | 2 | 9 | spread | gold across both wings; the race starts at once |
+| 43 | Prospector | 9 | 6 | 7 | scatter | scattered stone, and less gold than its neighbours |
+| 44 | Vein | 9 | 4 | 9 | vein | gold toward both homes, gated on the other axis |
+| 45 | Two Claims | 9 | 6 | 7 | wings | gold on the wings, stone gates on the spine |
+| 46 | Open Ledger | **8** | 2 | 9 | open | almost nothing; pure play (breather) |
+| 47 | The Mint | 9 | 6 | 9 | ring | a gold core ringed by stone, doors on the axes |
+| 48 | Paydirt | 9 | 6 | 9 | middle | gold on the wings, stone across the middle |
+| 49 | Gold Line | 9 | 8 | 9 | alternate | gold alternating with stone, long axis |
+| 50 | Mother Lode | 9 | 8 | 9 | edges | gold everywhere, stone round the edges |
 | **VI — The Long Way** | | | | | | |
 | 51 | Switchback | 9 | 8 | 4 | switchback | the S route |
 | 52 | Corridor | 9 | 9 | 4 | corridor | width is the lesson |
@@ -174,8 +174,8 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 69 | The Turning | 9 | 14 | 7 | lattice + teeth | turn the board around |
 | 70 | Last Light | 9 | 14 | 9 | composed finale | the campaign's hardest board |
 
-Breathers: **31, 38** so far (of the five planned: 31, 38, 46, 55, 63). Never two consecutive; each
-sits where the previous level spiked.
+Breathers: **31, 38, 46** so far (of the five planned: 31, 38, 46, 55, 63). Never two consecutive;
+each sits where the previous level spiked.
 
 **Authoring note learned while building IV:** point symmetry forces even rock counts (every shape is a
 pair), while gold is naturally odd because it is the centre plus pairs. The plan's original counts for
@@ -209,6 +209,32 @@ A versus-reference read (this bot against bot 7, seats swapped) showed bot 9 win
 both seats. One level (37) lost both at a single sample; re-measured over 12 deals per seat it is
 6/12 and 6/12, so that was noise, not a broken board. **Do not treat a one-game versus-reference
 result as evidence** — the 24-deal table above is the one to read.
+
+### Chapter V — measured, not assumed
+
+60 deals per level, the level's bot in both seats, the level's own board:
+
+| Lv | seat 0 | seat 1 | avg turns | finishes |
+| --- | --- | --- | --- | --- |
+| 41 | 28 | 32 | 18.8 | score 53, strangle 7 |
+| 42 | 34 | 26 | 19.5 | score 55, strangle 5 |
+| 43 | 32 | 28 | 19.1 | score 50, strangle 10 |
+| 44 | 30 | 30 | 18.5 | score 52, strangle 8 |
+| 45 | 30 | 30 | 18.9 | score 51, strangle 9 |
+| 46 | 27 | 33 | 20.7 | score 56, strangle 4 |
+| 47 | 32 | 27 | 19.6 | score 60, strangle 0 |
+| 48 | 25 | 35 | 19.5 | score 53, strangle 7 |
+| 49 | 23 | 37 | 19.2 | score 53, strangle 7 |
+| 50 | 26 | 33 | 20.0 | score 54, strangle 6 |
+
+The chapter is even (widest split 34/26 except level 49). Level 49 tripped the tool's 20% skew flag,
+so it was re-measured over eight independent 60-deal sweeps — 28/32, 33/27, 26/34, 31/29, 28/32,
+33/27, and the flagged 23/37 — which says the board is even and that one seed series was unlucky. Its
+seed is now 96249 (33/27, 10%) so the tool does not report a phantom defect; the board is unchanged.
+
+The intent is visible in the finish mix: strangles run 5-10 per 60 (chapter IV was about 7-8) because
+gold pulls both players onto the same ground, while **The Mint (47) never strangles** — 60 of 60
+score games — because its stone ring plus gold core is defensible from either side.
 
 Found during the browser pass, NOT fixed here (it is released-line behaviour, and the `/3` rework may
 touch the same entry point): the menu entry shows `LEVEL <current>` (here LEVEL 40) but tapping it

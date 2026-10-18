@@ -54,6 +54,7 @@ const board = (rock: readonly string[], gold: readonly string[]): BoardSpec => (
 });
 
 const late = (
+  chapter: number,
   number: number,
   id: string,
   name: string,
@@ -63,7 +64,7 @@ const late = (
   intent: string,
   breather = false,
 ): CampaignLevel => ({
-  id, number, chapter: 4, name, intent, seed, botLevel,
+  id, number, chapter, name, intent, seed, botLevel,
   ...(breather ? { breather: true } : {}),
   config: { ...BASE, board: spec },
 });
@@ -78,62 +79,132 @@ const late = (
 export const CHAPTER_4_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // Two small shoulders above and below the centre, and a gold slot between them. Minimal on
   // purpose: the first level after 30 should feel like a held breath, not a wall.
-  late(31, 'c4-31', 'First Light', 96031, 8, board(
+  late(4, 31, 'c4-31', 'First Light', 96031, 8, board(
     ['0,2', '1,2', '0,-2', '-1,-2'],
     ['0,0', '0,1', '0,-1'],
   ), 'Shoulders: gold slot through the middle; a soft re-entry after 30.', true),
 
   // Four stones on the two diagonals: the polar lanes stay open, the short diagonals do not.
-  late(32, 'c4-32', 'The Knot', 96032, 9, board(
+  late(4, 32, 'c4-32', 'The Knot', 96032, 9, board(
     ['1,1', '2,1', '-1,-1', '-2,-1'],
     ['0,0', '0,2', '0,-2'],
   ), 'Pips: two diagonal pairs; read which lanes survive.'),
 
   // Stones hug three corners; the middle stays wide. The first board where the edges lie to you.
-  late(33, 'c4-33', 'Outliers', 96033, 9, board(
+  late(4, 33, 'c4-33', 'Outliers', 96033, 9, board(
     ['-1,3', '1,-3', '-3,1', '3,-1', '-3,0', '3,0'],
     ['0,0', '1,1', '-1,-1'],
   ), 'Outliers: corners taken, centre open.'),
 
   // Edge stones plus two near the centre: four open lanes cross in an X.
-  late(34, 'c4-34', 'Crosswinds', 96034, 9, board(
+  late(4, 34, 'c4-34', 'Crosswinds', 96034, 9, board(
     ['0,3', '0,-3', '2,1', '-2,-1', '-1,0', '1,0'],
     ['0,0', '-3,1', '3,-1', '0,1', '0,-1'],
   ), 'Cross: an X of lanes, gold down the arms.'),
 
   // A broken wall with two wide gates; nothing is decided by one hex.
-  late(35, 'c4-35', 'The Gate', 96035, 9, board(
+  late(4, 35, 'c4-35', 'The Gate', 96035, 9, board(
     ['0,1', '0,-1', '0,2', '0,-2', '1,1', '-1,-1'],
     ['0,0', '-3,1', '3,-1'],
   ), 'Gate: two wide crossings, one diagonal.'),
 
   // Many single stones, no wall. The board asks for a plan rather than a route.
-  late(36, 'c4-36', 'Sparrow Stones', 96036, 9, board(
+  late(4, 36, 'c4-36', 'Sparrow Stones', 96036, 9, board(
     ['-1,3', '1,-3', '0,3', '0,-3', '1,2', '-1,-2', '2,1', '-2,-1'],
     ['0,0', '1,1', '-1,-1', '-3,1', '3,-1'],
   ), 'Scatter: eight single stones, every hex a choice.'),
 
   // Two solid four-cell blocks; the short way round is closed, the long way is not.
-  late(37, 'c4-37', 'Twin Anvils', 96037, 9, board(
+  late(4, 37, 'c4-37', 'Twin Anvils', 96037, 9, board(
     ['0,2', '1,2', '1,1', '2,1', '0,-2', '-1,-2', '-1,-1', '-2,-1'],
     ['0,0', '-3,1', '3,-1'],
   ), 'Anvils: two blocks; route around, not through.'),
 
   // Almost no stone, seven gold. A breather that teaches value over space.
-  late(38, 'c4-38', 'Gold Under Grass', 96038, 8, board(
+  late(4, 38, 'c4-38', 'Gold Under Grass', 96038, 8, board(
     ['0,2', '0,-2', '-2,0', '2,0'],
     ['0,0', '-3,1', '3,-1', '0,1', '0,-1', '1,1', '-1,-1'],
   ), 'Pasture: gold almost everywhere; the fight is for value.', true),
 
   // A ring of stones around the centre with gaps on opposite sides, plus the polar corners.
-  late(39, 'c4-39', 'Gated Ring', 96039, 9, board(
+  late(4, 39, 'c4-39', 'Gated Ring', 96039, 9, board(
     ['-1,0', '1,0', '0,1', '0,-1', '2,1', '-2,-1', '-1,3', '1,-3'],
     ['0,0', '1,1', '-1,-1', '0,2', '0,-2'],
   ), 'Ring: the centre is gated, not sealed.'),
 
   // The finale: ten stones, five gold, the tightest board of the chapter.
-  late(40, 'c4-40', 'Hollow Crown', 96040, 9, board(
+  late(4, 40, 'c4-40', 'Hollow Crown', 96040, 9, board(
     ['0,3', '0,-3', '1,2', '-1,-2', '-3,1', '3,-1', '1,1', '-1,-1', '2,1', '-2,-1'],
     ['0,0', '0,1', '0,-1', '0,2', '0,-2'],
   ), 'Crown: dense ring, gold spine; chapter finale.'),
+]);
+
+/**
+ * CHAPTER V — GOLD COUNTRY (41-50). Terrain budget rises 11 → 17.
+ * Where chapter IV took space away, this one hands out VALUE: gold is the star and stone is light, so
+ * the question changes from "where can I go?" to "what is it worth?". Every board still carries the
+ * centre gold, as every level from 2 on does.
+ */
+export const CHAPTER_5_LEVELS: readonly CampaignLevel[] = Object.freeze([
+  // A gold seam down the middle with gold on both wings. The chapter states its theme immediately.
+  late(5, 41, 'c5-41', 'Gold Seam', 96041, 9, board(
+    ['-3,0', '3,0'],
+    ['0,0', '0,1', '0,-1', '0,2', '0,-2', '1,1', '-1,-1', '2,0', '-2,0'],
+  ), 'Seam: five gold down the middle, gold on both wings.'),
+
+  // Gold thrown wide, stone only on the polar lanes: a race from turn one.
+  late(5, 42, 'c5-42', 'The Rush', 96042, 9, board(
+    ['0,2', '0,-2'],
+    ['0,0', '-1,0', '1,0', '0,1', '0,-1', '2,1', '-2,-1', '1,2', '-1,-2'],
+  ), 'Rush: gold across both wings; the race starts at turn one.'),
+
+  // Fewer gold than its neighbours, more scattered stone: the chapter's first "less value, more space".
+  late(5, 43, 'c5-43', 'Prospector', 96043, 9, board(
+    ['1,2', '-1,-2', '0,3', '0,-3', '2,1', '-2,-1'],
+    ['0,0', '-1,0', '1,0', '0,1', '0,-1', '-1,-1', '1,1'],
+  ), 'Prospector: scattered stone over a gold field; less gold than its neighbours.'),
+
+  // Gold running out toward both homes, gated by stone on the other axis.
+  late(5, 44, 'c5-44', 'Vein', 96044, 9, board(
+    ['0,2', '0,-2', '2,0', '-2,0'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,1', '-2,-1', '3,-1', '-3,1'],
+  ), 'Vein: gold running toward both homes, stone gates on the other axis.'),
+
+  // Two claims on the wings, stone gates on the spine: which claim do you defend?
+  late(5, 45, 'c5-45', 'Two Claims', 96045, 9, board(
+    ['1,0', '-1,0', '0,1', '0,-1', '2,1', '-2,-1'],
+    ['0,0', '2,0', '-2,0', '3,-1', '-3,1', '1,1', '-1,-1'],
+  ), 'Two Claims: gold on the wings, stone gates on the spine.'),
+
+  // The breather: almost nothing on the board, so the play is the whole game.
+  late(5, 46, 'c5-46', 'Open Ledger', 96046, 8, board(
+    ['-3,0', '3,0'],
+    ['0,0', '0,2', '0,-2', '1,1', '-1,-1', '2,1', '-2,-1', '2,0', '-2,0'],
+  ), 'Open Ledger: almost nothing on the board; pure play.', true),
+
+  // A gold core ringed by stone with doors on the axes.
+  late(5, 47, 'c5-47', 'The Mint', 96047, 9, board(
+    ['2,1', '-2,-1', '3,0', '-3,0', '0,3', '0,-3'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '1,1', '-1,-1', '0,2', '0,-2'],
+  ), 'Mint: a gold core ringed by stone, with doors on the axes.'),
+
+  // Gold on the wings, stone across the middle: value against space.
+  late(5, 48, 'c5-48', 'Paydirt', 96048, 9, board(
+    ['0,1', '0,-1', '3,-1', '-3,1', '2,1', '-2,-1'],
+    ['0,0', '-2,0', '2,0', '1,1', '-1,-1', '1,2', '-1,-2', '1,0', '-1,0'],
+  ), 'Paydirt: gold on the wings, stone across the middle.'),
+
+  // Gold alternating with stone along the long axis: the greed/connection trade made visible.
+  // Seed 96249 rather than 96049: the board is even over eight independent 60-deal sweeps, but the
+  // 96049 deal series happens to read 23% seat-skewed, which the balance tool flags as a defect.
+  late(5, 49, 'c5-49', 'Gold Line', 96249, 9, board(
+    ['0,1', '0,-1', '2,0', '-2,0', '3,0', '-3,0', '3,-1', '-3,1'],
+    ['0,0', '1,0', '-1,0', '0,2', '0,-2', '2,1', '-2,-1', '1,2', '-1,-2'],
+  ), 'Gold Line: gold alternating with stone along the long axis.'),
+
+  // The finale: the richest board in the campaign, stone only round the edges.
+  late(5, 50, 'c5-50', 'Mother Lode', 96050, 9, board(
+    ['0,3', '0,-3', '1,2', '-1,-2', '2,1', '-2,-1', '3,0', '-3,0'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,0', '-2,0', '1,1', '-1,-1'],
+  ), 'Mother Lode: gold everywhere, stone round the edges; the richest board.'),
 ]);

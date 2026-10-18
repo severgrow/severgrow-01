@@ -14,7 +14,7 @@ import type { Level } from '../bots/levels.js';
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 // Chapters IV-VII live in their own file: 40 authored boards would make every merge with the
 // parallel onboarding work a fight. Type-only import there, so there is no runtime cycle.
-import { CHAPTER_4_LEVELS } from './levels-late.js';
+import { CHAPTER_4_LEVELS, CHAPTER_5_LEVELS } from './levels-late.js';
 
 export type CampaignLevel = {
   /** Stable id, never reused or renumbered once published. */
@@ -222,6 +222,7 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // Levels 31-70 live in their own file (levels-late.ts) so this list stays small and the parallel
   // onboarding work never has to merge 40 boards. Difficulty there comes from terrain, not a bot.
   ...CHAPTER_4_LEVELS,
+  ...CHAPTER_5_LEVELS,
 ]);
 
 export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
@@ -244,6 +245,11 @@ export const CAMPAIGN_CHAPTERS: readonly CampaignChapter[] = Object.freeze([
     number: 4,
     id: 'hollow-ground',
     levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 4)),
+  }),
+  Object.freeze({
+    number: 5,
+    id: 'gold-country',
+    levels: Object.freeze(CAMPAIGN_LEVELS.filter((l) => l.chapter === 5)),
   }),
 ]);
 

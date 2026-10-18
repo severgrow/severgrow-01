@@ -1008,6 +1008,10 @@ export const CAMPAIGN = Object.freeze({
       title: 'Hollow Ground',
       subtitle: 'Ten boards that ask you to read the route.',
     }),
+    'gold-country': Object.freeze({
+      title: 'Gold Country',
+      subtitle: 'Ten boards where the ground is worth fighting for.',
+    }),
   }) as Readonly<Record<string, { title: string; subtitle: string }>>,
   /** a level's spoken label. The owner removed level and chapter NAMES everywhere (2026-10-16), so
    *  this is the number alone: "Level 4". */

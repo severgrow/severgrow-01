@@ -23,12 +23,12 @@ import {
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 describe('campaign levels: the definition is well formed', () => {
-  it('the whole campaign validates (no throw): four chapters of ten, levels 1-40', () => {
+  it('the whole campaign validates (no throw): five chapters of ten, levels 1-50', () => {
     expect(() => validateCampaign()).not.toThrow();
-    expect(CAMPAIGN_LEVELS).toHaveLength(40);
-    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 40 }, (_, i) => i + 1));
+    expect(CAMPAIGN_LEVELS).toHaveLength(50);
+    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     // Chapters are contiguous and each holds exactly its ten levels.
-    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4]);
+    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4, 5]);
     for (const chapter of CAMPAIGN_CHAPTERS) expect(chapter.levels).toHaveLength(10);
     for (const level of CAMPAIGN_LEVELS) {
       expect(CAMPAIGN_CHAPTERS[level.chapter - 1]!.levels).toContain(level);
@@ -43,9 +43,10 @@ describe('campaign levels: the definition is well formed', () => {
       expect(campaignLevelByNumber(level.number)).toBe(level);
     }
     expect(campaignLevelById('c1-99')).toBeNull();
-    // 31-40 now exist (chapter IV), so 30 is no longer the last built level.
+    // 31-50 now exist (chapters IV and V), so 50 is the last built level.
     expect(nextCampaignLevel(30)).toBe(campaignLevelByNumber(31));
-    expect(nextCampaignLevel(40)).toBeNull();
+    expect(nextCampaignLevel(40)).toBe(campaignLevelByNumber(41));
+    expect(nextCampaignLevel(50)).toBeNull();
     expect(nextCampaignLevel(1)).toBe(CAMPAIGN_LEVELS[1]);
   });
 
@@ -103,10 +104,34 @@ describe('campaign levels: the definition is well formed', () => {
       // Mirror symmetry gives even rock counts; gold is centre + pairs, so it stays odd.
       [31, 4], [32, 4], [33, 6], [34, 6], [35, 6],
       [36, 8], [37, 8], [38, 4], [39, 8], [40, 10],
+      // Chapter V (2026-10-18): gold-led, so stone stays light (2-8) and gold carries 7-9.
+      [41, 2], [42, 2], [43, 6], [44, 4], [45, 6],
+      [46, 2], [47, 6], [48, 6], [49, 8], [50, 8],
     ]);
   });
 
-  it('uses gold as well as rocks across 1-40 (every level but the first has gold off the centre)', () => {
+  it('chapter V stays gold-led: every board carries more gold than stone, and 7-9 gold', () => {
+    // The chapter's whole premise is "value, not space". If a later edit adds stone and drops gold,
+    // the chapter stops being Gold Country even though every board might still be legal.
+    const chapter = CAMPAIGN_LEVELS.filter((l) => l.chapter === 5);
+    expect(chapter).toHaveLength(10);
+    const gold = chapter.map((l) => l.config.board!.gold.length);
+    expect(gold).toEqual([9, 9, 7, 9, 7, 9, 9, 9, 9, 9]);
+    for (const level of chapter) {
+      const b = level.config.board!;
+      expect(b.gold.length, level.id).toBeGreaterThan(b.rock.length);
+      expect(b.gold.length, level.id).toBeGreaterThanOrEqual(7);
+      expect(b.gold.length, level.id).toBeLessThanOrEqual(9);
+      // Gold is centre + pairs, so the count is odd, exactly like chapters II-IV.
+      expect(b.gold.length % 2, level.id).toBe(1);
+    }
+    // The finale is the richest board in the campaign.
+    const finale = chapter.at(-1)!;
+    const richest = Math.max(...CAMPAIGN_LEVELS.map((l) => l.config.board!.gold.length));
+    expect(finale.config.board!.gold.length).toBe(richest);
+  });
+
+  it('uses gold as well as rocks across the whole campaign (every level but the first has gold off the centre)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(1);
       expect(level.config.board!.gold, level.id).toContain('0,0');
@@ -170,14 +195,15 @@ describe('campaign levels: the definition is well formed', () => {
       8, 8, 8, 8,
       9, 9, 9, 9, 9, 9,
     ]);
-    // Chapter IV (2026-10-18): bot 9 throughout, with breathers at 31 (re-entry after the finale)
-    // and 38 (gold-heavy). Pinned so a later edit has to be a decision.
+    // Chapters IV and V (2026-10-18): bot 9 throughout, with breathers at 31 (re-entry after the
+    // finale), 38 (gold-heavy) and 46 (the open board). Pinned so a later edit is a decision.
     expect(CAMPAIGN_LEVELS.filter((l) => l.number >= 31).map((l) => l.botLevel)).toEqual([
       8, 9, 9, 9, 9, 9, 9, 8, 9, 9,
+      9, 9, 9, 9, 9, 8, 9, 9, 9, 9,
     ]);
   });
 
-  it('levels 1-3 use the tutorial small map (radius 2); levels 4-40 the product hexagon (radius 3)', () => {
+  it('levels 1-3 use the tutorial small map (radius 2); levels 4+ the product hexagon (radius 3)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
       // Owner direction 2026-10-16: the first three levels are played on the SAME map the tutorial
