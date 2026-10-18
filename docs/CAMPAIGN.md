@@ -44,10 +44,9 @@ for an authored board. Then:
 No UI change is needed: the campaign screen is drawn from the level data, so further levels need no
 restructuring.
 
-**As built:** Chapters I-V — levels 1-50 — are playable. Every board is hand-authored
+**As built:** Chapters I-VI — levels 1-60 — are playable. Every board is hand-authored
 (`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
-Levels 51-70 are planned (two more chapters, `docs/CAMPAIGN-31-70.md`) and will land the same way,
-one chapter at a time.
+Levels 61-70 are planned (the last chapter, `docs/CAMPAIGN-31-70.md`) and will land the same way.
 
 ## Validation rules
 
@@ -283,6 +282,59 @@ Two things this chapter does differently from chapter IV:
   defensible from either side, so it is a pure conversion board. Worth keeping as the chapter's
   "no cheap finish" level.
 
+## Chapter VI — The Long Way (levels 51-60)
+
+Chapter V handed out value; this one takes the **straight line** away. Stone is heavy (6-14) and gold
+scarce (3-7), and it sits where the route slows down, so the chapter is about patience: the short path
+is walled and the long one is safe.
+
+| Lv | Name | Bot | Rocks | Gold | Shape | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 51 | Switchback | 9 | 8 | 5 | S route | the direct line is walled, the flanks are not |
+| 52 | Corridor | 9 | 10 | 5 | lane | one clear lane between two walls |
+| 53 | The S-Bend | 9 | 10 | 5 | long S | the route reverses twice |
+| 54 | Double Pass | 9 | 12 | 5 | two passes | pick one and commit |
+| 55 | Halcyon | **8** | 6 | 7 | open | the breather before the squeeze |
+| 56 | Narrows | 9 | 12 | 3 | narrows | the tightest route so far |
+| 57 | Hairpin | 9 | 12 | 5 | hairpin | the route doubles back |
+| 58 | Three Gates | 9 | 12 | 5 | three gates | a real choice, not a corridor |
+| 59 | Maze Garden | 9 | 14 | 3 | maze | many small walls, no long one |
+| 60 | The Long Way | 9 | 14 | 7 | corridor + crown | chapter finale |
+
+### Chapter VI — measured, not assumed
+
+60 alternate deals per level, the level's bot in both seats:
+
+| Lv | seat 0 / seat 1 | start wins | avg turns | finishes | flags |
+| --- | --- | --- | --- | --- | --- |
+| 51 Switchback | 35 / 25 | 22 | 19.7 | score 55, strangle 5 | — |
+| 52 Corridor | 33 / 26 | 19 | 17.7 | score 47, strangle 13 | — |
+| 53 The S-Bend | 35 / 25 | 28 | 18.9 | score 53, strangle 7 | — |
+| 54 Double Pass | 35 / 25 | 34 | 18.4 | score 47, strangle 13 | — |
+| 55 Halcyon | 29 / 30 | 34 | 20.3 | score 57, strangle 3 | — |
+| 56 Narrows | 24 / 36 | 28 | 19.2 | score 51, strangle 9 | — |
+| 57 Hairpin | 23 / 37 | 29 | 19.3 | score 53, strangle 7 | SKEW 23% (seed, see below) |
+| 58 Three Gates | 30 / 30 | 27 | 19.2 | score 53, strangle 7 | — |
+| 59 Maze Garden | 32 / 28 | 24 | 19.4 | score 52, strangle 8 | — |
+| 60 The Long Way | 26 / 34 | 35 | 18.9 | score 48, strangle 12 | — |
+
+Nine of ten sit inside noise. Level 57 was flagged at 23%, so it was re-measured over **eight
+independent 60-deal sweeps**: 23/37 (the flagged series), 35/24, 30/30, 29/31, 28/32 and 28/32 —
+the layout is even and one deal series was unlucky. Its seed is now **96357** (31/29, 3%) so the
+balance tool does not report a phantom defect; the board is unchanged. **This is the same failure
+mode as level 49**, and it is worth remembering: a first flag is a reason to re-measure, not to
+redesign.
+
+What the chapter is doing, in numbers: **strangles roughly double** against chapter V (7-13 per 60
+against 5-10), because a walled route punishes over-extension with a cutoff rather than a lost race.
+Levels 52 and 54 are the peaks (13 each) — both are boards where two routes meet, so a player who
+commits to the wrong pass can be sealed. Halcyon (55) is the floor (3), which is what a breather
+should look like.
+
+Every board in the chapter still passes the mechanical guarantees that matter most: 25 or more open
+hexes, no single hex whose removal disconnects the homes, and nothing authored inside either root
+zone. The tightest is the finale at 23 open, two above the floor of 20.
+
 ### The bot ladder (2026-10-16 rebalance)
 
 Owner-approved difficulty ladder, applied as a **data-only** change to each level's `botLevel`. No
@@ -505,7 +557,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-50) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-60) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |

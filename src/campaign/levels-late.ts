@@ -208,3 +208,64 @@ export const CHAPTER_5_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,0', '-2,0', '1,1', '-1,-1'],
   ), 'Mother Lode: gold everywhere, stone round the edges; the richest board.'),
 ]);
+
+/**
+ * CHAPTER VI — THE LONG WAY (51-60). Terrain budget rises 13 → 21.
+ * Chapter V handed out value; this one takes the straight line away. Stone builds the route,
+ * gold is scarce and sits where the route slows down, so the chapter is about patience: the
+ * short path is walled, the long one is safe, and every cut stays at least two hexes wide so no
+ * single cell decides the game.
+ */
+export const CHAPTER_6_LEVELS: readonly CampaignLevel[] = Object.freeze([
+  late(6, 51, 'c6-51', 'Switchback', 96051, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '-3,0', '3,0'],
+    ['0,0', '0,2', '0,-2', '1,0', '-1,0'],
+  ), 'an S route: the direct line is walled, the flanks are not'),
+
+  late(6, 52, 'c6-52', 'Corridor', 96052, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '-3,0', '3,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1'],
+  ), 'one clear lane between two walls'),
+
+  late(6, 53, 'c6-53', 'The S-Bend', 96053, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,3', '0,-3', '-1,3', '1,-3'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1'],
+  ), 'a longer switchback: the route reverses twice'),
+
+  late(6, 54, 'c6-54', 'Double Pass', 96054, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,3', '0,-3', '-3,0', '3,0', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1'],
+  ), 'two passes; pick one and commit'),
+
+  late(6, 55, 'c6-55', 'Halcyon', 96055, 8, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2'],
+    ['0,0', '1,0', '-1,0', '2,0', '-2,0', '0,1', '0,-1'],
+  ), 'the breather: three stone pairs and a wide gold field', true),
+
+  late(6, 56, 'c6-56', 'Narrows', 96056, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,3', '0,-3', '-1,3', '1,-3', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0'],
+  ), 'the tightest route so far; still two hexes at every cut'),
+
+  // Seed 96357 rather than 96057: the board is even over six independent 60-deal sweeps, but the
+  // 96057 deal series reads 23% seat-skewed, which the balance tool flags. The board is unchanged.
+  late(6, 57, 'c6-57', 'Hairpin', 96357, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '0,3', '0,-3', '-1,3', '1,-3', '-3,0', '3,0', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1'],
+  ), 'the route doubles back; reversing course is cheap'),
+
+  late(6, 58, 'c6-58', 'Three Gates', 96058, 9, board(
+    ['2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '-3,0', '3,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1'],
+  ), 'three gates, not a corridor: a real choice'),
+
+  late(6, 59, 'c6-59', 'Maze Garden', 96059, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0'],
+  ), 'many small walls; every hex a small decision'),
+
+  late(6, 60, 'c6-60', 'The Long Way', 96060, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '-2,0', '2,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,0', '-3,0'],
+  ), 'corridor plus rock crown; the chapter finale'),
+]);

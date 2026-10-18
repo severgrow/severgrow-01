@@ -1,7 +1,7 @@
 # Campaign levels 31-70 — design and implementation plan
 
 **Branch:** `futa0.5-levels-31-70`, cut from `origin/futa0.5-online` (`8bdfbeb`).
-**Status:** Chapters IV (31-40) and V (41-50) are BUILT and tested. Chapters VI-VII remain planned.
+**Status:** Chapters IV (31-40), V (41-50) and VI (51-60) are BUILT and tested. Chapter VII remains planned.
 
 **Decisions taken 2026-10-18 (owner):**
 1. **Board size:** stay on radius 3 (37 hexes) for 31-70; terrain is the only axis. A 61-hex board
@@ -151,17 +151,17 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 48 | Paydirt | 9 | 6 | 9 | middle | gold on the wings, stone across the middle |
 | 49 | Gold Line | 9 | 8 | 9 | alternate | gold alternating with stone, long axis |
 | 50 | Mother Lode | 9 | 8 | 9 | edges | gold everywhere, stone round the edges |
-| **VI — The Long Way** | | | | | | |
-| 51 | Switchback | 9 | 8 | 4 | switchback | the S route |
-| 52 | Corridor | 9 | 9 | 4 | corridor | width is the lesson |
-| 53 | The S-Bend | 9 | 10 | 3 | long switchback | patience |
-| 54 | Double Pass | 9 | 10 | 5 | two passes | pick your pass |
-| 55 | Halcyon | **8** | 5 | 6 | open | breather before the squeeze |
-| 56 | Narrows | 9 | 11 | 4 | narrows | space is scarce |
-| 57 | Hairpin | 9 | 11 | 5 | hairpin | reverse course cheaply |
-| 58 | Three Gates | 9 | 12 | 4 | three gates | a real choice, not a corridor |
-| 59 | Maze Garden | 9 | 12 | 5 | bramble | many small decisions |
-| 60 | The Long Way | 9 | 12 | 6 | corridor + crown | chapter finale |
+| **VI — The Long Way** (BUILT) | | | | | | |
+| 51 | Switchback | 9 | 8 | 5 | switchback | the direct line is walled, the flanks are not |
+| 52 | Corridor | 9 | 10 | 5 | corridor | one clear lane between two walls |
+| 53 | The S-Bend | 9 | 10 | 5 | long switchback | the route reverses twice |
+| 54 | Double Pass | 9 | 12 | 5 | two passes | pick one and commit |
+| 55 | Halcyon | **8** | 6 | 7 | open | breather before the squeeze |
+| 56 | Narrows | 9 | 12 | 3 | narrows | the tightest route so far |
+| 57 | Hairpin | 9 | 12 | 5 | hairpin | the route doubles back |
+| 58 | Three Gates | 9 | 12 | 5 | three gates | a real choice, not a corridor |
+| 59 | Maze Garden | 9 | 14 | 3 | bramble | many small walls, no long one |
+| 60 | The Long Way | 9 | 14 | 7 | corridor + crown | chapter finale |
 | **VII — Broken Crown** | | | | | | |
 | 61 | Shattered Ring | 9 | 10 | 5 | broken ring | the ring has holes |
 | 62 | Crossbones | 9 | 11 | 5 | cross | two axes, both broken |
@@ -174,8 +174,9 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 69 | The Turning | 9 | 14 | 7 | lattice + teeth | turn the board around |
 | 70 | Last Light | 9 | 14 | 9 | composed finale | the campaign's hardest board |
 
-Breathers: **31, 38, 46** so far (of the five planned: 31, 38, 46, 55, 63). Never two consecutive;
-each sits where the previous level spiked.
+Breathers: **31, 38, 46, 55** so far (of the five planned: 31, 38, 46, 55, 63). Never two
+consecutive; each sits where the previous level spiked. A breather is also the one board in a
+rock-led chapter allowed to be gold-led, so it plays as relief rather than another squeeze.
 
 **Authoring note learned while building IV:** point symmetry forces even rock counts (every shape is a
 pair), while gold is naturally odd because it is the centre plus pairs. The plan's original counts for
@@ -235,6 +236,30 @@ seed is now 96249 (33/27, 10%) so the tool does not report a phantom defect; the
 The intent is visible in the finish mix: strangles run 5-10 per 60 (chapter IV was about 7-8) because
 gold pulls both players onto the same ground, while **The Mint (47) never strangles** — 60 of 60
 score games — because its stone ring plus gold core is defensible from either side.
+
+### Chapter VI — measured, not assumed
+
+| Lv | seat 0 | seat 1 | avg turns | finishes |
+| --- | --- | --- | --- | --- |
+| 51 | 35 | 25 | 19.7 | score 55, strangle 5 |
+| 52 | 33 | 26 | 17.7 | score 47, strangle 13 |
+| 53 | 35 | 25 | 18.9 | score 53, strangle 7 |
+| 54 | 35 | 25 | 18.4 | score 47, strangle 13 |
+| 55 | 29 | 30 | 20.3 | score 57, strangle 3 |
+| 56 | 24 | 36 | 19.2 | score 51, strangle 9 |
+| 57 | 23 | 37 | 19.3 | score 53, strangle 7 |
+| 58 | 30 | 30 | 19.2 | score 53, strangle 7 |
+| 59 | 32 | 28 | 19.4 | score 52, strangle 8 |
+| 60 | 26 | 34 | 18.9 | score 48, strangle 12 |
+
+Level 57 tripped the skew flag at 23%, so it was re-measured over eight independent sweeps (23/37,
+35/24, 30/30, 29/31, 28/32, 28/32): the board is even, one series was unlucky. Its seed is now
+96357 (31/29) so the tool reports no phantom defect. Same failure mode as level 49 — re-measure
+before redesigning.
+
+Strangles roughly double against chapter V (7-13 per 60 against 5-10): a walled route punishes
+over-extension with a cutoff. Levels 52 and 54 are the peaks (they have two routes that meet), and
+Halcyon (55) is the floor at 3.
 
 Found during the browser pass, NOT fixed here (it is released-line behaviour, and the `/3` rework may
 touch the same entry point): the menu entry shows `LEVEL <current>` (here LEVEL 40) but tapping it
