@@ -16,6 +16,94 @@ hand-authored board. The campaign is about mastering the game that is already th
   tutorial's lesson lines live in `web/src/logic/tutorial-script.ts`)
 - Balance tool: `src/sim/campaign-balance.ts` → `npm run campaign:balance`
 
+## Levels 1-10 are the tutorial (the /3/ line, 2026-10-18)
+
+**This is the current design** on the `futa0.5-onboarding-3` branch, published for testing at
+**https://www.futasaku.com/3/**. The root and `/2/` are unchanged. The `/2/` "goal-first" onboarding
+described further down ("The 2026-10-17 onboarding pass") is **not current** for this line: it told
+players "surround their home to win", while most real games end when the Draw pile runs out. /3
+teaches that first.
+
+**What it is.** Levels 1-10 are ten short authored lessons, one idea each, every one ending in a real
+win. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules and chapter bonuses
+are unchanged. The full script of each lesson (beats, words, wrong-tap answers, finish lines) is in
+**[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
+
+| Level | Teaches | Ends |
+|---|---|---|
+| 1 | Draw, Grow, Throw; most points when the Draw pile runs out wins | on points |
+| 2 | tile numbers: Strengthen, then take a weaker tile | on points |
+| 3 | rocks block; gold counts double | on points (gold decides) |
+| 4 | cutting a link: cut-off tiles wither | on points |
+| 5 | Bloom (same number, or counting up) | on points |
+| 6 | knock-out: surround their home | by surround |
+| 7 | Bomb | on points |
+| 8 | Blast (two Bombs) and its free Grow | on points |
+| 9 | the Throw pile can finish a Bloom; skip the Grow | on points |
+| 10 | a normal game against the gentlest bot | on points (or surround) |
+
+**How a lesson is authored** (`web/src/lessons/`):
+
+- `authored.ts` builds the exact opening from real engine cards on the 19-hex map:
+  - terrain, tiles already grown;
+  - both hands, the Draw pile order and the Throw pile.
+  - Cards the lesson does not name are out of play. That is how a lesson gets a short Draw pile (its clock) **without any rule change**.
+- `opponent.ts` is the gentle scripted opponent:
+  - legal moves only;
+  - grows only on its script's turns;
+  - never takes your home's last open side;
+  - always draws from the Draw pile, so the authored Throw pile stays as set.
+  - Level 10 uses the existing level-1 bot.
+- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the instruction and reason) from the **live** game state, never from a step counter, so any legal alternative keeps working.
+- `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
+
+**Guidance by level.**
+
+| Levels | Guidance |
+|---|---|
+| 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
+| 4-9 | Every legal move is played; the light adapts. After the lesson's goal, hints appear only after 6 s idle. |
+| 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
+| 11-30 | The existing levels, unchanged. No lesson. |
+
+- **No text on the map.** In every mode the old on-board "tap why" plate now goes to the LED; the map only gets a ring.
+- **Hints off.** Settings → Step guidance off turns the light and the glass off in the levels too.
+
+**Storage and versioning.** The root, `/2/` and `/3/` share one origin:
+
+- `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
+- Each lesson has a `version`. The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Completed levels stay completed (the progress record is the existing one).
+
+**Seeds.** Levels 1-10 pay **no Seeds in /3** and their finish card has no Seeds line:
+
+- The server's verifier replays a proof from `campaignOpening(level)` against the real bot. An authored lesson against the scripted opponent cannot be replayed that way without a server change, which this line does not make.
+- Levels 11+ are untouched: same openings, same proofs, same payouts.
+- Clearing 1-10 locally only unlocks the next level on the device. Nothing in a level-11+ proof depends on it.
+
+**Engine rules: unchanged.** No rule, scoring, card-count or legal-move change. Draw/Grow/Throw, Bloom, Bomb, Blast and the strangle are the engine's own; the tests check this.
+
+**How to add or change a lesson without bringing confusion back:**
+
+1. One idea per level.
+2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
+3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason ≤ 12, one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+4. Bump the lesson's `version`.
+5. Update LESSON-SCRIPTS.md.
+6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.
+
+**How to test the beginner experience:**
+
+- Automated:
+  - `npx vitest run web/tests/lessons.test.ts web/tests/lesson-*.test.ts`;
+  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11.
+- These prove the levels can always be finished. They do **not** prove a beginner understands them; that needs real new players.
+
+**The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
+
+- the shared small-map radius lives in `src/campaign/small-board.ts`;
+- the glass window and focus layer live in `web/src/player/glass-surface.ts`.
+
 ## The level schema
 
 ```ts
@@ -113,7 +201,7 @@ the `r` axis** (the design's three-hex wall sits on the `q` axis, so `-2,0` woul
 and gold), and **level 3's single edge rock moved from `-3,0` to `-2,0`** when the level moved to the
 radius-2 map (`-3,0` is not on that board).
 
-### The 2026-10-17 onboarding pass
+### The 2026-10-17 onboarding pass (/2/ — not current for /3/)
 
 **Where it ships:** this line is published at **https://www.futasaku.com/2/**, beside the released
 game at the root (owner direction, 2026-10-17). The root keeps the pre-onboarding campaign; `/2/` is

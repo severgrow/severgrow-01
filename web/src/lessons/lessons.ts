@@ -147,7 +147,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     position: {
       seed: 96006,
       tiles: [['-1,1', YOU, 4], ['0,0', YOU, 5]],
-      hand: [[0, 5], [1, 6], [2, 7], [3, 4], [0, 8], [1, 3], [2, 2]],
+      hand: [[0, 1], [0, 3], [3, 9], [2, 7], [1, 9], [1, 6], [1, 8]],
       opponent: [[1, 1], [2, 2], [3, 3], [0, 2], [3, 2], [2, 1], [3, 4]],
       deck: [[0, 6], [1, 4], [3, 5], [0, 4], [1, 5], [2, 4], [3, 6], [0, 7], [1, 7], [2, 6], [3, 7], [2, 8]],
       discard: [[3, 1]],
@@ -403,7 +403,42 @@ export const pileCompletesBloom = (s: State): boolean => {
  * The one move the light points at, or null on their turn / when the game is over. Always a legal
  * move of the current position.
  */
+/**
+ * The game's own rule for a tapped card (main.ts `bloomKindsForCard`): a card that shares a face with
+ * a legal Bloom opens that Bloom instead of a single Grow. A lit single Grow must not use one, or the
+ * tap the light asks for would do something else.
+ */
+export const opensBloom = (s: State, legal: readonly Action[], card: number): boolean => {
+  const hand = s.hands[YOU];
+  const c = hand.find((x) => x.id === card);
+  if (!c || c.suit === null) return false;
+  return legal.some((a) => a.t === 'Bloom'
+    && a.cards.some((id) => { const o = hand.find((x) => x.id === id); return !!o && o.suit === c.suit && o.rank === c.rank; }));
+};
+
+/** The same Grow (same hex) with a card that taps as a Grow, else the best plain Grow that does. */
+const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, notKo: (x: Action | null) => Action | null): Action | null => {
+  if (!a || a.t !== 'Sprout' || !opensBloom(s, legal, a.card)) return a;
+  const plain = legal.filter((x): x is Sprout => x.t === 'Sprout' && !opensBloom(s, legal, x.card));
+  const sameHex = plain.filter((x) => keyOf(x.coord) === keyOf(a.coord))
+    .sort((x, y) => rankOf(s, y.card) - rankOf(s, x.card) || x.card - y.card)[0];
+  // A Strengthen keeps its number when it can (the lesson names a card); otherwise any plain card.
+  return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null))) ?? a;
+};
+
 export const suggestMove = (lesson: Lesson, s: State): Action | null => {
+  const legal = s.phase === 'ACT' && s.actor === YOU ? legalActions(viewFor(s, YOU)) : [];
+  const a = suggestRaw(lesson, s);
+  if (!a || a.t !== 'Sprout') return a;
+  const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10;
+  const notKo = (x: Action | null): Action | null => {
+    if (!x || koAllowed) return x;
+    try { return isStrangled(apply(s, x), THEM) ? null : x; } catch { return null; }
+  };
+  return asTappableGrow(s, legal, a, notKo);
+};
+
+const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   if (s.phase === 'GAME_OVER' || s.actor !== YOU) return null;
   const legal = legalActions(viewFor(s, YOU));
   if (!legal.length) return null;

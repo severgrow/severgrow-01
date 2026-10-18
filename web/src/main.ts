@@ -86,7 +86,7 @@ import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
 import { throwPileAction } from './logic/throw-pile.js';
-import { goalReachable, lessonBeat, lessonFor, lessonOpening } from './lessons/lessons.js';
+import { goalReachable, lessonBeat, lessonFor, lessonOpening, suggestMove } from './lessons/lessons.js';
 import type { Beat, Lesson } from './lessons/lessons.js';
 import { scriptedOpponentAction } from './lessons/opponent.js';
 import { tapAnswer } from './lessons/answer.js';
@@ -762,7 +762,7 @@ function syncResignMenu() {
 function syncTutorialChrome() {
   // The onboarding levels borrow the tutorial's own window and its board band, so the same chrome
   // class applies: it pads the map between the glass and the cockpit and keeps the menu reachable.
-  const on = !!coach.tutorial || onboardingActive();
+  const on = !!coach.tutorial || onboardingActive() || (!!lessonActive() && !guidanceOff());
   document.documentElement.classList.toggle('futa04-tutorial', on);
   syncTutorialMenuExit();
 }
@@ -2438,6 +2438,8 @@ let lessonBeatNow: Beat | null = null;
 let lessonShownKey = '';
 let lessonAnswerText = '';
 let lessonAnswerTimer = 0;
+/** Counts every answer given (tests: a new answer, not one still on screen). */
+let lessonAnswerSeq = 0;
 let lessonIdle = false;
 let lessonIdleTimer = 0;
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
@@ -3822,6 +3824,7 @@ function lessonArmIdle() {
 
 /** One short answer to a tap: in the glass (or the LED with hints off), a ring at the spot. */
 function lessonSay(text: string, x: number | null, y: number | null) {
+  lessonAnswerSeq++;
   if (x !== null && y !== null && !settings.reduceMotion) {
     const ring = document.createElement('div');
     ring.className = 'lesson-tap-ring';
@@ -3870,7 +3873,9 @@ function lessonDecide(e: Event): boolean {
   const tap = tapOf(target as never, keyAt);
   const x = Number.isFinite(pe.clientX) && pe.clientX ? pe.clientX : null;
   const y = Number.isFinite(pe.clientY) && pe.clientY ? pe.clientY : null;
-  if (busy() || !myTurn()) {
+  // My own move still settling: the game fast-forwards on a tap, as everywhere. Nothing to answer.
+  if (busy() && session.state.actor === HUMAN) return false;
+  if (!myTurn()) {
     if (tap.t === 'other') return false;
     lessonSay(LESSON.theirTurnNow, x, y);
     return lesson.locked;
@@ -5514,9 +5519,11 @@ function renderPiles(v: View, advice: Advice | null) {
   $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
   $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
+  // Tap-to-throw: with a throw waiting, the Throw pile takes it (it stays tappable for that alone).
+  const tossReady = !!session && myTurn() && !!throwPileAction(v.phase, session.pending, session.legal);
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
-    b.disabled = !look.enabled;
+    b.disabled = !look.enabled && !(id === 'discard' && tossReady);
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
     const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
@@ -5531,7 +5538,7 @@ function renderPiles(v: View, advice: Advice | null) {
     $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom);
   }
   $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
-  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : `${PILES.discard}: empty`);
+  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
 }
 
 function renderCoach(advice: Advice | null) {
@@ -7456,7 +7463,12 @@ let appReady = false;
   /** tests: the lesson on screen (levels 1-10): its beat, what is lit, the answer showing */
   lesson: () => {
     const l = lessonActive();
-    return l ? { level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, idle: lessonIdle, seen: [...lessonSeen] } : null;
+    return l ? { level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq, idle: lessonIdle, seen: [...lessonSeen] } : null;
+  },
+  /** tests: the lesson's own suggested move now (what the light would point at) */
+  lessonMove: () => {
+    const l = lessonActive();
+    return l && session ? suggestMove(l, session.state) : null;
   },
   tutorialNext: () => tutorialNext(),
   exitTutorial: () => exitTutorial(),

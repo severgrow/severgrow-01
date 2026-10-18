@@ -1,5 +1,9 @@
 # FUTASAKU tutorial "Pro" overhaul — plan
 
+> **Status (2026-10-18, /3/ line):** on `futa0.5-onboarding-3`, levels 1-10 are the tutorial (see
+> [CAMPAIGN.md](CAMPAIGN.md) and [LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)). This Tutorial is **still
+> available, to be retired later**: its menu entry is unchanged, and the levels no longer depend on it.
+
 > **Current structure (tutorial v3, 2026-10).** `TUTORIAL_CORE` and `TUTORIAL_EXTRAS` in
 > `web/src/logic/tutorial-script.ts`:
 > - **Full tutorial** (16 steps to the free turn, then a 3-button tour): your home, each turn, Draw, Grow

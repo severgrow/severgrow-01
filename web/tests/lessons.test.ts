@@ -42,6 +42,40 @@ const TURNS: Record<number, [number, number]> = {
   1: [4, 4], 2: [4, 6], 3: [4, 6], 4: [4, 6], 5: [3, 6], 6: [3, 6], 7: [3, 6], 8: [3, 6], 9: [3, 6], 10: [3, 10],
 };
 
+/** The game's own rule for a tapped card: one that shares a face with a legal Bloom opens the Bloom. */
+const opensBloomInGame = (s: State, card: number): boolean => {
+  const hand = s.hands[0];
+  const c = hand.find((x) => x.id === card);
+  if (!c || c.suit === null) return false;
+  return legalActions(viewFor(s, 0)).some((a) => a.t === 'Bloom'
+    && a.cards.some((id) => { const o = hand.find((x) => x.id === id); return !!o && o.suit === c.suit && o.rank === c.rank; }));
+};
+
+describe('the light never asks for a tap the game reads differently', () => {
+  it('a lit single Grow never uses a card that the game would open as a Bloom (when another card can grow)', () => {
+    for (const l of LESSONS) {
+      let s = lessonOpening(l);
+      for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
+        if (s.actor === 0) {
+          const a = suggestMove(l, s)!;
+          if (a.t === 'Sprout' && opensBloomInGame(s, a.card)) {
+            const other = legalActions(viewFor(s, 0)).some((x) => x.t === 'Sprout' && !opensBloomInGame(s, x.card));
+            expect(other, `L${l.level} turn ${s.turnNumber}: Grow with Bloom card ${a.card}`).toBe(false);
+          }
+          s = apply(s, a);
+        } else s = apply(s, opponentMove(l, s));
+      }
+    }
+  });
+});
+
+describe('levels 11+ are untouched', () => {
+  it('only levels 1-10 have a lesson; 11 and up keep their own opening (and their Seeds proofs)', () => {
+    for (let n = 1; n <= 10; n++) expect(lessonFor(n), `L${n}`).not.toBeNull();
+    for (let n = 11; n <= 50; n++) expect(lessonFor(n), `L${n}`).toBeNull();
+  });
+});
+
 describe('lesson openings', () => {
   it('there are ten lessons, levels 1-10, each on the 19-hex board', () => {
     expect(LESSONS.map((l) => l.level)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

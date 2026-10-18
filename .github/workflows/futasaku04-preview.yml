@@ -6,7 +6,7 @@ name: Futasaku 0.4 Pages preview
 # pages.yml Main deploy logic is not modified.
 on:
   push:
-    branches: [futa0.4, futa0.5-online, futa0.5-onboarding]
+    branches: [futa0.4, futa0.5-online, futa0.5-onboarding, futa0.5-onboarding-3]
   workflow_dispatch:
 
 permissions:
@@ -38,6 +38,11 @@ jobs:
         with:
           path: onboarding
           ref: ${{ github.ref_name == 'futa0.5-onboarding' && github.sha || 'futa0.5-onboarding' }}
+      - name: Check out levels 1-10 as the tutorial (/3/)
+        uses: actions/checkout@v4
+        with:
+          path: lessons3
+          ref: ${{ github.ref_name == 'futa0.5-onboarding-3' && github.sha || 'futa0.5-onboarding-3' }}
       - name: Read exact published source commits
         id: published
         run: |
@@ -70,6 +75,7 @@ jobs:
             preview/package-lock.json
             futa05/package-lock.json
             onboarding/package-lock.json
+            lessons3/package-lock.json
       - name: Install and validate Futasaku 0.4
         working-directory: preview
         run: |
@@ -116,6 +122,24 @@ jobs:
           npm run web:build
           node scripts/check-channel-assets.mjs
           echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
+      # /3/ — levels 1-10 as the tutorial, built from `futa0.5-onboarding-3` and published beside the
+      # root and /2/ exactly the way /2/ is, so it can be played on a real phone.
+      - name: Build the /3/ lessons channel
+        working-directory: lessons3
+        env:
+          CHANNEL: futa05
+          VITE_FIND_OPPONENT: '1'
+          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          for v in VITE_DUEL_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
+            test -n "${!v}" || { echo "Missing Actions Variable $v (VITE_DUEL_API_URL may fall back to FUTA05_API_URL)"; exit 1; }
+          done
+          npm ci
+          npm run web:build
+          node scripts/check-channel-assets.mjs
+          echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
       # The admin dashboard (futasaku.com/admin/). Its own build, so no player ever downloads it.
       # Published only because the compose step below is handed `web/dist-admin`; remove that
       # argument and the composed site is byte-identical to what shipped before.
@@ -148,6 +172,7 @@ jobs:
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
           node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin \
             onboarding/web/dist "$(git -C onboarding rev-parse HEAD)"
+          node lessons3/scripts/compose-lessons3.mjs site lessons3/web/dist "$(git -C lessons3 rev-parse HEAD)"
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -189,6 +189,9 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 8px; }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-cells,
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
+/* The levels: one fixed height. The reason line keeps its room (two lines on narrow phones). */
+#futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { min-height:1.45em; }
+@media (max-width: 379px) { #futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { min-height:2.9em; } }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
@@ -589,7 +592,7 @@ const geometryFromPolys = (polys: Pt[][]): Tracked => {
 };
 
 /** The pill (Tutorial), or the target's own outline (levels: 'hex', 'card'). */
-const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => {
+const measureTarget = (selector: string, _shape: FocusShape, exactTarget = false): Tracked | null => {
   if (!selector || _shape === 'none') return null;
   if (_shape === 'hex' || _shape === 'card') {
     const polys = [...document.querySelectorAll(selector)]
@@ -597,7 +600,8 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
       .filter((p): p is Pt[] => !!p);
     if (polys.length) return geometryFromPolys(polys);
   }
-  const nodes = [...document.querySelectorAll(expandFocusSelector(selector))];
+  // The levels light exactly their one target (never both piles at once).
+  const nodes = [...document.querySelectorAll(exactTarget ? selector : expandFocusSelector(selector))];
   if (!nodes.length) return null;
   let left = Infinity; let top = Infinity; let right = -Infinity; let bottom = -Infinity;
   for (const raw of nodes) {
@@ -610,7 +614,8 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
   }
   if (!Number.isFinite(left)) return null;
   const singleCard = nodes.length === 1 && nodes[0]!.matches('#hand .card');
-  return geometryFromBounds(left, top, right, bottom, singleCard);
+  // The levels keep the target's own box: widening a pile into a pill spills onto its neighbour.
+  return geometryFromBounds(left, top, right, bottom, singleCard || exactTarget);
 };
 
 /**
@@ -661,6 +666,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   let howToHtml = '';
   let reduceMotion = false;
   let idleHard = false;
+  /** A level's focus: exactly its target, the target's own outline, strong dim. */
+  let lessonFocus = false;
   let raf = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
@@ -1018,7 +1025,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const tick = (now: number) => {
     raf = 0;
     if (mode !== 'tutorial' || document.hidden) return;
-    const measured = measureTarget(targetSelector, targetShape);
+    const measured = measureTarget(targetSelector, targetShape, lessonFocus);
     if (measured) {
       holdUntil = now + 280;
       if (!smooth) smooth = measured;
@@ -1117,7 +1124,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     void chapter;
     void options.chapterCount;
     const line = options.praise || options.status || instruction;
-    const whyHtml = options.praise || options.status ? '' : (options.why ? `<p class="glass-why">${safe(options.why)}</p>` : '');
+    // The levels keep one fixed height: the reason line is always there (empty when a beat has none).
+    const whyHtml = options.praise || options.status
+      ? (options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '')
+      : options.why ? `<p class="glass-why">${safe(options.why)}</p>`
+      : options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '';
     const icons = options.turnIcons
       ? `<div class="glass-icons" aria-hidden="true"><span>Draw</span><span>Grow</span><span>Throw</span></div>` : '';
     const b = options.buttons ?? {};
@@ -1174,7 +1185,10 @@ export const mountGlassSurface = (onClose: () => void) => {
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
       : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
     setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
+    lessonFocus = !!options.lesson;
     panel.dataset.mode = 'tutorial';
+    if (options.lesson) panel.dataset.lesson = '1';
+    else delete panel.dataset.lesson;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
     panel.hidden = false;
     showFocus(true);

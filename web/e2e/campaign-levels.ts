@@ -112,9 +112,10 @@ try {
     if (level.number <= 7) check(first.length > 0, `L${level.number} opens with guidance (${first})`);
     else check(true, `L${level.number} opens quiet or with its mechanic (${first || 'quiet'})`);
     const board = await page.evaluate(() => document.querySelectorAll('.hex-cell').length);
-    // The three discovery levels use the tutorial's map; from level 4 the board is the full hexagon,
-    // which is also where a corner home stops being stranglable in one Bloom.
-    const expectedHexes = level.number <= 3 ? 19 : 37;
+    // /3/ line (owner, 2026-10-18): levels 1-10 are the tutorial and are all played on the 19-hex map
+    // as authored lessons; level 11 is the first 37-hex level (checked below). This replaces the /2/
+    // expectation (levels 4-10 on 37 hexes) on purpose; see docs/CAMPAIGN.md.
+    const expectedHexes = 19;
     check(board === expectedHexes, `L${level.number} plays on ${expectedHexes} hexes (${board})`);
 
     const end = await playToEnd(page, level.number);
