@@ -9,9 +9,9 @@
 import { allCoords, coordKey, rootCoord } from '../engine/index.js';
 import type { BoardSpec, RulesConfig } from '../engine/index.js';
 import type { Level } from '../bots/levels.js';
-// The tutorial's map size, imported rather than re-typed: levels 1-3 play on the SAME small map the
-// tutorial teaches on, and there stays exactly ONE source of truth for how big that map is.
-import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
+// The small map's size, imported rather than re-typed: the teaching levels play on the same small
+// map the old Tutorial used, and there stays exactly ONE source of truth for how big that map is.
+import { SMALL_BOARD_RADIUS as TUTORIAL_BOARD_RADIUS } from './small-board.js';
 
 export type CampaignLevel = {
   /** Stable id, never reused or renumbered once published. */

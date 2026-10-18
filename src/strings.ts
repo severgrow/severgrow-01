@@ -1125,3 +1125,114 @@ export const CAMPAIGN = Object.freeze({
   /** the finish screen's note after the last level of the campaign as built */
   chapterDone: 'Chapter complete. More levels are on the way.',
 });
+
+// ======================================================================================
+// LESSONS — levels 1-10 are the tutorial (/3 onboarding line, 2026-10-18).
+//
+// Every word a player reads in a teaching level. The glass window shows an instruction (6 words or
+// fewer, caps, LED) and a reason (12 words or fewer); a wrong tap is answered in the window or the
+// LED, never on the board. One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
+// Bloom is never "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
+// docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
+// ======================================================================================
+export const LESSON = Object.freeze({
+  // shared turn words (the one-word window after a lesson's first turn)
+  draw: 'DRAW',
+  grow: 'GROW',
+  throwWord: 'THROW',
+  theirTurn: 'THEIR TURN',
+  theirTurnLine: 'They draw, grow and throw too.',
+  // the turn, spelled out the first time
+  tapDraw: 'TAP THE DRAW PILE',
+  tapDrawLine: 'Every turn starts with a card.',
+  pickCard: 'PICK THE LIT CARD',
+  pickCardLine: 'Cards grow your tree.',
+  tapTile: 'TAP A LIT TILE',
+  tapTileLine: 'New tiles must touch your tree.',
+  youGrew: 'YOU GREW',
+  youGrewLine: 'Each tile is a point.',
+  throwCard: 'THROW A CARD',
+  throwCardLine: 'Throwing ends your turn.',
+  throwPile: 'TAP THE THROW PILE',
+  throwPileLine: 'The lit card goes there.',
+  done: 'DONE GROWING',
+  doneLine: 'Tap » to go on to Throw.',
+  // the objective
+  yourTree: 'THIS IS YOUR TREE',
+  yourTreeLine: 'You grow tiles outward from it.',
+  theirHome: 'THAT IS THEIR HOME',
+  theirHomeLine: 'Most points when the Draw pile runs out wins.',
+  pileLow: 'PILE ALMOST EMPTY',
+  pileLowLine: 'More points wins when it is gone.',
+  lastTurn: 'LAST TURN',
+  lastTurnLine: 'The Draw pile is empty. Grow once more, then score.',
+  // level 2
+  biggerWins: 'BIGGER NUMBER WINS',
+  biggerWinsLine: 'A higher card makes a tile stronger.',
+  takeTile: 'TAKE THEIR TILE',
+  takeTileLine: 'A higher card takes a weaker tile.',
+  // level 3
+  rocksBlock: 'ROCKS BLOCK',
+  rocksBlockLine: 'Nothing can grow on a rock.',
+  goldDouble: 'GOLD COUNTS DOUBLE',
+  goldDoubleLine: 'Worth two points. Take it first.',
+  // level 4
+  cutLink: 'CUT THEIR LINK',
+  cutLinkLine: 'Tiles cut off from home wither.',
+  withered: 'THEY WITHERED',
+  witheredLine: 'Cut off from home, they score nothing.',
+  // level 5
+  cardsThatBloom: 'CARDS THAT BLOOM',
+  cardsThatBloomLine: 'Same number, or counting up.',
+  playLit: 'PLAY THE LIT CARDS',
+  playLitLine: 'Three together make a Bloom.',
+  tapBloom: 'TAP BLOOM',
+  tapBloomLine: 'Then tap or draw the lit tiles.',
+  bloomed: 'BLOOM!',
+  bloomedLine: 'A Bloom grows many tiles at once.',
+  // level 6
+  surround: 'SURROUND THEIR HOME',
+  surroundLine: 'Fill every side and you win at once.',
+  canWin: 'YOU CAN WIN',
+  canWinLine: 'Take the last open side of their home.',
+  // level 7
+  bombTile: 'BOMB THEIR TILE',
+  bombTileLine: 'A Bomb removes one enemy tile.',
+  // level 8
+  blast: 'TWO BOMBS MAKE A BLAST',
+  blastLine: 'A Blast clears more. Homes are safe.',
+  freeGrow: 'FREE GROW',
+  freeGrowLine: 'A Blast gives you a free Grow.',
+  // level 9
+  pileGold: 'THROW PILE IS GOLD',
+  pileGoldLine: 'Its top card finishes your Bloom.',
+  skipGrow: 'SKIP GROW',
+  skipGrowLine: 'You may end a turn without growing.',
+  // finish cards: title + one line that says how you won
+  youWin: 'YOU WIN',
+  wonOnPoints: 'More points when the pile ran out.',
+  wonByKo: 'You surrounded their home.',
+  goldDecided: 'Gold put you ahead.',
+  canPlay: 'YOU CAN PLAY FUTASAKU',
+  canPlayLine: 'Next: the big board.',
+  // wrong taps (the engine says why; these are its words)
+  drawFirst: 'DRAW FIRST',
+  notYet: 'NOT YET',
+  tapLit: 'TAP THE LIT ONE',
+  connect: 'CONNECT TO YOUR TREE',
+  rockBlocks: 'ROCK BLOCKS THIS',
+  isTheirHome: 'THAT IS THEIR HOME',
+  isYourHome: 'THAT IS YOUR TREE',
+  tooWeak: (card: number, tile: number): string => `TOO WEAK: ${card} VS ${tile}`,
+  ownTile: 'YOUR TILE NEEDS A HIGHER CARD',
+  mustTouch: 'MUST TOUCH YOUR TILES',
+  homesSafe: 'HOMES ARE SAFE',
+  pickFirst: 'PICK A CARD FIRST',
+  oneDraw: 'ONE CARD PER TURN',
+  bloomNeeds: 'THREE CARDS OR MORE',
+  bloomMatch: 'SAME NUMBER, OR COUNTING UP',
+  theirTurnNow: 'THEIR TURN',
+  // the way out of a lesson that cannot finish any more
+  restart: 'RESTART LEVEL',
+  showMe: 'Show me',
+});

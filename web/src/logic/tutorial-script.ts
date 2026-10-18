@@ -5,6 +5,7 @@ import {
 } from '../../../src/engine/index.js';
 import type { Action, Card, Coord, State, Suit, Tile } from '../../../src/engine/index.js';
 import { HELP, TUTORIAL } from '../../../src/strings.js';
+import { SMALL_BOARD_RADIUS } from '../../../src/campaign/small-board.js';
 
 type CardSpec = readonly [Suit | null, number];
 type TileSpec = readonly [string, 0 | 1, number];
@@ -292,7 +293,7 @@ export const TUTORIAL_CHAPTER_COUNT = baseSpecs.length;
  * Tutorial-only map: one ring smaller than the product board (radius 2 → 19 hexes;
  * normal Play stays at DEFAULT_CONFIG.boardRadius 3 → 37 hexes). Same hex shape.
  */
-export const TUTORIAL_BOARD_RADIUS = 2;
+export const TUTORIAL_BOARD_RADIUS = SMALL_BOARD_RADIUS;
 const TUTORIAL_OPENING = Object.freeze({
   boardRadius: TUTORIAL_BOARD_RADIUS,
   rockCount: 0,
