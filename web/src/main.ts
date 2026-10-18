@@ -85,6 +85,7 @@ import {
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
+import { throwPileAction } from './logic/throw-pile.js';
 import type { Loaded } from './logic/persist.js';
 // Campaign mode (the primary offline experience). Progress and the campaign match save are separate
 // from the classic save; `overridesForMatch` is the offline-only seam that lets a level pass terrain.
@@ -6586,6 +6587,10 @@ bind('deck', () => {
 bind('discard', () => {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
+  // The Throw step: a card already picked goes onto the pile (the same move as tapping that card
+  // again). Nothing picked, nothing thrown. Every mode, online too (humanPlay routes it).
+  const toss = myTurn() && session ? throwPileAction(session.view.phase, session.pending, session.legal) : null;
+  if (toss) return humanPlay(toss);
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
