@@ -37,8 +37,14 @@ const isPreviewHost = typeof location !== 'undefined' && (
   location.pathname.includes('/futa0.5/') ||
   location.pathname.includes('/futa-test/')
 );
+/**
+ * The /3/ preview (levels 1-10 as the tutorial) is published on the same origin as the root and
+ * /2/, so it keeps its OWN storage: its level progress and saves never reach the released game's.
+ * Only the first path segment counts.
+ */
+export const IS_PREVIEW_3 = typeof location !== 'undefined' && /^\/3(\/|$)/.test(location.pathname);
 export const STORAGE_PREFIX = CHANNEL === 'futa-test' ? 'futa-test:'
-  : CHANNEL === 'futa05' ? 'futa05:'
+  : CHANNEL === 'futa05' ? (IS_PREVIEW_3 ? 'futa05-3:' : 'futa05:')
   : CHANNEL === 'test' ? 'test:'
   : IS_FUTA04 ? (isPreviewHost ? 'futa04:' : 'main2:')
   : '';

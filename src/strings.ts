@@ -1234,5 +1234,7 @@ export const LESSON = Object.freeze({
   theirTurnNow: 'THEIR TURN',
   // the way out of a lesson that cannot finish any more
   restart: 'RESTART LEVEL',
+  restartLine: 'This lesson cannot finish now. Start again.',
   showMe: 'Show me',
+  next: 'NEXT',
 });

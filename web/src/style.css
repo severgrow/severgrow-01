@@ -5916,3 +5916,20 @@ html.futa04-branding[data-layout='side'] .dock {
   margin-bottom: calc(var(--side-air) - 10px);
   translate: var(--side-dock-shift, 0px) 0;
 }
+
+/* ---------- levels 1-10 (lessons) ---------- */
+/* A tap's only mark on the map: a small ring where it landed (the words are in the glass / LED). */
+.lesson-tap-ring {
+  position: fixed; z-index: 60; width: 34px; height: 34px; margin: -17px 0 0 -17px;
+  border-radius: 50%; border: 2px solid rgba(240, 233, 220, .85); pointer-events: none;
+  animation: lesson-tap-ring 600ms ease-out forwards;
+}
+@keyframes lesson-tap-ring { from { transform: scale(.45); opacity: .95; } to { transform: scale(1.35); opacity: 0; } }
+/* The Draw pile's count glows as the lesson's clock runs out. */
+#deck.lesson-pile-low .pile-count {
+  color: #ffd98a; text-shadow: 0 0 10px rgba(255, 200, 90, .85);
+  animation: lesson-pile-low 1.2s ease-in-out infinite;
+}
+@keyframes lesson-pile-low { 50% { text-shadow: 0 0 3px rgba(255, 200, 90, .4); } }
+.reduce-motion #deck.lesson-pile-low .pile-count { animation: none; }
+@media (prefers-reduced-motion: reduce) { #deck.lesson-pile-low .pile-count { animation: none; } }
