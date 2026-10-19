@@ -17,6 +17,14 @@ const errors:string[]=[];
 page.on('pageerror',error=>errors.push(error.message));
 const state=()=>page.evaluate(()=>(window as any).__severgrow.state() as State);
 const play=(action:Action,who:0|1=0)=>page.evaluate(([a,p])=>(window as any).__severgrow.playFor(a,p),[action,who] as const);
+/** The Tutorial entry is HIDDEN while levels are the tutorial (2026-10-19), but the guided run is
+ *  still shipped and still has to work. Reveal the button on THIS page only and press it: nothing in
+ *  the product code changes, the same `hidden` flag is flipped for the test. */
+const openTutorialEntry = async (p: import('playwright-core').Page) => {
+  const entry = p.locator('#menu-tutorial');
+  if (await entry.isHidden()) await entry.evaluate((element) => { (element as HTMLElement).hidden = false; });
+  await entry.click();
+};
 /** Wait for the app to finish booting (async UI mounts + the first screen), never a fixed sleep.
  *  The `severor-ready` event fires once, so poll the `ready` hook and fall back to the event. */
 const waitBoot=(p:import('playwright-core').Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
@@ -40,7 +48,12 @@ try {
   assert.equal((await page.locator('#menu-tutorial').textContent())?.trim(), 'Tutorial', 'the single menu entry is named Tutorial');
   assert.equal(await page.locator('#menu-lessons-list').count(), 0, 'the old How-to lessons list is gone');
   assert.equal(await page.locator('#hint-btn').count(), 0, 'the floating in-match "?" tool is removed');
-  await page.locator('#menu-tutorial').click();
+  // The entry is HIDDEN on the campaign channels since 2026-10-19 (levels 1-10 are the tutorial),
+  // but the guided run itself is still shipped and still has to work. Assert the hiding, then
+  // reveal the button on THIS page only so the rest of this suite keeps covering the old run.
+  // Nothing in the product code changes: the same `hidden` flag is simply flipped for the test.
+  assert.equal(await page.locator('#menu-tutorial').isHidden(), true, 'the Tutorial entry is hidden while levels are the tutorial');
+  await openTutorialEntry(page);
   await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===51000,undefined,{timeout:10000});
   assert.equal(await page.locator('#futasaku-glass .glass-copy').textContent(),'YOUR HOME');
   // Dual advance: tapping the highlighted home must work (not only NEXT).
@@ -156,11 +169,15 @@ try {
     await page.evaluate(()=>(window as any).__severgrow.tutorialNext());
     await page.waitForTimeout(250);
   }
-  // Finishing the guided run no longer returns to the menu: since 2026-10-16 (owner direction,
-  // "after tutorial it takes you to level 1") it hands the player straight into a REAL campaign
-  // level through the campaign's own entry point. So assert the hand-off, not a menu visit — and
-  // assert the tutorial save is not retained as a live match, which was the original intent.
-  await page.waitForFunction(()=>(window as any).__severgrow?.state()?.seed===95001,undefined,{timeout:20000});
+  // Finishing the guided run no longer returns to the menu: it hands the player straight into a REAL
+  // campaign level through the campaign's own entry point. Since levels 1-10 became lessons
+  // (2026-10-19), that level opens from its AUTHORED lesson position, so the level's own seed is no
+  // longer what lands here - the honest signals are: the guided run is over, and a small-map
+  // campaign game is open.
+  await page.waitForFunction(() => {
+    const g = (window as any).__severgrow;
+    return !g?.tutorial?.() && g?.state()?.config?.boardRadius === 2;
+  }, undefined, { timeout: 20000 });
   assert.equal(await page.locator('#campaign').isVisible(),false,'the tutorial lands in the level, not the chapter list');
   s=await state();
   assert.equal(s.config.boardRadius,2,'the tutorial hands off to campaign level 1, which uses the small map');
@@ -243,7 +260,7 @@ try {
   const desktop=await browser.newPage({viewport:{width:1440,height:900}});
   await desktop.goto(base);
   await waitBoot(desktop);
-  await desktop.locator('#menu-tutorial').click();
+  await openTutorialEntry(desktop);
   await desktop.locator('#game').waitFor({state:'visible'});
   await desktop.locator('#futasaku-glass').waitFor({state:'visible'});
   const desktopGlass=await desktop.locator('#futasaku-glass').boundingBox();
