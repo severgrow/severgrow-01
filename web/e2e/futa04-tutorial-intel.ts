@@ -25,6 +25,11 @@ const openTutorialEntry = async (p: import('playwright-core').Page) => {
   if (await entry.isHidden()) await entry.evaluate((element) => { (element as HTMLElement).hidden = false; });
   await entry.click();
 };
+/** Continue is HIDDEN on the product menu (owner decision, 2026-10-19). This suite covers the
+ *  guided run's own resume, so it invokes the same legacy control directly rather than asking for
+ *  a button a player can no longer reach. */
+const resumeHiddenContinue = (p: import('playwright-core').Page) =>
+  p.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
 /** Wait for the app to finish booting (async UI mounts + the first screen), never a fixed sleep.
  *  The `severor-ready` event fires once, so poll the `ready` hook and fall back to the event. */
 const waitBoot=(p:import('playwright-core').Page)=>p.waitForFunction(()=>(window as any).__severgrow?.ready?.()===true,undefined,{timeout:20000});
@@ -77,7 +82,7 @@ try {
   const beforeRefresh=await state();
   await page.reload();
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
-  await page.locator('#menu-continue').click();
+  await resumeHiddenContinue(page);
   assert.deepEqual(await state(),beforeRefresh,'tutorial resumes the exact authored position');
   await page.waitForSelector('#futasaku-glass:not([hidden])');
   const resumedTut=await page.evaluate(()=>(window as any).__severgrow.tutorial());
@@ -233,8 +238,8 @@ try {
   }
   await page.locator('#futasaku-glass .intel-close').click();
   await page.goto(base);
-  await page.waitForFunction(()=>!!document.getElementById('menu-continue')&&!document.getElementById('menu-continue')!.hidden);
-  await page.locator('#menu-continue').click();
+  await page.waitForFunction(()=>!!document.getElementById('menu-continue'));
+  await resumeHiddenContinue(page);
   await page.waitForFunction(()=>(window as any).__severgrow?.state()?.turnPlayer===0);
   assert.match(await page.locator('#tool-undo').getAttribute('aria-label')??'',/Replay/,'Replay survives refresh');
   await page.locator('#tool-undo').evaluate(element=>(element as HTMLElement).click());
