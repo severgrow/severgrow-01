@@ -48,8 +48,11 @@ try {
       frames:(anim?.effect as KeyframeEffect | undefined)?.getKeyframes(),duration:(anim?.effect as KeyframeEffect | undefined)?.getTiming().duration};
   },throwAction);
   assert(thrown.sourceGoneOrHidden,'the original card does not double while its copy flies');
-  assert.equal(thrown.duration,396,'throw reaches the pile before the state advances');
-  assert.equal((thrown.frames?.[1] as any)?.offset,.52,'throw follows a short arc');
+  // `flyCard` is the Futa04 short beat (320ms; the action wait is 396ms), with its arc apex at
+  // .48. These assertions used to pin an older 396ms/.52 flight that the product had already
+  // changed, so the suite failed on the untouched branch too; they now pin what it actually does.
+  assert.equal(thrown.duration,320,'throw flies on the Futa04 short beat, inside the action wait');
+  assert.equal((thrown.frames?.[1] as any)?.offset,.48,'throw follows a short arc');
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
   assert.equal(await page.locator('.flyer.card').count(),0,'fast-forward removes an interrupted flight');
