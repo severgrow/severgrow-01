@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { LESSON } from '../../src/strings.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
 const SHOTS = process.env.SHOTS ?? '';
@@ -262,6 +263,23 @@ try {
       check(r.winner === 0, `after random taps, L1 still finishes and is won (${r.reason})`);
       check((await page.evaluate(() => document.querySelectorAll('.tap-why').length)) === 0, 'no text drawn on the map');
       assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+      await page.close();
+    }
+    // --- Every reason line fits in two lines in the real window, on the smallest phone ---
+    {
+      const { page } = await newPage(320, 568);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      const shownAfter: Record<string, string> = { youGrewLine: 'You grew. ', pileLowLine: 'Pile almost empty. ' };
+      const over: string[] = [];
+      for (const [k, v] of Object.entries(LESSON)) {
+        if (typeof v !== 'string' || !k.endsWith('Line')) continue;
+        const text = (shownAfter[k] ?? '') + v;
+        const n = await page.evaluate(`(() => { const el = document.querySelector('#futasaku-glass .glass-why'); el.style.minHeight = '0';
+          el.textContent = ${JSON.stringify(text)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
+        if (n > 2) over.push(`${k} (${n} lines)`);
+      }
+      check(over.length === 0, `every reason line fits in two lines at 320 px${over.length ? `: ${over.join(', ')}` : ''}`);
       await page.close();
     }
     // --- Level 3: the same wrong hex again and again; a refresh in the middle; hints off ---

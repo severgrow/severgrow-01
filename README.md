@@ -43,9 +43,9 @@ short authored lessons, one idea each, each ending in a real win. Level 11 is th
 
 **Words:**
 - NO TEXT ON THE MAP: words go only in the glass window or the LED; the map gets only glow, pulse or ring.
-- One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
+- One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points. Your **home** (never "tree"); "cut"/"disconnect" (never "take over"). At the end, points = how many tiles you hold (gold = 2); the numbers on tiles do not count.
   - Never "set"/"run" for a Bloom, never "Fruit" (it is Bomb), never "Campaign", never "bot", no tile colours.
-- Instruction ≤ 6 words, reason ≤ 12. New strings go in the `LESSON` section of `src/strings.ts`.
+- Instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over". New strings go in the `LESSON` section of `src/strings.ts`.
 
 **Other:**
 - Keep the old Tutorial (menu entry untouched); it is "still available, to be retired later". Keep the Boobsie easter egg for now.

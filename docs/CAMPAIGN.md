@@ -87,7 +87,7 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 1. One idea per level.
 2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
-3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason ≤ 12, one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
 4. Bump the lesson's `version`.
 5. Update LESSON-SCRIPTS.md.
 6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.

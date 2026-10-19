@@ -189,9 +189,9 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 8px; }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-cells,
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
-/* The levels: one fixed height. The reason line keeps its room (two lines on narrow phones). */
-#futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { min-height:1.45em; }
-@media (max-width: 379px) { #futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { min-height:2.9em; } }
+/* The levels: one fixed height. The reason line is a touch smaller and always keeps room for two
+   lines (owner, 2026-10-19: the reasons are full sentences that must fit in two lines). */
+#futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { font-size:12px; min-height:2.9em; }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
