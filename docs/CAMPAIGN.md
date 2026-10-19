@@ -72,8 +72,9 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 **Storage and versioning.** The root, `/2/` and `/3/` share one origin:
 
 - `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
-- Each lesson has a `version`. The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
-- Completed levels stay completed (the progress record is the existing one).
+- Each lesson has a `version` (currently **2**). The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Per-action mastery (Draw / Grow / Throw / Cut / Take over / Bloom / Bomb / Blast / Strengthen / Surround) is saved in `severgrow.lesson.mastery.v1`, keyed to that lesson version. A version bump starts the fade cleanly.
+- **v3 reset (2026-10-19):** the onboarding polish changed lesson versions and several authored boards, so progress and the unfinished match moved to `.v3`. Old `.v2` (and `.v1`) keys stay in the browser, unread; every player starts the campaign at level 1 again. Completed levels therefore stay completed only within the current `.v3` record.
 
 **Seeds.** Levels 1-10 pay **no Seeds in /3** and their finish card has no Seeds line:
 
@@ -671,10 +672,10 @@ device, or produced by a bundle built before the change, must never be refused b
   70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
   A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
   intended fixed start (the seed is never rerolled).
-- Progress is its own record, `severgrow.campaign.progress.v1`: the completed ids, the best attempt
+- Progress is its own record, `severgrow.campaign.progress.v3`: the completed ids, the best attempt
   per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
   array) is never migrated or reshaped.
-- A campaign match is saved under its **own** key (`severgrow.campaign.save.v1`, wrapped with the
+- A campaign match is saved under its **own** key (`severgrow.campaign.save.v3`, wrapped with the
   level id around the normal offline save), so the classic save
   (`severgrow.save.v7`) is never overwritten by a campaign game. `severgrow.lastmode.v1` records
   which offline match was played last, and **Continue** resumes that one. An unfinished campaign

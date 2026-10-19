@@ -80,7 +80,7 @@ What the player gets:
   - From level 4 any legal move is played and the light adapts.
 - **The old on-map "tap why" plate now goes to the LED in every mode** (`sayWhyAtPoint` in `main.ts`).
 - **Finish card:** the lesson's own title and one line, with **no Seeds line**. No Seeds proof is sent for levels 1-10.
-- **Saves:** the seen explanations and the lesson `version` are saved in `severgrow.lesson.meta.v1`. A save from another lesson version restarts the level.
+- **Saves:** the seen explanations and the lesson `version` (currently 2) are saved in `severgrow.lesson.meta.v1`; per-action mastery lives in `severgrow.lesson.mastery.v1`, keyed to that version. A save from another lesson version restarts the level. The campaign moved to `.v3` keys on 2026-10-19, so old progress is intentionally unread.
 - **/3 storage:** /3 uses its own prefix `futa05-3:` and SW cache `futa05lessons3-`, so it never touches root or /2 data.
 
 **Verified:**
