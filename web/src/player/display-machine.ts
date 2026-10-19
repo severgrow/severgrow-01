@@ -48,6 +48,14 @@ export class DisplayMachine {
   private urgency = false;
   /** A drag is holding a word on the sign; timers and idle reminders stay out of the way. */
   private held = false;
+  /**
+   * A lesson message is on screen (levels 1-10): the sign keeps the score and real play facts
+   * (priority 30+: a result, a wrong-tap answer) and drops its own step words, hints and idle
+   * prompts, so two displays never say different things at once.
+   */
+  private quiet = false;
+  /** The score is held on the sign (a lesson is pointing at it): nothing replaces it. */
+  private scoreHeld = false;
   /** Queued step announcement while a higher-priority event finishes. */
   private pendingStep: string | null = null;
   private frame: DisplayFrame = { text: '', mode: 'score' };
@@ -147,9 +155,22 @@ export class DisplayMachine {
     const next = `${you}:${opp}`;
     if (next === this.scoreText) return;
     this.scoreText = next;
+    if (this.scoreHeld) { this.emit({ text: next, mode: 'score' }, { force: true }); return; }
     if (!this.active && !this.urgency && !this.frame.pulse && !this.frame.alarm) this.rest();
   }
+  setQuiet(on: boolean) {
+    if (on === this.quiet) return;
+    this.quiet = on;
+    if (on) {
+      this.urgency = false;
+      this.clearUrgencyPaint();
+      if (!this.active) { this.clearTimers(); this.clearDwellQueue(); this.rest(); }
+    } else {
+      this.interact();
+    }
+  }
   phase(text: string) {
+    if (this.quiet) { this.instruction = text; return; }
     if (text === this.instruction && !isObsoleteStepCue(this.frame.text, text)
       && !(this.active && isObsoleteStepCue(this.active.message, text))) {
       return;
@@ -248,6 +269,8 @@ export class DisplayMachine {
     this.show(this.frame);
   }
   event(event: DisplayEvent) {
+    if (this.scoreHeld) return;
+    if (this.quiet && event.priority < 30) return;
     if (this.active && this.active.priority > event.priority) return;
     this.held = false;
     this.urgency = false;
@@ -289,7 +312,7 @@ export class DisplayMachine {
       this.timer = window.setTimeout(() => this.finish(id), factHold);
     }
   }
-  hint(text: string) { this.event({ message: text, priority: 20, duration: 1050, mode: 'amber' }); }
+  hint(text: string) { if (this.quiet) return; this.event({ message: text, priority: 20, duration: 1050, mode: 'amber' }); }
   /** Hold a word on the sign for the length of a drag; `release` restores the resting face. */
   hold(text: string, mode: LedTone = 'amber') {
     this.held = true;
@@ -300,7 +323,19 @@ export class DisplayMachine {
     this.active = null;
     this.emit({ text, mode, compact: text.length <= 12 });
   }
+  /** Hold the score itself on the sign (the lesson that teaches the score); `release` ends it. */
+  holdScore() {
+    this.scoreHeld = true;
+    this.held = true;
+    this.urgency = false;
+    this.clearTimers();
+    this.clearDwellQueue();
+    this.clearUrgencyPaint();
+    this.active = null;
+    this.emit({ text: this.scoreText, mode: 'score' }, { force: true });
+  }
   release() {
+    this.scoreHeld = false;
     if (!this.held) return;
     this.held = false;
     this.rest();
@@ -332,7 +367,7 @@ export class DisplayMachine {
   }
   private scheduleIdle(delay = 2500) {
     window.clearTimeout(this.idleTimer);
-    if (this.active || this.held || this.urgency) return;
+    if (this.active || this.held || this.urgency || this.quiet) return;
     if (this.instruction === 'WAIT' || this.instruction === 'OPPONENT TURN' || this.instruction === 'FUTASAKU') return;
     this.idleTimer = window.setTimeout(() => {
       if (this.active || this.held || this.urgency) return;

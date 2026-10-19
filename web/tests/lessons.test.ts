@@ -413,3 +413,79 @@ describe('robustness', () => {
     for (const l of LESSONS) expect(JSON.stringify(lessonOpening(l))).toBe(JSON.stringify(lessonOpening(l)));
   });
 });
+
+describe('owner review 2026-10-19', () => {
+  /** Every beat the follower meets on my turns, with the given ctx extras. */
+  const beatsOf = (l: Lesson, extra: Partial<BeatCtx> = {}) => {
+    const out: NonNullable<ReturnType<typeof lessonBeat>>[] = [];
+    let s = lessonOpening(l);
+    const seen = new Set<string>();
+    for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
+      if (s.actor === 0) {
+        const b = lessonBeat(l, s, { card: null, placing: null, throwPending: null, seen, ...extra });
+        if (b) { out.push(b); if (b.explain) { seen.add(b.id); continue; } }
+        s = apply(s, suggestMove(l, s)!);
+      } else s = apply(s, opponentMove(l, s));
+    }
+    return out;
+  };
+
+  it('levels 1-9 keep their hints on screen; only level 10 waits for a quiet moment', () => {
+    for (const l of LESSONS.filter((x) => x.level <= 9)) expect(beatsOf(l).some((b) => b.idleOnly), `L${l.level}`).toBe(false);
+    expect(beatsOf(lessonFor(10)!).some((b) => b.idleOnly)).toBe(true);
+  });
+
+  it('the » step is spelled out until it has been taught once, then it is a single word', () => {
+    const untaught = beatsOf(lessonFor(1)!).filter((b) => b.id === 'end');
+    expect(untaught.length).toBeGreaterThan(0);
+    for (const b of untaught) expect([b.title, b.line]).toEqual([LESSON.done, LESSON.doneLine]);
+    const taught = beatsOf(lessonFor(1)!, { doneTaught: true }).filter((b) => b.id === 'end');
+    for (const b of taught) { expect(b.title).toBe(LESSON.throwWord); expect(b.line).toBeUndefined(); }
+  });
+
+  it('a Bloom is two steps: tap Bloom to pick it, then tap the lit tiles', () => {
+    for (const n of [5, 9]) {
+      const l = lessonFor(n)!;
+      let s = lessonOpening(l);
+      for (let i = 0; i < 40 && !(s.phase === 'ACT' && suggestMove(l, s)?.t === 'Bloom'); i++) s = apply(s, suggestMove(l, s)!);
+      const seen = new Set(LESSONS.flatMap((x) => [`${x.level}:intro:bloom-cards`]));
+      const pick = lessonBeat(l, s, { card: null, placing: null, throwPending: null, seen })!;
+      expect(pick.title, `L${n} pick`).toBe(LESSON.tapBloom);
+      expect(pick.lit.t).toBe('bloom');
+      const place = lessonBeat(l, s, { card: null, placing: 'bloom', throwPending: null, seen })!;
+      expect(place.title, `L${n} place`).toBe(LESSON.bloomTiles);
+      expect(place.lit.t).toBe('hexes');
+    }
+  });
+});
+
+describe('level 1 teaches the score and the pile count once', () => {
+  it('right after the first Grow the score display is lit; at the last cards the Draw pile and its count are lit', () => {
+    const l = lessonFor(1)!;
+    let s = lessonOpening(l);
+    const seen = new Set<string>();
+    const lits: Record<string, string> = {};
+    for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
+      if (s.actor === 0) {
+        const b = lessonBeat(l, s, { card: null, placing: null, throwPending: null, seen });
+        if (b?.explain) { lits[b.id] = b.lit.t; seen.add(b.id); continue; }
+        s = apply(s, suggestMove(l, s)!);
+      } else s = apply(s, opponentMove(l, s));
+    }
+    expect(lits['1:grew']).toBe('score');
+    expect(lits['1:pile-low']).toBe('deckCount');
+    // Only level 1 lights them: the other lessons never do.
+    for (const other of LESSONS.filter((x) => x.level > 1)) {
+      let t = lessonOpening(other);
+      const seen2 = new Set<string>();
+      for (let i = 0; i < 400 && t.phase !== 'GAME_OVER'; i++) {
+        if (t.actor === 0) {
+          const b = lessonBeat(other, t, { card: null, placing: null, throwPending: null, seen: seen2 });
+          expect(['score', 'deckCount']).not.toContain(b?.lit.t);
+          if (b?.explain) { seen2.add(b.id); continue; }
+          t = apply(t, suggestMove(other, t)!);
+        } else t = apply(t, opponentMove(other, t));
+      }
+    }
+  });
+});

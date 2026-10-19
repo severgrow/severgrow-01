@@ -57,11 +57,13 @@ const newPage = async (w = 390, h = 844) => {
   return { page, errors };
 };
 
-const dismissInstall = (p: Page) => p.evaluate(() => {
-  for (const id of ['install-close', 'install-later', 'install-dismiss']) document.getElementById(id)?.click();
+/** Close the install invitation the way a person does, and only when it is actually showing. */
+const dismissInstall = (p: Page) => p.evaluate(`(() => {
   const prompt = document.getElementById('install-prompt');
-  if (prompt && !prompt.hidden) prompt.hidden = true;
-});
+  if (!prompt || prompt.hidden) return;
+  for (const id of ['install-close', 'install-later', 'install-dismiss']) document.getElementById(id)?.click();
+  if (!prompt.hidden) prompt.hidden = true;
+})()`);
 
 /** From the menu: PLAY → the next level (the only way in). */
 const openNextLevel = async (p: Page) => {
@@ -119,6 +121,8 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
     if (s.phase === 'GAME_OVER') return { wrong, taps, ms: Date.now() - t0, winner: s.result?.winner, reason: s.result?.reason, turns: s.turnNumber };
     const busy = await p.evaluate(() => (window as any).__severgrow.busy());
     if (s.actor !== 0 || busy) { await p.waitForTimeout(120); continue; }
+    // The install invitation may follow a closed finish card (from level 4): a person closes it.
+    await dismissInstall(p);
     const lesson = await hook<{ beat: Beat | null; answer: string; idle: boolean } | null>(p, 'lesson');
     if (!lesson) throw new Error(`L${level}: no lesson on screen`);
     const pos = `${s.turnNumber}|${s.phase}|${s.history?.length}|${lesson.beat?.id}|${JSON.stringify(lesson.beat?.lit)}`;
@@ -224,8 +228,9 @@ try {
       await openNextLevel(page);
       // Cards before drawing: every one is answered, none is played.
       const st0 = await hook<any>(page, 'state');
-      // (the two explanations first: a tap anywhere)
-      for (let i = 0; i < 2; i++) { await tapAnywhere(page); await page.waitForTimeout(250); }
+      // (the two explanations first: a tap anywhere, at a person's pace: a tap in an
+      // explanation's first moments is deliberately ignored)
+      for (let i = 0; i < 6 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await page.waitForTimeout(700); await tapAnywhere(page); await page.waitForTimeout(300); }
       const cardPt = await page.evaluate(`(() => { const r = document.querySelector('#hand .card').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number };
       await page.mouse.click(cardPt.x, cardPt.y);
       await page.waitForTimeout(150);
@@ -295,7 +300,7 @@ try {
       if (lv !== 3) console.log(`     (progress format differs: opened level ${lv}; robustness continues there)`);
       // Through the intro, draw, then tap the rock five times.
       const level = lv ?? 1;
-      for (let i = 0; i < 3; i++) { const b = (await hook<any>(page, 'lesson')).beat; if (b?.explain) { await tapAnywhere(page); await page.waitForTimeout(250); } }
+      for (let i = 0; i < 6 && (await hook<any>(page, 'lesson'))?.beat?.explain; i++) { await page.waitForTimeout(700); await tapAnywhere(page); await page.waitForTimeout(300); }
       const deck = (await litPoints(page, { t: 'deck' }))[0]!;
       await page.mouse.click(deck.x, deck.y); await idle(page); await page.waitForTimeout(300);
       if (level === 3) {

@@ -1184,10 +1184,12 @@ export const LESSON = Object.freeze({
   // level 5
   cardsThatBloom: 'CARDS THAT BLOOM',
   cardsThatBloomLine: '3 cards with the same number, or 3 of same suit in order.',
-  playLit: 'PLAY THE LIT CARDS',
   playLitLine: 'Three together make a Bloom.',
   tapBloom: 'TAP BLOOM',
   tapBloomLine: 'Then tap or draw the tiles on board. Have to connect to your home.',
+  // the Bloom picked: its tiles are next (owner, 2026-10-19: tap Bloom first, then the tiles)
+  bloomTiles: 'TAP THE LIT TILES',
+  bloomTilesLine: 'Tap or draw the tiles on board. Have to connect to your home.',
   bloomed: 'BLOOM!',
   bloomedLine: 'A Bloom is an extra move, growing multiple tiles at once.',
   // level 6

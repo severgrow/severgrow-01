@@ -502,7 +502,11 @@ export type Lit =
   | { t: 'end' }
   | { t: 'bloom' }
   | { t: 'rock'; key: string }
-  | { t: 'led' };
+  | { t: 'led' }
+  /** The cockpit's score display (taught once, level 1). */
+  | { t: 'score' }
+  /** The Draw pile together with its count (taught once, level 1). */
+  | { t: 'deckCount' };
 
 export type Beat = {
   /** Stable id (an explanation is shown once; seen ids are kept with the lesson's save). */
@@ -526,6 +530,8 @@ export type BeatCtx = {
   placing: 'bloom' | 'blast' | null;
   /** A throw is waiting for its second tap (the card id). */
   throwPending: number | null;
+  /** The » step was already spelled out once on this device: from then on it is one word. */
+  doneTaught?: boolean;
   seen: ReadonlySet<string>;
 };
 
@@ -555,14 +561,14 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
   const once = (id: string) => !seen.has(`${lesson.level}:${id}`);
   const ev = mine(s);
   if (lesson.level === 1 && ev.some((e) => e.t === 'Sprout') && once('grew'))
-    return explain(`${lesson.level}:grew`, W.youGrew, W.youGrewLine, { t: 'led' }, 'YOU 1 : THEM 0');
+    return explain(`${lesson.level}:grew`, W.youGrew, W.youGrewLine, { t: 'score' }, 'YOU 1 : THEM 0');
   if (lesson.level === 4 && goalDone({ t: 'cut', key: '1,-1' }, s) && once('withered'))
     return explain(`${lesson.level}:withered`, W.withered, W.witheredLine, { t: 'led' });
   if (lesson.level === 5 && goalDone({ t: 'bloom' }, s) && once('bloomed'))
     return explain(`${lesson.level}:bloomed`, W.bloomed, W.bloomedLine, { t: 'led' });
   // The clock: the Draw pile is nearly gone (levels with a points ending say it once).
   if (lesson.level === 1 && s.phase === 'DRAW' && s.deck.length > 0 && s.deck.length <= 3 && once('pile-low'))
-    return explain(`${lesson.level}:pile-low`, W.pileLow, W.pileLowLine, { t: 'deck' }, 'LAST CARDS');
+    return explain(`${lesson.level}:pile-low`, W.pileLow, W.pileLowLine, { t: 'deckCount' }, 'LAST CARDS');
   if (s.deckFinal && s.phase === 'ACT' && (s.sproutsThisTurn ?? 0) === 0 && once(`last-turn`))
     return explain(`${lesson.level}:last-turn`, W.lastTurn, W.lastTurnLine, { t: 'led' }, 'LAST TURN');
   return null;
@@ -577,7 +583,8 @@ const words = (lesson: Lesson, s: State, full: [string, string], word: string): 
 
 const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: readonly Action[]): Beat => {
   const goal = currentGoal(lesson, s);
-  const idleOnly = lesson.guide === 'idle' || (lesson.guide === 'word' && !goal && lesson.level >= 6);
+  // Only the finale waits for a quiet moment; levels 1-9 keep their hint on screen (owner, 2026-10-19).
+  const idleOnly = lesson.guide === 'idle';
   const beat = (id: string, w: { title: string; line?: string }, lit: Lit): Beat => ({ id, ...w, lit, ...(idleOnly ? { idleOnly } : {}) });
   switch (move.t) {
     case 'Draw':
@@ -601,9 +608,10 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
       return beat(`tile:${key}`, w, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
     }
     case 'Bloom': {
-      if (ctx.placing === 'bloom') return beat('bloom-tiles', { title: W.tapBloom, line: W.tapBloomLine }, { t: 'hexes', keys: move.hexes.map(keyOf) });
+      // Two steps: tap Bloom to pick it, then tap (or draw) its lit tiles.
+      if (ctx.placing === 'bloom') return beat('bloom-tiles', { title: W.bloomTiles, line: W.bloomTilesLine }, { t: 'hexes', keys: move.hexes.map(keyOf) });
       if (goal?.t === 'pileBloom') return { id: 'bloom', title: W.tapBloom, line: W.tapBloomLine, lit: { t: 'bloom' } };
-      return beat('bloom', { title: W.playLit, line: W.playLitLine }, { t: 'bloom' });
+      return beat('bloom', { title: W.tapBloom, line: W.playLitLine }, { t: 'bloom' });
     }
     case 'PlayFruit':
       if (ctx.card !== move.card) return beat('bomb-card', { title: W.bombTile, line: W.bombTileLine }, { t: 'card', id: move.card });
@@ -613,6 +621,8 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
       return beat('blast', { title: W.blast, line: W.blastLine }, { t: 'bloom' });
     case 'EndAct':
       if (goal?.t === 'skip') return { id: 'skip', title: W.skipGrow, line: W.skipGrowLine, lit: { t: 'end' } };
+      // Spelled out once (so the player knows » is there to skip on); after that one word.
+      if (ctx.doneTaught) return beat('end', { title: W.throwWord }, { t: 'end' });
       return beat('end', { title: W.done, line: W.doneLine }, { t: 'end' });
     case 'Discard':
       if (ctx.throwPending === move.card) return beat('throw-pile', words(lesson, s, [W.throwPile, W.throwPileLine], W.throwWord), { t: 'discard' });

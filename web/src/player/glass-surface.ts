@@ -578,7 +578,24 @@ const grownPoly = (pts: readonly Pt[], pad: number): Pt[] => {
     return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
   });
 };
-const polyAttr = (pts: readonly Pt[]) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+/** The levels' one corner: every glow (hex, card, pile, button) has the same rounded corner. */
+const LESSON_CORNER = 9;
+/** An outline as a path whose every corner is rounded by the same radius (shorter on tiny edges). */
+const roundedPath = (pts: readonly Pt[], r = LESSON_CORNER): string => {
+  const n = pts.length;
+  const f = (v: number) => v.toFixed(1);
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const p = pts[i]!; const prev = pts[(i + n - 1) % n]!; const next = pts[(i + 1) % n]!;
+    const lp = Math.hypot(prev.x - p.x, prev.y - p.y) || 1;
+    const ln = Math.hypot(next.x - p.x, next.y - p.y) || 1;
+    const rr = Math.min(r, lp / 2, ln / 2);
+    const a = { x: p.x + ((prev.x - p.x) / lp) * rr, y: p.y + ((prev.y - p.y) / lp) * rr };
+    const b = { x: p.x + ((next.x - p.x) / ln) * rr, y: p.y + ((next.y - p.y) / ln) * rr };
+    d += `${i === 0 ? 'M' : 'L'}${f(a.x)},${f(a.y)}Q${f(p.x)},${f(p.y)} ${f(b.x)},${f(b.y)}`;
+  }
+  return `${d}Z`;
+};
 
 /** Tracked geometry for outlines: the bounds (for the pointer) plus each outline. */
 const geometryFromPolys = (polys: Pt[][]): Tracked => {
@@ -942,7 +959,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     const y = tracked.top - padY;
     const w = tracked.w + padX * 2;
     const h = tracked.h + padY * 2;
-    const rx = Math.min(FOCUS_RX, Math.min(w, h) * 0.22);
+    // The levels use one corner for every glow; the Tutorial keeps its proportional pill.
+    const rx = lessonFocus ? Math.min(LESSON_CORNER, w / 2, h / 2) : Math.min(FOCUS_RX, Math.min(w, h) * 0.22);
     setIfChanged(el, 'x', x.toFixed(1));
     setIfChanged(el, 'y', y.toFixed(1));
     setIfChanged(el, 'width', w.toFixed(1));
@@ -972,7 +990,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   const paintFocus = (tracked: Tracked | null) => {
     setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
-    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : '1');
+    // The levels' glow holds still: the lit thing already breathes on its own.
+    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked || lessonFocus ? '0' : '1');
     setIfChanged(focus, 'data-bob', reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1');
     setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');
     // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
@@ -988,7 +1007,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       const n = tracked.polys.length;
       const scene = `poly:${n}` as const;
       if (focusScene !== scene) {
-        const each = (cls: string) => Array.from({ length: n }, () => `<polygon class="${cls}"/>`).join('');
+        const each = (cls: string) => Array.from({ length: n }, () => `<path class="${cls}"/>`).join('');
         focus.innerHTML = cutoutMask(each('focus-hole" fill="black'))
           + `<g class="focus-lift">${each('focus-glow-soft')}${each('focus-glow')}</g>`
           + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
@@ -998,9 +1017,9 @@ export const mountGlassSurface = (onClose: () => void) => {
       const softs = focus.querySelectorAll('.focus-glow-soft');
       const rings = focus.querySelectorAll('.focus-glow');
       tracked.polys.forEach((poly, i) => {
-        setIfChanged(holes[i] ?? null, 'points', polyAttr(grownPoly(poly, 4)));
-        setIfChanged(softs[i] ?? null, 'points', polyAttr(grownPoly(poly, 6)));
-        setIfChanged(rings[i] ?? null, 'points', polyAttr(grownPoly(poly, 2)));
+        setIfChanged(holes[i] ?? null, 'd', roundedPath(grownPoly(poly, 4)));
+        setIfChanged(softs[i] ?? null, 'd', roundedPath(grownPoly(poly, 6)));
+        setIfChanged(rings[i] ?? null, 'd', roundedPath(grownPoly(poly, 2)));
       });
     } else {
       ensureTrackedScene();

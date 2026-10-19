@@ -62,7 +62,7 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | Levels | Guidance |
 |---|---|
 | 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
-| 4-9 | Every legal move is played; the light adapts. After the lesson's goal, hints appear only after 6 s idle. |
+| 4-9 | Every legal move is played; the light adapts. The one-word hint stays on screen. |
 | 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
 | 11-30 | The existing levels, unchanged. No lesson. |
 

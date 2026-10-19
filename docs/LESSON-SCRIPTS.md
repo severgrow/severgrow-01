@@ -32,6 +32,9 @@ If you change a beat, a word or a position, change it here too. If you change a 
 | a card in the fan | the card itself, turned with the fan |
 | a pile or a button | rounded pill |
 
+- Every glow has the **same rounded corner**, whatever it outlines, and it **holds still** (no pulse): the lit thing already breathes on its own.
+- The score display and the pile count are taught **once**, in level 1, and are left as they are everywhere else.
+
 - Everything else is dimmed strongly.
 - A chunky pointer points at the target; the highlight follows it every frame.
 
@@ -84,12 +87,17 @@ The same in every level:
   - LIT Draw pile | TAP THE DRAW PILE / Every turn starts with drawing 1 card. | a card drawn | DRAW FIRST on anything else
   - LIT the card | PICK THE LIT CARD / This card will be placed on the board. | card picked
   - LIT the tile (other legal tiles quietly) | TAP A LIT TILE / Tap here to Grow this card. | Grow played
-  - LIT » (when growing is done and a Bloom is still possible) | DONE GROWING / Tap » to go on to Throw.
+  - LIT » after the Grow | DONE GROWING / Tap » to go on to Throw. Shown **once per device**: the player taps » themselves the first time. After that the game moves on to Throw by itself when nothing else can be played, and when a Bloom is still possible the » is lit with the one word THROW.
   - LIT the card to throw | THROW A CARD / Throw 1 card to end your turn. | card picked
   - LIT Throw pile | TAP THE THROW PILE / Move the card here, or tap it again. | card thrown
   - their turn | THEIR TURN / They draw, grow and throw too. (first time only)
 - **Later turns:** one word: DRAW, GROW, THROW.
-- **Levels 6-9:** after the lesson's goal is done, the one-word hints appear only after 6 s idle.
+- **Levels 1-9:** the one-word hint always stays on screen. Only level 10 waits for 6 s idle (owner, 2026-10-19).
+- **Explanations** cannot be dismissed by a tap in their first 0.65 s, so a tap meant for the move that just happened never swallows them.
+- **The cockpit LED** keeps to the score and real results while the window speaks (no competing words).
+- **A lit card** sits above the fan, so only that card shows in the glow.
+- **Finish card** in levels 1-10: the title, the lesson's one line and the score (no repeated reason, no "Next level unlocked").
+- **Install invitation:** never in levels 1-3; from level 4 it waits until the finish card is closed.
 
 ## LEVEL 1 — FIRST SEED
 
@@ -103,11 +111,11 @@ The same in every level:
   3. LIT Draw pile | TAP THE DRAW PILE / Every turn starts with drawing 1 card. | drawn | DRAW FIRST
   4. LIT the card | PICK THE LIT CARD / This card will be placed on the board. | picked | TAP THE LIT ONE
   5. LIT the tile, other legal tiles quietly | TAP A LIT TILE / Tap here to Grow this card. | Grow played | CONNECT TO YOUR HOME, THAT IS THEIR HOME
-  6. LED YOU 1 : THEM 0 | You grew. Tiles keep the rank of the card used. | tap anywhere
+  6. LIT the cockpit's score display, which holds the score itself (1:0) | LED YOU 1 : THEM 0 | You grew. Tiles keep the rank of the card used. | tap anywhere
   7. LIT the card, then Throw pile | THROW A CARD / Throw 1 card to end your turn. → TAP THE THROW PILE / Move the card here, or tap it again. | thrown
   8. THEIR TURN / They draw, grow and throw too.
   9. Turns 2-4: DRAW, GROW, THROW (one word, same light).
-  10. Draw pile at 3 cards: count glows, LED LAST CARDS | PILE ALMOST EMPTY / You can see how many cards are left in the Draw pile. | tap anywhere
+  10. Draw pile at 3 cards: LIT the Draw pile together with its count (the count also glows) | LED LAST CARDS | PILE ALMOST EMPTY / You can see how many cards are left in the Draw pile. | tap anywhere
   11. Pile empty: LAST TURN / Pile empty: each tile is 1 point. Numbers on tiles don’t count. | tap anywhere
 - **Finish:** YOU WIN / You had more points – you won!
 - **Proof:** the follower wins 4-1 in 4 of your turns. The browser tapper does it with 0 wrong taps.
@@ -155,8 +163,8 @@ The same in every level:
   - Your tile -1,1 (2). Their home's sides are held by 9s, so no Bloom can surround it.
 - **Beats:**
   1. LIT the three cards | CARDS THAT BLOOM / 3 cards with the same number, or 3 of same suit in order. | tap anywhere
-  2. LIT Bloom | PLAY THE LIT CARDS / Three together make a Bloom. | Bloom picked | THREE CARDS OR MORE, SAME NUMBER, OR COUNTING UP
-  3. LIT the Bloom's tiles | TAP BLOOM / Then tap or draw the tiles on board. Have to connect to your home. | Bloom played
+  2. LIT Bloom | TAP BLOOM / Three together make a Bloom. | Bloom picked | THREE CARDS OR MORE, SAME NUMBER, OR COUNTING UP
+  3. LIT the Bloom's tiles | TAP THE LIT TILES / Tap or draw the tiles on board. Have to connect to your home. | Bloom played
   4. BLOOM! / A Bloom is an extra move, growing multiple tiles at once. | tap anywhere
   5. Then the turn in one word. Ends on points.
 - **Finish:** YOU WIN / You had more points – you won!
@@ -181,7 +189,7 @@ The same in every level:
   - The opponent does not grow.
 - **Beats:**
   1. LIT the Bomb, then 0,0 | BOMB THEIR TILE / A Bomb removes 1 enemy tile. It replaces Grow in your turn. | 0,0 removed | MUST TOUCH YOUR TILES, HOMES ARE SAFE
-  2. Then the turn in one word (after 6 s idle). Ends on points.
+  2. Then the turn in one word. Ends on points.
 - **If you throw the Bomb:** RESTART LEVEL.
 - **Finish:** YOU WIN / You had more points – you won!
 
@@ -195,7 +203,7 @@ The same in every level:
   1. LIT Bloom (the two Bombs) | TWO BOMBS MAKE A BLAST / A Blast clears a large area. Homes are safe. | Blast picked
   2. LIT the target 0,-1 | TWO BOMBS MAKE A BLAST / A Blast clears a large area. Homes are safe. | Blast played
   3. LIT a card, then a tile | FREE GROW / A Blast is an extra move on top of Grow and Blooms. | the Grow played
-  4. Then the turn in one word (after 6 s idle). Ends on points.
+  4. Then the turn in one word. Ends on points.
 - **Finish:** YOU WIN / You had more points – you won!
 
 ## LEVEL 9 — THROW PILE AND SKIP
@@ -205,9 +213,10 @@ The same in every level:
   - Your tile -1,1 (4); their home's sides are held by 9s.
 - **Beats:**
   1. LIT Throw pile (it glows gold) | THROW PILE IS GOLD / An indicator that its top card completes a Bloom in your hand. | drawn from the Throw pile
-  2. LIT Bloom, then its tiles | TAP BLOOM / Then tap or draw the tiles on board. Have to connect to your home. | Bloom played
+  2. LIT Bloom | TAP BLOOM / Then tap or draw the tiles on board. Have to connect to your home. | Bloom picked
+  3. LIT the Bloom's tiles | TAP THE LIT TILES / Tap or draw the tiles on board. Have to connect to your home. | Bloom played
   3. LIT » | SKIP GROW / You can end a turn without growing to save cards for later. | turn ended without a Grow
-  4. Then the turn in one word (after 6 s idle). Ends on points.
+  4. Then the turn in one word. Ends on points.
 - **Finish:** YOU WIN / You had more points – you won!
 
 ## LEVEL 10 — FINALE

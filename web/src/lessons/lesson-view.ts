@@ -17,6 +17,8 @@ export const litTarget = (lit: Lit, homes: readonly [string, string]): { selecto
     case 'card': return { selectors: [cardSel(lit.id)], shape: 'card' };
     case 'cards': return { selectors: lit.ids.map(cardSel), shape: 'card' };
     case 'deck': return { selectors: ['#deck'], shape: 'pill' };
+    case 'deckCount': return { selectors: ['#deck .pile-card', '#deck-count'], shape: 'pill' };
+    case 'score': return { selectors: ['#smart-led'], shape: 'pill' };
     case 'discard': return { selectors: ['#discard'], shape: 'pill' };
     case 'end': return { selectors: ['#smart-context'], shape: 'pill' };
     case 'bloom': return { selectors: ['#smart-bloom-button'], shape: 'pill' };

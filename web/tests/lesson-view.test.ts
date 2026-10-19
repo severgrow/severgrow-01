@@ -28,6 +28,10 @@ describe('the light on screen', () => {
     expect(litTarget({ t: 'end' }, homes).shape).toBe('pill');
     expect(litTarget({ t: 'bloom' }, homes).shape).toBe('pill');
   });
+  it('the score display and the Draw pile with its count can be lit (taught once, in level 1)', () => {
+    expect(litTarget({ t: 'score' }, homes)).toEqual({ selectors: ['#smart-led'], shape: 'pill' });
+    expect(litTarget({ t: 'deckCount' }, homes)).toEqual({ selectors: ['#deck .pile-card', '#deck-count'], shape: 'pill' });
+  });
   it('nothing to light: no focus at all (the window speaks alone)', () => {
     expect(litTarget({ t: 'none' }, homes)).toEqual({ selectors: [], shape: 'none' });
     expect(litTarget({ t: 'led' }, homes)).toEqual({ selectors: [], shape: 'none' });

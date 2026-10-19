@@ -2101,7 +2101,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       store.set(STATS_KEY, JSON.stringify(stats));
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
-      installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
+      noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
       // The one-game carry-over, earned by this finished game: a win steps the training tier's next
       // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
       // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.
@@ -2173,7 +2173,28 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
 }
 
 /** The player plays `a` (from Confirm, a single tap, or the coach). */
+/**
+ * An offline finish, counted for the install invitation. Levels 1-3 (lessons) never invite, and
+ * levels 4-10 wait until their finish card is closed (`flushInstallInvite`): the invitation never
+ * covers a lesson's win. Every other mode counts at once, as before.
+ */
+function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false) {
+  const taughtLevel = later ? undefined : lessonActive()?.level;
+  if (taughtLevel !== undefined) {
+    if (taughtLevel > 3) pendingInstallOutcome = outcome;
+    return;
+  }
+  installPrompt.noteFinished(outcome);
+}
+function flushInstallInvite() {
+  const outcome = pendingInstallOutcome;
+  pendingInstallOutcome = null;
+  if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
+}
+
 function humanPlay(a: Action) {
+  // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
+  if (a.t === 'EndAct' && lessonActive() && (lessonBeatNow?.id === 'end' || lessonBeatNow?.id === 'skip')) store.set(LESSON_DONE_KEY, '1');
   if (isOnlineDuel()) {
     void humanPlayOnline(a);
     return;
@@ -2442,6 +2463,15 @@ let lessonAnswerTimer = 0;
 let lessonAnswerSeq = 0;
 let lessonIdle = false;
 let lessonIdleTimer = 0;
+/** When the explanation on screen appeared: a tap in its first moments is not "tap anywhere". */
+let lessonExplainAt = 0;
+let lessonHoldingScore = false;
+let lessonExplainId = '';
+/** The level 4+ finish waits to invite an install until the finish card is closed. */
+let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
+/** The » step has been spelled out once on this device (then it is one word). */
+const LESSON_DONE_KEY = 'severgrow.lesson.doneTaught.v1';
+const lessonDoneTaught = () => store.get(LESSON_DONE_KEY) === '1';
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
@@ -2578,6 +2608,8 @@ function autoAdvance() {
   // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
   if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
+  // Levels 1-10: the first time, the player taps » themselves (so they know it is there).
+  if (lessonActive() && !guidanceOff() && !lessonDoneTaught()) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
@@ -3794,6 +3826,7 @@ function lessonCtx() {
     placing: lessonPlacing(),
     throwPending: pending?.t === 'Discard' ? pending.card : null,
     seen: lessonSeen as ReadonlySet<string>,
+    doneTaught: lessonDoneTaught(),
   };
 }
 
@@ -3865,6 +3898,8 @@ function lessonDecide(e: Event): boolean {
   const guided = !guidanceOff();
   const beat = lessonBeatNow;
   if (guided && beat?.explain) {
+    // A tap meant for the move that just happened must not swallow the explanation unread.
+    if (performance.now() - lessonExplainAt < 650) return true;
     lessonMarkSeen(beat.id);
     return true;
   }
@@ -3938,6 +3973,7 @@ function renderLessonGuide(): void {
   if (!glassSurface) return;
   if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
+    smartCockpit?.quiet?.(false);
     if (lessonShownKey) {
       lessonShownKey = '';
       hideOnboardingWindow();
@@ -3952,6 +3988,12 @@ function renderLessonGuide(): void {
   // Level 10 plays on its own: its hints wait for a quiet moment.
   if (beat?.idleOnly && !lessonIdle) beat = null;
   lessonBeatNow = beat;
+  if (beat?.explain && beat.id !== lessonExplainId) { lessonExplainId = beat.id; lessonExplainAt = performance.now(); }
+  // H: while the window speaks, the cockpit's own LED keeps to the score and real results.
+  smartCockpit?.quiet?.(!!beat || !!lessonAnswerText);
+  // The one moment that teaches the score: the sign shows the score itself.
+  const holdScore = beat?.lit.t === 'score';
+  if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
   const key = JSON.stringify([level, beat?.id, beat?.title, beat?.line, beat?.lit, lessonAnswerText, lessonIdle, mine, settings.reduceMotion]);
   if (key === lessonShownKey) return;
   lessonShownKey = key;
@@ -3995,6 +4037,7 @@ function renderLessonGuide(): void {
 let onboardKey = '';
 function renderOnboardingGuide(v: View) {
   if (lessonActive()) return renderLessonGuide();
+  smartCockpit?.quiet?.(false);
   delete document.documentElement.dataset.lesson;
   syncLessonPile(null);
   if (!glassSurface) return;
@@ -5142,6 +5185,14 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
 }
 
 /** The single hand card the current tutorial step asks for (before it is picked), or null. */
+/** Levels 1-10: the one card the light points at, so it sits above the fan and alone in the glow. */
+function lessonSingleCardId(): number | null {
+  const lesson = lessonActive();
+  if (!lesson || !session || guidanceOff() || !myTurn() || busy()) return null;
+  const beat = lessonBeat(lesson, session.state, lessonCtx());
+  return beat?.lit.t === 'card' ? beat.lit.id : null;
+}
+
 function tutorialSingleCardId(): number | null {
   const progress = coach.tutorial;
   if (!progress || !session || session.sel.card !== null) return null;
@@ -5436,7 +5487,7 @@ function renderHand(v: View, advice: Advice | null) {
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
     // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
-    const tutorialCard = tutorialSingleCardId();
+    const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
@@ -5780,7 +5831,8 @@ function renderGameOver() {
   }
   setGoExtra('go-cut', !!session?.biggestCut);
   $('go-share').textContent = RESULT.share;
-  $('go-reason').textContent = resultReason(r, HUMAN);
+  $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
+  if (taught) $('go-sub').hidden = true;
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
@@ -6788,6 +6840,7 @@ function tearDownOnlineDuel(): void {
 }
 
 bind('go-other', () => {
+  flushInstallInvite();
   $('gameover').hidden = true;
   if (isOnlineDuel()) {
     // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
@@ -7137,6 +7190,7 @@ bind('tool-undo', () => {
   else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
+  flushInstallInvite();
   if (isOnlineDuel()) {
     // Rematch: the finished session is torn down FIRST (nothing leaks into the new match), then a
     // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
