@@ -358,11 +358,12 @@ export class Sound {
     this.snip(2.1, 0, 0.11);
   }
 
-  /** cutMedium: a snip plus a soft secondary tick. */
+  /** cutMedium (the Severe band, 3-4 tiles): a snip, a soft tick, and a quieter thud than Big's. */
   cutMedium() {
     const { detune } = this.pick('cutMedium', 2, 0.03);
     this.snip(2.1 * detune, 0, 0.11);
     this.snip(1.7 * detune, 0.05, 0.05);
+    this.settle(this.base * 0.72, 0.07, 0.1);
   }
 
   /** cutBig: two snips and a low settle. This should feel rewarding. */

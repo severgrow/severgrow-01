@@ -437,7 +437,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -3578,7 +3578,7 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
   for (const s of plan.stages) {
     switch (s.name) {
       case 'anticipation': {
-        // Only Big and Huge lean the camera; small and medium cuts never move it.
+        // Only Big and Huge lean the camera into the beat; Severe keeps its weight for the impact.
         if (plan.tier === 'big' || plan.tier === 'huge') anim(wrap, [{ scale: '1' }, { scale: '0.99' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
         // the doomed links brighten and shorten a little toward the cut origin
         const doomed = board.veinsTouching(keys);
@@ -3589,10 +3589,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         if (doomed.length) setTimeout(() => doomed.forEach((v) => v.classList.remove('straining')), s.dur + 60);
         break;
       }
-      case 'flash':
-        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius,
-          c.keys.find(key=>hexDistance(parseKey(key),parseKey(c.origin))===1)));
+      case 'flash': {
+        // the torn edge: the links that snapped. A Severe cut flashes the whole seam, so its
+        // weight reads along the cut and not just at one hex.
+        const seam = c.keys.filter((key) => hexDistance(parseKey(key), parseKey(c.origin)) === 1);
+        const edge = plan.tier === 'severe' ? seam : seam.slice(0, 1);
+        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius, edge));
         break;
+      }
       case 'zoom':
         at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: EASE.out, transformOrigin: origin } as KeyframeAnimationOptions));
         break;
@@ -3608,9 +3612,22 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         at(s.at, () => {
           // one cut family, recognisable at every size; losing tiles uses the duller, lower cutMe
           const cue: 'cutSmall' | 'cutMedium' | 'cutBig' | 'cutHuge' | 'cutMe' = c.mine ? 'cutMe'
-            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'medium' ? 'cutMedium' : 'cutSmall';
+            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'severe' ? 'cutMedium' : 'cutSmall';
           sound[cue]();
           if (plan.shakePx > 0) anim(wrap, shakeFrames(plan.shakePx), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+          // Severe: the tiles that survive beside the tear flinch toward it and dim a touch.
+          if (plan.tier === 'severe' && plan.shakePx > 0) {
+            const cutKeys = new Set(c.keys);
+            const neighbours = new Set<string>();
+            for (const key of c.keys) {
+              for (const nb of allNeighbors(parseKey(key))) {
+                const k = coordKey(nb);
+                const tile = queue.board[k];
+                if (tile && !tile.root && !cutKeys.has(k)) neighbours.add(k);
+              }
+            }
+            for (const k of neighbours) flinch(k, c.origin, s.dur);
+          }
           const hp = plan.haptic && hapticFor(plan.haptic, settings);
           if (hp && !quiet) vibrate(true, hp as number | number[]);
         });

@@ -11,8 +11,8 @@ import { parseKey } from '../../../src/engine/index.js';
 import type { FeedbackEvent } from './feedback.js';
 
 /** Tier thresholds (config values): tiles cut, and the share of the victim's tiles that makes any cut Huge. */
-export type CutTiers = { medium: number; big: number; huge: number; hugeShare: number };
-export const CUT_TIERS: Readonly<CutTiers> = Object.freeze({ medium: 3, big: 5, huge: 8, hugeShare: 0.5 });
+export type CutTiers = { severe: number; big: number; huge: number; hugeShare: number };
+export const CUT_TIERS: Readonly<CutTiers> = Object.freeze({ severe: 3, big: 5, huge: 8, hugeShare: 0.5 });
 /** A whole cut (or every cut of one move) lasts at most this long at Normal speed. */
 export const CUT_CAP_MS = 1800;
 /** Photosensitivity: the flash lasts at most 60ms, at most 35% white, and only around the cut. */
@@ -22,9 +22,12 @@ export const FLASH_MAX_ALPHA = 0.35;
 export const RIPPLE_STEP_MS = 70;
 export const RIPPLE_CAP_MS = 700;
 export const HITSTOP_MS = 100;
+/** The Severe band (3-4 tiles): a shorter stop than Big, but a real one. */
+export const SEVERE_HITSTOP_MS = 60;
 /** The cut's one link flash (Small and up): at most this long, whatever the speed. */
 export const CUT_FLASH_MS = 60;
-/** Shake ceilings: only Big and Huge move the board, and never beyond these. */
+/** Shake ceilings: Severe, Big and Huge move the board, and never beyond these. */
+export const SHAKE_SEVERE = 2.5;
 export const SHAKE_MAX_BIG = 4;
 export const SHAKE_MAX_HUGE = 6;
 /** Reduce motion: one plain fade (no shake, zoom or stagger), then the payoff. */
@@ -32,12 +35,12 @@ export const REDUCE_FADE_MS = 200;
 /** Replays play at half speed. */
 export const CUT_REPLAY_SPEED = 0.5;
 
-export type CutTier = 'small' | 'medium' | 'big' | 'huge';
+export type CutTier = 'small' | 'severe' | 'big' | 'huge';
 
 export const cutTier = (tiles: number, victimTilesBefore: number, t: Readonly<CutTiers> = CUT_TIERS): CutTier => {
   if (tiles >= t.huge || (victimTilesBefore > 0 && tiles >= 2 && tiles / victimTilesBefore >= t.hugeShare)) return 'huge';
   if (tiles >= t.big) return 'big';
-  if (tiles >= t.medium) return 'medium';
+  if (tiles >= t.severe) return 'severe';
   return 'small';
 };
 
@@ -91,16 +94,17 @@ const dist = (a: string, b: string) => {
   return Math.max(Math.abs(p.q - q.q), Math.abs(p.r - q.r), Math.abs(p.q + p.r - q.q - q.r));
 };
 
-// How each tier reads. Small/Medium stay still (no shake, no zoom): the link flash and the
-// folding tiles carry them. Only Big and Huge move the board, and only within the ceilings.
+// How each tier reads. Small (1-2) stays still: the link flash and the folding tiles carry it.
+// Severe (3-4) has real weight — a short beat, a 60ms hit-stop, a small shiver and a slight zoom —
+// but stays below Big. Big and Huge move the board more, always within their ceilings.
 const LOOK: Record<CutTier, { anticipation: number; hitstop: number; flashAlpha: number; zoom: number; pulse: number; shake: number; death: number; crumble: number; payoff: number }> = {
   small: { anticipation: 0, hitstop: 0, flashAlpha: 0.22, zoom: 1, pulse: 80, shake: 0, death: 440, crumble: 220, payoff: 300 },
-  medium: { anticipation: 90, hitstop: 0, flashAlpha: 0.24, zoom: 1, pulse: 100, shake: 0, death: 400, crumble: 240, payoff: 360 },
+  severe: { anticipation: 60, hitstop: SEVERE_HITSTOP_MS, flashAlpha: 0.3, zoom: 1.012, pulse: 100, shake: SHAKE_SEVERE, death: 400, crumble: 240, payoff: 360 },
   big: { anticipation: 140, hitstop: HITSTOP_MS, flashAlpha: 0.28, zoom: 1.02, pulse: 130, shake: SHAKE_MAX_BIG, death: 380, crumble: 280, payoff: 400 },
   huge: { anticipation: 180, hitstop: HITSTOP_MS + 20, flashAlpha: FLASH_MAX_ALPHA, zoom: 1.03, pulse: 150, shake: SHAKE_MAX_HUGE, death: 400, crumble: 300, payoff: 420 },
 };
 
-const HAPTIC: Record<CutTier, FeedbackEvent> = { small: 'cutSmall', medium: 'cutMedium', big: 'cutBig', huge: 'cutHuge' };
+const HAPTIC: Record<CutTier, FeedbackEvent> = { small: 'cutSmall', severe: 'cutMedium', big: 'cutBig', huge: 'cutHuge' };
 
 /** The plan for one cut. `first`: the first cut of the move (only it gets the anticipation beat). */
 export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
@@ -140,9 +144,12 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
 
   const low = o.effects === 'low';
   const major = tier === 'big' || tier === 'huge';
-  // Only a major sever moves the board, and never past its ceiling. The link flash carries
-  // small and medium cuts; only Big and Huge get the hit-stop, shake and micro zoom.
-  const shake = calm || low || !major ? 0 : Math.min(tier === 'huge' ? SHAKE_MAX_HUGE : SHAKE_MAX_BIG, L.shake + (o.effects === 'high' && tier !== 'huge' ? 1 : 0));
+  // Severe, Big and Huge move the board, and never past their ceiling. Small (1-2) stays quiet.
+  // Severe keeps the smaller shiver (2.5px); the 4-6px shake is still Big and Huge only.
+  const physical = tier === 'severe' || major;
+  const ceiling = tier === 'huge' ? SHAKE_MAX_HUGE : tier === 'big' ? SHAKE_MAX_BIG : SHAKE_SEVERE;
+  const bump = o.effects === 'high' && tier === 'big' ? 1 : 0;
+  const shake = calm || low || !physical ? 0 : Math.min(ceiling, L.shake + bump);
   const flashAlpha = calm || low ? 0 : Math.min(FLASH_MAX_ALPHA, L.flashAlpha);
   const zoom = calm || low ? 1 : L.zoom;
 
@@ -155,7 +162,7 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
   };
   const antic = first && !calm ? L.anticipation : 0;
   if (antic) push('anticipation', antic);
-  const hit = calm || !major ? 0 : low ? 40 : L.hitstop;
+  const hit = calm || !physical ? 0 : low ? 40 : L.hitstop;
   if (zoom > 1) push('zoom', hit + L.pulse, false);
   if (hit) push('hitstop', hit);
   push('pulse', L.pulse);
@@ -182,7 +189,7 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
     stages: stages.map((s) => ({ name: s.name, at: sc(s.at), dur: s.name === 'flash' ? Math.min(FLASH_MAX_MS, Math.round(s.dur * speed)) : sc(s.dur) })),
     tiles: tiles.map((x) => ({ key: x.key, at: sc(x.at), dur: sc(x.dur), ring: x.ring })),
     shakePx: shake,
-    flash: { ms: flashAlpha > 0 ? Math.min(FLASH_MAX_MS, Math.round(CUT_FLASH_MS * speed)) : 0, alpha: flashAlpha, radius: tier === 'huge' ? 2.5 : tier === 'big' ? 2 : 1.4 },
+    flash: { ms: flashAlpha > 0 ? Math.min(FLASH_MAX_MS, Math.round(CUT_FLASH_MS * speed)) : 0, alpha: flashAlpha, radius: tier === 'huge' ? 2.5 : tier === 'big' ? 2 : tier === 'severe' ? 1.5 : 1.4 },
     zoom,
     banner,
     float,

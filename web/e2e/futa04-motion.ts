@@ -78,14 +78,16 @@ try {
     }, [save, cfg] as const);
     await p.goto(BASE);
     await assertDistChannel(p);   // loud if the served dist was built for another channel
-    await p.waitForSelector('#menu-continue');
-    await p.click('#menu-continue');
+    await p.waitForSelector('#menu-continue', { state: 'attached' });
+    // The product menu hides Continue (the save is offered when entering the level); its listener
+    // is still bound, so a DOM click is the same resume path without a visible button.
+    await p.evaluate(() => (document.getElementById('menu-continue') as HTMLElement | null)?.click());
     await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30000 });
     return p;
   };
   const recordMotion = (p: Page) => p.evaluate(() => {
     const proto = Element.prototype as any;
-    proto.__m = { shakes: 0, tileDelays: [] as number[], sparks: 0, motes: 0, darks: 0 };
+    proto.__m = { shakes: 0, tileDelays: [] as number[], sparks: 0, motes: 0, darks: 0, flinches: 0 };
     const orig = proto.animate;
     proto.__mOrig = orig;
     proto.animate = function (this: Element, frames: unknown, opts: unknown) {
@@ -94,6 +96,8 @@ try {
       const cls = this.classList;
       if ((this as HTMLElement).id === 'board-wrap' && json.includes('translate(')) m.shakes++;
       if (cls?.contains?.('tile') && json.includes('scale')) m.tileDelays.push(typeof opts === 'object' && opts ? Number((opts as KeyframeAnimationOptions).delay ?? 0) : 0);
+      // a surviving tile beside a Severe cut: the flinch is the only tile animation that dips to 0.94
+      if (cls?.contains?.('tile') && json.includes('0.94')) m.flinches++;
       if (cls?.contains?.('fx-spark')) m.sparks++;
       if (cls?.contains?.('fx-mote')) m.motes++;
       if (cls?.contains?.('fx-flash') && cls?.contains?.('dark')) m.darks++;
@@ -107,7 +111,7 @@ try {
     delete proto.__mOrig; delete proto.__m;
     return m;
   });
-  type Recorded = { shakes: number; tileDelays: number[]; sparks: number; motes: number; darks: number };
+  type Recorded = { shakes: number; tileDelays: number[]; sparks: number; motes: number; darks: number; flinches: number };
   const playCutAndWatch = async (n: number, reduceMotion: boolean) => {
     const { state: cs, action: ca, cut } = cutPosition(n, false);
     assert.equal(cut, n, `a ${n}-tile cut fixture exists`);
@@ -117,7 +121,7 @@ try {
     await p.evaluate(a => (window as any).__severgrow.playFor(a, 0), ca);
     await p.waitForFunction(() => !!document.documentElement.dataset.cutTier, undefined, { timeout: 8000 });
     // count only what the cut itself adds (the replacing Sprout before it may spark)
-    await p.evaluate(() => { const m = (Element.prototype as any).__m; if (m) { m.sparks = 0; m.motes = 0; m.darks = 0; } });
+    await p.evaluate(() => { const m = (Element.prototype as any).__m; if (m) { m.sparks = 0; m.motes = 0; m.darks = 0; m.flinches = 0; } });
     for (let i = 0; i < 200; i++) {
       for (const t of await p.evaluate(() => [...document.querySelectorAll('#captions .float')].map(e => e.textContent))) if (t) floats.add(t);
       if (!await p.evaluate(() => (window as any).__severgrow.busy())) break;
@@ -135,6 +139,31 @@ try {
     assert.equal(small.m.shakes, 0, 'a 1-tile cut does not shake the board');
     assert.deepEqual([...small.floats], ['−1'], 'a Small cut shows one −N, never one per tile');
   } finally { await small.p.close(); }
+
+  const severe = await playCutAndWatch(3, false);
+  try {
+    assert.equal(severe.tier, 'severe', 'a 3-tile cut is Severe');
+    assert.equal(severe.m.shakes, 1, 'a Severe cut shivers the board exactly once');
+    assert(severe.m.flinches >= 1, `a Severe cut flinches its surviving neighbours (${severe.m.flinches})`);
+    assert.equal(small.m.flinches, 0, 'a Small cut does not flinch its neighbours');
+    assert.deepEqual([...severe.floats], ['−3'], 'a Severe cut shows one −N');
+  } finally { await severe.p.close(); }
+
+  // A tap during the cut still fast-forwards it and opens the gate.
+  {
+    const { state: cs, action: ca } = cutPosition(3, false);
+    const p = await openSaved(390, 844, positionSave({ state: cs }), { sound: false, music: false, coach: false, autoSkip: false, reduceMotion: false, speed: 'normal', vibration: false });
+    try {
+      await p.evaluate(a => (window as any).__severgrow.playFor(a, 0), ca);
+      await p.waitForFunction(() => !!document.documentElement.dataset.cutTier, undefined, { timeout: 8000 });
+      assert.equal(await p.evaluate(() => (window as any).__severgrow.busy()), true, 'the cut holds the gate');
+      const t0 = Date.now();
+      await p.locator('#deck').click({ force: true, timeout: 3000 });
+      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 3000 });
+      const ms = Date.now() - t0;
+      assert(ms < 1400, `a tap during the cut fast-forwards it (${ms}ms)`);
+    } finally { await p.close(); }
+  }
 
   const huge = await playCutAndWatch(9, false);
   try {
