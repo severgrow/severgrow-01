@@ -325,13 +325,13 @@ html.futa04-information[data-step='grow'] #hand:not(.waiting) .card.playable:not
 }
 /* Scale is separate from the fan's rotate/translate, preserving its hit targets. */
 @keyframes futa04-card-breathe { 0%,100% { scale: 1; } 50% { scale: 1.055; } }
-html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(.waiting) .card.playable:not(.lifted):not(.tutorial-target-card) {
+html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #hand:not(.waiting) .card.playable:not(.lifted) {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
 html.futa04-information[data-step='grow'][data-futa04-waiting='true'] #moves > :is(.kind[data-kind^='bloom-'],.bloom-toggle):not(.on) .futa04-combination {
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
-html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked):not(.tutorial-target-card) {
+html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04-throw-picked) {
   opacity: .88; filter: grayscale(.54) brightness(.94);
   outline-color: rgba(223,105,77,.35) !important;
   box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
