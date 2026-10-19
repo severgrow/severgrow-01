@@ -382,6 +382,13 @@ const TUTORIAL_PRAISE_IDS = new Set([
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
+/**
+ * The Throw pile exactly as the player has SEEN it. The engine view can already hold the
+ * opponent's discarded card while its card is still in the air; the pile top (and its count)
+ * must only change when that card arrives. `settleStep` advances this on the discard step and
+ * on the final sync, so a skipped/aborted flight still settles on the true pile.
+ */
+let shownDiscard: Card[] = [];
 const hiddenCards = new Set<number>();
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
@@ -437,7 +444,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -775,6 +782,9 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   }
   $('gameover').hidden = true;
   render();
+  // The seat anchor is placed whenever the map band becomes visible; from then on only a layout
+  // or resize moves it (`applyLayout` schedules it when its key changes).
+  if (name === 'game' && IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (name === 'menu') window.dispatchEvent(new Event('futasaku:menu'));
 }
 
@@ -1189,6 +1199,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
   shownScores = [v.score, v.opponentScore];
+  shownDiscard = [...v.discard];
   hiddenCards.clear();
   scars = [];
   inspectKey = null;
@@ -2728,6 +2739,9 @@ function settleStep(s: Step, animated: boolean) {
   if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
   outcomeSteps.delete(s);
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
+  // The Throw pile advances on the discard's arrival (and the closing sync catches up a skipped
+  // flight to the true pile), never on the render that starts the throw.
+  if ((s.k === 'discard' || s.k === 'sync') && session) shownDiscard = [...session.view.discard];
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
     // Futa04: cut-off tiles leave no scar / remnant art — board shows live tiles only.
     if (!IS_FUTA04) {
@@ -3175,10 +3189,21 @@ async function playStep(step: Step, my: number) {
         sound.draw();
         await wait((IS_FUTA04 ? 396 : 240) * f, my);
       } else {
-        flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        // The enemy's hidden draw: their card is private, so the deck flyer is the only cue.
-        // A live reveal gives it a beat of its own instead of a blink.
-        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        // The opponent's draw: a card back leaves the Draw pile and settles on their seat. The
+        // card stays face down; the seat is an anchor placed on layout, so nothing is measured
+        // inside a frame. Keep the old deck-to-score cue as a fallback for a page without the
+        // flight layer (the material lab).
+        const seat = oppSeat();
+        const source = $('deck').querySelector<HTMLElement>('.pile-card') ?? $('deck');
+        const ms = seat ? oppDraw(source, seat, f, !!quickShow) : 0;
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          await wait(ms, my);
+        } else {
+          flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
+          // A live reveal gives it a beat of its own instead of a blink.
+          await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        }
       }
       return;
     }
@@ -3437,21 +3462,34 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'discard': {
-      // The opponent's card is represented by the pile update; its old flight crossed the
-      // player's board and felt like a card thrown at the camera.
-      const from = step.player === HUMAN ? cardRects.get(step.card.id) : null;
-      if (from) {
-        flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
-        const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        if (source) source.style.visibility = 'hidden';
-      }
-      if (step.player === HUMAN) {
-        const hp = hapticFor('throw', settings);
-        if (hp) vibrate(true, hp as number | number[]);
-      }
+      // My card flies from my hand. The opponent's card has a body of its own: it turns face up
+      // on their seat, holds for a beat and arcs into the Throw pile. The pile top and its count
+      // change ON ARRIVAL (show() below), never while the card is still travelling.
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 396 * f : 320 * f, my);
+      if (step.player === HUMAN) {
+        const from = cardRects.get(step.card.id);
+        if (from) {
+          flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
+          const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+          if (source) source.style.visibility = 'hidden';
+        }
+        const hp = hapticFor('throw', settings);
+        if (hp) vibrate(true, hp as number | number[]);
+        await wait(IS_FUTA04 && from ? 396 * f : 320 * f, my);
+      } else {
+        const seat = oppSeat();
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow);
+          await wait(ms, my);
+          if (my !== epoch) return;
+          if (settings.sound) sound.throw();
+        } else {
+          // No flight layer (the material lab): keep the old pile-only beat.
+          await wait(quickShow ? quickShow.show.discard : 320 * f, my);
+        }
+      }
       show();
       return;
     }
@@ -3744,6 +3782,10 @@ const syncSessionFromOnline = (resetSelection = false) => {
   session = new Session(os.state, HUMAN, [...os.log], os.base);
   if (keptSel) session.sel = keptSel;
   if (keptPreset) session.preset(keptPreset);
+  // A catch-up that is about to replay (its steps are still pending) owns the Throw pile: keep
+  // the shown one until its discard step lands. An ordinary sync can catch the pile up now.
+  const replayQueued = (os.driver.pendingEvents?.().length ?? 0) > 0;
+  if (!os.isRevealing && !replayQueued) shownDiscard = [...session.view.discard];
 };
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
@@ -4915,6 +4957,46 @@ function centreSideDock(): void {
   const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
   root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
 }
+/**
+ * The opponent's seat: a real, invisible anchor at the top-right of the map band (their side of
+ * the board on both the portrait and the wide layout). It is measured only from layout — the
+ * cached key makes repeated calls from a layout pass free, and no animation frame measures it.
+ */
+let oppSeatCache = '';
+function placeOppSeat(): void {
+  if (!IS_FUTA04) return;
+  const seat = document.getElementById('opp-seat');
+  const wrapEl = document.getElementById('board-wrap');
+  const game = document.getElementById('game');
+  if (!seat || !wrapEl || !game) return;
+  const wrap = wrapEl.getBoundingClientRect();
+  if (wrap.width < 80 || wrap.height < 80) return;
+  const card = document.querySelector<HTMLElement>('#deck .pile-card')?.getBoundingClientRect();
+  const cw = card && card.width > 0 ? card.width : 44;
+  const ch = card && card.height > 0 ? card.height : Math.round(cw * 1.42);
+  const side = document.documentElement.dataset.layout === 'side';
+  // Clear of the header, the map's right edge and (on a wide screen) the cockpit beside it.
+  const left = Math.max(wrap.left + 4, wrap.right - cw - (side ? 18 : 10));
+  const top = Math.max(wrap.top + 6, wrap.top + (side ? 18 : 8));
+  const g = game.getBoundingClientRect();
+  const key = `${g.left},${g.top},${left.toFixed(1)},${top.toFixed(1)},${cw.toFixed(1)},${ch.toFixed(1)}`;
+  if (key === oppSeatCache) return;
+  oppSeatCache = key;
+  Object.assign(seat.style, {
+    left: `${(left - g.left).toFixed(1)}px`,
+    top: `${(top - g.top).toFixed(1)}px`,
+    width: `${cw}px`,
+    height: `${ch}px`,
+  });
+}
+/** The seat, if it has a settled rect. A page that has not laid out yet gets one more try. */
+function oppSeat(): HTMLElement | null {
+  const seat = document.getElementById('opp-seat');
+  if (!seat) return null;
+  if (seat.getBoundingClientRect().width > 1) return seat;
+  placeOppSeat();
+  return seat.getBoundingClientRect().width > 1 ? seat : null;
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
   const { w, h } = gameViewport();
@@ -5000,6 +5082,7 @@ function applyLayout() {
   board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
+  if (IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (IS_FUTA04) sideDockStale = true;
 
 }
@@ -6009,7 +6092,7 @@ let deckFull = 1;
 
 function renderPiles(v: View, advice: Advice | null) {
   const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
-  const top = v.discard.at(-1);
+  const top = shownDiscard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   // Keep the physical top card mounted while its identity is unchanged.
@@ -6024,8 +6107,8 @@ function renderPiles(v: View, advice: Advice | null) {
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  if (IS_FUTA04) renderPileMeter($('discard-count'), v.discard.length);
-  else $('discard-count').textContent = String(v.discard.length);
+  if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
+  else $('discard-count').textContent = String(shownDiscard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -6037,9 +6120,9 @@ function renderPiles(v: View, advice: Advice | null) {
   }
   lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
-  deckFull = Math.max(deckFull, v.deckCount + v.discard.length);
+  deckFull = Math.max(deckFull, v.deckCount + shownDiscard.length);
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
-  $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
+  $('discard').dataset.layers = String(stackLayers(shownDiscard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
   $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
   // Tap-to-throw: with a throw waiting, the Throw pile takes it (it stays tappable for that alone).

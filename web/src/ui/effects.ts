@@ -227,11 +227,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
         ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.48 },
+          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .68 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 320 : 440) * f;
+    const duration = (IS_FUTA04 ? 396 : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
@@ -252,6 +252,120 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       { transform: `translate(${(tx * 0.7).toFixed(1)}px, ${(ty * 0.7).toFixed(1)}px) scale(.6)`, opacity: 1, offset: 0.65 },
       { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(.4)`, opacity: 0 },
     ], { duration: 380 * f, easing: EASE.out, fill: 'forwards' }), d, 0);
+  }
+
+  /**
+   * The opponent's cards live in one layer inside the game (see `.enemy-flight`). Its seat anchor
+   * is placed on layout/resize, so a flight only reads two rects when it starts: never per frame.
+   */
+  const flightLayer = () => document.getElementById('enemy-flight');
+  const clearFlights = (layer: HTMLElement) => {
+    for (const n of layer.querySelectorAll('.flyer.opp')) n.remove();
+  };
+  const placeFlyer = (d: HTMLElement, r: DOMRect, layer: DOMRect) => {
+    Object.assign(d.style, {
+      left: `${(r.left - layer.left).toFixed(1)}px`,
+      top: `${(r.top - layer.top).toFixed(1)}px`,
+      width: `${r.width}px`,
+      height: `${r.height}px`,
+    });
+  };
+
+  /**
+   * The opponent's hidden draw: a card back leaves the Draw pile and settles on their seat.
+   * A lift, a few degrees of tilt and a short hold; never a face. Returns how long it runs.
+   * Reduce motion keeps the card still on the seat and only fades it.
+   */
+  function oppDraw(from: HTMLElement, seat: HTMLElement, f: number, quick = false): number {
+    const layer = flightLayer();
+    if (!layer) return 0;
+    clearFlights(layer);
+    const a = from.getBoundingClientRect();
+    const b = seat.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    const d = document.createElement('div');
+    d.className = 'flyer card back opp';
+    d.setAttribute('aria-hidden', 'true');
+    placeFlyer(d, a, layerRect);
+    layer.appendChild(d);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    const sc = b.height / Math.max(a.height, 1);
+    const atSeat = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    const ms = Math.max(1, Math.round((quick ? 130 : 280) * Math.max(f, 0.1)));
+    const frames: Keyframe[] = motion() === 0
+      ? [
+          { transform: atSeat, opacity: 0 },
+          { transform: atSeat, opacity: 0.9, offset: 0.2 },
+          { transform: atSeat, opacity: 0.9, offset: 0.8 },
+          { transform: atSeat, opacity: 0 },
+        ]
+      : [
+          { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 0.96 },
+          { transform: `translate(${(dx * 0.58).toFixed(1)}px, ${(dy * 0.58 - 18).toFixed(1)}px) rotate(4deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: 0.58 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.82 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.9 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+        ];
+    removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 50);
+    return ms;
+  }
+
+  /**
+   * The opponent's throw: the real card turns face up on their seat, holds for a beat, then arcs
+   * into the Throw pile and settles. Returns how long it runs; the caller advances the pile on
+   * that arrival, never before. A Bomb gets one brief border pulse at the reveal.
+   * Reduce motion: a fade on the seat, then a fade on the pile, with no travel between them.
+   */
+  function oppThrow(card: Card, seat: HTMLElement, pile: HTMLElement, f: number, quick = false): number {
+    const layer = flightLayer();
+    if (!layer) return 0;
+    clearFlights(layer);
+    const a = seat.getBoundingClientRect();
+    const b = pile.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    const d = document.createElement('div');
+    d.className = `flyer card opp ${suitClass(card)}`;
+    d.setAttribute('aria-hidden', 'true');
+    d.innerHTML = cardFace(card);
+    placeFlyer(d, a, layerRect);
+    layer.appendChild(d);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    const sc = b.height / Math.max(a.height, 1);
+    const reveal = quick ? 70 : 130;
+    const arc = quick ? 150 : 350;
+    const ms = Math.max(1, Math.round((reveal + arc) * Math.max(f, 0.1)));
+    const hold = reveal / (reveal + arc);
+    const atSeat = 'translate(0, 0)';
+    const atPile = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    const frames: Keyframe[] = motion() === 0
+      ? [
+          { transform: atSeat, opacity: 0 },
+          { transform: atSeat, opacity: 1, offset: Math.min(0.5, hold * 0.45) },
+          { transform: atSeat, opacity: 1, offset: hold },
+          { transform: atPile, opacity: 0, offset: Math.min(0.97, hold + 0.02) },
+          { transform: atPile, opacity: 0.9, offset: Math.min(0.99, hold + 0.08) },
+          { transform: atPile, opacity: 0 },
+        ]
+      : [
+          { transform: 'translate(0, 0) rotate(0deg) scale(0.92)', opacity: 0 },
+          { transform: 'translate(0, 0) rotate(-1deg) scale(1)', opacity: 1, offset: hold * 0.7 },
+          { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1, offset: hold },
+          { transform: `translate(${(dx * 0.52).toFixed(1)}px, ${(dy * 0.52 - 26).toFixed(1)}px) rotate(3deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: hold + (1 - hold) * 0.55 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-1deg) scale(${(sc * 1.04).toFixed(3)})`, opacity: 1, offset: 0.93 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.97 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+        ];
+    removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
+    if (card.suit === null) {
+      anim(d, [
+        { boxShadow: '0 0 0 0 rgba(255,225,167,0)' },
+        { boxShadow: '0 0 0 6px rgba(255,225,167,.46)', offset: 0.4 },
+        { boxShadow: '0 0 0 0 rgba(255,225,167,0)' },
+      ], { duration: Math.max(220, reveal * 2), easing: EASE.out, fill: 'none' });
+    }
+    return ms;
   }
 
   /** One quiet ring, only on the tile that just changed (bigger shine for a top rank). */
@@ -292,5 +406,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles };
 };

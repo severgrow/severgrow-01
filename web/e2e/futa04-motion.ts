@@ -218,7 +218,7 @@ try {
   await menu.goto(BASE);
   await openMenuEntry(menu, 'menu-new');
   await menu.locator('#levels').waitFor({state:'visible'});
-  assert.deepEqual(await menu.locator('#level-grid button').allTextContents(),['BEGINNER','EASY','MEDIUM','HARD','PRO']);
+  assert.deepEqual(await menu.locator('#level-grid button').allTextContents(),['EASY','MEDIUM','HARD']);
   assert.equal(await menu.locator('#level-grid button svg,#level-grid button .lt-note').count(),0,'difficulty choices are names only');
   await menu.screenshot({path:'/tmp/futasaku-03-difficulty.png'});
   await menuCtx.close();
