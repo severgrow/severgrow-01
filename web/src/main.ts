@@ -59,12 +59,14 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
-import { perfStart, perfStep } from './logic/perf.js';
+import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
+import { installPress } from './logic/press.js';
+import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { EASE, MOTION } from './logic/motion.js';
+import { EASE, MOTION, PINNED, motionAllowed } from './logic/motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -285,8 +287,10 @@ let reopenGameOver = false;
 let replaySpeed = REPLAY_SPEED;
 // Reduce-motion kills movement via motion(); do not also stretch wait timers.
 const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpeed : 1);
-/** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
+/** The one motion gate: Reduce motion, or a zero time scale, means no movement. */
+const motionOn = () => motionAllowed(settings.reduceMotion, timeScale());
+/** How much things move (0 when motion is not allowed). */
+const motion = () => (motionOn() ? theme().style.motion : 0);
 /** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
 const BLOOM_STAGGER_MS = 80;
 // Motion pass (owner, 2026-10-15): slow enough to see, fast enough to feel snappy. Measured with
@@ -294,9 +298,9 @@ const BLOOM_STAGGER_MS = 80;
 // tiles 1270 → ~900ms, strengthen 570 → ~420ms, Blast ≥ 640ms (was 430), turn hand-over 325 →
 // 260ms, the opponent's hidden draw 125 → 200ms (it was a blink).
 /** A multi-tile grow: the next tile starts when the previous one is this far through its pop. */
-const GROW_OVERLAP = 0.6;
+const GROW_OVERLAP = PINNED.growOverlap;
 /** After the last tile of a grow has landed, how long it holds before the next step. */
-const GROW_HOLD_MS = 160;
+const GROW_HOLD_MS = PINNED.growHold;
 const BLAST_MIN_MS = 640;
 const TURN_HANDOVER_MS = 260;
 const OPP_DRAW_MS = 200;
@@ -314,7 +318,7 @@ let revealProgress = 0;
  * The shortest the gate stays shut for a LIVE enemy turn. A turn that grew nothing (a hidden draw
  * and a discard) has almost no steps; without this it would swap the board in one frame.
  */
-const MIN_LIVE_REVEAL_MS = 700;
+const MIN_LIVE_REVEAL_MS = PINNED.liveReveal;
 /** An enemy turn is on screen right now: every input entry point must refuse until it drains. */
 const onlineReveal = (): boolean => isOnlineDuel() && getOnlineSession()?.isRevealing === true;
 /**
@@ -1183,9 +1187,11 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   intelState=null;
   for (const w of [...waiters]) w();
   // A previous match may still be counting its score when New Game is tapped.
-  // Its next animation frame must never write into this match's scoreboard.
-  cancelAnimationFrame(scoreRaf);
-  scoreRaf = 0;
+  // Its next scheduler frame must never write into this match's scoreboard.
+  scoreUnsub?.();
+  scoreUnsub = null;
+  perfUnsub?.();
+  perfUnsub = null;
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
   session = new Session(state, HUMAN, log, base);
@@ -2837,22 +2843,21 @@ async function impact(m: Moment, f: number, my: number) {
  * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
  */
 let perf = perfStart();
-let perfRaf = 0;
+let perfUnsub: (() => void) | null = null;
 function watchFrames() {
   if (IS_FUTA04) return; // no automatic effect downgrade or interruption in Futasaku 0.4
-  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
+  if (perfUnsub || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
   let last = performance.now();
-  const tick = (t: number) => {
-    const r = perfStep(perf, t - last);
+  perfUnsub = scheduler.subscribe(({ now }) => {
+    const r = perfStep(perf, now - last);
     perf = r.state;
-    last = t;
-    if (r.drop) {
-      perfRaf = 0;
-      return smootherMode();
+    last = now;
+    if (r.drop || !busy()) {
+      perfUnsub?.();
+      perfUnsub = null;
+      if (r.drop) smootherMode();
     }
-    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
-  };
-  perfRaf = requestAnimationFrame(tick);
+  });
 }
 function smootherMode() {
   const before = settings.effects;
@@ -3184,10 +3189,10 @@ async function playStep(step: Step, my: number) {
                  { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
                  { translate: '0 0', scale: '1', opacity: 1 }]
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_FUTA04 ? 396 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_FUTA04 ? PINNED.humanDraw : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.draw();
-        await wait((IS_FUTA04 ? 396 : 240) * f, my);
+        await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
       } else {
         // The opponent's draw: a card back leaves the Draw pile and settles on their seat. The
         // card stays face down; the seat is an anchor placed on layout, so nothing is measured
@@ -3476,7 +3481,7 @@ async function playStep(step: Step, my: number) {
         }
         const hp = hapticFor('throw', settings);
         if (hp) vibrate(true, hp as number | number[]);
-        await wait(IS_FUTA04 && from ? 396 * f : 320 * f, my);
+        await wait(IS_FUTA04 && from ? PINNED.throw * f : 320 * f, my);
       } else {
         const seat = oppSeat();
         if (seat) {
@@ -3730,23 +3735,25 @@ let finalShown = false;
 /** the final-turns cue plays once, when the endgame shade comes on */
 let finalSoundOn = false;
 
-let scoreRaf = 0;
+let scoreUnsub: (() => void) | null = null;
 function countScores(to: [number, number]) {
   const target: [number, number] = [to[HUMAN], to[BOT]];
   const start: [number, number] = [...shownScores];
   if (start[0] === target[0] && start[1] === target[1]) return;
   const t0 = performance.now();
   const dur = 600 * Math.max(timeScale(), 0.3);
-  cancelAnimationFrame(scoreRaf);
-  const tick = (t: number) => {
-    const k = Math.min(1, (t - t0) / dur);
+  scoreUnsub?.();
+  scoreUnsub = scheduler.subscribe(({ now }) => {
+    const k = Math.min(1, (now - t0) / dur);
     shownScores = [Math.round(start[0] + (target[0] - start[0]) * k), Math.round(start[1] + (target[1] - start[1]) * k)];
     $('score-you').textContent = String(shownScores[0]);
     $('score-bot').textContent = String(shownScores[1]);
     setRace(shownScores);
-    if (k < 1) scoreRaf = requestAnimationFrame(tick);
-  };
-  scoreRaf = requestAnimationFrame(tick);
+    if (k >= 1) {
+      scoreUnsub?.();
+      scoreUnsub = null;
+    }
+  });
   // A fast tick, then a tiny bounce on the final number.
   const bounce: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.28)', offset: 0.45 }, { transform: 'scale(0.96)', offset: 0.75 }, { transform: 'scale(1)' }];
   if (target[0] !== start[0]) anim($('score-you'), bounce, { duration: 360, delay: dur });
@@ -6379,13 +6386,13 @@ function renderGameOver() {
     const els = [$('go-score').querySelector('.you')!, $('go-score').querySelector('.bot')!];
     const to = [r.scores[HUMAN], r.scores[BOT]];
     const t0 = performance.now();
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - t0) / 900);
+    const tick = ({ now }: { now: number }) => {
+      const k = Math.min(1, (now - t0) / 900);
       const e = 1 - (1 - k) ** 3;
       els.forEach((el, i) => (el.textContent = String(Math.round(to[i]! * e))));
-      if (k < 1) requestAnimationFrame(tick);
+      if (k < 1) scheduler.request('result-score', tick);
     };
-    requestAnimationFrame(tick);
+    scheduler.request('result-score', tick);
   }
   setGoExtra('go-cut', !!session?.biggestCut);
   $('go-share').textContent = RESULT.share;
@@ -7342,10 +7349,8 @@ bind('hand-sort', () => {
 });
 // overhaul item 7: legal hexes brighten softly as the finger or mouse comes near
 {
-  let raf = 0;
   let last: { x: number; y: number } | null = null;
   const glowNear = () => {
-    raf = 0;
     const targets = board.svg.querySelectorAll<SVGPathElement>('.l-over .target');
     if (!targets.length) return;
     const m = board.svg.getScreenCTM();
@@ -7359,13 +7364,14 @@ bind('hand-sort', () => {
   };
   const track = (e: PointerEvent) => {
     last = { x: e.clientX, y: e.clientY };
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    // Several pointer moves in one frame collapse into one job (coalesced, non-urgent).
+    scheduler.request('board-near', glowNear);
   };
   board.svg.addEventListener('pointermove', track);
   board.svg.addEventListener('pointerdown', track);
   board.svg.addEventListener('pointerleave', () => {
     last = null;
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    scheduler.request('board-near', glowNear);
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
@@ -8039,6 +8045,10 @@ document.addEventListener(
   },
   { capture: true },
 );
+// Phase 0: the one delegated press primitive and the one frame scheduler.
+installPress();
+attachSchedulerPause($('game'), $('board-wrap'));
+observeLongTasks();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kbd');
 });
@@ -8076,6 +8086,8 @@ let appReady = false;
   },
   settings: () => ({ ...settings }),
   busy: () => busy(),
+  /** Test-only feel harness: press latency, frame gaps, long tasks, live animations, RAF jobs. */
+  feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
   /** tests: tutorial focus lock */

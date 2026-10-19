@@ -1,17 +1,79 @@
-// Step 7: the motion tokens. Every duration and easing in the page comes from this short list
-// (the CSS custom properties of the same names hold the same values; a test keeps them equal).
-// Input is never locked by motion: a tap during an animation jumps it to its end.
+// Phase 0: one motion language.
+//
+// There are exactly TWO tempo tokens:
+//   ack          the immediate answer to a press or a tap (96 ms)
+//   consequence  a physical move on the board (336 ms)
+// Everything else is derived, never a second hand-picked number:
+//   quick  = 2 * ack
+//   moment = 2 * consequence + ack / 2
+// The legacy names (`tap`, `move`, `quick`, `moment`) stay as aliases, so every existing use
+// resolves to the same millisecond value it did before this file changed.
+//
+// `PINNED` is the choreography that must never drift: values measured with web/e2e/motion-audit.ts
+// and asserted by web/tests/motion.test.ts. Code imports these names instead of repeating literals.
+
+/** The only two tempo tokens. */
+export const TEMPO = Object.freeze({ ack: 96, consequence: 336 });
+
+/** Values that are part of the game's feel and are deliberately pinned. */
+export const PINNED = Object.freeze({
+  /** A human card leaves the pile and lands in the hand. */
+  humanDraw: 396,
+  /** A human card leaves the hand and reaches the discard pile. */
+  throw: 396,
+  /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
+  liveReveal: 700,
+  /** The LED display's minimum dwell before another message may replace it. */
+  displayDwell: 1000,
+  /** A whole cut at Normal speed, whatever the number of tiles or chained cuts. */
+  cutCap: 1800,
+  /** The cut's local flash never exceeds this, even at Slow speed. */
+  flash: 60,
+  /** Two short freezes used by the existing choreography (light and heavy impacts). */
+  hitStopShort: 60,
+  hitStop: 100,
+  /** One ripple ring starts every this many ms, capped by the plan itself. */
+  ripple: 70,
+  /** How long a grown tile holds after it lands. */
+  growHold: 160,
+  /** A multi-tile grow starts the next tile when the previous one is this far through its pop. */
+  growOverlap: 0.6,
+});
+
+/** The derived durations, plus the legacy aliases that existing code already reads. */
 export const MOTION = Object.freeze({
-  /** a press: buttons and cards answer at once */
-  tap: 96,
-  /** small state changes: a ring, a highlight, a chip */
-  quick: 192,
-  /** a tile, a card or a panel moving */
-  move: 336,
-  /** an earned moment: a Bloom ripple, a big cut, the Strangle finish beats */
-  moment: 720,
+  /** The two source tokens, exposed under their own names. */
+  ack: TEMPO.ack,
+  consequence: TEMPO.consequence,
+  /** Legacy name for `ack`. */
+  tap: TEMPO.ack,
+  /** Derived: two acknowledgements. */
+  quick: TEMPO.ack * 2,
+  /** Legacy name for `consequence`. */
+  move: TEMPO.consequence,
+  /** Derived: two consequences plus half an acknowledgement. */
+  moment: TEMPO.consequence * 2 + TEMPO.ack / 2,
 });
+
+/** One easing family: the same control points, with the settle variant overshooting to 1.1. */
+const STANDARD_EASE = 'cubic-bezier(0.2, 0.8, 0.3, 1)';
+const SETTLE_EASE = 'cubic-bezier(0.2, 0.8, 0.3, 1.1)';
 export const EASE = Object.freeze({
-  out: 'cubic-bezier(0.2, 0.8, 0.3, 1)',
-  spring: 'cubic-bezier(0.2, 0.8, 0.3, 1.1)',
+  /** The canonical easing: decelerate into the resting position. */
+  standard: STANDARD_EASE,
+  /** The same control points, with a small overshoot for a physical landing. */
+  settle: SETTLE_EASE,
+  /** Legacy aliases. */
+  out: STANDARD_EASE,
+  spring: SETTLE_EASE,
 });
+
+/** Continuous marquees are the only place for `linear`; the LED projector is the only `steps(1)`. */
+export const EASE_SPECIAL = Object.freeze({ marquee: 'linear', led: 'steps(1)' });
+
+/**
+ * The one motion gate. Every path that animates reads this: a reduced-motion preference or a
+ * time scale of zero (Speed Off / fast-forward) means "no motion", never a new preference.
+ */
+export const motionAllowed = (reduceMotion: boolean, timeScale: number): boolean =>
+  !reduceMotion && timeScale > 0;

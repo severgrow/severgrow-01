@@ -523,7 +523,6 @@ export const ONLINE_CSS = `
   color: #eee3c6; background: #2b3029; border: 1px solid #d5c89b7a;
   border-radius: 9px; font: inherit; font-weight: 700; letter-spacing: .08em;
 }
-.world-claim-button:active { transform: translateY(1px); }
 .online-world .online-notice { min-height: 20px; max-width: 720px; width: 100%; margin: 0 auto; }
 /* A short (640px) phone: one small, deliberate step tighter — 6px, not 3px crumbs — and a shallower
    selection bar, so the map keeps the room it needs without the column reading as cramped. */

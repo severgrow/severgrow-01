@@ -90,7 +90,6 @@ html.futa04-information .dock #futa04-box :is(#smart-context,#futa04-actions > .
 html.futa04-information #futa04-box #smart-context:is(:hover,:focus-visible,[aria-expanded='true']) {
   color:#fff1cf; box-shadow:0 0 9px rgba(196,150,88,.22);
 }
-html.futa04-information #futa04-box #smart-context:active:not(:disabled) { transform:translateY(1px) scale(.98); }
 /* NO lit state on the Skip key (owner, 2026-10-15: "skip is highlighted on every grow — remove;
    i just wanted it to be possible during grow, but not extra highlighted"). Skip is therefore
    styled by the base key rule above, exactly like Draw/Grow/Blast, and no longer brightens its
@@ -356,7 +355,6 @@ html.futa04-information #smart-bloom-button:is(:hover,:focus-visible,[aria-expan
   filter:brightness(1.18);
 }
 html.futa04-information #smart-bloom-button:focus-visible { outline:2px solid #ffe1a7; outline-offset:2px; }
-html.futa04-information #smart-bloom-button:active { transform:translateY(1px) scale(.98); }
 /* Quiet TE-style corner ticks + soft brightness pulse on the recipe (button stays frameless). */
 html.futa04-information #smart-bloom-button::before,
 html.futa04-information #smart-bloom-button::after {
@@ -446,7 +444,7 @@ html.futa04-information[data-step='draw'] #discard.ready:not(.futa04-bloom-draw)
 html.futa04-information[data-step='draw'] #discard.futa04-bloom-draw .pile-top.card {
   transform:translateY(-3px); border-color:rgba(209,172,105,.8);
   box-shadow:0 0 0 1px rgba(209,172,105,.45),0 0 7px rgba(205,162,87,.30),0 2px 4px rgba(0,0,0,.45);
-  transition:transform .2s ease-out,border-color .2s ease-out,box-shadow .2s ease-out;
+  transition:transform var(--dur-ack) var(--ease-standard),border-color .2s ease-out,box-shadow .2s ease-out;
 }
 /* Legal empty sockets share one warm, recessed treatment on Forest and Volcano turns. */
 html.futa04-information #board .l-over .receptive-well {

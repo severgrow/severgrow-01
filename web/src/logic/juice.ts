@@ -4,6 +4,7 @@
 import type { Phase } from '../../../src/engine/index.js';
 import type { Step } from './anim.js';
 import type { Effects } from './settings.js';
+import { PINNED } from './motion.js';
 
 export type Tier = 'none' | 'small' | 'medium' | 'severe' | 'big';
 
@@ -53,8 +54,8 @@ const BASE: Record<Exclude<Tier, 'none'>, Budget> = {
   small: { particles: 6, shake: 0, hitStopMs: 0, anticipationMs: 0, banner: false, float: false, thud: false, vibrate: null, fadeOnly: false },
   medium: { particles: 14, shake: 0, hitStopMs: 0, anticipationMs: 0, banner: false, float: true, thud: false, vibrate: null, fadeOnly: false },
   // Severe (a cut of 3-4 tiles): real weight, but a smaller shiver and a shorter stop than Big.
-  severe: { particles: 22, shake: 2.5, hitStopMs: 60, anticipationMs: 60, banner: false, float: true, thud: true, vibrate: [24, 40, 16], fadeOnly: false },
-  big: { particles: 36, shake: 6, hitStopMs: 100, anticipationMs: 140, banner: true, float: true, thud: true, vibrate: [30, 40, 60], fadeOnly: false },
+  severe: { particles: 22, shake: 2.5, hitStopMs: PINNED.hitStopShort, anticipationMs: 60, banner: false, float: true, thud: true, vibrate: [24, 40, 16], fadeOnly: false },
+  big: { particles: 36, shake: 6, hitStopMs: PINNED.hitStop, anticipationMs: 140, banner: true, float: true, thud: true, vibrate: [30, 40, 60], fadeOnly: false },
 };
 const NONE: Budget = { ...BASE.small, particles: 0 };
 

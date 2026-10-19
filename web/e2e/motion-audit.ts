@@ -42,6 +42,16 @@ const all: Mark[] = [];
 const gaps: number[] = [];
 const gapDetail: string[] = [];
 const longs: string[] = [];
+type Feel = {
+  pressLatency: { count: number; median: number | null; max: number | null };
+  frameGaps: { count: number; median: number | null; max: number | null };
+  longTasks: { count: number; total: number; max: number };
+  liveAnimations: number;
+  rafSubscribers: number;
+  hidden: { elements: number; animations: number };
+  idle: { animations: number; elements: number };
+};
+const feels: Feel[] = [];
 try {
   for (let g = 0; g < GAMES; g++) {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -105,6 +115,7 @@ try {
       const during = marks.find((m) => m.ev === 'step' && m.t >= gp.at && m.t - (m.ms ?? 0) <= gp.at + gp.ms);
       gapDetail.push(`${gp.ms}ms during ${during ? `${during.k}(${during.n}) who=${during.who}` : 'no step (between steps)'}`);
     }
+    feels.push((await page.evaluate('window.__severgrow.feel()')) as Feel);
     await page.close();
   }
 } finally {
@@ -123,3 +134,14 @@ if (process.env.DETAIL) console.log(gapDetail.join('\n'));
 console.log(`long tasks (>50ms of blocked main thread): ${longs.length}`);
 if (process.env.DETAIL) console.log(longs.join('\n'));
 console.log(`\nframe gaps >50ms while animating: ${gaps.length}${gaps.length ? `  (worst ${Math.max(...gaps)}ms, median ${q(gaps, 0.5)}ms)` : ''}`);
+if (feels.length) {
+  const press = feels.reduce((n, f) => n + f.pressLatency.count, 0);
+  const pressMax = Math.max(...feels.map((f) => f.pressLatency.max ?? 0));
+  const schedulerGaps = feels.reduce((n, f) => n + f.frameGaps.count, 0);
+  const longTotal = feels.reduce((n, f) => n + f.longTasks.total, 0);
+  const subs = Math.max(...feels.map((f) => f.rafSubscribers));
+  const live = Math.max(...feels.map((f) => f.liveAnimations));
+  const hidden = feels.reduce((n, f) => n + f.hidden.elements, 0);
+  const idle = Math.max(...feels.map((f) => f.idle.animations));
+  console.log(`feel: ${press} presses (worst ${pressMax}ms) · scheduler gaps ${schedulerGaps} · long tasks ${longTotal}ms · max RAF subscribers ${subs} · live animations ${live} · hidden elements ${hidden} · idle animations ${idle}`);
+}

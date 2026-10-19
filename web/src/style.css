@@ -183,10 +183,7 @@ button {
   font-size: 0.95rem;
   line-height: 1.1;
   touch-action: manipulation;
-  transition: transform 0.12s, background-color 0.15s, border-color 0.15s;
-}
-.btn:active {
-  transform: scale(0.97);
+  transition: transform var(--dur-ack) var(--ease-standard), background-color 0.15s, border-color 0.15s;
 }
 .btn.primary {
   background: var(--c-accent);
@@ -387,8 +384,6 @@ button {
   color: var(--fu-ink);
   box-shadow: none;
 }
-.menu-buttons .btn:active,
-#levels .level-grid .difficulty-tile:active { transform: translateY(1px); }
 .menu-buttons .btn:focus-visible,
 #levels .level-grid .difficulty-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .menu-lessons {
@@ -1820,9 +1815,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-align: left;
   font: inherit;
   cursor: pointer;
-  transition: border-color .16s, background-color .16s, transform .16s;
+  transition: border-color .16s, background-color .16s, transform var(--dur-ack) var(--ease-standard);
 }
-.lab-card:active { transform: scale(.988); }
 .lab-card[aria-pressed="true"] { border-color: color-mix(in srgb, var(--c-text) 60%, transparent); background: color-mix(in srgb, var(--c-text) 11%, var(--c-bg)); }
 .lab-card-number { align-self: start; color: var(--c-muted); font: 600 .72rem/1.4 ui-monospace, SFMono-Regular, monospace; }
 .lab-card-copy strong { display: block; font-size: .88rem; font-weight: 650; }
@@ -1852,10 +1846,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
 }
 @media (prefers-reduced-motion: reduce) {
   .lab-chevron, .lab-card { transition: none; }
-  .lab-card:active { transform: none; }
 }
 .reduce-motion .lab-chevron, .reduce-motion .lab-card { transition: none; }
-.reduce-motion .lab-card:active { transform: none; }
 .prose p {
   margin: 10px 0;
 }
@@ -2102,9 +2094,6 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-decoration: underline;
   text-underline-offset: 3px;
   color: var(--fu-cream-55);
-}
-.gameover .go-buttons .btn:active {
-  transform: translateY(1px);
 }
 .gameover .go-buttons .btn:focus-visible {
   outline: 2px solid var(--fu-cream);
@@ -2361,10 +2350,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   background: var(--c-surface);
   color: var(--c-text);
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
-}
-.level-tile:active {
-  transform: scale(0.97);
+  transition: transform var(--dur-ack) var(--ease-standard), border-color 0.15s;
 }
 .level-tile.on:not(.difficulty-tile) {
   border-color: var(--c-accent);
@@ -2391,10 +2377,7 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   width: 100%;
   text-align: center;
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
-}
-.difficulty-tile:active {
-  transform: translateY(1px);
+  transition: transform var(--dur-ack) var(--ease-standard), border-color 0.15s, background 0.15s, color 0.15s;
 }
 .go-sub {
   margin: 6px 0 0;
@@ -2472,9 +2455,8 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   text-align: center;
   cursor: pointer;
   font-family: var(--font-ui);
-  transition: transform 0.12s, background-color 0.15s, color 0.15s;
+  transition: transform var(--dur-ack) var(--ease-standard), background-color 0.15s, color 0.15s;
 }
-.campaign-tile:active { transform: translateY(1px); }
 .campaign-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
 .campaign-tile .ct-num {
   font-size: 1.02rem;
@@ -2641,13 +2623,20 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
    Heights: big 56px, normal 44px, compact 36px; the step labels and their "?" are 32px.
    ================================================================= */
 :root {
-  /* Step 7: motion tokens (web/src/logic/motion.ts holds the same values) */
-  --dur-tap: 96ms;
-  --dur-quick: 192ms;
-  --dur-move: 336ms;
-  --dur-moment: 720ms;
-  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
-  --ease-spring: cubic-bezier(0.2, 0.8, 0.3, 1.1);
+  /* Phase 0: two tempo tokens, everything else derived (web/src/logic/motion.ts is the source).
+     ack = the immediate answer, consequence = a physical move. */
+  --dur-ack: 96ms;
+  --dur-consequence: 336ms;
+  --dur-quick: calc(var(--dur-ack) * 2);
+  --dur-moment: calc(var(--dur-consequence) * 2 + var(--dur-ack) / 2);
+  /* Legacy names resolve to the same values. */
+  --dur-tap: var(--dur-ack);
+  --dur-move: var(--dur-consequence);
+  /* One easing family; `linear` is only for continuous marquees and `steps(1)` only for the LED. */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-settle: cubic-bezier(0.2, 0.8, 0.3, 1.1);
+  --ease-out: var(--ease-standard);
+  --ease-spring: var(--ease-settle);
   --pill: 999px;
   --h-big: 56px;
   --h-btn: 44px;
@@ -2747,18 +2736,11 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--m-rimLight) calc(var(--m-rim, 0.3) * 45%), transparent),
     0 1.5px 2px -1px color-mix(in srgb, #000 70%, transparent);
-  transition: transform 0.08s, box-shadow 0.08s;
+  transition: transform var(--dur-ack) var(--ease-standard), box-shadow var(--dur-ack) var(--ease-standard);
 }
 .btn.link {
   box-shadow: none;
 }
-.btn:active,
-.chip:active,
-.seg-btn:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 55%, transparent);
-}
-
 /* =================================================================
    Board materials: grass-like moss (me), fire (the bot), rock, empty, gold.
    ================================================================= */
@@ -4281,7 +4263,6 @@ html[data-layout='side'] .dock-overlays {
   --fs-lg: 1.25rem;
   --fs-xl: 1.75rem;
   --press-scale: 0.97;
-  --press-ms: var(--dur-tap);
 }
 .num,
 .score b,
@@ -4291,19 +4272,23 @@ html[data-layout='side'] .dock-overlays {
   font-variant-numeric: lining-nums tabular-nums;
 }
 /* Primary = .btn.primary (one per moment), Secondary = .btn.ghost, Tertiary = .btn.link */
-.btn:active:not(:disabled),
-.seg-btn:active,
-.chip:active,
-.icon-only:active,
-.hand-sort:active {
-  transform: scale(var(--press-scale));
-  transition: transform var(--press-ms) ease-out, box-shadow var(--press-ms) ease-out;
+/* The ONE press implementation. web/src/logic/press.ts paints data-pressed and --press-depth on
+   pointerdown (and on Space/Enter), holds while down, and clears on release/leave/blur or after
+   a 10 px drag. No surface declares its own :active transform. */
+[data-pressed="true"] {
+  transform: scale(var(--press-depth, var(--press-scale)));
+  transition: transform var(--dur-ack) var(--ease-standard), box-shadow var(--dur-ack) var(--ease-standard) !important;
+  box-shadow: inset 0 1px 2px color-mix(in srgb, #000 55%, transparent);
 }
-.reduce-motion .btn:active,
-.reduce-motion .seg-btn:active,
-.reduce-motion .chip:active,
-.reduce-motion .icon-only:active,
-.reduce-motion .hand-sort:active {
+[data-pressed="true"][data-press-surface="key"] {
+  transform: translateY(1px) scale(var(--press-depth, 0.98));
+}
+/* SVG hexes need an explicit origin so the press shrinks in place. */
+#board [data-pressed="true"] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.reduce-motion [data-pressed="true"] {
   transform: none;
 }
 /* overhaul item 14: the score race, a slim tug-of-war under the header */
