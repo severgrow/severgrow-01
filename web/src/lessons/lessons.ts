@@ -52,19 +52,22 @@ export type Lesson = {
   /** The ideas this lesson is for, in order. */
   goals: readonly Goal[];
   /** Explanations shown once before the first draw (tap anywhere to move on). */
-  intro: readonly ('tree' | 'their-home' | 'rock' | 'bloom-cards' | 'surround')[];
-  /** How much the window says once the lesson's ideas are done: every step, one word, or only on idle. */
-  guide: 'full' | 'word' | 'idle';
+  intro: readonly IntroKind[];
+  /** Level 10 keeps its hints for an idle moment; every other level guides every step (the fade decides how much). */
+  guide: 'always' | 'idle';
   /**
    * The actions this level introduces. From level 2 a spotlight may fire only for one of these,
    * and only one new-idea spotlight is spent per level (lessons/mastery.ts).
    */
   newActions: readonly ActionKind[];
-  /** The one calm line shown in the glass before the first move ("Cut their root."). */
-  mission: string;
   /** The finish card: title, the one idea learned (YOU LEARNED: …), and its small mark. */
   finish: { title: string; line: string; learned: string; icon: string };
 };
+
+/** The one-time concepts a lesson explains in its info box before the first move. */
+export type IntroKind =
+  | 'tree' | 'their-home' | 'first-draw' | 'rock' | 'gold'
+  | 'bloom-cards' | 'surround' | 'bomb' | 'blast' | 'pile-gold';
 
 // ---------- the lessons ----------
 
@@ -72,11 +75,10 @@ const SET3: readonly (readonly [0 | 1 | 2 | 3, number])[] = [[0, 3], [1, 3], [2,
 
 export const LESSONS: readonly Lesson[] = Object.freeze([
   {
-    level: 1, version: 2, locked: true, guide: 'full',
-    intro: ['tree', 'their-home'],
+    level: 1, version: 2, locked: true, guide: 'always',
+    intro: ['tree', 'their-home', 'first-draw'],
     goals: [{ t: 'grow' }],
     newActions: ['draw', 'grow', 'throw'],
-    mission: 'Draw, Grow, Throw.',
     position: {
       seed: 96001,
       hand: [[0, 8], [1, 2], [1, 5], [2, 4], [1, 3], [2, 6], [3, 5]],
@@ -88,11 +90,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'DRAW, GROW, THROW', icon: '✦' },
   },
   {
-    level: 2, version: 2, locked: true, guide: 'word',
+    level: 2, version: 2, locked: true, guide: 'always',
     intro: [],
     goals: [{ t: 'strengthen', key: '-1,1', card: 8 }, { t: 'take', key: '0,0' }],
     newActions: ['strengthen', 'take'],
-    mission: 'Stronger tiles win.',
     position: {
       seed: 96002,
       tiles: [['-1,1', YOU, 2], ['0,0', THEM, 4], ['1,-1', THEM, 5]],
@@ -105,11 +106,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'STRONGER TILES WIN', icon: '↑' },
   },
   {
-    level: 3, version: 2, locked: true, guide: 'word',
-    intro: ['rock'],
+    level: 3, version: 2, locked: true, guide: 'always',
+    intro: ['rock', 'gold'],
     goals: [{ t: 'gold', key: '0,0' }],
     newActions: [],
-    mission: 'Take the gold.',
     position: {
       seed: 96003,
       rock: ['-1,0'],
@@ -125,11 +125,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.goldDecided, learned: 'GOLD COUNTS DOUBLE', icon: '◆' },
   },
   {
-    level: 4, version: 2, locked: false, guide: 'word',
+    level: 4, version: 2, locked: false, guide: 'always',
     intro: [],
     goals: [{ t: 'cut', key: '1,-1' }],
     newActions: ['cut'],
-    mission: 'Cut their root.',
     position: {
       seed: 96004,
       tiles: [['-1,1', YOU, 4], ['0,0', YOU, 3], ['1,-1', THEM, 2], ['0,-1', THEM, 5], ['-1,-1', THEM, 3]],
@@ -142,11 +141,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'CUT THEIR ROOT', icon: '✂' },
   },
   {
-    level: 5, version: 2, locked: false, guide: 'word',
+    level: 5, version: 2, locked: false, guide: 'always',
     intro: ['bloom-cards'],
     goals: [{ t: 'bloom' }],
     newActions: ['bloom'],
-    mission: 'Bloom three at once.',
     position: {
       seed: 96005,
       tiles: [['-1,1', YOU, 2], ['1,-2', THEM, 9], ['1,-1', THEM, 9], ['2,-1', THEM, 9]],
@@ -159,11 +157,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM THREE AT ONCE', icon: '✿' },
   },
   {
-    level: 6, version: 2, locked: false, guide: 'word',
+    level: 6, version: 2, locked: false, guide: 'always',
     intro: ['surround'],
     goals: [{ t: 'strangle' }],
     newActions: ['surround'],
-    mission: 'Surround their home.',
     position: {
       seed: 96006,
       tiles: [['-1,1', YOU, 4], ['0,0', YOU, 5]],
@@ -177,11 +174,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonByKo, learned: 'SURROUND THEIR HOME', icon: '◎' },
   },
   {
-    level: 7, version: 2, locked: false, guide: 'word',
-    intro: [],
+    level: 7, version: 2, locked: false, guide: 'always',
+    intro: ['bomb'],
     goals: [{ t: 'bomb', key: '0,0' }],
     newActions: ['bomb'],
-    mission: 'Bomb one tile.',
     position: {
       seed: 96007,
       tiles: [['-1,1', YOU, 3], ['0,0', THEM, 9], ['1,-1', THEM, 9]],
@@ -195,11 +191,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BOMB ONE TILE', icon: '●' },
   },
   {
-    level: 8, version: 2, locked: false, guide: 'word',
-    intro: [],
+    level: 8, version: 2, locked: false, guide: 'always',
+    intro: ['blast'],
     goals: [{ t: 'blast', key: '0,-1' }, { t: 'blastGrow' }],
     newActions: ['blast'],
-    mission: 'Blast a hole.',
     position: {
       seed: 96008,
       tiles: [
@@ -215,11 +210,10 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLAST A HOLE', icon: '✹' },
   },
   {
-    level: 9, version: 2, locked: false, guide: 'word',
-    intro: [],
+    level: 9, version: 2, locked: false, guide: 'always',
+    intro: ['pile-gold'],
     goals: [{ t: 'pileBloom' }, { t: 'skip' }],
     newActions: [],
-    mission: 'Skip Grow. Save cards.',
     position: {
       seed: 96009,
       tiles: [['-1,1', YOU, 4], ['1,-2', THEM, 9], ['1,-1', THEM, 9], ['2,-1', THEM, 9]],
@@ -236,7 +230,6 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
     intro: [],
     goals: [],
     newActions: [],
-    mission: 'Play a real game.',
     position: {
       seed: 96010,
       gold: ['0,0'],
@@ -592,19 +585,25 @@ export type Lit =
 export type Beat = {
   /** Stable id (an explanation is shown once; seen ids are kept with the lesson's save). */
   id: string;
-  title: string;
+  /**
+   * THE DISPLAY (the cockpit's LED): what to do now, as a short action line — never a lone word.
+   * Only action, status and warning beats carry this.
+   */
+  say?: string;
+  /**
+   * THE INFO BOX (#lesson-plate): one explanation, as a full sentence. Explanations are shown once
+   * per lesson and are never faded; the box never carries an action label or a button.
+   */
   line?: string;
   lit: Lit;
-  /** An explanation: a tap anywhere (or NEXT / ») moves on. */
+  /** An explanation: a tap anywhere (or on the lit thing) moves on. */
   explain?: boolean;
-  /** A short LED message beside it (the display, never the board). */
-  led?: string;
+  /** Their turn (a status, not an instruction): shown while the opponent plays, never faded. */
+  status?: boolean;
   /** Show only after a few idle seconds (the late levels' quiet guide). */
   idleOnly?: boolean;
   /** The action this step teaches, so the UI can fade its light by the player's mastery. */
   kind?: ActionKind;
-  /** One word for the WHISPER tier (DRAW, GROW, BLOOM …). */
-  word?: string;
   /** A power's one-time hello: remembered on this device, never shown twice. */
   hello?: PowerKind;
 };
@@ -617,20 +616,11 @@ export type BeatCtx = {
   placing: 'bloom' | 'blast' | null;
   /** A throw is waiting for its second tap (the card id). */
   throwPending: number | null;
-  /** The » step was already spelled out once on this device: from then on it is one word. */
-  doneTaught?: boolean;
   seen: ReadonlySet<string>;
   /** Bloom / Bomb / Blast hellos already shown on this device. */
   powerSeen?: ReadonlySet<PowerKind>;
 };
 
-/** One word per action, for the WHISPER tier and the new-power hello. */
-export const ACTION_WORD: Readonly<Record<ActionKind, string>> = Object.freeze({
-  draw: W.draw, grow: W.grow, throw: W.throwWord, cut: 'CUT', take: 'TAKE',
-  bloom: 'BLOOM', bomb: 'BOMB', blast: 'BLAST', strengthen: 'STRENGTHEN', surround: 'SURROUND',
-});
-
-const POWER_WORD: Readonly<Record<PowerKind, string>> = Object.freeze({ bloom: 'BLOOM', bomb: 'BOMB', blast: 'BLAST' });
 /** The level that first teaches each power. A hello only fires after it, never in its own lesson. */
 const POWER_TAUGHT_AT: Readonly<Record<PowerKind, number>> = Object.freeze({ bloom: 5, bomb: 7, blast: 8 });
 const GOAL_POWER: Readonly<Record<string, PowerKind | undefined>> = Object.freeze({
@@ -660,9 +650,9 @@ const powerCards = (s: State, legal: readonly Action[], power: PowerKind): numbe
 };
 
 /**
- * The first time a power is legal AFTER its lesson, glow its card(s) and say its one word — once
- * ever. It is skipped in the power's own lesson (that lesson is already teaching it) and while the
- * lesson's goal is still open. Once a hello has been seen the state is silent, never nagging.
+ * The first time a power is legal AFTER its lesson, glow its card(s) and say what to do with it —
+ * once ever. It is skipped in the power's own lesson (that lesson is already teaching it) and while
+ * the lesson's goal is still open. Once a hello has been seen the state is silent, never nagging.
  */
 const helloBeat = (lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, legal: readonly Action[]): Beat | null => {
   if (goal) return null;
@@ -678,27 +668,50 @@ const helloBeat = (lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, le
     if (ctx.powerSeen?.has(power)) continue;
     const ids = powerCards(s, legal, power);
     if (!ids.length) continue;
-    return { id: `hello:${power}`, title: POWER_WORD[power], lit: { t: 'cards', ids }, kind: power, hello: power, word: POWER_WORD[power] };
+    const say = power === 'bloom' ? W.bloomHello : power === 'bomb' ? W.bombHello : W.tapBlast;
+    return { id: `hello:${power}`, say, lit: { t: 'cards', ids }, kind: power, hello: power };
   }
   return null;
 };
 
-const explain = (id: string, title: string, line: string, lit: Lit, led?: string): Beat =>
-  ({ id, title, line, lit, explain: true, ...(led ? { led } : {}) });
+/** An explanation: one sentence in the info box, dismissed by a tap anywhere (never faded). */
+const explain = (id: string, line: string, lit: Lit): Beat => ({ id, line, lit, explain: true });
 
 const introBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat | null => {
   if (s.phase !== 'DRAW' || myTurns(s).length > 0) return null;
   for (const which of lesson.intro) {
     const id = `${lesson.level}:intro:${which}`;
     if (seen.has(id)) continue;
-    if (which === 'tree') return explain(id, W.yourTree, W.yourTreeLine, { t: 'home', player: YOU });
-    if (which === 'their-home') return explain(id, W.theirHome, W.theirHomeLine, { t: 'home', player: THEM });
+    if (which === 'tree') return explain(id, W.yourHomeLine, { t: 'home', player: YOU });
+    if (which === 'their-home') return explain(id, W.theirHomeLine, { t: 'home', player: THEM });
+    if (which === 'first-draw') return explain(id, W.tapDrawLine, { t: 'deck' });
     if (which === 'rock') {
-      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock')!;
-      return explain(id, W.rocksBlock, W.rocksBlockLine, { t: 'rock', key: rock });
+      const rock = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rock');
+      if (rock) return explain(id, W.rocksBlockLine, { t: 'rock', key: rock });
+      continue;
     }
-    if (which === 'bloom-cards') return explain(id, W.cardsThatBloom, W.cardsThatBloomLine, { t: 'cards', ids: bloomCardsFor(s.hands[YOU]).map((c) => c.id) });
-    if (which === 'surround') return explain(id, W.surround, W.surroundLine, { t: 'home', player: THEM });
+    if (which === 'gold') {
+      const gold = Object.keys(s.terrain).find((k) => s.terrain[k] === 'rich');
+      if (gold) return explain(id, W.goldDoubleLine, { t: 'hex', key: gold });
+      continue;
+    }
+    if (which === 'bloom-cards') {
+      const ids = bloomCardsFor(s.hands[YOU]).map((c) => c.id);
+      if (ids.length) return explain(id, W.cardsThatBloomLine, { t: 'cards', ids });
+      continue;
+    }
+    if (which === 'surround') return explain(id, W.surroundLine, { t: 'home', player: THEM });
+    if (which === 'bomb') {
+      const bomb = s.hands[YOU].find((c) => c.suit === null);
+      if (bomb) return explain(id, W.bombLine, { t: 'card', id: bomb.id });
+      continue;
+    }
+    if (which === 'blast') {
+      const ids = s.hands[YOU].filter((c) => c.suit === null).map((c) => c.id);
+      if (ids.length >= 2) return explain(id, W.blastLine, { t: 'cards', ids });
+      continue;
+    }
+    if (which === 'pile-gold') return explain(id, W.pileGoldLine, { t: 'discard' });
   }
   return null;
 };
@@ -708,25 +721,48 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
   if (s.actor !== YOU || s.phase === 'GAME_OVER') return null;
   const once = (id: string) => !seen.has(`${lesson.level}:${id}`);
   const ev = mine(s);
+  // The score is the display's own face; the box explains what a tile keeps.
   if (lesson.level === 1 && ev.some((e) => e.t === 'Sprout') && once('grew'))
-    return explain(`${lesson.level}:grew`, W.youGrew, W.youGrewLine, { t: 'score' }, 'YOU 1 : THEM 0');
+    return explain(`${lesson.level}:grew`, W.youGrewLine, { t: 'score' });
   if (lesson.level === 4 && goalDone({ t: 'cut', key: '1,-1' }, s) && once('withered'))
-    return explain(`${lesson.level}:withered`, W.withered, W.witheredLine, { t: 'led' });
+    return explain(`${lesson.level}:withered`, W.witheredLine, { t: 'led' });
   if (lesson.level === 5 && goalDone({ t: 'bloom' }, s) && once('bloomed'))
-    return explain(`${lesson.level}:bloomed`, W.bloomed, W.bloomedLine, { t: 'led' });
-  // The clock: the Draw pile is nearly gone (levels with a points ending say it once).
+    return explain(`${lesson.level}:bloomed`, W.bloomedLine, { t: 'led' });
+  // The clock: the Draw pile is nearly gone. The warning belongs on the display, not in the box.
   if (lesson.level === 1 && s.phase === 'DRAW' && s.deck.length > 0 && s.deck.length <= 3 && once('pile-low'))
-    return explain(`${lesson.level}:pile-low`, W.pileLow, W.pileLowLine, { t: 'deckCount' }, 'LAST CARDS');
+    return { id: `${lesson.level}:pile-low`, say: W.lastCards, lit: { t: 'deckCount' }, explain: true };
   if (s.deckFinal && s.phase === 'ACT' && (s.sproutsThisTurn ?? 0) === 0 && once(`last-turn`))
-    return explain(`${lesson.level}:last-turn`, W.lastTurn, W.lastTurnLine, { t: 'led' }, 'LAST TURN');
+    return { id: `${lesson.level}:last-turn`, say: W.lastTurn, line: W.lastTurnLine, lit: { t: 'led' }, explain: true };
   return null;
 };
 
-/** The words for a step: spelled out while the lesson's idea is new, one word once it is not. */
-const words = (lesson: Lesson, s: State, full: [string, string], word: string): { title: string; line?: string } => {
-  const firstTurn = myTurns(s).filter((t) => t.some((e) => e.t === 'Discard')).length === 0;
-  if (lesson.guide === 'full' && firstTurn) return { title: full[0], line: full[1] };
-  return { title: word };
+/**
+ * The one-time explanations that belong to an idea as it is about to be used (the Grow and Throw
+ * sentences, a stronger card, a cut, the free Grow after a Blast, skipping). They are a separate
+ * beat from the action, so the box is an explanation and the display is the action — never both
+ * saying the same thing. Shown once per lesson, never faded.
+ */
+const ideaBeat = (
+  lesson: Lesson, s: State, ctx: BeatCtx, goal: Goal | null, move: Action,
+): Beat | null => {
+  if (ctx.card !== null || ctx.placing !== null || ctx.throwPending !== null) return null;
+  const once = (id: string) => !ctx.seen.has(`${lesson.level}:idea:${id}`);
+  if (lesson.level === 1 && s.phase === 'ACT' && once('first-grow')
+    && !mine(s).some((e) => e.t === 'Sprout') && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:first-grow`, W.growLine, { t: 'card', id: move.card });
+  if (lesson.level === 1 && s.phase === 'DISCARD' && once('first-throw') && move.t === 'Discard')
+    return explain(`${lesson.level}:idea:first-throw`, W.throwLine, { t: 'card', id: move.card });
+  if (lesson.level === 2 && goal?.t === 'strengthen' && once('strengthen') && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:strengthen`, W.biggerWinsLine, { t: 'card', id: move.card });
+  if (lesson.level === 2 && goal?.t === 'take' && once('take'))
+    return explain(`${lesson.level}:idea:take`, W.takeTileLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 4 && goal?.t === 'cut' && once('cut'))
+    return explain(`${lesson.level}:idea:cut`, W.cutLinkLine, { t: 'hex', key: goal.key });
+  if (lesson.level === 8 && goal?.t === 'blastGrow' && once('free-grow') && move.t === 'Sprout')
+    return explain(`${lesson.level}:idea:free-grow`, W.freeGrowLine, { t: 'card', id: move.card });
+  if (lesson.level === 9 && goal?.t === 'skip' && once('skip'))
+    return explain(`${lesson.level}:idea:skip`, W.skipGrowLine, { t: 'end' });
+  return null;
 };
 
 const kindForMove = (goal: Goal | null, move: Action): ActionKind | null => {
@@ -747,71 +783,62 @@ const kindForMove = (goal: Goal | null, move: Action): ActionKind | null => {
   }
 };
 
+/** The action beat: the display says what to do. No explanation lives here (the box is separate). */
 const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: readonly Action[]): Beat => {
   const goal = currentGoal(lesson, s);
   // Only the finale waits for a quiet moment; levels 1-9 keep their hint on screen (owner, 2026-10-19).
   const idleOnly = lesson.guide === 'idle';
   const kind = kindForMove(goal, move);
-  const word = move.t === 'EndAct' && goal?.t === 'skip' ? 'SKIP' : kind ? ACTION_WORD[kind] : undefined;
-  const beat = (id: string, w: { title: string; line?: string }, lit: Lit): Beat => ({
-    id, ...w, lit, ...(idleOnly ? { idleOnly } : {}), ...(kind ? { kind } : {}),
-    ...(word ? { word } : {}),
+  const beat = (id: string, say: string, lit: Lit): Beat => ({
+    id, say, lit, ...(idleOnly ? { idleOnly } : {}), ...(kind ? { kind } : {}),
   });
   switch (move.t) {
     case 'Draw':
-      if (move.from === 'discard') return { id: 'pile', title: W.pileGold, line: W.pileGoldLine, lit: { t: 'discard' }, kind: 'draw', word: ACTION_WORD.draw };
-      return beat('draw', words(lesson, s, [W.tapDraw, W.tapDrawLine], W.draw), { t: 'deck' });
+      if (move.from === 'discard') return beat('pile', W.tapThrowPile, { t: 'discard' });
+      return beat('draw', W.tapDraw, { t: 'deck' });
     case 'Sprout': {
       const key = keyOf(move.coord);
-      const goalWords = goal?.t === 'strengthen' ? [W.biggerWins, W.biggerWinsLine]
-        : goal?.t === 'take' ? [W.takeTile, W.takeTileLine]
-        : goal?.t === 'cut' ? [W.cutLink, W.cutLinkLine]
-        : goal?.t === 'gold' ? [W.goldDouble, W.goldDoubleLine]
-        : goal?.t === 'strangle' ? (strangleMove(s, legal) ? [W.canWin, W.canWinLine] : [W.surround, W.surroundLine])
-        : goal?.t === 'blastGrow' ? [W.freeGrow, W.freeGrowLine]
-        : null;
-      if (ctx.card !== move.card) {
-        const w = goalWords ? { title: goalWords[0]!, line: goalWords[1]! } : words(lesson, s, [W.pickCard, W.pickCardLine], W.grow);
-        return beat(`pick:${move.card}`, w, { t: 'card', id: move.card });
-      }
+      if (ctx.card !== move.card) return beat(`pick:${move.card}`, W.chooseCard, { t: 'card', id: move.card });
       const others = legal.filter((a): a is Sprout => a.t === 'Sprout' && a.card === move.card).map((a) => keyOf(a.coord)).filter((k) => k !== key);
-      const w = goalWords ? { title: goalWords[0]!, line: goalWords[1]! } : words(lesson, s, [W.tapTile, W.tapTileLine], W.grow);
-      return beat(`tile:${key}`, w, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
+      if (goal?.t === 'strangle' && strangleMove(s, legal)) return beat('can-win', W.tapLastSide, { t: 'hex', key });
+      const say = goal?.t === 'take' || goal?.t === 'cut' ? W.tapTheirTile : W.tapTile;
+      return beat(`tile:${key}`, say, { t: 'hex', key, ...(goal ? {} : { quiet: others }) });
     }
     case 'Bloom': {
       // Two steps: tap Bloom to pick it, then tap (or draw) its lit tiles.
-      if (ctx.placing === 'bloom') return beat('bloom-tiles', { title: W.bloomTiles, line: W.bloomTilesLine }, { t: 'hexes', keys: move.hexes.map(keyOf) });
-      if (goal?.t === 'pileBloom') return { id: 'bloom', title: W.tapBloom, line: W.tapBloomLine, lit: { t: 'bloom' }, kind: 'bloom', word: ACTION_WORD.bloom };
-      return beat('bloom', { title: W.tapBloom, line: W.playLitLine }, { t: 'bloom' });
+      if (ctx.placing === 'bloom') return beat('bloom-tiles', W.tapTiles, { t: 'hexes', keys: move.hexes.map(keyOf) });
+      return beat('bloom', W.tapBloom, { t: 'bloom' });
     }
     case 'PlayFruit':
-      if (ctx.card !== move.card) return beat('bomb-card', { title: W.bombTile, line: W.bombTileLine }, { t: 'card', id: move.card });
-      return beat('bomb-tile', { title: W.bombTile, line: W.bombTileLine }, { t: 'hex', key: keyOf(move.target) });
+      if (ctx.card !== move.card) return beat('bomb-card', W.chooseBomb, { t: 'card', id: move.card });
+      return beat('bomb-tile', W.bombTile, { t: 'hex', key: keyOf(move.target) });
     case 'MegaBomb':
-      if (ctx.placing === 'blast') return beat('blast-tile', { title: W.blast, line: W.blastLine }, { t: 'hex', key: keyOf(move.target) });
-      return beat('blast', { title: W.blast, line: W.blastLine }, { t: 'bloom' });
+      if (ctx.placing === 'blast') return beat('blast-tile', W.tapTile, { t: 'hex', key: keyOf(move.target) });
+      return beat('blast', W.tapBlast, { t: 'bloom' });
     case 'EndAct':
-      if (goal?.t === 'skip') return { id: 'skip', title: W.skipGrow, line: W.skipGrowLine, lit: { t: 'end' }, kind: 'throw', word: 'SKIP' };
-      // Spelled out once (so the player knows » is there to skip on); after that one word.
-      if (ctx.doneTaught) return beat('end', { title: W.throwWord }, { t: 'end' });
-      return beat('end', { title: W.done, line: W.doneLine }, { t: 'end' });
+      if (goal?.t === 'skip') return beat('skip', W.tapSkip, { t: 'end' });
+      return beat('end', W.tapThrow, { t: 'end' });
     case 'Discard':
-      if (ctx.throwPending === move.card) return beat('throw-pile', words(lesson, s, [W.throwPile, W.throwPileLine], W.throwWord), { t: 'discard' });
-      return beat(`throw:${move.card}`, words(lesson, s, [W.throwCard, W.throwCardLine], W.throwWord), { t: 'card', id: move.card });
+      if (ctx.throwPending === move.card) return beat('throw-pile', W.tapThrowPile, { t: 'discard' });
+      return beat(`throw:${move.card}`, W.throwCard, { t: 'card', id: move.card });
     default:
-      return beat('wait', { title: W.notYet }, { t: 'none' });
+      return beat('wait', W.notYet, { t: 'none' });
   }
 };
 
 /**
- * What the window says and what is lit, from the live game. Null when the window should be empty
- * (the game is over).
+ * What the display says, what the box explains, and what is lit — read from the live game.
+ * Null when there is nothing to show (the game is over).
  */
 export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null => {
   if (s.phase === 'GAME_OVER') return null;
   if (s.actor !== YOU) {
-    const first = myTurns(s).length <= 1 && lesson.guide === 'full';
-    return { id: 'their-turn', title: W.theirTurn, ...(first ? { line: W.theirTurnLine } : {}), lit: { t: 'none' }, ...(lesson.guide === 'idle' ? { idleOnly: true } : {}) };
+    const first = myTurns(s).length <= 1 && lesson.guide === 'always';
+    return {
+      id: 'their-turn', say: W.theirTurn, status: true,
+      ...(first ? { line: W.theirTurnLine } : {}), lit: { t: 'none' },
+      ...(lesson.guide === 'idle' ? { idleOnly: true } : {}),
+    };
   }
   const intro = introBeat(lesson, s, ctx.seen);
   if (intro) return intro;
@@ -826,31 +853,23 @@ export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null 
   if (!goal && legalPowers(legal).length && ctx.card === null && ctx.placing === null) return null;
   const move = suggestMove(lesson, s);
   if (!move) return null;
+  const idea = ideaBeat(lesson, s, ctx, goal, move);
+  if (idea) return idea;
   return lightFor(lesson, s, ctx, move, legal);
 };
 
 /**
- * The level's one-line mission, shown in the glass until the player's first move. A mission is not
- * an instruction: it says what the level is about, then gets out of the way.
- */
-export const lessonMission = (lesson: Lesson, s: State): string | null =>
-  mine(s).length === 0 && s.phase !== 'GAME_OVER' ? lesson.mission : null;
-
-/**
- * The same beat, faded to the tier the player has earned. Explanations and a power's one-time hello
- * are never faded (they are exactly the moment being taught); an ordinary move is:
- *   spotlight — title + reason, full light
- *   guide     — the short line only, soft pointer and glow
- *   whisper   — one word, a gentle pulse on the target
- *   silent    — nothing, the calm neutral window
+ * The same beat, faded to the tier the player has earned. Explanations, a status line and a power's
+ * one-time hello are never faded (they are exactly the moment being taught); an ordinary move is:
+ *   spotlight — the action, full light
+ *   guide     — the action, soft pointer and glow
+ *   whisper   — the action instruction, a gentle pulse on the target (never a single word)
+ *   silent    — nothing, the calm neutral display
  */
 export const presentedLessonBeat = (beat: Beat | null, tier: LessonTier): Beat | null => {
   if (!beat) return null;
-  if (beat.explain || beat.hello) return beat;
+  if (beat.explain || beat.hello || beat.status) return beat;
   if (tier === 'silent') return null;
-  const { line: _line, ...rest } = beat;
-  if (tier === 'whisper') return { ...rest, title: beat.word ?? beat.title };
-  if (tier === 'guide') return rest;
   return beat;
 };
 

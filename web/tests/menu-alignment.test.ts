@@ -50,11 +50,34 @@ const classesOf = (section: string, id: string): string => {
 const COLUMN = 'width: min(420px, 100% - 32px)';
 
 describe('every menu surface centres the same column', () => {
-  it('the main menu column is the shared width, padding and rhythm', () => {
+  it('the main menu column is the shared width, and a height-aware rhythm', () => {
     expect(has(styleCss, '.menu-inner', COLUMN)).toBe(true);
-    expect(has(styleCss, '.menu-inner', 'padding: 32px 0')).toBe(true);
-    expect(has(styleCss, '.menu-inner', '--menu-rhythm: 14px')).toBe(true);
-    expect(has(styleCss, '.menu-inner', 'gap: var(--menu-rhythm)')).toBe(true);
+    // Owner, 2026-10-19: the menu spreads over tall screens and compresses on short ones, so its
+    // padding and rhythm are clamps of the viewport height (never fixed pixels that force a scroll).
+    const inner = rulesFor(styleCss, '.menu-inner');
+    const body = inner.map((r) => r.body).join('\n');
+    expect(body).toMatch(/--menu-rhythm:\s*clamp\([^)]*dvh/);
+    expect(body).toMatch(/padding:\s*clamp\([^)]*dvh/);
+    expect(body).toContain('gap: var(--menu-rhythm)');
+  });
+
+  it('the menu fits the screen by construction: spread, capped, and never scrollable', () => {
+    // (a rule's prelude also carries the comment above it, so match on the selector it ends with)
+    const menu = rules(styleCss).filter((r) => r.prelude.trim().endsWith('.menu')).map((r) => r.body).join('\n');
+    // No scrolling fallback: the layout itself has to fit.
+    expect(menu).toContain('overflow: hidden');
+    expect(menu).not.toContain('overflow-y: auto');
+    const inner = rulesFor(styleCss, '.menu-inner').map((r) => r.body).join('\n');
+    // Tall screens: the free height is shared evenly above, between and below the three blocks…
+    expect(inner).toContain('justify-content: space-evenly');
+    // …capped, so a very tall screen never becomes a sparse ladder.
+    expect(inner).toMatch(/height:\s*min\(100%,\s*max\(\d+px,\s*[\d.]+dvh\)\)/);
+    expect(inner).toContain('max-height: 100%');
+    // Short screens compress the gaps first; the tap targets keep the shared 44px floor.
+    const big = rulesFor(styleCss, '.menu-buttons .btn.big').map((r) => r.body).join('\n');
+    expect(big).toMatch(/min-height:\s*clamp\(44px/);
+    // The logo is never hidden: every supported screen keeps the mark.
+    expect(styleCss).not.toMatch(/#menu #logo[^{]*\{\s*display:\s*none/);
   });
 
   it('the difficulty pick repeats it exactly', () => {

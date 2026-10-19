@@ -55,8 +55,11 @@ html.futa04-branding #hud-brand { position: relative; top: 0; }
 html.futa04-branding #menu #terrarium { display: none !important; }
 html.futa04-branding #menu #logo {
   display: block !important;
-  width: min(240px, 58vw, 29dvh);
-  margin: 0 auto 16px;
+  /* Always visible, sized from the room the screen has: full size on a tall phone, a smaller mark
+     on a short one. It never disappears — a menu without its logo is not the menu. */
+  flex: none;
+  width: min(240px, 58vw, 26dvh);
+  margin: 0 auto;
 }
 html.futa04-branding #menu #logo svg { display: block; width: 100%; height: auto; }
 `;

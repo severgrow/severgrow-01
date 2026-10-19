@@ -106,15 +106,20 @@ const GEOMETRY = `(() => {
     right:+Math.max(...ps.map(r=>r.right)).toFixed(1), bottom:+Math.max(...ps.map(r=>r.bottom)).toFixed(1) } : null;
   if (union) { union.w = +(union.right - union.x).toFixed(1); union.h = +(union.bottom - union.y).toFixed(1); }
   const hex = ps.length ? ps.slice().sort((a, b) => b.width - a.width)[0] : null;
-  const next = plate && plate.querySelector('[data-lesson-next]');
   const padTop = wrap ? parseFloat(getComputedStyle(wrap).paddingTop) || 0 : 0;
+  const plateCss = plate && !plate.hidden ? getComputedStyle(plate) : null;
   return {
     hud: R(hud), headerTitle: vis(hud && hud.querySelector('.lesson-hud-title, #lesson-hud')),
     plate: plate && !plate.hidden ? R(plate) : null,
     plateHidden: !plate || plate.hidden,
-    plateWhy: plate?.querySelector('.lesson-why')?.textContent ?? '',
-    next: vis(next) ? R(next) : null,
-    nextHidden: !vis(next),
+    plateCopy: plate?.querySelector('.lesson-copy')?.textContent ?? '',
+    plateCss: plateCss ? {
+      border: plateCss.borderTopWidth, borderStyle: plateCss.borderTopStyle,
+      outline: plateCss.outlineStyle, outlineWidth: plateCss.outlineWidth,
+      shadow: plateCss.boxShadow, pointer: plateCss.pointerEvents,
+      buttons: plate ? plate.querySelectorAll('button').length : 0,
+      display: document.querySelector('#smart-led-text')?.textContent ?? '',
+    } : null,
     menu: R(menu), brand: R(brand),
     glass: glass && !glass.hidden ? R(glass) : null,
     kicker: glass && !glass.hidden ? (glass.dataset.kicker ?? null) : null,
@@ -129,8 +134,9 @@ const GEOMETRY = `(() => {
 })()`;
 
 const geometry = (p: Page) => p.evaluate(GEOMETRY) as Promise<{
-  hud: Box; headerTitle: boolean; plate: Box | null; plateHidden: boolean; plateWhy: string;
-  next: Box | null; nextHidden: boolean; menu: Box; brand: Box;
+  hud: Box; headerTitle: boolean; plate: Box | null; plateHidden: boolean; plateCopy: string;
+  plateCss: { border: string; borderStyle: string; outline: string; outlineWidth: string; shadow: string; pointer: string; buttons: number; display: string } | null;
+  menu: Box; brand: Box;
   glass: Box | null; kicker: string | null; tutorial: boolean; wrap: Box; union: Box;
   hex: { w: number; h: number } | null; padTop: number; hudPad: string; lessonAttr: string | null;
   scroll: { h: number; w: number; ih: number; iw: number };
@@ -151,12 +157,20 @@ const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phon
     check(size >= 72, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
   }
   if (!g.plateHidden && g.plate && g.union) {
-    check(!overlaps(g.plate, g.union), `${tag}: the plate never covers a hex`);
+    // On a phone tall enough for a free gap the box sits in it. On a short phone there is no gap
+    // at all, so it may sit over unlit hexes — but never over the lit target (checkPlateClear
+    // asserts that on every beat, at every size).
+    if (g.scroll.ih >= 800) check(!overlaps(g.plate, g.union), `${tag}: the plate sits in a gap, not over a hex`);
     check(g.plate.bottom <= g.scroll.ih + 1 && g.plate.y >= 0, `${tag}: the plate stays on screen`);
   }
-  if (!g.nextHidden && g.next && g.plate) {
-    check(g.next.y >= g.plate.y - 0.5 && g.next.bottom <= g.plate.bottom + 0.5, `${tag}: NEXT sits in the plate`);
-    check(g.hud && g.next.y >= g.hud.bottom, `${tag}: NEXT is not in the header`);
+  if (!g.plateHidden && g.plate && g.plateCss) {
+    // One info box, information only: no border, no outline, no shadow, no buttons, taps through.
+    check(parseFloat(g.plateCss.border) === 0, `${tag}: the info box has no border (${g.plateCss.border})`);
+    check(g.plateCss.outline === 'none' || parseFloat(g.plateCss.outlineWidth) === 0, `${tag}: no outline`);
+    check(g.plateCss.shadow === 'none', `${tag}: no box shadow/edge (${g.plateCss.shadow})`);
+    check(g.plateCss.pointer === 'none', `${tag}: the box is pointer-events:none`);
+    check(g.plateCss.buttons === 0, `${tag}: the box has no buttons`);
+    check(!!g.plateCopy, `${tag}: the box carries the explanation sentence`);
   }
   check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, `${tag}: no page scroll (${g.scroll.w}x${g.scroll.h} in ${g.scroll.iw}x${g.scroll.ih})`);
 };
@@ -214,7 +228,7 @@ const checkDealAudit = async (p: Page, level: number, expectLight: boolean) => {
 
 /** The centre of the thing a lit beat points at (a real element on screen), or null. */
 // Page code as a plain string: the test runner's name helpers do not exist inside the page.
-const LIT_POINTS = `(l) => {
+const LIT_POINTS = `(l, homes) => {
   function centre(el) {
     if (!el) return null;
     var box = (el.querySelector(':scope > path.hex') || el).getBoundingClientRect();
@@ -225,9 +239,13 @@ const LIT_POINTS = `(l) => {
   switch (l.t) {
     case 'hex': return [hex(l.key)];
     case 'hexes': return l.keys.map(hex);
+    case 'home': return [hex(l.player === 1 ? homes[1] : homes[0])];
+    case 'rock': return [hex(l.key)];
     case 'card': return [card(l.id)];
     case 'cards': return [card(l.ids[0])];
     case 'deck': return [centre(document.querySelector('#deck .pile-card') || document.getElementById('deck'))];
+    case 'deckCount': return [centre(document.querySelector('#deck .pile-card') || document.getElementById('deck'))];
+    case 'score': return [centre(document.getElementById('smart-led'))];
     case 'discard': return [centre(document.querySelector('#discard .pile-card') || document.getElementById('discard'))];
     case 'end': return [centre(document.getElementById('smart-context'))];
     case 'bloom': return [centre(document.getElementById('smart-bloom-button'))];
@@ -235,7 +253,7 @@ const LIT_POINTS = `(l) => {
   }
 }`;
 const litPoints = (p: Page, lit: Lit) =>
-  p.evaluate(`(${LIT_POINTS})(${JSON.stringify(lit)})`) as Promise<({ x: number; y: number } | null)[]>;
+  p.evaluate(`(${LIT_POINTS})(${JSON.stringify(lit)}, ${JSON.stringify(SMALL_HOMES)})`) as Promise<({ x: number; y: number } | null)[]>;
 
 /** The same selectors lesson-view.ts lights, so clearance is measured against the real target. */
 const litSelectors = (l: Lit): string[] => {
@@ -470,7 +488,7 @@ try {
         if (s.actor !== 0 || (await page.evaluate(() => (window as any).__severgrow.busy()))) { await page.waitForTimeout(150); continue; }
         const x = 8 + rnd() * (vp.width - 16); const y = 60 + rnd() * (vp.height - 70);
         const kind = await page.evaluate(`(() => { const e = document.elementFromPoint(${x}, ${y}); if (!e) return 'other';
-          if (e.closest('#hud, #hud-menu, #futasaku-glass, #lesson-plate, .sheet, #scrim, #gameover')) return 'chrome';
+          if (e.closest('#hud, #hud-menu, #futasaku-glass, .sheet, #scrim, #gameover')) return 'chrome';
           if (e.closest('#hand [data-card]')) return 'card'; if (e.closest('#deck')) return 'deck'; if (e.closest('#discard')) return 'discard';
           if (e.closest('#board [data-key]')) return 'hex'; return 'other'; })()`) as string;
         if (kind === 'chrome') continue;
@@ -493,25 +511,22 @@ try {
       assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
       await page.close();
     }
-    // --- Every reason line fits in two lines in the real window, on the smallest phone ---
+    // --- Every explanation fits in four lines in the real box, on the smallest phone ---
     {
       const { page } = await newPage(320, 568);
       await page.goto(URL3, { waitUntil: 'networkidle' });
       await openNextLevel(page);
-      await page.waitForSelector('#lesson-plate .lesson-why', { timeout: 10000 });
-      // The plate shows the title on its own line; the reason is the step's line alone (no
-      // repeated title prefix), so these are the exact strings the copy can put in the plate.
+      await page.waitForSelector('#lesson-plate .lesson-copy', { timeout: 10000 });
       const over: string[] = [];
       for (const [k, v] of Object.entries(LESSON)) {
         if (typeof v !== 'string' || !k.endsWith('Line')) continue;
-        const text = v;
-        // Measure the copy itself, not the two-line clamp that keeps the plate from growing.
-        const n = await page.evaluate(`(() => { const el = document.querySelector('#lesson-plate .lesson-why');
-          el.style.minHeight = '0'; el.style.webkitLineClamp = 'unset'; el.style.overflow = 'visible';
-          el.textContent = ${JSON.stringify(text)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
-        if (n > 2) over.push(`${k} (${n} lines)`);
+        // Measure the copy itself, not the four-line clamp that keeps the box from growing.
+        const n = await page.evaluate(`(() => { const el = document.querySelector('#lesson-plate .lesson-copy');
+          el.style.display = 'block'; el.style.webkitLineClamp = 'unset'; el.style.overflow = 'visible';
+          el.textContent = ${JSON.stringify(v)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
+        if (n > 4) over.push(`${k} (${n} lines)`);
       }
-      check(over.length === 0, `every reason line fits in two lines at 320 px${over.length ? `: ${over.join(', ')}` : ''}`);
+      check(over.length === 0, `every explanation fits in four lines at 320 px${over.length ? `: ${over.join(', ')}` : ''}`);
       await page.close();
     }
     // --- Level 3: the same wrong hex again and again; a refresh in the middle; hints off ---
@@ -571,18 +586,33 @@ try {
       await page.waitForTimeout(450);
       const g = await geometry(page);
       check(g.lessonAttr === '1', `${w}x${h}: lesson styling is scoped to the lesson`);
-      check(!g.plateHidden && !!g.plateWhy, `${w}x${h}: the opening sentence is in the plate`);
+      check(!g.plateHidden && !!g.plateCopy, `${w}x${h}: the opening sentence is in the info box`);
       checkCockpit(g, `${w}x${h}`, w < 600);
       check(!!g.union && g.union.w > 200, `${w}x${h}: the map is drawn (${g.union?.w}x${g.union?.h})`);
       await checkPointerOnHex(page, '-2,2', `${w}x${h} (L1 home)`);
-      // NEXT lives on the plate: one press moves the explanation on.
+      // The box is information only: no button. Tapping the lit thing itself advances.
       const before = await hook<any>(page, 'lesson');
-      const nextPt = await page.evaluate(`(() => { const b = document.querySelector('#lesson-plate [data-lesson-next]'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number } | null;
-      if (nextPt) {
-        await page.mouse.click(nextPt.x, nextPt.y);
+      const pts = await litPoints(page, before.beat.lit);
+      check(!!pts[0], `${w}x${h}: the explanation lights a thing to tap`);
+      if (pts[0]) {
+        await page.mouse.click(pts[0].x, pts[0].y);
         await page.waitForTimeout(350);
         const after = await hook<any>(page, 'lesson');
-        check(after?.beat?.id !== before?.beat?.id, `${w}x${h}: NEXT on the plate advances the lesson (${before?.beat?.id} -> ${after?.beat?.id})`);
+        check(after?.beat?.id !== before.beat.id, `${w}x${h}: tapping the lit thing advances (${before.beat.id} -> ${after?.beat?.id})`);
+      }
+      // And a tap over the box itself passes through (pointer-events:none) to the board.
+      const nextBeat = (await hook<any>(page, 'lesson')).beat;
+      if (nextBeat?.explain) {
+        // A tap in an explanation's first 0.65 s is deliberately ignored (it belonged to the move
+        // that opened it); wait past that, as a person would.
+        await page.waitForTimeout(800);
+        const boxPt = await page.evaluate(() => { const p = document.getElementById('lesson-plate'); const r = p!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
+        const under = await page.evaluate(`(() => { const e = document.elementFromPoint(${boxPt.x}, ${boxPt.y}); return e ? e.id || e.className || e.tagName : 'none'; })()`);
+        check(under !== 'lesson-plate', `${w}x${h}: a tap over the box reaches the board (${under})`);
+        await page.mouse.click(boxPt.x, boxPt.y);
+        await page.waitForTimeout(350);
+        const after = await hook<any>(page, 'lesson');
+        check(after?.beat?.id !== nextBeat.id, `${w}x${h}: a tap on the box dismisses the explanation (${nextBeat.id} -> ${after?.beat?.id})`);
       }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/layout-L1-${w}x${h}.png` });
       assert.deepEqual(errors, [], `${w}x${h}: no page errors: ${errors.join(' | ')}`);
@@ -621,7 +651,7 @@ try {
       }, counts);
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
-      // A fresh level replays its two opening explanations; move past them to the first Draw.
+      // A fresh level replays its opening explanations; move past them to the first Draw.
       for (let i = 0; i < 4; i++) {
         const b = (await hook<any>(page, 'lesson'))?.beat;
         if (!b?.explain) break;
@@ -633,10 +663,14 @@ try {
       const info = await page.evaluate(() => {
         const f = document.getElementById('tutorial-focus');
         const dim = f?.querySelector('.focus-dim');
+        const plate = document.getElementById('lesson-plate');
         return {
           tier: f?.getAttribute('data-tier') ?? '',
           hidden: !!f?.hasAttribute('hidden'),
           fill: dim ? getComputedStyle(dim).fill : '',
+          plateHidden: !plate || !!plate.hidden,
+          plateText: plate?.querySelector('.lesson-copy')?.textContent ?? '',
+          display: document.querySelector('#smart-led-text')?.textContent ?? '',
           lesson: (window as any).__severgrow?.lesson?.() ?? null,
         };
       });
@@ -647,7 +681,8 @@ try {
       const { page, errors, info } = await openWith({});
       check(info.tier === 'spotlight', `L1 first Draw is SPOTLIGHT (${info.tier})`);
       check(!info.hidden && /0\.45\)/.test(info.fill), `SPOTLIGHT dim is the strong L1 dim (${info.fill})`);
-      check(info.lesson?.beat?.title === 'TAP THE DRAW PILE', 'and it speaks fully');
+      check(info.lesson?.beat?.say === LESSON.tapDraw, 'and the display says what to do');
+      check(info.plateHidden, 'and the box is empty: nothing to explain');
       assert.deepEqual(errors, []);
       await page.close();
     }
@@ -655,7 +690,7 @@ try {
       const { page, errors, info } = await openWith({ draw: 1 });
       check(info.tier === 'guide', `second Draw is GUIDE (${info.tier})`);
       check(/0\.15\)/.test(info.fill), `GUIDE dim is light (${info.fill})`);
-      check(!!info.lesson?.beat?.title && !info.lesson?.beat?.line, 'and it says one short line');
+      check(info.lesson?.beat?.say === LESSON.tapDraw && !info.lesson?.beat?.line, 'and the action stays, with no box sentence');
       assert.deepEqual(errors, []);
       await page.close();
     }
@@ -663,16 +698,186 @@ try {
       const { page, errors, info } = await openWith({ draw: 2 });
       check(info.tier === 'whisper', `third Draw is WHISPER (${info.tier})`);
       check(/rgba\(0, 0, 0, 0\)/.test(info.fill), `WHISPER has no dim (${info.fill})`);
-      check(info.lesson?.beat?.title === 'DRAW' && !info.lesson?.beat?.line, 'and only one word');
+      check(info.lesson?.beat?.say === LESSON.tapDraw && !info.lesson?.beat?.line, 'and the action line, never a single word');
+      check(/\s/.test(info.lesson?.beat?.say ?? ''), 'the whisper says what to do (more than one word)');
       assert.deepEqual(errors, []);
       await page.close();
     }
     {
       const { page, errors, info } = await openWith({ draw: 9 });
       check(info.lesson?.beat == null, 'a well-practised Draw shows no light');
-      check(info.lesson?.mission === 'Draw, Grow, Throw.', 'the mission still says what the level is for');
+      check(info.plateHidden, 'and the box stays empty: no label, no sentence');
       assert.deepEqual(errors, []);
       await page.close();
+    }
+  }
+  if (ONLY === 'all' || ONLY === 'redesign') {
+    console.log('\nRedesign: one borderless box, tap-to-dismiss, a lifted card that still throws:');
+    const boxText = (p: Page) => p.evaluate(() => {
+      const plate = document.getElementById('lesson-plate');
+      return plate && !plate.hidden ? (plate.querySelector('.lesson-copy')?.textContent ?? '') : '';
+    }) as Promise<string>;
+    const displayText = (p: Page) => p.evaluate(() => document.querySelector('#smart-led-text')?.textContent ?? '') as Promise<string>;
+    const tap = async (p: Page, pt: { x: number; y: number } | null) => {
+      if (!pt) throw new Error('nothing to tap');
+      await p.mouse.click(pt.x, pt.y);
+      await p.waitForTimeout(380);
+    };
+    for (const [w, h] of [[390, 844], [360, 640]] as const) {
+      const tag = `${w}x${h}`;
+      const { page, errors } = await newPage(w, h);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      const copy: string[] = [];
+      try {
+        // 1. The opening explanation: one caption, no border/outline/shadow, no buttons, taps through.
+        await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 10000 });
+        const g = await geometry(page);
+        checkCockpit(g, tag, true);
+        check(g.plateCopy === LESSON.yourHomeLine, `${tag}: the home explanation is the new sentence`);
+        copy.push(g.plateCopy);
+        const chrome = await page.evaluate(() => {
+          const p = document.getElementById('lesson-plate')!;
+          const s = getComputedStyle(p);
+          const r = p.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {
+            border: s.borderTopWidth, outline: s.outlineStyle + ' ' + s.outlineWidth, shadow: s.boxShadow,
+            pointer: s.pointerEvents, buttons: p.querySelectorAll('button, [role="button"]').length,
+            under: at ? (at.id || at.className || at.tagName) : 'none',
+          };
+        });
+        check(parseFloat(chrome.border) === 0, `${tag}: no border (${chrome.border})`);
+        check(chrome.outline.startsWith('none') || chrome.outline.endsWith('0px'), `${tag}: no outline (${chrome.outline})`);
+        check(chrome.shadow === 'none', `${tag}: no shadow/edge (${chrome.shadow})`);
+        check(chrome.pointer === 'none', `${tag}: pointer-events:none (${chrome.pointer})`);
+        check(chrome.buttons === 0, `${tag}: no buttons in the box (${chrome.buttons})`);
+        check(chrome.under !== 'lesson-plate', `${tag}: a tap over the box lands on the board (${chrome.under})`);
+        await page.waitForTimeout(750);
+        const b1 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b1 && b1.id === '1:intro:tree', `${tag}: the first beat is the home explanation (${b1?.id})`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
+
+        // 2. Tapping the highlighted thing advances; the win condition is a sentence, not a label.
+        const p1 = (await litPoints(page, b1.lit))[0]!;
+        await tap(page, p1);
+        const b2 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b2 && b2.lit.t === 'home' && b2.lit.player === 1, `${tag}: tapping the lit home advances (${b2?.id})`);
+        check((await boxText(page)) === LESSON.theirHomeLine, `${tag}: the win sentence is in the box`);
+        copy.push(await boxText(page));
+
+        // 3. Tapping anywhere (over the box itself) advances; then the first-draw sentence.
+        await page.waitForTimeout(750);
+        const boxPt = await page.evaluate(() => { const r = document.getElementById('lesson-plate')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
+        await tap(page, boxPt);
+        const b3 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b3 && b3.id === '1:intro:first-draw', `${tag}: a tap anywhere advances (${b3?.id})`);
+        check((await boxText(page)) === LESSON.tapDrawLine, `${tag}: the first-draw sentence is in the box`);
+        copy.push(await boxText(page));
+
+        // 4. Dismiss with the lit deck: the action goes to the display, the box empties.
+        await page.waitForTimeout(750);
+        const deck = (await litPoints(page, b3.lit))[0]!;
+        await tap(page, deck);
+        const b4 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b4 && b4.id === 'draw' && b4.say === LESSON.tapDraw, `${tag}: the draw action is on the display`);
+        check((await boxText(page)) === '', `${tag}: the box is empty for a plain action`);
+        check((await displayText(page)) === LESSON.tapDraw, `${tag}: the display reads TAP THE DRAW PILE`);
+
+        // 5. Draw: the Grow explanation, and the suggested card is genuinely lifted.
+        await tap(page, deck);
+        await page.waitForTimeout(350);
+        const b5 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b5 && b5.id === '1:idea:first-grow', `${tag}: the Grow explanation follows the draw`);
+        check((await boxText(page)) === LESSON.growLine, `${tag}: the Grow sentence uses "your hand"`);
+        copy.push(await boxText(page));
+        // Never both voices at once: while the box explains there is no action line, and the
+        // display never falls back to a lone step word.
+        await page.waitForTimeout(1200);
+        const settleDisplay = (await displayText(page)).trim();
+        check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(settleDisplay), `${tag}: no lone step word on the display (${settleDisplay})`);
+        check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-card-${w}x${h}.png` });
+        const cardId = b5.lit.id;
+        const lift = await page.evaluate(`(() => {
+          const c = document.querySelector('#hand .card[data-card="${cardId}"]');
+          if (!c) return null;
+          const s = getComputedStyle(c); const r = c.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { translate: s.translate, scale: s.scale, z: s.zIndex, hit: at?.closest('#hand .card')?.getAttribute('data-card') ?? '' };
+        })()`) as { translate: string; scale: string; z: string; hit: string } | null;
+        check(!!lift, `${tag}: the suggested card is in the fan`);
+        check(!!lift && lift.translate !== 'none' && parseFloat(lift.translate.split(' ').at(-1) ?? '0') <= -18,
+          `${tag}: it is lifted out of the fan (${lift?.translate})`);
+        check(!!lift && parseFloat(lift.scale) >= 1.04, `${tag}: it is slightly larger (${lift?.scale})`);
+        check(!!lift && lift.hit === String(cardId), `${tag}: the lifted card is still the tap target`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-lifted-${w}x${h}.png` });
+
+        // 6. Dismiss on the card itself; the card stays lifted while it is the suggestion.
+        await page.waitForTimeout(750);
+        const cardPt = (await litPoints(page, b5.lit))[0]!;
+        await tap(page, cardPt);
+        const b6 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b6 && b6.id.startsWith('pick:') && b6.say === LESSON.chooseCard, `${tag}: then the card action (${b6?.id})`);
+        check((await page.evaluate(`!!document.querySelector('#hand .card[data-card="${cardId}"].tutorial-target-card')`)) === true,
+          `${tag}: the suggested card is still lifted`);
+        // 7. Pick it: the tile is lit and no card is left lifted by the lesson.
+        await tap(page, cardPt);
+        const b7 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b7 && b7.lit.t === 'hex', `${tag}: picking the card lights the tile (${b7?.id})`);
+        check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
+          `${tag}: no card stays lifted after the beat moves on`);
+        // 8. Place it: the score explanation; the display holds the score.
+        const tilePt = (await litPoints(page, b7.lit))[0]!;
+        await tap(page, tilePt);
+        await idle(page);
+        await page.waitForTimeout(300);
+        const b8 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the score moment explains the tile rank`);
+        check(/^\d+:\d+$/.test(await displayText(page)), `${tag}: the display shows the score (${await displayText(page)})`);
+        copy.push(await boxText(page));
+        // 9. Tap anywhere: the end-of-turn action is a line, never a bare word.
+        await page.waitForTimeout(750);
+        await tapAnywhere(page);
+        const b9 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b9 && b9.id === 'end' && b9.say === LESSON.tapThrow, `${tag}: the end action reads TAP » TO THROW`);
+        check((await displayText(page)) === LESSON.tapThrow, `${tag}: and the display says it`);
+        // 10. End the Grow: the Throw explanation, with the suggested card lifted.
+        const endPt = (await litPoints(page, b9.lit))[0]!;
+        await tap(page, endPt);
+        await page.waitForTimeout(250);
+        const b10 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b10 && b10.id === '1:idea:first-throw', `${tag}: the Throw explanation follows the Grow`);
+        check((await boxText(page)) === LESSON.throwLine, `${tag}: the Throw sentence is in the box`);
+        copy.push(await boxText(page));
+        check(b10.lit.t === 'card', `${tag}: the Throw explanation points at a card`);
+        // 11. Dismiss on the card, pick it, and throw it: the lifted card is fully usable.
+        await page.waitForTimeout(750);
+        const throwCardPt = (await litPoints(page, b10.lit))[0]!;
+        await tap(page, throwCardPt);
+        const b11 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b11 && b11.id.startsWith('throw:') && b11.say === LESSON.throwCard, `${tag}: then the throw action (${b11?.id})`);
+        await tap(page, throwCardPt);
+        const b12 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b12 && b12.lit.t === 'discard', `${tag}: the Throw pile is lit for the second tap`);
+        const pilePt = (await litPoints(page, b12.lit))[0]!;
+        await tap(page, pilePt);
+        await idle(page);
+        const st = await hook<any>(page, 'state');
+        check(st.history.some((e: any) => e.t === 'Discard' && e.player === 0), `${tag}: the lifted card was thrown and the turn ended`);
+        check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
+          `${tag}: nothing is left lifted after the throw`);
+
+        // The four required sentences all appeared in their own beat.
+        for (const [name, text] of [['win', LESSON.theirHomeLine], ['draw', LESSON.tapDrawLine], ['grow', LESSON.growLine], ['throw', LESSON.throwLine]] as const) {
+          check(copy.includes(text), `${tag}: the ${name} sentence appeared in the box`);
+        }
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-${w}x${h}.png` });
+        assert.deepEqual(errors, [], `${tag}: no page errors: ${errors.join(' | ')}`);
+      } finally {
+        await page.close();
+      }
     }
   }
   console.log('\n' + results.join('\n'));

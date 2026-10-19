@@ -325,84 +325,45 @@ html.futa04-lesson #hud-menu {
 }
 html.futa04-lesson #scrim { z-index: 50; }
 html.futa04-lesson .sheet { z-index: 51; }
+/* THE lesson info box: a caption floating over the felt. A soft translucent fill at .77 — no
+   border, no outline, no ring, no shadow, no buttons. Flat (no blur: a blur would repaint the
+   board underneath on every camera frame). pointer-events:none lets every tap through. */
 #lesson-plate {
   position: fixed;
   left: 0; top: 0;
   z-index: 42;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   margin: 0;
-  padding: 6px 12px 7px;
+  padding: 9px 14px 10px;
+  border: 0;
+  outline: 0;
   border-radius: 14px;
-  /* Was rgba(12,14,14,.94). 23% more transparent: .94 × .77 = .724. Flat fill, no blur —
-     a blur here would repaint the board underneath on every camera frame. */
-  background: rgba(14,13,12,.724);
+  background: rgba(14,13,12,.77);
   color: #f0e9dc;
-  border: 1px solid rgba(233,216,173,.28);
-  box-shadow: 0 10px 28px rgba(0,0,0,.16);
+  box-shadow: none;
   pointer-events: none;
   overflow: hidden;
-  transition: transform 160ms ease;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: transform 160ms ease, opacity 180ms ease;
 }
 #lesson-plate[hidden] { display: none !important; }
-#lesson-plate .lesson-head { position: relative; display: block; min-height: 0; }
-#lesson-plate .lesson-head[hidden] { display: none !important; }
-#lesson-plate .lesson-title {
+#lesson-plate .lesson-copy {
   margin: 0;
-  padding-inline: var(--lesson-key, 0px);
-  /* One line; the script only lowers --lesson-title-size when the webfont needs the room. */
-  font: 650 var(--lesson-title-size, 13px)/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  letter-spacing: .04em; text-align: center; white-space: nowrap;
-}
-#lesson-plate .lesson-why {
-  margin: 0;
-  /* At most two centred lines, whatever the copy; the plate never grows into the map for a third. */
+  /* One explanation, up to four centred lines on the smallest phone. The placement measures the
+     real height once per beat and never lets the box cover the lit target. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 4;
   overflow: hidden;
-  font: 400 12px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  color: rgba(240,233,220,.78);
+  font: 400 12.5px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  color: rgba(240,233,220,.9);
   letter-spacing: .012em;
   text-align: center;
   text-wrap: pretty;
 }
-#lesson-plate .lesson-why:empty { display: none; }
-#lesson-plate .lesson-mission {
-  margin: 1px 0 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: rgba(243,230,196,.58);
-  font: 500 10px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  white-space: nowrap;
-  letter-spacing: .16em; text-transform: uppercase; text-align: center;
-}
-#lesson-plate .lesson-mission:empty { display: none; }
-#lesson-plate [data-lesson-next] {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  transform: translateY(-50%);
-  pointer-events: auto;
-  height: 26px;
-  padding: 0 9px;
-  border-radius: 8px;
-  border: 1px solid rgba(233,216,173,.4);
-  background: rgba(233,216,173,.12);
-  color: #f0e9dc;
-  font: 400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
-  letter-spacing: .05em;
-  cursor: pointer;
-}
-#lesson-plate [data-lesson-next].glass-blink { animation: tutorial-next-blink 1.15s ease-in-out infinite; }
-.large-text #lesson-plate { --lesson-title-size: 16px; }
-.large-text #lesson-plate .lesson-why { font-size: 15px; line-height: 1.4; }
-.large-text #lesson-plate .lesson-mission { font-size: 12px; letter-spacing: .1em; }
+.large-text #lesson-plate .lesson-copy { font-size: 15px; line-height: 1.4; }
 .reduce-motion #lesson-plate { transition: none !important; }
-.reduce-motion #lesson-plate [data-lesson-next].glass-blink { animation: none !important; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.22); }

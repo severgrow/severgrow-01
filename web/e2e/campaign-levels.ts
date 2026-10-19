@@ -27,18 +27,10 @@ const check = (ok: boolean, what: string) => {
 };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow?.state?.() ?? null) as Promise<State | null>;
 const title = (p: Page) => p.evaluate(() => {
-  // Levels 1-10 keep their words in the cockpit plate (or, for a one-word hint, on the sign).
+  // Levels 1-10 keep their explanation in the one info box; the action lives on the display.
   const plate = document.getElementById('lesson-plate');
-  if (plate && !plate.hidden) {
-    const text = ['.lesson-title', '.lesson-why', '.lesson-mission']
-      .map((sel) => plate.querySelector(sel)?.textContent?.trim() ?? '')
-      .filter(Boolean)
-      .join(' ');
-    if (text) return text;
-  }
-  const panel = document.getElementById('futasaku-glass');
-  if (!panel || panel.hidden) return '';
-  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() || '';
+  if (plate && !plate.hidden) return plate.querySelector('.lesson-copy')?.textContent?.trim() ?? '';
+  return '';
 });
 const waitIdle = (p: Page) => p.waitForFunction(() => {
   const hook = (window as any).__severgrow;

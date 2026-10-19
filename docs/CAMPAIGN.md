@@ -54,7 +54,10 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
   - never takes your home's last open side;
   - always draws from the Draw pile, so the authored Throw pile stays as set.
   - Level 10 uses the existing level-1 bot.
-- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the instruction and reason) from the **live** game state, never from a step counter, so any legal alternative keeps working.
+- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the action on the display
+  and the explanation in the info box) from the **live** game state, never from a step counter, so
+  any legal alternative keeps working. `lesson-voice.ts` splits the two voices: the display says
+  what to do, the box explains why — never the same words in both.
 - `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
 
 **Guidance by level.**
@@ -62,8 +65,8 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | Levels | Guidance |
 |---|---|
 | 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
-| 4-9 | Every legal move is played; the light adapts. The one-word hint stays on screen. |
-| 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
+| 4-9 | Every legal move is played; the light adapts. The action line stays on the display. |
+| 10 | No guidance unless idle for 6 s; one LAST TURN beat. |
 | 11-30 | The existing levels, unchanged. No lesson. |
 
 - **No text on the map.** In every mode the old on-board "tap why" plate now goes to the LED; the map only gets a ring.
@@ -88,7 +91,10 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 1. One idea per level.
 2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
-3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+3. Words go in the `LESSON` section of `src/strings.ts`: the display carries an action line of 2-6
+   words (never a lone word), the info box one full sentence that fits four lines on the smallest
+   phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list
+   (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
 4. Bump the lesson's `version`.
 5. Update LESSON-SCRIPTS.md.
 6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.
@@ -104,11 +110,11 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
 - the glass window and focus layer live in `web/src/player/glass-surface.ts`;
-- the lesson's words (title, reason and its one action) live in the cockpit plate under the map
-  (`web/src/lessons/lesson-bar.ts` chooses them; `#lesson-plate` paints them), so the game's header
-  stays the menu and the logo, the map keeps full size and levels 1-10 show no glass window and no
-  `LEVEL n` kicker. A one-word hint with no sentence stays on the cockpit sign instead. Every other
-  screen keeps its own chrome.
+- the lesson's words live in two places only: the info box (`#lesson-plate`, explanations, one
+  sentence, no border, no buttons, `pointer-events:none`) and the cockpit display (the action).
+  `web/src/lessons/lesson-voice.ts` chooses which. The game's header stays the menu and the logo,
+  the map keeps full size, and levels 1-10 show no glass window, no `LEVEL n` kicker, no title and
+  no mission. Every other screen keeps its own chrome.
 
 ## The level schema
 

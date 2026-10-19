@@ -19,8 +19,7 @@ import {
   LESSON_VERSION, decodeMastery, displayTier, encodeMastery, freshMastery, recordAction, recordHello, tierOf,
 } from '../src/lessons/mastery.js';
 import { createIdleWatch } from '../src/lessons/idle.js';
-import { lessonBarFor } from '../src/lessons/lesson-bar.js';
-import type { LessonBarLabels } from '../src/lessons/lesson-bar.js';
+import { lessonVoiceFor } from '../src/lessons/lesson-voice.js';
 import { scriptedOpponentAction } from '../src/lessons/opponent.js';
 import { bloomProblem, tapAnswer } from '../src/lessons/answer.js';
 import type { Tap } from '../src/lessons/answer.js';
@@ -347,7 +346,7 @@ describe('win-moment proof (levels 6-10)', () => {
       for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
         if (s.actor === 0) {
           const beat = lessonBeat(lesson, s, { card: null, placing: null, throwPending: null, seen: new Set(['x']) });
-          if (beat?.title === LESSON.canWin) {
+          if (beat?.id === 'can-win') {
             const wins = legalActions(viewFor(s, 0)).some((a) => { const n = apply(s, a); return n.result?.reason === 'strangle' && n.result.winner === 0; });
             expect(wins, `L${lesson.level}`).toBe(true);
           }
@@ -467,12 +466,35 @@ describe('owner review 2026-10-19', () => {
     expect(beatsOf(lessonFor(10)!).some((b) => b.idleOnly)).toBe(true);
   });
 
-  it('the » step is spelled out until it has been taught once, then it is a single word', () => {
-    const untaught = beatsOf(lessonFor(1)!).filter((b) => b.id === 'end');
-    expect(untaught.length).toBeGreaterThan(0);
-    for (const b of untaught) expect([b.title, b.line]).toEqual([LESSON.done, LESSON.doneLine]);
-    const taught = beatsOf(lessonFor(1)!, { doneTaught: true }).filter((b) => b.id === 'end');
-    for (const b of taught) { expect(b.title).toBe(LESSON.throwWord); expect(b.line).toBeUndefined(); }
+  it('the end-of-turn step is always an action line, never a bare » or a lone word', () => {
+    const ends = beatsOf(lessonFor(1)!).filter((b) => b.id === 'end');
+    expect(ends.length).toBeGreaterThan(0);
+    for (const b of ends) { expect(b.say).toBe(LESSON.tapThrow); expect(b.line).toBeUndefined(); }
+  });
+
+  it('no beat ever says a single word, and no explanation lives on a fadable beat', () => {
+    const nWords = (t: string) => t.split(/\s+/).filter((w) => /[A-Za-z0-9]/.test(w)).length;
+    for (const l of LESSONS) {
+      for (const b of beatsOf(l)) {
+        if (b.say) expect(nWords(b.say), `L${l.level} ${b.id}: ${b.say}`).toBeGreaterThanOrEqual(2);
+        if (!b.explain && !b.status && !b.hello) expect(b.line, `L${l.level} ${b.id}`).toBeUndefined();
+      }
+    }
+  });
+
+  it('the Grow, Throw and first-draw explanations appear on their own beats, once', () => {
+    const l1 = lessonFor(1)!;
+    const beats = beatsOf(l1);
+    const line = (id: string) => beats.find((b) => b.id === id)?.line;
+    expect(line('1:idea:first-grow')).toBe(LESSON.growLine);
+    expect(line('1:idea:first-throw')).toBe(LESSON.throwLine);
+    expect(line('1:intro:first-draw')).toBe(LESSON.tapDrawLine);
+    // Each is an explanation: the box, not the display.
+    for (const id of ['1:idea:first-grow', '1:idea:first-throw', '1:intro:first-draw']) {
+      const b = beats.find((x) => x.id === id)!;
+      expect(b.explain, id).toBe(true);
+      expect(b.say, id).toBeUndefined();
+    }
   });
 
   it('a Bloom is two steps: tap Bloom to pick it, then tap the lit tiles', () => {
@@ -480,12 +502,12 @@ describe('owner review 2026-10-19', () => {
       const l = lessonFor(n)!;
       let s = lessonOpening(l);
       for (let i = 0; i < 40 && !(s.phase === 'ACT' && suggestMove(l, s)?.t === 'Bloom'); i++) s = apply(s, suggestMove(l, s)!);
-      const seen = new Set(LESSONS.flatMap((x) => [`${x.level}:intro:bloom-cards`]));
+      const seen = new Set(LESSONS.flatMap((x) => x.intro.map((w) => `${x.level}:intro:${w}`)));
       const pick = lessonBeat(l, s, { card: null, placing: null, throwPending: null, seen })!;
-      expect(pick.title, `L${n} pick`).toBe(LESSON.tapBloom);
+      expect(pick.say, `L${n} pick`).toBe(LESSON.tapBloom);
       expect(pick.lit.t).toBe('bloom');
       const place = lessonBeat(l, s, { card: null, placing: 'bloom', throwPending: null, seen })!;
-      expect(place.title, `L${n} place`).toBe(LESSON.bloomTiles);
+      expect(place.say, `L${n} place`).toBe(LESSON.tapTiles);
       expect(place.lit.t).toBe('hexes');
     }
   });
@@ -561,12 +583,13 @@ describe('per-action mastery fade', () => {
     expect(seen).toEqual(['spotlight', 'guide', 'whisper', 'silent']);
     // The window fades with it: a whisper is one word, silence is the calm neutral state.
     const beat = lessonBeat(lessonFor(1)!, apply(lessonOpening(lessonFor(1)!), { t: 'Draw', from: 'deck' }), {
-      card: null, placing: null, throwPending: null, seen: new Set(['1:intro:tree', '1:intro:their-home']),
+      card: null, placing: null, throwPending: null, seen: new Set(['1:intro:tree', '1:intro:their-home', '1:intro:first-draw', '1:idea:first-grow']),
     });
-    expect(presentedLessonBeat(beat, 'whisper')?.title).toBe('GROW');
+    expect(beat?.say).toBe(LESSON.chooseCard);
+    expect(presentedLessonBeat(beat, 'whisper')?.say).toBe(LESSON.chooseCard);
     expect(presentedLessonBeat(beat, 'whisper')?.line).toBeUndefined();
     expect(presentedLessonBeat(beat, 'silent')).toBeNull();
-    expect(presentedLessonBeat(beat, 'spotlight')?.title).toBe(beat?.title);
+    expect(presentedLessonBeat(beat, 'spotlight')?.say).toBe(beat?.say);
   });
 
   it('L2-L9 spend at most one new-idea spotlight; L1 may show its three', () => {
@@ -636,7 +659,7 @@ describe('per-action mastery fade', () => {
     const bloomState = apply(lessonOpening(l10), { t: 'Draw', from: 'deck' });
     const bloom = lessonBeat(l10, bloomState, { ...baseCtx, powerSeen: seen() });
     expect(bloom?.hello).toBe('bloom');
-    expect(bloom?.title).toBe('BLOOM');
+    expect(bloom?.say).toBe(LESSON.bloomHello);
     // A Bomb becomes legal once an enemy tile touches our network. With Bloom's hello remembered,
     // the Bomb's own hello fires (once).
     const bombReady = {
@@ -678,45 +701,37 @@ describe('the first turn is the only locked one', () => {
   });
 });
 
-describe('the lesson words (title + one action for the cockpit plate)', () => {
-  const labels: LessonBarLabels = { next: 'NEXT', showMe: 'Show me', restart: 'RESTART LEVEL' };
-  const base = { stageName: null, stuck: false, beat: null, answer: null, showMe: false, labels };
+describe('the lesson’s two voices (display + info box)', () => {
+  const base = { stuck: false, answer: null as string | null, restartLine: LESSON.restartLine };
 
-  it('the stage intro shows the level name and no action', () => {
-    const bar = lessonBarFor({ ...base, stageName: 'First Seed' });
-    expect(bar.title).toBe('FIRST SEED');
-    expect(bar.next).toEqual({ show: false, label: '', blink: false });
+  it('an explanation goes in the box; the display keeps the score', () => {
+    expect(lessonVoiceFor({ ...base, beat: { line: 'This is your home.' } }))
+      .toEqual({ box: 'This is your home.', display: null });
   });
 
-  it('an explanation offers NEXT (blinking)', () => {
-    const bar = lessonBarFor({ ...base, beat: { title: 'THIS IS YOUR HOME', explain: true } });
-    expect(bar.title).toBe('THIS IS YOUR HOME');
-    expect(bar.next).toEqual({ show: true, label: 'NEXT', blink: true });
+  it('an action goes on the display; the box stays empty', () => {
+    expect(lessonVoiceFor({ ...base, beat: { say: LESSON.tapDraw } }))
+      .toEqual({ box: null, display: LESSON.tapDraw });
   });
 
-  it('a move shows no action until the safety net offers Show me', () => {
-    const move = { title: 'GROW' };
-    expect(lessonBarFor({ ...base, beat: move }).next.show).toBe(false);
-    expect(lessonBarFor({ ...base, beat: move, showMe: true }).next)
-      .toEqual({ show: true, label: 'Show me', blink: false });
+  it('a notification brings its own explanation, never the same words twice', () => {
+    const voice = lessonVoiceFor({ ...base, beat: { say: LESSON.lastTurn, line: LESSON.lastTurnLine } });
+    expect(voice).toEqual({ box: LESSON.lastTurnLine, display: LESSON.lastTurn });
+    expect(voice.box).not.toBe(voice.display);
   });
 
-  it('a wrong tap owns the display for its moment, replacing the title', () => {
-    const bar = lessonBarFor({ ...base, beat: { title: 'GROW' }, answer: 'TOO WEAK: 2 VS 4' });
-    expect(bar.title).toBe('TOO WEAK: 2 VS 4');
-    expect(bar.next.show).toBe(false);
+  it('a wrong tap owns the display and never the box', () => {
+    expect(lessonVoiceFor({ ...base, beat: { say: LESSON.tapDraw }, answer: 'TOO WEAK: 2 VS 4' }))
+      .toEqual({ box: null, display: 'TOO WEAK: 2 VS 4' });
   });
 
-  it('a lesson that cannot finish offers only RESTART LEVEL', () => {
-    const bar = lessonBarFor({ ...base, stuck: true, beat: { title: 'RESTART LEVEL' } });
-    expect(bar.title).toBeNull();
-    expect(bar.next).toEqual({ show: true, label: 'RESTART LEVEL', blink: false });
+  it('a lesson that cannot finish explains the way out — no button, no display label', () => {
+    expect(lessonVoiceFor({ ...base, stuck: true, beat: { line: 'x' } }))
+      .toEqual({ box: LESSON.restartLine, display: null });
   });
 
-  it('a silent step shows nothing at all (no empty plate, no stray NEXT)', () => {
-    const bar = lessonBarFor(base);
-    expect(bar.title).toBeNull();
-    expect(bar.next.show).toBe(false);
+  it('a silent step says nothing at all (no empty box, no display text)', () => {
+    expect(lessonVoiceFor({ ...base, beat: null })).toEqual({ box: null, display: null });
   });
 });
 
