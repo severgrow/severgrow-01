@@ -53,6 +53,15 @@ export type TutorialFocusOptions = {
    * guide soft dim + pointer, whisper a pulse only, silent nothing.
    */
   tier?: 'spotlight' | 'guide' | 'whisper' | 'silent';
+  /**
+   * Lessons show their title and NEXT in the game's own top row (#lesson-hud), so the window has
+   * no head at all: it starts directly under that bar and keeps only the copy.
+   */
+  headless?: boolean;
+  /** Keep the focus layer and the reserved band, but show no window (a WHISPER step). */
+  panelHidden?: boolean;
+  /** Show copy with no lit target at all: no dim, no pointer (the level's mission line). */
+  noLight?: boolean;
 };
 
 /** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
@@ -203,12 +212,17 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
 /* The level's mission: a quiet pill, not another instruction. */
 #futasaku-glass[data-mode='tutorial'] .glass-mission {
-  align-self:center; margin:0; padding:3px 10px 2px; border:1px solid rgba(233,216,173,.18);
+  align-self:center; margin:0 0 6px; padding:3px 10px 2px; border:1px solid rgba(233,216,173,.18);
   border-radius:999px; background:rgba(233,216,173,.05); color:rgba(243,230,196,.76);
   font:600 10px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
   letter-spacing:.12em; text-transform:uppercase; text-align:center;
 }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-mission { font-size:12px; letter-spacing:.09em; }
+/* The lesson's title and NEXT are in the top row, so the window carries copy only and starts
+   flush under that row: no head, no kicker, no padding above the first line. */
+#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-tutorial { padding:4px 10px 8px; gap:0; }
+#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-why { min-height:2.9em; }
+#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-mission:last-child { margin-bottom:0; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
    (the Match Intel reference already goes 13px → 15px). The head buttons keep their 11px so the
    longest CTA ("DRAW 1 CARD") can never ellipsise inside a 360px glass. */
@@ -708,6 +722,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   let lessonFocus = false;
   /** The current teaching tier; WHISPER has a pulse but no dim and no pointer. */
   let focusTier: 'spotlight' | 'guide' | 'whisper' | 'silent' = 'spotlight';
+  /** Copy with no target at all: the window shows, the dim never appears. */
+  let lightOff = false;
   let raf = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
@@ -795,59 +811,59 @@ export const mountGlassSurface = (onClose: () => void) => {
     };
   };
 
+  /** Shared chrome→board margin on both ends of the leftover map band. */
+  const TUTORIAL_BAND_GAP = 4;
+  let lastBandKey = '';
+
+  /** The game's top row: the lesson bar lives inside it. */
+  const hudRect = () => document.querySelector('#game > .hud')?.getBoundingClientRect();
+
   const placeTutorialPanel = (_tracked: Tracked | null) => {
     // Keep the glass docked (never follows the moving highlight).
     void _tracked;
     panelSide = 'top';
     styleIfChanged(panel, 'height', 'auto');
     styleIfChanged(panel, 'bottom', '');
+    // A hidden panel still needs the focus loop, but not a position or a reserved band.
+    if (panel.hidden) return;
     const side = document.documentElement.dataset.layout === 'side';
     const safe = safeInsets();
+    // The window starts flush under the top row that now carries the title and NEXT.
+    const hud = hudRect();
+    const underBar = Math.round((hud?.bottom ?? safe.top) + TUTORIAL_BAND_GAP);
     if (side) {
-      // Desktop: right column — sides with the cockpit; top near the map but clear of the logo.
+      // Desktop: right column — sides with the cockpit; flush under the top row.
       const cockpit = document.getElementById('futa04-box')?.getBoundingClientRect();
-      const board = document.getElementById('board-wrap')?.getBoundingClientRect();
       const dock = document.getElementById('dock')?.getBoundingClientRect();
-      const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
       const col = cockpit ?? dock;
-      if (col && board) {
+      if (col) {
         const width = Math.max(200, Math.round(col.width));
         const left = Math.round(col.left);
-        // Prefer map-top alignment, but always sit a small gap under the Futa logo when it
-        // shares the right column (never cover chrome).
-        const logoClear = logo && logo.width > 0 ? Math.ceil(logo.bottom + 8) : 0;
-        const top = Math.max(Math.round(board.top), logoClear);
         styleIfChanged(panel, 'width', `${width}px`);
         styleIfChanged(panel, 'max-width', `${width}px`);
         styleIfChanged(panel, 'left', `${left}px`);
-        styleIfChanged(panel, 'top', `${top}px`);
+        styleIfChanged(panel, 'top', `${underBar}px`);
         // Override stylesheet `translateX(-50%)` (used for phone centering).
         styleIfChanged(panel, 'transform', 'none');
         clearTutorialPads();
         return;
       }
     }
-    // Phone / stack: the menu and logo own the top chrome, including the
-    // Home Screen safe area. Measure their live bounds rather than guessing a
-    // device-specific notch offset.
+    // Phone / stack: the window shares the board's left and right edges, so the bar, the window
+    // and the map read as one column (owner: "150IQ alignment"). The board already owns the
+    // gutters, so measuring it keeps them identical at every width.
+    const wrap = document.getElementById('board-wrap')?.getBoundingClientRect();
     const sidePad = 16 + safe.left + safe.right;
-    const width = Math.min(420, Math.max(200, innerWidth - sidePad));
-    const menu = document.getElementById('hud-menu')?.getBoundingClientRect();
-    const logo = document.getElementById('hud-brand')?.getBoundingClientRect();
-    const chromeBottom = Math.max(menu?.bottom ?? 0, logo?.bottom ?? 0);
-    const top = Math.max(Math.round(safe.top), Math.ceil(chromeBottom + 8));
+    const left = wrap ? Math.round(wrap.left) : Math.round(8 + safe.left);
+    const width = wrap ? Math.round(wrap.width) : Math.min(460, Math.max(200, innerWidth - sidePad));
     styleIfChanged(panel, 'width', `${width}px`);
     styleIfChanged(panel, 'max-width', `${width}px`);
-    styleIfChanged(panel, 'left', '50%');
-    styleIfChanged(panel, 'transform', 'translateX(-50%)');
-    styleIfChanged(panel, 'top', `${top}px`);
+    styleIfChanged(panel, 'left', `${left}px`);
+    styleIfChanged(panel, 'transform', 'none');
+    styleIfChanged(panel, 'top', `${underBar}px`);
     // After layout: equal gaps glass→board and board→cockpit/hand (centre map in the band).
     requestAnimationFrame(() => balanceTutorialBoardBand());
   };
-
-  /** Shared chrome→board margin on both ends of the leftover map band. */
-  const TUTORIAL_BAND_GAP = 4;
-  let lastBandKey = '';
 
   const clearTutorialPads = () => {
     lastBandKey = '';
@@ -862,7 +878,7 @@ export const mountGlassSurface = (onClose: () => void) => {
    * Camera centres a short map while `futa04-tutorial` is on so hex gaps match.
    */
   const balanceTutorialBoardBand = () => {
-    if (mode !== 'tutorial' || document.documentElement.dataset.layout === 'side') return;
+    if (mode !== 'tutorial' || panel.hidden || document.documentElement.dataset.layout === 'side') return;
     const wrapEl = document.getElementById('board-wrap');
     const dockEl = document.getElementById('dock');
     const wrap = wrapEl?.getBoundingClientRect();
@@ -1115,9 +1131,10 @@ export const mountGlassSurface = (onClose: () => void) => {
   const place = () => {
     if (!mode) return;
     if (mode === 'intel' || mode === 'guidance') return placeIntel();
+    if (panel.hidden) { if (!raf && !lightOff) startLoop(); return; }
     placeTutorialPanel(smooth);
     paintTutorialLed();
-    if (!raf) startLoop();
+    if (!raf && !lightOff) startLoop();
   };
 
   const observer = new ResizeObserver(place); observer.observe(dock);
@@ -1136,6 +1153,16 @@ export const mountGlassSurface = (onClose: () => void) => {
     focusScene = null;
     setBloomDemo(false); clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
+  };
+
+  /**
+   * Take the window (and its light) away. `keepBand` keeps the space it reserved, so a step that
+   * goes quiet does not make the map jump under the player's finger.
+   */
+  const hidePanel = (keepBand = false) => {
+    mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false;
+    panel.hidden = true; showFocus(false); setBloomDemo(false);
+    if (!keepBand) clearTutorialReserve();
   };
 
   const playGlassStepSettle = () => {
@@ -1188,13 +1215,13 @@ export const mountGlassSurface = (onClose: () => void) => {
       + `<span class="glass-led-sr">${safe(line)}</span>`
       + `<span class="glass-led-window" aria-hidden="true"><canvas class="glass-led-cells"></canvas></span>`
       + `</p>`;
-    const headHtml = `<div class="glass-head" role="group" aria-label="Tutorial step">`
+    const headHtml = options.headless ? '' : `<div class="glass-head" role="group" aria-label="Tutorial step">`
       + `<div class="glass-head-slot glass-head-prev">${prevBtn}</div>`
       + `<div class="glass-head-slot glass-head-title">${titleHtml}</div>`
       + `<div class="glass-head-slot glass-head-next">${nextBtn}</div>`
       + `</div>`;
     const shell = panel.querySelector('.glass-tutorial');
-    const canPatch = !!opts.keepShell && !!shell && ledTitle === line
+    const canPatch = !options.headless && !!opts.keepShell && !!shell && ledTitle === line
       && !!panel.querySelector('.glass-led-cells') && !!panel.querySelector('.glass-head');
     if (canPatch && shell) {
       // Same lesson shell: only swap side buttons / why / icons so the LED does not flash.
@@ -1215,7 +1242,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     ledTitle = line;
     panel.innerHTML = `<div class="glass-tutorial">${headHtml}${missionHtml}${whyHtml}${icons}</div>`;
     bindTutorialButtons();
-    paintTutorialLed();
+    if (!options.headless) paintTutorialLed();
   };
 
   const tutorial = (text: string, chapter: number, selectors: readonly string[], options: TutorialFocusOptions = {}) => {
@@ -1224,7 +1251,10 @@ export const mountGlassSurface = (onClose: () => void) => {
     reduceMotion = !!options.reduceMotion || document.documentElement.classList.contains('reduce-motion');
     idleHard = !!options.idleHard;
     const nextSelector = selectors.join(', ');
-    targetSelector = nextSelector;
+    // Copy with no target (a mission line): the window shows, but nothing is dimmed or pointed at.
+    lightOff = !!options.noLight;
+    if (lightOff) { targetSelector = ''; stopLoop(); smooth = null; }
+    else targetSelector = nextSelector;
     // The Tutorial's focus is always a soft pill. The levels keep the target's own outline.
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
       : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
@@ -1235,31 +1265,36 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.dataset.mode = 'tutorial';
     if (options.lesson) panel.dataset.lesson = '1';
     else delete panel.dataset.lesson;
+    if (options.headless) panel.dataset.headless = '1';
+    else delete panel.dataset.headless;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
-    panel.hidden = false;
-    showFocus(true);
+    // Headless: the lesson's title is in the top row; the focus layer still belongs to the glass.
+    panel.hidden = !!options.panelHidden;
+    showFocus(!lightOff);
     setBloomDemo(!!options.bloomDemo);
-    panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
+    panel.setAttribute('aria-label', options.headless ? 'Lesson guidance' : options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
     panel.setAttribute('role', 'status');
-    panel.setAttribute('aria-live', 'polite');
+    // With the title in the top row, that row is the one live region: the window must not repeat it.
+    if (options.headless) panel.setAttribute('aria-live', 'off');
+    else panel.setAttribute('aria-live', 'polite');
     if (options.kicker) panel.dataset.kicker = options.kicker;
     else delete panel.dataset.kicker;
     const stepKey = options.stepKey ?? `${chapter}:${text}`;
     const stepped = stepKey !== lastStepKey;
     lastStepKey = stepKey;
     // Same step (CTA arm / status clear): patch actions only — avoids LED redraw flash.
-    renderTutorialWindow(text, chapter, options, { keepShell: !stepped });
+    if (!options.panelHidden) renderTutorialWindow(text, chapter, options, { keepShell: !stepped });
     if (stepped) {
       // Soft content settle — keep the highlight living so it can glide to the next target.
       panel.dataset.fade = 'out';
       playGlassStepSettle();
       requestAnimationFrame(() => {
         panel.dataset.fade = 'in';
-        startLoop();
+        if (!lightOff) startLoop();
         place();
       });
     } else {
-      startLoop();
+      if (!lightOff) startLoop();
       place();
     }
   };
@@ -1358,11 +1393,12 @@ export const mountGlassSurface = (onClose: () => void) => {
     guidance,
     close,
     hide: () => {
-      mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
+      hidePanel(false);
+      moveCursor = -1; lastMoveLen = -1;
       intelTab = 'intel'; howToHtml = '';
-      focusScene = null;
-      setBloomDemo(false); clearTutorialReserve(); panel.hidden = true; showFocus(false);
     },
+    /** Quiet step: no window, no light, but the map keeps the space it had. */
+    hidePanel,
     nudge: () => {
       if (reduceMotion) return;
       focus.classList.remove('nudge');

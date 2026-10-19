@@ -101,6 +101,7 @@ import {
 } from './lessons/mastery.js';
 import type { ActionKind, LessonTier, Mastery, PowerKind } from './lessons/mastery.js';
 import { createIdleWatch } from './lessons/idle.js';
+import { lessonBarFor, mountLessonBar } from './lessons/lesson-bar.js';
 import { SMALL_HOMES } from './lessons/authored.js';
 import type { Loaded } from './logic/persist.js';
 // Campaign mode (the primary offline experience). Progress and the campaign match save are separate
@@ -1147,6 +1148,7 @@ const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
   epoch++;
   resetLessonRuntime();
+  lessonBar.hide();
   handSettled = true;
   tutorialTransitionPending = false;
   tutorialDisplayKey = '';
@@ -2593,6 +2595,9 @@ let handSettled = true;
 let lessonExplainAt = 0;
 let lessonHoldingScore = false;
 let lessonExplainId = '';
+/** The lesson's title + ONE action live in the game's top row (levels 1-10 only). */
+const lessonBar = mountLessonBar();
+const LESSON_BAR_LABELS = Object.freeze({ next: LESSON.next, showMe: LESSON.showMe, restart: LESSON.restart });
 const lessonIdleWatch = createIdleWatch((stage) => {
   lessonIdleStage = stage;
   lessonIdle = stage > 0;
@@ -4185,37 +4190,38 @@ function renderLessonGuide(): void {
   if (!glassSurface) return;
   if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
+    lessonBar.hide();
     smartCockpit?.quiet?.(false);
     if (lessonShownKey) {
       lessonShownKey = '';
-      hideOnboardingWindow();
+      glassSurface.hide();
     }
     return;
   }
-  // The stage intro comes first: level number + name, ~1.2 s, a tap skips it.
+  // The stage intro comes first: level number + name, ~1.2 s, a tap skips it. The name is the top
+  // row's now, so the window stays out of the way entirely.
   if (lessonStageActive()) {
     const stageKey = `stage:${level}`;
-    if (lessonShownKey === stageKey) return;
-    lessonShownKey = stageKey;
     lessonBeatNow = null;
     smartCockpit?.quiet?.(false);
-    glassSurface.tutorial((campaignLevel?.name ?? lesson.finish.learned).toUpperCase(), 0, [], {
-      shape: 'none',
-      lesson: true,
-      tier: 'guide',
-      stepKey: stageKey,
-      kicker: CAMPAIGN.levelLabel(level),
-      reduceMotion: settings.reduceMotion,
-      buttons: { previous: false, next: false },
-    });
+    lessonBar.onNext(() => {});
+    lessonBar.paint(lessonBarFor({
+      stageName: campaignLevel?.name ?? lesson.finish.learned, stuck: false,
+      beat: null, answer: null, showMe: false, line: null, labels: LESSON_BAR_LABELS,
+    }));
+    if (lessonShownKey !== stageKey) {
+      lessonShownKey = stageKey;
+      glassSurface.hide();
+    }
     return;
   }
   // The first light waits for the opening hand to stop moving — never a fixed delay.
   if (!handSettled) {
     lessonBeatNow = null;
+    lessonBar.hide();
     if (lessonShownKey) {
       lessonShownKey = '';
-      hideOnboardingWindow();
+      glassSurface.hide();
     }
     return;
   }
@@ -4267,65 +4273,63 @@ function renderLessonGuide(): void {
   const holdScore = shown?.lit.t === 'score';
   if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
   const mission = lessonMission(lesson, st);
+  const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
+  const led = shown?.led && shown.led !== shown.title ? shown.led : null;
+  const title = led ?? shown?.title;
+  const sentence = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
+  const why = stuck ? LESSON.restartLine
+    : led && shown ? [`${sentence(shown.title)}.`, shown.line].filter(Boolean).join(' ')
+    : shown?.line;
+  const showMe = lessonIdle && !!shown && !shown.explain && !shown.hello && lit.selectors.length > 0;
+  // The top row owns the title, the answer and the ONE action. A wrong tap's answer lives there
+  // too, so answering never resizes the map under the player's finger.
+  lessonBar.onNext(() => {
+    if (stuck) return startCampaignLevel(campaignLevel!);
+    if (shown?.explain) return lessonMarkSeen(shown.id);
+    // Show me: the light pulses and the pointer taps harder (nothing is played for you).
+    glassSurface?.nudge();
+  });
+  lessonBar.paint(lessonBarFor({
+    stageName: null, stuck, beat: shown, answer: lessonAnswerText || null, showMe,
+    line: why ?? null, labels: LESSON_BAR_LABELS,
+  }));
+  const panelHidden = !mission && !why;
   const key = JSON.stringify([
     level, shown?.id, shown?.title, shown?.line, shown?.lit, lessonAnswerText, lessonIdle, tier,
-    lessonHelloNow, mission, mine, settings.reduceMotion, handSettled,
+    lessonHelloNow, mission, panelHidden, mine, settings.reduceMotion, handSettled,
   ]);
   if (key === lessonShownKey) return;
   lessonShownKey = key;
-  if (!shown && !lessonAnswerText) {
-    // Before the first move the mission still speaks, even at SILENT: it is the level's aim,
-    // not an instruction. The light stays off.
-    if (mission) {
-      glassSurface.tutorial(mission.toUpperCase(), 0, [], {
-        shape: 'none', lesson: true, tier: 'silent', stepKey: `mission:${level}`,
-        kicker: CAMPAIGN.levelLabel(level), reduceMotion: settings.reduceMotion,
-        buttons: { previous: false, next: false },
-      });
-      lessonBeatNow = null;
-      return;
-    }
-    hideOnboardingWindow();
+  if (!shown && !mission) {
+    // A truly quiet step: no window and no light, but the map keeps the band it reserved.
+    lessonBeatNow = null;
+    glassSurface.hidePanel(true);
     return;
   }
-  const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
-  const led = shown?.led && shown.led !== shown.title ? shown.led : null;
-  const title = led ?? shown?.title ?? LESSON.tapLit;
-  const sentence = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
-  const why = led && shown ? [`${sentence(shown.title)}.`, shown.line].filter(Boolean).join(' ') : shown?.line;
-  const showMe = lessonIdle && !!shown && !shown.explain && !shown.hello && lit.selectors.length > 0;
-  glassSurface.tutorial(title, 0, lit.selectors, {
+  glassSurface.tutorial(title ?? '', 0, lit.selectors, {
     shape: lit.shape,
     lesson: true,
+    headless: true,
     tier,
+    // No window body to show (a one-word step): keep the light, drop the panel.
+    panelHidden,
+    noLight: lit.selectors.length === 0,
     stepKey: `lesson:${level}:${shown?.id ?? 'answer'}`,
     ...(why ? { why } : {}),
     ...(mission ? { mission } : {}),
-    ...(lessonAnswerText ? { status: lessonAnswerText } : {}),
-    kicker: CAMPAIGN.levelLabel(level),
     reduceMotion: settings.reduceMotion,
     idleHard: lessonIdle,
     arrow: lit.selectors.length > 0,
-    buttons: {
-      previous: false,
-      next: !!shown && (shown.explain || stuck || showMe),
-      nextLabel: stuck ? LESSON.restart : shown?.explain ? LESSON.next : LESSON.showMe,
-      nextBlink: !!shown?.explain,
-    },
-    handlers: {
-      onNext: () => {
-        if (stuck) return startCampaignLevel(campaignLevel!);
-        if (shown?.explain) return lessonMarkSeen(shown.id);
-        // Show me: the light pulses and the pointer taps harder (nothing is played for you).
-        glassSurface?.nudge();
-      },
-    },
+    // The top row carries NEXT; the window has no buttons in a lesson any more.
+    buttons: { previous: false, next: false },
   });
 }
 
 let onboardKey = '';
 function renderOnboardingGuide(v: View) {
   if (lessonActive()) return renderLessonGuide();
+  // Every other screen keeps its own chrome: the lesson bar never shows outside a lesson.
+  lessonBar.hide();
   smartCockpit?.quiet?.(false);
   delete document.documentElement.dataset.lesson;
   syncLessonPile(null);
