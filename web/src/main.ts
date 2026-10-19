@@ -4253,7 +4253,7 @@ function renderLessonGuide(): void {
       mastery: lessonMastery, kind, level: lesson.level, newActions: lesson.newActions,
       safety: lessonIdleStage, escalation: lessonEscalated,
     })
-    : 'spotlight';
+    : 'silent';
   const shown = presentedLessonBeat(beat, tier);
   lessonBeatNow = shown;
   lessonTierShown = tier;
