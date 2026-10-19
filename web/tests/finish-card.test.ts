@@ -129,8 +129,14 @@ describe('after the tutorial, the player lands in a level (never back at a menu)
 
   it('the campaign entry point is the ONE way to start a level', () => {
     const entry = mainSource.slice(mainSource.indexOf('function enterCampaign()'), mainSource.indexOf('function completeTutorial()'));
-    expect(entry).toMatch(/const resume = campaignResume\(\);\s*\n\s*if \(resume\) return continueCampaignMatch\(resume\)/);
-    expect(entry).toMatch(/startCampaignLevel\(currentLevel\(campaignProgress\)\)/);
+    // ONE decision drives both the menu label and this press, so they cannot disagree. That is the
+    // fix for the old mismatch where the label said LEVEL 70 and the press resumed level 31.
+    expect(entry).toMatch(/const entry = campaignEntry\(campaignProgress, campaignResume\(\)\?\.level \?\? null\)/);
+    expect(entry).toMatch(/startCampaignLevel\(entry\.level\)/);
+    expect(entry).toMatch(/return askCampaignStart\(entry\.next, entry\.saved\)/);
+    // No path may start a level straight from progress any more, and none may silently resume a save.
+    expect(entry).not.toMatch(/startCampaignLevel\(currentLevel\(/);
+    expect(entry).not.toMatch(/if \(resume\) return continueCampaignMatch\(resume\)/);
     // The campaign screen's own leading button goes through it too: no second path.
     expect(mainSource).toContain("bind('campaign-continue', () => enterCampaign())");
   });

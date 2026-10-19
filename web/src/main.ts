@@ -104,6 +104,7 @@ import type { CampaignLevel, CampaignProgress } from '../../src/campaign/index.j
 import {
   CAMPAIGN_SAVE_KEY,
   LAST_MODE_KEY,
+  campaignEntry,
   decodeCampaignSave,
   encodeCampaignSave,
   offlineSaveKey,
@@ -665,9 +666,18 @@ function layoutMenu(canContinue: boolean) {
     // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
     const cmp = $('menu-campaign');
     cmp.hidden = false;
-    const current = currentLevel(campaignProgress).number;
-    cmp.textContent = MENU.level(current);
-    cmp.setAttribute('aria-label', MENU.levelAria(current));
+    // The entry and the press now come from ONE decision (campaignEntry), so the label can no longer
+    // disagree with what opens. With every built level complete there is no next level to name, so
+    // the entry opens the chapter list instead of claiming LEVEL <n>.
+    const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
+    if (entry.kind === 'list') {
+      cmp.textContent = MENU.levels;
+      cmp.setAttribute('aria-label', MENU.levelsAria);
+    } else {
+      const current = entry.kind === 'ask' ? entry.next.number : entry.level.number;
+      cmp.textContent = MENU.level(current);
+      cmp.setAttribute('aria-label', MENU.levelAria(current));
+    }
     $('menu-online').hidden = !online;
     setLead($('menu-online'), online);
     setLead(cmp, !online);
@@ -1680,9 +1690,33 @@ function startTutorialFromMenu() {
  * to start a level.
  */
 function enterCampaign() {
-  const resume = campaignResume();
-  if (resume) return continueCampaignMatch(resume);
-  startCampaignLevel(currentLevel(campaignProgress));
+  const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
+  // No level is left: the chapter list is the only honest destination, and it carries the resume
+  // hint and the finished-campaign state the menu cannot show in one line.
+  if (entry.kind === 'list') return showScreen('campaign');
+  if (entry.kind === 'start') return startCampaignLevel(entry.level);
+  if (entry.kind === 'resume') {
+    const resume = campaignResume();
+    return resume ? continueCampaignMatch(resume) : startCampaignLevel(entry.level);
+  }
+  // The one disagreement possible: a saved match on a different level. Ask, rather than silently
+  // resuming something the label did not name.
+  return askCampaignStart(entry.next, entry.saved);
+}
+
+/** The saved match the ask sheet is currently about, or null when it is closed. */
+let campaignAsk: { next: CampaignLevel; saved: CampaignLevel } | null = null;
+
+function askCampaignStart(next: CampaignLevel, saved: CampaignLevel) {
+  campaignAsk = { next, saved };
+  $('csa-title').textContent = CAMPAIGN.askTitle;
+  $('csa-body').textContent = CAMPAIGN.askBody(saved.number, next.number);
+  $('csa-resume').textContent = CAMPAIGN.askResume(saved.number);
+  $('csa-start').textContent = CAMPAIGN.askStart(next.number);
+  sheet('sheet-campaign-start');
+  // `sheet()` focuses the close control when one exists; here the point of the sheet is the choice,
+  // so Resume leads with focus as well as with the primary weight.
+  $('csa-resume').focus();
 }
 
 function completeTutorial() {
@@ -6167,6 +6201,20 @@ bind('levels-back', () => showScreen('menu'));
 bind('menu-campaign', () => enterCampaign());
 bind('campaign-back', () => showScreen('menu'));
 bind('campaign-continue', () => enterCampaign());
+// The ask sheet: only reachable when the saved match is a different level from the next one, so
+// both answers are explicit and one tap each. Resume wins the lead: the match exists already.
+bind('csa-resume', () => {
+  campaignAsk = null;
+  sheet(null);
+  const resume = campaignResume();
+  if (resume) continueCampaignMatch(resume);
+});
+bind('csa-start', () => {
+  const ask = campaignAsk;
+  campaignAsk = null;
+  sheet(null);
+  if (ask) startCampaignLevel(ask.next);
+});
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
 document.addEventListener(

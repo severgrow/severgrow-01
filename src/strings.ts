@@ -549,6 +549,11 @@ export const MENU = Object.freeze({
   training: 'Training',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */
   level: (number: number): string => `LEVEL ${number}`,
+  /** The PLAY entry once every built level is complete: there is no next level to name, so it opens
+   *  the chapter list instead. This is the ONLY state where the entry is not `LEVEL <n>`; while any
+   *  level is unfinished the entry stays the single way in (owner, 2026-10-16). */
+  levels: 'LEVELS',
+  levelsAria: 'Levels. Choose a completed level to replay.',
   /** the training screen's heading (the tier picker keeps its legacy heading off the product menu) */
   trainingTitle: 'Training',
 });
@@ -981,6 +986,12 @@ export const CAMPAIGN = Object.freeze({
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
   play: 'Continue',
+  /** the question shown only when a saved match is NOT the next unfinished level */
+  askTitle: 'Your campaign match is unfinished.',
+  askBody: (saved: number, next: number): string =>
+    `Level ${saved} is still in progress. Start level ${next} instead?`,
+  askResume: (saved: number): string => `Resume level ${saved}`,
+  askStart: (next: number): string => `Start level ${next}`,
   /** the state words on a level tile (a completed tile is tapped to replay it) */
   completed: 'Completed',
   current: 'You are here',

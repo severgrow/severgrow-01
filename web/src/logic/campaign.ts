@@ -6,8 +6,8 @@
 // generation lives on the server and the online client never starts an offline match, so a campaign
 // config cannot reach an online board — `web/tests/campaign-seam.test.ts` pins both halves.
 import type { RulesConfig } from '../../../src/engine/index.js';
-import type { CampaignLevel } from '../../../src/campaign/index.js';
-import { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY } from '../../../src/campaign/index.js';
+import type { CampaignLevel, CampaignProgress } from '../../../src/campaign/index.js';
+import { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY, CAMPAIGN_LEVELS, currentLevel, isCompleted } from '../../../src/campaign/index.js';
 import { SAVE_KEY } from './persist.js';
 
 export { CAMPAIGN_SAVE_KEY, LAST_MODE_KEY };
@@ -56,3 +56,36 @@ export const decodeCampaignSave = (raw: string | null): CampaignSave | null => {
     return null;
   }
 };
+
+/**
+ * WHAT THE CAMPAIGN ENTRY DOES, decided from data rather than from whichever state the page happens
+ * to be in. The bug this replaces: the menu label came from progress while the press preferred a
+ * saved match, so with an old replay left unfinished the entry said `LEVEL 70` and opened level 31.
+ *
+ *   - `list`   — every built level is complete. The chapter list is the only place left to go, so the
+ *                entry stops claiming a level number at all.
+ *   - `start`  — nothing saved: open the next unfinished level.
+ *   - `resume` — the saved match IS that level: resume it. No question, because there is no conflict.
+ *   - `ask`    — the saved match is a DIFFERENT level: the only case where the player has to choose.
+ *                Asking here and nowhere else keeps a normal press to one tap.
+ */
+export type CampaignEntry =
+  | { kind: 'list' }
+  | { kind: 'start'; level: CampaignLevel }
+  | { kind: 'resume'; level: CampaignLevel }
+  | { kind: 'ask'; next: CampaignLevel; saved: CampaignLevel };
+
+export const campaignEntry = (
+  progress: CampaignProgress,
+  savedLevel: CampaignLevel | null,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): CampaignEntry => {
+  const next = currentLevel(progress, levels);
+  // `currentLevel` returns the first unlocked level that is not complete, else the furthest unlocked.
+  // If even that is complete, every built level is done.
+  if (isCompleted(progress, next.id)) return { kind: 'list' };
+  if (!savedLevel) return { kind: 'start', level: next };
+  if (savedLevel.id === next.id) return { kind: 'resume', level: next };
+  return { kind: 'ask', next, saved: savedLevel };
+};
+

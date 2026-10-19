@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { MENU } from '../../src/strings.js';
+import { CAMPAIGN, MENU } from '../../src/strings.js';
 import { DIFFICULTIES } from '../src/logic/difficulty.js';
 import { FEATURES } from '../src/channel.js';
 
@@ -79,18 +79,38 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
   });
 
   it('is driven by the existing campaign progress getter', () => {
-    // The level NUMBER comes from the campaign progress getter, and that number is what the label
-    // formats: `currentLevel(campaignProgress).number` → `MENU.level(current)`.
-    expect(mainSource).toMatch(/\$\('menu-campaign'\)[\s\S]{0,600}const current = currentLevel\(campaignProgress\)\.number/);
-    // The label is the campaign entry's visible text AND its spoken name, both derived from that
-    // number through MENU. Asserted as intent (a MENU helper fed `current`), not as the literal
-    // text of the template — the spoken name moved to MENU.levelAria when LEVEL <n> became a
-    // direct route into the game, and pinning the template made a correct change look like a bug.
+    // The label and the press now come from ONE decision: campaignEntry(progress, savedLevel). That
+    // is what stops the old mismatch where the label said LEVEL 70 but the press resumed level 31.
+    expect(mainSource).toMatch(/\$\('menu-campaign'\)[\s\S]{0,900}const entry = campaignEntry\(campaignProgress, campaignResume\(\)\?\.level \?\? null\)/);
+    // The level NUMBER on the entry is the campaign's next unfinished level, formatted by MENU.level.
+    expect(mainSource).toMatch(/const current = entry\.kind === 'ask' \? entry\.next\.number : entry\.level\.number/);
     expect(mainSource).toMatch(/cmp\.textContent = MENU\.level\(current\)/);
-    expect(mainSource).toMatch(/cmp\.setAttribute\('aria-label', MENU\.[A-Za-z]+\(current\)\)/);
+    expect(mainSource).toMatch(/cmp\.setAttribute\('aria-label', MENU\.levelAria\(current\)\)/);
     // And the words themselves are real, which the source pattern above cannot prove.
     expect(MENU.levelAria(1)).toBe('Play campaign level 1');
     expect(MENU.levelAria(25)).toBe('Play campaign level 25');
+  });
+
+  it('stops claiming a level number once every level is complete', () => {
+    // LEVEL 70 would promise a level; with nothing left, the entry opens the chapter list and says so.
+    // This is the ONLY state in which the entry is not LEVEL <n> - while any level is unfinished it
+    // stays the single way in, so the owner's "no Levels entry" rule still holds where it mattered.
+    expect(MENU.levels).toBe('LEVELS');
+    expect(mainSource).toMatch(/if \(entry\.kind === 'list'\) \{\s*\n\s*cmp\.textContent = MENU\.levels/);
+    expect(mainSource).toMatch(/cmp\.setAttribute\('aria-label', MENU\.levelsAria\)/);
+    expect(mainSource).toMatch(/if \(entry\.kind === 'list'\) return showScreen\('campaign'\)/);
+  });
+
+  it('asks only when the saved match disagrees, and offers both answers', () => {
+    // The question exists once, in one decision function, and the sheet gives each answer a button.
+    expect(mainSource).toMatch(/return askCampaignStart\(entry\.next, entry\.saved\)/);
+    expect(mainSource).toMatch(/CAMPAIGN\.askResume\(saved\.number\)/);
+    expect(mainSource).toMatch(/CAMPAIGN\.askStart\(next\.number\)/);
+    expect(CAMPAIGN.askBody(31, 70)).toBe('Level 31 is still in progress. Start level 70 instead?');
+    expect(CAMPAIGN.askResume(31)).toBe('Resume level 31');
+    expect(CAMPAIGN.askStart(70)).toBe('Start level 70');
+    // No silent resume path may remain: the press must go through the decision, not straight to a save.
+    expect(mainSource).not.toMatch(/function enterCampaign\(\) \{\s*\n\s*const resume = campaignResume\(\);/);
   });
 });
 

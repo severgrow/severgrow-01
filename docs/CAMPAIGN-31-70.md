@@ -264,11 +264,23 @@ Strangles roughly double against chapter V (7-13 per 60 against 5-10): a walled 
 over-extension with a cutoff. Levels 52 and 54 are the peaks (they have two routes that meet), and
 Halcyon (55) is the floor at 3.
 
-Found during the browser pass, NOT fixed here (it is released-line behaviour, and the `/3` rework may
-touch the same entry point): the menu entry shows `LEVEL <current>` (here LEVEL 40) but tapping it
-resumes an unfinished match from an earlier level (here 31), because `enterCampaign()` prefers
-`campaignResume()` without saying so. With 40+ levels that mismatch is easier to hit. Proposed fix:
-when a save exists, label the entry with the saved level, or show "Resume" as the label.
+FOUND during the browser pass and **FIXED 2026-10-19**: the menu entry's label came from progress
+("the next level you have not completed") while tapping it preferred a saved match, so an unfinished
+replay of an earlier level made the entry say `LEVEL 70` and open level 31. Reproduced in the
+browser, then fixed by giving label and press ONE decision (`campaignEntry` in
+`web/src/logic/campaign.ts`):
+
+- nothing saved → start the next unfinished level (one tap, no question);
+- the saved match IS that level → resume it (one tap, no question);
+- the saved match is a DIFFERENT level → ask, with `Resume level n` and `Start level n`;
+- every built level complete → the entry says `LEVELS` and opens the chapter list, which already
+  carries the resume hint. That all-clear case was the main trigger, so removing it removes the
+  reason players end up mid-replay in the first place.
+
+The chapter count was never the cause (the old note guessed at "40+ levels"); only whether an older
+replay is unfinished matters. `web/tests/campaign-entry.test.ts` pins all four cases, and
+`web/tests/finish-card.test.ts` pins that no path may start a level straight from progress or
+silently resume a save.
 
 ---
 
