@@ -284,6 +284,9 @@ try {
     return positionSave({state});
   })());
   await layers.goto(BASE);
+  // Boot first: the fixture click must land after main.ts has bound the control, or CI's slower
+  // runner clicks a button that is not wired yet.
+  await layers.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
   // Owner decision (2026-10-19): the product main menu has NO Continue. This suite seeds a
   // classic save only as a fixture for the overlay-geometry checks, so it invokes the hidden
   // legacy control directly — it is not asserting that a player can reach it.

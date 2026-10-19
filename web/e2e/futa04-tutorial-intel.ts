@@ -81,6 +81,7 @@ try {
   await page.waitForFunction(()=>document.querySelector('#futasaku-glass .glass-copy')?.textContent==='GROW',undefined,{timeout:5000}).catch(()=>{});
   const beforeRefresh=await state();
   await page.reload();
+  await waitBoot(page);
   await page.waitForFunction(()=>!!document.getElementById('smart-panel'));
   await resumeHiddenContinue(page);
   assert.deepEqual(await state(),beforeRefresh,'tutorial resumes the exact authored position');
@@ -238,6 +239,7 @@ try {
   }
   await page.locator('#futasaku-glass .intel-close').click();
   await page.goto(base);
+  await waitBoot(page);
   await page.waitForFunction(()=>!!document.getElementById('menu-continue'));
   await resumeHiddenContinue(page);
   await page.waitForFunction(()=>(window as any).__severgrow?.state()?.turnPlayer===0);

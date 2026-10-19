@@ -111,7 +111,9 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   await page.reload(); await page.waitForTimeout(500);
   // Owner decision (2026-10-19): the product main menu has NO Continue. This suite uses the
   // saved match only as a fixture for the post-resume checks, so it invokes the hidden legacy
-  // control directly — it is not asserting that a player can reach it.
+  // control directly — it is not asserting that a player can reach it. Boot first, so the click
+  // cannot land before main.ts binds the control.
+  await page.waitForFunction(() => (window as any).__severgrow?.ready?.() === true, undefined, { timeout: 20000 });
   await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
   await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(saved), `${w}: resume after turn`);
