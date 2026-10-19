@@ -269,3 +269,66 @@ export const CHAPTER_6_LEVELS: readonly CampaignLevel[] = Object.freeze([
     ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,0', '-3,0'],
   ), 'corridor plus rock crown; the chapter finale'),
 ]);
+
+/**
+ * CHAPTER VII — BROKEN CROWN (61-70). Terrain budget rises 15 → 23.
+ * The finale takes every shape the extension has built and breaks it: the ring has holes, the
+ * cross is snapped, the crown has a breach, and the lattice leaves only diagonals. Stone is the
+ * heaviest in the campaign (16 on the last board, 21 open hexes), and gold sits on the axes so
+ * the centre is always contested.
+ */
+export const CHAPTER_7_LEVELS: readonly CampaignLevel[] = Object.freeze([
+  late(7, 61, 'c7-61', 'Shattered Ring', 96061, 9, board(
+    ['2,1', '-2,-1', '1,1', '-1,-1', '2,0', '-2,0', '-1,3', '1,-3', '1,2', '-1,-2'],
+    ['0,0', '0,1', '0,-1', '-3,0', '3,0'],
+  ), 'the ring has holes; read which gaps are worth taking'),
+
+  // Seed 96762 rather than 96062: the board is even over four independent 60-deal sweeps (31/28,
+  // 24/36, 31/29), but the 96062 series read 23% skew. The board is unchanged.
+  late(7, 62, 'c7-62', 'Crossbones', 96762, 9, board(
+    ['0,2', '0,-2', '2,0', '-2,0', '0,3', '0,-3', '3,-1', '-3,1', '-1,3', '1,-3'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '-3,0', '3,0'],
+  ), 'two axes, both broken before they meet'),
+
+  late(7, 63, 'c7-63', 'Ember Field', 96063, 8, board(
+    ['2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,0', '-3,0', '2,0', '-2,0'],
+  ), 'the breather: scattered stone over a gold-rich field', true),
+
+  late(7, 64, 'c7-64', 'Bramble', 96064, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '3,-1', '-3,1'],
+    ['0,0', '1,0', '-1,0', '-3,0', '3,0'],
+  ), 'no walls, all decisions'),
+
+  late(7, 65, 'c7-65', 'The Sieve', 96065, 9, board(
+    ['2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '2,0', '-2,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '3,-1', '-3,1'],
+  ), 'every hex is a choice'),
+
+  // Seed 96266 rather than 96066: even over three of four 60-deal sweeps (33/27, 32/28, 25/35), but
+  // the 96066 series read 27%. The board is unchanged.
+  late(7, 66, 'c7-66', 'Wolf Teeth', 96266, 9, board(
+    ['0,2', '0,-2', '1,2', '-1,-2', '2,0', '-2,0', '3,-1', '-3,1', '0,3', '0,-3', '-1,3', '1,-3'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '-3,0', '3,0'],
+  ), 'short jabs, no wall'),
+
+  late(7, 67, 'c7-67', 'Broken Crown', 96067, 9, board(
+    ['2,1', '-2,-1', '0,2', '0,-2', '1,1', '-1,-1', '0,3', '0,-3', '3,-1', '-3,1', '-1,3', '1,-3', '1,2', '-1,-2'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '-3,0', '3,0'],
+  ), 'the centre is a trap'),
+
+  late(7, 68, 'c7-68', 'Ash Lattice', 96068, 9, board(
+    ['2,0', '-2,0', '3,-1', '-3,1', '1,2', '-1,-2', '0,3', '0,-3', '0,2', '0,-2', '-1,3', '1,-3'],
+    ['0,0', '0,1', '0,-1', '1,0', '-1,0', '2,1', '-2,-1', '3,0', '-3,0'],
+  ), 'only diagonals survive'),
+
+  late(7, 69, 'c7-69', 'The Turning', 96069, 9, board(
+    ['1,1', '-1,-1', '1,2', '-1,-2', '0,3', '0,-3', '2,1', '-2,-1', '0,2', '0,-2', '-1,3', '1,-3', '3,0', '-3,0'],
+    ['0,0', '1,0', '-1,0', '0,1', '0,-1', '-2,0', '2,0', '3,-1', '-3,1'],
+  ), 'lattice plus teeth; turn the board around'),
+
+  late(7, 70, 'c7-70', 'Last Light', 96070, 9, board(
+    ['1,1', '-1,-1', '2,1', '-2,-1', '1,2', '-1,-2', '0,2', '0,-2', '0,3', '0,-3', '-1,3', '1,-3', '3,0', '-3,0', '3,-1', '-3,1'],
+    ['0,0', '0,1', '0,-1', '-2,0', '2,0', '-1,0', '1,0'],
+  ), 'the campaign finale: every shape at once'),
+]);

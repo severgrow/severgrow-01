@@ -23,12 +23,12 @@ import {
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 describe('campaign levels: the definition is well formed', () => {
-  it('the whole campaign validates (no throw): six chapters of ten, levels 1-60', () => {
+  it('the whole campaign validates (no throw): seven chapters of ten, levels 1-70', () => {
     expect(() => validateCampaign()).not.toThrow();
-    expect(CAMPAIGN_LEVELS).toHaveLength(60);
-    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+    expect(CAMPAIGN_LEVELS).toHaveLength(70);
+    expect(CAMPAIGN_LEVELS.map((l) => l.number)).toEqual(Array.from({ length: 70 }, (_, i) => i + 1));
     // Chapters are contiguous and each holds exactly its ten levels.
-    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(CAMPAIGN_CHAPTERS.map((c) => c.number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     for (const chapter of CAMPAIGN_CHAPTERS) expect(chapter.levels).toHaveLength(10);
     for (const level of CAMPAIGN_LEVELS) {
       expect(CAMPAIGN_CHAPTERS[level.chapter - 1]!.levels).toContain(level);
@@ -43,11 +43,12 @@ describe('campaign levels: the definition is well formed', () => {
       expect(campaignLevelByNumber(level.number)).toBe(level);
     }
     expect(campaignLevelById('c1-99')).toBeNull();
-    // 31-60 now exist (chapters IV-VI), so 60 is the last built level.
+    // 31-70 now exist (chapters IV-VII), so 70 is the last built level.
     expect(nextCampaignLevel(30)).toBe(campaignLevelByNumber(31));
     expect(nextCampaignLevel(40)).toBe(campaignLevelByNumber(41));
     expect(nextCampaignLevel(50)).toBe(campaignLevelByNumber(51));
-    expect(nextCampaignLevel(60)).toBeNull();
+    expect(nextCampaignLevel(60)).toBe(campaignLevelByNumber(61));
+    expect(nextCampaignLevel(70)).toBeNull();
     expect(nextCampaignLevel(1)).toBe(CAMPAIGN_LEVELS[1]);
   });
 
@@ -111,6 +112,9 @@ describe('campaign levels: the definition is well formed', () => {
       // Chapter VI (2026-10-18): the route chapter, so stone is heavy (6-14) and gold is scarce.
       [51, 8], [52, 10], [53, 10], [54, 12], [55, 6],
       [56, 12], [57, 12], [58, 12], [59, 14], [60, 14],
+      // Chapter VII (2026-10-18): the finale, heaviest stone in the campaign (10-16).
+      [61, 10], [62, 10], [63, 6], [64, 12], [65, 12],
+      [66, 12], [67, 14], [68, 12], [69, 14], [70, 16],
     ]);
   });
 
@@ -171,6 +175,36 @@ describe('campaign levels: the definition is well formed', () => {
     const finale = chapter.at(-1)!;
     const heaviest = Math.max(...chapter.map((l) => l.config.board!.rock.length + l.config.board!.gold.length));
     expect(finale.config.board!.rock.length + finale.config.board!.gold.length).toBe(heaviest);
+  });
+
+  it('chapter VII closes the campaign: the heaviest chapter, and the heaviest board is the last', () => {
+    const chapter = CAMPAIGN_LEVELS.filter((l) => l.chapter === 7);
+    expect(chapter).toHaveLength(10);
+    expect(chapter.map((l) => l.config.board!.rock.length)).toEqual([10, 10, 6, 12, 12, 12, 14, 12, 14, 16]);
+    // Pressure climbs, with the single breather (63) as the only dip.
+    let previous = 0;
+    for (const level of chapter) {
+      const pressure = level.config.board!.rock.length + level.config.board!.gold.length;
+      if (level.breather) {
+        expect(level.number, 'the only breather in the finale is 63').toBe(63);
+        expect(pressure).toBeLessThan(previous);
+      } else {
+        expect(pressure, `${level.id} pressure must not fall`).toBeGreaterThanOrEqual(previous);
+      }
+      previous = pressure;
+    }
+    // The last board is the hardest in the whole campaign, by stone.
+    const finale = chapter.at(-1)!;
+    const mostRock = Math.max(...CAMPAIGN_LEVELS.map((l) => l.config.board!.rock.length));
+    expect(finale.config.board!.rock.length).toBe(mostRock);
+    // And it still leaves room to play: the floor is 20 open hexes.
+    expect(37 - finale.config.board!.rock.length).toBeGreaterThanOrEqual(20);
+    // Every level in the finale is stone-led except the breather.
+    for (const level of chapter) {
+      const b = level.config.board!;
+      if (level.breather) expect(b.gold.length, level.id).toBeGreaterThan(b.rock.length);
+      else expect(b.rock.length, level.id).toBeGreaterThan(b.gold.length);
+    }
   });
 
   it('uses gold as well as rocks across the whole campaign (every level but the first has gold off the centre)', () => {
@@ -237,13 +271,14 @@ describe('campaign levels: the definition is well formed', () => {
       8, 8, 8, 8,
       9, 9, 9, 9, 9, 9,
     ]);
-    // Chapters IV-VI (2026-10-18): bot 9 throughout, with breathers at 31 (re-entry after the
-    // finale), 38 (gold-heavy), 46 (the open board) and 55 (before the squeeze). Pinned so a later
-    // edit is a decision.
+    // Chapters IV-VII (2026-10-18): bot 9 throughout, with breathers at 31 (re-entry after the
+    // finale), 38 (gold-heavy), 46 (the open board), 55 (before the squeeze) and 63 (before the
+    // finale). Pinned so a later edit is a decision.
     expect(CAMPAIGN_LEVELS.filter((l) => l.number >= 31).map((l) => l.botLevel)).toEqual([
       8, 9, 9, 9, 9, 9, 9, 8, 9, 9,
       9, 9, 9, 9, 9, 8, 9, 9, 9, 9,
       9, 9, 9, 9, 8, 9, 9, 9, 9, 9,
+      9, 9, 8, 9, 9, 9, 9, 9, 9, 9,
     ]);
   });
 

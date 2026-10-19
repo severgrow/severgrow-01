@@ -1016,6 +1016,10 @@ export const CAMPAIGN = Object.freeze({
       title: 'The Long Way',
       subtitle: 'Ten boards where the short path is a trap.',
     }),
+    'broken-crown': Object.freeze({
+      title: 'Broken Crown',
+      subtitle: 'Ten boards where every shape is broken on purpose.',
+    }),
   }) as Readonly<Record<string, { title: string; subtitle: string }>>,
   /** a level's spoken label. The owner removed level and chapter NAMES everywhere (2026-10-16), so
    *  this is the number alone: "Level 4". */

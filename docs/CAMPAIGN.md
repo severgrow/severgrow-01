@@ -44,9 +44,10 @@ for an authored board. Then:
 No UI change is needed: the campaign screen is drawn from the level data, so further levels need no
 restructuring.
 
-**As built:** Chapters I-VI — levels 1-60 — are playable. Every board is hand-authored
+**As built:** Chapters I-VII — levels 1-70 — the campaign is complete. Every board is hand-authored
 (`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
-Levels 61-70 are planned (the last chapter, `docs/CAMPAIGN-31-70.md`) and will land the same way.
+Levels 31-70 were built one chapter at a time; the plan and its measurements are in
+`docs/CAMPAIGN-31-70.md`.
 
 ## Validation rules
 
@@ -335,6 +336,72 @@ Every board in the chapter still passes the mechanical guarantees that matter mo
 hexes, no single hex whose removal disconnects the homes, and nothing authored inside either root
 zone. The tightest is the finale at 23 open, two above the floor of 20.
 
+## Chapter VII — Broken Crown (levels 61-70)
+
+The finale takes every shape the extension built and **breaks it**: the ring has holes, the cross is
+snapped, the crown has a breach, the lattice leaves only diagonals. Stone is the heaviest in the
+campaign and gold sits on the axes, so the centre is always contested.
+
+| Lv | Name | Bot | Rocks | Gold | Shape | Intent |
+| --- | --- | --- | --- | --- | --- | --- |
+| 61 | Shattered Ring | 9 | 10 | 5 | broken ring | the ring has holes; read which gaps are worth taking |
+| 62 | Crossbones | 9 | 10 | 7 | broken cross | two axes, both broken before they meet |
+| 63 | Ember Field | **8** | 6 | 9 | scatter | the breather: scattered stone, gold-rich |
+| 64 | Bramble | 9 | 12 | 5 | bramble | no walls, all decisions |
+| 65 | The Sieve | 9 | 12 | 7 | sieve | every hex is a choice |
+| 66 | Wolf Teeth | 9 | 12 | 7 | teeth | short jabs, no wall |
+| 67 | Broken Crown | 9 | 14 | 7 | crown | the centre pays, but it is ringed: a trap |
+| 68 | Ash Lattice | 9 | 12 | 9 | lattice | only diagonals survive |
+| 69 | The Turning | 9 | 14 | 9 | lattice + teeth | read the board from both ends |
+| 70 | Last Light | 9 | 16 | 7 | composed | the campaign's hardest board |
+
+The last board is the stiffest in the whole campaign: **16 stone, 21 open hexes**, which is the most
+terrain any level carries and only one hex above the playability floor of 20. Pressure runs 15 → 23
+and only dips at the declared breather (63), which is gold-led like every other breather.
+
+Both of the extension's mechanical traps showed up again while authoring this chapter, and both are
+now cheap to catch because the harness prints the board:
+
+- **Pockets.** Removing the wrong pair can seal two hexes off from a home even though the board looks
+  fine at a glance. Every refusal in this chapter was of that kind (levels 61, 67, 68, 69, 70 on the
+  first pass), and each was fixed by freeing the pair that closed the pocket, not by weakening the
+  check.
+- **Breathers must be gold-led.** The plan's first numbers for Ember Field were 8 stone / 7 gold,
+  which reads as another squeeze rather than relief. It ships at 6 / 9 with the same pressure, and a
+  test now pins that every breather in the extension is gold-led.
+
+### Chapter VII — measured, not assumed
+
+60 alternate deals per level, the level's bot in both seats:
+
+| Lv | seat 0 / seat 1 | start wins | avg turns | finishes | flags |
+| --- | --- | --- | --- | --- | --- |
+| 61 Shattered Ring | 35 / 25 | 21 | 19.5 | score 55, strangle 5 | — |
+| 62 Crossbones | 37 / 23 | 24 | 19.5 | score 56, strangle 4 | SKEW 23% (seed, see below) |
+| 63 Ember Field | 35 / 25 | 20 | 20.8 | score 58, strangle 2 | — |
+| 64 Bramble | 26 / 34 | 20 | 19.2 | score 47, strangle 13 | — |
+| 65 The Sieve | 31 / 29 | 27 | 19.2 | score 50, strangle 10 | — |
+| 66 Wolf Teeth | 38 / 22 | 32 | 18.2 | score 50, strangle 10 | SKEW 27% (seed, see below) |
+| 67 Broken Crown | 25 / 35 | 27 | 18.9 | score 50, strangle 10 | — |
+| 68 Ash Lattice | 27 / 33 | 38 | 19.0 | score 53, strangle 7 | — |
+| 69 The Turning | 31 / 29 | 25 | 19.2 | score 51, strangle 9 | — |
+| 70 Last Light | 32 / 28 | 26 | 19.3 | score 49, strangle 11 | — |
+
+Two levels tripped the skew flag on the first sweep, and **both turned out to be deal series rather
+than layouts.** The tell is direction: a biased layout favours the same seat every time, while 62 read
+37/23 on one start and 24/36 on another, and 66 read 38/22, 33/27, 32/28 and 25/35 across four starts.
+Seeds changed, boards did not: 62 → **96762** (29/31) and 66 → **96266** (31/29).
+
+This is the **third and fourth** time in the extension that a first flag was noise (49, 57, 62, 66).
+The pattern is now established enough to write down as a rule: **a 60-deal flag is a prompt to
+re-measure across seed starts, never a prompt to redesign.**
+
+What the finale does in numbers: strangles run 4-13 per 60, the widest spread of any chapter, which is
+what "every shape at once" should look like. Bramble (64) is the high end at 13 — its clumps invite
+bluffs — and Ember Field (63) the low at 2, because a gold-rich breather rewards racing rather than
+cutting. Turn counts stay 18-21, so the extra stone changes the *decision*, not the length.
+
+
 ### The bot ladder (2026-10-16 rebalance)
 
 Owner-approved difficulty ladder, applied as a **data-only** change to each level's `botLevel`. No
@@ -557,7 +624,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-60) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |

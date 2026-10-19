@@ -1,7 +1,7 @@
 # Campaign levels 31-70 — design and implementation plan
 
 **Branch:** `futa0.5-levels-31-70`, cut from `origin/futa0.5-online` (`8bdfbeb`).
-**Status:** Chapters IV (31-40), V (41-50) and VI (51-60) are BUILT and tested. Chapter VII remains planned.
+**Status:** All four chapters — IV (31-40), V (41-50), VI (51-60), VII (61-70) — are BUILT and tested. Levels 31-70 are complete.
 
 **Decisions taken 2026-10-18 (owner):**
 1. **Board size:** stay on radius 3 (37 hexes) for 31-70; terrain is the only axis. A 61-hex board
@@ -162,21 +162,24 @@ exact hexes are the implementation. Seeds are `96 031` … `96 070` (unused rang
 | 58 | Three Gates | 9 | 12 | 5 | three gates | a real choice, not a corridor |
 | 59 | Maze Garden | 9 | 14 | 3 | bramble | many small walls, no long one |
 | 60 | The Long Way | 9 | 14 | 7 | corridor + crown | chapter finale |
-| **VII — Broken Crown** | | | | | | |
+| **VII — Broken Crown** (BUILT) | | | | | | |
 | 61 | Shattered Ring | 9 | 10 | 5 | broken ring | the ring has holes |
-| 62 | Crossbones | 9 | 11 | 5 | cross | two axes, both broken |
-| 63 | Ember Field | **8** | 8 | 7 | scattered, gold-rich | breather |
+| 62 | Crossbones | 9 | 10 | 7 | broken cross | two axes, both broken |
+| 63 | Ember Field | **8** | 6 | 9 | scattered, gold-rich | breather (gold-led, like all breathers) |
 | 64 | Bramble | 9 | 12 | 5 | bramble | no walls, all decisions |
-| 65 | The Sieve | 9 | 13 | 5 | sieve | every hex is a choice |
-| 66 | Wolf Teeth | 9 | 12 | 6 | teeth | short jabs, no wall |
-| 67 | Broken Crown | 9 | 13 | 7 | crown, broken | the centre is a trap |
-| 68 | Ash Lattice | 9 | 14 | 5 | lattice | only diagonals survive |
-| 69 | The Turning | 9 | 14 | 7 | lattice + teeth | turn the board around |
-| 70 | Last Light | 9 | 14 | 9 | composed finale | the campaign's hardest board |
+| 65 | The Sieve | 9 | 12 | 7 | sieve | every hex is a choice |
+| 66 | Wolf Teeth | 9 | 12 | 7 | teeth | short jabs, no wall |
+| 67 | Broken Crown | 9 | 14 | 7 | crown, broken | the centre is a trap |
+| 68 | Ash Lattice | 9 | 12 | 9 | lattice | only diagonals survive |
+| 69 | The Turning | 9 | 14 | 9 | lattice + teeth | turn the board around |
+| 70 | Last Light | 9 | 16 | 7 | composed finale | the campaign's hardest board |
 
-Breathers: **31, 38, 46, 55** so far (of the five planned: 31, 38, 46, 55, 63). Never two
-consecutive; each sits where the previous level spiked. A breather is also the one board in a
-rock-led chapter allowed to be gold-led, so it plays as relief rather than another squeeze.
+Point symmetry forces even stone counts, so the plan's odd numbers (11, 13) could not be authored
+as written; the drawn shapes are even and the intent (a heavier stone budget than chapter VI) holds.
+
+Breathers: **31, 38, 46, 55, 63** — all five, never two consecutive; each sits where the previous
+level spiked. A breather is also the one board in a rock-led chapter allowed to be gold-led, so it
+plays as relief rather than another squeeze.
 
 **Authoring note learned while building IV:** point symmetry forces even rock counts (every shape is a
 pair), while gold is naturally odd because it is the centre plus pairs. The plan's original counts for
