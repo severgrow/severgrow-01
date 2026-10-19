@@ -10,21 +10,22 @@ import { CAMPAIGN_LEVELS, FIRST_CAMPAIGN_LEVEL } from './levels.js';
 /**
  * The campaign's own resume save — a saved unfinished campaign match.
  *
- * v2 (2026-10-19): the campaign was reset when levels 1-10 became the guided lessons. A v1 save
- * belongs to a game that no longer exists (different opening, different teaching), so it is not
- * read at all: the old key stays on disk unused rather than being migrated into a mismatch.
+ * v3 (2026-10-19): the onboarding polish changed lesson versions and several authored boards, so
+ * a v2 match cannot be resumed onto a board it no longer matches. A v2 (or v1) save is not read at
+ * all: the old key stays on disk unused rather than being migrated into a mismatch.
  */
-export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v2';
+export const CAMPAIGN_SAVE_KEY = 'severgrow.campaign.save.v3';
 /** Which offline match the player last played, so Continue resumes the right one. */
 export const LAST_MODE_KEY = 'severgrow.lastmode.v1';
 /**
  * The campaign progress record.
  *
- * v2 (2026-10-19): owner direction — everyone starts the campaign again from level 1, because the
- * first ten levels are now the tutorial. A v1 record is ignored, so an existing player sees a fresh
- * campaign; the old key is left alone so nothing is destroyed on their device.
+ * v3 (2026-10-19): owner direction — reset the campaign once more for the onboarding polish, so
+ * nobody resumes onto a changed board or keeps progress through a lesson script that has moved on.
+ * A v2 (or v1) record is ignored, so an existing player starts at level 1; the old key is left
+ * alone so nothing is destroyed on their device.
  */
-export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v2';
+export const CAMPAIGN_PROGRESS_KEY = 'severgrow.campaign.progress.v3';
 
 export const CAMPAIGN_PROGRESS_VERSION = 1;
 

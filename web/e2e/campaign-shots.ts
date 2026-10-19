@@ -248,7 +248,7 @@ try {
     if (finished.result!.winner === 0) {
       // A win: the progress record moves and the next level is now unlocked and current.
       // The app's Storage wrapper adds the channel prefix itself, so this reads the UNPREFIXED key.
-      const stored = await page.evaluate(() => localStorage.getItem('severgrow.campaign.progress.v2'));
+      const stored = await page.evaluate(() => localStorage.getItem('severgrow.campaign.progress.v3'));
       const progress = JSON.parse(stored ?? '{}') as { unlocked?: number; completed?: string[] };
       assert.equal(progress.unlocked, 2, 'the win unlocked level 2');
       assert.deepEqual(progress.completed, [level1.id]);

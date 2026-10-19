@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
@@ -73,13 +74,161 @@ const openNextLevel = async (p: Page) => {
   await p.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
   await dismissInstall(p);
   await p.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement).click());
+  // A saved match asks first (owner decision); resume it so the level continues where it was.
+  await p.waitForSelector('#game:not([hidden]), #sheet-campaign-start:not([hidden])', { timeout: 15000 });
+  const asked = await p.evaluate(() => !document.getElementById('sheet-campaign-start')!.hidden);
+  if (asked) await p.evaluate(() => (document.getElementById('csa-resume') as HTMLButtonElement).click());
   await p.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
-  await p.waitForTimeout(700);
+  // The stage intro and the opening deal both finish before the board is live; a card tapped
+  // before that would skip the intro instead of answering DRAW FIRST.
+  await p.waitForFunction(() => {
+    const l = (window as any).__severgrow?.lesson?.();
+    return !l || (!l.stage && l.handSettled);
+  }, undefined, { timeout: 15000 });
+  await p.waitForTimeout(300);
+};
+
+/**
+ * The lesson's chrome, measured from the live page: the header (menu and logo only), the cockpit
+ * plate under the map, and the hexes themselves. The checks compare these boxes.
+ */
+const GEOMETRY = `(() => {
+  const R = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x:+r.x.toFixed(1), y:+r.y.toFixed(1), w:+r.width.toFixed(1), h:+r.height.toFixed(1), right:+r.right.toFixed(1), bottom:+r.bottom.toFixed(1) }; };
+  const vis = (el) => !!el && el.getBoundingClientRect().width > 0 && getComputedStyle(el).display !== 'none' && !el.hidden;
+  const hud = document.querySelector('#game > .hud');
+  const plate = document.getElementById('lesson-plate');
+  const glass = document.getElementById('futasaku-glass');
+  const wrap = document.getElementById('board-wrap');
+  const menu = document.getElementById('hud-menu');
+  const brand = document.getElementById('hud-brand');
+  const ps = [...document.querySelectorAll('#board .hex-cell path.hex')].map((p) => p.getBoundingClientRect());
+  const union = ps.length ? { x:+Math.min(...ps.map(r=>r.left)).toFixed(1), y:+Math.min(...ps.map(r=>r.top)).toFixed(1),
+    right:+Math.max(...ps.map(r=>r.right)).toFixed(1), bottom:+Math.max(...ps.map(r=>r.bottom)).toFixed(1) } : null;
+  if (union) { union.w = +(union.right - union.x).toFixed(1); union.h = +(union.bottom - union.y).toFixed(1); }
+  const hex = ps.length ? ps.slice().sort((a, b) => b.width - a.width)[0] : null;
+  const padTop = wrap ? parseFloat(getComputedStyle(wrap).paddingTop) || 0 : 0;
+  const plateCss = plate && !plate.hidden ? getComputedStyle(plate) : null;
+  return {
+    hud: R(hud), headerTitle: vis(hud && hud.querySelector('.lesson-hud-title, #lesson-hud')),
+    plate: plate && !plate.hidden ? R(plate) : null,
+    plateHidden: !plate || plate.hidden,
+    plateCopy: plate?.querySelector('.lesson-copy')?.textContent ?? '',
+    plateCss: plateCss ? {
+      border: plateCss.borderTopWidth, borderStyle: plateCss.borderTopStyle,
+      outline: plateCss.outlineStyle, outlineWidth: plateCss.outlineWidth,
+      shadow: plateCss.boxShadow, pointer: plateCss.pointerEvents,
+      buttons: plate ? plate.querySelectorAll('button').length : 0,
+      display: document.querySelector('#smart-led-text')?.textContent ?? '',
+    } : null,
+    menu: R(menu), brand: R(brand),
+    glass: glass && !glass.hidden ? R(glass) : null,
+    kicker: glass && !glass.hidden ? (glass.dataset.kicker ?? null) : null,
+    tutorial: document.documentElement.classList.contains('futa04-tutorial'),
+    wrap: R(wrap), union,
+    hex: hex ? { w:+hex.width.toFixed(1), h:+hex.height.toFixed(1) } : null,
+    padTop,
+    hudPad: hud ? getComputedStyle(hud).paddingLeft : null,
+    lessonAttr: document.documentElement.dataset.lesson ?? null,
+    scroll: { h: document.documentElement.scrollHeight, w: document.documentElement.scrollWidth, ih: innerHeight, iw: innerWidth },
+  };
+})()`;
+
+const geometry = (p: Page) => p.evaluate(GEOMETRY) as Promise<{
+  hud: Box; headerTitle: boolean; plate: Box | null; plateHidden: boolean; plateCopy: string;
+  plateCss: { border: string; borderStyle: string; outline: string; outlineWidth: string; shadow: string; pointer: string; buttons: number; display: string } | null;
+  menu: Box; brand: Box;
+  glass: Box | null; kicker: string | null; tutorial: boolean; wrap: Box; union: Box;
+  hex: { w: number; h: number } | null; padTop: number; hudPad: string; lessonAttr: string | null;
+  scroll: { h: number; w: number; ih: number; iw: number };
+}>;
+type Box = { x: number; y: number; w: number; h: number; right: number; bottom: number };
+
+const overlaps = (a: Box, b: Box) => !(a.right <= b.x || a.x >= b.right || a.bottom <= b.y || a.y >= b.bottom);
+
+/** Header is the menu and the logo. Sentences sit in the plate under the map, which is not padded. */
+const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phone: boolean) => {
+  check(!g.headerTitle, `${tag}: the header has no lesson title`);
+  check(!g.tutorial, `${tag}: the lesson does not use the tutorial band`);
+  check(g.padTop < 2, `${tag}: the map is not padded down (${g.padTop}px)`);
+  check(g.kicker === null && g.glass === null, `${tag}: no lesson window over the map`);
+  check(!!g.menu && g.menu.w > 0 && !!g.brand && g.brand.w > 0, `${tag}: the header is the menu and the logo`);
+  if (phone && g.hex) {
+    const size = Math.max(g.hex.w, g.hex.h);
+    check(size >= 72, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
+  }
+  if (!g.plateHidden && g.plate && g.union) {
+    // On a phone tall enough for a free gap the box sits in it. On a short phone there is no gap
+    // at all, so it may sit over unlit hexes — but never over the lit target (checkPlateClear
+    // asserts that on every beat, at every size).
+    if (g.scroll.ih >= 800) check(!overlaps(g.plate, g.union), `${tag}: the plate sits in a gap, not over a hex`);
+    check(g.plate.bottom <= g.scroll.ih + 1 && g.plate.y >= 0, `${tag}: the plate stays on screen`);
+  }
+  if (!g.plateHidden && g.plate && g.plateCss) {
+    // One info box, information only: no border, no outline, no shadow, no buttons, taps through.
+    check(parseFloat(g.plateCss.border) === 0, `${tag}: the info box has no border (${g.plateCss.border})`);
+    check(g.plateCss.outline === 'none' || parseFloat(g.plateCss.outlineWidth) === 0, `${tag}: no outline`);
+    check(g.plateCss.shadow === 'none', `${tag}: no box shadow/edge (${g.plateCss.shadow})`);
+    check(g.plateCss.pointer === 'none', `${tag}: the box is pointer-events:none`);
+    check(g.plateCss.buttons === 0, `${tag}: the box has no buttons`);
+    check(!!g.plateCopy, `${tag}: the box carries the explanation sentence`);
+  }
+  check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, `${tag}: no page scroll (${g.scroll.w}x${g.scroll.h} in ${g.scroll.iw}x${g.scroll.ih})`);
+};
+
+/** The focus layer must wrap the lit hex itself, not a neighbour or an old position. */
+const checkPointerOnHex = async (p: Page, key: string, tag: string) => {
+  // The overlay eases toward its target; wait for two identical samples before measuring.
+  let last = '';
+  for (let i = 0; i < 40; i++) {
+    const now = await p.evaluate(`(() => { const g = document.querySelector('#tutorial-focus .focus-glow'); return g ? g.getAttribute('d') : ''; })()`);
+    if (now && now === last) break;
+    last = now as string;
+    await p.waitForTimeout(60);
+  }
+  const m = await p.evaluate(`(() => {
+    const R = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x:+r.x.toFixed(2), y:+r.y.toFixed(2), w:+r.width.toFixed(2), h:+r.height.toFixed(2), right:+r.right.toFixed(2), bottom:+r.bottom.toFixed(2) }; };
+    const cell = document.querySelector('#board .hex-cell[data-key="${key}"]');
+    return { path: R(cell && cell.querySelector('path.hex')), glow: R(document.querySelector('#tutorial-focus .focus-glow')) };
+  })()`) as { path: Box | null; glow: Box | null };
+  check(!!m.path && !!m.glow, `${tag}: the light and the lit hex are both on screen`);
+  if (!m.path || !m.glow) return;
+  const dx = Math.abs((m.path.x + m.path.right) / 2 - (m.glow.x + m.glow.right) / 2);
+  const dy = Math.abs((m.path.y + m.path.bottom) / 2 - (m.glow.y + m.glow.bottom) / 2);
+  check(dx <= 2 && dy <= 2, `${tag}: the light sits on the lit hex (off ${dx.toFixed(1)},${dy.toFixed(1)}px)`);
+  check(Math.abs(m.path.w - m.glow.w) <= 5 && Math.abs(m.path.h - m.glow.h) <= 6, `${tag}: the glow wraps that hex, no wider (${m.glow.w}x${m.glow.h} vs ${m.path.w}x${m.path.h})`);
+};
+
+/**
+ * Watch the very first light: it may only appear once the opening hand has stopped moving. The
+ * observer runs from before the level starts, so it sees the stage intro and the deal too.
+ */
+const installDealAudit = (p: Page) => p.evaluate(`(() => {
+  const g = window.__severgrow;
+  const audit = window.__dealAudit = { beatBeforeSettled: false, firstAfterSettled: false, stageSeen: false };
+  let stop = false;
+  window.__dealAuditStop = () => { stop = true; };
+  const tick = () => {
+    const l = g && g.lesson && g.lesson();
+    if (l) {
+      if (l.stage) audit.stageSeen = true;
+      if (l.beat && !l.handSettled) audit.beatBeforeSettled = true;
+      if (l.beat && l.handSettled) audit.firstAfterSettled = true;
+    }
+    if (!stop) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})()`);
+const checkDealAudit = async (p: Page, level: number, expectLight: boolean) => {
+  const audit = await p.evaluate(`(() => { window.__dealAuditStop && window.__dealAuditStop(); return window.__dealAudit; })()`) as
+    { beatBeforeSettled: boolean; firstAfterSettled: boolean; stageSeen: boolean } | null;
+  if (expectLight) check(!!audit && audit.firstAfterSettled, `L${level}: first light appears after the deal settles`);
+  check(!!audit && !audit.beatBeforeSettled, `L${level}: no light while the hand is still moving`);
+  check(!!audit && audit.stageSeen, `L${level}: stage intro came first`);
 };
 
 /** The centre of the thing a lit beat points at (a real element on screen), or null. */
 // Page code as a plain string: the test runner's name helpers do not exist inside the page.
-const LIT_POINTS = `(l) => {
+const LIT_POINTS = `(l, homes) => {
   function centre(el) {
     if (!el) return null;
     var box = (el.querySelector(':scope > path.hex') || el).getBoundingClientRect();
@@ -90,9 +239,13 @@ const LIT_POINTS = `(l) => {
   switch (l.t) {
     case 'hex': return [hex(l.key)];
     case 'hexes': return l.keys.map(hex);
+    case 'home': return [hex(l.player === 1 ? homes[1] : homes[0])];
+    case 'rock': return [hex(l.key)];
     case 'card': return [card(l.id)];
     case 'cards': return [card(l.ids[0])];
     case 'deck': return [centre(document.querySelector('#deck .pile-card') || document.getElementById('deck'))];
+    case 'deckCount': return [centre(document.querySelector('#deck .pile-card') || document.getElementById('deck'))];
+    case 'score': return [centre(document.getElementById('smart-led'))];
     case 'discard': return [centre(document.querySelector('#discard .pile-card') || document.getElementById('discard'))];
     case 'end': return [centre(document.getElementById('smart-context'))];
     case 'bloom': return [centre(document.getElementById('smart-bloom-button'))];
@@ -100,7 +253,60 @@ const LIT_POINTS = `(l) => {
   }
 }`;
 const litPoints = (p: Page, lit: Lit) =>
-  p.evaluate(`(${LIT_POINTS})(${JSON.stringify(lit)})`) as Promise<({ x: number; y: number } | null)[]>;
+  p.evaluate(`(${LIT_POINTS})(${JSON.stringify(lit)}, ${JSON.stringify(SMALL_HOMES)})`) as Promise<({ x: number; y: number } | null)[]>;
+
+/** The same selectors lesson-view.ts lights, so clearance is measured against the real target. */
+const litSelectors = (l: Lit): string[] => {
+  const hex = (k: string) => `#board .hex-cell[data-key="${k}"]`;
+  const card = (id: number) => `#hand .card[data-card="${id}"]`;
+  switch (l.t) {
+    case 'hex': return l.key ? [hex(l.key)] : [];
+    case 'hexes': return (l.keys ?? []).map(hex);
+    case 'home': return [hex(SMALL_HOMES[l.player === 1 ? 1 : 0]!)];
+    case 'rock': return l.key ? [hex(l.key)] : [];
+    case 'card': return l.id === undefined ? [] : [card(l.id)];
+    case 'cards': return (l.ids ?? []).map(card);
+    case 'deck': return ['#deck'];
+    case 'deckCount': return ['#deck .pile-card', '#deck-count'];
+    case 'score': return ['#smart-led'];
+    case 'discard': return ['#discard'];
+    case 'end': return ['#smart-context'];
+    case 'bloom': return ['#smart-bloom-button'];
+    default: return [];
+  }
+};
+
+// Page code as a string for the same reason as LIT_POINTS: the runner's TS transform must not leak
+// into the browser.
+const PLATE_CLEAR = `(sels) => {
+  const R = (el) => {
+    if (!el) return null;
+    const b = (el.querySelector(':scope > path.hex') || el).getBoundingClientRect();
+    return b.width > 0 ? { x: b.left, y: b.top, right: b.right, bottom: b.bottom } : null;
+  };
+  const plate = document.getElementById('lesson-plate');
+  const pr = plate && !plate.hidden ? plate.getBoundingClientRect() : null;
+  return {
+    plate: pr ? { x: pr.left, y: pr.top, right: pr.right, bottom: pr.bottom } : null,
+    targets: sels.map((sel) => ({ sel, box: R(document.querySelector(sel)) })).filter((t) => !!t.box),
+  };
+}`;
+
+/** The caption must never sit on the thing the step lights (hex, card, pile, sign, Bloom...). */
+const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
+  const selectors = litSelectors(lit);
+  if (!selectors.length) return;
+  const r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as {
+    plate: { x: number; y: number; right: number; bottom: number } | null;
+    targets: { sel: string; box: { x: number; y: number; right: number; bottom: number } }[];
+  };
+  if (!r.plate) return;
+  for (const t of r.targets) {
+    const b = t.box;
+    const hits = r.plate.x < b.right && r.plate.right > b.x && r.plate.y < b.bottom && r.plate.bottom > b.y;
+    check(!hits, `${tag}: the caption never covers ${t.sel}`);
+  }
+};
 
 /** A tap somewhere neutral on the map (an explanation moves on with a tap anywhere). */
 const tapAnywhere = async (p: Page) => {
@@ -113,7 +319,7 @@ const tapAnywhere = async (p: Page) => {
  * every answer the game gives (a wrong tap). Returns when the level is over.
  */
 const tapOnlyTheLight = async (p: Page, level: number) => {
-  let wrong = 0; let taps = 0; let still = 0; let last = '';
+  let wrong = 0; let taps = 0; let still = 0; let last = ''; let lastPlate = '';
   const t0 = Date.now();
   for (let guard = 0; Date.now() - t0 < 360000; guard++) {
     const s = await hook<any>(p, 'state');
@@ -123,21 +329,43 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
     if (s.actor !== 0 || busy) { await p.waitForTimeout(120); continue; }
     // The install invitation may follow a closed finish card (from level 4): a person closes it.
     await dismissInstall(p);
-    const lesson = await hook<{ beat: Beat | null; answer: string; idle: boolean } | null>(p, 'lesson');
+    const lesson = await hook<{ beat: Beat | null; answer: string; idle: boolean; stage: boolean; handSettled: boolean } | null>(p, 'lesson');
     if (!lesson) throw new Error(`L${level}: no lesson on screen`);
     const pos = `${s.turnNumber}|${s.phase}|${s.history?.length}|${lesson.beat?.id}|${JSON.stringify(lesson.beat?.lit)}`;
     still = pos === last ? still + 1 : 0;
     last = pos;
-    if (still > 40) {
+    // A silent tier deliberately shows nothing; the 6 s safety net brings a whisper. Wait past
+    // that before calling it stuck.
+    if (still > 70) {
       const pts = lesson.beat ? await litPoints(p, lesson.beat.lit) : [];
       const under = pts[0] ? await p.evaluate(`(() => { const e = document.elementFromPoint(${pts[0].x}, ${pts[0].y}); return e ? (e.tagName + '#' + e.id + '.' + (e.getAttribute('class') || '') + ' < ' + (e.closest('[id]') || {}).id) : 'none'; })()`) : 'no point';
       const sel = await hook(p, 'sel');
       if (SHOTS) await p.screenshot({ path: `${SHOTS}/stuck-L${level}.png` });
-      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}`);
+      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}; lesson ${JSON.stringify(lesson)}`);
     }
     const beat = lesson.beat;
-    if (!beat) { await p.waitForTimeout(250); continue; } // level 10 waits for a quiet moment
+    if (!beat) {
+      // SILENT is a real state: the light deliberately says nothing. A player who already knows
+      // the move makes it; the test does the same rather than waiting out the 6 s safety net.
+      if (lesson.stage || !lesson.handSettled) { await p.waitForTimeout(120); continue; }
+      const move = await hook<any>(p, 'lessonMove');
+      if (move) {
+        const ok = await p.evaluate((a) => (window as any).__severgrow.playFor(a, 0), move);
+        if (ok) { taps++; await idle(p); continue; }
+      }
+      await p.waitForTimeout(250);
+      continue;
+    }
+    // Every step (including an explanation that lights a home, a rock, the sign or a pile): the
+    // caption may move to another gap, but it must never sit on the lit thing.
+    if (beat.id !== lastPlate) {
+      lastPlate = beat.id;
+      await p.waitForTimeout(220);
+      await checkPlateClear(p, beat.lit, `L${level} ${beat.id}`);
+    }
     if (beat.explain) { await tapAnywhere(p); taps++; await p.waitForTimeout(250); continue; }
+    // A power hello is information, not a target. It fades by itself; then the ordinary move.
+    if ((beat as { hello?: string }).hello) { await p.waitForTimeout(2800); continue; }
     const points = (await litPoints(p, beat.lit)).filter((x): x is { x: number; y: number } => !!x);
     if (!points.length) { await p.waitForTimeout(200); continue; }
     for (const pt of points) {
@@ -173,19 +401,32 @@ try {
     console.log('Levels 1-10 in a row, tapping only the light:');
     const { page, errors } = await newPage();
     await page.goto(URL3, { waitUntil: 'networkidle' });
+    await installDealAudit(page);
     await openNextLevel(page);
     for (let level = 1; level <= 10; level++) {
       if (level > 1) {
         await page.waitForSelector('#gameover:not([hidden])', { timeout: 30000 });
         await dismissInstall(page);
+        await installDealAudit(page);
         await page.evaluate(() => (document.getElementById('go-rematch') as HTMLButtonElement).click());
         await page.waitForFunction((n) => (window as any).__severgrow?.lesson?.()?.level === n, level, { timeout: 15000 });
-        await page.waitForTimeout(600);
       }
+      await page.waitForFunction(() => {
+        const l = (window as any).__severgrow?.lesson?.();
+        return !!l && !l.stage && l.handSettled;
+      }, undefined, { timeout: 15000 });
+      if (SHOTS && (level === 1 || level === 5 || level === 10)) await page.screenshot({ path: `${SHOTS}/L${level}-first-frame.png` });
       const hexes = await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length);
       check(hexes === 19, `L${level} plays on the 19-hex map (${hexes})`);
+      // The header stays the menu and the logo. Teaching sits under the map, which stays full size.
+      await page.waitForFunction((n) => document.documentElement.dataset.lesson === String(n), level, { timeout: 10000 }).catch(() => undefined);
+      const lg = await geometry(page);
+      checkCockpit(lg, `L${level}`, true);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-open.png` });
       const r = await tapOnlyTheLight(page, level);
+      // The observer saw the whole level: no hint may have appeared before the deal settled, and
+      // the first one (where the level has one) came after it.
+      await checkDealAudit(page, level, level !== 10);
       check(r.winner === 0, `L${level} won by ${r.reason} in ${r.turns} turns, ${r.taps} taps, ${r.wrong} wrong, ${(r.ms / 1000).toFixed(0)}s`);
       if (level === 1) {
         check(r.wrong === 0, 'L1: zero wrong taps');
@@ -270,21 +511,22 @@ try {
       assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
       await page.close();
     }
-    // --- Every reason line fits in two lines in the real window, on the smallest phone ---
+    // --- Every explanation fits in four lines in the real box, on the smallest phone ---
     {
       const { page } = await newPage(320, 568);
       await page.goto(URL3, { waitUntil: 'networkidle' });
       await openNextLevel(page);
-      const shownAfter: Record<string, string> = { youGrewLine: 'You grew. ', pileLowLine: 'Pile almost empty. ' };
+      await page.waitForSelector('#lesson-plate .lesson-copy', { timeout: 10000 });
       const over: string[] = [];
       for (const [k, v] of Object.entries(LESSON)) {
         if (typeof v !== 'string' || !k.endsWith('Line')) continue;
-        const text = (shownAfter[k] ?? '') + v;
-        const n = await page.evaluate(`(() => { const el = document.querySelector('#futasaku-glass .glass-why'); el.style.minHeight = '0';
-          el.textContent = ${JSON.stringify(text)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
-        if (n > 2) over.push(`${k} (${n} lines)`);
+        // Measure the copy itself, not the four-line clamp that keeps the box from growing.
+        const n = await page.evaluate(`(() => { const el = document.querySelector('#lesson-plate .lesson-copy');
+          el.style.display = 'block'; el.style.webkitLineClamp = 'unset'; el.style.overflow = 'visible';
+          el.textContent = ${JSON.stringify(v)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
+        if (n > 4) over.push(`${k} (${n} lines)`);
       }
-      check(over.length === 0, `every reason line fits in two lines at 320 px${over.length ? `: ${over.join(', ')}` : ''}`);
+      check(over.length === 0, `every explanation fits in four lines at 320 px${over.length ? `: ${over.join(', ')}` : ''}`);
       await page.close();
     }
     // --- Level 3: the same wrong hex again and again; a refresh in the middle; hints off ---
@@ -293,7 +535,7 @@ try {
       await page.goto(URL3, { waitUntil: 'networkidle' });
       // Levels 1-2 already cleared on this device (the progress record, as a player who did them).
       const done = CAMPAIGN_LEVELS.slice(0, 2).map((l) => l.id);
-      await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v2', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 3, completed: done, best: {} }))})`);
+      await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 3, completed: done, best: {} }))})`);
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
       const lv = (await hook<any>(page, 'lesson'))?.level;
@@ -331,6 +573,311 @@ try {
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/hints-off-finish.png` });
       assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
       await page.close();
+    }
+  }
+  if (ONLY === 'all' || ONLY === 'layout') {
+    console.log('\nLayout: the header, the plate under the map, and the hexes:');
+    for (const [w, h] of [[390, 844], [1440, 900]] as const) {
+      const { page, errors } = await newPage(w, h);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      await page.waitForSelector('#lesson-plate:not([hidden])', { timeout: 10000 });
+      await page.waitForSelector('#tutorial-focus[data-on="1"]', { timeout: 10000 });
+      await page.waitForTimeout(450);
+      const g = await geometry(page);
+      check(g.lessonAttr === '1', `${w}x${h}: lesson styling is scoped to the lesson`);
+      check(!g.plateHidden && !!g.plateCopy, `${w}x${h}: the opening sentence is in the info box`);
+      checkCockpit(g, `${w}x${h}`, w < 600);
+      check(!!g.union && g.union.w > 200, `${w}x${h}: the map is drawn (${g.union?.w}x${g.union?.h})`);
+      await checkPointerOnHex(page, '-2,2', `${w}x${h} (L1 home)`);
+      // The box is information only: no button. Tapping the lit thing itself advances.
+      const before = await hook<any>(page, 'lesson');
+      const pts = await litPoints(page, before.beat.lit);
+      check(!!pts[0], `${w}x${h}: the explanation lights a thing to tap`);
+      if (pts[0]) {
+        await page.mouse.click(pts[0].x, pts[0].y);
+        await page.waitForTimeout(350);
+        const after = await hook<any>(page, 'lesson');
+        check(after?.beat?.id !== before.beat.id, `${w}x${h}: tapping the lit thing advances (${before.beat.id} -> ${after?.beat?.id})`);
+      }
+      // And a tap over the box itself passes through (pointer-events:none) to the board.
+      const nextBeat = (await hook<any>(page, 'lesson')).beat;
+      if (nextBeat?.explain) {
+        // A tap in an explanation's first 0.65 s is deliberately ignored (it belonged to the move
+        // that opened it); wait past that, as a person would.
+        await page.waitForTimeout(800);
+        const boxPt = await page.evaluate(() => { const p = document.getElementById('lesson-plate'); const r = p!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
+        const under = await page.evaluate(`(() => { const e = document.elementFromPoint(${boxPt.x}, ${boxPt.y}); return e ? e.id || e.className || e.tagName : 'none'; })()`);
+        check(under !== 'lesson-plate', `${w}x${h}: a tap over the box reaches the board (${under})`);
+        await page.mouse.click(boxPt.x, boxPt.y);
+        await page.waitForTimeout(350);
+        const after = await hook<any>(page, 'lesson');
+        check(after?.beat?.id !== nextBeat.id, `${w}x${h}: a tap on the box dismisses the explanation (${nextBeat.id} -> ${after?.beat?.id})`);
+      }
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/layout-L1-${w}x${h}.png` });
+      assert.deepEqual(errors, [], `${w}x${h}: no page errors: ${errors.join(' | ')}`);
+      await page.close();
+    }
+    // Outside a lesson the change must be invisible: level 11 keeps its chrome and its board.
+    {
+      const { page, errors } = await newPage(390, 844);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await page.evaluate((done) => {
+        localStorage.clear();
+        localStorage.setItem('severgrow.campaign.progress.v3', JSON.stringify({ version: 1, unlocked: 11, completed: done, best: {} }));
+      }, CAMPAIGN_LEVELS.slice(0, 10).map((l) => l.id));
+      await page.reload({ waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      await page.waitForTimeout(700);
+      const g = await geometry(page);
+      check(g.lessonAttr === null && !g.headerTitle && g.plateHidden, 'L11: no lesson title, no plate, and no lesson attribute');
+      check(Math.abs(parseFloat(g.hudPad ?? '6') - 6) <= 0.5, `L11: the HUD keeps its own gutter (${g.hudPad})`);
+      check((await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length)) === 37, 'L11: the 37-hex board is whole');
+      check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, 'L11: no page scroll');
+      assert.deepEqual(errors, [], `L11: no page errors: ${errors.join(' | ')}`);
+      await page.close();
+    }
+  }
+  if (ONLY === 'all' || ONLY === 'tiers') {
+    console.log('\nTier fade on the real window:');
+    const openWith = async (counts: Record<string, number>) => {
+      const { page, errors } = await newPage(390, 844);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await page.evaluate((c) => {
+        localStorage.clear();
+        localStorage.setItem('severgrow.campaign.progress.v3', JSON.stringify({ version: 1, unlocked: 1, completed: [], best: {} }));
+        localStorage.setItem('severgrow.lesson.meta.v1', JSON.stringify({ level: 1, version: 2, seen: ['1:intro:tree', '1:intro:their-home'] }));
+        localStorage.setItem('severgrow.lesson.mastery.v1', JSON.stringify({ version: 2, counts: c, spotlights: {}, hellos: [] }));
+      }, counts);
+      await page.reload({ waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      // A fresh level replays its opening explanations; move past them to the first Draw.
+      for (let i = 0; i < 4; i++) {
+        const b = (await hook<any>(page, 'lesson'))?.beat;
+        if (!b?.explain) break;
+        await page.waitForTimeout(700);
+        await tapAnywhere(page);
+        await page.waitForTimeout(220);
+      }
+      await page.waitForTimeout(350);
+      const info = await page.evaluate(() => {
+        const f = document.getElementById('tutorial-focus');
+        const dim = f?.querySelector('.focus-dim');
+        const plate = document.getElementById('lesson-plate');
+        return {
+          tier: f?.getAttribute('data-tier') ?? '',
+          hidden: !!f?.hasAttribute('hidden'),
+          fill: dim ? getComputedStyle(dim).fill : '',
+          plateHidden: !plate || !!plate.hidden,
+          plateText: plate?.querySelector('.lesson-copy')?.textContent ?? '',
+          display: document.querySelector('#smart-led-text')?.textContent ?? '',
+          lesson: (window as any).__severgrow?.lesson?.() ?? null,
+        };
+      });
+      return { page, errors, info };
+    };
+
+    {
+      const { page, errors, info } = await openWith({});
+      check(info.tier === 'spotlight', `L1 first Draw is SPOTLIGHT (${info.tier})`);
+      check(!info.hidden && /0\.45\)/.test(info.fill), `SPOTLIGHT dim is the strong L1 dim (${info.fill})`);
+      check(info.lesson?.beat?.say === LESSON.tapDraw, 'and the display says what to do');
+      check(info.plateHidden, 'and the box is empty: nothing to explain');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 1 });
+      check(info.tier === 'guide', `second Draw is GUIDE (${info.tier})`);
+      check(/0\.15\)/.test(info.fill), `GUIDE dim is light (${info.fill})`);
+      check(info.lesson?.beat?.say === LESSON.tapDraw && !info.lesson?.beat?.line, 'and the action stays, with no box sentence');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 2 });
+      check(info.tier === 'whisper', `third Draw is WHISPER (${info.tier})`);
+      check(/rgba\(0, 0, 0, 0\)/.test(info.fill), `WHISPER has no dim (${info.fill})`);
+      check(info.lesson?.beat?.say === LESSON.tapDraw && !info.lesson?.beat?.line, 'and the action line, never a single word');
+      check(/\s/.test(info.lesson?.beat?.say ?? ''), 'the whisper says what to do (more than one word)');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 9 });
+      check(info.lesson?.beat == null, 'a well-practised Draw shows no light');
+      check(info.plateHidden, 'and the box stays empty: no label, no sentence');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+  }
+  if (ONLY === 'all' || ONLY === 'redesign') {
+    console.log('\nRedesign: one borderless box, tap-to-dismiss, a lifted card that still throws:');
+    const boxText = (p: Page) => p.evaluate(() => {
+      const plate = document.getElementById('lesson-plate');
+      return plate && !plate.hidden ? (plate.querySelector('.lesson-copy')?.textContent ?? '') : '';
+    }) as Promise<string>;
+    const displayText = (p: Page) => p.evaluate(() => document.querySelector('#smart-led-text')?.textContent ?? '') as Promise<string>;
+    const tap = async (p: Page, pt: { x: number; y: number } | null) => {
+      if (!pt) throw new Error('nothing to tap');
+      await p.mouse.click(pt.x, pt.y);
+      await p.waitForTimeout(380);
+    };
+    for (const [w, h] of [[390, 844], [360, 640]] as const) {
+      const tag = `${w}x${h}`;
+      const { page, errors } = await newPage(w, h);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      const copy: string[] = [];
+      try {
+        // 1. The opening explanation: one caption, no border/outline/shadow, no buttons, taps through.
+        await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 10000 });
+        const g = await geometry(page);
+        checkCockpit(g, tag, true);
+        check(g.plateCopy === LESSON.yourHomeLine, `${tag}: the home explanation is the new sentence`);
+        copy.push(g.plateCopy);
+        const chrome = await page.evaluate(() => {
+          const p = document.getElementById('lesson-plate')!;
+          const s = getComputedStyle(p);
+          const r = p.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {
+            border: s.borderTopWidth, outline: s.outlineStyle + ' ' + s.outlineWidth, shadow: s.boxShadow,
+            pointer: s.pointerEvents, buttons: p.querySelectorAll('button, [role="button"]').length,
+            under: at ? (at.id || at.className || at.tagName) : 'none',
+          };
+        });
+        check(parseFloat(chrome.border) === 0, `${tag}: no border (${chrome.border})`);
+        check(chrome.outline.startsWith('none') || chrome.outline.endsWith('0px'), `${tag}: no outline (${chrome.outline})`);
+        check(chrome.shadow === 'none', `${tag}: no shadow/edge (${chrome.shadow})`);
+        check(chrome.pointer === 'none', `${tag}: pointer-events:none (${chrome.pointer})`);
+        check(chrome.buttons === 0, `${tag}: no buttons in the box (${chrome.buttons})`);
+        check(chrome.under !== 'lesson-plate', `${tag}: a tap over the box lands on the board (${chrome.under})`);
+        await page.waitForTimeout(750);
+        const b1 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b1 && b1.id === '1:intro:tree', `${tag}: the first beat is the home explanation (${b1?.id})`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-box-${w}x${h}.png` });
+
+        // 2. Tapping the highlighted thing advances; the win condition is a sentence, not a label.
+        const p1 = (await litPoints(page, b1.lit))[0]!;
+        await tap(page, p1);
+        const b2 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b2 && b2.lit.t === 'home' && b2.lit.player === 1, `${tag}: tapping the lit home advances (${b2?.id})`);
+        check((await boxText(page)) === LESSON.theirHomeLine, `${tag}: the win sentence is in the box`);
+        copy.push(await boxText(page));
+
+        // 3. Tapping anywhere (over the box itself) advances; then the first-draw sentence.
+        await page.waitForTimeout(750);
+        const boxPt = await page.evaluate(() => { const r = document.getElementById('lesson-plate')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }) as { x: number; y: number };
+        await tap(page, boxPt);
+        const b3 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b3 && b3.id === '1:intro:first-draw', `${tag}: a tap anywhere advances (${b3?.id})`);
+        check((await boxText(page)) === LESSON.tapDrawLine, `${tag}: the first-draw sentence is in the box`);
+        copy.push(await boxText(page));
+
+        // 4. Dismiss with the lit deck: the action goes to the display, the box empties.
+        await page.waitForTimeout(750);
+        const deck = (await litPoints(page, b3.lit))[0]!;
+        await tap(page, deck);
+        const b4 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b4 && b4.id === 'draw' && b4.say === LESSON.tapDraw, `${tag}: the draw action is on the display`);
+        check((await boxText(page)) === '', `${tag}: the box is empty for a plain action`);
+        check((await displayText(page)) === LESSON.tapDraw, `${tag}: the display reads TAP THE DRAW PILE`);
+
+        // 5. Draw: the Grow explanation, and the suggested card is genuinely lifted.
+        await tap(page, deck);
+        await page.waitForTimeout(350);
+        const b5 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b5 && b5.id === '1:idea:first-grow', `${tag}: the Grow explanation follows the draw`);
+        check((await boxText(page)) === LESSON.growLine, `${tag}: the Grow sentence uses "your hand"`);
+        copy.push(await boxText(page));
+        // Never both voices at once: while the box explains there is no action line, and the
+        // display never falls back to a lone step word.
+        await page.waitForTimeout(1200);
+        const settleDisplay = (await displayText(page)).trim();
+        check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(settleDisplay), `${tag}: no lone step word on the display (${settleDisplay})`);
+        check(settleDisplay !== LESSON.growLine, `${tag}: the display does not repeat the box`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-card-${w}x${h}.png` });
+        const cardId = b5.lit.id;
+        const lift = await page.evaluate(`(() => {
+          const c = document.querySelector('#hand .card[data-card="${cardId}"]');
+          if (!c) return null;
+          const s = getComputedStyle(c); const r = c.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { translate: s.translate, scale: s.scale, z: s.zIndex, hit: at?.closest('#hand .card')?.getAttribute('data-card') ?? '' };
+        })()`) as { translate: string; scale: string; z: string; hit: string } | null;
+        check(!!lift, `${tag}: the suggested card is in the fan`);
+        check(!!lift && lift.translate !== 'none' && parseFloat(lift.translate.split(' ').at(-1) ?? '0') <= -18,
+          `${tag}: it is lifted out of the fan (${lift?.translate})`);
+        check(!!lift && parseFloat(lift.scale) >= 1.04, `${tag}: it is slightly larger (${lift?.scale})`);
+        check(!!lift && lift.hit === String(cardId), `${tag}: the lifted card is still the tap target`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-lifted-${w}x${h}.png` });
+
+        // 6. Dismiss on the card itself; the card stays lifted while it is the suggestion.
+        await page.waitForTimeout(750);
+        const cardPt = (await litPoints(page, b5.lit))[0]!;
+        await tap(page, cardPt);
+        const b6 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b6 && b6.id.startsWith('pick:') && b6.say === LESSON.chooseCard, `${tag}: then the card action (${b6?.id})`);
+        check((await page.evaluate(`!!document.querySelector('#hand .card[data-card="${cardId}"].tutorial-target-card')`)) === true,
+          `${tag}: the suggested card is still lifted`);
+        // 7. Pick it: the tile is lit and no card is left lifted by the lesson.
+        await tap(page, cardPt);
+        const b7 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b7 && b7.lit.t === 'hex', `${tag}: picking the card lights the tile (${b7?.id})`);
+        check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
+          `${tag}: no card stays lifted after the beat moves on`);
+        // 8. Place it: the score explanation; the display holds the score.
+        const tilePt = (await litPoints(page, b7.lit))[0]!;
+        await tap(page, tilePt);
+        await idle(page);
+        await page.waitForTimeout(300);
+        const b8 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the score moment explains the tile rank`);
+        check(/^\d+:\d+$/.test(await displayText(page)), `${tag}: the display shows the score (${await displayText(page)})`);
+        copy.push(await boxText(page));
+        // 9. Tap anywhere: the end-of-turn action is a line, never a bare word.
+        await page.waitForTimeout(750);
+        await tapAnywhere(page);
+        const b9 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b9 && b9.id === 'end' && b9.say === LESSON.tapThrow, `${tag}: the end action reads TAP » TO THROW`);
+        check((await displayText(page)) === LESSON.tapThrow, `${tag}: and the display says it`);
+        // 10. End the Grow: the Throw explanation, with the suggested card lifted.
+        const endPt = (await litPoints(page, b9.lit))[0]!;
+        await tap(page, endPt);
+        await page.waitForTimeout(250);
+        const b10 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b10 && b10.id === '1:idea:first-throw', `${tag}: the Throw explanation follows the Grow`);
+        check((await boxText(page)) === LESSON.throwLine, `${tag}: the Throw sentence is in the box`);
+        copy.push(await boxText(page));
+        check(b10.lit.t === 'card', `${tag}: the Throw explanation points at a card`);
+        // 11. Dismiss on the card, pick it, and throw it: the lifted card is fully usable.
+        await page.waitForTimeout(750);
+        const throwCardPt = (await litPoints(page, b10.lit))[0]!;
+        await tap(page, throwCardPt);
+        const b11 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b11 && b11.id.startsWith('throw:') && b11.say === LESSON.throwCard, `${tag}: then the throw action (${b11?.id})`);
+        await tap(page, throwCardPt);
+        const b12 = (await hook<any>(page, 'lesson')).beat;
+        check(!!b12 && b12.lit.t === 'discard', `${tag}: the Throw pile is lit for the second tap`);
+        const pilePt = (await litPoints(page, b12.lit))[0]!;
+        await tap(page, pilePt);
+        await idle(page);
+        const st = await hook<any>(page, 'state');
+        check(st.history.some((e: any) => e.t === 'Discard' && e.player === 0), `${tag}: the lifted card was thrown and the turn ended`);
+        check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
+          `${tag}: nothing is left lifted after the throw`);
+
+        // The four required sentences all appeared in their own beat.
+        for (const [name, text] of [['win', LESSON.theirHomeLine], ['draw', LESSON.tapDrawLine], ['grow', LESSON.growLine], ['throw', LESSON.throwLine]] as const) {
+          check(copy.includes(text), `${tag}: the ${name} sentence appeared in the box`);
+        }
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-${w}x${h}.png` });
+        assert.deepEqual(errors, [], `${tag}: no page errors: ${errors.join(' | ')}`);
+      } finally {
+        await page.close();
+      }
     }
   }
   console.log('\n' + results.join('\n'));

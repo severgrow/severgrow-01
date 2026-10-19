@@ -54,7 +54,10 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
   - never takes your home's last open side;
   - always draws from the Draw pile, so the authored Throw pile stays as set.
   - Level 10 uses the existing level-1 bot.
-- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the instruction and reason) from the **live** game state, never from a step counter, so any legal alternative keeps working.
+- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the action on the display
+  and the explanation in the info box) from the **live** game state, never from a step counter, so
+  any legal alternative keeps working. `lesson-voice.ts` splits the two voices: the display says
+  what to do, the box explains why — never the same words in both.
 - `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
 
 **Guidance by level.**
@@ -62,8 +65,8 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 | Levels | Guidance |
 |---|---|
 | 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
-| 4-9 | Every legal move is played; the light adapts. The one-word hint stays on screen. |
-| 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
+| 4-9 | Every legal move is played; the light adapts. The action line stays on the display. |
+| 10 | No guidance unless idle for 6 s; one LAST TURN beat. |
 | 11-30 | The existing levels, unchanged. No lesson. |
 
 - **No text on the map.** In every mode the old on-board "tap why" plate now goes to the LED; the map only gets a ring.
@@ -72,8 +75,9 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 **Storage and versioning.** The root, `/2/` and `/3/` share one origin:
 
 - `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
-- Each lesson has a `version`. The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
-- Completed levels stay completed (the progress record is the existing one).
+- Each lesson has a `version` (currently **2**). The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Per-action mastery (Draw / Grow / Throw / Cut / Take over / Bloom / Bomb / Blast / Strengthen / Surround) is saved in `severgrow.lesson.mastery.v1`, keyed to that lesson version. A version bump starts the fade cleanly.
+- **v3 reset (2026-10-19):** the onboarding polish changed lesson versions and several authored boards, so progress and the unfinished match moved to `.v3`. Old `.v2` (and `.v1`) keys stay in the browser, unread; every player starts the campaign at level 1 again. Completed levels therefore stay completed only within the current `.v3` record.
 
 **Seeds.** Levels 1-10 pay **no Seeds in /3** and their finish card has no Seeds line:
 
@@ -87,7 +91,10 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 1. One idea per level.
 2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
-3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+3. Words go in the `LESSON` section of `src/strings.ts`: the display carries an action line of 2-6
+   words (never a lone word), the info box one full sentence that fits four lines on the smallest
+   phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list
+   (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
 4. Bump the lesson's `version`.
 5. Update LESSON-SCRIPTS.md.
 6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.
@@ -102,7 +109,12 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 **The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
-- the glass window and focus layer live in `web/src/player/glass-surface.ts`.
+- the glass window and focus layer live in `web/src/player/glass-surface.ts`;
+- the lesson's words live in two places only: the info box (`#lesson-plate`, explanations, one
+  sentence, no border, no buttons, `pointer-events:none`) and the cockpit display (the action).
+  `web/src/lessons/lesson-voice.ts` chooses which. The game's header stays the menu and the logo,
+  the map keeps full size, and levels 1-10 show no glass window, no `LEVEL n` kicker, no title and
+  no mission. Every other screen keeps its own chrome.
 
 ## The level schema
 
@@ -671,10 +683,10 @@ device, or produced by a bundle built before the change, must never be refused b
   70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
   A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
   intended fixed start (the seed is never rerolled).
-- Progress is its own record, `severgrow.campaign.progress.v1`: the completed ids, the best attempt
+- Progress is its own record, `severgrow.campaign.progress.v3`: the completed ids, the best attempt
   per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
   array) is never migrated or reshaped.
-- A campaign match is saved under its **own** key (`severgrow.campaign.save.v1`, wrapped with the
+- A campaign match is saved under its **own** key (`severgrow.campaign.save.v3`, wrapped with the
   level id around the normal offline save), so the classic save
   (`severgrow.save.v7`) is never overwritten by a campaign game. `severgrow.lastmode.v1` records
   which offline match was played last, and **Continue** resumes that one. An unfinished campaign

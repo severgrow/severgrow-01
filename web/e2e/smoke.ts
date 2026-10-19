@@ -95,7 +95,7 @@ const openPage = async (theme: string, size: keyof typeof SIZES, settings: Recor
   return { page, errors };
 };
 
-/** Builds the menu as far as the Training entry: the product menu keeps it behind PLAY. */
+/** Builds the menu as far as the Practice match entry: the product menu keeps it behind PLAY. */
 const openTraining = async (page: Page): Promise<void> => {
   await openMenuEntry(page, 'menu-new');
 };
@@ -121,7 +121,7 @@ const pickDifficultyLevel = async (page: Page, level: Level) => {
   await page.click(`#level-grid [data-difficulty="${tier.id}"]`);
 };
 
-/** Play → Training → the given bot level (default 7). */
+/** Play → Practice match → the given bot level (default 7). */
 const newGame = async (page: Page, level: Level = 7) => {
   await openTraining(page);
   await pickDifficultyLevel(page, level);

@@ -180,12 +180,21 @@ for (const ph of PHONES) {
     // 4 tiles, and 3 from a group of 4 ("keep the other")
     const { page } = await open(stateWith({}, SET4), ph);
     // two ways to bloom: one "Bloom" button opens the list; it says "Bloom 3 tiles, keep the other"
-    const toggle = await page.locator('#moves .bloom-toggle').isVisible();
-    await page.click('#moves .bloom-toggle').catch(() => {});
+    const bloomToggle = page.locator('#moves .bloom-toggle');
+    await bloomToggle.waitFor({ state: 'visible' });
+    const toggle = await bloomToggle.isVisible();
+    const bloomOptions = page.locator('#moves .bloom-options');
+    await bloomToggle.click();
+    // Only measure once the list is really open. No catch: a click that never lands must fail
+    // here with its real error, not turn into a missing panel later ("box none").
+    await bloomOptions.waitFor({ state: 'visible' });
+    await page.locator('#moves .bloom-toggle[aria-expanded="true"]').waitFor({ state: 'visible' });
     const label3 = (await page.locator('#moves [data-kind^="bloom-3-"]').textContent()) ?? '';
-    const box = await page.locator('.bloom-options').boundingBox();
+    const box = await bloomOptions.boundingBox();
     const inView = !!box && box.x >= 0 && box.x + box.width <= ph.w + 0.5 && box.y >= 0;
-    await page.click('#moves .bloom-toggle').catch(() => {});
+    // The same control closes the list; wait for that before pick() reopens it.
+    await bloomToggle.click();
+    await bloomOptions.waitFor({ state: 'hidden' });
     await pick(page, 4);
     await tDrag(page, ['-1,1', '0,1', '1,0', '1,1']);
     await confirm(page);

@@ -1,5 +1,5 @@
 // Main-menu structure shots for the FUTASAKU 0.5 menu restructure (2026-10-15): the main menu with
-// its LOG IN button, the PLAY submenu, the three TRAINING tiers and the signed-in menu.
+// its LOG IN button, the PLAY submenu, the three practice-match tiers and the signed-in menu.
 //
 //   npx tsx web/e2e/menu-shots.ts
 //   PW_CHROMIUM=/path/to/chrome npx tsx web/e2e/menu-shots.ts
@@ -128,7 +128,7 @@ try {
       await context.close();
     }
 
-    // ---- 2. the PLAY submenu: Play online / LEVEL n / Training, and a way back ----
+    // ---- 2. the PLAY submenu: Play online / LEVEL n / Practice match, and a way back ----
     {
       const { context, page } = await device(vp, false, `play-${vp.key}`);
       await page.click('#menu-play');
@@ -137,7 +137,7 @@ try {
       check(`${vp.key}: the submenu takes over the menu`, !(await page.locator('#menu').isVisible()));
       check(`${vp.key}: the PLAY heading reads Play`, (await page.textContent('#play-title'))?.trim() === 'Play');
       const entries = await page.locator('#play-actions button').allTextContents();
-      check(`${vp.key}: PLAY holds Play online / LEVEL n / Training`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Training']), entries.join(' | '));
+      check(`${vp.key}: PLAY holds Play online / LEVEL n / Practice match`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Practice match']), entries.join(' | '));
       check(`${vp.key}: exactly one filled button in the submenu, and it is Play online`,
         JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
       const fit = await page.evaluate(() => {
@@ -149,14 +149,14 @@ try {
       await context.close();
     }
 
-    // ---- 3. the three TRAINING tiers (PLAY -> Training) ----
+    // ---- 3. the three practice-match tiers (PLAY -> Practice match) ----
     {
       const { context, page } = await device(vp, false, `training-${vp.key}`);
       await page.click('#menu-play');
       await page.click('#menu-new');
       await page.waitForSelector('#levels:not([hidden])', { timeout: 10_000 });
       await page.waitForTimeout(400);
-      check(`${vp.key}: the training heading reads Training`, (await page.textContent('#levels-heading'))?.trim() === 'Training');
+      check(`${vp.key}: the practice-match heading reads Practice match`, (await page.textContent('#levels-heading'))?.trim() === 'Practice match');
       const tiers = await page.locator('#level-grid .difficulty-tile').allTextContents();
       check(`${vp.key}: three tiers EASY / MEDIUM / HARD`, JSON.stringify(tiers) === JSON.stringify(['EASY', 'MEDIUM', 'HARD']), tiers.join(' | '));
       await shotName(page, `training-tiers-${vp.key}`);

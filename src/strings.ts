@@ -626,7 +626,7 @@ export const HELP = Object.freeze({
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
- *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Training. */
+ *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Practice match. */
 export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
@@ -642,8 +642,8 @@ export const MENU = Object.freeze({
   // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
   // player is not given access to every level - MENU.level(n) starts the next one they have not
   // completed. Kept out of strings.ts entirely rather than left as a string nothing reads.
-  /** the PLAY entry that opens the three training tiers */
-  training: 'Training',
+  /** the PLAY entry that opens the three practice-match tiers */
+  training: 'Practice match',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */
   level: (number: number): string => `LEVEL ${number}`,
   /** The PLAY entry once every built level is complete: there is no next level to name, so it opens
@@ -651,8 +651,8 @@ export const MENU = Object.freeze({
    *  level is unfinished the entry stays the single way in (owner, 2026-10-16). */
   levels: 'LEVELS',
   levelsAria: 'Levels. Choose a completed level to replay.',
-  /** the training screen's heading (the tier picker keeps its legacy heading off the product menu) */
-  trainingTitle: 'Training',
+  /** the practice-match screen's heading (the tier picker keeps its legacy heading off the product menu) */
+  trainingTitle: 'Practice match',
 });
 
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */
@@ -1167,88 +1167,61 @@ export const CAMPAIGN = Object.freeze({
 // ======================================================================================
 // LESSONS — levels 1-10 are the tutorial (/3 onboarding line, 2026-10-18).
 //
-// Every word a player reads in a teaching level. The glass window shows an instruction (6 words or
-// fewer, caps, LED) and a reason (12 words or fewer); a wrong tap is answered in the window or the
-// LED, never on the board. One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
-// Bloom is never "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
+// Every word a player reads in a teaching level. The DISPLAY (the cockpit's LED) says what to do
+// now: a short action line, never a lone word. The INFO BOX (#lesson-plate) explains: one full
+// sentence, shown once, dismissed by a tap anywhere. A wrong tap is answered on the display.
+// One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points, home. Bloom is never
+// "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
 // docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
 // ======================================================================================
 export const LESSON = Object.freeze({
-  // shared turn words (the one-word window after a lesson's first turn)
-  draw: 'DRAW',
-  grow: 'GROW',
-  throwWord: 'THROW',
-  theirTurn: 'THEIR TURN',
-  theirTurnLine: 'They draw, grow and throw too.',
-  // the turn, spelled out the first time
+  // ---- the display: what to do now (never a lone word) ----
   tapDraw: 'TAP THE DRAW PILE',
-  tapDrawLine: 'Every turn starts with drawing 1 card.',
-  pickCard: 'PICK THE LIT CARD',
-  pickCardLine: 'This card will be placed on the board.',
-  tapTile: 'TAP A LIT TILE',
-  tapTileLine: 'Tap here to Grow this card.',
-  youGrew: 'YOU GREW',
-  youGrewLine: 'Tiles keep the rank of the card used.',
+  tapThrowPile: 'TAP THE THROW PILE',
+  chooseCard: 'CHOOSE A CARD',
+  tapTile: 'TAP THE LIT TILE',
+  tapTiles: 'TAP THE LIT TILES',
   throwCard: 'THROW A CARD',
-  throwCardLine: 'Throw 1 card to end your turn.',
-  throwPile: 'TAP THE THROW PILE',
-  throwPileLine: 'Move the card here, or tap it again.',
-  done: 'DONE GROWING',
-  doneLine: 'Tap » to go on to Throw.',
-  // the objective
-  yourTree: 'THIS IS YOUR HOME',
-  yourTreeLine: 'Grow by placing cards on the board, on tiles that connect to your home.',
-  theirHome: 'THAT IS THEIR HOME',
-  theirHomeLine: 'Surround it to win, or have more points at the end.',
-  pileLow: 'PILE ALMOST EMPTY',
-  pileLowLine: 'You can see how many cards are left in the Draw pile.',
-  lastTurn: 'LAST TURN',
-  lastTurnLine: 'Pile empty: each tile is 1 point. Numbers on tiles don’t count.',
-  // level 2
-  biggerWins: 'BIGGER NUMBER WINS',
-  biggerWinsLine: 'You can replace your tile with a stronger card.',
-  takeTile: 'CUT THROUGH THEIR TILE',
-  takeTileLine: 'A card can cut through opponent’s weaker tile.',
-  // level 3
-  rocksBlock: 'ROCKS BLOCK',
-  rocksBlockLine: 'Nothing can grow on a rock.',
-  goldDouble: 'GOLD COUNTS DOUBLE',
-  goldDoubleLine: 'Gold tiles score two points. Take it first.',
-  // level 4
-  cutLink: 'CUT THEIR LINK',
-  cutLinkLine: 'Disconnect opponent’s tiles from their home to destroy them.',
-  withered: 'THEY WITHERED',
-  witheredLine: 'Disconnected tiles don’t score anything.',
-  // level 5
-  cardsThatBloom: 'CARDS THAT BLOOM',
-  cardsThatBloomLine: '3 cards with the same number, or 3 of same suit in order.',
-  playLitLine: 'Three together make a Bloom.',
+  tapThrow: 'TAP » TO THROW',
+  tapSkip: 'TAP » TO SKIP GROW',
   tapBloom: 'TAP BLOOM',
-  tapBloomLine: 'Then tap or draw the tiles on board. Have to connect to your home.',
-  // the Bloom picked: its tiles are next (owner, 2026-10-19: tap Bloom first, then the tiles)
-  bloomTiles: 'TAP THE LIT TILES',
-  bloomTilesLine: 'Tap or draw the tiles on board. Have to connect to your home.',
-  bloomed: 'BLOOM!',
-  bloomedLine: 'A Bloom is an extra move, growing multiple tiles at once.',
-  // level 6
-  surround: 'SURROUND THEIR HOME',
-  surroundLine: 'Surround their home from each side for an instant win.',
-  canWin: 'YOU CAN WIN',
-  canWinLine: 'Take the last open side of their home.',
-  // level 7
+  tapBlast: 'TAP BLOOM TO BLAST',
+  chooseBomb: 'CHOOSE THE BOMB',
   bombTile: 'BOMB THEIR TILE',
-  bombTileLine: 'A Bomb removes 1 enemy tile. It replaces Grow in your turn.',
-  // level 8
-  blast: 'TWO BOMBS MAKE A BLAST',
-  blastLine: 'A Blast clears a large area. Homes are safe.',
-  freeGrow: 'FREE GROW',
-  freeGrowLine: 'A Blast is an extra move on top of Grow and Blooms.',
-  // level 9
-  pileGold: 'THROW PILE IS GOLD',
-  pileGoldLine: 'An indicator that its top card completes a Bloom in your hand.',
-  skipGrow: 'SKIP GROW',
-  skipGrowLine: 'You can end a turn without growing to save cards for later.',
-  // finish cards: title + one line that says how you won
+  tapTheirTile: 'TAP THEIR TILE',
+  tapLastSide: 'TAP THE LAST SIDE',
+  // a power's once-ever hello (the card itself glows)
+  bloomHello: 'TAP TO BLOOM',
+  bombHello: 'TAP THE BOMB',
+  theirTurn: 'THEIR TURN',
+  lastCards: 'LAST CARDS',
+  lastTurn: 'LAST TURN',
+  // ---- the info box: explanations, one full sentence each ----
+  yourHomeLine: 'This is your home. Place cards on the board so they connect to it.',
+  theirHomeLine: 'To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the draw pile runs out.',
+  tapDrawLine: 'You start every turn by drawing 1 card from the draw or discard pile.',
+  growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.',
+  throwLine: 'Throw: swipe up, drag it to a discard pile, or double tap to discard a card and finish your turn.',
+  youGrewLine: 'Tiles keep the rank of the card used.',
+  biggerWinsLine: 'Bigger number wins: a stronger card can replace your own tile.',
+  takeTileLine: 'Cut through: a stronger card can take an opponent’s tile next to yours.',
+  rocksBlockLine: 'Nothing can Grow on a rock.',
+  goldDoubleLine: 'A gold tile counts double, so it is worth two points.',
+  cutLinkLine: 'Cut their link: take that tile and the tiles behind it wither.',
+  witheredLine: 'Tiles cut off from their home wither and stop scoring.',
+  cardsThatBloomLine: 'Bloom: three cards with the same number, or three in a row in one suit.',
+  bloomedLine: 'A Bloom is an extra move: it grows several tiles at once.',
+  surroundLine: 'Surround: fill every side of their home for an instant win.',
+  bombLine: 'Bomb: it removes one enemy tile and replaces your Grow that turn.',
+  blastLine: 'Blast: two Bombs clear a large area. Homes are safe.',
+  freeGrowLine: 'A Blast is an extra move: you can still Grow afterwards.',
+  pileGoldLine: 'The Throw pile glows gold when its top card completes a Bloom in your hand.',
+  skipGrowLine: 'You can end a turn without Growing to keep cards for later.',
+  lastTurnLine: 'The Draw pile is empty: each tile is now 1 point, and the numbers on tiles don’t count.',
+  theirTurnLine: 'They draw, grow and throw too.',
+  restartLine: 'This lesson cannot finish now. Open the menu to start again.',
+  // finish cards: the one idea learned, with a small mark, then the way on
+  learned: 'YOU LEARNED',
   youWin: 'YOU WIN',
   wonOnPoints: 'You had more points – you won!',
   wonByKo: 'You surrounded their home.',
@@ -1272,9 +1245,4 @@ export const LESSON = Object.freeze({
   bloomNeeds: 'THREE CARDS OR MORE',
   bloomMatch: 'SAME NUMBER, OR COUNTING UP',
   theirTurnNow: 'THEIR TURN',
-  // the way out of a lesson that cannot finish any more
-  restart: 'RESTART LEVEL',
-  restartLine: 'This lesson cannot finish now. Start again.',
-  showMe: 'Show me',
-  next: 'NEXT',
 });

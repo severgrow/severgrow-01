@@ -337,6 +337,17 @@ html.futa04-information[data-step='throw'] #hand:not(.waiting) .card:not(.futa04
   box-shadow: 0 0 0 1px rgba(222,110,83,.29), 0 0 9px 1px rgba(186,66,47,.24), 0 5px 15px rgba(20,11,10,.34);
   animation: futa04-card-breathe 1.35s ease-in-out infinite;
 }
+/* The lesson's suggested card is lifted out of the fan: still, one clean shadow, no green edge.
+   (!important is needed: the playable/throw rules above are more specific and injected later.) */
+html.futa04-information #hand .card.tutorial-target-card {
+  animation: none !important;
+  box-shadow:
+    inset 1px 1px 0 rgba(243,232,202,.25),
+    inset -1px -1.5px 0 rgba(0,0,0,.32),
+    0 16px 26px -12px rgba(0,0,0,.88),
+    0 2px 6px -2px rgba(0,0,0,.55),
+    0 0 20px rgba(233,216,173,.14) !important;
+}
 html.futa04-information[data-step='throw'] #hand:not(.waiting) .card.futa04-throw-picked {
   opacity: 1; box-shadow: 0 0 0 1px rgba(222,110,83,.35), 0 0 11px 1px rgba(186,66,47,.26) !important;
 }

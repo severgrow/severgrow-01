@@ -27,10 +27,10 @@ const check = (ok: boolean, what: string) => {
 };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow?.state?.() ?? null) as Promise<State | null>;
 const title = (p: Page) => p.evaluate(() => {
-  const panel = document.getElementById('futasaku-glass');
-  // A hidden panel keeps its last words; only a visible one is guidance.
-  if (!panel || panel.hidden) return '';
-  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() ?? '';
+  // Levels 1-10 keep their explanation in the one info box; the action lives on the display.
+  const plate = document.getElementById('lesson-plate');
+  if (plate && !plate.hidden) return plate.querySelector('.lesson-copy')?.textContent?.trim() ?? '';
+  return '';
 });
 const waitIdle = (p: Page) => p.waitForFunction(() => {
   const hook = (window as any).__severgrow;
