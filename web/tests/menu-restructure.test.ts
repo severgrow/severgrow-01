@@ -103,16 +103,26 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
     expect(mainSource).toMatch(/if \(entry\.kind === 'list'\) return showScreen\('campaign'\)/);
   });
 
-  it('asks only when the saved match disagrees, and offers both answers', () => {
-    // The question exists once, in one decision function, and the sheet gives each answer a button.
+  it('always asks on a saved match, naming the level being entered', () => {
+    // Owner decision (2026-10-19): no resume happens on entry without a question. The question
+    // exists once, in one decision function, and the sheet gives each answer a button.
     expect(mainSource).toMatch(/return askCampaignStart\(entry\.next, entry\.saved\)/);
-    expect(mainSource).toMatch(/CAMPAIGN\.askResume\(saved\.number\)/);
-    expect(mainSource).toMatch(/CAMPAIGN\.askStart\(next\.number\)/);
+    // Same level: the two answers are continue-this-level vs start-it-over.
+    expect(mainSource).toMatch(/const sameLevel = saved\.id === next\.id/);
+    expect(mainSource).toMatch(/sameLevel \? CAMPAIGN\.askContinue\(saved\.number\) : CAMPAIGN\.askResume\(saved\.number\)/);
+    expect(mainSource).toMatch(/sameLevel \? CAMPAIGN\.askRestart\(next\.number\) : CAMPAIGN\.askStart\(next\.number\)/);
+    expect(CAMPAIGN.askTitle(31, 31)).toBe('Level 31 is unfinished.');
+    expect(CAMPAIGN.askBody(31, 31)).toBe('Continue level 31 where you left off, or start it over?');
+    expect(CAMPAIGN.askContinue(31)).toBe('Continue level 31');
+    expect(CAMPAIGN.askRestart(31)).toBe('Start level 31 over');
+    // A save on a DIFFERENT level still names both levels honestly.
+    expect(CAMPAIGN.askTitle(31, 70)).toBe('Another level is unfinished.');
     expect(CAMPAIGN.askBody(31, 70)).toBe('Level 31 is still in progress. Start level 70 instead?');
     expect(CAMPAIGN.askResume(31)).toBe('Resume level 31');
     expect(CAMPAIGN.askStart(70)).toBe('Start level 70');
     // No silent resume path may remain: the press must go through the decision, not straight to a save.
     expect(mainSource).not.toMatch(/function enterCampaign\(\) \{\s*\n\s*const resume = campaignResume\(\);/);
+    expect(mainSource).not.toContain("entry.kind === 'resume'");
   });
 
   it('cannot skip a level: the order rule is checked at BOTH doors', () => {
@@ -155,18 +165,44 @@ describe('LOG IN reuses the one Google flow and hides itself when signed in', ()
     expect(accountsSource.match(/id="menu-login"|getElementById\('menu-login'\)/g) ?? []).toHaveLength(1);
   });
 
-  it('hides LOG IN whenever signedIn() is true', () => {
-    expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = signedIn\(\) !== null/);
+  it('hides LOG IN whenever signedIn() is true, and always on the product menu', () => {
+    expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = FEATURES\.campaign \|\| signedIn\(\) !== null/);
+    // The product menu is exactly PLAY, TERRITORY, SETTINGS (owner decision, 2026-10-19), so the
+    // layout pass hides LOG IN too rather than leaving it for the async accounts probe.
+    expect(mainSource).toMatch(/\$\('menu-login'\)\.hidden = FEATURES\.campaign/);
   });
 });
 
-// The saved-game resume is the ONLY way back into a match, so it must never depend on the menu
-// being re-rendered: a fresh boot, a reload and a return from a submenu all show the menu while
-// `shownScreen` may already say 'menu' (the menu restructure made PLAY a section of its own that
-// sets it back). Pinned here because the failure it prevents is silent and total: a player with a
-// finished turn and no Continue button (regression guard, 2026-10-15).
+describe('the product main menu is exactly PLAY, TERRITORY, SETTINGS', () => {
+  it('hides Continue and LOG IN in the layout pass, never merely when empty', () => {
+    // Owner decision (2026-10-19): no resume on the main menu. Continue is hidden even when a save
+    // exists; the question belongs on entry, not here.
+    expect(mainSource).toMatch(/\$\('menu-continue'\)\.hidden = FEATURES\.campaign \|\| !canContinue/);
+    expect(menuSection).toMatch(/id="menu-continue"[^>]*hidden/);
+    expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
+    // The three entries that DO belong are present: PLAY, the world map (TERRITORY) and Settings.
+    expect(menuSection).toMatch(/id="menu-play"[^>]*hidden/);
+    expect(menuSection).toMatch(/id="menu-world"[^>]*hidden/);
+    expect(menuSection).toMatch(/id="menu-settings"/);
+    expect(MENU.world).toBe('Territory');
+  });
+
+  it('leaves no Continue behaviour reachable from the menu', () => {
+    // The button is hidden with [hidden] { display:none !important }, so no empty gap remains; and
+    // its handler is ordinary legacy wiring, not a second visible control.
+    expect(mainSource).toContain("bind('menu-continue', () => continueGame())");
+    expect(menuSection).not.toMatch(/data-menu-continue/);
+  });
+});
+
+// The saved-game resume is the ONLY way back into a match on the legacy channels, so it must never
+// depend on the menu being re-rendered: a fresh boot, a reload and a return from a submenu all show
+// the menu while `shownScreen` may already say 'menu' (the menu restructure made PLAY a section of
+// its own that sets it back). Pinned here because the failure it prevents is silent and total: a
+// player with a finished turn and no Continue button (regression guard, 2026-10-15). On the product
+// channels the same recompute deliberately keeps it hidden (owner decision, 2026-10-19).
 describe('the saved-game resume is recomputed on every menu show', () => {
-  it('ships Continue hidden in the markup, so the product must reveal it', () => {
+  it('ships Continue hidden in the markup, so the layout controls whether it appears', () => {
     expect(menuSection).toMatch(/id="menu-continue"[^>]*hidden/);
   });
 
@@ -183,6 +219,8 @@ describe('the saved-game resume is recomputed on every menu show', () => {
     const sync = mainSource.slice(mainSource.indexOf('function syncMenuResume('), mainSource.indexOf('function showScreen('));
     expect(sync).toMatch(/decodeSave<CoachProgress>\(store\.get\(SAVE_KEY\)\)/);
     expect(sync).toMatch(/saved\.state\.phase !== 'GAME_OVER'/);
-    expect(sync).toMatch(/btn\.hidden = !canContinue/);
+    // The legacy channels still reveal it from storage; the product menu never does.
+    expect(sync).toMatch(/const showContinue = canContinue && !FEATURES\.campaign/);
+    expect(sync).toMatch(/btn\.hidden = !showContinue/);
   });
 });

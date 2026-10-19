@@ -20,13 +20,14 @@ describe('campaignEntry decides what the entry does', () => {
     expect(e).toEqual({ kind: 'start', level: lvl(31) });
   });
 
-  it('resumes without asking when the saved match IS the next unfinished level', () => {
-    // The common case. A question here would be pure friction.
+  it('asks before continuing a saved match on the level being entered', () => {
+    // Owner decision (2026-10-19): there is no resume from the main menu, and entering the level
+    // that owns the unfinished match must ASK rather than silently drop the player back into it.
     const e = campaignEntry(progress(31, range(30)), lvl(31));
-    expect(e).toEqual({ kind: 'resume', level: lvl(31) });
+    expect(e).toEqual({ kind: 'ask', next: lvl(31), saved: lvl(31) });
   });
 
-  it('asks only when the saved match is a DIFFERENT level', () => {
+  it('asks when the saved match is a DIFFERENT level too', () => {
     // The reported bug: everything is done, an old replay of 31 is unfinished.
     const e = campaignEntry(progress(70, range(70)), lvl(31));
     expect(e.kind).toBe('list');

@@ -6,6 +6,7 @@ import { BETA_GUIDE, FEEDBACK } from '../../../src/strings.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
+import { FEATURES } from '../channel.js';
 import { getOnlineSession } from '../online/duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
@@ -279,6 +280,10 @@ export const mountFeedback = (): void => {
     betaLink.dataset.fb = 'menu-link';
     betaLink.addEventListener('click', () => openGuide()); // replaced by the report form below when a server exists
     note.append(betaLink);
+    // Owner decision (2026-10-19): the product main menu is exactly PLAY, TERRITORY, SETTINGS.
+    // The beta line's button is a real interactive element, so it is HIDDEN on that menu rather
+    // than sitting under the three entries. The code stays intact for the legacy channels.
+    note.hidden = FEATURES.campaign;
     menuButtons.before(note);
   }
 

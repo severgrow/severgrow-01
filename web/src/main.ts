@@ -620,12 +620,12 @@ function setLead(btn: HTMLElement, lead: boolean) {
   btn.classList.toggle('ghost', !lead);
 }
 /**
- * The saved-game resume on the main menu — "Continue", or the campaign's "Resume" — or hidden when
- * there is nothing to resume. It is recomputed EVERY time the menu is shown and is deliberately NOT
- * inside the "the screen did not change" guard below: the menu is the ONLY way back into a saved
- * match, so a fresh boot, a reload and a return from a submenu must all agree with storage. A miss
- * here would leave a player staring at a menu with no way back into their game (2026-10-15).
- * Returns whether there is anything to continue, for the rest of the menu's own layout.
+ * The saved-game resume — "Continue", or the campaign's "Resume". On the LEGACY channels it is the
+ * main menu's way back into a saved match and is recomputed EVERY time the menu is shown, outside
+ * the "the screen did not change" guard, so a fresh boot, reload and submenu return all agree with
+ * storage. On the PRODUCT channels (owner decision, 2026-10-19) the main menu has NO resume at all:
+ * the player enters the level and is asked there. Returns whether the button is shown, for the rest
+ * of the menu's own layout.
  */
 function syncMenuResume(): boolean {
   const saved = decodeSave<CoachProgress>(store.get(SAVE_KEY));
@@ -633,13 +633,16 @@ function syncMenuResume(): boolean {
   const resumeCampaign = campaignCanContinue && parseLastMode(store.get(LAST_MODE_KEY)) === 'campaign';
   const resumeClassic = !!saved && saved.state.phase !== 'GAME_OVER' && !resumeCampaign;
   const canContinue = resumeCampaign || resumeClassic;
+  // Owner decision (2026-10-19): NO continue/resume button on the product main menu. A saved match
+  // is offered when the player enters its level from PLAY (see askCampaignStart), never here.
+  const showContinue = canContinue && !FEATURES.campaign;
   const btn = $('menu-continue');
-  btn.hidden = !canContinue;
+  btn.hidden = !showContinue;
   btn.classList.remove('version-btn');
   const continueLabel = resumeCampaign ? CAMPAIGN.resume : resumeClassic && saved!.coach?.tutorial ? 'Continue tutorial' : 'Continue';
   btn.textContent = continueLabel;
   btn.setAttribute('aria-label', continueLabel);
-  return canContinue;
+  return showContinue;
 }
 /**
  * Every control of the product menu that depends only on compile-time channel flags, the saved-game
@@ -652,9 +655,9 @@ function syncMenuResume(): boolean {
  */
 function layoutMenu(canContinue: boolean) {
   // ---- the product menu (owner direction, 2026-10-15, option 'split') ----
-  // LOG IN at the top, then PLAY, then the world map, Tutorial and Settings. Exactly ONE action
-  // leads on this screen and it is PLAY; Continue (the saved-game resume) is a quiet ghost right
-  // under it.
+  // On the product channels the menu is EXACTLY PLAY, TERRITORY and SETTINGS (owner decision,
+  // 2026-10-19). PLAY is its single leading action. LOG IN, Continue and Tutorial are not part of
+  // it; the legacy channels keep the flat menu they are used to.
   const online = onlineBuildEnabled();
   $('menu-play').hidden = !FEATURES.campaign;
   $('menu-play').textContent = MENU.play;
@@ -662,6 +665,10 @@ function layoutMenu(canContinue: boolean) {
   $('play-title').textContent = MENU.playTitle;
   $('menu-login').textContent = MENU.login;
   $('menu-login').setAttribute('aria-label', MENU.login);
+  // Owner decision (2026-10-19): the product menu is exactly PLAY, TERRITORY, SETTINGS. LOG IN is
+  // hidden here (the accounts module also refuses to reveal it on this channel), so a guest sees
+  // no sign-in entry on the menu itself; the online hub and Settings still offer the same flow.
+  $('menu-login').hidden = FEATURES.campaign;
   $('menu-world').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
@@ -717,6 +724,11 @@ function layoutMenu(canContinue: boolean) {
   // The code path is kept intact and the entry still exists on non-campaign channels, so the old
   // guided run can come back by flipping this one line.
   $('menu-tutorial').hidden = FEATURES.campaign;
+  // Continue is HIDDEN on the product channels (owner decision, 2026-10-19): there is NO resume on
+  // the main menu. The player enters the level from PLAY and is asked there (askCampaignStart).
+  // Hidden, not deleted, so the legacy channels keep their Continue; `[hidden]` is display:none,
+  // so it leaves no gap in the button column.
+  $('menu-continue').hidden = FEATURES.campaign || !canContinue;
   // Rename the one tutorial entry from src/strings.ts (single source).
   $('menu-tutorial').textContent = HELP.tutorial;
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
@@ -1727,10 +1739,10 @@ function startTutorialFromMenu() {
 
 /**
  * The campaign's ONE entry point — the campaign screen's own leading action, and (owner direction,
- * 2026-10-16) where the guided run now hands the player off. It resumes an unfinished campaign match
- * when there is one; otherwise it opens the player's CURRENT level, which is level 1 for a new
- * player and their own level for one who has already progressed. There is deliberately no second way
- * to start a level.
+ * 2026-10-16) where the guided run now hands the player off. With nothing saved it opens the
+ * player's CURRENT level (level 1 for a new player, their own level for one who has progressed).
+ * With an unfinished saved match it ASKS first (owner decision, 2026-10-19), naming the level being
+ * entered. There is deliberately no second way to start a level.
  */
 function enterCampaign() {
   const entry = campaignEntry(campaignProgress, campaignResume()?.level ?? null);
@@ -1738,12 +1750,9 @@ function enterCampaign() {
   // hint and the finished-campaign state the menu cannot show in one line.
   if (entry.kind === 'list') return showScreen('campaign');
   if (entry.kind === 'start') return startCampaignLevel(entry.level);
-  if (entry.kind === 'resume') {
-    const resume = campaignResume();
-    return resume ? continueCampaignMatch(resume) : startCampaignLevel(entry.level);
-  }
-  // The one disagreement possible: a saved match on a different level. Ask, rather than silently
-  // resuming something the label did not name.
+  // ANY saved match asks first (owner decision, 2026-10-19): the player tapped a level, so the
+  // question is about that level — continue it or start it over (or, if the save belongs to a
+  // different level, resume that one or start the next). Nothing resumes silently from here.
   return askCampaignStart(entry.next, entry.saved);
 }
 
@@ -1752,10 +1761,14 @@ let campaignAsk: { next: CampaignLevel; saved: CampaignLevel } | null = null;
 
 function askCampaignStart(next: CampaignLevel, saved: CampaignLevel) {
   campaignAsk = { next, saved };
-  $('csa-title').textContent = CAMPAIGN.askTitle;
+  // Owner decision (2026-10-19): entering a level with an unfinished save always asks. When the
+  // save belongs to THAT level, the two answers are "continue this level" and "start it over";
+  // when it belongs to a different level, they are "resume the saved level" and "start this one".
+  const sameLevel = saved.id === next.id;
+  $('csa-title').textContent = CAMPAIGN.askTitle(saved.number, next.number);
   $('csa-body').textContent = CAMPAIGN.askBody(saved.number, next.number);
-  $('csa-resume').textContent = CAMPAIGN.askResume(saved.number);
-  $('csa-start').textContent = CAMPAIGN.askStart(next.number);
+  $('csa-resume').textContent = sameLevel ? CAMPAIGN.askContinue(saved.number) : CAMPAIGN.askResume(saved.number);
+  $('csa-start').textContent = sameLevel ? CAMPAIGN.askRestart(next.number) : CAMPAIGN.askStart(next.number);
   sheet('sheet-campaign-start');
   // `sheet()` focuses the close control when one exists; here the point of the sheet is the choice,
   // so Resume leads with focus as well as with the primary weight.

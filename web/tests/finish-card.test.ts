@@ -135,9 +135,11 @@ describe('after the tutorial, the player lands in a level (never back at a menu)
     expect(entry).toMatch(/const entry = campaignEntry\(campaignProgress, campaignResume\(\)\?\.level \?\? null\)/);
     expect(entry).toMatch(/startCampaignLevel\(entry\.level\)/);
     expect(entry).toMatch(/return askCampaignStart\(entry\.next, entry\.saved\)/);
-    // No path may start a level straight from progress any more, and none may silently resume a save.
+    // No path may start a level straight from progress any more, and none may silently resume a save:
+    // owner decision (2026-10-19) removed the resume branch, so every saved match asks on entry.
     expect(entry).not.toMatch(/startCampaignLevel\(currentLevel\(/);
     expect(entry).not.toMatch(/if \(resume\) return continueCampaignMatch\(resume\)/);
+    expect(entry).not.toContain("entry.kind === 'resume'");
     // The campaign screen's own leading button goes through it too: no second path.
     expect(mainSource).toContain("bind('campaign-continue', () => enterCampaign())");
   });

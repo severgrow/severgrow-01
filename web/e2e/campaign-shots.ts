@@ -204,9 +204,16 @@ try {
     assert.equal(before.phase !== 'GAME_OVER', true, 'the resume check needs an unfinished match');
     await page.reload();
     await page.waitForFunction(() => !!(window as any).__severgrow, undefined, { timeout: 20000 });
-    await page.locator('#menu-continue').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#menu-continue').textContent(), 'Resume');
-    await click(page, '#menu-continue');
+    // Owner decision (2026-10-19): the main menu has NO Continue/resume. The player enters the
+    // level from PLAY and is ASKED there, so the same reload must produce the ask sheet, and the
+    // ask is about THIS level (continue it, or start it over).
+    assert.equal(await page.locator('#menu-continue').isVisible(), false, 'the main menu shows no Continue');
+    await openMenuEntry(page, 'menu-campaign');
+    await page.locator('#sheet-campaign-start:not([hidden])').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#csa-title').textContent(), `Level ${level1.number} is unfinished.`);
+    assert.equal(await page.locator('#csa-resume').textContent(), `Continue level ${level1.number}`);
+    assert.equal(await page.locator('#csa-start').textContent(), `Start level ${level1.number} over`);
+    await click(page, '#csa-resume');
     await page.waitForFunction((seed: number) => (window as any).__severgrow.state()?.seed === seed, level1.seed, { timeout: 20000 });
     await waitIdle(page);
     const resumed = (await stateOf(page))!;

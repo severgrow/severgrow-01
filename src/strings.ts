@@ -1084,10 +1084,21 @@ export const CAMPAIGN = Object.freeze({
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
   play: 'Continue',
-  /** the question shown only when a saved match is NOT the next unfinished level */
-  askTitle: 'Your campaign match is unfinished.',
+  /** The question asked when the player enters a level that has an unfinished saved match (owner
+   *  decision, 2026-10-19: there is no resume on the main menu, so entering always asks). When the
+   *  save belongs to the level being entered, the question and both answers are about THAT level;
+   *  when it belongs to another level, they name both honestly. */
+  askTitle: (saved: number, next: number): string =>
+    saved === next ? `Level ${saved} is unfinished.` : 'Another level is unfinished.',
   askBody: (saved: number, next: number): string =>
-    `Level ${saved} is still in progress. Start level ${next} instead?`,
+    saved === next
+      ? `Continue level ${saved} where you left off, or start it over?`
+      : `Level ${saved} is still in progress. Start level ${next} instead?`,
+  /** continue the saved match on the level being entered */
+  askContinue: (level: number): string => `Continue level ${level}`,
+  /** throw that saved match away and play the level from its opening */
+  askRestart: (level: number): string => `Start level ${level} over`,
+  /** the saved match is a different level: resume it, or start the level being entered */
   askResume: (saved: number): string => `Resume level ${saved}`,
   askStart: (next: number): string => `Start level ${next}`,
   /** the state words on a level tile (a completed tile is tapped to replay it) */

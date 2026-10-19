@@ -9,6 +9,7 @@ import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.
 import type { KeyValue } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
+import { FEATURES } from '../channel.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
 import {
@@ -655,9 +656,11 @@ export const mountAccounts = async (): Promise<void> => {
 
   const refresh = () => {
     hub.hidden = signedIn() !== null;
-    // The main menu's LOG IN follows the same state: shown to a guest, hidden the moment the
-    // player is signed in (and never shown at all when this whole Google branch is skipped).
-    if (menuLogin) menuLogin.hidden = signedIn() !== null;
+    // The main menu's LOG IN follows the same state on the legacy channels: shown to a guest,
+    // hidden the moment the player is signed in (and never shown when this Google branch is
+    // skipped). On the product channels it is ALWAYS hidden (owner decision, 2026-10-19: the menu
+    // is exactly PLAY, TERRITORY, SETTINGS); the online hub and Settings still offer the flow.
+    if (menuLogin) menuLogin.hidden = FEATURES.campaign || signedIn() !== null;
   };
   renderSettings();
   refresh();

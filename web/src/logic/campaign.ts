@@ -64,15 +64,16 @@ export const decodeCampaignSave = (raw: string | null): CampaignSave | null => {
  *
  *   - `list`   — every built level is complete. The chapter list is the only place left to go, so the
  *                entry stops claiming a level number at all.
- *   - `start`  — nothing saved: open the next unfinished level.
- *   - `resume` — the saved match IS that level: resume it. No question, because there is no conflict.
- *   - `ask`    — the saved match is a DIFFERENT level: the only case where the player has to choose.
- *                Asking here and nowhere else keeps a normal press to one tap.
+ *   - `start`  — nothing saved: open the next unfinished level, silently (one tap).
+ *   - `ask`    — an unfinished saved match exists. The player is ALWAYS asked before it resumes:
+ *                either "continue this level or start it over" when the save is the level being
+ *                entered, or "resume the saved level or start the next one" when it is a different
+ *                level. Owner decision (2026-10-19): no silent resume on entry, and no Continue on
+ *                the main menu.
  */
 export type CampaignEntry =
   | { kind: 'list' }
   | { kind: 'start'; level: CampaignLevel }
-  | { kind: 'resume'; level: CampaignLevel }
   | { kind: 'ask'; next: CampaignLevel; saved: CampaignLevel };
 
 export const campaignEntry = (
@@ -85,7 +86,8 @@ export const campaignEntry = (
   // If even that is complete, every built level is done.
   if (isCompleted(progress, next.id)) return { kind: 'list' };
   if (!savedLevel) return { kind: 'start', level: next };
-  if (savedLevel.id === next.id) return { kind: 'resume', level: next };
+  // `next` and `saved` may be the same level. The caller tells the two apart by comparing ids: the
+  // same level asks continue-vs-start-over; a different one asks resume-saved-vs-start-next.
   return { kind: 'ask', next, saved: savedLevel };
 };
 
