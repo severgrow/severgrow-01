@@ -46,6 +46,13 @@ export type TutorialFocusOptions = {
    * journey?" without spending any of the one-line instruction budget. Campaign guidance only.
    */
   kicker?: string;
+  /** The level's one-line mission, shown as a small pill until the first move. */
+  mission?: string;
+  /**
+   * How much light this step earns (lessons/mastery.ts): spotlight full dim + pointer,
+   * guide soft dim + pointer, whisper a pulse only, silent nothing.
+   */
+  tier?: 'spotlight' | 'guide' | 'whisper' | 'silent';
 };
 
 /** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
@@ -194,6 +201,14 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 #futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { font-size:12px; min-height:2.9em; }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
+/* The level's mission: a quiet pill, not another instruction. */
+#futasaku-glass[data-mode='tutorial'] .glass-mission {
+  align-self:center; margin:0; padding:3px 10px 2px; border:1px solid rgba(233,216,173,.18);
+  border-radius:999px; background:rgba(233,216,173,.05); color:rgba(243,230,196,.76);
+  font:600 10px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing:.12em; text-transform:uppercase; text-align:center;
+}
+.large-text #futasaku-glass[data-mode='tutorial'] .glass-mission { font-size:12px; letter-spacing:.09em; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
    (the Match Intel reference already goes 13px → 15px). The head buttons keep their 11px so the
    longest CTA ("DRAW 1 CARD") can never ellipsise inside a 360px glass. */
@@ -289,9 +304,15 @@ html.futa04-tutorial #scrim { z-index: 50; }
 html.futa04-tutorial .sheet { z-index: 51; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
-#tutorial-focus .focus-dim { fill:rgba(0,0,0,.38); }
-/* The levels: a strong dim (only the lit thing reads), a chunky pointer with a dark edge. */
-#tutorial-focus[data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.62); }
+#tutorial-focus .focus-dim { fill:rgba(0,0,0,.22); }
+/* The levels: a NEW idea gets the strong dim; a guide is much lighter; a whisper has no dim at
+   all and only pulses the target. Level 1 starts a little stronger than the rest. */
+#tutorial-focus[data-tier='spotlight'][data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.45); }
+#tutorial-focus[data-tier='guide'] .focus-dim { fill:rgba(0,0,0,.15); }
+#tutorial-focus[data-tier='whisper'] .focus-dim { fill:rgba(0,0,0,0); }
+#tutorial-focus[data-tier='whisper'] .focus-hole { fill:transparent; }
+#tutorial-focus[data-tier='whisper'] .focus-glow-soft { fill:rgba(233,216,173,.10); }
+#tutorial-focus[data-tier='whisper'] .focus-glow { fill:rgba(233,216,173,.14); filter:drop-shadow(0 0 10px rgba(233,216,173,.38)); }
 #tutorial-focus[data-lesson='1'] .focus-glow { fill:rgba(233,216,173,.16); }
 #tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; stroke:rgba(20,16,10,.85); stroke-width:1.6px; paint-order:stroke; }
 /* Contour-free highlight: soft cream fill only — no stroke/ring outline. */
@@ -685,6 +706,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   let idleHard = false;
   /** A level's focus: exactly its target, the target's own outline, strong dim. */
   let lessonFocus = false;
+  /** The current teaching tier; WHISPER has a pulse but no dim and no pointer. */
+  let focusTier: 'spotlight' | 'guide' | 'whisper' | 'silent' = 'spotlight';
   let raf = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
@@ -991,8 +1014,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
     // The levels' glow holds still: the lit thing already breathes on its own.
-    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked || lessonFocus ? '0' : '1');
-    setIfChanged(focus, 'data-bob', reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1');
+    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : focusTier === 'whisper' ? '1' : lessonFocus ? '0' : '1');
+    setIfChanged(focus, 'data-bob', reduceMotion || !tracked || focusTier === 'whisper' ? '0' : idleHard ? 'hard' : '1');
     setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');
     // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
     if (!tracked) {
@@ -1028,7 +1051,8 @@ export const mountGlassSurface = (onClose: () => void) => {
       applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
     }
     const panelRect = panel.getBoundingClientRect();
-    const pose = pointerPose(tracked, panelRect);
+    // WHISPER is a pulse on the target only: no pointer, no dim.
+    const pose = focusTier === 'whisper' ? null : pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
     if (pose && pointerRoot) {
       styleIfChanged(focus, '--bob-x', `${pose.bobX}px`);
@@ -1148,6 +1172,7 @@ export const mountGlassSurface = (onClose: () => void) => {
       ? (options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '')
       : options.why ? `<p class="glass-why">${safe(options.why)}</p>`
       : options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '';
+    const missionHtml = options.mission ? `<p class="glass-mission">${safe(options.mission)}</p>` : '';
     const icons = options.turnIcons
       ? `<div class="glass-icons" aria-hidden="true"><span>Draw</span><span>Grow</span><span>Throw</span></div>` : '';
     const b = options.buttons ?? {};
@@ -1179,16 +1204,16 @@ export const mountGlassSurface = (onClose: () => void) => {
       const nextSlot = shell.querySelector('.glass-head-next');
       if (prevSlot) prevSlot.innerHTML = prevBtn;
       if (nextSlot) nextSlot.innerHTML = nextBtn;
-      for (const node of [...shell.querySelectorAll('.glass-why, .glass-status, .glass-icons')]) node.remove();
+      for (const node of [...shell.querySelectorAll('.glass-mission, .glass-why, .glass-status, .glass-icons')]) node.remove();
       const head = shell.querySelector('.glass-head');
-      if (head) head.insertAdjacentHTML('afterend', `${whyHtml}${icons}`);
-      else shell.insertAdjacentHTML('beforeend', `${whyHtml}${icons}`);
+      if (head) head.insertAdjacentHTML('afterend', `${missionHtml}${whyHtml}${icons}`);
+      else shell.insertAdjacentHTML('beforeend', `${missionHtml}${whyHtml}${icons}`);
       handlers = options.handlers ?? handlers;
       bindTutorialButtons();
       return;
     }
     ledTitle = line;
-    panel.innerHTML = `<div class="glass-tutorial">${headHtml}${whyHtml}${icons}</div>`;
+    panel.innerHTML = `<div class="glass-tutorial">${headHtml}${missionHtml}${whyHtml}${icons}</div>`;
     bindTutorialButtons();
     paintTutorialLed();
   };
@@ -1204,6 +1229,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     targetShape = !targetSelector || options.shape === 'none' ? 'none'
       : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
     setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
+    focusTier = options.tier ?? 'spotlight';
+    setIfChanged(focus, 'data-tier', focusTier);
     lessonFocus = !!options.lesson;
     panel.dataset.mode = 'tutorial';
     if (options.lesson) panel.dataset.lesson = '1';

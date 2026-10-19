@@ -1248,7 +1248,8 @@ export const LESSON = Object.freeze({
   pileGoldLine: 'An indicator that its top card completes a Bloom in your hand.',
   skipGrow: 'SKIP GROW',
   skipGrowLine: 'You can end a turn without growing to save cards for later.',
-  // finish cards: title + one line that says how you won
+  // finish cards: the one idea learned, with a small mark, then the way on
+  learned: 'YOU LEARNED',
   youWin: 'YOU WIN',
   wonOnPoints: 'You had more points – you won!',
   wonByKo: 'You surrounded their home.',

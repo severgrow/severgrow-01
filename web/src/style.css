@@ -2376,6 +2376,15 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   color: rgba(243, 230, 196, 0.72);
 }
 .go-learned[hidden] { display: none; }
+.go-learned[data-icon]:not([data-icon=''])::before {
+  content: attr(data-icon);
+  display: inline-block;
+  margin-right: 7px;
+  color: #e8c98f;
+  font-size: 14px;
+  letter-spacing: 0;
+  transform: translateY(1px);
+}
 .large-text .go-learned { font-size: 13px; letter-spacing: 0.1em; }
 
 /* ---------- campaign (the primary offline mode) ---------- */
