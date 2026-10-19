@@ -20,17 +20,23 @@ const FINISH_LINES = new Set(['wonOnPoints', 'wonByKo', 'goldDecided']);
 
 describe('lesson words', () => {
   it('the four core explanations are the owner’s sentences, exactly', () => {
-    expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.');
-    expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the Draw pile or Throw pile.');
+    // The owner's wording, verbatim (owner, 2026-10-19). Its "draw or discard pile" and the win
+    // line's lowercase "draw pile" are the owner's own; the display labels keep the game's names
+    // (Draw pile / Throw pile), and the mismatch is an open question for the owner.
+    expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the draw pile runs out.');
+    expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the draw or discard pile.');
     expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to discard a card and finish your turn.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to a discard pile, or double tap to discard a card and finish your turn.');
   });
 
-  it('the piles use the game’s own names everywhere: Draw pile and Throw pile, never "discard pile"', () => {
-    for (const [k, v] of entries) {
-      expect(v, `${k}: ${v}`).not.toMatch(/discard pile/i);
-      // A lowercase pile name reads as a common noun, not the game's name for a place on the board.
-      expect(v, `${k}: ${v}`).not.toMatch(/\b(draw|throw) pile/);
+  it('the display labels use the game’s own names: Draw pile and Throw pile', () => {
+    expect(LESSON.tapDraw).toBe('TAP THE DRAW PILE');
+    expect(LESSON.tapThrowPile).toBe('TAP THE THROW PILE');
+    for (const k of DISPLAY) {
+      expect(LESSON[k], `${k}: ${LESSON[k]}`).not.toMatch(/discard pile/i);
+      // If a label names a pile, it is the game's name: DRAW PILE / THROW PILE.
+      const piles = LESSON[k].match(/\b(?:DRAW|THROW|draw|throw) PILE\b/gi) ?? [];
+      expect(piles.every((p) => p === p.toUpperCase()), `${k}: ${LESSON[k]}`).toBe(true);
     }
   });
 
