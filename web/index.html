@@ -114,7 +114,7 @@
           <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
           <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
-               entries (Play online / LEVEL n / Training) are MOVED into #play-actions at boot. -->
+               entries (Play online / LEVEL n / Practice match) are MOVED into #play-actions at boot. -->
           <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
           <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
           <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
@@ -147,7 +147,7 @@
          menu and the campaign screen — `.levels-inner` (the shared centred column), `.levels-head`
          (the back button + display heading) and `.menu-buttons` (the same buttons the menu uses) —
          so it echoes the main menu exactly while reading as a submenu, not a second menu.
-         Its three entries — Play online / LEVEL <n> / Training — are MOVED into #play-actions at
+         Its three entries — Play online / LEVEL <n> / Practice match — are MOVED into #play-actions at
          boot by main.ts, so each keeps its one id, its one handler and its one set of words: no
          second copy of the online or campaign wiring exists. Only ONE of them leads (Play online,
          or LEVEL <n> when this build has no online endpoint); the rest recede. -->

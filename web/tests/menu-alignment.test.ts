@@ -102,7 +102,7 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
   it('the main menu has exactly one leading action (PLAY), and it is the cream fill', () => {
     const menu = sectionById('menu');
     // Every entry that STAYS on the main menu is quiet except PLAY. The three that main.ts moves
-    // into #play-actions (Play online / LEVEL n / Training) are checked in the submenu below.
+    // into #play-actions (Play online / LEVEL n / Practice match) are checked in the submenu below.
     expect(classesOf(menu, 'menu-play')).toContain('primary');
     for (const id of ['menu-login', 'menu-continue', 'menu-world', 'menu-tutorial', 'menu-settings']) {
       expect(classesOf(menu, id), `${id} must be the quiet ghost`).toContain('ghost');
@@ -118,7 +118,7 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     expect(menu.indexOf('id="menu-world"')).toBeLessThan(menu.indexOf('id="menu-tutorial"'));
   });
 
-  it('PLAY holds Play online / LEVEL n / Training, in that order', () => {
+  it('PLAY holds Play online / LEVEL n / Practice match, in that order', () => {
     const main = read('../src/main.ts');
     const list = /const PLAY_MENU_ENTRIES = \[([^\]]*)\] as const;/.exec(main);
     expect(list, 'PLAY_MENU_ENTRIES must exist').toBeTruthy();

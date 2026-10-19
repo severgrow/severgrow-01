@@ -148,7 +148,7 @@ for (const vp of VIEWPORTS) {
   check(`${tag}: the menu column is centred`, centred(menu.menu.centre), `offset ${menu.menu.centre}px`);
   check(`${tag}: the menu column does not overflow`, menu.menu.overflow === 0, `overflow ${menu.menu.overflow}px`);
 
-  // The difficulty pick (Training lives behind the PLAY doorway on product channels)
+  // The difficulty pick (Practice match lives behind the PLAY doorway on product channels)
   await openMenuEntry(page, 'menu-new');
   await page.waitForSelector('#levels:not([hidden])', { timeout: 10_000 });
   await page.waitForTimeout(400);

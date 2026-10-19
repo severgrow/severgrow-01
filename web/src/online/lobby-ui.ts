@@ -288,7 +288,7 @@ export const installOnlineLobby = (hooks: LobbyUiHooks): OnlineLobbyController =
       menuOnline.textContent = ONLINE.playOnline;
       menuOnline.setAttribute('aria-label', ONLINE.playOnline);
     }
-    // The 0.5 product menu MOVES #menu-new into the PLAY submenu and labels it "Training" (main.ts).
+    // The 0.5 product menu MOVES #menu-new into the PLAY submenu and labels it "Practice match" (main.ts).
     // Only the flat legacy menu names it "Play offline"; fillCopy runs again on every hub open, so
     // writing it here would stomp the product label back to "Play offline".
     const offline = document.getElementById('menu-new');

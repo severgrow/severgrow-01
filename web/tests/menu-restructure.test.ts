@@ -56,7 +56,7 @@ describe('PLAY is a real screen, not a layer on the menu', () => {
 });
 
 describe('PLAY holds exactly the three product entries, moved not copied', () => {
-  it('moves Play online / LEVEL n / Training into #play-actions on a product channel', () => {
+  it('moves Play online / LEVEL n / Practice match into #play-actions on a product channel', () => {
     // Three, not four: the "Levels" entry is gone (owner, 2026-10-16). The player does not get the
     // whole level list - LEVEL <n> starts the next UNCOMPLETED level and is the only way in.
     expect(mainSource).toMatch(/const PLAY_MENU_ENTRIES = \['menu-online', 'menu-campaign', 'menu-new'\] as const/);
@@ -136,16 +136,16 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
   });
 });
 
-describe('the Training entry opens the three tiers', () => {
-  it('is named Training and opens the tier picker', () => {
-    expect(MENU.training).toBe('Training');
+describe('the Practice match entry opens the three tiers', () => {
+  it('is named Practice match and opens the tier picker', () => {
+    expect(MENU.training).toBe('Practice match');
     expect(mainSource).toMatch(/\$\('menu-new'\)[\s\S]{0,200}MENU\.training/);
     expect(mainSource).toContain("bind('menu-new', () => {");
     expect(mainSource).toMatch(/bind\('menu-new'[\s\S]{0,200}showScreen\('levels'\)/);
   });
 
-  it('its heading is the training title on a product channel and the legacy words elsewhere', () => {
-    expect(MENU.trainingTitle).toBe('Training');
+  it('its heading is the practice-match title on a product channel and the legacy words elsewhere', () => {
+    expect(MENU.trainingTitle).toBe('Practice match');
     expect(mainSource).toMatch(/if \(FEATURES\.campaign\)[\s\S]*?\$\('levels-heading'\)\.textContent = MENU\.trainingTitle/);
     expect(mainSource).toMatch(/else \{[\s\S]*?\$\('levels-heading'\)\.textContent = 'Choose difficulty'/);
   });

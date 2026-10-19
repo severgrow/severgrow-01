@@ -1,6 +1,6 @@
 // The ONE doorway through the product main menu (owner restructure, 2026-10-15).
 //
-// On the product channels (`futa04` / `futa05`) main.ts MOVES Play online, LEVEL <n> and Training
+// On the product channels (`futa04` / `futa05`) main.ts MOVES Play online, LEVEL <n> and Practice match
 // OUT of the flat menu and INTO the PLAY submenu (`#play-menu` → `#play-actions`). They are real
 // children of that section, so while the menu is on show they sit inside a `hidden` subtree and a
 // bare `page.click('#menu-online')` can never see them: Playwright waits forever for an element the

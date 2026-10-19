@@ -688,7 +688,7 @@ function layoutMenu(canContinue: boolean) {
     setLead($('menu-play'), true);
     setLead($('menu-continue'), false);
     setLead($('menu-world'), false);
-    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Training
+    // Inside PLAY exactly one entry leads: Play online, the duel lobby. LEVEL <n> and Practice match
     // are the next tier down and the back control is the quietest of all. A build with no online
     // endpoint has no Play online at all, so the campaign (the primary offline mode) leads.
     const cmp = $('menu-campaign');
@@ -713,7 +713,7 @@ function layoutMenu(canContinue: boolean) {
     // only way in. The list still renders; the finish card's "Back to campaign" is where the campaign
     // hands off to it once no next level is left.
     $('menu-new').textContent = MENU.training;
-    $('menu-new').setAttribute('aria-label', `${MENU.training}. Train against the computer.`);
+    $('menu-new').setAttribute('aria-label', `${MENU.training}. Play against the computer.`);
     setLead($('menu-new'), false);
     $('levels-heading').textContent = MENU.trainingTitle;
   } else {
@@ -891,7 +891,7 @@ function renderLevelGrid() {
       b.dataset.difficulty = tier.id;
       // Visible label is CAPS via CSS; keep the spoken name title-case.
       const spoken = tier.label.charAt(0) + tier.label.slice(1).toLowerCase();
-      b.setAttribute('aria-label', `${spoken}. Train against the computer at this difficulty.`);
+      b.setAttribute('aria-label', `${spoken}. Play a practice match against the computer at this difficulty.`);
       b.textContent = tier.label;
       b.addEventListener('click', () => {
         sound.unlock();

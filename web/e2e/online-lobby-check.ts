@@ -107,7 +107,7 @@ try {
   // Read the attribute, not isHidden(): the entry also sits inside the (hidden) PLAY submenu now,
   // so a plain isHidden() would be true on every build and the check would be hollow.
   check('Play online hidden without API URL', (await page.locator('#menu-online').getAttribute('hidden')) !== null);
-  // The offline entry now lives behind the PLAY doorway and reads "Training" on the product menu
+  // The offline entry now lives behind the PLAY doorway and reads "Practice match" on the product menu
   // (main.ts sets MENU.training); reach it the way a player does, and keep proving the path works.
   check('the offline entry keeps the product word', ((await page.locator('#menu-new').textContent()) ?? '').trim() === MENU.training);
   await openMenuEntry(page, 'menu-new');

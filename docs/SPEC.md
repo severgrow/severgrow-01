@@ -67,7 +67,8 @@ opening state from it.
 
 ## Difficulty
 
-The three TRAINING tiers (owner direction, 2026-10-15). A tier’s first game starts at the bottom of
+The three practice-match tiers (owner direction, 2026-10-15; the menu entry reads **Practice
+match**). A tier’s first game starts at the bottom of
 its range; the only movement is the one-game carry-over, a win stepping the tier’s next game one bot
 level UP and a loss one DOWN, never outside the tier’s own range.
 

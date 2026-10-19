@@ -626,7 +626,7 @@ export const HELP = Object.freeze({
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
- *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Training. */
+ *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Practice match. */
 export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
@@ -642,8 +642,8 @@ export const MENU = Object.freeze({
   // Removed (owner, 2026-10-16): the "Levels" entry that opened the whole chapter/level list. The
   // player is not given access to every level - MENU.level(n) starts the next one they have not
   // completed. Kept out of strings.ts entirely rather than left as a string nothing reads.
-  /** the PLAY entry that opens the three training tiers */
-  training: 'Training',
+  /** the PLAY entry that opens the three practice-match tiers */
+  training: 'Practice match',
   /** the PLAY entry that opens the campaign: "LEVEL 1", "LEVEL 25" (the level the player is on) */
   level: (number: number): string => `LEVEL ${number}`,
   /** The PLAY entry once every built level is complete: there is no next level to name, so it opens
@@ -651,8 +651,8 @@ export const MENU = Object.freeze({
    *  level is unfinished the entry stays the single way in (owner, 2026-10-16). */
   levels: 'LEVELS',
   levelsAria: 'Levels. Choose a completed level to replay.',
-  /** the training screen's heading (the tier picker keeps its legacy heading off the product menu) */
-  trainingTitle: 'Training',
+  /** the practice-match screen's heading (the tier picker keeps its legacy heading off the product menu) */
+  trainingTitle: 'Practice match',
 });
 
 /** Tutorial Pro window copy — one place for every player-facing tutorial line. */

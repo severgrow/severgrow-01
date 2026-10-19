@@ -99,7 +99,7 @@ const fmt = (r: Awaited<ReturnType<typeof framesDuring>>) =>
   // The product menu's leading entry is PLAY; the offline picker is one tap inside it (2026-10-15).
   await page.waitForSelector('#menu-play:not([disabled])', { state: 'visible', timeout: 60000 });
   const shown = Date.now() - t0;
-  // the first tap that works: PLAY opens the submenu, then Training opens the level screen (a tap
+  // the first tap that works: PLAY opens the submenu, then Practice match opens the level screen (a tap
   // on the opening splash only skips it, so keep tapping every 100 ms until the level screen opens)
   for (let i = 0; i < 300 && !(await page.locator('#levels').isVisible()); i++) {
     if (await page.locator('#menu-play').isVisible().catch(() => false)) {
