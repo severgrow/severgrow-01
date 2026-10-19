@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { transformSync } from 'esbuild';
 import { describe, expect, it } from 'vitest';
 const source = transformSync(readFileSync(new URL('../src/channel.ts', import.meta.url), 'utf8'), { loader: 'ts', format: 'cjs' }).code;
-const boot = (channel: string) => {
+const boot = (channel: string, pathname?: string) => {
   class Storage {
     data = new Map<string, string>();
     getItem(k: string) { return this.data.get(k) ?? null; }
@@ -12,7 +12,8 @@ const boot = (channel: string) => {
   }
   const exports: Record<string, any> = {};
   const module = { exports };
-  runInNewContext(source, { __CHANNEL__: channel, Storage, exports, module });
+  const location = pathname ? { hostname: 'futasaku.com', pathname } : undefined;
+  runInNewContext(source, { __CHANNEL__: channel, Storage, exports, module, ...(location ? { location } : {}) });
   return { policy: module.exports, Storage };
 };
 describe('release channel policy', () => {
@@ -49,6 +50,21 @@ describe('release channel policy', () => {
     expect(policy.FEATURES.typography).toBe(true);
     expect(policy.FEATURES.lab).toBe(false);
     expect(policy.FEATURES.v3).toBe(false);
+  });
+  it('the /3/ preview keeps its own storage; the root and /2/ keep theirs, unchanged', () => {
+    expect(boot('futa05', '/3/').policy.STORAGE_PREFIX).toBe('futa05-3:');
+    expect(boot('futa05', '/3/index.html').policy.STORAGE_PREFIX).toBe('futa05-3:');
+    expect(boot('futa05', '/').policy.STORAGE_PREFIX).toBe('futa05:');
+    expect(boot('futa05', '/2/').policy.STORAGE_PREFIX).toBe('futa05:');
+    // Only the first path segment counts: a deeper "/3/" elsewhere is not the /3/ copy.
+    expect(boot('futa05', '/2/3/').policy.STORAGE_PREFIX).toBe('futa05:');
+    const { policy, Storage } = boot('futa05', '/3/');
+    const store = new Storage();
+    store.data.set('futa05:severgrow.campaign.progress.v1', 'root progress');
+    expect(store.getItem('severgrow.campaign.progress.v1')).toBeNull();
+    store.setItem('severgrow.campaign.progress.v1', 'lessons');
+    expect(store.data.get('futa05:severgrow.campaign.progress.v1')).toBe('root progress');
+    expect(policy.STORAGE_PREFIX).toBe('futa05-3:');
   });
   it('Main retains legacy player behavior and Dev retains tools', () => {
     expect(boot('live').policy.FEATURES.tapAgain).toBe(false);

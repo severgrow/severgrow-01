@@ -274,3 +274,64 @@ describe('cockpit flavour stays sparse and never repeats', () => {
     expect(deck.draw('bloom', pool, firingKey('a'))).not.toBeNull();
   });
 });
+
+describe('quiet sign (a lesson message is on screen)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('keeps the score and real play facts, and drops its own step words, hints and idle prompts', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('DRAW!', 1, 0);
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    sign.setQuiet(true);
+    // The word already on the sign finishes its 1s dwell, then the score takes over.
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    const before = frames.length;
+    sign.phase('GROW!');
+    sign.hint('CANCEL');
+    sign.event({ message: 'WAIT', mode: 'red', priority: 20, duration: 1050 });
+    vi.advanceTimersByTime(30000);
+    expect(frames.slice(before).every((f) => f.mode === 'score')).toBe(true);
+    // A real result still shows (a play fact, a wrong-tap answer).
+    sign.event({ message: '+3', mode: 'green', priority: 40, duration: 950 });
+    expect(frames.at(-1)).toMatchObject({ text: '+3' });
+    vi.advanceTimersByTime(3000);
+    expect(frames.at(-1)).toMatchObject({ mode: 'score' });
+    // Back to normal: the step word shows again.
+    sign.setQuiet(false);
+    sign.phase('THROW!');
+    vi.advanceTimersByTime(3000);
+    expect(frames.some((f, i) => i >= before && isStep(f.text))).toBe(true);
+  });
+});
+
+describe('the sign can hold the score (the lesson that teaches it)', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('window', globalThis); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('shows the score at once, over a word still playing, until released', () => {
+    const frames: DisplayFrame[] = [];
+    const sign = new DisplayMachine(frame => frames.push(frame));
+    sign.reset('GROW!', 1, 0);
+    vi.advanceTimersByTime(3 * DISPLAY_MIN_DWELL_MS);
+    sign.event({ message: 'LEAD', mode: 'green', priority: 75, duration: 1500 });
+    vi.advanceTimersByTime(DISPLAY_MIN_DWELL_MS);
+    expect(frames.at(-1)).toMatchObject({ text: 'LEAD' });
+    sign.holdScore();
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    // A score update during the hold shows at once.
+    sign.score(2, 0);
+    expect(frames.at(-1)).toMatchObject({ text: '2:0', mode: 'score' });
+    sign.score(1, 0);
+    // A result arriving during the hold (it lands just after the move) does not replace it.
+    sign.event({ message: 'LEAD', mode: 'green', priority: 75, duration: 1500 });
+    vi.advanceTimersByTime(20000);
+    expect(frames.at(-1)).toMatchObject({ text: '1:0', mode: 'score' });
+    sign.release();
+    sign.phase('THROW!');
+    vi.advanceTimersByTime(3000);
+    expect(frames.some((f) => f.text?.startsWith('THROW'))).toBe(true);
+  });
+});

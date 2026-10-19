@@ -246,7 +246,7 @@ for (const ph of PHONES) {
     await tTap(page, '-2,2');
     await tTap(page, '2,-2');
     const theirs = (await page.textContent('#tooltip')) ?? '';
-    check(`${tag}: tapping my home says "Your tree" and its sides; the opponent's says "Opponent's volcano"`, /Your tree/.test(mine) && /of 6 sides blocked/.test(mine) && /Opponent's volcano/.test(theirs) && errors.length === 0, `${mine.slice(0, 40)} | ${theirs.slice(0, 40)} | tapped ${tapped}`);
+    check(`${tag}: tapping my home says "Your tree" and its sides; the opponent's says "Opponent's volcano"`, /Your tree/.test(mine) && /of 6 sides taken/.test(mine) && /Opponent's volcano/.test(theirs) && /Take every side/.test(theirs) && errors.length === 0, `${mine.slice(0, 40)} | ${theirs.slice(0, 40)} | tapped ${tapped}`);
     // the corner icons: 40pt visible, a ring when on; Sort
     const box = await page.locator('#tool-weak').boundingBox();
     await page.locator('#tool-weak').click();

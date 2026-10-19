@@ -1,5 +1,16 @@
 # FUTASAKU tutorial "Pro" overhaul — plan
 
+> **Status (2026-10-19, shipping line):** levels 1-10 ARE the tutorial, so its **menu entry is now
+> hidden** on the campaign channels (owner direction 2026-10-19: levels are the tutorial, so a second
+> guided run would teach it twice). The entry and its code path are kept, not deleted: flipping
+> `$('menu-tutorial').hidden = FEATURES.campaign` in `web/src/main.ts` brings the old run back.
+> The campaign itself was reset at the same time — progress keys moved `.v1` → `.v2`, so everyone
+> starts again from level 1.
+>
+> **Previous (2026-10-18, /3/ line):** on `futa0.5-onboarding-3`, levels 1-10 are the tutorial (see
+> [CAMPAIGN.md](CAMPAIGN.md) and [LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)). This Tutorial was left
+> available for a while, to be retired later.
+
 > **Current structure (tutorial v3, 2026-10).** `TUTORIAL_CORE` and `TUTORIAL_EXTRAS` in
 > `web/src/logic/tutorial-script.ts`:
 > - **Full tutorial** (16 steps to the free turn, then a 3-button tour): your home, each turn, Draw, Grow

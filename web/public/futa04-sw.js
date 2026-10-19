@@ -10,11 +10,19 @@
 const PREFIX = cachePrefix();
 function cachePrefix() {
   const url = new URL(self.registration.scope);
+  // The onboarding line, published beside the released game at /2/. It is its own scope and must
+  // never share a cache with the root or with Main: without this branch it would fall through to
+  // Main's prefix, and could answer an offline /2/ navigation with Main's page.
+  if (url.pathname.includes('/2/')) return 'futa05onboarding-';
+  // The /3/ preview (levels 1-10 as the tutorial): its own scope, its own cache.
+  if (/^\/3\//.test(url.pathname)) return 'futa05lessons3-';
   if (url.pathname.includes('/futa0.5/')) return 'futa05-';
   if (url.hostname.endsWith('.chatgpt.site') || url.pathname.includes('/futa0.4/')) return 'futa04-';
   return 'severor-main2-';
 }
-const CACHE = `${PREFIX}v2`;
+// v3 (2026-10-19): levels 1-10 became the guided lessons and the campaign was reset, so every
+// returning player must get the new app rather than a cached v2 shell.
+const CACHE = `${PREFIX}v3`;
 const scope = new URL(self.registration.scope);
 const shell = ['./', './index.html', './manifest.webmanifest', './futasaku-icon-192.png', './futasaku-icon-512.png'];
 self.addEventListener('install', (e) => {

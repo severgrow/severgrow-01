@@ -16,6 +16,94 @@ hand-authored board. The campaign is about mastering the game that is already th
   tutorial's lesson lines live in `web/src/logic/tutorial-script.ts`)
 - Balance tool: `src/sim/campaign-balance.ts` → `npm run campaign:balance`
 
+## Levels 1-10 are the tutorial (the /3/ line, 2026-10-18)
+
+**This is the current design** on the `futa0.5-onboarding-3` branch, published for testing at
+**https://www.futasaku.com/3/**. The root and `/2/` are unchanged. The `/2/` "goal-first" onboarding
+described further down ("The 2026-10-17 onboarding pass") is **not current** for this line: it told
+players "surround their home to win", while most real games end when the Draw pile runs out. /3
+teaches that first.
+
+**What it is.** Levels 1-10 are ten short authored lessons, one idea each, every one ending in a real
+win. Level 11 is the first 37-hex level and has no lesson. Level ids, Seeds rules and chapter bonuses
+are unchanged. The full script of each lesson (beats, words, wrong-tap answers, finish lines) is in
+**[LESSON-SCRIPTS.md](LESSON-SCRIPTS.md)**. It must match the code.
+
+| Level | Teaches | Ends |
+|---|---|---|
+| 1 | Draw, Grow, Throw; most points when the Draw pile runs out wins | on points |
+| 2 | tile numbers: Strengthen, then take a weaker tile | on points |
+| 3 | rocks block; gold counts double | on points (gold decides) |
+| 4 | cutting a link: cut-off tiles wither | on points |
+| 5 | Bloom (same number, or counting up) | on points |
+| 6 | knock-out: surround their home | by surround |
+| 7 | Bomb | on points |
+| 8 | Blast (two Bombs) and its free Grow | on points |
+| 9 | the Throw pile can finish a Bloom; skip the Grow | on points |
+| 10 | a normal game against the gentlest bot | on points (or surround) |
+
+**How a lesson is authored** (`web/src/lessons/`):
+
+- `authored.ts` builds the exact opening from real engine cards on the 19-hex map:
+  - terrain, tiles already grown;
+  - both hands, the Draw pile order and the Throw pile.
+  - Cards the lesson does not name are out of play. That is how a lesson gets a short Draw pile (its clock) **without any rule change**.
+- `opponent.ts` is the gentle scripted opponent:
+  - legal moves only;
+  - grows only on its script's turns;
+  - never takes your home's last open side;
+  - always draws from the Draw pile, so the authored Throw pile stays as set.
+  - Level 10 uses the existing level-1 bot.
+- `lessons.ts` holds the lesson data. It derives each beat (what is lit, the instruction and reason) from the **live** game state, never from a step counter, so any legal alternative keeps working.
+- `answer.ts` answers a wrong tap from the engine's own reasons (`claimBlocker`, `fruitTargetBlocker`, `legalActions`, the Bloom shapes).
+
+**Guidance by level.**
+
+| Levels | Guidance |
+|---|---|
+| 1-3 | Locked: only the lit thing reacts. Every other tap is answered in the glass or the LED, with a small ring at the spot. |
+| 4-9 | Every legal move is played; the light adapts. The one-word hint stays on screen. |
+| 10 | No guidance unless idle for 6 s (or Show me); one LAST TURN beat. |
+| 11-30 | The existing levels, unchanged. No lesson. |
+
+- **No text on the map.** In every mode the old on-board "tap why" plate now goes to the LED; the map only gets a ring.
+- **Hints off.** Settings → Step guidance off turns the light and the glass off in the levels too.
+
+**Storage and versioning.** The root, `/2/` and `/3/` share one origin:
+
+- `/3/` uses its own storage prefix, `futa05-3:` (`web/src/channel.ts`, by path), and its own service-worker cache, `futa05lessons3-`. Nothing in /3 reads or writes the root's or /2's progress, saves or hints.
+- Each lesson has a `version`. The seen explanations and that version are saved beside the level's match (`severgrow.lesson.meta.v1`). A saved match from another lesson version restarts the level cleanly.
+- Completed levels stay completed (the progress record is the existing one).
+
+**Seeds.** Levels 1-10 pay **no Seeds in /3** and their finish card has no Seeds line:
+
+- The server's verifier replays a proof from `campaignOpening(level)` against the real bot. An authored lesson against the scripted opponent cannot be replayed that way without a server change, which this line does not make.
+- Levels 11+ are untouched: same openings, same proofs, same payouts.
+- Clearing 1-10 locally only unlocks the next level on the device. Nothing in a level-11+ proof depends on it.
+
+**Engine rules: unchanged.** No rule, scoring, card-count or legal-move change. Draw/Grow/Throw, Bloom, Bomb, Blast and the strangle are the engine's own; the tests check this.
+
+**How to add or change a lesson without bringing confusion back:**
+
+1. One idea per level.
+2. Author the position so the moment *must* happen (a stacked Draw pile, a hand that holds the cards). If a lesson cannot happen naturally, change the position, never a rule.
+3. Words go in the `LESSON` section of `src/strings.ts`: instruction ≤ 6 words, reason fits two lines on the smallest phone (owner, 2026-10-19), never "tree" (it is your home), never "take over", one word list (Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points), never "set"/"run", no tile colours.
+4. Bump the lesson's `version`.
+5. Update LESSON-SCRIPTS.md.
+6. Run `web/tests/lessons.test.ts`, which has the three automated players, and the browser run `web/e2e/lessons-3.ts`.
+
+**How to test the beginner experience:**
+
+- Automated:
+  - `npx vitest run web/tests/lessons.test.ts web/tests/lesson-*.test.ts`;
+  - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11.
+- These prove the levels can always be finished. They do **not** prove a beginner understands them; that needs real new players.
+
+**The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
+
+- the shared small-map radius lives in `src/campaign/small-board.ts`;
+- the glass window and focus layer live in `web/src/player/glass-surface.ts`.
+
 ## The level schema
 
 ```ts
@@ -45,9 +133,9 @@ No UI change is needed: the campaign screen is drawn from the level data, so fur
 restructuring.
 
 **As built:** Chapters I-VII — levels 1-70 — the campaign is complete. Every board is hand-authored
-(`config.board`); `boardRadius` is 2 (the tutorial's map) for levels 1-3 and 3 for the rest.
-Levels 31-70 were built one chapter at a time; the plan and its measurements are in
-`docs/CAMPAIGN-31-70.md`.
+(`config.board`); `boardRadius` is 2 (the small map) for levels 1-3 and 3 for the rest, so only the
+three discovery levels use the small map and every real match runs on the full hexagon. Levels 31-70
+were built one chapter at a time; the plan and its measurements are in `docs/CAMPAIGN-31-70.md`.
 
 ## Validation rules
 
@@ -99,13 +187,13 @@ Notes when authoring:
 | 1 | First Seed | 1 | 0 | centre | 2 | Completely open, welcoming; the tutorial's own opening |
 | 2 | New Growth | 1 | 0 | centre + inner pair | 2 | Reinforce the basics; a first taste of contested gold |
 | 3 | Two Directions | 1 | 1 | centre + pair | 2 | One harmless edge rock |
-| 4 | The Clearing | 2 | 0 | centre + pair | 3 | Open board, slightly better bot |
-| 5 | Stone in the Grass | 2 | 2 | centre + pair | 3 | Scattered rocks away from central routes |
-| 6 | Branching Out | 3 | 1 | centre + pair | 3 | Encourage multiple directions |
-| 7 | First Obstacle | 3 | 2 | centre + pair | 3 | Small rock cluster near a flank |
-| 8 | The Open Field | 3 | 0 | centre + flank pair | 3 | Stronger opponent, forgiving terrain |
-| 9 | Around the Stone | 4 | 3 | centre + pair (other axis) | 3 | A short detour around blocked hexes |
-| 10 | The First Grove | 4 | 3 | centre + pair | 3 | Chapter finale testing the fundamentals |
+| 4 | The Clearing | 2 | 0 | centre + pair | 2 | Connected territory: open ground, gold on one axis |
+| 5 | Stone in the Grass | 2 | 2 | centre + pair | 2 | Tile numbers and strength: a mirrored pair to grow across |
+| 6 | Branching Out | 3 | 1 | centre + pair | 2 | Defending connected territory: one stone splits the middle |
+| 7 | First Obstacle | 3 | 2 | centre + pair (other axis) | 2 | Cutting a connection: a small cluster near a flank |
+| 8 | The Open Field | 3 | 0 | centre + pair (other axis) | 2 | Fruit: an open field where the networks can touch early |
+| 9 | Around the Stone | 4 | 3 | centre + pair (other axis) | 2 | Bloom: a short wall to paint around, room for three in a row |
+| 10 | The First Grove | 4 | 3 | centre + pair | 2 | Chapter finale on the small map: every lesson so far |
 
 Every level's rock count matches the design pack exactly; the bot (`AI`) column is the approved
 difficulty ladder (see *The bot ladder* below), not the design pack's original suggestion. Two terrain
@@ -113,6 +201,130 @@ adjustments were made for legality, neither of which changed a level's intent: *
 the `r` axis** (the design's three-hex wall sits on the `q` axis, so `-2,0` would have been both rock
 and gold), and **level 3's single edge rock moved from `-3,0` to `-2,0`** when the level moved to the
 radius-2 map (`-3,0` is not on that board).
+
+### The 2026-10-17 onboarding pass (/2/ — not current for /3/)
+
+**Where it ships:** this line is published at **https://www.futasaku.com/2/**, beside the released
+game at the root (owner direction, 2026-10-17). The root keeps the pre-onboarding campaign; `/2/` is
+where this work is played and iterated. A push to `futa0.5-onboarding` rebuilds `/2/` automatically —
+the preview workflow checks this branch out, builds it and composes it into the Pages site. `/2/` is
+never merged into the root build without an explicit decision.
+
+Owner brief (2026-10-17): the Campaign is the game's tutorial, so the first ten levels teach on the
+small map and Level 11 is where the board grows. Terrain-only change, plus the guidance work below.
+
+#### How the first ten levels teach (2026-10-17, second pass)
+
+The campaign borrows the **Tutorial's own top window** — the same panel, the same LED type, the same
+pill that points at a control — rather than adding a second overlay. `logic/onboarding.ts` decides
+what it says, from the live position only:
+
+| Levels | Intensity | What the window does |
+| --- | --- | --- |
+| 1-2 | very high | **the objective first**: level 1 "THE GOAL — Surround their home to win. Tap the Draw pile."; level 2 "HOW TO WIN — Surround their home, or hold more ground." Then the turn: draw → pick a card → tap a lit tile → throw |
+| 3 | very high | the turn, with "TWO WAYS" when more than one place works; guidance fades after the opening turns |
+| 4-7 | medium | the level's new idea on the player's first acting turn (connected, strength, defend, cut), then silence |
+| 8-10 | targeted | Fruit only when a Fruit card is playable, Bloom only when a Bloom is legal, gold once on the first turn |
+
+**Why the objective needed its own step (beta feedback, 2026-10-17).** Testers said they could not
+tell how to win or what the point was, even after playing: the only explanation lived in the Help
+sheet, which nobody opens. Level 1 and level 2 now spend their opening draw on it — the decisive win
+first, then both routes — while the window still points at the Draw pile, so knowing *why* never
+hides *what to press*.
+
+**The win is also taught where it is actionable.** Whenever one legal move would surround the
+opponent's home, the window says **YOU CAN WIN — Surround their home now and it is over.** This is
+the one line that makes a promise, so it is not re-derived by hand: the page plays each candidate
+move on a copy of the state and asks the engine (`isStrangled`). That matters because a move does not
+simply "fill" sides — a Bloom overgrows and severs, and can leave a hex empty; their own tiles around
+their home do not count as blocked. `web/tests/win-moment.test.ts` proves the promise on every level
+where it fires: it plays the offered move, finishes the turn, and requires a real strangle win.
+(Nine of the ten guided levels produce the moment for a strong player; level 4 legitimately ends on
+score instead.)
+
+Supporting rules, all from the same pass:
+
+- **The board shows the moves.** With nothing picked, every hex a card could grow on gets a quiet
+  dashed ring (`.available`); the coach's suggested hex keeps its stronger ring. Picking a card turns
+  them into the card's real targets, and the suggested one — when the picked card can actually use it —
+  gets a soft pool of light under a heavier ring, so one tile is the obvious one to tap.
+- **The interface reveals itself by level** (`html[data-onboard="1|2|3"]`): levels 1-3 quiet sort,
+  replay and history; 4-7 bring sort back; 8-10 are the normal game. Nothing legal is ever removed.
+- **No lottery** on a campaign level: the seed fixes who starts, so the player is in the game
+  immediately. Classic and online keep the draw.
+- **The player can switch it off**: Settings → Step guidance → Off silences the window
+  (`severgrow-guide` in local storage), exactly as it does in the Tutorial.
+
+Second clarity pass (2026-10-17, after the objective landed):
+
+- The window carries a quiet **LEVEL n** line above the instruction, and says the same in its
+  `aria-label`, so a player always knows where they are in the journey.
+- The goal beat **points at the opponent's home** while it says "surround their home" — the word is
+  useless without a referent. The Draw pile haloes itself at that step, so the next touch is still
+  obvious.
+- When the only thing left is to finish the turn, the window **points at the end-turn control**.
+  In the throw phase it points at the **hand**, because the line says "tap a card twice"; once a card
+  waits for its second tap the line becomes "tap the same card again".
+- A dead tap is answered everywhere it can happen: a hex (rock, connection, wrong phase) *and* a card
+  before the draw ("Draw a card first"), placed at the tapped thing.
+- A round cockpit button with no action is invisible on the guided levels instead of blank — a
+  control that looks live but does nothing is worse than an absent one.
+- Winning a guided level ends with **what it taught** ("Draw · Grow · Throw", "Numbers are strength",
+  "Three in a row: Bloom", …). A normal match's finish card is unchanged.
+
+Tests: `web/tests/onboarding.test.ts` pins the curve and the silence; `web/e2e/onboarding.ts` drives
+Level 1 on a 390×844 phone and a 1280×800 desktop (window content, level kicker, board padding, lit
+hexes, quieted controls, no lottery); `web/e2e/campaign-levels.ts` plays 1-10 through the menu and
+checks the recap after each win.
+
+**Where the Fruit/Strengthen "first tip" went.** The dock tip stays inside the Help sheet, as it
+always did: lifting it onto the game surface passed its own check but broke the smart-cockpit layout
+suite in a way nobody could explain, so it was put back. The guided levels do not depend on it — Fruit
+and Bloom are taught in the top window at the moment they can be played, and Strengthen is the level-5
+lesson. The sheet's "Learn to play" page still carries the long explanations.
+
+#### Played end to end, and what that exposed (2026-10-17)
+
+`web/e2e/campaign-levels.ts` plays **levels 1-10 through the real menu**, one after another, with the
+engine's own strongest chooser on the player's side: every level opens, every level finishes with a
+win, the finish card offers "Next level", and **level 11 carries on the 37-hex board with no guidance**.
+That is the whole onboarding journey, proved on the product channel and on `/2`.
+
+Playing them found two things that a unit test cannot see:
+
+1. **Guidance was keyed to match turn 1, but the opponent opens on levels 2, 4 and 8.** A lesson shown
+   only on "turn 1 ACT" therefore never appeared on those levels. It is now keyed to the player's first
+   acting turn (the first two match turns, since turns alternate strictly), and the opponent's opening
+   move is captioned on levels 1-7 so an inert board is never a mystery.
+2. **A strong player wins every small-board level by strangle, in 3-16 turns.** On the tutorial map the
+   homes sit in corners with exactly three neighbours, and one Bloom places three tiles — so a single
+   Bloom against the far home ends the match. Measured with a level-9 player: L5, L6 and L9 finish in
+   3 turns; L8 in 4. None of this is exploitable by a beginner (a random player sees the Fruit lesson
+   in 193/200 playouts and the Bloom lesson in 200/200), but it does mean the small board cannot carry
+   a *strategic* match, and it is why level 8's Fruit lesson can be missed by a competent player: the
+   game ends before the networks touch.
+
+   This needs an owner decision before more tuning: keep 1-10 on the 19-hex map and accept short
+   strangles, or return levels 4-10 to the 37-hex board (where the corner home has more neighbours) as
+   the pre-onboarding build had. Rules are not changed either way — only the map each level plays on.
+
+- **The board split is 1-3 small, 4-30 full.** The ten-level small-map experiment was reverted after
+  playing it: on the 19-hex map a corner home has three neighbours and one Bloom places three tiles,
+  so a single Bloom strangulates it (measured: L5, L6 and L9 in three turns, L8 in four). Levels 4-10
+  are back on the 37-hex board, where they run 7-30 turns instead — and level 8's Fruit lesson now
+  genuinely surfaces, because the networks have time to touch. Because `/2` and the root publish the
+  same levels again, the temporary alternate-opening fallback was removed with it.
+- **The first ten levels keep the game's existing guidance language**, and nothing new competes with
+  it: the draw/throw piles halo at their step, playable cards are outlined in the hand, and a picked
+  card lights its legal hexes on the board. The cockpit's LED still owns the turn's word (GROW!,
+  THROW!, WAIT), so the board carries no second instruction plate.
+- **An invalid tap answers where the finger landed** ("Blocked by rock", "Connect to your tree",
+  "Draw a card first", "Pick a card", "Not this hex"). Every reason is read from the engine's own
+  state — terrain, phase, legal actions — never a second rule book, and repeated taps on the same
+  reason stay quiet for 4.5 s.
+- **The in-play first-time tip stays in the Help sheet.** Lifting `#first-tip` onto the game surface
+  passed its own check but broke the smart-cockpit layout suite, so it was put back; the guided levels
+  teach Fruit and Bloom in the top window instead.
 
 ### The 2026-10-16 refinement
 
@@ -124,12 +336,11 @@ Two changes, both owner direction, both terrain-only:
   pulled toward the same fights — and the first pass barely used it. Level 1 is deliberately left with
   a single gold centre: it is the first board a player ever sees. No rock count, level name, seed or
   bot level changed.
-- **Levels 1-3 moved onto the tutorial's small map** (radius 2 → 19 hexes, `TUTORIAL_BOARD_RADIUS`).
-  They are the first three levels ever and the tutorial's own ground, so the opening chapter stays
+- **Levels 1-3 moved onto the tutorial's small map** (radius 2 → 19 hexes, `TUTORIAL_BOARD_RADIUS`).  They are the first three levels ever and the tutorial's own ground, so the opening chapter stays
   small, quick and legible. A smaller board is *less* forgiving in one respect (fewer places to grow)
   and *more* forgiving in another (the two homes are closer, the whole map is visible at once), so the
   level 3 rock was re-placed and every board re-validated; the boards keep 19, 19 and 18 open hexes of
-  19. Levels 4-30 stay on the product hexagon.
+  19. Levels 4-10 later joined them (2026-10-17, above); levels 11-30 stay on the product hexagon.
 
 ## Chapter II — Broken Ground (levels 11-20)
 

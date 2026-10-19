@@ -59,6 +59,11 @@ const drawLawnDetail = (parent: SVGGElement, key: string, x: number, y: number, 
 
 export type Overlay = {
   targets: Set<string> | null;
+  /**
+   * Onboarding: every hex the picked-up state could still grow on, shown before a card is chosen.
+   * A calm, quiet ring — the game offering the moves rather than demanding one.
+   */
+  available?: Set<string> | null;
   selectedHex: string | null;
   selectedKind?: 'grow' | 'replace' | 'strengthen' | 'bloom' | 'fruit' | null | undefined;
   ghosts: Ghost[];
@@ -90,6 +95,7 @@ export type Overlay = {
 };
 export const NO_OVERLAY: Overlay = {
   targets: null,
+  available: null,
   selectedHex: null,
   ghosts: [],
   cutKeys: [],
@@ -580,6 +586,16 @@ export class BoardView {
     }
 
     // ---- overlays ----
+    // Onboarding: the places the game would let you grow, before you have picked a card.
+    // Drawn under the real targets, so a picked card's highlight always wins.
+    for (const key of o.available ?? []) {
+      if (o.targets?.has(key) || key === o.selectedHex || board[key]) continue;
+      el('path', {
+        d: hexPath(key, S - 6, IS_FUTA04 ? 'flat' : st.tileShape),
+        class: 'available',
+        'aria-hidden': 'true',
+      }, over);
+    }
     if (o.targets) {
       for (const key of this.keys) {
         if (o.targets.has(key) || key === o.selectedHex) continue;
@@ -623,6 +639,8 @@ export class BoardView {
     // The coach's hint is a circle (not a hex outline), so it never looks like gold.
     for (const key of o.coachHexes) {
       const { x, y } = centerOf(key);
+      // A soft disc under the ring: on the guided levels, one move has to be the obvious one.
+      el('circle', { cx: x, cy: y, r: S * 0.8, class: 'coach-pool' }, over);
       el('circle', { cx: x, cy: y, r: S * 0.86, class: 'coach-ring' }, over);
     }
     if (o.selectedHex) {

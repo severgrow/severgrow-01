@@ -62,7 +62,7 @@ try {
       localStorage.setItem(`${prefix}severgrow.settings.v1`, JSON.stringify({ sound: false, music: false, coach: false, speed: 'fast', reduceMotion: true, autoSkip: true, confirmPolicy: 'never' }));
       // The app's Storage wrapper adds the channel prefix itself, so the raw key carries it.
       const completed = Array.from({ length: 20 }, (_, i) => `c${i < 10 ? 1 : 2}-${String((i % 10) + 1).padStart(2, '0')}`);
-      localStorage.setItem(`${prefix}severgrow.campaign.progress.v1`, JSON.stringify({ version: 1, unlocked: 30, completed, best: {} }));
+      localStorage.setItem(`${prefix}severgrow.campaign.progress.v2`, JSON.stringify({ version: 1, unlocked: 30, completed, best: {} }));
     }, PREFIX);
 
     await page.goto(`http://localhost:${PORT}/`);

@@ -6,7 +6,7 @@ import { runRematch } from './online/rematch.js';
 // engine in src/engine; this file only draws, animates and listens. The game state
 // lives in a Session; the board on screen is shown through an AnimQueue whose last
 // step always matches the real state, so animations can never leave it wrong.
-import { apply, bloomGroups, coordKey, hexDistance, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
+import { allNeighbors, apply, bloomGroups, coordKey, hexDistance, homeCoord, isStrangled, legalActions, newGame, newMatch, parseKey, planMegaBomb, viewFor } from '../../src/engine/index.js';
 import type { Action, Card, Player, RulesConfig, State, Tile, View } from '../../src/engine/index.js';
 import { COACH_STEPS, TUTORIAL_SEED, coachAdvice, coachSummary } from '../../src/playtest/coach.js';
 import type { Advice, TipId } from '../../src/playtest/coach.js';
@@ -23,6 +23,8 @@ import { gameHighlights } from './logic/highlights.js';
 import { EMPTY_SEL, futa04OneTap, growControls, isBoardAction, kindCards, kindOf, moveButtons, onlyChoice, playNow, playNowBlast, shortKindLabel, sproutKind, targetHexes, targetKinds, usableCards } from './logic/interaction.js';
 import type { Sel } from './logic/interaction.js';
 import { fruitCardState, fruitOffer, hexTapIntent } from './logic/fruitcard.js';
+import { ONBOARDING_LEVELS, guideKey, onboardGuide, revealTierFor } from './logic/onboarding.js';
+import { whyNotTap, placedHexKeys } from './logic/tap-why.js';
 import {
   DESK_IDLE,
   comboFor,
@@ -83,6 +85,14 @@ import {
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
 import { SAVE_KEY, decodeSave, encodeSave } from './logic/persist.js';
+import { throwPileAction } from './logic/throw-pile.js';
+import { goalReachable, lessonBeat, lessonFor, lessonOpening, suggestMove } from './lessons/lessons.js';
+import type { Beat, Lesson } from './lessons/lessons.js';
+import { scriptedOpponentAction } from './lessons/opponent.js';
+import { tapAnswer } from './lessons/answer.js';
+import { litTarget, tapOf } from './lessons/lesson-view.js';
+import { LESSON_META_KEY, decodeLessonMeta, encodeLessonMeta, lessonResumable } from './lessons/lesson-save.js';
+import { SMALL_HOMES } from './lessons/authored.js';
 import type { Loaded } from './logic/persist.js';
 // Campaign mode (the primary offline experience). Progress and the campaign match save are separate
 // from the classic save; `overridesForMatch` is the offline-only seam that lets a level pass terrain.
@@ -176,7 +186,7 @@ import { getOrient, getRotation, homeRotation, setOrient, setRotation } from './
 import { Sound, vibrate } from './ui/sound.js';
 import { TurnPill } from './ui/turnpill.js';
 import { bannerOpts, turnTone } from './logic/turnbanner.js';
-import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, MENU, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TUTORIAL } from '../../src/strings.js';
+import { BLOOM, CAMPAIGN, FRUIT, GAME_TITLE, HELP, HOME, INSTALL, LESSON, MENU, ONBOARD, ONLINE, OPP, PILES, RESULT, SETTINGS, SHOW_MENU_TAGLINE, SPROUT, TAP_WHY, TUTORIAL } from '../../src/strings.js';
 import { homeSides } from './logic/home.js';
 import { landmarkMotion, strangleFinish } from './logic/landmark.js';
 import { pulseLandmark } from './ui/landmarks.js';
@@ -702,6 +712,11 @@ function layoutMenu(canContinue: boolean) {
   }
   $('menu-tutorial').classList.remove('primary');
   $('menu-tutorial').classList.add('ghost');
+  // The Tutorial is HIDDEN on the product channels (owner, 2026-10-19): levels 1-10 ARE the tutorial
+  // now, so a second guided run in the menu would teach the same thing twice and confuse the order.
+  // The code path is kept intact and the entry still exists on non-campaign channels, so the old
+  // guided run can come back by flipping this one line.
+  $('menu-tutorial').hidden = FEATURES.campaign;
   // Rename the one tutorial entry from src/strings.ts (single source).
   $('menu-tutorial').textContent = HELP.tutorial;
   $('menu-tutorial').setAttribute('aria-label', HELP.tutorial);
@@ -760,7 +775,9 @@ function syncResignMenu() {
 
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
-  const on = !!coach.tutorial;
+  // The onboarding levels borrow the tutorial's own window and its board band, so the same chrome
+  // class applies: it pads the map between the glass and the cockpit and keeps the menu reachable.
+  const on = !!coach.tutorial || onboardingActive() || (!!lessonActive() && !guidanceOff());
   document.documentElement.classList.toggle('futa04-tutorial', on);
   syncTutorialMenuExit();
 }
@@ -1196,6 +1213,17 @@ function fillMenuStatus() {
   const turn = $('gm-turn');
   turn.className = `gm-turn ${$('turn').className}`;
   turn.innerHTML = $('turn').innerHTML;
+  // Which level this is, where a paused player looks for it. A normal offline game keeps "Paused".
+  const title = document.getElementById('gm-title');
+  if (title) title.textContent = campaignLevel ? CAMPAIGN.levelLabel(campaignLevel.number) : 'Paused';
+  // In a campaign level this button leaves for the level list, and the match is SAVED (Resume brings
+  // it back), so it is not a "New game" and nothing is lost.
+  const leave = document.getElementById('gm-new');
+  if (leave) {
+    const words = campaignLevel ? CAMPAIGN.back : 'New game';
+    leave.textContent = words;
+    leave.setAttribute('aria-label', words);
+  }
 }
 /** The thumb layout in use (test copy, phones in portrait), or null. */
 let thumbLayout: Thumb | null = null;
@@ -1480,16 +1508,24 @@ async function startGame(
   gameLevel = level;
   gameDifficulty = difficulty;
   campaignLevel = campaign;
+  lessonNow = campaign ? lessonFor(campaign.number) : null;
+  lessonSeen = new Set();
+  lessonAnswerText = '';
+  lessonShownKey = '';
+  if (lessonNow) saveLessonMeta();
   // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
   // otherwise {} — the classic game's own configuration.
   const overrides = overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
   // Futasaku 0.4 starts from the engine's versioned match setup, so the client and the server
   // verifier agree on who moves first. The classic live channel keeps its historical player-0 start.
-  const opening = IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
+  // Levels 1-10 open from their lesson's authored position (the engine's own cards and board).
+  const opening = lessonNow ? lessonOpening(lessonNow) : IS_FUTA04 ? newMatch(seed, overrides) : newGame(seed, overrides);
   const opponentStarts = opening.startingPlayer === BOT;
   if (IS_FUTA04) {
     showScreen('game');
-    await runStarterLottery(opponentStarts);
+    // A campaign level's opening is fixed by its seed, so there is no draw to watch. The guided
+    // levels get straight into the game; every other offline match keeps the lottery courtesy.
+    if (!campaign) await runStarterLottery(opponentStarts);
   }
   const state: State = opening;
   log = [
@@ -2006,6 +2042,16 @@ function tutorialAfterPlay(p: Played, by: Player) {
 
 /** Resumes a saved campaign match as the level it belongs to (its board comes from the save's base). */
 function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachProgress> }) {
+  // A lesson resumes only under the very lesson it was started with; a changed lesson starts over.
+  const lesson = lessonFor(r.level.number);
+  if (lesson) {
+    const meta = decodeLessonMeta(store.get(LESSON_META_KEY));
+    if (!lessonResumable(meta, lesson)) return startCampaignLevel(r.level);
+    lessonSeen = new Set(meta!.seen);
+  }
+  lessonNow = lesson;
+  lessonAnswerText = '';
+  lessonShownKey = '';
   log = [CAMPAIGN.started(r.level.number)];
   watching = null;
   if (IS_TEST) {
@@ -2101,7 +2147,7 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       store.set(STATS_KEY, JSON.stringify(stats));
       // The install invitation counts EVERY finished game — offline here, online at the finish
       // screen — and never a tutorial step (the guard above already excludes the tutorial).
-      installPrompt.noteFinished(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
+      noteFinishedForInstall(p.after.result.winner === HUMAN ? 'won' : p.after.result.winner === null ? 'draw' : 'lost');
       // The one-game carry-over, earned by this finished game: a win steps the training tier's next
       // game one bot level UP, a loss one DOWN (and never outside the tier). Anything else clears
       // that tier's pending step. Online duels and campaigns carry a null tier, so they never write.
@@ -2121,7 +2167,9 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
         saveCampaignProgress();
       }
       if (onlineBuildEnabled() && session) {
-        const proof = campaignLevel && p.after.result.winner === HUMAN
+        // Levels 1-10 (lessons) pay no Seeds in this preview: their authored openings cannot be
+        // replayed by the server's verifier, so no proof is sent and the finish card has no Seeds line.
+        const proof = campaignLevel && !lessonNow && p.after.result.winner === HUMAN
           ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
@@ -2171,7 +2219,28 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
 }
 
 /** The player plays `a` (from Confirm, a single tap, or the coach). */
+/**
+ * An offline finish, counted for the install invitation. Levels 1-3 (lessons) never invite, and
+ * levels 4-10 wait until their finish card is closed (`flushInstallInvite`): the invitation never
+ * covers a lesson's win. Every other mode counts at once, as before.
+ */
+function noteFinishedForInstall(outcome: 'won' | 'lost' | 'draw', later = false) {
+  const taughtLevel = later ? undefined : lessonActive()?.level;
+  if (taughtLevel !== undefined) {
+    if (taughtLevel > 3) pendingInstallOutcome = outcome;
+    return;
+  }
+  installPrompt.noteFinished(outcome);
+}
+function flushInstallInvite() {
+  const outcome = pendingInstallOutcome;
+  pendingInstallOutcome = null;
+  if (outcome) window.setTimeout(() => noteFinishedForInstall(outcome, true), 900);
+}
+
 function humanPlay(a: Action) {
+  // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
+  if (a.t === 'EndAct' && lessonActive() && (lessonBeatNow?.id === 'end' || lessonBeatNow?.id === 'skip')) store.set(LESSON_DONE_KEY, '1');
   if (isOnlineDuel()) {
     void humanPlayOnline(a);
     return;
@@ -2318,6 +2387,16 @@ let botPlan: BotPlan | null = null;
 /** The opponent's empty turn is on show: the draw, throw and next turn start are quick. */
 let quickShow: Beats | null = null;
 const askFor = (st: State) => {
+  const taught = lessonActive();
+  if (taught) {
+    if ('script' in taught.opponent) {
+      const action = scriptedOpponentAction(st, taught.opponent.script);
+      if (action) return Promise.resolve(action);
+    } else {
+      const lvl = taught.opponent.bot;
+      return askBot(viewFor(st, BOT), lvl, botSeed(st.seed, lvl, st.turnNumber, st.history?.length ?? 0));
+    }
+  }
   const lesson=coach.tutorial && tutorialLesson(coach.tutorial.chapter,coach.tutorial.step);
   if (lesson?.action==='Opponent') {
     const action=tutorialOpponentAction(legalActions(viewFor(st,BOT)));
@@ -2418,6 +2497,27 @@ let gameDifficulty: DifficultyId | null = null;
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
 let campaignLevel: CampaignLevel | null = null;
+/** The lesson of the campaign level on screen (levels 1-10), or null. Set with `campaignLevel`. */
+let lessonNow: Lesson | null = null;
+/** The explanations already read in this level (saved beside the level's match). */
+let lessonSeen = new Set<string>();
+let lessonBeatNow: Beat | null = null;
+let lessonShownKey = '';
+let lessonAnswerText = '';
+let lessonAnswerTimer = 0;
+/** Counts every answer given (tests: a new answer, not one still on screen). */
+let lessonAnswerSeq = 0;
+let lessonIdle = false;
+let lessonIdleTimer = 0;
+/** When the explanation on screen appeared: a tap in its first moments is not "tap anywhere". */
+let lessonExplainAt = 0;
+let lessonHoldingScore = false;
+let lessonExplainId = '';
+/** The level 4+ finish waits to invite an install until the finish card is closed. */
+let pendingInstallOutcome: 'won' | 'lost' | 'draw' | null = null;
+/** The » step has been spelled out once on this device (then it is one word). */
+const LESSON_DONE_KEY = 'severgrow.lesson.doneTaught.v1';
+const lessonDoneTaught = () => store.get(LESSON_DONE_KEY) === '1';
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
@@ -2554,6 +2654,8 @@ function autoAdvance() {
   // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
   if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
+  // Levels 1-10: the first time, the player taps » themselves (so they know it is there).
+  if (lessonActive() && !guidanceOff() && !lessonDoneTaught()) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
@@ -3631,6 +3733,7 @@ function render() {
     guideMod.update({ step, turn: st.turnNumber, picked: session.sel.card !== null });
   }
   renderCoach(advice);
+  renderOnboardingGuide(v);
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
@@ -3686,6 +3789,360 @@ function freeTurnGuideNow(): { title: string; line: string } {
 
 function freePlayGuidanceLine(): string {
   return freeTurnGuideNow().line;
+}
+
+/** The player can turn step guidance off (Settings → Step guidance). Respect it here too. */
+function guidanceOff(): boolean {
+  try {
+    return localStorage.getItem('severgrow-guide') === 'off';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Campaign levels 1-10 ARE the game's tutorial, so they borrow the tutorial's own top window and
+ * its board band — never a second overlay system. The window only appears while the level is
+ * guided, and it is the SAME panel the Tutorial uses, so a player who has seen one recognises the
+ * other. Guidance is derived from the live position (logic/onboarding.ts), never scripted.
+ */
+function onboardingActive(): boolean {
+  if (lessonActive()) return false;
+  return FEATURES.guidance && !guidanceOff() && !coach.tutorial && !!campaignLevel
+    && campaignLevel.number <= ONBOARDING_LEVELS && !!session && !watching;
+}
+
+/** Hides our own window only: Match Intel and the real Tutorial are not ours to close. */
+function hideOnboardingWindow() {
+  if (glassSurface?.mode?.() === 'tutorial' && !coach.tutorial) glassSurface.hide();
+}
+
+/**
+ * How close the WIN is. Rather than re-state the strangle rule, this asks the ENGINE: it plays each
+ * candidate move on a copy of the state and checks `isStrangled`. That matters because a move does
+ * not simply "fill" sides — a Bloom overgrows, severs, and can leave a hex EMPTY — and only the
+ * engine knows the result. The guide must never promise a win it cannot see.
+ *
+ * `theirOpen` is only a count for the words: the sides of their home that are still not mine.
+ */
+function theirHomeState(v: View, legal: readonly Action[]): { theirOpen: number; canWinNow: boolean } {
+  if (!session) return { theirOpen: 6, canWinNow: false };
+  const home = homeCoord(BOT, v.config);
+  const around = new Set(allNeighbors(home).map(coordKey));
+  const theirOpen = [...around]
+    .filter((k) => k in v.board && v.terrain[k] !== 'rock' && v.board[k]?.owner !== HUMAN).length;
+  // Only a PLACEMENT that touches their home can strangle it, so the simulation stays cheap and the
+  // promise stays exact: the line says "surround their home", so the engine must say strangled.
+  const candidates = legal.filter((a) => placedHexKeys(a).some((k) => around.has(k)));
+  const canWinNow = candidates.some((a) => isStrangled(apply(session!.state, a), BOT));
+  return { theirOpen, canWinNow };
+}
+
+// ---------- levels 1-10: the lessons ----------
+// Levels 1-10 ARE the tutorial (owner, FUTASAKU /3). Each opens from an authored position
+// (lessons/authored.ts), plays a gentle scripted opponent (lessons/opponent.ts) and is guided by
+// beats read from the live game (lessons/lessons.ts). Words go only in the glass window or the
+// LED; the map itself only ever gets a small ring where a tap landed.
+
+/** The lesson of the match on screen, or null (any other level, mode, the Tutorial, online). */
+function lessonActive(): Lesson | null {
+  if (!lessonNow || !session || !campaignLevel || campaignLevel.number !== lessonNow.level) return null;
+  if (coach.tutorial || isOnlineDuel() || watching) return null;
+  return lessonNow;
+}
+
+function saveLessonMeta() {
+  if (!lessonNow) return;
+  store.set(LESSON_META_KEY, encodeLessonMeta({ level: lessonNow.level, version: lessonNow.version, seen: [...lessonSeen] }));
+}
+
+/** A Bloom or a Blast is being placed: its tiles are the next touch. */
+function lessonPlacing(): 'bloom' | 'blast' | null {
+  if (!session) return null;
+  const kind = session.sel.kind ?? '';
+  if (kind.startsWith('bloom-mega')) return 'blast';
+  if (kind.startsWith('bloom-') || draw.shape.length) return 'bloom';
+  return null;
+}
+
+function lessonCtx() {
+  const pending = session?.pending;
+  return {
+    card: session?.sel.card ?? null,
+    placing: lessonPlacing(),
+    throwPending: pending?.t === 'Discard' ? pending.card : null,
+    seen: lessonSeen as ReadonlySet<string>,
+    doneTaught: lessonDoneTaught(),
+  };
+}
+
+/** An explanation was read: it never shows again in this level (kept across a refresh). */
+function lessonMarkSeen(id: string) {
+  if (lessonSeen.has(id)) return;
+  lessonSeen.add(id);
+  saveLessonMeta();
+  lessonShownKey = '';
+  render();
+}
+
+/** Quiet for 6s on my turn: the pointer bobs harder, and "Show me" appears. Any input resets it. */
+function lessonArmIdle() {
+  clearTimeout(lessonIdleTimer);
+  if (lessonIdle) {
+    lessonIdle = false;
+    lessonShownKey = '';
+  }
+  if (!lessonActive()) return;
+  lessonIdleTimer = window.setTimeout(() => {
+    if (!lessonActive() || !myTurn() || busy()) return;
+    lessonIdle = true;
+    lessonShownKey = '';
+    render();
+  }, 6000);
+}
+
+/** One short answer to a tap: in the glass (or the LED with hints off), a ring at the spot. */
+function lessonSay(text: string, x: number | null, y: number | null) {
+  lessonAnswerSeq++;
+  if (x !== null && y !== null && !settings.reduceMotion) {
+    const ring = document.createElement('div');
+    ring.className = 'lesson-tap-ring';
+    ring.setAttribute('aria-hidden', 'true');
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    document.body.append(ring);
+    window.setTimeout(() => ring.remove(), 650);
+  }
+  if (guidanceOff() || !glassSurface) {
+    smartCockpit?.event({ message: text.toUpperCase(), priority: 40, duration: 1800 });
+    return;
+  }
+  lessonAnswerText = text;
+  lessonShownKey = '';
+  clearTimeout(lessonAnswerTimer);
+  lessonAnswerTimer = window.setTimeout(() => {
+    lessonAnswerText = '';
+    lessonShownKey = '';
+    render();
+  }, 2200);
+  render();
+}
+
+/**
+ * Every tap during a lesson is read once, before the game sees it. An explanation moves on with a
+ * tap anywhere. A tap that cannot do anything gets its answer. In levels 1-3 (locked) a tap that is
+ * not the lit one does not reach the game at all; from level 4 on the game takes every legal tap
+ * (a different legal move is the player's choice) and only the answer is added.
+ */
+let lessonVeto = false;
+function lessonDecide(e: Event): boolean {
+  const lesson = lessonActive();
+  if (!lesson || !session || openSheet || session.state.phase === 'GAME_OVER') return false;
+  const target = e.target as Element | null;
+  if (!target?.closest?.('#game')) return false;
+  if (target.closest('#hud, #hud-menu, #futasaku-glass, #gameover, .sheet, #scrim')) return false;
+  const guided = !guidanceOff();
+  const beat = lessonBeatNow;
+  if (guided && beat?.explain) {
+    // A tap meant for the move that just happened must not swallow the explanation unread.
+    if (performance.now() - lessonExplainAt < 650) return true;
+    lessonMarkSeen(beat.id);
+    return true;
+  }
+  const pe = e as PointerEvent;
+  const keyAt = () => (Number.isFinite(pe.clientX) ? board.keyAtClient(pe.clientX, pe.clientY) : null);
+  const tap = tapOf(target as never, keyAt);
+  const x = Number.isFinite(pe.clientX) && pe.clientX ? pe.clientX : null;
+  const y = Number.isFinite(pe.clientY) && pe.clientY ? pe.clientY : null;
+  // My own move still settling: the game fast-forwards on a tap, as everywhere. Nothing to answer.
+  if (busy() && session.state.actor === HUMAN) return false;
+  if (!myTurn()) {
+    if (tap.t === 'other') return false;
+    lessonSay(LESSON.theirTurnNow, x, y);
+    return lesson.locked;
+  }
+  const locked = lesson.locked && guided;
+  if (tap.t === 'other') {
+    // A control that is not the lit one (Undo, sort, Bloom) does not react in the locked levels.
+    if (locked && target.closest('button') && !(beat?.lit.t === 'bloom' && target.closest('#smart-bloom'))) {
+      lessonSay(LESSON.tapLit, x, y);
+      return true;
+    }
+    return false;
+  }
+  const answer = tapAnswer(session.state, session.sel.card, tap, guided ? beat?.lit ?? null : null, locked, !!lessonPlacing());
+  if (!answer) return false;
+  lessonSay(answer, x, y);
+  return locked;
+}
+function lessonCapture(e: Event) {
+  if (!lessonActive()) return;
+  lessonArmIdle();
+  const stop = () => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  };
+  if (e.type === 'pointerdown') {
+    lessonVeto = lessonDecide(e);
+    if (lessonVeto) stop();
+    return;
+  }
+  // A keyboard click has no pointer before it: it is decided on its own.
+  if (e.type === 'click' && (e as MouseEvent).detail === 0) {
+    if (lessonDecide(e)) stop();
+    return;
+  }
+  if (lessonVeto) stop();
+  if (e.type === 'click') lessonVeto = false;
+}
+for (const name of ['pointerdown', 'pointerup', 'click', 'touchend'] as const) {
+  document.addEventListener(name, lessonCapture, { capture: true, passive: false });
+}
+
+/** The Draw pile's count glows as the lesson's clock runs out. */
+function syncLessonPile(st: State | null) {
+  const low = !!st && !!lessonActive() && st.deck.length > 0 && st.deck.length <= 3 && st.phase !== 'GAME_OVER';
+  $('deck').classList.toggle('lesson-pile-low', low);
+}
+
+function renderLessonGuide(): void {
+  const lesson = lessonActive()!;
+  const st = session!.state;
+  const level = lesson.level;
+  document.documentElement.dataset.onboard = String(revealTierFor(level));
+  document.documentElement.dataset.lesson = String(level);
+  const bulb = $('futa04-help-button');
+  if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
+  else bulb.style.removeProperty('filter');
+  syncLessonPile(st);
+  if (!glassSurface) return;
+  if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
+    lessonBeatNow = null;
+    smartCockpit?.quiet?.(false);
+    if (lessonShownKey) {
+      lessonShownKey = '';
+      hideOnboardingWindow();
+    }
+    return;
+  }
+  const mine = st.actor === HUMAN && !busy();
+  const stuck = mine && !goalReachable(lesson, st);
+  let beat: Beat | null = stuck
+    ? { id: 'restart', title: LESSON.restart, line: LESSON.restartLine, lit: { t: 'none' } }
+    : lessonBeat(lesson, st, lessonCtx());
+  // Level 10 plays on its own: its hints wait for a quiet moment.
+  if (beat?.idleOnly && !lessonIdle) beat = null;
+  lessonBeatNow = beat;
+  if (beat?.explain && beat.id !== lessonExplainId) { lessonExplainId = beat.id; lessonExplainAt = performance.now(); }
+  // H: while the window speaks, the cockpit's own LED keeps to the score and real results.
+  smartCockpit?.quiet?.(!!beat || !!lessonAnswerText);
+  // The one moment that teaches the score: the sign shows the score itself.
+  const holdScore = beat?.lit.t === 'score';
+  if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
+  const key = JSON.stringify([level, beat?.id, beat?.title, beat?.line, beat?.lit, lessonAnswerText, lessonIdle, mine, settings.reduceMotion]);
+  if (key === lessonShownKey) return;
+  lessonShownKey = key;
+  if (!beat && !lessonAnswerText) {
+    hideOnboardingWindow();
+    return;
+  }
+  const lit = beat && mine ? litTarget(beat.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
+  const led = beat?.led && beat.led !== beat.title ? beat.led : null;
+  const title = led ?? beat?.title ?? LESSON.tapLit;
+  const sentence = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
+  const why = led && beat ? [`${sentence(beat.title)}.`, beat.line].filter(Boolean).join(' ') : beat?.line;
+  const showMe = lessonIdle && !!beat && !beat.explain && lit.selectors.length > 0;
+  glassSurface.tutorial(title, 0, lit.selectors, {
+    shape: lit.shape,
+    lesson: true,
+    stepKey: `lesson:${level}:${beat?.id ?? 'answer'}`,
+    ...(why ? { why } : {}),
+    ...(lessonAnswerText ? { status: lessonAnswerText } : {}),
+    kicker: CAMPAIGN.levelLabel(level),
+    reduceMotion: settings.reduceMotion,
+    idleHard: lessonIdle,
+    arrow: lit.selectors.length > 0,
+    buttons: {
+      previous: false,
+      next: !!beat && (beat.explain || stuck || showMe),
+      nextLabel: stuck ? LESSON.restart : beat?.explain ? LESSON.next : LESSON.showMe,
+      nextBlink: !!beat?.explain,
+    },
+    handlers: {
+      onNext: () => {
+        if (stuck) return startCampaignLevel(campaignLevel!);
+        if (beat?.explain) return lessonMarkSeen(beat.id);
+        // Show me: the light pulses and the pointer taps harder (nothing is played for you).
+        glassSurface?.nudge();
+      },
+    },
+  });
+}
+
+let onboardKey = '';
+function renderOnboardingGuide(v: View) {
+  if (lessonActive()) return renderLessonGuide();
+  smartCockpit?.quiet?.(false);
+  delete document.documentElement.dataset.lesson;
+  syncLessonPile(null);
+  if (!glassSurface) return;
+  if (!onboardingActive()) {
+    if (onboardKey) {
+      onboardKey = '';
+      delete document.documentElement.dataset.onboard;
+      hideOnboardingWindow();
+    }
+    return;
+  }
+  const level = campaignLevel!.number;
+  // The interface reveals itself by level; CSS keys off this one attribute.
+  document.documentElement.dataset.onboard = String(revealTierFor(level));
+  // The old help bulb (Match Intel) is an advanced tool: on the first levels it steps back rather
+  // than competing with the lesson. Opacity is animated by the cockpit's own transition, so the
+  // quieting is done with a filter — it applies at once and cannot fight that transition.
+  const bulb = $('futa04-help-button');
+  if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
+  else bulb.style.removeProperty('filter');
+
+  const st = session!.state;
+  const picked = session!.sel.card !== null || session!.sel.kind !== null;
+  const guide = openSheet || st.phase === 'GAME_OVER' ? null : onboardGuide({
+    level,
+    turn: st.turnNumber,
+    mine: st.actor === HUMAN,
+    phase: st.phase,
+    picked,
+    targetCount: picked ? targetHexes(v, session!.legal, session!.sel).size : 0,
+    availableCount: session!.legal.filter((a) => a.t === 'Sprout').length,
+    fruitReady: session!.legal.some((a) => a.t === 'PlayFruit'),
+    bloomReady: document.documentElement.dataset.futa04BloomReady === 'true',
+    grew: (st.sproutsThisTurn ?? 0) > 0,
+    throwPending: session!.pending?.t === 'Discard',
+    ...theirHomeState(v, session!.legal),
+  });
+  const key = guideKey(level, st.turnNumber, picked, guide);
+  if (key === onboardKey) return;
+  onboardKey = key;
+  if (!guide) {
+    hideOnboardingWindow();
+    return;
+  }
+  const selector = guide.focus === 'deck' ? ['#deck']
+    : guide.focus === 'discard' ? ['#discard']
+    : guide.focus === 'hand' ? ['#hand']
+    : guide.focus === 'their-home' ? ['.lm-volcano']
+    : guide.focus === 'end' ? ['#smart-context[data-action="skip"]']
+    : [];
+  glassSurface.tutorial(guide.title, 0, selector, {
+    shape: selector.length ? 'pill' : 'none',
+    stepKey: key,
+    why: guide.line,
+    // Where this is in the journey, quietly: "LEVEL 1" above the instruction.
+    kicker: CAMPAIGN.levelLabel(level),
+    reduceMotion: settings.reduceMotion,
+    buttons: { previous: false, next: false },
+  });
 }
 
 function updateFuta04Help() {
@@ -4273,7 +4730,19 @@ function renderBoard(v: View, advice: Advice | null) {
       ghosts: pv?.ghosts ?? [],
       cutKeys: pv?.cutKeys ?? [],
       ...ghostExtras(v, pending, pv?.ghosts ?? []),
-      coachHexes: advice && !anySel && !IS_FUTA04 ? advice.hexes.map(coordKey) : [],
+      // A guided level offers the coach's own pick as a stronger ring — but only where the picked
+      // card can actually go. Pointing at a hex the current card cannot use would be a lie, and
+      // three equally-lit rings make a beginner choose blind.
+      coachHexes: advice
+        ? (onboardingActive()
+          ? advice.hexes.map(coordKey).filter((k) => targets?.has(k))
+          : (!anySel && !IS_FUTA04 ? advice.hexes.map(coordKey) : []))
+        : [],
+      // Before a card is picked, the guided levels show every hex that card could use: the game
+      // offering the moves, so a beginner never has to guess a tap and wait for a rejection.
+      available: !pending && !anySel && onboardingActive()
+        ? new Set(session.legal.filter((a) => a.t === 'Sprout').map((a) => coordKey((a as Extract<Action, { t: 'Sprout' }>).coord)))
+        : null,
       usable: true,
     };
     if (sel.kind?.startsWith('bloom-mega-')) {
@@ -4412,7 +4881,7 @@ function renderTooltip(v: View) {
     const who = mine ? 'Your' : OPP.Label;
     if (t.root) {
       const sides = homeSides(v, t.owner);
-      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.blocked)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.blocked)}</span>`;
+      html = mine ? `<b>${HOME.mine}</b><span>${HOME.tapMine(sides.taken, sides.openSides)}</span>` : `<b>${HOME.theirs}</b><span>${HOME.tapTheirs(sides.taken, sides.openSides)}</span>`;
     }
     else {
       const loss = cutLoss(v, key).length;
@@ -4762,6 +5231,14 @@ function scheduleTutorialRoutineThrow(stepKey: string) {
 }
 
 /** The single hand card the current tutorial step asks for (before it is picked), or null. */
+/** Levels 1-10: the one card the light points at, so it sits above the fan and alone in the glow. */
+function lessonSingleCardId(): number | null {
+  const lesson = lessonActive();
+  if (!lesson || !session || guidanceOff() || !myTurn() || busy()) return null;
+  const beat = lessonBeat(lesson, session.state, lessonCtx());
+  return beat?.lit.t === 'card' ? beat.lit.id : null;
+}
+
 function tutorialSingleCardId(): number | null {
   const progress = coach.tutorial;
   if (!progress || !session || session.sel.card !== null) return null;
@@ -5056,7 +5533,7 @@ function renderHand(v: View, advice: Advice | null) {
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
     // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
-    const tutorialCard = tutorialSingleCardId();
+    const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';
@@ -5139,9 +5616,11 @@ function renderPiles(v: View, advice: Advice | null) {
   $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
   $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
+  // Tap-to-throw: with a throw waiting, the Throw pile takes it (it stays tappable for that alone).
+  const tossReady = !!session && myTurn() && !!throwPileAction(v.phase, session.pending, session.legal);
   for (const [id, look] of [['deck', looks.deck], ['discard', looks.discard]] as const) {
     const b = $(id) as HTMLButtonElement;
-    b.disabled = !look.enabled;
+    b.disabled = !look.enabled && !(id === 'discard' && tossReady);
     b.classList.toggle('ready', look.glow);
     b.classList.toggle('dim', look.dim);
     const coachOn = !!advice && advice.action.t === 'Draw' && advice.action.from === id && look.enabled;
@@ -5156,7 +5635,7 @@ function renderPiles(v: View, advice: Advice | null) {
     $('discard').classList.toggle('futa04-bloom-draw', looks.discard.enabled && createsBloom);
   }
   $('deck').setAttribute('aria-label', `${PILES.draw}: ${plural(v.deckCount, 'card')}.${looks.deck.enabled ? ' Tap to draw.' : ''}`);
-  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : ''}` : `${PILES.discard}: empty`);
+  $('discard').setAttribute('aria-label', top ? `${PILES.discard}: ${plural(v.discard.length, 'card')}, ${cardName(top)} on top.${looks.discard.enabled ? ' Tap to take it.' : tossReady ? ' Tap to throw your card.' : ''}` : `${PILES.discard}: empty${tossReady ? '. Tap to throw your card.' : ''}`);
 }
 
 function renderCoach(advice: Advice | null) {
@@ -5349,6 +5828,18 @@ function renderGameOver() {
     $('go-sub').textContent = '';
     $('go-sub').hidden = true;
   }
+  // What this level was teaching, said back to the player once they have won it: the "you did it,
+  // and here is what you just learned" beat. Only on a guided level, only on a win. Guarded by id:
+  // a stale cached shell without the line must not break the finish card.
+  // A lesson's finish card says how it was won, in one line (and its title is the lesson's own).
+  const taught = lessonActive();
+  if (taught && won) $('go-title').textContent = taught.finish.title;
+  const learned = taught ? (won ? taught.finish.line : '') : campaign && won ? ONBOARD.recap(campaign.number) : '';
+  const learnedEl = document.getElementById('go-learned');
+  if (learnedEl) {
+    learnedEl.textContent = learned;
+    learnedEl.hidden = learned === '';
+  }
   // The owner's rule (2026-10-16): after a WON campaign level the first button is "Next level" — the
   // next level starts straight away, with no walk back to the list to pick it. The last built level
   // has no next, so that same button becomes the honest way out (the level list) rather than a dead
@@ -5358,6 +5849,8 @@ function renderGameOver() {
   const leadWord = lead === 'next-level' ? CAMPAIGN.nextLevel : lead === 'back-to-campaign' ? CAMPAIGN.back : won ? 'Play again' : 'Try again';
   $('go-rematch').textContent = leadWord;
   $('go-rematch').setAttribute('aria-label', leadWord);
+  // Lessons pay no Seeds in this preview: no Seeds line at all on their finish card.
+  if (taught) seedRewardMessage = '';
   paintGoSeeds();
   const other = $('go-other');
   // On the last level the primary already IS "Back to campaign": one action, not two that do the
@@ -5384,7 +5877,8 @@ function renderGameOver() {
   }
   setGoExtra('go-cut', !!session?.biggestCut);
   $('go-share').textContent = RESULT.share;
-  $('go-reason').textContent = resultReason(r, HUMAN);
+  $('go-reason').textContent = taught ? '' : resultReason(r, HUMAN);
+  if (taught) $('go-sub').hidden = true;
   // UX pass: what I did with the one-card move
   const moves = moveSummary(st.history ?? [], HUMAN);
   $('go-moves').textContent = moves ?? '';
@@ -5513,6 +6007,14 @@ function onCardTap(id: number) {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   if (!myTurn()) return;
+  // Before the draw a card cannot be used yet. It used to be selected silently, so the tap looked
+  // broken; now it says why, at the card.
+  if (IS_FUTA04 && !coach.tutorial && session.view.phase === 'DRAW') {
+    const card = document.querySelector<HTMLElement>(`.hand .card[data-card="${id}"]`);
+    const r = card?.getBoundingClientRect();
+    if (r) sayWhyAtPoint(r.left + r.width / 2, r.top + r.height / 2, TAP_WHY.draw, document.body);
+    return;
+  }
   if (IS_FUTA04 && session.view.phase === 'ACT') {
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
@@ -6001,6 +6503,87 @@ function bloomStepBack(): boolean {
   return false;
 }
 
+/** How long the same reason stays quiet, so hammering a stone never turns into a chant. */
+const WHY_QUIET_MS = 4500;
+let whyEl: HTMLElement | null = null;
+let whyReason = '';
+let whyAt = 0;
+let whyTimer = 0;
+
+/**
+ * Says, at the tapped hex and for a moment, why nothing happened. One line at a time, never over the
+ * hand or the cockpit, never blocking the next tap, and a plain fade with Reduce motion.
+ */
+function sayWhy(key: string, reason: string) {
+  if (!IS_FUTA04 || document.hidden || !session) return;
+  const p = boardWrapPoint(key);
+  sayWhyAtPoint(p.x, p.y, reason, $('board-wrap'));
+}
+
+/**
+ * The same answer, placed anywhere (a card in the hand sits outside the board's box, so its plate is
+ * fixed to the viewport). Shared by the hex and the card paths so the wording and the quiet period
+ * are one rule.
+ */
+function sayWhyAtPoint(x: number, y: number, reason: string, host: HTMLElement | null) {
+  if (!IS_FUTA04 || document.hidden || !session) return;
+  // A lesson answers its own taps (glass or LED).
+  if (lessonActive()) return;
+  // No text on the map: the answer goes to the LED, the spot gets only a small ring.
+  if (smartCockpit) {
+    const now = performance.now();
+    if (whyReason === reason && now - whyAt < WHY_QUIET_MS) return;
+    whyAt = now;
+    whyReason = reason;
+    const r = (host ?? $('board-wrap')).getBoundingClientRect();
+    const px = host && host.id !== 'board-wrap' ? x : r.left + x;
+    const py = host && host.id !== 'board-wrap' ? y : r.top + y;
+    if (!settings.reduceMotion) {
+      const ring = document.createElement('div');
+      ring.className = 'lesson-tap-ring';
+      ring.setAttribute('aria-hidden', 'true');
+      ring.style.left = `${px}px`;
+      ring.style.top = `${py}px`;
+      document.body.append(ring);
+      window.setTimeout(() => ring.remove(), 650);
+    }
+    smartCockpit.event({ message: reason.toUpperCase(), priority: 40, duration: 1700 });
+    return;
+  }
+  const now = performance.now();
+  if (whyReason === reason && now - whyAt < WHY_QUIET_MS) return;
+  whyAt = now;
+  whyReason = reason;
+  whyEl?.remove();
+  const el = document.createElement('div');
+  el.className = host && host.id !== 'board-wrap' ? 'tap-why fixed' : 'tap-why';
+  el.dataset.reason = reason;
+  // A spoken status, not decoration: a player using a screen reader gets the same answer.
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  el.textContent = reason;
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  if (!(settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches)) el.classList.add('rise');
+  // NOT #captions: the product cockpit hides the board's caption layer by design, so the answer
+  // lives on the board itself, where the finger landed.
+  (host ?? $('board-wrap')).append(el);
+  // Never off the edge or under the header: the plate is centred, then pulled in.
+  const half = el.offsetWidth / 2;
+  const lift = el.offsetHeight * 1.4;
+  const box = (host ?? $('board-wrap')).getBoundingClientRect();
+  const minX = (host?.id === 'board-wrap' ? 0 : box.left) + half + 6;
+  const maxX = (host?.id === 'board-wrap' ? box.width : box.right) - half - 6;
+  el.style.left = `${Math.min(Math.max(x, minX), maxX)}px`;
+  el.style.top = `${Math.max(y, lift + 8)}px`;
+  whyEl = el;
+  clearTimeout(whyTimer);
+  whyTimer = window.setTimeout(() => {
+    el.remove();
+    if (whyEl === el) whyEl = null;
+  }, 1700);
+}
+
 function onHexTap(key: string) {
   sound.unlock();
   if (!session) return;
@@ -6021,6 +6604,10 @@ function onHexTap(key: string) {
       if (bloomStepBack()) return;
     }
   }
+  // A tap that can do nothing says why, at the hex. It never blocks the tap: the same tap still
+  // unpicks, inspects or boinks exactly as before.
+  const why = session ? whyNotTap(session.view, session.legal, session.sel, key) : null;
+  if (why) sayWhy(key, why);
   const idleGrowSpot = IS_FUTA04 && myTurn() && session.view.phase === 'ACT' &&
     session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
     session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);
@@ -6313,6 +6900,7 @@ function tearDownOnlineDuel(): void {
 }
 
 bind('go-other', () => {
+  flushInstallInvite();
   $('gameover').hidden = true;
   if (isOnlineDuel()) {
     // "Back to matches": the same one teardown, then the hub. Hiding #game is the same guard the
@@ -6361,7 +6949,8 @@ bind('gm-new', () => {
     showScreen('levels');
     return;
   }
-  if (session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
+  // A campaign level is saved as it is played, so leaving it loses nothing and asks nothing.
+  if (!campaignLevel && session && session.state.phase !== 'GAME_OVER' && session.state.turnNumber > 1 && !window.confirm('Start a new game? This one will be lost.')) return;
   sheet(null);
   showScreen(campaignLevel ? 'campaign' : 'levels');
 });
@@ -6424,6 +7013,10 @@ bind('deck', () => {
 bind('discard', () => {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
+  // The Throw step: a card already picked goes onto the pile (the same move as tapping that card
+  // again). Nothing picked, nothing thrown. Every mode, online too (humanPlay routes it).
+  const toss = myTurn() && session ? throwPileAction(session.view.phase, session.pending, session.legal) : null;
+  if (toss) return humanPlay(toss);
   const a = myTurn() ? session!.legal.find((x) => x.t === 'Draw' && x.from === 'discard') : undefined;
   if (a) humanPlay(a);
 });
@@ -6657,6 +7250,7 @@ bind('tool-undo', () => {
   else if (!isOnlineDuel() && session.canReplayOpponent) replayBotTurn();
 });
 bind('go-rematch', () => {
+  flushInstallInvite();
   if (isOnlineDuel()) {
     // Rematch: the finished session is torn down FIRST (nothing leaks into the new match), then a
     // fresh match is created and the existing invite/share screen is shown. Hiding #game keeps a
@@ -6980,6 +7574,16 @@ let appReady = false;
     wouldBlock: (target: EventTarget | null) => tutorialGate!.wouldBlock(target),
   } : null,
   tutorial: () => coach.tutorial ? { ...coach.tutorial } : null,
+  /** tests: the lesson on screen (levels 1-10): its beat, what is lit, the answer showing */
+  lesson: () => {
+    const l = lessonActive();
+    return l ? { level: l.level, beat: lessonBeatNow, answer: lessonAnswerText, answers: lessonAnswerSeq, idle: lessonIdle, seen: [...lessonSeen] } : null;
+  },
+  /** tests: the lesson's own suggested move now (what the light would point at) */
+  lessonMove: () => {
+    const l = lessonActive();
+    return l && session ? suggestMove(l, session.state) : null;
+  },
   tutorialNext: () => tutorialNext(),
   exitTutorial: () => exitTutorial(),
   /**

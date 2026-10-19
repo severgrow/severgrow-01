@@ -71,7 +71,8 @@ describe('campaign levels: the definition is well formed', () => {
     for (const [id, c] of checks) {
       const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
       // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
-      // hexes it may lose to rock. Levels 4-30 keep the product board's original floor of 20.
+      // hexes it may lose to rock. Levels 1-3 use it; levels 4-30 keep the product board's original
+      // floor of 20.
       expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
     }
@@ -288,10 +289,11 @@ describe('campaign levels: the definition is well formed', () => {
   it('levels 1-3 use the tutorial small map (radius 2); levels 4+ the product hexagon (radius 3)', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      // Owner direction 2026-10-16: the first three levels are played on the SAME map the tutorial
-      // teaches on. This is a deliberate narrowing, not a range: the split is exact per level.
-      // 31-40 stay on the product hexagon (a bigger map was considered and set aside: 61 hexes at
-      // 360 px gives ~36 px hexes, under the 44 px tap target the cockpit uses).
+      // Owner direction 2026-10-17, after playing the guided levels: only the three discovery levels
+      // use the tutorial's map. On the 19-hex board a corner home has three neighbours and one Bloom
+      // places three tiles, so a single Bloom strangulates it — that map cannot carry a real match.
+      // Chapters IV-VII stay on the product hexagon (a bigger map was considered and set aside:
+      // 61 hexes at 360 px gives ~36 px hexes, under the 44 px tap target the cockpit uses).
       const small = level.number <= 3;
       const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
       const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
@@ -331,8 +333,8 @@ describe('campaign levels: the definition is well formed', () => {
 
 describe('campaign levels: the validation layer fails loudly and specifically', () => {
   // A product-board (radius 3) level as the base: these checks are about OTHER rules, so the board
-  // must not trip the radius/hexagon check first.
-  const base = CAMPAIGN_LEVELS[3]!; // level 4, the product hexagon
+  // must not trip the radius/hexagon check first. Level 11 is the first full-hexagon level.
+  const base = CAMPAIGN_LEVELS.find((l) => l.number === 11)!;
   const withBoard = (rock: string[], gold: string[] = ['0,0'], homes = [...CAMPAIGN_HOMES] as [string, string]) => ({
     ...base,
     id: 'broken',

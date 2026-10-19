@@ -207,7 +207,7 @@ by that rule (a test asserts the literal message still appears in JSON).
 
 Campaign progress is the single piece of player state the database does not hold. Unlocked levels,
 the best attempt per level and the unfinished campaign match live in the player's browser
-(`severgrow.campaign.progress.v1`, `severgrow.campaign.save.v1`, `severgrow.lastmode.v1`; see
+(`severgrow.campaign.progress.v2`, `severgrow.campaign.save.v2`, `severgrow.lastmode.v1`; see
 `src/campaign/progress.ts`). The server records only the Seeds a first clear paid.
 
 So the Player screen offers **“Reset campaign progress”**, which clears those keys in **the browser

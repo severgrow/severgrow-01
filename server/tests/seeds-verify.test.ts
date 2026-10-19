@@ -7,7 +7,7 @@ import { CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { verifyCampaignProof, verifyOfflineMatch } from '../src/seeds/verify.js';
 
 const level = CAMPAIGN_LEVELS[0]!;
-const genuineWin = (): Action[] => {
+const genuineWin = (level = CAMPAIGN_LEVELS[0]!): Action[] => {
   let state = campaignOpening(level);
   const actions: Action[] = [];
   while (state.phase !== 'GAME_OVER' && actions.length < 300) {
@@ -37,5 +37,15 @@ describe('offline replay verification', () => {
     altered[botMove] = { t: 'EndAct' };
     expect(verifyCampaignProof(level.id, altered, CURRENT_BOT_VERSION)).toBeNull();
     expect(verifyCampaignProof('c1-99', actions, CURRENT_BOT_VERSION)).toBeNull();
+  });
+});
+
+describe('levels 11+ after the /3/ lessons', () => {
+  // On /3/, levels 1-10 are authored lessons that pay no Seeds and send no proof. Level 11 and up must
+  // be claimable exactly as before, whatever was cleared locally: a proof is checked on its own level.
+  it('a genuine level 11 win still verifies on its own opening', () => {
+    const eleven = CAMPAIGN_LEVELS.find((l) => l.number === 11)!;
+    const actions = genuineWin(eleven);
+    expect(verifyCampaignProof(eleven.id, actions, CURRENT_BOT_VERSION)?.winner).toBe(0);
   });
 });

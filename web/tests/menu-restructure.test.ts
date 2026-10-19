@@ -86,9 +86,11 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
     expect(mainSource).toMatch(/const current = entry\.kind === 'ask' \? entry\.next\.number : entry\.level\.number/);
     expect(mainSource).toMatch(/cmp\.textContent = MENU\.level\(current\)/);
     expect(mainSource).toMatch(/cmp\.setAttribute\('aria-label', MENU\.levelAria\(current\)\)/);
-    // And the words themselves are real, which the source pattern above cannot prove.
-    expect(MENU.levelAria(1)).toBe('Play campaign level 1');
-    expect(MENU.levelAria(25)).toBe('Play campaign level 25');
+    // And the words themselves are real, which the source pattern above cannot prove. Owner brief
+    // 2026-10-17: the progression is never called "Campaign" where a player (or their screen
+    // reader) can hear it — the game simply has LEVEL 1, LEVEL 2, …
+    expect(MENU.levelAria(1)).toBe('Play level 1');
+    expect(MENU.levelAria(25)).toBe('Play level 25');
   });
 
   it('stops claiming a level number once every level is complete', () => {

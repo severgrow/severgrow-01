@@ -14,7 +14,7 @@
 // A level whose board has never changed has no entry. Never use an alternate to open a new match.
 import type { BoardSpec } from '../engine/index.js';
 import { CAMPAIGN_SMALL_CELLS, CAMPAIGN_SMALL_HOMES } from './levels.js';
-import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
+import { SMALL_BOARD_RADIUS as TUTORIAL_BOARD_RADIUS } from './small-board.js';
 
 export type AlternateOpening = { boardRadius: number; board: BoardSpec };
 

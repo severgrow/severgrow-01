@@ -20,6 +20,16 @@ describe('main menu: exactly one tutorial entry', () => {
     expect(menuSection).toContain(`>${HELP.tutorial}<`);
   });
 
+  it('hides that entry wherever levels ARE the tutorial, and keeps the code path', () => {
+    // Owner direction (2026-10-19): levels 1-10 are the game's tutorial, so a second guided run in
+    // the menu would teach the same thing twice. The entry is hidden - not deleted - on the product
+    // channels, so the old tutorial can return by flipping one line.
+    const main = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+    expect(main).toMatch(/\$\('menu-tutorial'\)\.hidden = FEATURES\.campaign/);
+    // Hidden, never removed: the press handler and its screen still exist.
+    expect(main).toContain("bind('menu-tutorial'");
+  });
+
   it('has no duplicate How-to-play entry and no lesson list', () => {
     expect(menuSection).not.toMatch(/How to play/i);
     expect(html).not.toContain('id="menu-lessons-list"');

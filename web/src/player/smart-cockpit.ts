@@ -860,5 +860,9 @@ export function mountSmartCockpit() {
       if (word) machine.hold(word, word === 'THROW' ? 'red' : word === 'BLOOM' || word === 'MEGA' ? 'green' : 'amber');
       else machine.release();
     },
-    reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp) };
+    reset: (you=0,opp=0) => machine.reset(phaseMessage(),you,opp),
+    /** A lesson message is on screen: the sign keeps the score and real results only. */
+    quiet: (on: boolean) => machine.setQuiet(on),
+    /** Hold the score on the sign while a lesson points at it; false lets it go. */
+    holdScore: (on: boolean) => { if (on) machine.holdScore(); else machine.release(); } };
 }

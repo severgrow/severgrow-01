@@ -36,6 +36,16 @@ export type TutorialFocusOptions = {
   stepKey?: string;
   /** Soft mid-screen set + run card examples (bloom explain). */
   bloomDemo?: boolean;
+  /**
+   * The teaching levels' look: a stronger dim, a bigger pointer, and a highlight that keeps the
+   * target's own outline ('hex' for a map hex, 'card' for a fanned card). Off: the Tutorial's pill.
+   */
+  lesson?: boolean;
+  /**
+   * A tiny tracked-out line above the title, e.g. "LEVEL 1". It answers "where am I in this
+   * journey?" without spending any of the one-line instruction budget. Campaign guidance only.
+   */
+  kicker?: string;
 };
 
 /** Match Intel has two tabs: what happened (data) and the moves reference (static text). */
@@ -96,6 +106,23 @@ html.futa04-tutorial:not([data-layout='side']) .play {
   overflow: visible;
 }
 html.futa04-tutorial .cam-fade { opacity: 0 !important; }
+/* The campaign's little "LEVEL 1" line: quiet, tracked out, above the instruction. It answers
+   "where am I?" without taking any of the one-line instruction budget. */
+#futasaku-glass[data-mode='tutorial'][data-kicker]::before {
+  content: attr(data-kicker);
+  display: block;
+  padding: 6px 12px 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(243, 230, 196, 0.62);
+}
+.large-text #futasaku-glass[data-mode='tutorial'][data-kicker]::before {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
 #futasaku-glass[data-mode='tutorial'] .glass-tutorial { display:flex; flex-direction:column; gap:6px; padding:8px 10px 10px; margin:0; max-width:none;
   min-height:0; border-radius:0; background:transparent; box-shadow:none; pointer-events:none; }
 /* One head row: PREVIOUS | title | NEXT/TAP, with full-size touch targets. */
@@ -162,6 +189,9 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-window { min-height:38px; padding:5px 8px; }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-led-cells,
 .large-text #futasaku-glass[data-mode='guidance'] .glass-led-cells { height:34px; }
+/* The levels: one fixed height. The reason line is a touch smaller and always keeps room for two
+   lines (owner, 2026-10-19: the reasons are full sentences that must fit in two lines). */
+#futasaku-glass[data-mode='tutorial'][data-lesson='1'] .glass-why { font-size:12px; min-height:2.9em; }
 #futasaku-glass[data-mode='tutorial'] .glass-why { margin:0; font:400 13px/1.45 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:rgba(240,233,220,.78); letter-spacing:.012em; text-transform:none; text-wrap:pretty; text-align:center; }
 #futasaku-glass[data-mode='tutorial'] .glass-status { margin:0; font:400 13px/1.4 var(--font-ui,'Fragment Mono',ui-monospace,monospace); color:#e8ddc9; letter-spacing:.015em; text-align:center; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
@@ -260,6 +290,10 @@ html.futa04-tutorial .sheet { z-index: 51; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.38); }
+/* The levels: a strong dim (only the lit thing reads), a chunky pointer with a dark edge. */
+#tutorial-focus[data-lesson='1'] .focus-dim { fill:rgba(0,0,0,.62); }
+#tutorial-focus[data-lesson='1'] .focus-glow { fill:rgba(233,216,173,.16); }
+#tutorial-focus[data-lesson='1'] .focus-pointer-body { transform:scale(1.6); transform-origin:10px 1px; stroke:rgba(20,16,10,.85); stroke-width:1.6px; paint-order:stroke; }
 /* Contour-free highlight: soft cream fill only — no stroke/ring outline. */
 #tutorial-focus .focus-glow { fill:rgba(233,216,173,.10); stroke:none; stroke-width:0;
   filter:drop-shadow(0 0 12px rgba(233,216,173,.55)); }
@@ -380,7 +414,10 @@ const safe = (text: string) => text.replace(/[&<>"']/g, char=>({'&':'&amp;','<':
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number; exact?: boolean };
+type Pt = { x: number; y: number };
+type Tracked = { cx: number; cy: number; hole: string; ring: string; soft: string; w: number; h: number; left: number; top: number; right: number; bottom: number; exact?: boolean;
+  /** The lesson shapes: one outline per target, in screen pixels (absent: the pill). */
+  polys?: Pt[][] };
 
 const FOCUS_RX = 10;
 const FOCUS_PAD_X = 8;
@@ -495,10 +532,93 @@ const expandFocusSelector = (selector: string): string => {
   return selector;
 };
 
-/** Always the same soft pill — never hex / circle contour, even on icon buttons. */
-const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => {
+/** A map hex's outline on screen: the corners of its own drawn path, through the SVG's transform. */
+const hexOutline = (cell: Element): Pt[] | null => {
+  const path = cell.querySelector<SVGPathElement>(':scope > path.hex');
+  const ctm = path?.getScreenCTM?.();
+  const d = path?.getAttribute('d');
+  if (!path || !ctm || !d) return null;
+  const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  const pts: Pt[] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const p = new DOMPoint(nums[i]!, nums[i + 1]!).matrixTransform(ctm);
+    pts.push({ x: p.x, y: p.y });
+  }
+  return pts.length >= 3 ? pts : null;
+};
+
+/** A fanned card's outline: its own size, turned by its fan angle, around its centre on screen. */
+const cardOutline = (el: Element): Pt[] | null => {
+  const h = el as HTMLElement;
+  const r = rectOf(h);
+  if (!r.width || !r.height) return null;
+  const w = h.offsetWidth || r.width;
+  const ht = h.offsetHeight || r.height;
+  const deg = parseFloat(getComputedStyle(h).getPropertyValue('--rot')) || 0;
+  const a = (deg * Math.PI) / 180;
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  const cos = Math.cos(a); const sin = Math.sin(a);
+  return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+    const x = (sx! * w) / 2; const y = (sy! * ht) / 2;
+    return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos };
+  });
+};
+
+const polyCentre = (pts: readonly Pt[]): Pt => ({
+  x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
+  y: pts.reduce((a, p) => a + p.y, 0) / pts.length,
+});
+/** The outline pushed out by `pad` pixels from its centre (the soft halo around it). */
+const grownPoly = (pts: readonly Pt[], pad: number): Pt[] => {
+  const c = polyCentre(pts);
+  return pts.map((p) => {
+    const dx = p.x - c.x; const dy = p.y - c.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: p.x + (dx / len) * pad, y: p.y + (dy / len) * pad };
+  });
+};
+/** The levels' one corner: every glow (hex, card, pile, button) has the same rounded corner. */
+const LESSON_CORNER = 9;
+/** An outline as a path whose every corner is rounded by the same radius (shorter on tiny edges). */
+const roundedPath = (pts: readonly Pt[], r = LESSON_CORNER): string => {
+  const n = pts.length;
+  const f = (v: number) => v.toFixed(1);
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const p = pts[i]!; const prev = pts[(i + n - 1) % n]!; const next = pts[(i + 1) % n]!;
+    const lp = Math.hypot(prev.x - p.x, prev.y - p.y) || 1;
+    const ln = Math.hypot(next.x - p.x, next.y - p.y) || 1;
+    const rr = Math.min(r, lp / 2, ln / 2);
+    const a = { x: p.x + ((prev.x - p.x) / lp) * rr, y: p.y + ((prev.y - p.y) / lp) * rr };
+    const b = { x: p.x + ((next.x - p.x) / ln) * rr, y: p.y + ((next.y - p.y) / ln) * rr };
+    d += `${i === 0 ? 'M' : 'L'}${f(a.x)},${f(a.y)}Q${f(p.x)},${f(p.y)} ${f(b.x)},${f(b.y)}`;
+  }
+  return `${d}Z`;
+};
+
+/** Tracked geometry for outlines: the bounds (for the pointer) plus each outline. */
+const geometryFromPolys = (polys: Pt[][]): Tracked => {
+  const all = polys.flat();
+  const left = Math.min(...all.map((p) => p.x)); const right = Math.max(...all.map((p) => p.x));
+  const top = Math.min(...all.map((p) => p.y)); const bottom = Math.max(...all.map((p) => p.y));
+  return {
+    cx: (left + right) / 2, cy: (top + bottom) / 2, hole: '', ring: '', soft: '',
+    w: right - left, h: bottom - top, left, top, right, bottom, exact: true, polys,
+  };
+};
+
+/** The pill (Tutorial), or the target's own outline (levels: 'hex', 'card'). */
+const measureTarget = (selector: string, _shape: FocusShape, exactTarget = false): Tracked | null => {
   if (!selector || _shape === 'none') return null;
-  const nodes = [...document.querySelectorAll(expandFocusSelector(selector))];
+  if (_shape === 'hex' || _shape === 'card') {
+    const polys = [...document.querySelectorAll(selector)]
+      .map((n) => (_shape === 'hex' ? (n.classList.contains('hex-cell') ? hexOutline(n) : null) ?? cardOutline(n) : cardOutline(n)))
+      .filter((p): p is Pt[] => !!p);
+    if (polys.length) return geometryFromPolys(polys);
+  }
+  // The levels light exactly their one target (never both piles at once).
+  const nodes = [...document.querySelectorAll(exactTarget ? selector : expandFocusSelector(selector))];
   if (!nodes.length) return null;
   let left = Infinity; let top = Infinity; let right = -Infinity; let bottom = -Infinity;
   for (const raw of nodes) {
@@ -511,7 +631,8 @@ const measureTarget = (selector: string, _shape: FocusShape): Tracked | null => 
   }
   if (!Number.isFinite(left)) return null;
   const singleCard = nodes.length === 1 && nodes[0]!.matches('#hand .card');
-  return geometryFromBounds(left, top, right, bottom, singleCard);
+  // The levels keep the target's own box: widening a pile into a pill spills onto its neighbour.
+  return geometryFromBounds(left, top, right, bottom, singleCard || exactTarget);
 };
 
 /**
@@ -562,6 +683,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   let howToHtml = '';
   let reduceMotion = false;
   let idleHard = false;
+  /** A level's focus: exactly its target, the target's own outline, strong dim. */
+  let lessonFocus = false;
   let raf = 0;
   let holdUntil = 0;
   let smooth: Tracked | null = null;
@@ -569,7 +692,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   let handlers: TutorialWindowHandlers = {};
   let lastStepKey = '';
   let ledTitle = '';
-  let focusScene: 'tracked' | 'empty' | null = null;
+  let focusScene: 'tracked' | 'empty' | `poly:${number}` | null = null;
   // The LED title is redrawn whenever the glass is re-placed, but its pixels only depend on the
   // title, the large-text flag, the slot width and the viewport - so a re-place that changes none of
   // them would repaint an identical canvas. Skip it (same pixels, no raster invalidation).
@@ -836,7 +959,8 @@ export const mountGlassSurface = (onClose: () => void) => {
     const y = tracked.top - padY;
     const w = tracked.w + padX * 2;
     const h = tracked.h + padY * 2;
-    const rx = Math.min(FOCUS_RX, Math.min(w, h) * 0.22);
+    // The levels use one corner for every glow; the Tutorial keeps its proportional pill.
+    const rx = lessonFocus ? Math.min(LESSON_CORNER, w / 2, h / 2) : Math.min(FOCUS_RX, Math.min(w, h) * 0.22);
     setIfChanged(el, 'x', x.toFixed(1));
     setIfChanged(el, 'y', y.toFixed(1));
     setIfChanged(el, 'width', w.toFixed(1));
@@ -866,7 +990,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   const paintFocus = (tracked: Tracked | null) => {
     setIfChanged(focus, 'viewBox', `0 0 ${innerWidth} ${innerHeight}`);
     // Steady pulse always while a target is live — never pauses for settle/jiggle.
-    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked ? '0' : '1');
+    // The levels' glow holds still: the lit thing already breathes on its own.
+    setIfChanged(focus, 'data-pulse', reduceMotion || !tracked || lessonFocus ? '0' : '1');
     setIfChanged(focus, 'data-bob', reduceMotion || !tracked ? '0' : idleHard ? 'hard' : '1');
     setIfChanged(focus, 'data-on', tracked || mode === 'tutorial' ? '1' : '0');
     // #hud-menu sits above the dim (z-index), so it needs no cut-out of its own
@@ -878,10 +1003,30 @@ export const mountGlassSurface = (onClose: () => void) => {
       setIfChanged(focus, 'data-pointer', '0');
       return;
     }
-    ensureTrackedScene();
-    applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
-    applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
-    applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
+    if (tracked.polys) {
+      const n = tracked.polys.length;
+      const scene = `poly:${n}` as const;
+      if (focusScene !== scene) {
+        const each = (cls: string) => Array.from({ length: n }, () => `<path class="${cls}"/>`).join('');
+        focus.innerHTML = cutoutMask(each('focus-hole" fill="black'))
+          + `<g class="focus-lift">${each('focus-glow-soft')}${each('focus-glow')}</g>`
+          + `<g class="focus-pointer-root" hidden>${POINTER_ARROW}</g>`;
+        focusScene = scene;
+      }
+      const holes = focus.querySelectorAll('.focus-hole');
+      const softs = focus.querySelectorAll('.focus-glow-soft');
+      const rings = focus.querySelectorAll('.focus-glow');
+      tracked.polys.forEach((poly, i) => {
+        setIfChanged(holes[i] ?? null, 'd', roundedPath(grownPoly(poly, 4)));
+        setIfChanged(softs[i] ?? null, 'd', roundedPath(grownPoly(poly, 6)));
+        setIfChanged(rings[i] ?? null, 'd', roundedPath(grownPoly(poly, 2)));
+      });
+    } else {
+      ensureTrackedScene();
+      applyRectAttrs(focus.querySelector('.focus-hole'), tracked, true);
+      applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
+      applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
+    }
     const panelRect = panel.getBoundingClientRect();
     const pose = pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
@@ -899,11 +1044,22 @@ export const mountGlassSurface = (onClose: () => void) => {
   const tick = (now: number) => {
     raf = 0;
     if (mode !== 'tutorial' || document.hidden) return;
-    const measured = measureTarget(targetSelector, targetShape);
+    const measured = measureTarget(targetSelector, targetShape, lessonFocus);
     if (measured) {
       holdUntil = now + 280;
       if (!smooth) smooth = measured;
-      else {
+      else if (measured.polys) {
+        // Outlines glide point by point to the same shape; a different shape arrives at once.
+        const same = smooth.polys && smooth.polys.length === measured.polys.length
+          && smooth.polys.every((p, i) => p.length === measured.polys![i]!.length);
+        const t = reduceMotion ? 1 : 0.24;
+        smooth = same
+          ? geometryFromPolys(measured.polys.map((poly, i) => poly.map((p, j) => {
+            const q = smooth!.polys![i]![j]!;
+            return { x: lerp(q.x, p.x, t), y: lerp(q.y, p.y, t) };
+          })))
+          : measured;
+      } else {
         // Soft ease toward a new target; unscaled measure already ignores breathe jitter.
         const drift = Math.hypot(smooth.cx - measured.cx, smooth.cy - measured.cy)
           + Math.abs(smooth.w - measured.w) + Math.abs(smooth.h - measured.h);
@@ -987,7 +1143,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     void chapter;
     void options.chapterCount;
     const line = options.praise || options.status || instruction;
-    const whyHtml = options.praise || options.status ? '' : (options.why ? `<p class="glass-why">${safe(options.why)}</p>` : '');
+    // The levels keep one fixed height: the reason line is always there (empty when a beat has none).
+    const whyHtml = options.praise || options.status
+      ? (options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '')
+      : options.why ? `<p class="glass-why">${safe(options.why)}</p>`
+      : options.lesson ? '<p class="glass-why" aria-hidden="true"></p>' : '';
     const icons = options.turnIcons
       ? `<div class="glass-icons" aria-hidden="true"><span>Draw</span><span>Grow</span><span>Throw</span></div>` : '';
     const b = options.buttons ?? {};
@@ -1040,16 +1200,23 @@ export const mountGlassSurface = (onClose: () => void) => {
     idleHard = !!options.idleHard;
     const nextSelector = selectors.join(', ');
     targetSelector = nextSelector;
-    // Tutorial focus is always a soft pill/rounded-rect — never hex or circle contour.
-    targetShape = !targetSelector || options.shape === 'none' ? 'none' : 'pill';
+    // The Tutorial's focus is always a soft pill. The levels keep the target's own outline.
+    targetShape = !targetSelector || options.shape === 'none' ? 'none'
+      : options.lesson && (options.shape === 'hex' || options.shape === 'card') ? options.shape : 'pill';
+    setIfChanged(focus, 'data-lesson', options.lesson ? '1' : '0');
+    lessonFocus = !!options.lesson;
     panel.dataset.mode = 'tutorial';
+    if (options.lesson) panel.dataset.lesson = '1';
+    else delete panel.dataset.lesson;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
     panel.hidden = false;
     showFocus(true);
     setBloomDemo(!!options.bloomDemo);
-    panel.setAttribute('aria-label', 'Tutorial guidance');
+    panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
+    if (options.kicker) panel.dataset.kicker = options.kicker;
+    else delete panel.dataset.kicker;
     const stepKey = options.stepKey ?? `${chapter}:${text}`;
     const stepped = stepKey !== lastStepKey;
     lastStepKey = stepKey;
@@ -1123,6 +1290,7 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (options.howToHtml !== undefined) howToHtml = options.howToHtml;
     if (options.tab) intelTab = options.tab;
     mode = 'intel'; stopLoop(); smooth = null;
+    delete panel.dataset.kicker;
     panel.dataset.mode = 'intel'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Match details'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');
@@ -1133,6 +1301,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const guidance = (line: string) => {
     const same = mode === 'guidance' && ledTitle === line && !panel.hidden;
     mode = 'guidance'; stopLoop(); smooth = null;
+    delete panel.dataset.kicker;
     panel.dataset.mode = 'guidance'; panel.hidden = false; showFocus(false);
     panel.setAttribute('aria-label', 'Turn guidance'); panel.setAttribute('role', 'dialog');
     panel.removeAttribute('aria-live');

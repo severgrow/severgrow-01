@@ -97,7 +97,7 @@ for (const size of SIZES) {
     await page.close();
   }
   if (OLD) continue;
-  // 2. the homes close up: idle, danger (4 of 6 sides blocked), tapped
+  // 2. the homes close up: idle, danger (4 of 6 sides closed), tapped
   {
     const danger = stateWith({ '-1,1': [1, 3], '-1,2': [1, 3], '-2,1': [1, 2], '-3,2': [1, 4], '1,-1': [0, 3], '2,-1': [0, 2], '1,-2': [0, 2], '3,-3': [0, 4] }, [[0, 6], [1, 6], [2, 6]]);
     const page = await open(size, { state: danger, settings: { reduceMotion: true } });

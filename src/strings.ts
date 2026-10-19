@@ -416,9 +416,10 @@ export const HOME = Object.freeze({
   danger: 'Home in danger',
   cutOff: 'Tiles cut off from your home wither',
   surround: `Surround ${OPP.theirs} home to win at once`,
-  /** the tile card when a home is tapped */
-  tapMine: (blocked: number) => `Your home: everything you own must stay connected to it. ${blocked} of 6 sides blocked.`,
-  tapTheirs: (blocked: number) => `Surround all 6 sides to win at once. ${blocked} of 6 sides blocked.`,
+  /** the tile card when a home is tapped: how many of its REAL sides are taken (a corner home has
+   *  fewer than six, so "all 6" would be a lie there) */
+  tapMine: (taken: number, open: number) => `Your home: everything you own must stay connected to it. ${taken} of ${open} sides taken.`,
+  tapTheirs: (taken: number, open: number) => `Take every side of this home to win at once. ${taken} of ${open} taken.`,
   /** the Strangle captions */
   mineSurrounded: 'Your tree is surrounded!',
   theirsSurrounded: `${OPPONENT_LABEL}'s volcano is surrounded!`,
@@ -504,12 +505,108 @@ export const BLAST = Object.freeze({
 /** The test copy's step guidance: the plate on the map when a step starts (at most ~24 letters). */
 export const STEP_CUE = Object.freeze({
   draw: 'Draw a card',
-  grow: 'Play or skip',
+  grow: 'Play a card',
   throw: 'Throw one card',
   opp: OPP.label,
   /** the small line above the words */
   kicker: Object.freeze({ draw: 'Step 1 of 3', grow: 'Step 2 of 3', throw: 'Step 3 of 3' }),
   kickerOpp: 'Their turn',
+});
+
+/**
+ * Why a tap did nothing: one short line, said at the touched hex, always read from the engine's own
+ * state (the terrain, the phase, the legal moves) — never a second rule book. Sentence case; the
+ * plate uppercases it.
+ */
+export const TAP_WHY = Object.freeze({
+  draw: 'Draw a card first',
+  rock: 'Blocked by rock',
+  connect: 'Connect to your tree',
+  pick: 'Pick a card',
+  target: 'Not this hex',
+});
+
+/**
+ * What each guided level taught, in three or four words, for the finish card. Deliberately concrete:
+ * the player should recognise the thing they just did, not a chapter title.
+ */
+const RECAP: Readonly<Record<number, string>> = Object.freeze({
+  1: 'Draw · Grow · Throw',
+  2: 'Your turn, again',
+  3: 'More than one way',
+  4: 'Stay connected',
+  5: 'Numbers are strength',
+  6: 'Defend your link',
+  7: 'Cut their link',
+  8: 'Fruit takes a tile',
+  9: 'Three in a row: Bloom',
+  10: 'Gold is worth two',
+});
+
+/**
+ * The campaign's first ten levels teach through the game, so their words are short, concrete and
+ * in the game's own voice: an LED title (≤ 12 characters) and ONE line under it. They name the next
+ * touch, never the whole rule book, and they never say "tutorial".
+ */
+export const ONBOARD = Object.freeze({
+  /**
+   * The objective, said before anything else. Beta feedback (2026-10-17): players could not tell
+   * what winning looked like, even after playing. Levels 1 and 2 spend their opening draw on it —
+   * level 1 the decisive win, level 2 both routes — while the window still points at the deck, so
+   * the goal never hides the next action.
+   */
+  goal: 'THE GOAL',
+  goalLine: 'Surround their home to win. Tap the Draw pile.',
+  howToWin: 'HOW TO WIN',
+  howToWinLine: 'Surround their home, or hold more ground.',
+  /**
+   * The win, said at the one moment it is concrete: their home has a single side left to take and
+   * a legal move would take it. This is how the objective is actually learned — not from a paragraph.
+   */
+  oneMore: 'YOU CAN WIN',
+  oneMoreLine: 'Surround their home now and it is over.',
+  /**
+   * The word "home" is useless until the player can see WHICH thing it is. On levels 1-2, after the
+   * goal is stated, the window points at the opponent's landmark and names it once. After that the
+   * word means something.
+   */
+  theirHome: 'THEIR HOME',
+  theirHomeLine: 'This one. Surround it to win.',
+  /**
+   * What the level was teaching, said back to the player on the finish card after a win: the "you
+   * did it, and this is what you just learned" beat. Empty past the guided levels, so a normal
+   * match's finish card is unchanged.
+   */
+  recap: (level: number): string => RECAP[level] ?? '',  draw: 'DRAW',
+  drawLine: 'Tap the Draw pile to start your turn.',
+  take: 'TAKE A CARD',
+  /**
+   * Levels 2-7: ONE pile, because a beginner has not learned either yet, and the Throw pile's top
+   * card can be a Fruit card — which is not taught until level 8.
+   */
+  takeLine: 'Tap the Draw pile.',
+  pick: 'PICK A CARD',
+  pickLine: 'Tap any card in your hand.',
+  grow: 'GROW',
+  growLine: 'Tap a lit tile.',
+  throwTitle: 'THROW',
+  throwLine: 'Tap a card twice to throw it.',
+  throwAgain: 'Tap the same card again.',
+  throwDone: 'Tap » when you are done.',
+  twoWays: 'TWO WAYS',
+  twoWaysLine: 'More than one tile works. Pick one.',
+  theirTurn: 'THEIR TURN',
+  theirTurnLine: 'Watch where they grow.',
+  /** The one new idea each level introduces (levels 4-10), shown once on its first turn. */
+  lessons: Object.freeze({
+    4: Object.freeze({ title: 'CONNECTED', line: 'Every tile must join your tree.' }),
+    5: Object.freeze({ title: 'STRONGER', line: 'A higher number is harder to take.' }),
+    6: Object.freeze({ title: 'DEFEND', line: 'A joined tile is harder to cut.' }),
+    7: Object.freeze({ title: 'CUT', line: 'Take a tile to break their link.' }),
+    8: Object.freeze({ title: 'FRUIT', line: 'A Fruit card takes any neighbour.' }),
+    9: Object.freeze({ title: 'BLOOM', line: 'Three in a row makes a bloom.' }),
+    10: Object.freeze({ title: 'GOLD', line: 'Gold is worth two at the end.' }),
+  } as Readonly<Record<number, { title: string; line: string }>>),
 });
 
 /** FUTASAKU 0.5 menu + Match Intel labels. One place to rename the single tutorial entry
@@ -534,7 +631,7 @@ export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
   /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
-  levelAria: (number: number): string => `Play campaign level ${number}`,
+  levelAria: (number: number): string => `Play level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
   play: 'Play',
   /** the PLAY screen's heading */
@@ -980,8 +1077,9 @@ export const CAMPAIGN = Object.freeze({
   title: 'Campaign',
   /** the main menu entry that keeps the old difficulty picker */
   classic: 'Classic vs AI',
-  /** the campaign screen heading */
-  heading: 'Campaign',
+  /** the level screen heading. The player-facing progression is never called "Campaign": the game
+   *  simply has LEVEL 1, LEVEL 2, … (owner brief, 2026-10-17). */
+  heading: 'Levels',
   /** the prominent button that resumes an unfinished campaign match */
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
@@ -1036,13 +1134,13 @@ export const CAMPAIGN = Object.freeze({
    *  this is the number alone: "Level 4". */
   levelLabel: (number: number): string => `Level ${number}`,
   /** resume the campaign match exactly where it stopped */
-  resumeHint: 'Your campaign match is unfinished.',
+  resumeHint: 'Your level is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
   started: (number: number): string => `Level ${number}`,
   /** the campaign finish title after a win: "Level 6 complete" */
   levelWon: (number: number): string => `Level ${number} complete`,
   /** the finish screen's secondary way out, back to the level list */
-  back: 'Back to campaign',
+  back: 'Back to levels',
   /**
    * The finish screen's LEADING action after a won level (owner direction, 2026-10-16): the next
    * level starts straight away, so the player never has to walk back to the list to pick it. The
@@ -1053,4 +1151,119 @@ export const CAMPAIGN = Object.freeze({
   unlockedNext: (): string => 'Next level unlocked',
   /** the finish screen's note after the last level of the campaign as built */
   chapterDone: 'Chapter complete. More levels are on the way.',
+});
+
+// ======================================================================================
+// LESSONS — levels 1-10 are the tutorial (/3 onboarding line, 2026-10-18).
+//
+// Every word a player reads in a teaching level. The glass window shows an instruction (6 words or
+// fewer, caps, LED) and a reason (12 words or fewer); a wrong tap is answered in the window or the
+// LED, never on the board. One word list: Draw pile, Throw pile, Grow, Bloom, Bomb, Blast, points.
+// Bloom is never "set" or "run"; no tile colours. Scoring words follow SPEC ("Ending the game").
+// docs/LESSON-SCRIPTS.md holds the same text beat by beat; web/tests/lesson-words.test.ts pins both.
+// ======================================================================================
+export const LESSON = Object.freeze({
+  // shared turn words (the one-word window after a lesson's first turn)
+  draw: 'DRAW',
+  grow: 'GROW',
+  throwWord: 'THROW',
+  theirTurn: 'THEIR TURN',
+  theirTurnLine: 'They draw, grow and throw too.',
+  // the turn, spelled out the first time
+  tapDraw: 'TAP THE DRAW PILE',
+  tapDrawLine: 'Every turn starts with drawing 1 card.',
+  pickCard: 'PICK THE LIT CARD',
+  pickCardLine: 'This card will be placed on the board.',
+  tapTile: 'TAP A LIT TILE',
+  tapTileLine: 'Tap here to Grow this card.',
+  youGrew: 'YOU GREW',
+  youGrewLine: 'Tiles keep the rank of the card used.',
+  throwCard: 'THROW A CARD',
+  throwCardLine: 'Throw 1 card to end your turn.',
+  throwPile: 'TAP THE THROW PILE',
+  throwPileLine: 'Move the card here, or tap it again.',
+  done: 'DONE GROWING',
+  doneLine: 'Tap » to go on to Throw.',
+  // the objective
+  yourTree: 'THIS IS YOUR HOME',
+  yourTreeLine: 'Grow by placing cards on the board, on tiles that connect to your home.',
+  theirHome: 'THAT IS THEIR HOME',
+  theirHomeLine: 'Surround it to win, or have more points at the end.',
+  pileLow: 'PILE ALMOST EMPTY',
+  pileLowLine: 'You can see how many cards are left in the Draw pile.',
+  lastTurn: 'LAST TURN',
+  lastTurnLine: 'Pile empty: each tile is 1 point. Numbers on tiles don’t count.',
+  // level 2
+  biggerWins: 'BIGGER NUMBER WINS',
+  biggerWinsLine: 'You can replace your tile with a stronger card.',
+  takeTile: 'CUT THROUGH THEIR TILE',
+  takeTileLine: 'A card can cut through opponent’s weaker tile.',
+  // level 3
+  rocksBlock: 'ROCKS BLOCK',
+  rocksBlockLine: 'Nothing can grow on a rock.',
+  goldDouble: 'GOLD COUNTS DOUBLE',
+  goldDoubleLine: 'Gold tiles score two points. Take it first.',
+  // level 4
+  cutLink: 'CUT THEIR LINK',
+  cutLinkLine: 'Disconnect opponent’s tiles from their home to destroy them.',
+  withered: 'THEY WITHERED',
+  witheredLine: 'Disconnected tiles don’t score anything.',
+  // level 5
+  cardsThatBloom: 'CARDS THAT BLOOM',
+  cardsThatBloomLine: '3 cards with the same number, or 3 of same suit in order.',
+  playLitLine: 'Three together make a Bloom.',
+  tapBloom: 'TAP BLOOM',
+  tapBloomLine: 'Then tap or draw the tiles on board. Have to connect to your home.',
+  // the Bloom picked: its tiles are next (owner, 2026-10-19: tap Bloom first, then the tiles)
+  bloomTiles: 'TAP THE LIT TILES',
+  bloomTilesLine: 'Tap or draw the tiles on board. Have to connect to your home.',
+  bloomed: 'BLOOM!',
+  bloomedLine: 'A Bloom is an extra move, growing multiple tiles at once.',
+  // level 6
+  surround: 'SURROUND THEIR HOME',
+  surroundLine: 'Surround their home from each side for an instant win.',
+  canWin: 'YOU CAN WIN',
+  canWinLine: 'Take the last open side of their home.',
+  // level 7
+  bombTile: 'BOMB THEIR TILE',
+  bombTileLine: 'A Bomb removes 1 enemy tile. It replaces Grow in your turn.',
+  // level 8
+  blast: 'TWO BOMBS MAKE A BLAST',
+  blastLine: 'A Blast clears a large area. Homes are safe.',
+  freeGrow: 'FREE GROW',
+  freeGrowLine: 'A Blast is an extra move on top of Grow and Blooms.',
+  // level 9
+  pileGold: 'THROW PILE IS GOLD',
+  pileGoldLine: 'An indicator that its top card completes a Bloom in your hand.',
+  skipGrow: 'SKIP GROW',
+  skipGrowLine: 'You can end a turn without growing to save cards for later.',
+  // finish cards: title + one line that says how you won
+  youWin: 'YOU WIN',
+  wonOnPoints: 'You had more points – you won!',
+  wonByKo: 'You surrounded their home.',
+  goldDecided: 'Gold put you ahead.',
+  canPlay: 'YOU CAN PLAY FUTASAKU',
+  canPlayLine: 'Next: the big board.',
+  // wrong taps (the engine says why; these are its words)
+  drawFirst: 'DRAW FIRST',
+  notYet: 'NOT YET',
+  tapLit: 'TAP THE LIT ONE',
+  connect: 'CONNECT TO YOUR HOME',
+  rockBlocks: 'ROCK BLOCKS THIS',
+  isTheirHome: 'THAT IS THEIR HOME',
+  isYourHome: 'THAT IS YOUR HOME',
+  tooWeak: (card: number, tile: number): string => `TOO WEAK: ${card} VS ${tile}`,
+  ownTile: 'YOUR TILE NEEDS A HIGHER CARD',
+  mustTouch: 'MUST TOUCH YOUR TILES',
+  homesSafe: 'HOMES ARE SAFE',
+  pickFirst: 'PICK A CARD FIRST',
+  oneDraw: 'ONE CARD PER TURN',
+  bloomNeeds: 'THREE CARDS OR MORE',
+  bloomMatch: 'SAME NUMBER, OR COUNTING UP',
+  theirTurnNow: 'THEIR TURN',
+  // the way out of a lesson that cannot finish any more
+  restart: 'RESTART LEVEL',
+  restartLine: 'This lesson cannot finish now. Start again.',
+  showMe: 'Show me',
+  next: 'NEXT',
 });

@@ -329,8 +329,10 @@ never cover a neighbour's number.
   leaves tremble, the volcano rumbles, and a ring shows which sides are blocked, with "4/6".
   Never flashing. "Home in danger" shows in the header.
 - **Tap**: the tree's heartbeat and a rustle, or the volcano's thump and a rumble, and the tile
-  card: "Your tree. Your home: everything you own must stay connected to it. 2 of 6 sides
-  blocked." / "Opponent's volcano. Surround all 6 sides to win at once. 3 of 6 sides blocked."
+  card: "Your tree. Your home: everything you own must stay connected to it. 2 of 6 sides taken."
+  / "Opponent's volcano. Take every side of this home to win at once. 3 of 6 taken." The count
+  follows the board, not a fixed six: a home in a corner has three sides that can be taken
+  (`homeSides().openSides`), so the card never promises six where there are three.
 - **Strangle finish** (at most 2.0 s at Normal; tap or Skip jumps to the end): the surrounding
   tiles pulse inward, a slow beat, then the volcano is smothered by moss (a sigh) while the tree
   blooms, or the tree withers (a grind) while the volcano roars.

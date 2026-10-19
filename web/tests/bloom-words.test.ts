@@ -39,7 +39,10 @@ describe('Bloom and home wording', () => {
     expect(kindLabel('bloom-4-1.2.3.4')).toBe('Bloom 4 tiles');
     expect(HOME.mine).toBe('Your tree');
     expect(HOME.theirs).toBe("Opponent's volcano");
-    expect(HOME.tapTheirs(3)).toBe('Surround all 6 sides to win at once. 3 of 6 sides blocked.');
+    expect(HOME.tapTheirs(3, 6)).toBe('Take every side of this home to win at once. 3 of 6 taken.');
+    // A corner home has three sides, so the words follow the board instead of saying "all 6".
+    expect(HOME.tapTheirs(1, 3)).toBe('Take every side of this home to win at once. 1 of 3 taken.');
+    expect(HOME.tapMine(2, 3)).toBe('Your home: everything you own must stay connected to it. 2 of 3 sides taken.');
     expect(BLOOM.howto).toContain('may also <b>bloom</b>');
     expect(BLOOM.hint).toBe('Bloom on Grow: a set or a run of 3 to 6 cards.');
   });

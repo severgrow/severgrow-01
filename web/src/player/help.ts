@@ -143,6 +143,9 @@ export const mountHelp = (hooks: HelpHooks) => {
   tipPanel.className = 'futa04-help-panel futa04-help-tip';
   const coachPanel = document.createElement('div');
   coachPanel.className = 'futa04-help-panel futa04-help-coach';
+  // The in-play tip lives in this sheet, as it always has. Keeping it in the dock made the
+  // smart-cockpit layout suite fail in a way that was never explained, so it stays here: the
+  // campaign's guided levels teach Fruit and Bloom in the top window instead (player/onboarding).
   tipPanel.append(firstTip);
   coachPanel.append(coach);
   body.append(tipPanel, coachPanel);
