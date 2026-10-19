@@ -357,3 +357,25 @@ same player; nothing is ever merged or overwritten (DB unique keys both ways). "
 removes the link and the Supabase user and signs out other devices. Privacy policy at
 `futasaku.com/#privacy`. Nothing appears until the owner switches Google on in Supabase — release order
 and clicks in [`ACCOUNTS.md`](ACCOUNTS.md).
+
+### 2026-10-19 — The root .com build gets the lessons tutorial, and the campaign reset is ACCEPTED
+
+Owner direction: "newest levels tutorial update can be pushed to .com and merge". `futa0.5-online`
+was an ancestor of `futa0.5-onboarding-3`, so the merge is clean (`--no-ff`, no conflict
+resolution); the root build is now the lessons line's tree, unchanged.
+
+**The storage decision.** The root (`CHANNEL=futa05`, path `/`) uses the `futa05:` storage prefix;
+`/3/` uses `futa05-3:`. The lessons line moved the campaign's progress and match save to
+`severgrow.campaign.progress.v3` / `severgrow.campaign.save.v3`, so **an existing root player starts
+the campaign at level 1 again**. We accept that reset, for the reason already written in
+[`CAMPAIGN.md`](CAMPAIGN.md): the onboarding polish changed several authored boards and the lesson
+scripts, and a `.v2` "completed" list would unlock levels whose teaching has moved on — the player
+would skip the new lessons rather than replay them. This is the owner's earlier written direction,
+not a new choice made here.
+
+Nothing is destroyed on the device. The old `.v2` progress, match save and lesson-mastery keys stay
+in storage, unread and unwritten; no migration runs and no key is removed. The root and `/3/` have
+different prefixes, so a player who tested `/3/` does not carry that progress into the root either
+way. If the owner later wants "keep completed", it must be an explicit, visible migration (a one-time
+`completed` import into the `.v3` record), never a silent read of the old key — reading it silently
+would unlock levels nobody has been taught in the new script.
