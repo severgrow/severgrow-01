@@ -73,8 +73,46 @@ const openNextLevel = async (p: Page) => {
   await p.waitForSelector('#menu-campaign:not([hidden])', { timeout: 10000 });
   await dismissInstall(p);
   await p.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement).click());
+  // A saved match asks first (owner decision); resume it so the level continues where it was.
+  await p.waitForSelector('#game:not([hidden]), #sheet-campaign-start:not([hidden])', { timeout: 15000 });
+  const asked = await p.evaluate(() => !document.getElementById('sheet-campaign-start')!.hidden);
+  if (asked) await p.evaluate(() => (document.getElementById('csa-resume') as HTMLButtonElement).click());
   await p.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
-  await p.waitForTimeout(700);
+  // The stage intro and the opening deal both finish before the board is live; a card tapped
+  // before that would skip the intro instead of answering DRAW FIRST.
+  await p.waitForFunction(() => {
+    const l = (window as any).__severgrow?.lesson?.();
+    return !l || (!l.stage && l.handSettled);
+  }, undefined, { timeout: 15000 });
+  await p.waitForTimeout(300);
+};
+
+/**
+ * Watch the very first light: it may only appear once the opening hand has stopped moving. The
+ * observer runs from before the level starts, so it sees the stage intro and the deal too.
+ */
+const installDealAudit = (p: Page) => p.evaluate(`(() => {
+  const g = window.__severgrow;
+  const audit = window.__dealAudit = { beatBeforeSettled: false, firstAfterSettled: false, stageSeen: false };
+  let stop = false;
+  window.__dealAuditStop = () => { stop = true; };
+  const tick = () => {
+    const l = g && g.lesson && g.lesson();
+    if (l) {
+      if (l.stage) audit.stageSeen = true;
+      if (l.beat && !l.handSettled) audit.beatBeforeSettled = true;
+      if (l.beat && l.handSettled) audit.firstAfterSettled = true;
+    }
+    if (!stop) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})()`);
+const checkDealAudit = async (p: Page, level: number, expectLight: boolean) => {
+  const audit = await p.evaluate(`(() => { window.__dealAuditStop && window.__dealAuditStop(); return window.__dealAudit; })()`) as
+    { beatBeforeSettled: boolean; firstAfterSettled: boolean; stageSeen: boolean } | null;
+  if (expectLight) check(!!audit && audit.firstAfterSettled, `L${level}: first light appears after the deal settles`);
+  check(!!audit && !audit.beatBeforeSettled, `L${level}: no light while the hand is still moving`);
+  check(!!audit && audit.stageSeen, `L${level}: stage intro came first`);
 };
 
 /** The centre of the thing a lit beat points at (a real element on screen), or null. */
@@ -123,21 +161,36 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
     if (s.actor !== 0 || busy) { await p.waitForTimeout(120); continue; }
     // The install invitation may follow a closed finish card (from level 4): a person closes it.
     await dismissInstall(p);
-    const lesson = await hook<{ beat: Beat | null; answer: string; idle: boolean } | null>(p, 'lesson');
+    const lesson = await hook<{ beat: Beat | null; answer: string; idle: boolean; stage: boolean; handSettled: boolean } | null>(p, 'lesson');
     if (!lesson) throw new Error(`L${level}: no lesson on screen`);
     const pos = `${s.turnNumber}|${s.phase}|${s.history?.length}|${lesson.beat?.id}|${JSON.stringify(lesson.beat?.lit)}`;
     still = pos === last ? still + 1 : 0;
     last = pos;
-    if (still > 40) {
+    // A silent tier deliberately shows nothing; the 6 s safety net brings a whisper. Wait past
+    // that before calling it stuck.
+    if (still > 70) {
       const pts = lesson.beat ? await litPoints(p, lesson.beat.lit) : [];
       const under = pts[0] ? await p.evaluate(`(() => { const e = document.elementFromPoint(${pts[0].x}, ${pts[0].y}); return e ? (e.tagName + '#' + e.id + '.' + (e.getAttribute('class') || '') + ' < ' + (e.closest('[id]') || {}).id) : 'none'; })()`) : 'no point';
       const sel = await hook(p, 'sel');
       if (SHOTS) await p.screenshot({ path: `${SHOTS}/stuck-L${level}.png` });
-      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}`);
+      throw new Error(`L${level}: stuck at ${pos}; point ${JSON.stringify(pts[0])} is ${under}; sel ${JSON.stringify(sel)}; lesson ${JSON.stringify(lesson)}`);
     }
     const beat = lesson.beat;
-    if (!beat) { await p.waitForTimeout(250); continue; } // level 10 waits for a quiet moment
+    if (!beat) {
+      // SILENT is a real state: the light deliberately says nothing. A player who already knows
+      // the move makes it; the test does the same rather than waiting out the 6 s safety net.
+      if (lesson.stage || !lesson.handSettled) { await p.waitForTimeout(120); continue; }
+      const move = await hook<any>(p, 'lessonMove');
+      if (move) {
+        const ok = await p.evaluate((a) => (window as any).__severgrow.playFor(a, 0), move);
+        if (ok) { taps++; await idle(p); continue; }
+      }
+      await p.waitForTimeout(250);
+      continue;
+    }
     if (beat.explain) { await tapAnywhere(p); taps++; await p.waitForTimeout(250); continue; }
+    // A power hello is information, not a target. It fades by itself; then the ordinary move.
+    if ((beat as { hello?: string }).hello) { await p.waitForTimeout(2800); continue; }
     const points = (await litPoints(p, beat.lit)).filter((x): x is { x: number; y: number } => !!x);
     if (!points.length) { await p.waitForTimeout(200); continue; }
     for (const pt of points) {
@@ -173,19 +226,28 @@ try {
     console.log('Levels 1-10 in a row, tapping only the light:');
     const { page, errors } = await newPage();
     await page.goto(URL3, { waitUntil: 'networkidle' });
+    await installDealAudit(page);
     await openNextLevel(page);
     for (let level = 1; level <= 10; level++) {
       if (level > 1) {
         await page.waitForSelector('#gameover:not([hidden])', { timeout: 30000 });
         await dismissInstall(page);
+        await installDealAudit(page);
         await page.evaluate(() => (document.getElementById('go-rematch') as HTMLButtonElement).click());
         await page.waitForFunction((n) => (window as any).__severgrow?.lesson?.()?.level === n, level, { timeout: 15000 });
-        await page.waitForTimeout(600);
       }
+      await page.waitForFunction(() => {
+        const l = (window as any).__severgrow?.lesson?.();
+        return !!l && !l.stage && l.handSettled;
+      }, undefined, { timeout: 15000 });
+      if (SHOTS && (level === 1 || level === 5 || level === 10)) await page.screenshot({ path: `${SHOTS}/L${level}-first-frame.png` });
       const hexes = await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length);
       check(hexes === 19, `L${level} plays on the 19-hex map (${hexes})`);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-open.png` });
       const r = await tapOnlyTheLight(page, level);
+      // The observer saw the whole level: no hint may have appeared before the deal settled, and
+      // the first one (where the level has one) came after it.
+      await checkDealAudit(page, level, level !== 10);
       check(r.winner === 0, `L${level} won by ${r.reason} in ${r.turns} turns, ${r.taps} taps, ${r.wrong} wrong, ${(r.ms / 1000).toFixed(0)}s`);
       if (level === 1) {
         check(r.wrong === 0, 'L1: zero wrong taps');
@@ -293,7 +355,7 @@ try {
       await page.goto(URL3, { waitUntil: 'networkidle' });
       // Levels 1-2 already cleared on this device (the progress record, as a player who did them).
       const done = CAMPAIGN_LEVELS.slice(0, 2).map((l) => l.id);
-      await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v2', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 3, completed: done, best: {} }))})`);
+      await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 3, completed: done, best: {} }))})`);
       await page.reload({ waitUntil: 'networkidle' });
       await openNextLevel(page);
       const lv = (await hook<any>(page, 'lesson'))?.level;
@@ -330,6 +392,73 @@ try {
       check(r.winner === 0, `hints off: the level still plays to a win (${r.reason})`);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/hints-off-finish.png` });
       assert.deepEqual(errors, [], `no page errors: ${errors.join(' | ')}`);
+      await page.close();
+    }
+  }
+  if (ONLY === 'all' || ONLY === 'tiers') {
+    console.log('\nTier fade on the real window:');
+    const openWith = async (counts: Record<string, number>) => {
+      const { page, errors } = await newPage(390, 844);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      await page.evaluate((c) => {
+        localStorage.clear();
+        localStorage.setItem('severgrow.campaign.progress.v3', JSON.stringify({ version: 1, unlocked: 1, completed: [], best: {} }));
+        localStorage.setItem('severgrow.lesson.meta.v1', JSON.stringify({ level: 1, version: 2, seen: ['1:intro:tree', '1:intro:their-home'] }));
+        localStorage.setItem('severgrow.lesson.mastery.v1', JSON.stringify({ version: 2, counts: c, spotlights: {}, hellos: [] }));
+      }, counts);
+      await page.reload({ waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      // A fresh level replays its two opening explanations; move past them to the first Draw.
+      for (let i = 0; i < 4; i++) {
+        const b = (await hook<any>(page, 'lesson'))?.beat;
+        if (!b?.explain) break;
+        await page.waitForTimeout(700);
+        await tapAnywhere(page);
+        await page.waitForTimeout(220);
+      }
+      await page.waitForTimeout(350);
+      const info = await page.evaluate(() => {
+        const f = document.getElementById('tutorial-focus');
+        const dim = f?.querySelector('.focus-dim');
+        return {
+          tier: f?.getAttribute('data-tier') ?? '',
+          hidden: !!f?.hasAttribute('hidden'),
+          fill: dim ? getComputedStyle(dim).fill : '',
+          lesson: (window as any).__severgrow?.lesson?.() ?? null,
+        };
+      });
+      return { page, errors, info };
+    };
+
+    {
+      const { page, errors, info } = await openWith({});
+      check(info.tier === 'spotlight', `L1 first Draw is SPOTLIGHT (${info.tier})`);
+      check(!info.hidden && /0\.45\)/.test(info.fill), `SPOTLIGHT dim is the strong L1 dim (${info.fill})`);
+      check(info.lesson?.beat?.title === 'TAP THE DRAW PILE', 'and it speaks fully');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 1 });
+      check(info.tier === 'guide', `second Draw is GUIDE (${info.tier})`);
+      check(/0\.15\)/.test(info.fill), `GUIDE dim is light (${info.fill})`);
+      check(!!info.lesson?.beat?.title && !info.lesson?.beat?.line, 'and it says one short line');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 2 });
+      check(info.tier === 'whisper', `third Draw is WHISPER (${info.tier})`);
+      check(/rgba\(0, 0, 0, 0\)/.test(info.fill), `WHISPER has no dim (${info.fill})`);
+      check(info.lesson?.beat?.title === 'DRAW' && !info.lesson?.beat?.line, 'and only one word');
+      assert.deepEqual(errors, []);
+      await page.close();
+    }
+    {
+      const { page, errors, info } = await openWith({ draw: 9 });
+      check(info.lesson?.beat == null, 'a well-practised Draw shows no light');
+      check(info.lesson?.mission === 'Draw, Grow, Throw.', 'the mission still says what the level is for');
+      assert.deepEqual(errors, []);
       await page.close();
     }
   }
