@@ -27,10 +27,12 @@ const check = (ok: boolean, what: string) => {
 };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow?.state?.() ?? null) as Promise<State | null>;
 const title = (p: Page) => p.evaluate(() => {
+  // Levels 1-10 keep their title in the game's top row now; other screens still use the glass.
+  const bar = document.querySelector('#lesson-hud:not([hidden]) .lesson-hud-sr');
   const panel = document.getElementById('futasaku-glass');
   // A hidden panel keeps its last words; only a visible one is guidance.
-  if (!panel || panel.hidden) return '';
-  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() ?? '';
+  if (!panel || panel.hidden) return bar?.textContent?.trim() ?? '';
+  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() || bar?.textContent?.trim() || '';
 });
 const waitIdle = (p: Page) => p.waitForFunction(() => {
   const hook = (window as any).__severgrow;
