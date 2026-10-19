@@ -1590,6 +1590,29 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   z-index: 20;
   pointer-events: none;
 }
+/* The opponent's own cards travel inside this one layer (futa0.5 "the opponent has a body").
+   It sits above the board and cockpit, but inside #game (z-index 1): the tutorial focus (34)
+   and the lesson plate (42) still draw above it, so a flyer can never hide the lit target or
+   the words. A single absolutely positioned card at a time; taps pass straight through. */
+.enemy-flight {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  overflow: visible;
+}
+.enemy-flight .flyer {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+/* The opponent's seat: an invisible anchor measured once per layout, never per frame. */
+.opp-seat {
+  position: absolute;
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+}
 .card.back {
   background: var(--c-surface);
   background-image: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--c-line) 70%, transparent) 5px 6px);
