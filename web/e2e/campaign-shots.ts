@@ -88,13 +88,28 @@ try {
     await openMenuEntry(page, 'menu-campaign');
     await page.waitForFunction(() => !!(window as any).__severgrow?.state(), undefined, { timeout: 20000 });
     await waitIdle(page);
-    for (let guard = 0; guard < 80; guard++) {
+    // Play to a finish WITHOUT growing (Draw + EndAct only) so the human scores 0 and cannot win:
+    // the level stays incomplete, which is exactly what the fresh-player assertions below need.
+    // The loop must WAIT for the human's turn - choosing from `legalActions(viewFor(s, 0))` while
+    // the bot is still to move yields an empty list, and passing `undefined` to playFor threw
+    // ("reading 't'"). That is what kept this suite red; the browser tool is fine.
+    for (let guard = 0; guard < 400; guard++) {
       const s = await stateOf(page);
       if (!s || s.phase === 'GAME_OVER') break;
+      if (s.actor !== 0) {
+        await waitIdle(page);
+        await page.waitForTimeout(80);
+        continue;
+      }
       const legal = legalActions(viewFor(s, 0));
       const action = s.phase === 'DRAW'
-        ? (legal.find((a) => a.t === 'Draw') ?? legal[0]!)
-        : (legal.find((a) => a.t === 'EndAct') ?? legal.find((a) => a.t === 'Discard') ?? legal[0]!);
+        ? (legal.find((a) => a.t === 'Draw') ?? legal[0])
+        : (legal.find((a) => a.t === 'EndAct') ?? legal.find((a) => a.t === 'Discard') ?? legal[0]);
+      if (!action) {
+        await waitIdle(page);
+        await page.waitForTimeout(80);
+        continue;
+      }
       await page.evaluate((a: Action) => Boolean((window as any).__severgrow.playFor(a, 0)), action as never);
       await waitIdle(page);
     }
