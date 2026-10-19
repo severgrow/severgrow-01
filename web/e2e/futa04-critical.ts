@@ -109,7 +109,11 @@ for (const [w, h] of [[360,640],[390,664],[390,844],[430,932],[768,1024],[1280,8
   const saved = await state(page);
   await page.evaluate(() => history.replaceState(null, '', location.pathname));
   await page.reload(); await page.waitForTimeout(500);
-  await page.click('#menu-continue'); await idle(page);
+  // Owner decision (2026-10-19): the product main menu has NO Continue. This suite uses the
+  // saved match only as a fixture for the post-resume checks, so it invokes the hidden legacy
+  // control directly — it is not asserting that a player can reach it.
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
+  await idle(page);
   check(JSON.stringify(await state(page)) === JSON.stringify(saved), `${w}: resume after turn`);
   await page.click('#hud-menu');
   check(await page.locator('#gm-turn').textContent(), `${w}: Pause retains turn info`);

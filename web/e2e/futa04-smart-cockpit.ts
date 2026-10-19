@@ -283,7 +283,11 @@ try {
     const state:State={...g,board,terrain,phase:'ACT',actor:0,turnPlayer:0};
     return positionSave({state});
   })());
-  await layers.goto(BASE); await layers.locator('#menu-continue').click();
+  await layers.goto(BASE);
+  // Owner decision (2026-10-19): the product main menu has NO Continue. This suite seeds a
+  // classic save only as a fixture for the overlay-geometry checks, so it invokes the hidden
+  // legacy control directly — it is not asserting that a player can reach it.
+  await layers.evaluate(() => (document.getElementById('menu-continue') as HTMLButtonElement | null)?.click());
   await layers.waitForFunction(()=>document.getElementById('board')?.querySelector('.hex') && !(window as any).__severgrow.busy());
   await layers.waitForTimeout(700);
   const overlay=await layers.evaluate(()=>{
