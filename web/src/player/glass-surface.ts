@@ -54,12 +54,11 @@ export type TutorialFocusOptions = {
    */
   tier?: 'spotlight' | 'guide' | 'whisper' | 'silent';
   /**
-   * Lessons show their title and NEXT in the game's own top row (#lesson-hud), so the window has
-   * no head at all: it starts directly under that bar and keeps only the copy.
+   * Levels 1-10: keep the glow and the pointer, but do not park a window on the map and do not
+   * pad the board. The words live in the cockpit plate (#lesson-plate) instead, so the hexes stay
+   * the size of a normal match. The highlight tier still decides how strong that light is.
    */
-  headless?: boolean;
-  /** Keep the focus layer and the reserved band, but show no window (a WHISPER step). */
-  panelHidden?: boolean;
+  inCockpit?: boolean;
   /** Show copy with no lit target at all: no dim, no pointer (the level's mission line). */
   noLight?: boolean;
 };
@@ -218,11 +217,8 @@ html.futa04-tutorial .cam-fade { opacity: 0 !important; }
   letter-spacing:.12em; text-transform:uppercase; text-align:center;
 }
 .large-text #futasaku-glass[data-mode='tutorial'] .glass-mission { font-size:12px; letter-spacing:.09em; }
-/* The lesson's title and NEXT are in the top row, so the window carries copy only and starts
-   flush under that row: no head, no kicker, no padding above the first line. */
-#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-tutorial { padding:4px 10px 8px; gap:0; }
-#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-why { min-height:2.9em; }
-#futasaku-glass[data-mode='tutorial'][data-headless='1'] .glass-mission:last-child { margin-bottom:0; }
+/* A mission line is the last thing in the window: no stray gap under it. */
+#futasaku-glass[data-mode='tutorial'] .glass-mission:last-child { margin-bottom:0; }
 /* Large text: the tutorial window's copy follows the same ~18% step the rest of Futasaku takes
    (the Match Intel reference already goes 13px → 15px). The head buttons keep their 11px so the
    longest CTA ("DRAW 1 CARD") can never ellipsise inside a 360px glass. */
@@ -316,6 +312,97 @@ html.futa04-tutorial #hud-menu {
 }
 html.futa04-tutorial #scrim { z-index: 50; }
 html.futa04-tutorial .sheet { z-index: 51; }
+/* Lessons: the menu stays above the dim. The map is not padded — the words sit in #lesson-plate. */
+html.futa04-lesson .game > .hud,
+html.futa04-lesson.futa04-branding.slim-hud .game > .hud {
+  z-index: 45;
+  pointer-events: none;
+}
+html.futa04-lesson #hud-menu {
+  position: relative;
+  z-index: 46;
+  pointer-events: auto !important;
+}
+html.futa04-lesson #scrim { z-index: 50; }
+html.futa04-lesson .sheet { z-index: 51; }
+#lesson-plate {
+  position: fixed;
+  left: 0; top: 0;
+  z-index: 42;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 12px 7px;
+  border-radius: 14px;
+  /* Was rgba(12,14,14,.94). 23% more transparent: .94 × .77 = .724. Flat fill, no blur —
+     a blur here would repaint the board underneath on every camera frame. */
+  background: rgba(14,13,12,.724);
+  color: #f0e9dc;
+  border: 1px solid rgba(233,216,173,.28);
+  box-shadow: 0 10px 28px rgba(0,0,0,.16);
+  pointer-events: none;
+  overflow: hidden;
+  transition: transform 160ms ease;
+}
+#lesson-plate[hidden] { display: none !important; }
+#lesson-plate .lesson-head { position: relative; display: block; min-height: 0; }
+#lesson-plate .lesson-head[hidden] { display: none !important; }
+#lesson-plate .lesson-title {
+  margin: 0;
+  padding-inline: var(--lesson-key, 0px);
+  /* One line; the script only lowers --lesson-title-size when the webfont needs the room. */
+  font: 650 var(--lesson-title-size, 13px)/1.15 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing: .04em; text-align: center; white-space: nowrap;
+}
+#lesson-plate .lesson-why {
+  margin: 0;
+  /* At most two centred lines, whatever the copy; the plate never grows into the map for a third. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font: 400 12px/1.35 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  color: rgba(240,233,220,.78);
+  letter-spacing: .012em;
+  text-align: center;
+  text-wrap: pretty;
+}
+#lesson-plate .lesson-why:empty { display: none; }
+#lesson-plate .lesson-mission {
+  margin: 1px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(243,230,196,.58);
+  font: 500 10px/1.2 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  white-space: nowrap;
+  letter-spacing: .16em; text-transform: uppercase; text-align: center;
+}
+#lesson-plate .lesson-mission:empty { display: none; }
+#lesson-plate [data-lesson-next] {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(233,216,173,.4);
+  background: rgba(233,216,173,.12);
+  color: #f0e9dc;
+  font: 400 11px/1 var(--font-ui,'Fragment Mono',ui-monospace,monospace);
+  letter-spacing: .05em;
+  cursor: pointer;
+}
+#lesson-plate [data-lesson-next].glass-blink { animation: tutorial-next-blink 1.15s ease-in-out infinite; }
+.large-text #lesson-plate { --lesson-title-size: 16px; }
+.large-text #lesson-plate .lesson-why { font-size: 15px; line-height: 1.4; }
+.large-text #lesson-plate .lesson-mission { font-size: 12px; letter-spacing: .1em; }
+.reduce-motion #lesson-plate { transition: none !important; }
+.reduce-motion #lesson-plate [data-lesson-next].glass-blink { animation: none !important; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */
 #tutorial-focus .focus-dim { fill:rgba(0,0,0,.22); }
@@ -720,6 +807,8 @@ export const mountGlassSurface = (onClose: () => void) => {
   let idleHard = false;
   /** A level's focus: exactly its target, the target's own outline, strong dim. */
   let lessonFocus = false;
+  /** Levels 1-10: glow and pointer only. The words are the cockpit plate, so the map is not padded. */
+  let cockpitLesson = false;
   /** The current teaching tier; WHISPER has a pulse but no dim and no pointer. */
   let focusTier: 'spotlight' | 'guide' | 'whisper' | 'silent' = 'spotlight';
   /** Copy with no target at all: the window shows, the dim never appears. */
@@ -815,7 +904,7 @@ export const mountGlassSurface = (onClose: () => void) => {
   const TUTORIAL_BAND_GAP = 4;
   let lastBandKey = '';
 
-  /** The game's top row: the lesson bar lives inside it. */
+  /** The game's header row (menu + logo); the tutorial band starts under it. */
   const hudRect = () => document.querySelector('#game > .hud')?.getBoundingClientRect();
 
   const placeTutorialPanel = (_tracked: Tracked | null) => {
@@ -828,11 +917,11 @@ export const mountGlassSurface = (onClose: () => void) => {
     if (panel.hidden) return;
     const side = document.documentElement.dataset.layout === 'side';
     const safe = safeInsets();
-    // The window starts flush under the top row that now carries the title and NEXT.
+    // The window starts flush under the game's header row.
     const hud = hudRect();
     const underBar = Math.round((hud?.bottom ?? safe.top) + TUTORIAL_BAND_GAP);
     if (side) {
-      // Desktop: right column — sides with the cockpit; flush under the top row.
+      // Desktop: right column — sides with the cockpit; flush under the header.
       const cockpit = document.getElementById('futa04-box')?.getBoundingClientRect();
       const dock = document.getElementById('dock')?.getBoundingClientRect();
       const col = cockpit ?? dock;
@@ -980,6 +1069,9 @@ export const mountGlassSurface = (onClose: () => void) => {
         if (c.room < BOX + GAP) return false;
         if (!onScreen(c.box)) return false;
         if (overlaps(c.box, panelRect)) return false;
+        const lessonPlate = document.getElementById('lesson-plate') as (HTMLElement & { _lessonBox?: DOMRect }) | null;
+        const lessonPlateRect = lessonPlate && !lessonPlate.hidden ? lessonPlate._lessonBox : null;
+        if (lessonPlateRect && lessonPlateRect.height > 8 && overlaps(c.box, lessonPlateRect)) return false;
         if (fan && overlaps(c.box, fan)) return false;
         if (overlaps(c.box, targetRect)) return false;
         return true;
@@ -1066,7 +1158,11 @@ export const mountGlassSurface = (onClose: () => void) => {
       applyRectAttrs(focus.querySelector('.focus-glow-soft'), tracked, true);
       applyRectAttrs(focus.querySelector('.focus-glow'), tracked, true);
     }
-    const panelRect = panel.getBoundingClientRect();
+    const panelBox = panel.getBoundingClientRect();
+    const livePanel = !panel.hidden && panelBox.height > 8;
+    const panelRect = livePanel
+      ? panelBox
+      : ({ left: -10000, right: -10000, top: -10000, bottom: -10000 } as DOMRect);
     // WHISPER is a pulse on the target only: no pointer, no dim.
     const pose = focusTier === 'whisper' ? null : pointerPose(tracked, panelRect);
     const pointerRoot = focus.querySelector('.focus-pointer-root');
@@ -1110,14 +1206,14 @@ export const mountGlassSurface = (onClose: () => void) => {
         const bottom = lerp(smooth.bottom, measured.bottom, t);
         smooth = geometryFromBounds(left, top, right, bottom, measured.exact);
       }
-      placeTutorialPanel(smooth);
+      if (!cockpitLesson) placeTutorialPanel(smooth);
       paintFocus(smooth);
     } else if (now < holdUntil && smooth) {
-      placeTutorialPanel(smooth);
+      if (!cockpitLesson) placeTutorialPanel(smooth);
       paintFocus(smooth);
     } else {
       smooth = null;
-      placeTutorialPanel(null);
+      if (!cockpitLesson) placeTutorialPanel(null);
       paintFocus(null);
     }
     raf = requestAnimationFrame(tick);
@@ -1131,6 +1227,11 @@ export const mountGlassSurface = (onClose: () => void) => {
   const place = () => {
     if (!mode) return;
     if (mode === 'intel' || mode === 'guidance') return placeIntel();
+    if (cockpitLesson) {
+      clearTutorialPads();
+      if (!raf && !lightOff) startLoop();
+      return;
+    }
     if (panel.hidden) { if (!raf && !lightOff) startLoop(); return; }
     placeTutorialPanel(smooth);
     paintTutorialLed();
@@ -1150,7 +1251,7 @@ export const mountGlassSurface = (onClose: () => void) => {
 
   const close = () => {
     mode = null; moveCursor = -1; lastMoveLen = -1; stopLoop(); smooth = null;
-    focusScene = null;
+    focusScene = null; cockpitLesson = false;
     setBloomDemo(false); clearTutorialReserve();
     panel.hidden = true; showFocus(false); panel.replaceChildren(); onClose();
   };
@@ -1160,7 +1261,7 @@ export const mountGlassSurface = (onClose: () => void) => {
    * goes quiet does not make the map jump under the player's finger.
    */
   const hidePanel = (keepBand = false) => {
-    mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false;
+    mode = null; stopLoop(); smooth = null; focusScene = null; lightOff = false; cockpitLesson = false;
     panel.hidden = true; showFocus(false); setBloomDemo(false);
     if (!keepBand) clearTutorialReserve();
   };
@@ -1215,13 +1316,13 @@ export const mountGlassSurface = (onClose: () => void) => {
       + `<span class="glass-led-sr">${safe(line)}</span>`
       + `<span class="glass-led-window" aria-hidden="true"><canvas class="glass-led-cells"></canvas></span>`
       + `</p>`;
-    const headHtml = options.headless ? '' : `<div class="glass-head" role="group" aria-label="Tutorial step">`
+    const headHtml = `<div class="glass-head" role="group" aria-label="Tutorial step">`
       + `<div class="glass-head-slot glass-head-prev">${prevBtn}</div>`
       + `<div class="glass-head-slot glass-head-title">${titleHtml}</div>`
       + `<div class="glass-head-slot glass-head-next">${nextBtn}</div>`
       + `</div>`;
     const shell = panel.querySelector('.glass-tutorial');
-    const canPatch = !options.headless && !!opts.keepShell && !!shell && ledTitle === line
+    const canPatch = !!opts.keepShell && !!shell && ledTitle === line
       && !!panel.querySelector('.glass-led-cells') && !!panel.querySelector('.glass-head');
     if (canPatch && shell) {
       // Same lesson shell: only swap side buttons / why / icons so the LED does not flash.
@@ -1242,12 +1343,13 @@ export const mountGlassSurface = (onClose: () => void) => {
     ledTitle = line;
     panel.innerHTML = `<div class="glass-tutorial">${headHtml}${missionHtml}${whyHtml}${icons}</div>`;
     bindTutorialButtons();
-    if (!options.headless) paintTutorialLed();
+    paintTutorialLed();
   };
 
   const tutorial = (text: string, chapter: number, selectors: readonly string[], options: TutorialFocusOptions = {}) => {
     mode = 'tutorial';
     handlers = options.handlers ?? {};
+    cockpitLesson = !!options.inCockpit;
     reduceMotion = !!options.reduceMotion || document.documentElement.classList.contains('reduce-motion');
     idleHard = !!options.idleHard;
     const nextSelector = selectors.join(', ');
@@ -1265,25 +1367,29 @@ export const mountGlassSurface = (onClose: () => void) => {
     panel.dataset.mode = 'tutorial';
     if (options.lesson) panel.dataset.lesson = '1';
     else delete panel.dataset.lesson;
-    if (options.headless) panel.dataset.headless = '1';
-    else delete panel.dataset.headless;
     panel.dataset.focus = targetSelector.includes('#deck') ? 'deck' : targetSelector.includes('#discard') ? 'discard' : 'other';
-    // Headless: the lesson's title is in the top row; the focus layer still belongs to the glass.
-    panel.hidden = !!options.panelHidden;
+    panel.hidden = false;
     showFocus(!lightOff);
     setBloomDemo(!!options.bloomDemo);
-    panel.setAttribute('aria-label', options.headless ? 'Lesson guidance' : options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
+    panel.setAttribute('aria-label', options.kicker ? `${options.kicker} guidance` : 'Tutorial guidance');
     panel.setAttribute('role', 'status');
-    // With the title in the top row, that row is the one live region: the window must not repeat it.
-    if (options.headless) panel.setAttribute('aria-live', 'off');
-    else panel.setAttribute('aria-live', 'polite');
+    panel.setAttribute('aria-live', 'polite');
     if (options.kicker) panel.dataset.kicker = options.kicker;
     else delete panel.dataset.kicker;
     const stepKey = options.stepKey ?? `${chapter}:${text}`;
     const stepped = stepKey !== lastStepKey;
     lastStepKey = stepKey;
+    if (cockpitLesson) {
+      clearTutorialPads();
+      panel.hidden = true;
+      panel.replaceChildren();
+      delete panel.dataset.kicker;
+      if (lightOff) { stopLoop(); smooth = null; paintFocus(null); }
+      else startLoop();
+      return;
+    }
     // Same step (CTA arm / status clear): patch actions only — avoids LED redraw flash.
-    if (!options.panelHidden) renderTutorialWindow(text, chapter, options, { keepShell: !stepped });
+    renderTutorialWindow(text, chapter, options, { keepShell: !stepped });
     if (stepped) {
       // Soft content settle — keep the highlight living so it can glide to the next target.
       panel.dataset.fade = 'out';

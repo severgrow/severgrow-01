@@ -104,9 +104,11 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
 - the glass window and focus layer live in `web/src/player/glass-surface.ts`;
-- the lesson's title and its one action (NEXT) live in the game's top row
-  (`web/src/lessons/lesson-bar.ts`, `#lesson-hud`), so the window has no head and no `LEVEL n`
-  kicker in levels 1-10. Every other screen keeps its own chrome.
+- the lesson's words (title, reason and its one action) live in the cockpit plate under the map
+  (`web/src/lessons/lesson-bar.ts` chooses them; `#lesson-plate` paints them), so the game's header
+  stays the menu and the logo, the map keeps full size and levels 1-10 show no glass window and no
+  `LEVEL n` kicker. A one-word hint with no sentence stays on the cockpit sign instead. Every other
+  screen keeps its own chrome.
 
 ## The level schema
 

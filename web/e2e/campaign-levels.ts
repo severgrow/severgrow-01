@@ -27,12 +27,18 @@ const check = (ok: boolean, what: string) => {
 };
 const state = (p: Page) => p.evaluate(() => (window as any).__severgrow?.state?.() ?? null) as Promise<State | null>;
 const title = (p: Page) => p.evaluate(() => {
-  // Levels 1-10 keep their title in the game's top row now; other screens still use the glass.
-  const bar = document.querySelector('#lesson-hud:not([hidden]) .lesson-hud-sr');
+  // Levels 1-10 keep their words in the cockpit plate (or, for a one-word hint, on the sign).
+  const plate = document.getElementById('lesson-plate');
+  if (plate && !plate.hidden) {
+    const text = ['.lesson-title', '.lesson-why', '.lesson-mission']
+      .map((sel) => plate.querySelector(sel)?.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+    if (text) return text;
+  }
   const panel = document.getElementById('futasaku-glass');
-  // A hidden panel keeps its last words; only a visible one is guidance.
-  if (!panel || panel.hidden) return bar?.textContent?.trim() ?? '';
-  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() || bar?.textContent?.trim() || '';
+  if (!panel || panel.hidden) return '';
+  return document.querySelector('#futasaku-glass .glass-led-sr')?.textContent?.trim() || '';
 });
 const waitIdle = (p: Page) => p.waitForFunction(() => {
   const hook = (window as any).__severgrow;

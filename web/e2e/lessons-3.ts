@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net';
 import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { CAMPAIGN_LEVELS } from '../../src/campaign/index.js';
+import { SMALL_HOMES } from '../src/lessons/authored.js';
 import { LESSON } from '../../src/strings.js';
 
 const DIST = process.env.FUTA_DIST ?? 'web/dist';
@@ -88,80 +89,75 @@ const openNextLevel = async (p: Page) => {
 };
 
 /**
- * The lesson's chrome, measured from the live page: the top row (menu, title, NEXT, logo), the
- * window under it and the map. The checks all compare these boxes, never an assumed number.
+ * The lesson's chrome, measured from the live page: the header (menu and logo only), the cockpit
+ * plate under the map, and the hexes themselves. The checks compare these boxes.
  */
 const GEOMETRY = `(() => {
   const R = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x:+r.x.toFixed(1), y:+r.y.toFixed(1), w:+r.width.toFixed(1), h:+r.height.toFixed(1), right:+r.right.toFixed(1), bottom:+r.bottom.toFixed(1) }; };
   const vis = (el) => !!el && el.getBoundingClientRect().width > 0 && getComputedStyle(el).display !== 'none' && !el.hidden;
   const hud = document.querySelector('#game > .hud');
-  const bar = document.getElementById('lesson-hud');
+  const plate = document.getElementById('lesson-plate');
   const glass = document.getElementById('futasaku-glass');
   const wrap = document.getElementById('board-wrap');
   const menu = document.getElementById('hud-menu');
-  const history = document.getElementById('hud-history');
   const brand = document.getElementById('hud-brand');
   const ps = [...document.querySelectorAll('#board .hex-cell path.hex')].map((p) => p.getBoundingClientRect());
   const union = ps.length ? { x:+Math.min(...ps.map(r=>r.left)).toFixed(1), y:+Math.min(...ps.map(r=>r.top)).toFixed(1),
     right:+Math.max(...ps.map(r=>r.right)).toFixed(1), bottom:+Math.max(...ps.map(r=>r.bottom)).toFixed(1) } : null;
   if (union) { union.w = +(union.right - union.x).toFixed(1); union.h = +(union.bottom - union.y).toFixed(1); }
-  const title = bar && bar.querySelector('.lesson-hud-title');
-  const canvas = bar && bar.querySelector('canvas');
+  const hex = ps.length ? ps.slice().sort((a, b) => b.width - a.width)[0] : null;
+  const next = plate && plate.querySelector('[data-lesson-next]');
+  const padTop = wrap ? parseFloat(getComputedStyle(wrap).paddingTop) || 0 : 0;
   return {
-    hud: R(hud), bar: R(bar), barHidden: !bar || bar.hidden,
-    inHud: !!bar && !!hud && hud.contains(bar),
-    title: R(title), canvas: R(canvas), canvasWidth: canvas ? canvas.width : 0,
-    next: R(document.getElementById('lesson-next')),
-    nextText: document.getElementById('lesson-next')?.textContent ?? '',
-    nextHidden: !vis(document.getElementById('lesson-next')),
-    menu: R(menu), history: vis(history) ? R(history) : null, brand: R(brand),
-    rightControl: vis(history) ? R(history) : R(brand),
+    hud: R(hud), headerTitle: vis(hud && hud.querySelector('.lesson-hud-title, #lesson-hud')),
+    plate: plate && !plate.hidden ? R(plate) : null,
+    plateHidden: !plate || plate.hidden,
+    plateWhy: plate?.querySelector('.lesson-why')?.textContent ?? '',
+    next: vis(next) ? R(next) : null,
+    nextHidden: !vis(next),
+    menu: R(menu), brand: R(brand),
     glass: glass && !glass.hidden ? R(glass) : null,
-    kicker: glass ? (glass.dataset.kicker ?? null) : null,
-    glassHeads: glass ? glass.querySelectorAll('.glass-head').length : 0,
-    headless: glass ? glass.getAttribute('data-headless') : null,
+    kicker: glass && !glass.hidden ? (glass.dataset.kicker ?? null) : null,
+    tutorial: document.documentElement.classList.contains('futa04-tutorial'),
     wrap: R(wrap), union,
+    hex: hex ? { w:+hex.width.toFixed(1), h:+hex.height.toFixed(1) } : null,
+    padTop,
     hudPad: hud ? getComputedStyle(hud).paddingLeft : null,
     lessonAttr: document.documentElement.dataset.lesson ?? null,
     scroll: { h: document.documentElement.scrollHeight, w: document.documentElement.scrollWidth, ih: innerHeight, iw: innerWidth },
-    layout: document.documentElement.dataset.layout,
   };
 })()`;
 
 const geometry = (p: Page) => p.evaluate(GEOMETRY) as Promise<{
-  hud: Box; bar: Box; barHidden: boolean; inHud: boolean; title: Box; canvas: Box; canvasWidth: number;
-  next: Box; nextText: string; nextHidden: boolean; menu: Box; history: Box | null; brand: Box;
-  rightControl: Box; glass: Box | null; kicker: string | null; glassHeads: number; headless: string | null;
-  wrap: Box; union: Box; hudPad: string; lessonAttr: string | null;
-  scroll: { h: number; w: number; ih: number; iw: number }; layout: string | null;
+  hud: Box; headerTitle: boolean; plate: Box | null; plateHidden: boolean; plateWhy: string;
+  next: Box | null; nextHidden: boolean; menu: Box; brand: Box;
+  glass: Box | null; kicker: string | null; tutorial: boolean; wrap: Box; union: Box;
+  hex: { w: number; h: number } | null; padTop: number; hudPad: string; lessonAttr: string | null;
+  scroll: { h: number; w: number; ih: number; iw: number };
 }>;
 type Box = { x: number; y: number; w: number; h: number; right: number; bottom: number };
 
 const overlaps = (a: Box, b: Box) => !(a.right <= b.x || a.x >= b.right || a.bottom <= b.y || a.y >= b.bottom);
 
-/** The top row's one geometry rule: the title is centred in the span the controls leave. */
-const checkBarGeometry = (g: Awaited<ReturnType<typeof geometry>>, tag: string) => {
-  const spanCentre = (g.menu.right + g.rightControl.x) / 2;
-  // The visible title is the LED canvas inside the (full-width, centred) paragraph.
-  const ink = g.canvas && g.canvas.w > 0 ? g.canvas : g.title;
-  const titleCentre = (ink.x + ink.right) / 2;
-  check(Math.abs(titleCentre - spanCentre) <= 1.5, `${tag}: title centred in the menu→logo span (off ${Math.abs(titleCentre - spanCentre).toFixed(1)}px)`);
-  check(Math.abs((ink.y + ink.bottom) / 2 - (g.hud.y + g.hud.bottom) / 2) <= 1.5, `${tag}: title on the menu's own row centre`);
-  if (!g.nextHidden) {
-    check(g.next.y >= g.hud.y - 0.5 && g.next.bottom <= g.hud.bottom + 0.5 && g.next.h >= 44, `${tag}: NEXT is a full-height 44px target in that row`);
-    check(g.next.right <= g.rightControl.x + 0.5, `${tag}: NEXT never reaches the right-hand control`);
-    check(ink.right <= g.next.x + 0.5, `${tag}: the title never runs under NEXT`);
+/** Header is the menu and the logo. Sentences sit in the plate under the map, which is not padded. */
+const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phone: boolean) => {
+  check(!g.headerTitle, `${tag}: the header has no lesson title`);
+  check(!g.tutorial, `${tag}: the lesson does not use the tutorial band`);
+  check(g.padTop < 2, `${tag}: the map is not padded down (${g.padTop}px)`);
+  check(g.kicker === null && g.glass === null, `${tag}: no lesson window over the map`);
+  check(!!g.menu && g.menu.w > 0 && !!g.brand && g.brand.w > 0, `${tag}: the header is the menu and the logo`);
+  if (phone && g.hex) {
+    const size = Math.max(g.hex.w, g.hex.h);
+    check(size >= 72, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
   }
-  check(Math.abs(g.hudPad ? parseFloat(g.hudPad) - 2 : 0) <= 0.5, `${tag}: one gutter at the bar's edge (${g.hudPad})`);
-  check(g.glass !== null, `${tag}: the window is up`);
-  if (!g.glass) return;
-  check(Math.abs(g.glass.y - (g.hud.bottom + 4)) <= 1.5, `${tag}: the window starts directly under the bar (${(g.glass.y - g.hud.bottom).toFixed(1)}px)`);
-  if (g.layout !== 'side') {
-    check(Math.abs(g.glass.x - g.wrap.x) <= 1 && Math.abs(g.glass.right - g.wrap.right) <= 1, `${tag}: window shares the map's left/right edges`);
+  if (!g.plateHidden && g.plate && g.union) {
+    check(!overlaps(g.plate, g.union), `${tag}: the plate never covers a hex`);
+    check(g.plate.bottom <= g.scroll.ih + 1 && g.plate.y >= 0, `${tag}: the plate stays on screen`);
   }
-  check(g.kicker === null && g.glassHeads === 0, `${tag}: no LEVEL kicker and no glass head (title lives in the top row)`);
-  check(g.headless === '1', `${tag}: the lesson window is headless`);
-  if (g.union) check(!overlaps(g.glass, g.union), `${tag}: the window never covers the map`);
+  if (!g.nextHidden && g.next && g.plate) {
+    check(g.next.y >= g.plate.y - 0.5 && g.next.bottom <= g.plate.bottom + 0.5, `${tag}: NEXT sits in the plate`);
+    check(g.hud && g.next.y >= g.hud.bottom, `${tag}: NEXT is not in the header`);
+  }
   check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, `${tag}: no page scroll (${g.scroll.w}x${g.scroll.h} in ${g.scroll.iw}x${g.scroll.ih})`);
 };
 
@@ -241,6 +237,59 @@ const LIT_POINTS = `(l) => {
 const litPoints = (p: Page, lit: Lit) =>
   p.evaluate(`(${LIT_POINTS})(${JSON.stringify(lit)})`) as Promise<({ x: number; y: number } | null)[]>;
 
+/** The same selectors lesson-view.ts lights, so clearance is measured against the real target. */
+const litSelectors = (l: Lit): string[] => {
+  const hex = (k: string) => `#board .hex-cell[data-key="${k}"]`;
+  const card = (id: number) => `#hand .card[data-card="${id}"]`;
+  switch (l.t) {
+    case 'hex': return l.key ? [hex(l.key)] : [];
+    case 'hexes': return (l.keys ?? []).map(hex);
+    case 'home': return [hex(SMALL_HOMES[l.player === 1 ? 1 : 0]!)];
+    case 'rock': return l.key ? [hex(l.key)] : [];
+    case 'card': return l.id === undefined ? [] : [card(l.id)];
+    case 'cards': return (l.ids ?? []).map(card);
+    case 'deck': return ['#deck'];
+    case 'deckCount': return ['#deck .pile-card', '#deck-count'];
+    case 'score': return ['#smart-led'];
+    case 'discard': return ['#discard'];
+    case 'end': return ['#smart-context'];
+    case 'bloom': return ['#smart-bloom-button'];
+    default: return [];
+  }
+};
+
+// Page code as a string for the same reason as LIT_POINTS: the runner's TS transform must not leak
+// into the browser.
+const PLATE_CLEAR = `(sels) => {
+  const R = (el) => {
+    if (!el) return null;
+    const b = (el.querySelector(':scope > path.hex') || el).getBoundingClientRect();
+    return b.width > 0 ? { x: b.left, y: b.top, right: b.right, bottom: b.bottom } : null;
+  };
+  const plate = document.getElementById('lesson-plate');
+  const pr = plate && !plate.hidden ? plate.getBoundingClientRect() : null;
+  return {
+    plate: pr ? { x: pr.left, y: pr.top, right: pr.right, bottom: pr.bottom } : null,
+    targets: sels.map((sel) => ({ sel, box: R(document.querySelector(sel)) })).filter((t) => !!t.box),
+  };
+}`;
+
+/** The caption must never sit on the thing the step lights (hex, card, pile, sign, Bloom...). */
+const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
+  const selectors = litSelectors(lit);
+  if (!selectors.length) return;
+  const r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as {
+    plate: { x: number; y: number; right: number; bottom: number } | null;
+    targets: { sel: string; box: { x: number; y: number; right: number; bottom: number } }[];
+  };
+  if (!r.plate) return;
+  for (const t of r.targets) {
+    const b = t.box;
+    const hits = r.plate.x < b.right && r.plate.right > b.x && r.plate.y < b.bottom && r.plate.bottom > b.y;
+    check(!hits, `${tag}: the caption never covers ${t.sel}`);
+  }
+};
+
 /** A tap somewhere neutral on the map (an explanation moves on with a tap anywhere). */
 const tapAnywhere = async (p: Page) => {
   const box = await p.evaluate(() => { const r = document.getElementById('board-wrap')!.getBoundingClientRect(); return { x: r.left + 12, y: r.top + r.height * 0.5 }; });
@@ -252,7 +301,7 @@ const tapAnywhere = async (p: Page) => {
  * every answer the game gives (a wrong tap). Returns when the level is over.
  */
 const tapOnlyTheLight = async (p: Page, level: number) => {
-  let wrong = 0; let taps = 0; let still = 0; let last = '';
+  let wrong = 0; let taps = 0; let still = 0; let last = ''; let lastPlate = '';
   const t0 = Date.now();
   for (let guard = 0; Date.now() - t0 < 360000; guard++) {
     const s = await hook<any>(p, 'state');
@@ -288,6 +337,13 @@ const tapOnlyTheLight = async (p: Page, level: number) => {
       }
       await p.waitForTimeout(250);
       continue;
+    }
+    // Every step (including an explanation that lights a home, a rock, the sign or a pile): the
+    // caption may move to another gap, but it must never sit on the lit thing.
+    if (beat.id !== lastPlate) {
+      lastPlate = beat.id;
+      await p.waitForTimeout(220);
+      await checkPlateClear(p, beat.lit, `L${level} ${beat.id}`);
     }
     if (beat.explain) { await tapAnywhere(p); taps++; await p.waitForTimeout(250); continue; }
     // A power hello is information, not a target. It fades by itself; then the ordinary move.
@@ -344,12 +400,10 @@ try {
       if (SHOTS && (level === 1 || level === 5 || level === 10)) await page.screenshot({ path: `${SHOTS}/L${level}-first-frame.png` });
       const hexes = await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length);
       check(hexes === 19, `L${level} plays on the 19-hex map (${hexes})`);
-      // The top row owns the title in every lesson, and no lesson carries a LEVEL kicker.
-      await page.waitForSelector('#lesson-hud:not([hidden])', { timeout: 10000 }).catch(() => undefined);
+      // The header stays the menu and the logo. Teaching sits under the map, which stays full size.
+      await page.waitForFunction((n) => document.documentElement.dataset.lesson === String(n), level, { timeout: 10000 }).catch(() => undefined);
       const lg = await geometry(page);
-      check(lg.inHud, `L${level}: the lesson bar is inside the game's top row`);
-      check(lg.kicker === null && lg.glassHeads === 0, `L${level}: no LEVEL kicker above the window`);
-      if (lg.title && lg.title.w > 0) checkBarGeometry(lg, `L${level}`);
+      checkCockpit(lg, `L${level}`, true);
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/L${level}-open.png` });
       const r = await tapOnlyTheLight(page, level);
       // The observer saw the whole level: no hint may have appeared before the deal settled, and
@@ -416,7 +470,7 @@ try {
         if (s.actor !== 0 || (await page.evaluate(() => (window as any).__severgrow.busy()))) { await page.waitForTimeout(150); continue; }
         const x = 8 + rnd() * (vp.width - 16); const y = 60 + rnd() * (vp.height - 70);
         const kind = await page.evaluate(`(() => { const e = document.elementFromPoint(${x}, ${y}); if (!e) return 'other';
-          if (e.closest('#hud, #hud-menu, #futasaku-glass, .sheet, #scrim, #gameover')) return 'chrome';
+          if (e.closest('#hud, #hud-menu, #futasaku-glass, #lesson-plate, .sheet, #scrim, #gameover')) return 'chrome';
           if (e.closest('#hand [data-card]')) return 'card'; if (e.closest('#deck')) return 'deck'; if (e.closest('#discard')) return 'discard';
           if (e.closest('#board [data-key]')) return 'hex'; return 'other'; })()`) as string;
         if (kind === 'chrome') continue;
@@ -444,12 +498,16 @@ try {
       const { page } = await newPage(320, 568);
       await page.goto(URL3, { waitUntil: 'networkidle' });
       await openNextLevel(page);
-      const shownAfter: Record<string, string> = { youGrewLine: 'You grew. ', pileLowLine: 'Pile almost empty. ' };
+      await page.waitForSelector('#lesson-plate .lesson-why', { timeout: 10000 });
+      // The plate shows the title on its own line; the reason is the step's line alone (no
+      // repeated title prefix), so these are the exact strings the copy can put in the plate.
       const over: string[] = [];
       for (const [k, v] of Object.entries(LESSON)) {
         if (typeof v !== 'string' || !k.endsWith('Line')) continue;
-        const text = (shownAfter[k] ?? '') + v;
-        const n = await page.evaluate(`(() => { const el = document.querySelector('#futasaku-glass .glass-why'); el.style.minHeight = '0';
+        const text = v;
+        // Measure the copy itself, not the two-line clamp that keeps the plate from growing.
+        const n = await page.evaluate(`(() => { const el = document.querySelector('#lesson-plate .lesson-why');
+          el.style.minHeight = '0'; el.style.webkitLineClamp = 'unset'; el.style.overflow = 'visible';
           el.textContent = ${JSON.stringify(text)}; const lh = parseFloat(getComputedStyle(el).lineHeight); return Math.round(el.getBoundingClientRect().height / lh); })()`) as number;
         if (n > 2) over.push(`${k} (${n} lines)`);
       }
@@ -503,29 +561,28 @@ try {
     }
   }
   if (ONLY === 'all' || ONLY === 'layout') {
-    console.log('\nLayout: the top row, the window under it, and the map:');
+    console.log('\nLayout: the header, the plate under the map, and the hexes:');
     for (const [w, h] of [[390, 844], [1440, 900]] as const) {
       const { page, errors } = await newPage(w, h);
       await page.goto(URL3, { waitUntil: 'networkidle' });
       await openNextLevel(page);
-      await page.waitForSelector('#lesson-hud:not([hidden])', { timeout: 10000 });
+      await page.waitForSelector('#lesson-plate:not([hidden])', { timeout: 10000 });
       await page.waitForSelector('#tutorial-focus[data-on="1"]', { timeout: 10000 });
       await page.waitForTimeout(450);
       const g = await geometry(page);
-      check(g.inHud, `${w}x${h}: the lesson bar is inside #game > .hud`);
       check(g.lessonAttr === '1', `${w}x${h}: lesson styling is scoped to the lesson`);
-      checkBarGeometry(g, `${w}x${h}`);
+      check(!g.plateHidden && !!g.plateWhy, `${w}x${h}: the opening sentence is in the plate`);
+      checkCockpit(g, `${w}x${h}`, w < 600);
       check(!!g.union && g.union.w > 200, `${w}x${h}: the map is drawn (${g.union?.w}x${g.union?.h})`);
-      if (w < 600) check((g.union?.h ?? 0) >= 390, `${w}x${h}: the 19-hex map grew into the freed height (${g.union?.h}px)`);
       await checkPointerOnHex(page, '-2,2', `${w}x${h} (L1 home)`);
-      // The button in the top row is a real control: one press moves the explanation on.
+      // NEXT lives on the plate: one press moves the explanation on.
       const before = await hook<any>(page, 'lesson');
-      const nextPt = await page.evaluate(`(() => { const b = document.getElementById('lesson-next'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number } | null;
+      const nextPt = await page.evaluate(`(() => { const b = document.querySelector('#lesson-plate [data-lesson-next]'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`) as { x: number; y: number } | null;
       if (nextPt) {
         await page.mouse.click(nextPt.x, nextPt.y);
         await page.waitForTimeout(350);
         const after = await hook<any>(page, 'lesson');
-        check(after?.beat?.id !== before?.beat?.id, `${w}x${h}: NEXT in the top row advances the lesson (${before?.beat?.id} -> ${after?.beat?.id})`);
+        check(after?.beat?.id !== before?.beat?.id, `${w}x${h}: NEXT on the plate advances the lesson (${before?.beat?.id} -> ${after?.beat?.id})`);
       }
       if (SHOTS) await page.screenshot({ path: `${SHOTS}/layout-L1-${w}x${h}.png` });
       assert.deepEqual(errors, [], `${w}x${h}: no page errors: ${errors.join(' | ')}`);
@@ -543,7 +600,7 @@ try {
       await openNextLevel(page);
       await page.waitForTimeout(700);
       const g = await geometry(page);
-      check(g.lessonAttr === null && g.barHidden, 'L11: no lesson bar and no lesson attribute');
+      check(g.lessonAttr === null && !g.headerTitle && g.plateHidden, 'L11: no lesson title, no plate, and no lesson attribute');
       check(Math.abs(parseFloat(g.hudPad ?? '6') - 6) <= 0.5, `L11: the HUD keeps its own gutter (${g.hudPad})`);
       check((await page.evaluate(() => document.querySelectorAll('#board .hex-cell').length)) === 37, 'L11: the 37-hex board is whole');
       check(g.scroll.h <= g.scroll.ih + 1 && g.scroll.w <= g.scroll.iw + 1, 'L11: no page scroll');

@@ -101,7 +101,7 @@ import {
 } from './lessons/mastery.js';
 import type { ActionKind, LessonTier, Mastery, PowerKind } from './lessons/mastery.js';
 import { createIdleWatch } from './lessons/idle.js';
-import { lessonBarFor, mountLessonBar } from './lessons/lesson-bar.js';
+import { lessonBarFor } from './lessons/lesson-bar.js';
 import { SMALL_HOMES } from './lessons/authored.js';
 import type { Loaded } from './logic/persist.js';
 // Campaign mode (the primary offline experience). Progress and the campaign match save are separate
@@ -751,6 +751,8 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   $('levels').hidden = name !== 'levels';
   $('campaign').hidden = name !== 'campaign';
   $('game').hidden = name !== 'game';
+  // The plate is fixed to the viewport (not inside #game), so leaving the board must take it too.
+  if (name !== 'game') hideLessonPlate();
   for (const id of ['online-hub', 'online-waiting', 'online-join']) {
     const el = document.getElementById(id);
     if (el) el.hidden = true;
@@ -795,12 +797,27 @@ function syncResignMenu() {
   if (btn) btn.hidden = !(isOnlineDuel() && !!onlineResign);
 }
 
+let lessonChromeOn = false;
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
-  // The onboarding levels borrow the tutorial's own window and its board band, so the same chrome
-  // class applies: it pads the map between the glass and the cockpit and keeps the menu reachable.
-  const on = !!coach.tutorial || onboardingActive() || (!!lessonActive() && !guidanceOff());
+  // Onboarding still borrows the tutorial window, which pads the map. A lesson must not: its words
+  // sit in the cockpit, and the board stays the size of a normal match.
+  const lessonOn = !!lessonActive() && !guidanceOff();
+  const on = !!coach.tutorial || onboardingActive();
   document.documentElement.classList.toggle('futa04-tutorial', on);
+  document.documentElement.classList.toggle('futa04-lesson', lessonOn);
+  if (lessonOn) {
+    const root = document.documentElement.style;
+    root.removeProperty('--tutorial-pad-top');
+    root.removeProperty('--tutorial-pad-bottom');
+    root.removeProperty('--tutorial-glass-h');
+  }
+  if (!lessonOn) hideLessonPlate();
+  if (lessonChromeOn && !lessonOn) {
+    if (lessonHoldingScore) { lessonHoldingScore = false; smartCockpit?.holdScore?.(false); }
+    else smartCockpit?.led?.(null);
+  }
+  lessonChromeOn = lessonOn;
   syncTutorialMenuExit();
 }
 
@@ -1148,7 +1165,7 @@ const randomSeed = () => crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_
 function beginSession(state: State, c: CoachProgress | null, log: readonly Action[] = [], base: State | null = null) {
   epoch++;
   resetLessonRuntime();
-  lessonBar.hide();
+  hideLessonPlate();
   handSettled = true;
   tutorialTransitionPending = false;
   tutorialDisplayKey = '';
@@ -2595,8 +2612,7 @@ let handSettled = true;
 let lessonExplainAt = 0;
 let lessonHoldingScore = false;
 let lessonExplainId = '';
-/** The lesson's title + ONE action live in the game's top row (levels 1-10 only). */
-const lessonBar = mountLessonBar();
+/** The lesson's title + ONE action choose the cockpit plate (levels 1-10 only). */
 const LESSON_BAR_LABELS = Object.freeze({ next: LESSON.next, showMe: LESSON.showMe, restart: LESSON.restart });
 const lessonIdleWatch = createIdleWatch((stage) => {
   lessonIdleStage = stage;
@@ -4098,7 +4114,7 @@ function lessonDecide(e: Event): boolean {
   if (!lesson || !session || openSheet || session.state.phase === 'GAME_OVER') return false;
   const target = e.target as Element | null;
   if (!target?.closest?.('#game')) return false;
-  if (target.closest('#hud, #hud-menu, #futasaku-glass, #gameover, .sheet, #scrim')) return false;
+  if (target.closest('#hud, #hud-menu, #futasaku-glass, #lesson-plate, #gameover, .sheet, #scrim')) return false;
   const guided = !guidanceOff();
   const beat = lessonBeatNow;
   if (guided && beat?.explain) {
@@ -4177,48 +4193,229 @@ function syncLessonPile(st: State | null) {
   $('deck').classList.toggle('lesson-pile-low', low);
 }
 
+let lessonPlateAction: (() => void) | null = null;
+let lessonPlateTimer = 0;
+
+function lessonPlate(): HTMLElement {
+  let plate = document.getElementById('lesson-plate');
+  if (plate) return plate;
+  plate = document.createElement('div');
+  plate.id = 'lesson-plate';
+  plate.hidden = true;
+  plate.setAttribute('role', 'status');
+  plate.innerHTML = '<div class="lesson-head"><p class="lesson-title"></p><button type="button" data-lesson-next hidden>NEXT</button></div><p class="lesson-mission"></p><p class="lesson-why"></p>';
+  plate.querySelector('[data-lesson-next]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    lessonPlateAction?.();
+  });
+  document.body.append(plate);
+  window.addEventListener('resize', () => placeLessonPlate(), { passive: true });
+  return plate;
+}
+
+type PlateEl = HTMLElement & {
+  _avoid?: readonly string[];
+  _lessonBox?: { left: number; right: number; top: number; bottom: number; width: number; height: number };
+};
+type Spot = { l: number; t: number; r: number; b: number };
+
+/** The plate may use this much room at the viewport's side, and this gap from the header. */
+const PLATE_MARGIN = 8;
+const PLATE_GAP = 6;
+const PLATE_MAX_WIDTH = 420;
+/** Controls the caption must never sit on, whatever the light is doing. */
+const PLATE_KEEP_CLEAR = ['#hud', '#hud-menu', '#deck', '#discard', '#hand', '#smart-led', '#smart-bloom-button', '#moves', '#smart-context', '#dock'] as const;
+
+function hideLessonPlate() {
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (plate) { plate.hidden = true; delete plate._lessonBox; }
+  lessonPlateAction = null;
+}
+
+/** A box for an element that is actually on screen, or null. */
+const plateBox = (el: Element | null): Spot | null => {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return null;
+  return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+};
+const boxesOverlap = (a: Spot, b: Spot) =>
+  a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5;
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * The title is one line, always. If the webfont makes it wider than the room NEXT leaves, step
+ * the size down rather than wrap or clip it. This is a fit, not a style override: the CSS decides
+ * the face and the starting size (including large text).
+ */
+function fitLessonTitle(plate: HTMLElement) {
+  plate.style.removeProperty('--lesson-title-size');
+  const title = plate.querySelector<HTMLElement>('.lesson-title');
+  if (!title || !title.textContent) return;
+  // The stylesheet owns the base size (13 px, or 16 px with large text): read it, then only lower
+  // the hook when the measured glyphs do not fit beside NEXT.
+  let font = parseFloat(getComputedStyle(title).fontSize) || 13;
+  plate.style.setProperty('--lesson-title-size', `${font}px`);
+  const range = document.createRange();
+  range.selectNodeContents(title);
+  const room = () => {
+    const cs = getComputedStyle(title);
+    return title.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  };
+  for (let guard = 0; guard < 24 && font > 9; guard++) {
+    if (range.getBoundingClientRect().width <= room() + 0.5) break;
+    font = Math.max(9, font - 0.5);
+    plate.style.setProperty('--lesson-title-size', `${font}px`);
+  }
+}
+
+/**
+ * Put the wide caption in an empty gap: under the header, clear of the hexes and of every cockpit
+ * control, and never on the lit thing. Where the map leaves no gap at all (a short phone), take the
+ * gap with the fewest hexes under it — still never on the light, a control, or the header.
+ *
+ * This runs when the words change, on resize and once after the camera settles, never per frame.
+ */
+function placeLessonPlate() {
+  const plate = document.getElementById('lesson-plate') as PlateEl | null;
+  if (!plate || plate.hidden) return;
+  const hud = document.querySelector('#game > .hud');
+  if (!hud) return;
+  const vw = innerWidth;
+  const vh = innerHeight;
+  const width = Math.round(Math.max(0, Math.min(PLATE_MAX_WIDTH, vw - 2 * PLATE_MARGIN)));
+  plate.style.width = `${width}px`;
+  const btn = plate.querySelector<HTMLButtonElement>('[data-lesson-next]');
+  const key = btn && !btn.hidden ? Math.ceil(btn.offsetWidth) + 12 : 0;
+  plate.style.setProperty('--lesson-key', `${key}px`);
+  fitLessonTitle(plate);
+  const h = Math.ceil(plate.offsetHeight);
+
+  const hexes: Spot[] = [];
+  for (const el of document.querySelectorAll('#board .hex-cell')) {
+    const spot = plateBox(el);
+    if (spot) hexes.push(spot);
+  }
+  const lit: Spot[] = [];
+  for (const sel of plate._avoid ?? []) {
+    const spot = plateBox(document.querySelector(sel));
+    if (spot) lit.push(spot);
+  }
+  const controls: Spot[] = [];
+  for (const sel of PLATE_KEEP_CLEAR) {
+    const spot = plateBox(document.querySelector(sel));
+    if (spot) controls.push(spot);
+  }
+  const dock = plateBox(document.getElementById('dock'));
+  const topMin = Math.max(PLATE_MARGIN, Math.round(hud.getBoundingClientRect().bottom + PLATE_GAP));
+  const topMax = Math.max(topMin, Math.min(vh - h - PLATE_MARGIN, (dock ? dock.t - PLATE_GAP : vh) - h));
+  const xMax = Math.max(PLATE_MARGIN, vw - width - PLATE_MARGIN);
+  const centre = Math.round((vw - width) / 2);
+  const xs = [...new Set([clamp(centre, PLATE_MARGIN, xMax), PLATE_MARGIN, xMax])];
+  // The edges of every box define the only vertical intervals worth testing: the plate either sits
+  // above a box or below it, so the candidate tops are exactly those edges (plus the two extremes).
+  const ys = new Set<number>([topMin, topMax]);
+  for (const spot of [...hexes, ...lit, ...controls]) {
+    ys.add(clamp(Math.round(spot.t - h - 2), topMin, topMax));
+    ys.add(clamp(Math.round(spot.b + 2), topMin, topMax));
+  }
+  let best: { x: number; y: number; hexes: number } | null = null;
+  for (const y of ys) {
+    for (const x of xs) {
+      const r = { l: x, t: y, r: x + width, b: y + h };
+      if (lit.some((s) => boxesOverlap(r, s))) continue;
+      if (controls.some((s) => boxesOverlap(r, s))) continue;
+      const covered = hexes.reduce((n, s) => n + (boxesOverlap(r, s) ? 1 : 0), 0);
+      const dx = Math.abs(x + width / 2 - vw / 2);
+      if (!best
+        || covered < best.hexes
+        || (covered === best.hexes && (y < best.y || (y === best.y && dx < Math.abs(best.x + width / 2 - vw / 2))))) {
+        best = { x, y, hexes: covered };
+      }
+    }
+  }
+  const x = best?.x ?? clamp(centre, PLATE_MARGIN, xMax);
+  const y = best?.y ?? topMin;
+  plate.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+  plate._lessonBox = { left: Math.round(x), top: Math.round(y), right: Math.round(x) + width, bottom: Math.round(y) + h, width, height: h };
+}
+
+function showLessonPlate(
+  title: string,
+  why: string | undefined,
+  mission: string | undefined,
+  next: { label: string; blink: boolean; run: () => void } | null,
+  lift: readonly string[],
+) {
+  const plate = lessonPlate();
+  plate.hidden = false;
+  const titleEl = plate.querySelector('.lesson-title');
+  const whyEl = plate.querySelector('.lesson-why');
+  const missionEl = plate.querySelector('.lesson-mission');
+  const head = plate.querySelector<HTMLElement>('.lesson-head');
+  if (titleEl) titleEl.textContent = title;
+  if (whyEl) whyEl.textContent = why ?? '';
+  if (missionEl) missionEl.textContent = mission ?? '';
+  const btn = plate.querySelector<HTMLButtonElement>('[data-lesson-next]');
+  if (btn) {
+    btn.hidden = !next;
+    btn.textContent = next?.label ?? '';
+    btn.classList.toggle('glass-blink', !!next?.blink);
+  }
+  if (head) head.hidden = !title && !next;
+  lessonPlateAction = next?.run ?? null;
+  (plate as PlateEl)._avoid = lift;
+  placeLessonPlate();
+  // The camera eases for a moment after a beat. Correct once when it has settled.
+  clearTimeout(lessonPlateTimer);
+  lessonPlateTimer = window.setTimeout(placeLessonPlate, 400);
+}
+
 function renderLessonGuide(): void {
   const lesson = lessonActive()!;
   const st = session!.state;
   const level = lesson.level;
   document.documentElement.dataset.onboard = String(revealTierFor(level));
   document.documentElement.dataset.lesson = String(level);
-  const bulb = $('futa04-help-button');
-  if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
-  else bulb.style.removeProperty('filter');
+  const bulb = document.getElementById('futa04-help-button');
+  if (bulb) {
+    if (revealTierFor(level) === 1) bulb.style.setProperty('filter', 'brightness(0.45) saturate(0.6)', 'important');
+    else bulb.style.removeProperty('filter');
+  }
   syncLessonPile(st);
   if (!glassSurface) return;
+  // The header stays the menu and the logo; the words are chosen below.
   if (guidanceOff() || openSheet || st.phase === 'GAME_OVER') {
     lessonBeatNow = null;
-    lessonBar.hide();
+    hideLessonPlate();
     smartCockpit?.quiet?.(false);
+    if (!lessonHoldingScore) smartCockpit?.led?.(null);
     if (lessonShownKey) {
       lessonShownKey = '';
       glassSurface.hide();
     }
     return;
   }
-  // The stage intro comes first: level number + name, ~1.2 s, a tap skips it. The name is the top
-  // row's now, so the window stays out of the way entirely.
+  // The stage intro comes first: the level's name, ~1.2 s, a tap skips it. It sits in the plate
+  // under the board, so the header and the map stay clear.
   if (lessonStageActive()) {
     const stageKey = `stage:${level}`;
     lessonBeatNow = null;
-    smartCockpit?.quiet?.(false);
-    lessonBar.onNext(() => {});
-    lessonBar.paint(lessonBarFor({
-      stageName: campaignLevel?.name ?? lesson.finish.learned, stuck: false,
-      beat: null, answer: null, showMe: false, line: null, labels: LESSON_BAR_LABELS,
-    }));
+    const name = (campaignLevel?.name ?? lesson.finish.learned).toUpperCase();
     if (lessonShownKey !== stageKey) {
       lessonShownKey = stageKey;
       glassSurface.hide();
+      smartCockpit?.quiet?.(true);
+      if (!lessonHoldingScore) smartCockpit?.led?.(null);
+      showLessonPlate(name, undefined, undefined, null, []);
     }
     return;
   }
   // The first light waits for the opening hand to stop moving — never a fixed delay.
   if (!handSettled) {
     lessonBeatNow = null;
-    lessonBar.hide();
+    hideLessonPlate();
     if (lessonShownKey) {
       lessonShownKey = '';
       glassSurface.hide();
@@ -4267,69 +4464,84 @@ function renderLessonGuide(): void {
   lessonTierShown = tier;
   lessonTierKind = kind;
   if (beat?.explain && beat.id !== lessonExplainId) { lessonExplainId = beat.id; lessonExplainAt = performance.now(); }
-  // H: while the window speaks, the cockpit's own LED keeps to the score and real results.
-  smartCockpit?.quiet?.(!!shown || !!lessonAnswerText);
   // The one moment that teaches the score: the sign shows the score itself.
   const holdScore = shown?.lit.t === 'score';
   if (holdScore !== lessonHoldingScore) { lessonHoldingScore = holdScore; smartCockpit?.holdScore?.(holdScore); }
-  const mission = lessonMission(lesson, st);
+  const mission = lessonAnswerText ? null : lessonMission(lesson, st);
   const lit = shown && mine ? litTarget(shown.lit, SMALL_HOMES) : { selectors: [] as string[], shape: 'none' as const };
-  const led = shown?.led && shown.led !== shown.title ? shown.led : null;
-  const title = led ?? shown?.title;
-  const sentence = (t: string) => t.charAt(0) + t.slice(1).toLowerCase();
-  const why = stuck ? LESSON.restartLine
-    : led && shown ? [`${sentence(shown.title)}.`, shown.line].filter(Boolean).join(' ')
-    : shown?.line;
+  // The plate's first line is the title, so the reason never repeats it: it is the step's own line.
+  // That keeps the reason inside the two-line budget on the smallest phone.
+  const why = lessonAnswerText ? undefined : stuck ? LESSON.restartLine : shown?.line;
   const showMe = lessonIdle && !!shown && !shown.explain && !shown.hello && lit.selectors.length > 0;
-  // The top row owns the title, the answer and the ONE action. A wrong tap's answer lives there
-  // too, so answering never resizes the map under the player's finger.
-  lessonBar.onNext(() => {
+  // What the top row used to decide — title, answer, and the one button — now chooses the plate
+  // or the sign. The highlight tier is unchanged.
+  const bar = lessonBarFor({
+    stageName: null, stuck, beat: shown, answer: lessonAnswerText || null, showMe,
+    labels: LESSON_BAR_LABELS,
+  });
+  const onNext = () => {
     if (stuck) return startCampaignLevel(campaignLevel!);
     if (shown?.explain) return lessonMarkSeen(shown.id);
-    // Show me: the light pulses and the pointer taps harder (nothing is played for you).
     glassSurface?.nudge();
-  });
-  lessonBar.paint(lessonBarFor({
-    stageName: null, stuck, beat: shown, answer: lessonAnswerText || null, showMe,
-    line: why ?? null, labels: LESSON_BAR_LABELS,
-  }));
-  const panelHidden = !mission && !why;
+  };
+  // A sentence sits in the cockpit plate. A one-word hint stays on the sign, so the piles stay clear.
+  const sentenceText = why ?? '';
+  const missionText = mission ?? '';
+  const plateWhy = sentenceText || undefined;
+  const needsPlate = !!(lessonAnswerText || sentenceText || mission || bar.next.show || stuck);
+  const signWord = !needsPlate ? bar.title : null;
   const key = JSON.stringify([
-    level, shown?.id, shown?.title, shown?.line, shown?.lit, lessonAnswerText, lessonIdle, tier,
-    lessonHelloNow, mission, panelHidden, mine, settings.reduceMotion, handSettled,
+    level, shown?.id, bar.title, plateWhy, missionText, shown?.lit, lessonAnswerText, lessonIdle, tier,
+    lessonHelloNow, mission, needsPlate, signWord, mine, settings.reduceMotion, handSettled,
   ]);
   if (key === lessonShownKey) return;
   lessonShownKey = key;
-  if (!shown && !mission) {
-    // A truly quiet step: no window and no light, but the map keeps the band it reserved.
+  if (!holdScore) {
+    if (needsPlate) {
+      smartCockpit?.led?.(null);
+      smartCockpit?.quiet?.(true);
+    } else if (signWord) {
+      smartCockpit?.quiet?.(false);
+      smartCockpit?.led?.(signWord);
+    } else {
+      smartCockpit?.quiet?.(false);
+      smartCockpit?.led?.(null);
+    }
+  }
+  if (!shown && !mission && !lessonAnswerText) {
     lessonBeatNow = null;
-    glassSurface.hidePanel(true);
+    hideLessonPlate();
+    glassSurface.hide();
     return;
   }
-  glassSurface.tutorial(title ?? '', 0, lit.selectors, {
+  if (needsPlate) {
+    const next = bar.next.show ? { label: bar.next.label, blink: bar.next.blink, run: onNext } : null;
+    const lift = holdScore ? ['#smart-led', ...lit.selectors] : lit.selectors;
+    showLessonPlate(bar.title ?? '', plateWhy, missionText || undefined, next, lift);
+  } else hideLessonPlate();
+  // A mission with no lit move: the sentence stays in the plate and the board is not dimmed.
+  if (!shown) {
+    glassSurface.hide();
+    return;
+  }
+  glassSurface.tutorial(bar.title ?? signWord ?? '', 0, lit.selectors, {
     shape: lit.shape,
     lesson: true,
-    headless: true,
+    inCockpit: true,
     tier,
-    // No window body to show (a one-word step): keep the light, drop the panel.
-    panelHidden,
     noLight: lit.selectors.length === 0,
     stepKey: `lesson:${level}:${shown?.id ?? 'answer'}`,
-    ...(why ? { why } : {}),
-    ...(mission ? { mission } : {}),
     reduceMotion: settings.reduceMotion,
     idleHard: lessonIdle,
     arrow: lit.selectors.length > 0,
-    // The top row carries NEXT; the window has no buttons in a lesson any more.
-    buttons: { previous: false, next: false },
   });
 }
 
 let onboardKey = '';
 function renderOnboardingGuide(v: View) {
   if (lessonActive()) return renderLessonGuide();
-  // Every other screen keeps its own chrome: the lesson bar never shows outside a lesson.
-  lessonBar.hide();
+  // Every other screen keeps its own chrome: the plate never shows outside a lesson.
+  hideLessonPlate();
   smartCockpit?.quiet?.(false);
   delete document.documentElement.dataset.lesson;
   syncLessonPile(null);

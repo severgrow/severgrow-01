@@ -24,26 +24,32 @@ If you change a beat, a word or a position, change it here too. If you change a 
   - it grows only on the turns the script lists, and throws its lowest card (never a Bomb);
   - it never takes the last open side of your home.
   - Level 10 plays the gentlest bot (level 1).
-- **No text on the map.** Words go in the glass window (instruction ≤ 6 words, reason fits two lines on the smallest phone) or the LED. The map gets only the glow of the lit target and a small ring where a tap landed.
+- **No text on the map.** Words go in the caption plate under it (or the cockpit sign for a one-word hint; instruction ≤ 6 words, reason fits two lines on the smallest phone). The map gets only the glow of the lit target and a small ring where a tap landed.
 
-### The top row and the window (2026-10-19)
+### The caption under the map (2026-10-19)
 
-The lesson's title and its ONE action live in the game's own top row, so the window below carries
-copy only:
+The game's header is the menu and the logo only. The lesson's words sit in one wide plate
+(`#lesson-plate`), placed in an empty gap above the map:
 
-    [menu]            TITLE (LED)                    [NEXT]  [logo]
+    [menu]                                          [logo]
 
-- **No `LEVEL n` kicker** above the lesson window; the level's name is in the row only during the
-  ~1.2 s stage intro. (Other screens that still use the glass keep their kicker.)
-- The title is **centred in the span between the menu button and the right-hand control** (the logo
-  on the compact HUD, or History where it is shown), never in the viewport. It is on the menu
-  button's own row centre. NEXT is a 44 px target at the right end of that span and keeps its
-  blink on explanations and its hidden state when there is nothing to press.
-- The LED shrinks to the room NEXT leaves, so a long title never pushes the button off. On a very
-  narrow phone (320 px) with a wide label, the title steps left beside the button instead.
-- The window starts **4 px under the row** and shares the map's left and right edges; the gutters
-  above and below it are equal. The map takes every pixel the removed rows freed.
-- A wrong tap's answer is shown in the top row, so answering never resizes the map.
+              TITLE (one line)                 [NEXT]
+              reason (at most two lines)
+              mission line
+
+- **No glass window and no `LEVEL n` kicker** in levels 1-10. The level's name is the plate's first
+  line during the ~1.2 s stage intro. (Other screens that still use the glass keep their chrome.)
+- The plate is **flat, no blur** (it must not repaint the board under it), at 0.77 of the old dark
+  slab's alpha. It stays wide (260-420 px, the narrower side of the viewport) rather than becoming
+  a skinny column.
+- The placement reads the hexes and cockpit controls once: it prefers the band under the header and
+  above the hexes, and it **never overlaps the lit target, a control or the header**. On a screen
+  where the map leaves no gap at all (a short phone), it takes the gap with the fewest hexes under
+  it; the map is never shrunk and the plate moves to another gap when the light changes.
+- The **title never wraps**: it steps down a size to fit the room NEXT leaves. The **reason is
+  centred and clamped to two lines**. NEXT / Show me is the one action in the right margin.
+- A wrong tap's answer is shown in the plate, so answering never resizes the map. A one-word hint
+  with no sentence stays on the cockpit sign instead.
 
 ### The light
 
@@ -100,7 +106,7 @@ live. The mission is a small pill in the glass until the player's first move:
 
 ### Explanations
 
-- An explanation beat (marked **tap anywhere**) moves on with a tap anywhere, or the glass NEXT.
+- An explanation beat (marked **tap anywhere**) moves on with a tap anywhere, or NEXT on the plate.
 - An explanation is shown once per level. It is remembered across a refresh, with the lesson's version.
 
 ### Wrong taps

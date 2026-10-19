@@ -19,7 +19,7 @@ import {
   LESSON_VERSION, decodeMastery, displayTier, encodeMastery, freshMastery, recordAction, recordHello, tierOf,
 } from '../src/lessons/mastery.js';
 import { createIdleWatch } from '../src/lessons/idle.js';
-import { lessonBarFor, lessonBarRoom } from '../src/lessons/lesson-bar.js';
+import { lessonBarFor } from '../src/lessons/lesson-bar.js';
 import type { LessonBarLabels } from '../src/lessons/lesson-bar.js';
 import { scriptedOpponentAction } from '../src/lessons/opponent.js';
 import { bloomProblem, tapAnswer } from '../src/lessons/answer.js';
@@ -678,9 +678,9 @@ describe('the first turn is the only locked one', () => {
   });
 });
 
-describe('the lesson bar (title + one action in the game top row)', () => {
+describe('the lesson words (title + one action for the cockpit plate)', () => {
   const labels: LessonBarLabels = { next: 'NEXT', showMe: 'Show me', restart: 'RESTART LEVEL' };
-  const base = { stageName: null, stuck: false, beat: null, answer: null, showMe: false, line: null, labels };
+  const base = { stageName: null, stuck: false, beat: null, answer: null, showMe: false, labels };
 
   it('the stage intro shows the level name and no action', () => {
     const bar = lessonBarFor({ ...base, stageName: 'First Seed' });
@@ -688,11 +688,10 @@ describe('the lesson bar (title + one action in the game top row)', () => {
     expect(bar.next).toEqual({ show: false, label: '', blink: false });
   });
 
-  it('an explanation offers NEXT (blinking) and speaks its line with the title', () => {
-    const bar = lessonBarFor({ ...base, beat: { title: 'THIS IS YOUR HOME', explain: true }, line: 'Grow by placing cards.' });
+  it('an explanation offers NEXT (blinking)', () => {
+    const bar = lessonBarFor({ ...base, beat: { title: 'THIS IS YOUR HOME', explain: true } });
     expect(bar.title).toBe('THIS IS YOUR HOME');
     expect(bar.next).toEqual({ show: true, label: 'NEXT', blink: true });
-    expect(bar.spoken).toBe('THIS IS YOUR HOME. Grow by placing cards.');
   });
 
   it('a move shows no action until the safety net offers Show me', () => {
@@ -709,23 +708,15 @@ describe('the lesson bar (title + one action in the game top row)', () => {
   });
 
   it('a lesson that cannot finish offers only RESTART LEVEL', () => {
-    const bar = lessonBarFor({ ...base, stuck: true, beat: { title: 'RESTART LEVEL' }, line: 'This lesson cannot finish now.' });
+    const bar = lessonBarFor({ ...base, stuck: true, beat: { title: 'RESTART LEVEL' } });
     expect(bar.title).toBeNull();
     expect(bar.next).toEqual({ show: true, label: 'RESTART LEVEL', blink: false });
   });
 
-  it('a silent step shows nothing at all (no empty bar, no stray NEXT)', () => {
+  it('a silent step shows nothing at all (no empty plate, no stray NEXT)', () => {
     const bar = lessonBarFor(base);
     expect(bar.title).toBeNull();
     expect(bar.next.show).toBe(false);
-  });
-
-  it('the title keeps a symmetric reserve for the button, so its centre stays the span centre', () => {
-    // 259 px of span, a 56 px button and an 8 px gap: the LED may use the middle 131 px.
-    expect(lessonBarRoom(259, 56, true)).toBe(259 - 2 * 64);
-    // Without a button it may use the whole span; a tiny span still leaves a readable minimum.
-    expect(lessonBarRoom(259, 56, false)).toBe(259);
-    expect(lessonBarRoom(80, 56, true)).toBe(60);
   });
 });
 
