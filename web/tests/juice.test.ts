@@ -19,17 +19,24 @@ describe('move size tiers (the juice budget)', () => {
     expect(moveTier([grow(2)], noGold)).toBe('small');
   });
 
-  it('medium: 3-4 tiles, a gold hex, replacing a bot tile, or a cut of 1-3', () => {
+  it('medium: 3-4 tiles, a gold hex, replacing a bot tile, or a quiet cut of 1-2', () => {
     expect(moveTier([grow(3)], noGold)).toBe('medium');
     expect(moveTier([grow(4)], noGold)).toBe('medium');
     expect(moveTier([grow(1)], (k) => k === '0,0')).toBe('medium');
     expect(moveTier([grow(2, { replaced: 1 })], noGold)).toBe('medium');
-    expect(moveTier([sever(3)], noGold)).toBe('medium');
+    expect(moveTier([sever(2)], noGold)).toBe('medium');
   });
 
-  it('big: 5+ tiles, a cut of 4+, or a Strangle', () => {
+  it('severe: a cut of 3-4 tiles', () => {
+    expect(moveTier([sever(3)], noGold)).toBe('severe');
+    expect(moveTier([sever(4)], noGold)).toBe('severe');
+    // the biggest cut in a mixed move still decides the moment
+    expect(moveTier([sever(3), grow(2)], noGold)).toBe('severe');
+  });
+
+  it('big: 5+ tiles, a cut of 5+, or a Strangle', () => {
     expect(moveTier([grow(5)], noGold)).toBe('big');
-    expect(moveTier([grow(2), sever(4)], noGold)).toBe('big');
+    expect(moveTier([grow(2), sever(5)], noGold)).toBe('big');
     expect(moveTier([{ k: 'strangle', loser: 1 }], noGold)).toBe('big');
   });
 
@@ -38,12 +45,12 @@ describe('move size tiers (the juice budget)', () => {
   });
 
   it('every real move gets a tier, and it never shrinks when more happens', () => {
-    const order = ['none', 'small', 'medium', 'big'];
+    const order = ['none', 'small', 'medium', 'severe', 'big'];
     playGame(3, ({ before, action, after }) => {
       const steps = buildSteps(before, action, after, 0);
       const t = moveTier(steps, (k) => before.terrain[k] === 'rich');
       expect(order).toContain(t);
-      const more = moveTier([...steps, sever(4)], () => false);
+      const more = moveTier([...steps, sever(5)], () => false);
       expect(more).toBe('big');
     });
   });
@@ -60,13 +67,19 @@ describe('effect budget per tier and intensity', () => {
   it('bigger moments get bigger effects, but stay capped', () => {
     const s = effectBudget('small', 'normal', false);
     const m = effectBudget('medium', 'normal', false);
+    const sv = effectBudget('severe', 'normal', false);
     const b = effectBudget('big', 'normal', false);
     expect(s.particles).toBeLessThan(m.particles);
-    expect(m.particles).toBeLessThan(b.particles);
+    expect(m.particles).toBeLessThan(sv.particles);
+    expect(sv.particles).toBeLessThan(b.particles);
     expect(b.particles).toBeLessThanOrEqual(60);
     expect(s.shake).toBe(0);
     expect(m.shake).toBe(0);
-    expect(b.shake).toBeGreaterThan(0);
+    expect(sv.shake).toBe(2.5); // a shiver, not the 4-6px Big shake
+    expect(sv.hitStopMs).toBe(60);
+    expect(sv.anticipationMs).toBe(60);
+    expect(sv.thud && sv.vibrate !== null).toBe(true);
+    expect(b.shake).toBeGreaterThan(sv.shake);
     expect(b.hitStopMs).toBeGreaterThanOrEqual(80);
     expect(b.hitStopMs).toBeLessThanOrEqual(120);
     expect(b.banner && b.vibrate !== null && b.thud).toBe(true);
@@ -80,6 +93,9 @@ describe('effect budget per tier and intensity', () => {
     expect(lo!.shake).toBe(0);
     expect(lo!.hitStopMs).toBe(0);
     expect(hi!.particles).toBeLessThanOrEqual(60);
+    const loSev = effectBudget('severe', 'low', false);
+    expect([loSev.shake, loSev.hitStopMs, loSev.anticipationMs]).toEqual([0, 0, 0]);
+    expect(effectBudget('severe', 'high', false).shake).toBe(2.5); // the shiver stays small on High
   });
 
   it('Reduce motion: no shake and no flying particles; quick fades instead', () => {

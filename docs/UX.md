@@ -386,8 +386,9 @@ engine events.
 | Size | When | Effects |
 | --- | --- | --- |
 | Small | a Sprout, 1-2 tiles | a quick squash-and-stretch pop, a soft note, one small spark |
-| Medium | 3-4 tiles, a gold hex, overgrowing a bot tile, a cut of 1-3 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
-| Big | 5+ tiles, a cut of 4+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
+| Medium | 3-4 tiles, a gold hex, overgrowing a bot tile, a cut of 1-2 | a staggered ripple, one rising note per tile, a chime on gold, "+3" floats up |
+| Severe | a cut of 3-4 tiles | a short build-up beat, a ~60 ms hit-stop, a 2.5px shiver, a 1.012 zoom, a seam flash, neighbours flinch, a low cut and a quiet thud |
+| Big | 5+ tiles, a cut of 5+, a Strangle | a short build-up beat, a ~100 ms hit-stop, a stronger ripple, a soft shake, a low thud, a banner ("Big grow!", "Cut off 5!", "Strangled!"), a light buzz |
 
 | Moment | What you see and hear |
 | --- | --- |
@@ -577,15 +578,19 @@ One pure generator (`web/src/logic/cut.ts`, tested in `web/tests/cut.test.ts`) t
 a timeline; the page only plays it. The same cut always looks the same, and a replay plays the
 same sequence slower.
 
-- **Tiers** (config values, `CUT_TIERS`): Small 1–2 tiles, Medium 3–4, Big 5–7, Huge 8+ or at
+- **Tiers** (config values, `CUT_TIERS`): Small 1–2 tiles, Severe 3–4, Big 5–7, Huge 8+ or at
   least half of the victim's tiles.
 - **Stages:** anticipation (the board draws in a little; first cut of a move only) → impact
-  hit-stop (~100ms, nothing moves) with a small local flash (≤60ms, ≤35% white, a few hexes
-  around the cut) and a micro zoom (1–3%) → a pulse along the cut vein → the snap (a click and a
-  2–6px shake, bigger for bigger tiers, its own vibration) → the slow-motion ripple (the tiles die
-  one ring at a time, 70ms apart, all started within 700ms; moss dries and curls away, lava flares
-  once, cools and sinks into crumbs) → the crumble, leaving a ground scar → the payoff (the "−N"
-  number, the score tally, a banner for Big and Huge, the ambient sound ducked 6 dB).
+  hit-stop (~100ms Big+, ~60ms Severe; nothing moves) with a small local flash (≤60ms, ≤35%
+  white, a few hexes around the cut) and a micro zoom (Severe 1.012, Big/Huge 1–3%) → a pulse
+  along the cut vein → the snap (a click and a shake: a 2.5px shiver on Severe, 4–6px on Big and
+  Huge, its own vibration) → the slow-motion ripple (the tiles die one ring at a time, 70ms apart,
+  all started within 700ms; moss dries and curls away, lava flares once, cools and sinks into
+  crumbs) → the crumble, leaving a ground scar → the payoff (the "−N" number, the score tally, a
+  banner for Big and Huge, the ambient sound ducked 6 dB).
+- **Severe** (3–4 tiles) also flashes the torn seam, flinches the surviving tiles beside it
+  ~1.5px toward the cut and dims them 6% for ~120ms, and plays the low cut plus a quieter thud.
+  Small stays quiet; Big and Huge keep their stronger shake and hit-stop.
 - **Length:** at most 1.8s at Normal speed, also for chains and several cuts in one move (they
   follow each other and are squeezed to fit).
 - **The opponent cutting me:** calmer: no flash, no zoom, no anticipation, at most a 2px shake,

@@ -92,17 +92,38 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: alpha }, { transform: `scale(${grow})`, opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 60);
   }
 
-  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤38%), short. */
-  function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string) {
+  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤38%), short.
+   *  `linkTo` is the torn edge: one hex (the link that snapped), or several for a Severe cut so
+   *  the flash runs along the whole seam. */
+  function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string | readonly string[]) {
     if (ms <= 0 || alpha <= 0) return;
     const { x, y } = centerOf(key);
-    const other = linkTo ? centerOf(linkTo) : null;
+    const links = linkTo === undefined ? [] : typeof linkTo === 'string' ? [linkTo] : linkTo;
     const a = Math.min(0.38, alpha * (IS_FUTA04 ? 1.12 : 1));
-    const c = IS_FUTA04 && other
-      ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
-          fill:'none',stroke:'#fff2d2','stroke-width':3.2,'stroke-linecap':'round' }, board.fx)
+    const c = IS_FUTA04 && links.length
+      ? el('path', { d: links.map((k) => {
+          const o = centerOf(k);
+          return `M${x.toFixed(2)},${y.toFixed(2)}L${o.x.toFixed(2)},${o.y.toFixed(2)}`;
+        }).join(''), fill:'none',stroke:'#fff2d2','stroke-width':3.2,'stroke-linecap':'round' }, board.fx)
       : el('circle', { cx: x, cy: y, r: S * radius * (IS_FUTA04 ? 1.08 : 1), class: 'fx-cutflash' }, board.fx);
     removeAfter(anim(c, [{ opacity: a }, { opacity: 0 }], { duration: Math.max(ms, IS_FUTA04 ? ms * 1.15 : ms), easing: EASE.out, fill: 'forwards' }), c, ms + 50);
+  }
+
+  /** A surviving tile beside a Severe cut: a 1.5px flinch toward the tear and a 6% dim, then back. */
+  function flinch(key: string, origin: string, ms: number) {
+    if (motion() === 0) return;
+    const tile = board.tile(key);
+    if (!tile || ms <= 0) return;
+    const p = centerOf(key);
+    const o = centerOf(origin);
+    const len = Math.hypot(p.x - o.x, p.y - o.y) || 1;
+    const dx = ((o.x - p.x) / len) * 1.5;
+    const dy = ((o.y - p.y) / len) * 1.5;
+    anim(tile, [
+      { transform: 'translate(0,0)', opacity: 1 },
+      { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`, opacity: 0.94, offset: 0.45 },
+      { transform: 'translate(0,0)', opacity: 1 },
+    ], { duration: ms, easing: EASE.out });
   }
 
   /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
@@ -271,5 +292,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
 };

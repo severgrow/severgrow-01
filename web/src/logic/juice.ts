@@ -5,13 +5,13 @@ import type { Phase } from '../../../src/engine/index.js';
 import type { Step } from './anim.js';
 import type { Effects } from './settings.js';
 
-export type Tier = 'none' | 'small' | 'medium' | 'big';
+export type Tier = 'none' | 'small' | 'medium' | 'severe' | 'big';
 
 /** How big one action's moment is, from its animation steps (built from engine events). */
 export const moveTier = (steps: readonly Step[], isGold: (key: string) => boolean): Tier => {
   let tier: Tier = 'none';
   const up = (t: Tier) => {
-    const order: Tier[] = ['none', 'small', 'medium', 'big'];
+    const order: Tier[] = ['none', 'small', 'medium', 'severe', 'big'];
     if (order.indexOf(t) > order.indexOf(tier)) tier = t;
   };
   for (const s of steps) {
@@ -20,7 +20,7 @@ export const moveTier = (steps: readonly Step[], isGold: (key: string) => boolea
       if (n >= 5) up('big');
       else if (n >= 3 || s.tiles.some((t) => t.replaced || isGold(t.key))) up('medium');
       else up('small');
-    } else if (s.k === 'sever') up(s.keys.length >= 4 ? 'big' : 'medium');
+    } else if (s.k === 'sever') up(s.keys.length >= 5 ? 'big' : s.keys.length >= 3 ? 'severe' : 'medium');
     else if (s.k === 'strangle' || s.k === 'fruit') up('big');
     else if (s.k === 'strengthen') up(s.to >= 9 ? 'medium' : 'small');
   }
@@ -52,6 +52,8 @@ export type Budget = {
 const BASE: Record<Exclude<Tier, 'none'>, Budget> = {
   small: { particles: 6, shake: 0, hitStopMs: 0, anticipationMs: 0, banner: false, float: false, thud: false, vibrate: null, fadeOnly: false },
   medium: { particles: 14, shake: 0, hitStopMs: 0, anticipationMs: 0, banner: false, float: true, thud: false, vibrate: null, fadeOnly: false },
+  // Severe (a cut of 3-4 tiles): real weight, but a smaller shiver and a shorter stop than Big.
+  severe: { particles: 22, shake: 2.5, hitStopMs: 60, anticipationMs: 60, banner: false, float: true, thud: true, vibrate: [24, 40, 16], fadeOnly: false },
   big: { particles: 36, shake: 6, hitStopMs: 100, anticipationMs: 140, banner: true, float: true, thud: true, vibrate: [30, 40, 60], fadeOnly: false },
 };
 const NONE: Budget = { ...BASE.small, particles: 0 };
@@ -68,6 +70,7 @@ export const effectBudget = (tier: Tier, intensity: Effects, reduceMotion: boole
   } else if (intensity === 'high') {
     b.particles = Math.min(60, Math.round(b.particles * 1.6));
     b.shake = Math.round(b.shake * 1.4);
+    if (tier === 'severe') b.shake = 2.5; // the Severe shiver stays small, even on High
     if (tier === 'medium') b.vibrate = [20];
   }
   if (reduceMotion) {
