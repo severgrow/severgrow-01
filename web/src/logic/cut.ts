@@ -9,21 +9,22 @@
 // the score tally, a banner for big ones, the haptic, the audio duck).
 import { parseKey } from '../../../src/engine/index.js';
 import type { FeedbackEvent } from './feedback.js';
+import { PINNED } from './motion.js';
 
 /** Tier thresholds (config values): tiles cut, and the share of the victim's tiles that makes any cut Huge. */
 export type CutTiers = { medium: number; big: number; huge: number; hugeShare: number };
 export const CUT_TIERS: Readonly<CutTiers> = Object.freeze({ medium: 3, big: 5, huge: 8, hugeShare: 0.5 });
 /** A whole cut (or every cut of one move) lasts at most this long at Normal speed. */
-export const CUT_CAP_MS = 1800;
+export const CUT_CAP_MS = PINNED.cutCap;
 /** Photosensitivity: the flash lasts at most 60ms, at most 35% white, and only around the cut. */
-export const FLASH_MAX_MS = 60;
+export const FLASH_MAX_MS = PINNED.flash;
 export const FLASH_MAX_ALPHA = 0.35;
 /** The ripple: one ring of tiles every 70ms, never more than 700ms in all. */
-export const RIPPLE_STEP_MS = 70;
+export const RIPPLE_STEP_MS = PINNED.ripple;
 export const RIPPLE_CAP_MS = 700;
-export const HITSTOP_MS = 100;
+export const HITSTOP_MS = PINNED.hitStop;
 /** The cut's one link flash (Small and up): at most this long, whatever the speed. */
-export const CUT_FLASH_MS = 60;
+export const CUT_FLASH_MS = PINNED.flash;
 /** Shake ceilings: only Big and Huge move the board, and never beyond these. */
 export const SHAKE_MAX_BIG = 4;
 export const SHAKE_MAX_HUGE = 6;

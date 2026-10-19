@@ -386,7 +386,7 @@ html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #mov
   color: var(--control-ivory); opacity: 1;
   box-shadow: none;
   text-decoration: none; touch-action: manipulation;
-  transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform .12s ease;
+  transition: border-color .16s ease, box-shadow .16s ease, color .16s ease, opacity .16s ease, transform var(--dur-ack) var(--ease-standard);
 }
 html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control) :is(svg,.i) {
   display: block; width: 21px; height: 21px;
@@ -396,9 +396,6 @@ html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #mov
 }
 html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control):focus-visible {
   outline: 2px solid #ffe1a7; outline-offset: 2px;
-}
-html.futa04-information .dock #futa04-box :is(#futa04-actions > .hand-slot, #moves .futa04-hardware-control):active:not(:disabled) {
-  transform: translateY(1px) scale(.98);
 }
 html.futa04-information .dock #futa04-box #moves .futa04-skip.futa04-hardware-control {
   color: #c4c1b7; opacity: .77;

@@ -1,4 +1,5 @@
 import type { DisplayEvent } from './display-readout.js';
+import { PINNED } from '../logic/motion.js';
 import { FlavourDeck } from './led-flavour.js';
 import type { LedMotif, LedTone } from './led-cells.js';
 
@@ -14,7 +15,7 @@ export type DisplayFrame = {
 };
 
 /** Hard floor: no LED message may be replaced sooner than this. */
-export const DISPLAY_MIN_DWELL_MS = 1000;
+export const DISPLAY_MIN_DWELL_MS = PINNED.displayDwell;
 
 const STEP_WORDS = new Set(['DRAW', 'DRAW!', 'GROW', 'GROW!', 'THROW', 'THROW!', 'BLOOM', 'BLOOM!', 'SKIP?']);
 

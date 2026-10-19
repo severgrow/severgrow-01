@@ -9,7 +9,7 @@ declare const __CHANNEL__: string;
 const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05');
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
-import { EASE, MOTION } from '../logic/motion.js';
+import { EASE, MOTION, PINNED } from '../logic/motion.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -127,7 +127,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     for (let i = 0; i < k; i++) {
       const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
       const c = el('circle', { cx: x, cy: y, r: IS_FUTA04 ? 1.85 : 1.6, class: 'fx-mote' }, board.fx);
-      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * 70, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * PINNED.ripple, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
     }
   }
 
@@ -206,11 +206,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
         ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.48 },
+          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .68 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 320 : 440) * f;
+    const duration = (IS_FUTA04 ? PINNED.throw : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
