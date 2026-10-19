@@ -863,6 +863,9 @@ function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress> 
   if (!raw) return null;
   const level = campaignLevelById(raw.levelId);
   if (!level) return null;
+  // A save can only resume a level the record actually opened. A stale or edited save pointing at a
+  // level the player has not reached is ignored, so it cannot become a shortcut past the order rule.
+  if (!isUnlocked(campaignProgress, level)) return null;
   const saved = decodeSave<CoachProgress>(raw.match);
   if (!saved || saved.state.phase === 'GAME_OVER') return null;
   return { level, saved };
@@ -1505,6 +1508,10 @@ async function startGame(
 
 /** Opens a campaign level as a fresh, reproducible match. The fixed seed makes the start identical. */
 function startCampaignLevel(level: CampaignLevel) {
+  // ONE door, and it checks the order itself: a level is only startable when every level before it
+  // has been won. The tiles already disable locked levels, but a guard here means no future caller
+  // (a deep link, a test hook, a stale save) can skip the campaign by starting a level directly.
+  if (!isUnlocked(campaignProgress, level)) return showScreen('campaign');
   gameOverDismissed = true;
   void startGame(level.seed, level.botLevel, null, level);
 }

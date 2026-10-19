@@ -112,6 +112,16 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
     // No silent resume path may remain: the press must go through the decision, not straight to a save.
     expect(mainSource).not.toMatch(/function enterCampaign\(\) \{\s*\n\s*const resume = campaignResume\(\);/);
   });
+
+  it('cannot skip a level: the order rule is checked at BOTH doors', () => {
+    // (owner, 2026-10-19) every level 1-70 must be won in order. The data layer already derives
+    // access from the completed list; these two guards mean no DOM state or stale save can bypass it.
+    const start = mainSource.slice(mainSource.indexOf('function startCampaignLevel('), mainSource.indexOf('function clearFreePlayBulbNudge('));
+    expect(start).toMatch(/if \(!isUnlocked\(campaignProgress, level\)\) return showScreen\('campaign'\)/);
+    // The resume door too: a save for a level the record has not opened is ignored, not resumed.
+    const resume = mainSource.slice(mainSource.indexOf('function campaignResume('), mainSource.indexOf('function campaignTile('));
+    expect(resume).toMatch(/if \(!isUnlocked\(campaignProgress, level\)\) return null/);
+  });
 });
 
 describe('the Training entry opens the three tiers', () => {

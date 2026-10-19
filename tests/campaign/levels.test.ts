@@ -15,11 +15,14 @@ import {
   campaignOpening,
   currentLevel,
   freshProgress,
+  isUnlocked,
   nextCampaignLevel,
+  parseProgress,
   recordCampaignResult,
   validateCampaign,
   validateLevel,
 } from '../../src/campaign/index.js';
+import type { CampaignProgress } from '../../src/campaign/index.js';
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 describe('campaign levels: the definition is well formed', () => {
@@ -477,3 +480,68 @@ describe('campaign progress: the unlock rule', () => {
     expect(currentLevel(p).number).toBe(last);
   });
 });
+
+describe('campaign progress: strict order, no skipping', () => {
+  // THE RULE (owner, 2026-10-19): every level 1-70 must be won IN ORDER to finish the campaign.
+  // Access therefore comes from the COMPLETED LIST, never from a stored counter: a counter can
+  // disagree with the record, and that disagreement is exactly how a player could skip ahead.
+  const win = (p: CampaignProgress, n: number) =>
+    recordCampaignResult(p, CAMPAIGN_LEVELS[n - 1]!, { won: true, score: 10, turns: 10 });
+
+  it('opens exactly one level beyond the completed run, never more', () => {
+    let p = freshProgress();
+    for (let n = 1; n <= 5; n++) p = win(p, n);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[5]!)).toBe(true);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[6]!)).toBe(false);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[69]!)).toBe(false);
+  });
+
+  it('a completed later level does not open the levels after it while an earlier one is missing', () => {
+    // The hole this closes: level 4 completed while 3 is not. Before, `unlocked` could say 5 and
+    // levels 5+ were playable, which is a skip. Now the gap is the frontier.
+    const p: CampaignProgress = {
+      version: 1,
+      unlocked: 70,
+      completed: [CAMPAIGN_LEVELS[0]!.id, CAMPAIGN_LEVELS[1]!.id, CAMPAIGN_LEVELS[3]!.id],
+      best: {},
+    };
+    expect(currentLevel(p).number).toBe(3);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[2]!)).toBe(true);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[3]!)).toBe(false);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[4]!)).toBe(false);
+  });
+
+  it('ignores a stored unlocked counter that disagrees with the completed list', () => {
+    // A legacy or edited save cannot grant access the record does not support.
+    const p = parseProgress(JSON.stringify({ version: 1, unlocked: 70, completed: [CAMPAIGN_LEVELS[0]!.id] }));
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[1]!)).toBe(true);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[2]!)).toBe(false);
+    expect(currentLevel(p).number).toBe(2);
+  });
+
+  it('cannot finish the campaign without every level: a gap leaves it unfinished', () => {
+    // Win everything EXCEPT level 40. Even with 69 of 70 done, the campaign is not complete and
+    // nothing past the gap opens.
+    let p = freshProgress();
+    for (let n = 1; n <= 70; n++) if (n !== 40) p = win(p, n);
+    expect(p.completed).toHaveLength(69);
+    expect(currentLevel(p).number).toBe(40);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[39]!)).toBe(true);
+    expect(isUnlocked(p, CAMPAIGN_LEVELS[40]!)).toBe(false);
+    // And winning 40 is what finishes it.
+    const done = win(p, 40);
+    expect(done.completed).toHaveLength(70);
+    expect(isUnlocked(done, CAMPAIGN_LEVELS[69]!)).toBe(true);
+  });
+
+  it('replaying a completed level never opens anything new', () => {
+    // A replay win of level 1 when the frontier is 6 must not move the frontier.
+    let p = freshProgress();
+    for (let n = 1; n <= 5; n++) p = win(p, n);
+    const replay = win(p, 1);
+    expect(isUnlocked(replay, CAMPAIGN_LEVELS[5]!)).toBe(true);
+    expect(isUnlocked(replay, CAMPAIGN_LEVELS[6]!)).toBe(false);
+    expect(replay.unlocked).toBe(6);
+  });
+});
+

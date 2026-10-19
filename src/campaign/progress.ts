@@ -28,7 +28,9 @@ export type CampaignResult = {
 
 export type CampaignProgress = {
   version: typeof CAMPAIGN_PROGRESS_VERSION;
-  /** Count of levels unlocked from the start (>= 1). Level n is playable iff n <= unlocked. */
+  /** Derived count of levels open from the start (>= 1). Level n is playable iff n <= unlocked.
+   *  It is RECOMPUTED from `completed` rather than trusted, so it can never disagree with the
+   *  record — see `unlockedThrough`. */
   unlocked: number;
   /** Ids of levels won at least once. */
   completed: string[];
@@ -76,13 +78,39 @@ export const parseProgress = (raw: string | null): CampaignProgress => {
       if (id && r) out.best[id] = r;
     }
   }
+  // The stored counter is NOT trusted: it is recomputed from the completed list, so a save that
+  // claims more progress than it records cannot grant access to a level the player skipped.
+  out.unlocked = unlockedThrough(out);
   return out;
 };
 
 export const serializeProgress = (p: CampaignProgress): string => JSON.stringify(p);
 
-export const isUnlocked = (p: CampaignProgress, level: Pick<CampaignLevel, 'number'>): boolean =>
-  level.number <= p.unlocked;
+/**
+ * The first level you have NOT won, in level order: level 1 for a new player, and after winning
+ * 1..n it is n+1. This is the ONE source of access — the stored `unlocked` is recomputed from it.
+ *
+ * Reads the completed LIST rather than a counter, so a gap cannot be skipped over: if 40 is missing,
+ * nothing past 40 opens, however many later levels are in the record.
+ */
+export const unlockedThrough = (
+  p: CampaignProgress,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): number => {
+  let unlocked = FIRST_CAMPAIGN_LEVEL.number;
+  for (const level of [...levels].sort((a, b) => a.number - b.number)) {
+    if (!p.completed.includes(level.id)) break;
+    unlocked = level.number + 1;
+  }
+  return unlocked;
+};
+
+/** Level n is playable iff every level before it has been won. Order is part of the rule. */
+export const isUnlocked = (
+  p: CampaignProgress,
+  level: Pick<CampaignLevel, 'number'>,
+  levels: readonly CampaignLevel[] = CAMPAIGN_LEVELS,
+): boolean => level.number <= unlockedThrough(p, levels);
 
 export const isCompleted = (p: CampaignProgress, levelId: string): boolean => p.completed.includes(levelId);
 
@@ -98,19 +126,25 @@ const better = (a: CampaignResult | undefined, b: CampaignResult): CampaignResul
 };
 
 /**
- * The progress after one finished campaign attempt. A win unlocks the next level and marks this
- * one completed; a loss changes neither. The best attempt is kept either way. Never mutates `p`.
+ * The progress after one finished campaign attempt. A win marks this one completed and therefore
+ * opens the next level IN ORDER; a loss changes neither. The best attempt is kept either way.
+ * The `unlocked` counter is recomputed from the completed list, never advanced blindly: winning a
+ * replay of an earlier level cannot open anything new. Never mutates `p`.
  */
 export const recordCampaignResult = (
   p: CampaignProgress,
   level: Pick<CampaignLevel, 'id' | 'number'>,
   result: CampaignResult,
-): CampaignProgress => ({
-  version: CAMPAIGN_PROGRESS_VERSION,
-  unlocked: result.won ? Math.max(p.unlocked, level.number + 1) : p.unlocked,
-  completed: result.won && !p.completed.includes(level.id) ? [...p.completed, level.id] : [...p.completed],
-  best: { ...p.best, [level.id]: better(p.best[level.id], result) },
-});
+): CampaignProgress => {
+  const next: CampaignProgress = {
+    version: CAMPAIGN_PROGRESS_VERSION,
+    unlocked: 0,
+    completed: result.won && !p.completed.includes(level.id) ? [...p.completed, level.id] : [...p.completed],
+    best: { ...p.best, [level.id]: better(p.best[level.id], result) },
+  };
+  // Derived after the fact, so a win that leaves a gap opens nothing past the gap.
+  return { ...next, unlocked: unlockedThrough(next) };
+};
 
 /**
  * The level Continue should open: the first unlocked level the player has NOT yet completed
@@ -122,7 +156,7 @@ export const currentLevel = (
 ): CampaignLevel => {
   let furthest = FIRST_CAMPAIGN_LEVEL;
   for (const level of levels) {
-    if (!isUnlocked(p, level)) continue;
+    if (!isUnlocked(p, level, levels)) continue;
     if (level.number > furthest.number) furthest = level;
     if (!isCompleted(p, level.id)) return level;
   }

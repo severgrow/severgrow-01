@@ -453,12 +453,16 @@ device, or produced by a bundle built before the change, must never be refused b
 
 ## Progress and saving
 
-- Level 1 is open by default. **Winning** a level unlocks the next. A loss removes nothing. A
-  completed level stays replayable. Restarting a level reproduces the intended fixed start (the seed
-  is never rerolled).
-- Progress is its own record, `severgrow.campaign.progress.v1`: highest unlocked, the completed ids,
-  and the best attempt per level. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9 array) is
-  never migrated or reshaped.
+- **Strict order (owner, 2026-10-19).** Level 1 is open by default. **Winning** a level opens the next,
+  and it is the only thing that does: access is derived from the completed list, so level *n* is
+  playable only once **every** level before it has been won. The stored `unlocked` counter is
+  recomputed from that list and never trusted, which means a gap cannot be skipped over (**win 69 of
+  70 levels and miss one: nothing past the gap opens**) and a save cannot be edited into a shortcut.
+  A loss removes nothing. A completed level stays replayable. Restarting a level reproduces the
+  intended fixed start (the seed is never rerolled).
+- Progress is its own record, `severgrow.campaign.progress.v1`: the completed ids, the best attempt
+  per level, and the derived unlocked count. Classic's `severgrow.stats.v1` (`winsByLevel`, a length-9
+  array) is never migrated or reshaped.
 - A campaign match is saved under its **own** key (`severgrow.campaign.save.v1`, wrapped with the
   level id around the normal offline save), so the classic save
   (`severgrow.save.v7`) is never overwritten by a campaign game. `severgrow.lastmode.v1` records
@@ -624,7 +628,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); the unlock rule (1 open, win unlocks next, loss removes nothing, replayable) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); **the strict order rule** (access derived from the completed list, a gap opens nothing past it, an edited unlocked counter grants nothing, 69 of 70 leaves the campaign unfinished, a replay opens nothing new) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
