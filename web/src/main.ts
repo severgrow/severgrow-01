@@ -1199,11 +1199,13 @@ function dealIn() {
       const animation = anim(card, [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, rotate: '-12deg', opacity: 0 }, { translate: '0 0', rotate: '0deg', opacity: 1 }], { duration: 420 * timeScale(), delay: i * 70 * timeScale(), easing: 'cubic-bezier(.2,.8,.3,1.05)', fill: 'backwards' });
       if (animation) flying.push(animation);
     });
-    if (!flying.length) { handSettled = true; render(); return; }
+    if (!flying.length) { handSettled = true; if (lessonNow) render(); return; }
     // The real signal: every deal animation has finished (delay included). The light waits for it.
+    // Only a lesson reads this flag, so only a lesson repaints here: a late repaint in a normal
+    // game could hide the How-to sheet the player is reading.
     void Promise.all(flying.map((a) => a.finished.catch(() => undefined))).then(() => {
       handSettled = true;
-      render();
+      if (lessonNow) render();
     });
   });
 }
@@ -5439,7 +5441,10 @@ function renderFirstTip(v: View) {
     else if (!tipsSeen.fruit && v.hand.some((c) => c.suit === null)) tipOpen = 'fruit';
     else if (!tipsSeen.strengthen && session.sel.card !== null && [...targetKinds(v, session.legal, session.sel).values()].includes('strengthen')) tipOpen = 'strengthen';
   }
-  card.hidden = !tipOpen || (IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
+  // An explicitly opened lesson (the How to sheet) belongs to the player, not to the moment: a
+  // background render must never close it just because it is not their ACT turn right now.
+  const openedByPlayer = IS_FUTA04 && openSheet?.id === 'sheet-futa04-help' && !!tipOpen;
+  card.hidden = !tipOpen || (!openedByPlayer && IS_FUTA04 && (!myTurn() || busy() || v.phase !== 'ACT'));
   if (!tipOpen) return;
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
