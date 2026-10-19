@@ -26,6 +26,25 @@ If you change a beat, a word or a position, change it here too. If you change a 
   - Level 10 plays the gentlest bot (level 1).
 - **No text on the map.** Words go in the glass window (instruction ≤ 6 words, reason fits two lines on the smallest phone) or the LED. The map gets only the glow of the lit target and a small ring where a tap landed.
 
+### The top row and the window (2026-10-19)
+
+The lesson's title and its ONE action live in the game's own top row, so the window below carries
+copy only:
+
+    [menu]            TITLE (LED)                    [NEXT]  [logo]
+
+- **No `LEVEL n` kicker** above the lesson window; the level's name is in the row only during the
+  ~1.2 s stage intro. (Other screens that still use the glass keep their kicker.)
+- The title is **centred in the span between the menu button and the right-hand control** (the logo
+  on the compact HUD, or History where it is shown), never in the viewport. It is on the menu
+  button's own row centre. NEXT is a 44 px target at the right end of that span and keeps its
+  blink on explanations and its hidden state when there is nothing to press.
+- The LED shrinks to the room NEXT leaves, so a long title never pushes the button off. On a very
+  narrow phone (320 px) with a wide label, the title steps left beside the button instead.
+- The window starts **4 px under the row** and shares the map's left and right edges; the gutters
+  above and below it are equal. The map takes every pixel the removed rows freed.
+- A wrong tap's answer is shown in the top row, so answering never resizes the map.
+
 ### The light
 
 | Lit thing | Outline |

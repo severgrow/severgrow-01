@@ -103,7 +103,10 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
 **The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
-- the glass window and focus layer live in `web/src/player/glass-surface.ts`.
+- the glass window and focus layer live in `web/src/player/glass-surface.ts`;
+- the lesson's title and its one action (NEXT) live in the game's top row
+  (`web/src/lessons/lesson-bar.ts`, `#lesson-hud`), so the window has no head and no `LEVEL n`
+  kicker in levels 1-10. Every other screen keeps its own chrome.
 
 ## The level schema
 
