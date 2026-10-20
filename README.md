@@ -127,7 +127,7 @@ PW_CHROMIUM=/opt/pw-browsers/chromium npx tsx web/e2e/lessons-3.ts     # ONLY=ru
 | Focus layer shapes (`lesson` option, `hexOutline`, `cardOutline`) | `web/src/player/glass-surface.ts` |
 | Words | `src/strings.ts` → `LESSON` |
 | Scripts (must match the code) | `docs/LESSON-SCRIPTS.md` |
-| /3 compose step | `scripts/compose-lessons3.mjs` + `.github/workflows/futasaku04-preview.yml` |
+| /2 and /3 (retired, forward to /) | `scripts/compose-retired-routes.mjs` + `.github/workflows/futasaku04-preview.yml` |
 
 **Changing a lesson:** keep it one idea, and author the position so the moment must happen.
 1. Bump its `version`.

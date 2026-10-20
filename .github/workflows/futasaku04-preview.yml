@@ -1,12 +1,13 @@
 name: Futasaku 0.4 Pages preview
 
-# Runs from the futa0.4 deployment ref (and futa0.5-online so /futa0.5/ stays composed).
-# The existing Main/Dev/Test2 workflow and refs stay untouched; their
-# currently published SHAs are rebuilt and checked for parity.
-# pages.yml Main deploy logic is not modified.
+# futasaku.com is published from ONE branch: futa0.5-online, and only after CI passed on the exact
+# commit (the ci-gate job). /futa0.4/ and /futa-test/ are still built from futa0.4's HEAD, and the
+# published Main/Dev/Test2 SHAs are rebuilt and checked for parity, but a push to any other branch
+# no longer publishes anything (owner decision, 2026-10-20). /2/ and /3/ are retired: they forward
+# to the root (scripts/compose-retired-routes.mjs).
 on:
   push:
-    branches: [futa0.4, futa0.5-online, futa0.5-onboarding, futa0.5-onboarding-3]
+    branches: [futa0.5-online]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +25,8 @@ jobs:
   # commit and stop here unless it passed. CI and this workflow both start on the same push, so
   # this waits ~20 min while CI runs; a red or cancelled CI leaves the site as it was.
   ci-gate:
+    # A manual run from any other branch would publish that branch at the root: refuse it.
+    if: github.ref_name == 'futa0.5-online'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
@@ -55,22 +58,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: preview
-          ref: ${{ github.ref_name == 'futa0.4' && github.sha || 'futa0.4' }}
+          ref: futa0.4
       - name: Check out Futasaku 0.5 online source
         uses: actions/checkout@v4
         with:
           path: futa05
-          ref: ${{ github.ref_name == 'futa0.5-online' && github.sha || 'futa0.5-online' }}
-      - name: Check out the onboarding line (/2/)
-        uses: actions/checkout@v4
-        with:
-          path: onboarding
-          ref: ${{ github.ref_name == 'futa0.5-onboarding' && github.sha || 'futa0.5-onboarding' }}
-      - name: Check out levels 1-10 as the tutorial (/3/)
-        uses: actions/checkout@v4
-        with:
-          path: lessons3
-          ref: ${{ github.ref_name == 'futa0.5-onboarding-3' && github.sha || 'futa0.5-onboarding-3' }}
+          ref: ${{ github.sha }}
       - name: Read exact published source commits
         id: published
         run: |
@@ -102,8 +95,6 @@ jobs:
           cache-dependency-path: |
             preview/package-lock.json
             futa05/package-lock.json
-            onboarding/package-lock.json
-            lessons3/package-lock.json
       - name: Install and validate Futasaku 0.4
         working-directory: preview
         run: |
@@ -118,42 +109,6 @@ jobs:
           mv web/dist-futa04 web/dist
       - name: Build /futa0.5/ preview channel
         working-directory: futa05
-        env:
-          CHANNEL: futa05
-          VITE_FIND_OPPONENT: '1'
-          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          for v in VITE_DUEL_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
-            test -n "${!v}" || { echo "Missing Actions Variable $v (VITE_DUEL_API_URL may fall back to FUTA05_API_URL)"; exit 1; }
-          done
-          npm ci
-          npm run web:build
-          node scripts/check-channel-assets.mjs
-          echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
-      # /2/ — the onboarding line, built from `futa0.5-onboarding` and published beside the root so
-      # the teaching work can be played on a real phone without changing the released site.
-      - name: Build the /2/ onboarding channel
-        working-directory: onboarding
-        env:
-          CHANNEL: futa05
-          VITE_FIND_OPPONENT: '1'
-          VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-        run: |
-          for v in VITE_DUEL_API_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
-            test -n "${!v}" || { echo "Missing Actions Variable $v (VITE_DUEL_API_URL may fall back to FUTA05_API_URL)"; exit 1; }
-          done
-          npm ci
-          npm run web:build
-          node scripts/check-channel-assets.mjs
-          echo "$(git rev-parse HEAD)" > web/dist/BUILD_SHA
-      # /3/ — levels 1-10 as the tutorial, built from `futa0.5-onboarding-3` and published beside the
-      # root and /2/ exactly the way /2/ is, so it can be played on a real phone.
-      - name: Build the /3/ lessons channel
-        working-directory: lessons3
         env:
           CHANNEL: futa05
           VITE_FIND_OPPONENT: '1'
@@ -198,9 +153,8 @@ jobs:
           node candidate/scripts/compose-pages.mjs live/web/dist dev/web/dist candidate/web/dist site \
             "$MAIN_SHA" "$DEV_SHA" "$TEST2_SHA"
           node preview/scripts/compose-futasaku-preview.mjs site preview/web/dist "$(git -C preview rev-parse HEAD)" preview/web/dist-futa-test
-          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin \
-            onboarding/web/dist "$(git -C onboarding rev-parse HEAD)"
-          node lessons3/scripts/compose-lessons3.mjs site lessons3/web/dist "$(git -C lessons3 rev-parse HEAD)"
+          node futa05/scripts/compose-futa05-preview.mjs site futa05/web/dist "$(git -C futa05 rev-parse HEAD)" futa05/web/dist-admin
+          node futa05/scripts/compose-retired-routes.mjs site
           node preview/scripts/check-pages-parity.mjs site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -17,8 +17,14 @@
 ## How futasaku.com is published (as of 2026-10-20)
 
 - **`futa0.5-online` IS the live site.** A push there runs `.github/workflows/futasaku04-preview.yml`
-  (the name is historic), which builds `futa0.5-online` as the root of futasaku.com, plus `/2/`
-  (`futa0.5-onboarding`) and `/3/` (`futa0.5-onboarding-3`), and deploys GitHub Pages.
+  (the name is historic), which builds `futa0.5-online` as the root of futasaku.com and deploys
+  GitHub Pages. It is the ONLY branch whose push publishes the site: `futa0.4`,
+  `futa0.5-onboarding` and `futa0.5-onboarding-3` no longer deploy (`/futa0.4/` is still rebuilt
+  from `futa0.4`'s HEAD on each futa0.5-online deploy). `/2/` and `/3/` are retired: they forward
+  to the root and remove their old service workers (`scripts/compose-retired-routes.mjs`).
+- Known gap outside this branch: `main`'s `pages.yml` still deploys on a push to `main`, a `dev`
+  test-copy push or green CI on `Main2.0`, and that would put the old Main build at the root.
+  Do not push to those branches without the owner's go-ahead.
 - That deploy first **waits for CI (`ci.yml`) to pass on the same commit**; red CI publishes nothing.
   Never push to `futa0.5-online` without the owner's go-ahead; work on a branch, let CI go green,
   then fast-forward.

@@ -294,3 +294,42 @@ describe('compose-futa05-preview: the admin route is opt-in', () => {
     );
   });
 });
+
+describe('compose-retired-routes: /2/ and /3/ forward to the root and clean up after themselves', () => {
+  const retired = join(repo, 'scripts', 'compose-retired-routes.mjs');
+  const runRetired = (): string => {
+    const root = run();
+    execFileSync(process.execPath, [retired, 'site'], { cwd: root, encoding: 'utf8' });
+    return root;
+  };
+
+  it('replaces each route with a page that forwards to the root, keeping the invite hash', () => {
+    const root = runRetired();
+    for (const route of ['2', '3']) {
+      const page = read(root, 'site', route, 'index.html');
+      expect(page).toContain("location.replace('/' + location.search + location.hash)");
+      expect(page).toContain('content="0; url=/"');
+      expect(page).not.toContain('./assets/');
+      expect(existsSync(join(root, 'site', route, 'assets'))).toBe(false);
+    }
+  });
+
+  it('serves a worker at the old address that deletes only its own cache and unregisters', () => {
+    const root = runRetired();
+    const two = read(root, 'site', '2', 'futa04-sw.js');
+    const three = read(root, 'site', '3', 'futa04-sw.js');
+    expect(two).toContain('"futa05onboarding-"');
+    expect(three).toContain('"futa05lessons3-"');
+    for (const worker of [two, three]) {
+      expect(worker).toContain('self.registration.unregister()');
+      expect(worker).not.toContain("addEventListener('fetch'");
+    }
+  });
+
+  it('keeps the released root and the root worker guard covering both routes', () => {
+    const root = runRetired();
+    expect(read(root, 'site', 'index.html')).toBe(FUTA05_HTML);
+    expect(read(root, 'site', 'futa04-sw.js')).toContain('futa-test|admin|2|3)');
+    expect(existsSync(join(root, 'site', 'firststep', '3'))).toBe(false);
+  });
+});
