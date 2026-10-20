@@ -363,6 +363,51 @@ html.futa04-lesson .sheet { z-index: 51; }
   text-wrap: pretty;
 }
 .large-text #lesson-plate .lesson-copy { font-size: 15px; line-height: 1.4; }
+/* The Bloom lesson's static example: three tiny faces per row, inside the SAME caption box.
+   No new overlay, no animation, no border of its own; it is sized to stay legible at 360 px. */
+#lesson-plate .lesson-example {
+  margin: 5px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+}
+#lesson-plate .lesson-example[hidden] { display: none; }
+#lesson-plate .lesson-example-row {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+}
+#lesson-plate .lesson-example-row[hidden] { display: none; }
+#lesson-plate .lesson-example-card {
+  --cw: 24px;
+  --ch: 30px;
+  width: 24px;
+  height: 30px;
+  padding: 1px 0 2px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  align-items: center;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--suit, #f0e9dc) 42%, transparent);
+  background: rgba(20, 21, 21, 0.88);
+  color: var(--suit, #f0e9dc);
+  box-shadow: none;
+}
+#lesson-plate .lesson-example-card .futa04-card-art { display: none; }
+#lesson-plate .lesson-example-card :is(.c-num, .c-suit) { opacity: 1; }
+#lesson-plate .lesson-example-card .c-num {
+  font: 700 11px/1 var(--font-ui, 'Fragment Mono', ui-monospace, monospace);
+  padding: 0;
+}
+#lesson-plate .lesson-example-card .c-suit svg { width: 11px; height: 11px; }
+.large-text #lesson-plate .lesson-example-card { width: 30px; height: 40px; }
+.large-text #lesson-plate .lesson-example-card .c-num { font-size: 13px; }
+.large-text #lesson-plate .lesson-example-card .c-suit svg { width: 13px; height: 13px; }
+.reduce-motion #lesson-plate .lesson-example-card { transition: none !important; }
 .reduce-motion #lesson-plate { transition: none !important; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
    and the grayscale+brightness crush leaves the board nearly black). */

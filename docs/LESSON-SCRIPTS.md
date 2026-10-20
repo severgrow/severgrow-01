@@ -269,11 +269,18 @@ The same in every level:
   - You hold three 3s (one Bloom) and no other Bloom.
   - Your tile -1,1 (2). Their home's sides are held by 9s, so no Bloom can surround it.
 - **Beats:**
-  1. LIT the three cards | BOX: "Bloom: three cards with the same number, or three in a row in one suit." | tap anywhere
+  1. LIT the three cards | BOX: "Bloom: three cards with the same number, or three in order in one suit." | tap anywhere
   2. LIT Bloom | DISPLAY: TAP BLOOM | Bloom picked | THREE CARDS OR MORE, SAME NUMBER, OR COUNTING UP
   3. LIT the Bloom's tiles | DISPLAY: TAP THE LIT TILES | Bloom played
   4. BLOOM | BOX: "A Bloom is an extra move: it grows several tiles at once." | tap anywhere
   5. Then the turn. Ends on points.
+- **The explanation's example (owner, 2026-10-20):** under that one sentence, in the same box, a
+  compact set — 3, 3, 3 in three suits — and, when it fits, a second row — 3, 4, 5 in one suit.
+  Two rows of tiny faces built from the cards' own face markup (no new art), static, no overlay, no
+  animation. It grows back row by row only while the box sits on **no more hexes than the sentence
+  alone**: 412x915 and taller phones show both rows, a 390x844 phone shows the set, and a phone
+  whose caption already sits over the map (360x640, 320x568) keeps the sentence alone. The box
+  still never covers a lit target and the map is not padded for it.
 - **Finish:** YOU WIN / YOU LEARNED: BLOOM THREE AT ONCE (✿)
 
 ## LEVEL 6 — KNOCK-OUT
