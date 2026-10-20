@@ -443,7 +443,7 @@ export const ONLINE_CSS = `
 .world-grid {
   position: relative;
   flex: 1 1 0; min-height: 0;
-  width: min(100%, 1100px, calc((100dvh - 210px) * 274.49 / 272));
+  width: min(100%, 1100px, calc((100dvh - 210px) * 271.11 / 256.48));
   max-height: 100%; margin: 0 auto;
   display: grid; place-items: center; overflow: hidden;
   border-radius: 14px; background: radial-gradient(ellipse at 50% 44%, #232721 0, #171b18 55%, #101412 100%);

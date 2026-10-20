@@ -7,17 +7,62 @@ const grant = (store: MemoryWorldEconomyStore, playerId: string, sourceKey: stri
   store.settle({ playerId, sourceKey, mode: 'campaign', outcome: 'win', opponentId: null, campaignLevel: 1, now });
 
 describe('frozen shared hex world', () => {
-  it('contains 183 unique connected cells with no one-cell tails', () => {
-    expect(WORLD_CELLS).toHaveLength(183);
-    expect(WORLD_CELL_IDS.size).toBe(183);
+  it('is 275 unique connected cells with no one-cell tails (v2)', () => {
+    expect(WORLD_CELLS).toHaveLength(275);
+    expect(WORLD_CELL_IDS.size).toBe(275);
     const seen = new Set<string>([WORLD_CELLS[0]!.id]);
     const queue = [WORLD_CELLS[0]!.id];
     while (queue.length) for (const id of worldNeighbours(queue.shift()!)) if (!seen.has(id)) { seen.add(id); queue.push(id); }
-    expect(seen.size).toBe(183);
+    expect(seen.size).toBe(275);
     expect(WORLD_CELLS.every((c) => worldNeighbours(c.id).length >= 2)).toBe(true);
   });
+
+  it('keeps EVERY v1 cell: an existing claim can never be orphaned by the expansion', () => {
+    // The v1 geometry, reproduced here so the test fails if a v1 id is ever dropped.
+    const WIDTHS = [6, 8, 10, 11, 12, 13, 13, 14, 14, 13, 13, 12, 11, 10, 9, 8, 6];
+    const SHIFT = [0, 0, 0, 0, 0, -1, -1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0];
+    const v1: string[] = [];
+    for (let index = 0; index < WIDTHS.length; index++) {
+      const r = index - 8;
+      const first = Math.floor(-r / 2 - WIDTHS[index]! / 2) + SHIFT[index]!;
+      for (let offset = 0; offset < WIDTHS[index]!; offset++) v1.push(`${first + offset},${r}`);
+    }
+    expect(v1).toHaveLength(183);
+    for (const id of v1) expect(WORLD_CELL_IDS.has(id), id).toBe(true);
+  });
+
+  it('grew by about half and its edge is irregular, not a bigger hexagon', () => {
+    expect(WORLD_CELLS.length).toBeGreaterThan(183 * 1.4);
+    expect(WORLD_CELLS.length).toBeLessThan(183 * 1.6);
+    // A bigger hexagon (or any ring-grown shape) has an edge that moves by at most one cell per
+    // row. The grown map does not: measure both edges and require at least one row where an edge
+    // jumps by two or more, which is what makes the silhouette irregular.
+    const rows = new Map<number, { lo: number; hi: number }>();
+    for (const c of WORLD_CELLS) {
+      const row = rows.get(c.r);
+      if (!row) rows.set(c.r, { lo: c.q, hi: c.q });
+      else { row.lo = Math.min(row.lo, c.q); row.hi = Math.max(row.hi, c.q); }
+    }
+    const ordered = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
+    const jumps: number[] = [];
+    for (let i = 1; i < ordered.length; i++) {
+      jumps.push(Math.abs(ordered[i]!.lo - ordered[i - 1]!.lo));
+      jumps.push(Math.abs(ordered[i]!.hi - ordered[i - 1]!.hi));
+    }
+    expect(Math.max(...jumps)).toBeGreaterThanOrEqual(2);
+    // And it is not a single row of teeth either: several rows have a non-trivial edge step.
+    expect(jumps.filter((j) => j >= 2).length).toBeGreaterThan(3);
+  });
+
   it('keeps all 64 historical tile coordinates in the expanded map', () => {
     for (let oldCell = 0; oldCell < 64; oldCell++) expect(WORLD_CELL_IDS.has(legacyWorldCell(oldCell))).toBe(true);
+  });
+
+  it('every id matches its own q,r and no cell points at a missing neighbour', () => {
+    for (const c of WORLD_CELLS) {
+      expect(c.id).toBe(`${c.q},${c.r}`);
+      for (const id of worldNeighbours(c.id)) expect(WORLD_CELL_IDS.has(id)).toBe(true);
+    }
   });
 });
 

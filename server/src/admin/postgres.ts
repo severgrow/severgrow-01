@@ -892,7 +892,7 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           where ${PLAYER_OF_NOT_TEST('c.owner_id')}
           order by c.claimed_at desc limit 20`,
       );
-      // Bounded by design: the v1 world is 183 hexes, so every claim fits in one page. The limit
+      // Bounded by design: the world is 275 hexes (v2), so every claim fits in one page. The limit
       // is a guard against a future expansion, not a silent truncation.
       const all = await pool.query(
         `select c.cell_id, c.owner_id, c.claimed_at from world_claims c
