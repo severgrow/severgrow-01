@@ -306,6 +306,14 @@ export class BoardView {
     el('feMergeNode', { in: 'b' }, merge);
     el('feMergeNode', { in: 'SourceGraphic' }, merge);
 
+    // The LIGHT contract's low-alpha tint for a top-rank tile. It reads the root variables, so it
+    // follows the display's tone without ever replacing the owner's moss/lava halo underneath.
+    // `var()` is unreliable as an SVG presentation attribute, so the colour is set as a style.
+    const lightTint = el('radialGradient', { id: this.id('light-tint'), cx: 0.5, cy: 0.5, r: 0.5 }, defs);
+    el('stop', { offset: 0, style: 'stop-color:var(--light-core,#f5d8a4);stop-opacity:.18' }, lightTint);
+    el('stop', { offset: 0.55, style: 'stop-color:var(--light-core,#f5d8a4);stop-opacity:.07' }, lightTint);
+    el('stop', { offset: 1, style: 'stop-color:var(--light-core,#f5d8a4);stop-opacity:0' }, lightTint);
+
     materialDefs(defs, this.id, look);
     // Material pass 2: one world-space picture for every moss and lava tile (seamless).
     this.world = null;
@@ -794,6 +802,9 @@ export class BoardView {
       now.add(key);
       const { x, y } = centerOf(key);
       const e = sprite.extent;
+      // One halo for the tile: the owner's baked sprite. The light only adds a low-alpha tint
+      // UNDER it in the display's tone (never a second owner-coloured halo).
+      el('circle', { cx: x, cy: y, r: S * 1.55, fill: `url(#${this.id('light-tint')})`, class: 'top-glow-tint', 'aria-hidden': 'true' }, layer);
       const img = el('image', { href: sprite.url, x: x - e, y: y - e, width: e * 2, height: e * 2, class: `top-glow ${kind}`, 'data-key': key, style: `--op:${Math.min(1, glow.opacity * this.glowScale).toFixed(3)}` }, layer);
       // newly at the top (a Strengthen, or a tile grown at the top rank): fade in, nothing else
       if (this.glowKeys && !this.glowKeys.has(key)) img.classList.add('glow-in');

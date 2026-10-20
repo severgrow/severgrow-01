@@ -7574,7 +7574,7 @@ const dragLayer = mountDragLayer({
       ? document.elementsFromPoint(x, y)
       : [document.elementFromPoint(x, y)].filter((el): el is Element => !!el);
     for (const el of stack) {
-      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-spill, #smart-spill')) continue;
+      if (el.closest?.('.drag-ghost, #smart-led-window, #smart-led-bloom, #smart-spill')) continue;
       if (el.closest?.('#hand, #futa04-actions, #smart-context, #smart-bloom, #moves, button, .bloom-options, .bloom-toggle')) return false;
       if (el.closest?.('#discard, #futa04-box')) return true;
     }
