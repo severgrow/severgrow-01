@@ -1,7 +1,7 @@
 import type { DuelClient } from '../../../server/src/client.js';
 import type { WorldMapPayload } from '../../../server/src/protocol.js';
 import type { SeedWallet } from '../../../server/src/seeds/types.js';
-import { seedIcon } from './seed-icon.js';
+import { seedBalanceLabel, seedIcon } from './seed-icon.js';
 import { ownerLine } from './world-selection.js';
 
 type Identity = { token: string; playerId: string };
@@ -109,7 +109,7 @@ export class WorldView {
     private paintWallet() {
       const node = document.getElementById('online-world-wallet')!;
       node.replaceChildren();
-      node.append(seedIcon(22), document.createTextNode(this.wallet ? `${this.wallet.balance} SEEDS` : 'SIGN IN TO GROW'));
+      node.append(seedIcon(22), document.createTextNode(this.wallet ? seedBalanceLabel(this.wallet.balance) : 'SIGN IN TO GROW'));
       // The old "N / 183 grown - one shared world" caption is GONE (owner, 2026-10-16): the map shows
       // the world, so a caption counting it was noise. The element no longer exists in the markup, and
       // this method no longer writes to it.

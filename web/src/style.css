@@ -386,6 +386,71 @@ button {
 }
 .menu-buttons .btn:focus-visible,
 #levels .level-grid .difficulty-tile:focus-visible { outline: 2px solid var(--fu-cream); outline-offset: 2px; }
+
+/* ---------- the Territory entry's instrument read-outs (owner brief, 2026-10-20) ----------
+   Seeds on the left, tiles held on the right, the label between them on ONE centre line. The three
+   cells are placed EXPLICITLY, so the label stays geometrically centred even while both read-outs
+   are hidden: an unknown value must never shift "TERRITORY" sideways, and the entry must read as the
+   same button whether the numbers are there or not.
+   This is not a badge and not two loose numbers: each side is a quiet mono read-out with the game's
+   own glyph (the authored seed, the board's hexagon), the same 16px cell, the same baseline, and a
+   hairline rule that joins it to the label like one instrument panel. */
+#menu .menu-buttons .btn.menu-territory {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  /* The shared big-entry frame and its 44px tap floor are untouched; the sides add no height. */
+  padding: 1px 16px 0;
+}
+.menu-territory-label { grid-area: 1 / 2; }
+.menu-territory-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--fu-cream-70);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: var(--w-ui-medium, 500);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+.menu-territory-seeds { grid-area: 1 / 1; justify-self: start; }
+.menu-territory-tiles { grid-area: 1 / 3; justify-self: end; }
+.menu-territory-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.menu-territory-icon > svg { width: 16px; height: 16px; }
+.menu-territory-icon .seed-icon { color: var(--fu-cream-70); }
+/* Tabular digits in a shared three-cell column, hugging their own glyph: a 9 becomes a 10 (or a 999
+   a 1,000) inside the same cell, and both sides keep the same width for the usual 1-3 digit values,
+   so the two halves stay mirror images of each other. The number is updated in place (textContent
+   only), so a refresh never re-lays anything out. */
+.menu-territory-value { min-width: 3ch; text-align: start; }
+.menu-territory-tiles .menu-territory-value { text-align: end; }
+/* The one structural mark shared by both sides: a cream-22 hairline between number and label. */
+.menu-territory-seeds::after,
+.menu-territory-tiles::before {
+  content: '';
+  flex: none;
+  width: 1px;
+  height: 12px;
+  margin: 0 3px;
+  border-radius: 1px;
+  background: var(--fu-cream-22);
+}
+/* The smallest phones: the label and the two read-outs step down together so even a five-digit
+   balance stays inside the entry. Nothing hides, and the button keeps its 44px tap floor. */
+@media (max-width: 340px) {
+  #menu .menu-buttons .btn.menu-territory { padding-inline: 12px; }
+  #menu .menu-territory-side { gap: 4px; font-size: 0.8rem; }
+  #menu .menu-territory-label { font-size: 0.95rem; letter-spacing: 0.05em; }
+}
 .menu-lessons {
   display: grid;
   grid-template-columns: 1fr 1fr;

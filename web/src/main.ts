@@ -692,7 +692,10 @@ function layoutMenu(canContinue: boolean) {
   // hidden here (the accounts module also refuses to reveal it on this channel), so a guest sees
   // no sign-in entry on the menu itself; the online hub and Settings still offer the same flow.
   $('menu-login').hidden = FEATURES.campaign;
-  $('menu-world').textContent = MENU.world;
+  // The label is its own node (owner brief, 2026-10-20): the Territory entry also carries the
+  // player's Seeds and tile counts, painted by web/src/online/lobby-ui.ts from ONE menu-show read.
+  // Writing the button's textContent here would wipe both read-outs, so this pass writes the label.
+  $('menu-world-label').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
   // only when the build has an online endpoint to read the map from.

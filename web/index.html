@@ -138,8 +138,23 @@
           <!-- The world map: a top-level destination of its own, in the main menu with Tutorial and
                Settings (owner direction 2026-10-15, option 'split' — deliberately NOT in the PLAY
                submenu). Revealed by main.ts when the build has an online endpoint and the screen it
-               opens is live, so it can never be a dead entry. -->
-          <button id="menu-world" class="btn ghost big" type="button" hidden></button>
+               opens is live, so it can never be a dead entry.
+               The player's two numbers ride INSIDE it (owner brief, 2026-10-20): Seeds on the left,
+               tiles held on the right, the label between them. Each side is its own grid cell, so the
+               label is centred even while both read-outs are hidden; the numbers are painted only
+               from a successful wallet + world read, and start hidden so an unknown value can never
+               read as 0. -->
+          <button id="menu-world" class="btn ghost big menu-territory" type="button" hidden>
+            <span id="menu-world-seeds" class="menu-territory-side menu-territory-seeds" hidden>
+              <span id="menu-world-seeds-icon" class="menu-territory-icon" aria-hidden="true"></span>
+              <span id="menu-world-seeds-value" class="menu-territory-value">0</span>
+            </span>
+            <span id="menu-world-label" class="menu-territory-label">TERRITORY</span>
+            <span id="menu-world-tiles" class="menu-territory-side menu-territory-tiles" hidden>
+              <span id="menu-world-tiles-value" class="menu-territory-value">0</span>
+              <span class="menu-territory-icon i" data-icon="tile" aria-hidden="true"></span>
+            </span>
+          </button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
         </div>
