@@ -575,6 +575,129 @@ try {
       await page.close();
     }
   }
+  if (ONLY === 'all' || ONLY === 'bloom') {
+    console.log('\nL5 Bloom explanation: the owner copy and the compact example in the same box:');
+    for (const [w, h] of [[360, 640], [390, 844]] as const) {
+      const tag = `${w}x${h}`;
+      const { page, errors } = await newPage(w, h);
+      await page.goto(URL3, { waitUntil: 'networkidle' });
+      const done = CAMPAIGN_LEVELS.slice(0, 4).map((l) => l.id);
+      await page.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 5, completed: done, best: {} }))})`);
+      await page.reload({ waitUntil: 'networkidle' });
+      await openNextLevel(page);
+      await page.waitForSelector('#lesson-plate:not([hidden]) .lesson-copy', { timeout: 15000 });
+      await page.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === '5:intro:bloom-cards', undefined, { timeout: 15000 });
+      await page.waitForTimeout(500);
+      const beat = await hook<any>(page, 'lesson');
+      const g = await geometry(page);
+      check(g.plateCopy.includes('three in order in one suit'), `${tag}: the Bloom sentence says three in order in one suit`);
+      check(!g.plateCopy.includes('in a row'), `${tag}: the Bloom sentence never says in a row`);
+      const ex = await page.evaluate(`(() => {
+        const plate = document.getElementById('lesson-plate');
+        const box = plate.querySelector('.lesson-example');
+        const cards = [...(box ? box.querySelectorAll('.lesson-example-card') : [])];
+        const rows = [...(box ? box.querySelectorAll('.lesson-example-row') : [])].filter(r => !r.hidden);
+        const size = (c) => { const r = c.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+        return {
+          present: !!box && !box.hidden,
+          inside: box ? box.parentElement === plate : false,
+          rows: rows.map(r => r.querySelectorAll('.lesson-example-card').length),
+          cards: cards.length,
+          nums: cards.map(c => (c.querySelector('.c-num')?.textContent || '').trim()),
+          sizes: cards.map(size),
+          fonts: cards.map(c => parseFloat(getComputedStyle(c.querySelector('.c-num')).fontSize)),
+          animations: box ? box.getAnimations({ subtree: true }).length : -1,
+          platePosition: getComputedStyle(plate).position,
+          padTop: parseFloat(getComputedStyle(document.getElementById('board-wrap')).paddingTop) || 0,
+          scroll: { h: document.documentElement.scrollHeight, ih: innerHeight },
+        };
+      })()`) as {
+        present: boolean; inside: boolean; rows: number[]; cards: number; nums: string[];
+        sizes: { w: number; h: number }[]; fonts: number[]; animations: number;
+        platePosition: string; padTop: number; scroll: { h: number; ih: number };
+      };
+      check(ex.inside, `${tag}: the example lives inside the ONE caption box (no new overlay)`);
+      // On a short phone the box may sit over unlit hexes, so both rows always fit. On a tall
+      // phone the free gap is about 54 px: the example gives way (run row first, then the whole
+      // example) rather than covering a hex or pushing the map — the sentence always stays.
+      if (ex.present) {
+        check(ex.rows.length >= 1 && ex.rows.length <= 2 && ex.rows.every((n) => n === 3), `${tag}: the set, and the run when it fits (${ex.rows.join(' + ')})`);
+        check(ex.nums.slice(0, 3).join('') === '333', `${tag}: the set is 3-3-3 (${ex.nums.slice(0, 3).join('-')})`);
+        check(ex.rows.length === 1 || ex.nums.slice(3).join('') === '345', `${tag}: a second row is the run 3-4-5 (${ex.nums.slice(3).join('-') || 'dropped to fit'})`);
+        const smallest = Math.min(...ex.sizes.map((s) => s.w));
+        check(smallest >= 20, `${tag}: every example face is legible at this width (${smallest}px wide)`);
+        check(Math.min(...ex.fonts) >= 10, `${tag}: the example numbers are at least 10 px (${Math.min(...ex.fonts)}px)`);
+      }
+      if (h < 800) {
+        check(ex.present && ex.rows.length === 2, `${tag}: the short phone shows both rows (${ex.rows.join(' + ')})`);
+      } else if (!ex.present) {
+        // The tall phone kept the sentence and took the example away, exactly so the caption
+        // stays in its gap (checkCockpit asserts it covers no hex at this height).
+        check(!!g.plateCopy, `${tag}: the tall phone keeps the sentence when the example cannot fit`);
+        check(ex.cards === 0, `${tag}: and leaves no example markup behind`);
+      } else {
+        check(true, `${tag}: the tall phone fits the example in its gap (${ex.rows.join(' + ')})`);
+      }
+      check(ex.animations === 0, `${tag}: the example is static (no animation)`);
+      check(ex.platePosition === 'fixed' && ex.padTop < 2, `${tag}: the box never pushes the map (${ex.platePosition}, pad ${ex.padTop}px)`);
+      check(ex.scroll.h <= ex.scroll.ih + 1, `${tag}: the example adds no page scroll`);
+      checkCockpit(g, tag, true);
+      await checkPlateClear(page, beat.beat.lit, `${tag} Bloom example`);
+
+      // The lit lesson card is a pressable surface like every other card.
+      const pts = await litPoints(page, beat.beat.lit);
+      check(!!pts[0], `${tag}: the explanation lights a card`);
+      if (pts[0]) {
+        await page.mouse.move(pts[0].x, pts[0].y);
+        await page.mouse.down();
+        await page.waitForTimeout(40);
+        const painted = await page.evaluate(`(() => {
+          const el = document.querySelector('[data-pressed="true"]');
+          return { any: !!el, card: !!el && !!el.closest('#hand .card'), what: el ? (el.id || el.className || el.tagName) : 'none', under: (() => { const u = document.elementFromPoint(${pts[0].x}, ${pts[0].y}); return u ? (u.id || u.className || u.tagName) : 'none'; })() };
+        })()`) as { any: boolean; card: boolean; what: string; under: string };
+        await page.mouse.up();
+        check(painted.card, `${tag}: the lit lesson card paints the press (${painted.what} / under ${painted.under})`);
+      }
+      if (SHOTS) await page.screenshot({ path: `${SHOTS}/bloom-example-${w}x${h}.png` });
+      assert.deepEqual(errors, [], `${tag} Bloom example: no page errors: ${errors.join(' | ')}`);
+      await page.close();
+
+      // The same box under Reduce motion: present, still, and clear of the lit card.
+      const rm = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+      const rmErrors: string[] = [];
+      rm.on('pageerror', (e) => rmErrors.push(e.message));
+      await rm.addInitScript(`
+        localStorage.setItem('futa05-3:severgrow.settings.v1', ${JSON.stringify(JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, reduceMotion: true, speed: 'normal' }))});
+        localStorage.setItem('futa05:severgrow.settings.v1', ${JSON.stringify(JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, reduceMotion: true, speed: 'normal' }))});
+      `);
+      await rm.goto(URL3, { waitUntil: 'networkidle' });
+      await rm.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 5, completed: done, best: {} }))})`);
+      await rm.reload({ waitUntil: 'networkidle' });
+      await openNextLevel(rm);
+      await rm.waitForSelector('#lesson-plate:not([hidden]) .lesson-example', { timeout: 15000 });
+      await rm.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === '5:intro:bloom-cards', undefined, { timeout: 15000 });
+      await rm.waitForTimeout(400);
+      const rmEx = await rm.evaluate(`(() => {
+        const box = document.querySelector('#lesson-plate .lesson-example');
+        return {
+          reduce: document.documentElement.classList.contains('reduce-motion'),
+          cards: box ? box.querySelectorAll('.lesson-example-card').length : 0,
+          animations: box ? box.getAnimations({ subtree: true }).length : -1,
+          plateAnimations: document.getElementById('lesson-plate').getAnimations({ subtree: true }).length,
+        };
+      })()`) as { reduce: boolean; cards: number; animations: number; plateAnimations: number };
+      check(rmEx.reduce, `${tag} reduce motion: the page is in its reduce-motion state`);
+      // The same fit rule applies: both rows on a short phone; on a tall phone the example yields
+      // to the gap, but it is still static (nothing animates either way).
+      if (h < 800) check(rmEx.cards === 6, `${tag} reduce motion: the example still shows both rows (${rmEx.cards} faces)`);
+      else check(rmEx.cards === 0 || rmEx.cards === 6, `${tag} reduce motion: the example follows the same fit rule (${rmEx.cards} faces)`);
+      check(rmEx.animations === 0 && rmEx.plateAnimations === 0, `${tag} reduce motion: the example and the box are static`);
+      await checkPlateClear(rm, (await hook<any>(rm, 'lesson')).beat.lit, `${tag} reduce motion Bloom example`);
+      if (SHOTS) await rm.screenshot({ path: `${SHOTS}/bloom-example-${w}x${h}-reduce.png` });
+      assert.deepEqual(rmErrors, [], `${tag} reduce motion Bloom example: no page errors: ${rmErrors.join(' | ')}`);
+      await rm.close();
+    }
+  }
   if (ONLY === 'all' || ONLY === 'layout') {
     console.log('\nLayout: the header, the plate under the map, and the hexes:');
     for (const [w, h] of [[390, 844], [1440, 900]] as const) {

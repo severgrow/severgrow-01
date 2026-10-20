@@ -26,7 +26,18 @@ describe('lesson words', () => {
     expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the draw pile runs out.');
     expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the draw or discard pile.');
     expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to a discard pile, or double tap to discard a card and finish your turn.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to discard a card and finish your turn.');
+  });
+
+  it('the Bloom explanation says three in order, and the throw line names the Throw pile', () => {
+    // Owner copy (2026-10-20): "three in order in one suit" (never "in a row"), and the Throw
+    // line names the Throw pile (never the discard pile). "double tap to discard a card" stays.
+    expect(LESSON.cardsThatBloomLine).toBe('Bloom: three cards with the same number, or three in order in one suit.');
+    expect(LESSON.cardsThatBloomLine).not.toMatch(/\bin a row\b/i);
+    expect(LESSON.throwLine).toMatch(/\bThrow pile\b/);
+    expect(LESSON.throwLine).not.toMatch(/\bdiscard pile\b/i);
+    expect(LESSON.throwLine).toMatch(/double tap to discard a card/);
+    expect(LESSON.tapThrow).toBe('TAP » TO THROW');
   });
 
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {
