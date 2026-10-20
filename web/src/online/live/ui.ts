@@ -683,7 +683,7 @@ export const mountSettingsSwitch = (initial: boolean, onChange: (on: boolean) =>
 
 /** "Leave live" in the pause menu, shown only while this match is live. */
 export const mountLeaveItem = (onLeave: () => void): ((show: boolean) => void) => {
-  const btn = el('button', 'btn ghost', LIVE.leaveLive);
+  const btn = el('button', 'btn ghost gm-act', LIVE.leaveLive);
   btn.type = 'button';
   btn.id = 'gm-leave-live';
   btn.dataset.live = 'leave';
@@ -695,7 +695,7 @@ export const mountLeaveItem = (onLeave: () => void): ((show: boolean) => void) =
   });
   const resign = document.getElementById('gm-resign');
   if (resign?.parentElement) resign.parentElement.insertBefore(btn, resign);
-  else document.querySelector('#sheet-menu .sheet-body')?.append(btn);
+  else document.querySelector('#sheet-menu .gm-acts')?.append(btn);
   return (show) => {
     btn.hidden = !show;
   };

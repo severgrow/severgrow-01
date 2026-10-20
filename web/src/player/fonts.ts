@@ -111,14 +111,16 @@ ${T} .tagline {
   line-height: 1.5;
   letter-spacing: 0.012em;
 }
-/* Menu / difficulty / pause: CAPS labels in the cream frames (tracking + optical padding). */
+/* Menu / difficulty / pause: CAPS labels in the cream frames (tracking + optical padding).
+   The pause panel's rows, lead key and corner key all share ONE tracking, so the face reads as a
+   single engraved plate rather than three control families (owner direction, 2026-10-20). */
 ${T} #menu .menu-buttons .btn,
 ${T} #levels .level-grid .difficulty-tile,
-${T} #sheet-menu .sheet-body > .btn {
+${T} #sheet-menu .gm-body .btn {
   font-family: var(--font-ui);
   font-weight: var(--w-ui-semibold);
   line-height: 1.2;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.14em;
   padding-top: 1px;
   text-transform: uppercase;
 }

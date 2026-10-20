@@ -534,16 +534,51 @@
       </div>
     </section>
 
+    <!-- The pause panel, as ONE machine face (owner direction, 2026-10-20: between the old menu,
+         the Instrument and the Bare Rail). The parts, top to bottom:
+           - an engraved nameplate: the amber power lamp, the title (Paused / LEVEL n), and Close;
+           - the instrument read-out: both scores on either side of a centre hairline, the turn
+             under them — it is a read-out, never a control;
+           - the lead key: Back to the game (Exit tutorial in a lesson, above it);
+           - the quiet action column, one hairline between rows;
+           - the corner plate: the mode word on the left, SETTINGS as the small utility key on the
+             right. Settings is LAST in the DOM so it is last in tab order, and it is a full 44px
+             target under its small label.
+         Nothing here scrolls; the layout is height-aware so every entry stays visible at 320x568
+         and in landscape (see `#sheet-menu` in style.css). -->
     <section id="sheet-menu" class="sheet" role="dialog" aria-modal="true" aria-labelledby="gm-title" hidden>
-      <header class="sheet-head"><h2 id="gm-title">Paused</h2><button class="icon-only" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button></header>
-      <div class="sheet-body stack">
-        <button id="gm-exit-tutorial" class="btn primary" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
-        <button id="gm-resume" class="btn primary" type="button" aria-label="Back to the game">Back to the game</button>
-        <button id="gm-new" class="btn ghost" type="button" aria-label="New game">New game</button>
-        <button id="gm-howto" class="btn ghost" type="button" aria-label="How to play">How to play</button>
-        <button id="gm-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
-        <button id="gm-resign" class="btn ghost" type="button" aria-label="Resign the duel" hidden>Resign</button>
-        <button id="gm-main" class="btn link" type="button" aria-label="Main menu">Main menu</button>
+      <header class="sheet-head gm-head">
+        <h2 id="gm-title">Paused</h2>
+        <button class="icon-only gm-close" data-close type="button" aria-label="Close"><span class="i" data-icon="close"></span></button>
+      </header>
+      <div class="sheet-body gm-body">
+        <!-- Revealed by main.ts on the product channels (the slim header moves the scores here). -->
+        <div id="gm-status" class="gm-readout" hidden>
+          <div class="gm-scores">
+            <span class="gm-you"><b class="num" id="gm-score-you">0</b><small>You</small></span>
+            <span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span>
+          </div>
+          <div class="gm-turn" id="gm-turn"></div>
+        </div>
+        <!-- A lesson has TWO ways back (leave the tutorial, or return to it). They share one row, so
+             the extra key can never push the column into a scroll on a 320x568 phone; with one key
+             the row is simply full width. -->
+        <div class="gm-leads">
+          <button id="gm-exit-tutorial" class="btn primary gm-lead" type="button" aria-label="Exit tutorial" hidden>Exit tutorial</button>
+          <button id="gm-resume" class="btn primary gm-lead" type="button" aria-label="Back to the game">Back to the game</button>
+        </div>
+        <div class="gm-acts">
+          <button id="gm-new" class="btn ghost gm-act" type="button" aria-label="New game">New game</button>
+          <button id="gm-howto" class="btn ghost gm-act" type="button" aria-label="How to play">How to play</button>
+          <!-- Product channels only (the slim header); main.ts reveals it. -->
+          <button id="gm-history" class="btn ghost gm-act" type="button" aria-label="What happened" hidden>What happened</button>
+          <button id="gm-resign" class="btn ghost gm-act" type="button" aria-label="Resign the duel" hidden>Resign</button>
+          <button id="gm-main" class="btn ghost gm-act gm-act-quiet" type="button" aria-label="Main menu">Main menu</button>
+        </div>
+        <footer class="gm-foot">
+          <p class="gm-mode" id="gm-mode">Practice</p>
+          <button id="gm-settings" class="btn ghost gm-key" type="button" aria-label="Settings">Settings</button>
+        </footer>
       </div>
     </section>
 

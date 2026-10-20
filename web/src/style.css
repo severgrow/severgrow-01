@@ -1750,6 +1750,430 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   flex-direction: column;
   gap: 8px;
 }
+
+/* ---------- the pause panel: one machine face ---------- */
+/* Owner direction (2026-10-20): between the old menu, the Instrument and the Bare Rail. A 1970s
+   studio-hardware faceplate: warm off-white type on the warm dark panel, ONE amber lamp, hairlines
+   only where they separate things, small tracked caps, no glow, no gradient decoration.
+   ONE content axis: every part is centred on the panel's own centre line, and the two scores are
+   mirrored across it. Every target is at least 44px; nothing scrolls at 320x568 or in landscape
+   (see the height rules at the end of this block). Settings is the LAST button in the DOM, so it
+   is last in tab order, and it sits alone in the bottom-right corner. */
+#sheet-menu {
+  --gm-pad: 16px;
+  --gm-row: 46px;
+  --gm-hair: color-mix(in srgb, var(--c-line) 58%, transparent);
+  --gm-hair-strong: color-mix(in srgb, var(--c-line) 90%, transparent);
+  padding: 4px var(--gm-pad) max(14px, env(safe-area-inset-bottom));
+  /* A pause panel is brief by design: let it use the screen rather than scroll. 94dvh still
+     leaves the board's top edge visible, so the player never loses the sense of being in a match. */
+  max-height: 94dvh;
+  /* The panel slides in on the acknowledgement beat; transform and opacity only. */
+  animation: gm-panel-in var(--dur-quick) var(--ease-standard) both;
+}
+/* The slide uses the independent `translate` property, never `transform`: on wide screens the
+   sheet is a centred dialog positioned with transform, and animating transform would drop that
+   centring mid-flight. `translate` composes with it and still moves only the panel. */
+@keyframes gm-panel-in {
+  from {
+    translate: 0 16px;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+/* Reduce motion: the panel is simply there. No slide, no fade — a designed static state. */
+.reduce-motion #sheet-menu,
+#sheet-menu.reduce-motion {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  #sheet-menu {
+    animation: none;
+  }
+}
+
+/* the nameplate: lamp, title, close — three cells, so the title is centred on the panel axis */
+#sheet-menu .gm-head {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 0 2px;
+  position: static;
+  background: transparent;
+  border-bottom: 1px solid var(--gm-hair);
+}
+#sheet-menu .gm-head h2 {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  text-align: center;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+/* The one amber note: the lamp beside the title, reading the LIGHT contract's core tone. */
+#sheet-menu .gm-head h2::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--light-core, #f5d8a4);
+}
+#sheet-menu .gm-close {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  color: var(--c-muted);
+}
+
+/* the read-out: scores mirrored across a centre hairline, the turn under them */
+#sheet-menu .gm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+#sheet-menu .gm-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 12px;
+}
+#sheet-menu .gm-readout[hidden] {
+  display: none;
+}
+#sheet-menu .gm-scores {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  align-items: center;
+  column-gap: 14px;
+}
+#sheet-menu .gm-scores::before {
+  content: '';
+  grid-column: 2;
+  grid-row: 1;
+  height: 26px;
+  background: var(--gm-hair-strong);
+}
+#sheet-menu .gm-you {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+#sheet-menu .gm-bot {
+  grid-column: 3;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+#sheet-menu .gm-scores b {
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+#sheet-menu .gm-you b {
+  color: var(--c-you);
+}
+#sheet-menu .gm-bot b {
+  color: var(--c-bot);
+}
+#sheet-menu .gm-scores small {
+  font-size: 0.6rem;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-turn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 8px;
+  text-align: center;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-text);
+}
+#sheet-menu .gm-turn:empty {
+  display: none;
+}
+#sheet-menu .gm-turn b {
+  font-weight: inherit;
+  font-size: inherit;
+}
+#sheet-menu .gm-turn small {
+  color: var(--c-muted);
+  font-size: inherit;
+}
+
+/* the lead keys: one filled control on the face, and in a lesson a twin key beside it */
+#sheet-menu .gm-leads {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin: 12px 0 2px;
+}
+/* Two visible leads (a lesson) sit side by side. The label shrinks with the key so both stay on
+   ONE line at 320px and with Large text - a wrapped label would spill out of a 44px key. */
+#sheet-menu .gm-leads:has(> .gm-lead:not([hidden]) + .gm-lead:not([hidden])) .gm-lead {
+  padding: 0 8px;
+  font-size: clamp(0.6rem, 2.9vw, 0.78rem);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+#sheet-menu .gm-lead {
+  width: 100%;
+  min-height: 48px;
+  height: 48px;
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: var(--w-text);
+  box-shadow: inset 0 1px 0 var(--light-bloom, rgba(255, 195, 104, 0.3));
+}
+#sheet-menu .gm-lead.ghost {
+  box-shadow: none;
+}
+
+/* the quiet column: full-width rows, one hairline between neighbours, no second border */
+#sheet-menu .gm-acts {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+#sheet-menu .gm-act {
+  position: relative;
+  width: 100%;
+  min-height: var(--gm-row);
+  height: auto;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: var(--w-text);
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--c-text);
+  justify-content: center;
+}
+#sheet-menu .gm-act + .gm-act::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--gm-hair);
+}
+#sheet-menu .gm-act-quiet {
+  color: var(--c-muted);
+}
+/* A live duel carries Resign, Leave live and Report on top of the four usual rows. SIX or more
+   rows would overrun a 320 phone (the offline face has five), so the column pairs into a keypad
+   instead of scrolling: the same single axis, the same 44px targets, every entry still visible. */
+#sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+}
+#sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-act {
+  min-height: 44px;
+  padding: 4px 6px;
+  font-size: clamp(0.66rem, 2.6vw, 0.76rem);
+  letter-spacing: 0.08em;
+}
+#sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-act + .gm-act::before {
+  display: none;
+}
+#sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-act-quiet {
+  grid-column: 1 / -1;
+}
+/* A live duel's Resign is the one row that must not look like the others. */
+#sheet-menu #gm-resign:not([hidden]) {
+  color: var(--c-bot);
+}
+
+/* the corner plate: the mode word on the left, the Settings key alone on the right */
+#sheet-menu .gm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gm-hair);
+}
+#sheet-menu .gm-mode {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.58rem;
+  line-height: 1.2;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+#sheet-menu .gm-key {
+  flex: none;
+  min-width: 108px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 16px;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: var(--w-text);
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+/* Short screens (320x568, 360x640): the air comes out first; every target stays 44px. */
+@media (max-height: 700px) {
+  #sheet-menu {
+    --gm-pad: 14px;
+  }
+  #sheet-menu .gm-grab {
+    margin: 2px auto 0;
+  }
+  #sheet-menu .gm-head {
+    min-height: 44px;
+  }
+  #sheet-menu .gm-head h2 {
+    font-size: 1.18rem;
+  }
+  #sheet-menu .gm-readout {
+    padding: 6px 0 8px;
+    gap: 4px;
+  }
+  #sheet-menu .gm-scores b {
+    font-size: 1.32rem;
+  }
+  #sheet-menu .gm-leads {
+    margin: 8px 0 0;
+  }
+  #sheet-menu .gm-lead {
+    min-height: 44px;
+    height: 44px;
+  }
+  #sheet-menu .gm-act {
+    font-size: 0.76rem;
+  }
+  #sheet-menu .gm-acts {
+    margin-top: 4px;
+  }
+  #sheet-menu .gm-foot {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+}
+
+/* Landscape phones (844x390 and the like): the same face, laid out across the machine. */
+@media (max-height: 520px) and (min-width: 560px) {
+  #sheet-menu {
+    --gm-pad: 18px;
+    max-height: 94dvh;
+    padding-top: 12px;
+  }
+  /* Wide screens turn every sheet into a centred dialog; the pause panel becomes a real faceplate,
+     so it loses the phone's grab handle and keeps its own top edge. */
+  #sheet-menu::before {
+    display: none;
+  }
+  #sheet-menu .gm-body {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  #sheet-menu .gm-head {
+    min-height: 44px;
+  }
+  #sheet-menu .gm-head h2 {
+    font-size: 1.2rem;
+  }
+  #sheet-menu .gm-readout {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 2px 0 6px;
+  }
+  #sheet-menu .gm-scores {
+    grid-template-columns: auto 1px auto;
+    column-gap: 12px;
+  }
+  #sheet-menu .gm-scores b {
+    font-size: 1.35rem;
+  }
+  #sheet-menu .gm-you,
+  #sheet-menu .gm-bot {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  #sheet-menu .gm-leads {
+    margin: 4px 0 2px;
+  }
+  #sheet-menu .gm-lead {
+    min-height: 44px;
+    height: 44px;
+  }
+  #sheet-menu .gm-acts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 24px;
+    margin-top: 2px;
+  }
+  #sheet-menu .gm-act + .gm-act::before {
+    display: none;
+  }
+  #sheet-menu .gm-act {
+    min-height: 44px;
+  }
+  /* An odd count must not leave a hole: the quiet row takes the full width of the last line. */
+  #sheet-menu .gm-act-quiet {
+    grid-column: 1 / -1;
+  }
+  /* A duel's extra rows in landscape: three equal keys per line keeps the faceplate's height, and
+     the columns still mirror the same axis. */
+  #sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-acts {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  #sheet-menu:has(.gm-acts > .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden]) ~ .gm-act:not([hidden])) .gm-act {
+    font-size: clamp(0.58rem, 1.6vw, 0.7rem);
+    letter-spacing: 0.05em;
+  }
+  #sheet-menu .gm-foot {
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+  #sheet-menu .gm-key {
+    min-height: 44px;
+    height: 44px;
+  }
+}
+
 .row {
   display: flex;
   align-items: center;

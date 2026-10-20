@@ -369,8 +369,11 @@ export const mountFeedback = (): void => {
     b.addEventListener('click', openReport);
     return b;
   };
-  const settingsBtn = document.getElementById('gm-settings');
-  settingsBtn?.parentElement?.insertBefore(button('gm-report', 'btn ghost'), settingsBtn.nextSibling);
+  // The report row belongs to the quiet action column (never the corner plate): Settings is the
+  // panel's LAST control, alone in the bottom-right corner.
+  const acts = document.querySelector('#sheet-menu .gm-acts');
+  const reportRow = button('gm-report', 'btn ghost gm-act');
+  if (acts) acts.insertBefore(reportRow, document.getElementById('gm-main'));
   const settingsBody = document.querySelector('#sheet-settings .sheet-body');
   settingsBody?.append(button('settings-report', 'btn ghost'));
 };

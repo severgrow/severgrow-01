@@ -476,59 +476,9 @@ html.slim-hud .game > .race .race-fill::after {
   top: -3px;
   height: 12px;
 }
-/* the menu: the scores and the turn on top (no player marks: the colours say who is who) */
-.gm-status {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  padding-bottom: 12px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.gm-scores {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.gm-scores > span {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.gm-scores b {
-  font-size: 2rem;
-  line-height: 1;
-}
-.gm-scores small {
-  font-size: 0.95rem;
-  opacity: 0.85;
-}
-/* The pause menu's score digits are neutral too (owner, 2026-10-20). Whose number is whose is
-   said by the label under it and by which side it sits on; the turn line keeps its colours. */
-.gm-you b,
-.gm-bot b {
-  color: var(--c-text);
-}
-.gm-turn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 2px;
-}
-.gm-turn b {
-  font-size: 1.05rem;
-}
-.gm-turn.you b {
-  color: var(--c-you);
-}
-.gm-turn.bot b {
-  color: var(--c-bot);
-}
-.gm-turn small {
-  opacity: 0.8;
-}
+/* The menu's read-out (scores + turn) is part of the pause panel's face: it lives in the
+   #sheet-menu .gm-readout rules in style.css, so the panel has ONE set of rules. The slim header
+   only decides WHERE the player reads the scores - the pause panel is the only place they exist. */
 
 /* ---- thumb dock v4: the move buttons stacked in the middle of the control row ---- */
 html[data-thumb] .dock .table-row > .moves {

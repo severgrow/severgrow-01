@@ -817,6 +817,17 @@ function syncResignMenu() {
   if (btn) btn.hidden = !(isOnlineDuel() && !!onlineResign);
 }
 
+/**
+ * The pause panel's mode word, in the corner plate opposite Settings. It is a read-out, never a
+ * control: the title already says "Paused" (or LEVEL n in a campaign match), so this names the
+ * KIND of match instead of repeating it.
+ */
+function syncMenuMode() {
+  const el = document.getElementById('gm-mode');
+  if (!el) return;
+  el.textContent = campaignLevel ? 'Campaign' : isOnlineDuel() ? 'Duel' : 'Practice';
+}
+
 let lessonChromeOn = false;
 /** Keep #hud-menu crisp/tappable for the whole tutorial (gate + focus dim + free play). */
 function syncTutorialChrome() {
@@ -853,6 +864,7 @@ function sheet(id: string | null) {
     setPaused(true);
     syncTutorialMenuExit();
     syncResignMenu();
+    syncMenuMode();
     if (FEATURES.slimHeader) fillMenuStatus();
   }
   else if (id === null) setPaused(false);
@@ -1267,20 +1279,24 @@ let thumbMod: { side: (w: number, h: number) => 'right' | 'left' | null; tip: (t
 const REPLAY_BUTTON = FEATURES.replay;
 /** The test copy: the weak-spot corner icons are gone (their signals live on the map and the tile card). */
 if (!FEATURES.weakTools) for (const id of ['tool-weak', 'tool-targets']) document.getElementById(id)?.remove();
-// the test copy: the header keeps only the menu button and the score bar; the scores, the turn
-// and History move into the menu (no player marks there: the colours say who is who)
+// product channels: the header keeps only the menu button and the score bar; the scores, the turn
+// and History move into the pause panel's read-out (no player marks there: the colours say who is who)
 if (FEATURES.slimHeader) {
   setSlimHud(true);
   document.documentElement.classList.add('slim-hud');
-  const body = document.querySelector('#sheet-menu .sheet-body');
-  if (body) {
-    const box = document.createElement('div');
-    box.id = 'gm-status';
-    box.className = 'gm-status';
-    box.innerHTML = '<div class="gm-scores"><span class="gm-you"><small>You</small><b class="num" id="gm-score-you">0</b></span><span class="gm-bot"><b class="num" id="gm-score-bot">0</b><small></small></span></div><div class="gm-turn" id="gm-turn"></div><button id="gm-history" class="btn ghost" type="button">What happened</button>';
-    box.querySelector('.gm-bot small')!.textContent = OPP.label; // the plain word beside a score ("Opponent"), not the possessive
-    body.prepend(box);
-    box.querySelector('#gm-history')!.addEventListener('click', () => sheet('sheet-history'));
+  // The read-out is part of the panel's markup (index.html): reveal it and label the opponent's
+  // side. Nothing is built here, so the panel has ONE author and the legacy channels never see it.
+  const status = document.getElementById('gm-status');
+  if (status) {
+    status.hidden = false;
+    const bot = status.querySelector('.gm-bot small');
+    if (bot) bot.textContent = OPP.label; // the plain word beside a score ("Opponent"), not the possessive
+  }
+  // History is a quiet row of the action column, not a second control inside the read-out.
+  const history = document.getElementById('gm-history');
+  if (history) {
+    history.hidden = false;
+    history.addEventListener('click', () => sheet('sheet-history'));
   }
 }
 /** The test copy's menu: the scores and the turn, as the header used to show them. */
