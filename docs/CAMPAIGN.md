@@ -364,7 +364,7 @@ terrain the player has to read and the better bots behind it.
 | --- | --- | --- | --- | --- | --- | --- |
 | 11 | Pebble Trail | 4 | 2 | 3 | 35 | A mirrored pebble pair beside the trail; still wide open |
 | 12 | Split Meadow | 5 | 3 | 3 | 34 | A short wall across the centre; two lanes to pick |
-| 13 | The Detour | 5 | 4 | 3 | 33 | A four-hex arc to route around |
+| 13 | The Detour | **8** | 4 | 3 | 33 | A four-hex arc to route around; a deliberate bot-8 spike (owner, 2026-10-20) |
 | 14 | Open Horizon | 5 | 1 | 3 | 36 | Breathing space: one lone stone, a clearly better bot |
 | 15 | Twin Stones | 6 | 4 | 3 | 33 | Twin wings plus a central pair: two threats at once |
 | 16 | Broken Crossing | 6 | 4 | 3 | 33 | A broken wall with two crossings |
@@ -430,7 +430,7 @@ symmetry is also why rock counts are even and gold counts odd: gold is the centr
 data (`breather: true`) so the choice is reviewed rather than an invisible curve: 31 (re-entry after
 the level-30 finale) and 38 (the gold-heavy breather). The tests allow bot 8 only on a flagged
 breather, never twice in a row, and never on more than a quarter of the extension. The 1-30 ladder
-keeps its original "never decreases" rule, unchanged.
+keeps its original "never decreases" rule, with the one pinned level-13 bot-8 spike (2026-10-20).
 
 **Two terrains, two jobs.** Rock takes space; gold creates value. A chapter leans on one, which is
 what makes IV (rock-led), V (planned: gold-led), VI (rock-heavy, gold-light) and VII (both) feel
@@ -640,17 +640,24 @@ level:
 | 4-5 | 2 |
 | 6-8 | 3 |
 | 9-11 | 4 |
-| 12-14 | 5 |
+| 12-14 | 5 (level 13 is 8 — the deliberate spike) |
 | 15-17 | 6 |
 | 18-20 | 7 |
 | 21-24 | 8 |
 | 25-30 | 9 |
 
-Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,5,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
+Full sequence: `1,1,1, 2,2, 3,3,3, 4,4,4, 5,8,5, 6,6,6, 7,7,7, 8,8,8,8, 9,9,9,9,9,9`.
+
+**One deliberate exception (owner, 2026-10-20): level 13 is a bot-8 spike.** "The Detour" keeps its
+board, seed, name and intent and only names a stronger bot — two rungs above its neighbours. Level 14
+returns straight to bot 5, so the spike is a single level, not a raised plateau. The ladder guard
+below pins it by level number: every other step through 1-30 still never decreases, and a second
+spike or a permanent lift fails the test.
 
 The ladder is pinned by a **guard test**, not a comment: `tests/campaign/levels.test.ts` asserts the
-bot level never decreases as the level number rises **through the teaching chapters (1-30)**, that it
-starts at 1 and ends at 9, and the exact sequence above. The old curve rose to bot 5 at level 20 then
+bot level never decreases as the level number rises **through the teaching chapters (1-30)** — except
+at the one declared level-13 spike, which the test pins by number and requires to recover at level 14
+— that it starts at 1 and ends at 9, and the exact sequence above. The old curve rose to bot 5 at level 20 then
 dropped back to bot 4 at level 21, and nothing caught it, because the previous test allowed a one-step
 fall. Existing player progress is untouched — campaign progress is stored per level **id**, and no id
 changed.
@@ -659,7 +666,7 @@ changed.
 difficulty through terrain and allows an occasional bot 8 as a *breather*. That is a reviewed design
 choice, so it is declared in the data (`breather: true`) and the test is stricter than "it may drop":
 bot 8 is legal only on a flagged breather, never twice in a row, and never on more than a quarter of
-the extension. The 1-30 rule above is unchanged.
+the extension. The 1-30 rule above is unchanged apart from the single pinned level-13 spike.
 
 ## Two boards for the same levels (the /2/ onboarding line)
 
@@ -851,7 +858,7 @@ Reading:
 
 | File | Proves |
 | --- | --- |
-| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); **the strict order rule** (access derived from the completed list, a gap opens nothing past it, an edited unlocked counter grants nothing, 69 of 70 leaves the campaign unfinished, a replay opens nothing new) |
+| `tests/campaign/levels.test.ts` | every level's board is legal and playable; the campaign is well formed across every chapter built; the authored rock counts (1-70) and the per-level board radius (2 for levels 1-3, 3 for the rest); **the 1-30 bot ladder never decreases (apart from the one pinned level-13 bot-8 spike, which must recover at level 14) and matches the approved sequence exactly**; from 31 a bot-8 dip is allowed only on a flagged `breather`, never twice in a row, and at most a quarter of the extension; **terrain pressure (rocks + gold) does not fall chapter by chapter**; no rock or gold in a root zone; no single hex that decides the game; each level is reproducible (same id → same terrain, homes, deal); **the strict order rule** (access derived from the completed list, a gap opens nothing past it, an edited unlocked counter grants nothing, 69 of 70 leaves the campaign unfinished, a replay opens nothing new) |
 | `tests/campaign/isolation.test.ts` | the shared rules version has no board; `src/engine/`, `server/src/` and `web/src/online/` never read a campaign level |
 | `web/tests/campaign-seam.test.ts` | only a campaign level produces overrides; the online client cannot build a match from a config; campaign saves never share the classic key |
 | `web/tests/campaign-save.test.ts` | progress saves/restores; an unfinished campaign match resumes as its level; existing classic (and legacy) saves still decode |
