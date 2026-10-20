@@ -491,8 +491,29 @@ const asTappableGrow = (s: State, legal: readonly Action[], a: Action | null, no
   return sameHex ?? notKo(plainGrow(s, plain.filter((x) => notKo(x) !== null))) ?? a;
 };
 
+// Your legal moves in a position, worked out once (read-only: nothing here changes the list).
+const legalCache = new WeakMap<State, readonly Action[]>();
+const yourLegal = (s: State): readonly Action[] => {
+  let legal = legalCache.get(s);
+  if (!legal) legalCache.set(s, legal = legalActions(viewFor(s, YOU)));
+  return legal;
+};
+
+// States are immutable engine values, so a position's suggestion never changes: the screen asks
+// several times per tap (the window, the lit card, the answer), and each answer searches moves.
+const suggested = new WeakMap<State, Map<Lesson, Action | null>>();
+
 export const suggestMove = (lesson: Lesson, s: State): Action | null => {
-  const legal = s.phase === 'ACT' && s.actor === YOU ? legalActions(viewFor(s, YOU)) : [];
+  let byLesson = suggested.get(s);
+  if (!byLesson) suggested.set(s, byLesson = new Map());
+  if (byLesson.has(lesson)) return byLesson.get(lesson)!;
+  const a = suggestFresh(lesson, s);
+  byLesson.set(lesson, a);
+  return a;
+};
+
+const suggestFresh = (lesson: Lesson, s: State): Action | null => {
+  const legal = s.phase === 'ACT' && s.actor === YOU ? yourLegal(s) : [];
   const a = suggestRaw(lesson, s);
   if (!a || a.t !== 'Sprout') return a;
   const koAllowed = currentGoal(lesson, s)?.t === 'strangle' || lesson.level === 10;
@@ -505,7 +526,7 @@ export const suggestMove = (lesson: Lesson, s: State): Action | null => {
 
 const suggestRaw = (lesson: Lesson, s: State): Action | null => {
   if (s.phase === 'GAME_OVER' || s.actor !== YOU) return null;
-  const legal = legalActions(viewFor(s, YOU));
+  const legal = yourLegal(s);
   if (!legal.length) return null;
   const goal = currentGoal(lesson, s);
   if (s.phase === 'DRAW') {
@@ -844,7 +865,7 @@ export const lessonBeat = (lesson: Lesson, s: State, ctx: BeatCtx): Beat | null 
   if (intro) return intro;
   const moment = momentBeat(lesson, s, ctx.seen);
   if (moment) return moment;
-  const legal = legalActions(viewFor(s, YOU));
+  const legal = yourLegal(s);
   const goal = currentGoal(lesson, s);
   const hello = helloBeat(lesson, s, ctx, goal, legal);
   if (hello) return hello;

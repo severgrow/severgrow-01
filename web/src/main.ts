@@ -6008,6 +6008,8 @@ function renderHand(v: View, advice: Advice | null) {
     before.set(Number(b.dataset.card), b.getBoundingClientRect());
   const n = cards.length;
   const spread = Math.min(3.5, 22 / Math.max(n, 1));
+  // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
+  const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
   const existing = new Map([...hand.querySelectorAll<HTMLButtonElement>('[data-card]')].map((b) => [Number(b.dataset.card), b]));
   cards.forEach((c, i) => {
     let b = existing.get(c.id);
@@ -6048,8 +6050,6 @@ function renderHand(v: View, advice: Advice | null) {
       b.style.setProperty('--dy', `${(off * off * 0.7).toFixed(1)}px`);
     }
     if (IS_FUTA04 && b.classList.contains('futa04-throw-picked')) b.style.zIndex = '100';
-    // Tutorial: the one card a step asks for sits above the fan, so only it shows in the glow.
-    const tutorialCard = tutorialSingleCardId() ?? lessonSingleCardId();
     b.classList.toggle('tutorial-target-card', tutorialCard === c.id);
     if (tutorialCard === c.id) b.style.zIndex = '100';
     b.style.visibility = hiddenCards.has(c.id) ? 'hidden' : '';

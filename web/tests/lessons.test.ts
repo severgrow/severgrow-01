@@ -80,6 +80,18 @@ describe('the light never asks for a tap the game reads differently', () => {
   });
 });
 
+describe('the suggestion is worked out once per position', () => {
+  it('asking twice about the same state gives the same answer, computed once', () => {
+    for (const l of LESSONS) {
+      const s = lessonOpening(l);
+      const first = suggestMove(l, s);
+      expect(suggestMove(l, s)).toBe(first);
+      // a structurally equal copy is a different position object: same answer, worked out afresh
+      expect(suggestMove(l, structuredClone(s))).toEqual(first);
+    }
+  });
+});
+
 describe('levels 11+ are untouched', () => {
   it('only levels 1-10 have a lesson; 11 and up keep their own opening (and their Seeds proofs)', () => {
     for (let n = 1; n <= 10; n++) expect(lessonFor(n), `L${n}`).not.toBeNull();
