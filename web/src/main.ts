@@ -60,7 +60,7 @@ import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
 import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
-import { installPress } from './logic/press.js';
+import { dragExceeded, installPress, PRESS_SELECTOR, shouldSkipPress } from './logic/press.js';
 import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
@@ -505,6 +505,7 @@ function applyTheme() {
   if (lk.textures && !IS_FUTA04) warmPhotos();
   root.classList.toggle('large-text', settings.largeText);
   root.classList.toggle('reduce-motion', settings.reduceMotion);
+  sound.setReduceMotion(settings.reduceMotion);
   // overhaul Part 3: the decorations, all behind one switch (and quiet with Reduce motion)
   root.classList.toggle('eye-candy', settings.eyeCandy);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolveColors(t).bg);
@@ -1089,6 +1090,7 @@ function finishLabChange() {
   saveSettings();
   sound.enabled = settings.sound;
   sound.setEffects(settings.effects);
+  sound.setReduceMotion(settings.reduceMotion);
   if (settings.sound || settings.music) sound.unlock();
   sound.setMix(settings);
   sound.setMusic(settings.music);
@@ -2832,7 +2834,7 @@ async function anticipate(m: Moment, f: number, my: number) {
 async function impact(m: Moment, f: number, my: number) {
   const b = m.budget;
   if (b.shake > 0 && !IS_FUTA04) anim($('board-wrap'), shakeFrames(b.shake * motion()), { duration: 320 * Math.max(f, 0.5) });
-  if (b.thud) sound.thud();
+  if (b.thud) sound.thud(m.tier === 'severe' ? 0.72 : 1);
   if (b.vibrate) vibrate(settings.vibration, b.vibrate);
   if (m.banner && m.first) banner(m.banner, 'big');
   if (b.hitStopMs > 0) await wait(b.hitStopMs * Math.max(f, 0.5), my);
@@ -7330,18 +7332,51 @@ bind('csa-start', () => {
 });
 // Overhaul item 11: every button answers a press the same way: a 0.97 press (CSS), a soft
 // tick (Sound) and, with Effects High, a tiny tap (Vibration). Nothing plays before a tap.
+// Sound is a CONSUMER of the phase 0 press seam, never a second primitive: the same pointerdown
+// gets a quiet tick, the lift gets the click, and a drag (a paint, not a tap) gets neither.
+const BUTTON_SELECTOR = '.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile';
+let soundPress: { el: Element; x: number; y: number; id: number; cancelled: boolean } | null = null;
+const pressableAt = (target: EventTarget | null): Element | null => {
+  const el = target instanceof Element ? target.closest(PRESS_SELECTOR) : null;
+  return el && !shouldSkipPress(el as unknown as Parameters<typeof shouldSkipPress>[0]) ? el : null;
+};
 document.addEventListener(
   'pointerdown',
   (e) => {
-    const b = (e.target as Element | null)?.closest?.('.btn, .ctool, .undo-chip, .seg-btn, .chip, .icon-only, .hand-sort, .level-tile');
-    if (!b || (b as HTMLButtonElement).disabled) return;
+    const el = pressableAt(e.target);
+    if (!el) return;
     sound.unlock();
-    if (settings.sound) sound.click();
+    if (settings.sound) sound.tick();
+    soundPress = { el, x: e.clientX, y: e.clientY, id: e.pointerId, cancelled: false };
+    const b = el.closest(BUTTON_SELECTOR);
+    if (!b || (b as HTMLButtonElement).disabled) return;
     const hp = hapticFor('press', settings);
     if (hp) vibrate(true, hp as number | number[]);
   },
-  { capture: true },
+  { capture: true, passive: true },
 );
+document.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!soundPress || soundPress.id !== e.pointerId || soundPress.cancelled) return;
+    if (dragExceeded(soundPress.x, soundPress.y, e.clientX, e.clientY)) soundPress.cancelled = true;
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'pointerup',
+  (e) => {
+    const p = soundPress;
+    soundPress = null;
+    if (!p || p.cancelled || p.id !== e.pointerId) return;
+    // Lift is the click layer; only button-like surfaces get it. Cards and hexes already click
+    // with their action, so they are not clicked twice.
+    if (!p.el.closest(BUTTON_SELECTOR)) return;
+    if (settings.sound) sound.click();
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener('pointercancel', () => (soundPress = null), { capture: true, passive: true });
 bind('hand-sort', () => {
   settings = { ...settings, handSort: nextSort(settings.handSort) };
   saveSettings();
@@ -8086,6 +8121,11 @@ let appReady = false;
   },
   settings: () => ({ ...settings }),
   busy: () => busy(),
+  /** Read-only sound diagnostics: the pre-rendered bank's size and the last cues played. */
+  soundBank: () => sound.bankStats(),
+  soundLog: () => [...sound.log()],
+  /** tests only: play a named cue through the real sound gate (never mutates the game) */
+  soundCue: (name: string) => sound.cue(name),
   /** Test-only feel harness: press latency, frame gaps, long tasks, live animations, RAF jobs. */
   feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
