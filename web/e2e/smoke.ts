@@ -226,7 +226,9 @@ const playTurn = async (page: Page) => {
   await idle(page);
   const level = await page.evaluate(() => (window as unknown as { __severgrow: { settings: () => { level: number } } }).__severgrow.settings().level);
   const hud = (await page.textContent('#turn')) ?? '';
-  check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Level 3'), `${level} · ${hud.trim().slice(0, 40)}`);
+  // The internal opponent level (1-9) is never shown to the player (owner, 2026-10-20): the game
+  // runs at level 3, and the turn pill names the difficulty, Easy.
+  check('the difficulty screen starts a game at the seeded Easy level', level === 3 && hud.includes('Easy') && !/Level \d/.test(hud), `${level} · ${hud.trim().slice(0, 40)}`);
   {
     // UI overhaul: the hint line is always in the dock; the moves reference now lives in the
     // in-game menu (the floating "?" corner tool was removed by owner direction).

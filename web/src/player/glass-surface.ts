@@ -362,6 +362,10 @@ html.futa04-lesson .sheet { z-index: 51; }
   text-align: center;
   text-wrap: pretty;
 }
+/* The smallest phones (320-340 px): half a pixel smaller, so the longest explanation keeps its
+   four lines with room to spare (at 12.5px its second line had 0.4px left, and a rounding
+   difference pushed the end of the sentence past the four-line clamp). */
+@media (max-width: 340px) { #lesson-plate .lesson-copy { font-size: 12px; } }
 .large-text #lesson-plate .lesson-copy { font-size: 15px; line-height: 1.4; }
 .reduce-motion #lesson-plate { transition: none !important; }
 /* Plain SVG mask dim — no foreignObject/backdrop-filter (iOS Safari ignores those cutouts
