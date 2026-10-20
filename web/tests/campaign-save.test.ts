@@ -6,6 +6,7 @@ import type { Action } from '../../src/engine/index.js';
 import {
   CAMPAIGN_LEVELS,
   campaignLevelById,
+  legacyCampaignLevelById,
   freshProgress,
   parseProgress,
   recordCampaignResult,
@@ -74,6 +75,7 @@ describe('an unfinished campaign match resumes as its level', () => {
     const raw = encodeCampaignSave(level.id, match);
     const decoded = decodeCampaignSave(raw)!;
     expect(decoded.levelId).toBe(level.id);
+    expect(decoded.openingVersion).toBe(2);
     expect(campaignLevelById(decoded.levelId)).toBe(level);
     // The classic decoder replays the match against the CAMPAIGN base, so the board is the level's.
     const loaded = decodeSave<null>(decoded.match)!;
@@ -81,6 +83,18 @@ describe('an unfinished campaign match resumes as its level', () => {
     expect(loaded.state.terrain).toEqual(after.terrain);
     expect(loaded.state.hands).toEqual(after.hands);
     expect(loaded.state.config.board!.rock).toEqual(level.config.board!.rock);
+  });
+
+  it('preserves the original opening revision when an older saved level resumes', () => {
+    const oldLevel = legacyCampaignLevelById(CAMPAIGN_LEVELS[0]!.id)!;
+    const oldOpening = campaignOpening(oldLevel);
+    const raw = JSON.stringify({ v: 1, levelId: oldLevel.id,
+      match: encodeSave({ seed: oldLevel.seed, actions: [], coach: null, level: oldLevel.botLevel, base: oldOpening }) });
+    const decoded = decodeCampaignSave(raw)!;
+    expect(decoded.openingVersion).toBe(1);
+    expect(decodeSave(decoded.match)?.state.terrain).toEqual(oldOpening.terrain);
+    expect(oldOpening.config.board!.gold).not.toEqual(CAMPAIGN_LEVELS[0]!.config.board!.gold);
+    expect(decodeCampaignSave(encodeCampaignSave(CAMPAIGN_LEVELS[0]!.id, 'new-match'))?.openingVersion).toBe(2);
   });
 
   it('rejects anything unreadable, so a broken campaign save is simply no campaign save', () => {

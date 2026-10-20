@@ -2,7 +2,7 @@ import { apply, newMatch, viewFor } from '../../../src/engine/index.js';
 import type { Action, State } from '../../../src/engine/index.js';
 import { botSeed } from '../../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../../src/bots/versions.js';
-import { campaignLevelById, campaignOpening } from '../../../src/campaign/index.js';
+import { campaignLevelById, campaignOpening, legacyCampaignLevelById } from '../../../src/campaign/index.js';
 
 export type OfflineProof = { actions: readonly Action[]; botVersion: string };
 export type VerifiedOffline = { winner: 0 | 1 | null; actionCount: number; result: State['result'] };
@@ -38,8 +38,8 @@ export const verifyOfflineMatch = (
   return { winner: state.result.winner, actionCount: proof.actions.length, result: state.result };
 };
 
-export const verifyCampaignProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION): VerifiedOffline | null => {
-  const level = campaignLevelById(levelId);
+export const verifyCampaignProof = (levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION, openingVersion: 1 | 2 = 1): VerifiedOffline | null => {
+  const level = openingVersion === 1 ? legacyCampaignLevelById(levelId) : campaignLevelById(levelId);
   return level ? verifyOfflineMatch(campaignOpening(level), level.botLevel, { actions, botVersion }) : null;
 };
 

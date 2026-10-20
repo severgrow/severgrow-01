@@ -122,7 +122,7 @@
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
                so no other channel ever shows it. Its words come from src/strings.ts, and on the
                product menu it reads LEVEL <n> (the level the player is on). -->
-          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Campaign" hidden>Campaign</button>
+          <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Level</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
                chapter/level list. The owner's rule is that the player does not need access to every
@@ -264,11 +264,11 @@
     <!-- ===== Campaign (the primary offline mode) ===== -->
     <!-- The chapter list and level tiles are drawn from the level data by main.ts, so a level is
          never duplicated here. Everything a player reads comes from src/strings.ts and the level. -->
-    <section id="campaign" class="screen campaign" aria-label="Campaign" hidden>
+    <section id="campaign" class="screen campaign" aria-label="Levels" hidden>
       <div class="campaign-inner levels-inner">
         <header class="levels-head">
           <button id="campaign-back" class="icon-only" type="button" aria-label="Back to the menu"><span class="i" data-icon="back"></span></button>
-          <h2 id="campaign-heading">Campaign</h2>
+          <h2 id="campaign-heading">Levels</h2>
         </header>
         <button id="campaign-continue" class="btn primary big" type="button" aria-label="Continue">Continue</button>
         <p id="campaign-resume-hint" class="campaign-hint muted small" hidden></p>
@@ -290,6 +290,7 @@
 
     <!-- ===== Game ===== -->
     <section id="game" class="screen game" aria-label="Game" hidden>
+      <div id="campaign-guide" class="campaign-guide" role="note" hidden></div>
       <header class="hud">
         <button id="hud-menu" class="icon-only" type="button" aria-label="Menu"><span class="i" data-icon="menu"></span></button>
         <div class="score you">
@@ -471,6 +472,7 @@
           <summary><span><strong data-copy="helpGroup"></strong><small data-copy="helpGroupHint"></small></span><span class="lab-chevron" aria-hidden="true">⌄</span></summary>
           <div class="lab-inside">
             <!-- the Step guidance row is injected here by player/guide.ts -->
+            <label class="row"><span data-copy="guidedLevels"></span><input type="checkbox" data-setting="guidedLevels" /></label>
             <label class="row"><span data-copy="placementList"></span><input type="checkbox" data-setting="placementList" /></label>
             <label class="row"><span data-copy="weakSpots"></span><input type="checkbox" data-setting="weakSpots" /></label>
             <label class="row"><span data-copy="weakPulse"></span><input type="checkbox" data-setting="weakPulse" /></label>

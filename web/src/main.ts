@@ -126,6 +126,8 @@ import type { GlassSurface } from './player/glass-surface.js';
 import { previewMove } from './logic/preview.js';
 import { STUCK_MS, hintFor, hintWeight, isRoutineHint } from './logic/hint.js';
 import type { Hint, HintCtx } from './logic/hint.js';
+import { campaignCue, invalidCampaignHex, NO_CAMPAIGN_CUE } from './logic/campaign-guide.js';
+import type { CampaignCue } from './logic/campaign-guide.js';
 import { CONFIRM_MODES, forecastMove, ghostLinks, needsConfirm, riskLines } from './logic/forecast.js';
 import { hapticFor, settleFor, undoPitches } from './logic/feedback.js';
 import { pileCountState, pileStates, stackLayers } from './logic/piles.js';
@@ -448,7 +450,7 @@ const save = () => {
   // offline save is never overwritten by a campaign game, and a campaign match resumes as the level
   // it actually is (the level's config is carried by the save's base state).
   if (campaignLevel) {
-    store.set(offlineSaveKey(campaignLevel), encodeCampaignSave(campaignLevel.id, encoded));
+    store.set(offlineSaveKey(campaignLevel), encodeCampaignSave(campaignLevel.id, encoded, campaignOpeningVersion));
     store.set(LAST_MODE_KEY, 'campaign');
     return;
   }
@@ -699,6 +701,7 @@ function layoutMenu(canContinue: boolean) {
 function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   const same = shownScreen === name;
   shownScreen = name;
+  if (name !== 'game') document.documentElement.dataset.campaignFocus = 'none';
   closePlayMenu();
   $('menu').hidden = name !== 'menu';
   $('levels').hidden = name !== 'levels';
@@ -848,14 +851,14 @@ function renderLevelGrid() {
 // ---------- campaign screen ----------
 
 /** The saved unfinished campaign match: the level it belongs to and its replayed state, or null. */
-function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress> } | null {
+function campaignResume(): { level: CampaignLevel; saved: Loaded<CoachProgress>; openingVersion: 1 | 2 } | null {
   const raw = decodeCampaignSave(store.get(CAMPAIGN_SAVE_KEY));
   if (!raw) return null;
   const level = campaignLevelById(raw.levelId);
   if (!level) return null;
   const saved = decodeSave<CoachProgress>(raw.match);
   if (!saved || saved.state.phase === 'GAME_OVER') return null;
-  return { level, saved };
+  return { level, saved, openingVersion: raw.openingVersion };
 }
 
 /** One level tile: completed, the current level, an unlocked level, or locked. */
@@ -1467,6 +1470,7 @@ async function startGame(
   gameLevel = level;
   gameDifficulty = difficulty;
   campaignLevel = campaign;
+  campaignOpeningVersion = 2;
   // Campaign first (the only production source of overrides), then the test copy's Lab experiment,
   // otherwise {} — the classic game's own configuration.
   const overrides = overridesForMatch(campaign, IS_TEST, IS_TEST && lab ? lab.overrides() : {});
@@ -1964,7 +1968,7 @@ function tutorialAfterPlay(p: Played, by: Player) {
 }
 
 /** Resumes a saved campaign match as the level it belongs to (its board comes from the save's base). */
-function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachProgress> }) {
+function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachProgress>; openingVersion: 1 | 2 }) {
   log = [CAMPAIGN.started(r.level.number)];
   watching = null;
   if (IS_TEST) {
@@ -1972,6 +1976,7 @@ function continueCampaignMatch(r: { level: CampaignLevel; saved: Loaded<CoachPro
     lab?.watchingChanged(null);
   }
   campaignLevel = r.level;
+  campaignOpeningVersion = r.openingVersion;
   gameLevel = r.saved.level;
   gameDifficulty = null; // a campaign level is not a training tier: it never writes a carry-over
   store.set(LAST_MODE_KEY, 'campaign');
@@ -2081,14 +2086,14 @@ function afterPlay(p: Played, by: Player, advice: Advice | null) {
       }
       if (onlineBuildEnabled() && session) {
         const proof = campaignLevel && p.after.result.winner === HUMAN
-          ? { kind: 'campaign' as const, levelId: campaignLevel.id, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
+          ? { kind: 'campaign' as const, levelId: campaignLevel.id, openingVersion: campaignOpeningVersion, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
           : gameDifficulty && trainingRewardTicketId
             ? { kind: 'training' as const, ticketId: trainingRewardTicketId, actions: [...session.log], botVersion: CURRENT_BOT_VERSION }
             : null;
         if (proof) {
           queueSeedProof(store, proof);
           seedRewardMessage = 'Seeds pending verification';
-          const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}` : `training:${proof.ticketId}`;
+          const key = proof.kind === 'campaign' ? `campaign:${proof.levelId}:v${proof.openingVersion}` : `training:${proof.ticketId}`;
           void onlineLobbyCtl?.syncSeedRewards().then((results) => {
             const verified = results.find((entry) => entry.key === key)?.reward;
             if (!verified) return;
@@ -2377,6 +2382,8 @@ let gameDifficulty: DifficultyId | null = null;
  * way a match can start, so a campaign board can never leak into a classic or online game.
  */
 let campaignLevel: CampaignLevel | null = null;
+let campaignOpeningVersion: 1 | 2 = 2;
+let currentCampaignCue: CampaignCue = NO_CAMPAIGN_CUE;
 /** The campaign progress record (level 1 open; a win unlocks the next; a loss removes nothing). */
 let campaignProgress: CampaignProgress = parseProgress(store.get(CAMPAIGN_PROGRESS_KEY));
 const saveCampaignProgress = () => store.set(CAMPAIGN_PROGRESS_KEY, serializeProgress(campaignProgress));
@@ -3551,8 +3558,20 @@ function render() {
   syncGlow();
   updateFuta04MoveActive();
   if (!session || $('game').hidden) return;
+  if (campaignAttemptState && session.state !== campaignAttemptState) {
+    document.getElementById('campaign-attempt')?.classList.remove('visible');
+    clearTimeout(campaignAttemptTimer);
+    campaignAttemptState = null;
+    campaignAttemptKey = '';
+  }
   armIdle();
   const v = session.view;
+  currentCampaignCue = campaignLevel && !coach.tutorial
+    ? campaignCue({ level: campaignLevel.number, enabled: settings.guidedLevels,
+      state: session.state, view: v, legal: session.legal,
+      cardSelected: session.sel.card !== null, kindSelected: session.sel.kind !== null })
+    : NO_CAMPAIGN_CUE;
+  document.documentElement.dataset.campaignFocus = currentCampaignCue.focus;
   const advice = myTurn() && !busy() ? currentAdvice() : null;
   document.documentElement.style.setProperty('--anim', String(timeScale()));
   renderHud();
@@ -3593,6 +3612,7 @@ function render() {
   renderGameOver();
   renderGuide(advice);
   renderFirstTip(v);
+  renderCampaignGuide();
   updateFuta04Help();
   smartCockpit?.sync();
   syncTutorialChrome();
@@ -3914,6 +3934,7 @@ const discardEndsTurn = (v: View) => !v.config.rotEnabled && !v.config.knockEnab
 /** The dock's one-line hint (overhaul item 13 shortens and sharpens it). */
 function dockHint(v: View): Hint {
   if (!session) return { text: '', arrow: null };
+  if (currentCampaignCue.text) return { text: currentCampaignCue.text, arrow: currentCampaignCue.focus === 'targets' ? 'up' : 'down' };
   const h = hintFor(hintCtx(v));
   if (IS_FUTA04 && session.presetMove?.t === 'Bloom') return { text: 'Tap a glowing hex to bloom', arrow: 'up' };
   if (IS_FUTA04 && session.sel.card === null && session.sel.kind === null && (session.pending?.t === 'Bloom' || session.pending?.t === 'Sprout')) return { text: 'Pick a card or Bloom', arrow: 'down' };
@@ -4679,6 +4700,12 @@ function renderRisks(risks: ReturnType<typeof riskLines>) {
 /** First-time tips for Fruit and Strengthen: shown once, until dismissed (re-open from How to play). */
 function renderFirstTip(v: View) {
   const card = $('first-tip');
+  // This panel belongs to the help sheet on Futa05; Levels use their own compact in-game
+  // presentation so they cannot make an invisible sheet child look like visible guidance.
+  if (campaignLevel && settings.guidedLevels && campaignLevel.number <= 15) {
+    card.hidden = true;
+    return;
+  }
   if (!session || coach.tutorial || (openSheet && (!IS_FUTA04 || openSheet.id !== 'sheet-futa04-help'))) {
     card.hidden = true;
     return;
@@ -4693,6 +4720,26 @@ function renderFirstTip(v: View) {
   $('first-tip-title').textContent = TIPS[tipOpen].title;
   $('first-tip-text').textContent = TIPS[tipOpen].text;
   $('first-tip-demo').hidden = tipOpen !== 'draw';
+}
+
+function renderCampaignGuide() {
+  const note = $('campaign-guide');
+  const visible = !!currentCampaignCue.text && myTurn() && !busy() && !openSheet;
+  note.hidden = !visible;
+  if (!visible) return;
+  if (note.textContent !== currentCampaignCue.text) note.textContent = currentCampaignCue.text;
+  const boardBox = board.svg.getBoundingClientRect();
+  const dockBox = $('dock').getBoundingClientRect();
+  const deckBox = $('deck').getBoundingClientRect();
+  const discardBox = $('discard').getBoundingClientRect();
+  // On a phone the home art extends below the SVG's measured box. Use the actual pile edge,
+  // then place the short cue in a side pocket so the tree and legal hexes stay uncovered.
+  const pileTop = Math.min(deckBox.top, discardBox.top);
+  const top = pileTop - note.offsetHeight - (thumbLayout ? 5 : 8);
+  note.style.top = `${Math.max(48, top)}px`;
+  const onLeft = currentCampaignCue.focus === 'deck' || currentCampaignCue.focus === 'targets';
+  note.style.left = `${thumbLayout ? onLeft ? boardBox.left + 67 : boardBox.right - 67
+    : onLeft ? deckBox.left + deckBox.width / 2 : dockBox.left + dockBox.width / 2}px`;
 }
 
 /** Let the familiar Throw motion finish a scripted turn without another lesson. */
@@ -5465,6 +5512,35 @@ function asksConfirm(a: Action): boolean {
   return !!session && needsConfirm(settings.confirmPolicy, forecastMove(session.view, a));
 }
 
+let campaignAttemptTimer = 0;
+let campaignAttemptKey = '';
+let campaignAttemptAt = 0;
+let campaignAttemptState: State | null = null;
+/** One small, non-blocking explanation beside an experimental tap. */
+function showCampaignAttempt(message: string, target: Element | null) {
+  if (!campaignLevel || !settings.guidedLevels) return;
+  const now = performance.now();
+  if (campaignAttemptKey === message && now - campaignAttemptAt < 900) return;
+  campaignAttemptKey = message;
+  campaignAttemptAt = now;
+  campaignAttemptState = session?.state ?? null;
+  let note = document.getElementById('campaign-attempt');
+  if (!note) {
+    note = document.createElement('div');
+    note.id = 'campaign-attempt';
+    note.setAttribute('role', 'status');
+    document.body.append(note);
+  }
+  note.textContent = message;
+  const box = target?.getBoundingClientRect();
+  const width = Math.min(230, window.innerWidth - 24);
+  note.style.left = `${Math.max(12, Math.min(window.innerWidth - width - 12, (box?.left ?? window.innerWidth / 2) + (box?.width ?? 0) / 2 - width / 2))}px`;
+  note.style.top = `${Math.max(78, Math.min(window.innerHeight - 60, (box?.top ?? window.innerHeight / 2) - 32))}px`;
+  note.classList.add('visible');
+  clearTimeout(campaignAttemptTimer);
+  campaignAttemptTimer = window.setTimeout(() => note?.classList.remove('visible'), 1550);
+}
+
 function onCardTap(id: number) {
   sound.unlock();
   if (!session) return;
@@ -5472,6 +5548,10 @@ function onCardTap(id: number) {
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
   if (!myTurn()) return;
+  if (campaignLevel && settings.guidedLevels && session.view.phase === 'DRAW') {
+    showCampaignAttempt('DRAW FIRST', document.querySelector<HTMLElement>(`#hand [data-card="${id}"]`));
+    return;
+  }
   if (IS_FUTA04 && session.view.phase === 'ACT') {
     const hasCombo = session.legal.some(a => a.t === 'Bloom' || a.t === 'MegaBomb');
     const matchingBlooms = bloomKindsForCard(id);
@@ -5966,6 +6046,12 @@ function onHexTap(key: string) {
   // Mid-reveal a tap must not skip the enemy's turn: the board is still changing under it.
   if (onlineGateShut()) return revealWaitNotice();
   if (busy()) fastForward();
+  if (campaignLevel && settings.guidedLevels && myTurn() &&
+      (session.view.phase !== 'ACT' || session.view.terrain[key] === 'rock')) {
+    const why = invalidCampaignHex({ state: session.state, view: session.view, legal: session.legal,
+      key, selected: session.sel.card !== null || session.sel.kind !== null });
+    if (why) showCampaignAttempt(why, board.tile(key) ?? board.svg);
+  }
   // Bloom undo / unpick on a hex that is not continuing the paint (still allow the
   // first→last endpoint shortcut used by Futa04 Bloom).
   if (IS_FUTA04 && myTurn() && session.view.phase === 'ACT' && (session.sel.kind?.startsWith('bloom-') || draw.shape.length)) {
@@ -5980,6 +6066,14 @@ function onHexTap(key: string) {
       if (bloomStepBack()) return;
     }
   }
+  if (campaignLevel && settings.guidedLevels && myTurn() && session.view.phase === 'ACT' &&
+      session.sel.card !== null && !drawCombo() &&
+      hexTapIntent(session.view, session.legal, session.sel, key) !== 'tilecard' &&
+      !targetHexes(session.view, session.legal, session.sel).has(key)) {
+    const why = invalidCampaignHex({ state: session.state, view: session.view, legal: session.legal,
+      key, selected: true });
+    if (why) showCampaignAttempt(why, board.tile(key) ?? board.svg);
+  }
   const idleGrowSpot = IS_FUTA04 && myTurn() && session.view.phase === 'ACT' &&
     session.sel.card === null && session.sel.kind === null && !session.view.board[key] &&
     session.legal.some(a => a.t === 'Sprout' && coordKey(a.coord) === key);
@@ -5988,6 +6082,11 @@ function onHexTap(key: string) {
       (session.view.phase === 'ACT' && ((!idleGrowSpot && session.sel.card === null && session.sel.kind === null) ||
         hexTapIntent(session.view, session.legal, session.sel, key) === 'tilecard')))) {
     if (trySkipBloomToThrow()) return;
+    if (campaignLevel && settings.guidedLevels && session.view.phase === 'ACT') {
+      const why = invalidCampaignHex({ state: session.state, view: session.view, legal: session.legal,
+        key, selected: session.sel.card !== null || session.sel.kind !== null });
+      if (why) showCampaignAttempt(why, board.tile(key) ?? board.svg);
+    }
     boinkTile(key);
     return;
   }

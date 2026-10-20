@@ -64,15 +64,15 @@ export class WorldEconomyService {
     }
   }
 
-  async campaign(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION) {
+  async campaign(player: PlayerRecord, levelId: string, actions: readonly Action[], botVersion = CURRENT_BOT_VERSION, openingVersion: 1 | 2 = 1) {
     const level = campaignLevelById(levelId);
-    if (!level) throw new ApiError('INVALID_REQUEST', 'That Campaign level is not available.');
+    if (!level) throw new ApiError('INVALID_REQUEST', 'That level is not available.');
     const bucket = Math.floor(this.now() / 3_600_000) * 3_600_000;
     if (!(await this.matches.hitRateLimit(`seeds:proof:${player.id}`, bucket, 90)).ok) {
       throw new ApiError('RATE_LIMITED', 'Please wait before verifying another match.');
     }
-    const verified = verifyCampaignProof(levelId, actions, botVersion);
-    if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That Campaign result could not be verified.');
+    const verified = verifyCampaignProof(levelId, actions, botVersion, openingVersion);
+    if (!verified || verified.winner !== 0) throw new ApiError('INVALID_REQUEST', 'That level result could not be verified.');
     return this.store.settle({
       playerId: player.id, sourceKey: `campaign:${levelId}`, mode: 'campaign', outcome: 'win',
       opponentId: null, now: this.now(), campaignLevel: level.number,

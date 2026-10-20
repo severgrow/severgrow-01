@@ -42,16 +42,17 @@ export const parseLastMode = (raw: string | null): OfflineMode => (raw === 'camp
  * The campaign's own resume save: which level, and the offline match save (the same
  * `encodeSave` format the classic game uses, so resuming replays through the tested decoder).
  */
-export type CampaignSave = { levelId: string; match: string };
+export type CampaignSave = { levelId: string; match: string; openingVersion: 1 | 2 };
 
-export const encodeCampaignSave = (levelId: string, match: string): string =>
-  JSON.stringify({ v: 1, levelId, match });
+export const encodeCampaignSave = (levelId: string, match: string, openingVersion: 1 | 2 = 2): string =>
+  JSON.stringify({ v: 2, levelId, match, openingVersion });
 
 export const decodeCampaignSave = (raw: string | null): CampaignSave | null => {
   try {
-    const s = JSON.parse(raw ?? '') as { v?: number; levelId?: unknown; match?: unknown };
-    if (s?.v !== 1 || typeof s.levelId !== 'string' || !s.levelId || typeof s.match !== 'string' || !s.match) return null;
-    return { levelId: s.levelId, match: s.match };
+    const s = JSON.parse(raw ?? '') as { v?: number; levelId?: unknown; match?: unknown; openingVersion?: unknown };
+    if ((s?.v !== 1 && s?.v !== 2) || typeof s.levelId !== 'string' || !s.levelId || typeof s.match !== 'string' || !s.match) return null;
+    if (s.v === 2 && s.openingVersion !== 1 && s.openingVersion !== 2) return null;
+    return { levelId: s.levelId, match: s.match, openingVersion: s.v === 1 ? 1 : s.openingVersion as 1 | 2 };
   } catch {
     return null;
   }

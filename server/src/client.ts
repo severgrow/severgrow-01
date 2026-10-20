@@ -300,7 +300,7 @@ export class DuelClient {
     return response.ticket;
   }
 
-  async submitSeedProof(token: string, source: { levelId: string } | { ticketId: string }, actions: readonly Action[], botVersion: string): Promise<RewardResult> {
+  async submitSeedProof(token: string, source: { levelId: string; openingVersion?: 1 | 2 } | { ticketId: string }, actions: readonly Action[], botVersion: string): Promise<RewardResult> {
     const campaign = 'levelId' in source;
     const response = await this.request<{ reward: RewardResult }>(
       'POST', campaign ? '/v1/seeds/campaign' : '/v1/seeds/training',

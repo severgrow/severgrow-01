@@ -9,8 +9,7 @@
 import { allCoords, coordKey, rootCoord } from '../engine/index.js';
 import type { BoardSpec, RulesConfig } from '../engine/index.js';
 import type { Level } from '../bots/levels.js';
-// The tutorial's map size, imported rather than re-typed: levels 1-3 play on the SAME small map the
-// tutorial teaches on, and there stays exactly ONE source of truth for how big that map is.
+// Levels 1-10 use the same small-map radius as the optional Tutorial.
 import { TUTORIAL_BOARD_RADIUS } from '../../web/src/logic/tutorial-script.js';
 
 export type CampaignLevel = {
@@ -61,7 +60,7 @@ export const CAMPAIGN_HOMES: readonly [string, string] = Object.freeze([
 ]);
 
 /**
- * The tutorial's small map (radius 2 → 19 hexes), used by levels 1-3 only. Its size comes from
+ * The small map (radius 2 → 19 hexes), used by levels 1-10. Its size comes from
  * `TUTORIAL_BOARD_RADIUS` (one ring smaller than the product board; SPEC 4.3, tutorial exception).
  * The ring2 homes stay the same keys — on radius 2 they are the two far corners.
  */
@@ -121,68 +120,38 @@ const level = (
 });
 
 /**
- * CHAPTER I — levels 1-10. AI = the existing bot level; the board is authored so the design's
- * rock counts are exact (the generator can only place mirrored PAIRS, so it can never make the
- * one-rock and three-rock boards the design asks for). Stones are placed off the home-to-home
- * diagonal (the central routes) and outside both root zones; every board is validated on load
- * (`validate.ts`) — legal, connected, and reachable from both homes.
- *
- * The 2026-10-16 refinement (owner direction): the levels that carried ONLY the centre gold (2, 4,
- * 8) now carry one mirrored gold pair as well, so every board from level 2 on rewards growth on gold
- * — a lever the first pass barely used — while staying open and gentle. Rock counts and bots are
- * untouched (design-exact); only gold counts and positions changed. Level 1 stays a single gold centre.
- *
- * Levels 1-3 also play on the TUTORIAL's small map (radius 2 → 19 hexes) by owner direction: the same
- * ground the tutorial teaches on, so the first three campaign levels stay small, quick and welcoming.
- * Levels 4-30 keep the full product hexagon (radius 3 → 37 hexes).
+ * Levels 1–20 double as the gradual learning journey. The first ten use the familiar 19-cell
+ * tutorial-sized hexagon; level 11 introduces the normal 37-cell field without an AI spike.
+ * Only authored terrain and existing bot tiers change. Stable ids preserve progress and rewards;
+ * `legacy-levels-v1.ts` preserves the previous openings for saves and queued proof verification.
  */
 export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
-  // A completely open board: a clean first win, no obstacle at all — the tutorial's own map and its
-  // single gold centre, nothing else.
-  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], OPEN_GOLD, TUTORIAL_BOARD_RADIUS), 'Completely open, welcoming; the tutorial map.', TUTORIAL_BOARD_RADIUS),
-  // A second open board on the small map: the centre gold plus one inner pair, so gold is worth
-  // reaching for early without any obstacle to read.
-  level(1, 2, 'c1-02', 'New Growth', 95002, 1, board([], RICH_PAIR_INNER, TUTORIAL_BOARD_RADIUS), 'Another open board; a first taste of contested gold.', TUTORIAL_BOARD_RADIUS),
-  // The first stone, on the small map: one harmless edge hex, far from both homes and the centre.
-  level(1, 3, 'c1-03', 'Two Directions', 95003, 1, board(['-2,0'], RICH_PAIR_R, TUTORIAL_BOARD_RADIUS), 'One harmless edge rock.', TUTORIAL_BOARD_RADIUS),
-  // Open again, one step better: a stronger opponent on forgiving ground, now with gold off-centre.
-  level(1, 4, 'c1-04', 'The Clearing', 95004, 2, board([], RICH_PAIR_Q), 'Open board, slightly better bot; gold on the q axis.'),
-  // Two stones on opposite flanks, mirror images: neither home is favoured, the middle stays open.
-  level(1, 5, 'c1-05', 'Stone in the Grass', 95005, 2, board(['-3,1', '3,-1'], RICH_PAIR_Q), 'Scattered rocks away from central routes.'),
-  // One stone just off the diagonal: nudge around it, in either direction.
-  level(1, 6, 'c1-06', 'Branching Out', 95006, 3, board(['0,1'], RICH_PAIR_Q), 'Encourage multiple directions.'),
-  // A two-hex cluster on the left flank: the first real shape to route around.
-  level(1, 7, 'c1-07', 'First Obstacle', 95007, 3, board(['-3,0', '-3,1'], RICH_PAIR_Q), 'Small rock cluster near a flank.'),
-  // The strongest Chapter I opponent on a wide-open field: pure play, gold waiting on both wings.
-  level(1, 8, 'c1-08', 'The Open Field', 95008, 3, board([], RICH_PAIR_FLANK), 'Stronger opponent, forgiving terrain; flank gold.'),
-  // A short three-hex wall to walk around; the rich pair moved to the other axis so nothing overlaps.
-  level(1, 9, 'c1-09', 'Around the Stone', 95009, 4, board(['-2,-1', '-2,0', '-1,-1'], RICH_PAIR_R), 'A short detour around blocked hexes.'),
-  // The finale: a compact grove off-centre, the strongest Chapter I bot, everything so far at once.
-  level(1, 10, 'c1-10', 'The First Grove', 95010, 4, board(['-1,0', '-1,-1', '0,-1'], RICH_PAIR_Q), 'Chapter finale testing the fundamentals.'),
+  // DISCOVER: no terrain vocabulary yet. Every legal placement can teach the real turn.
+  level(1, 1, 'c1-01', 'First Seed', 95001, 1, board([], [], 2), 'Draw, Grow and Throw on quiet ground.', 2),
+  level(1, 2, 'c1-02', 'New Growth', 96003, 1, board([], [], 2), 'Repeat the turn with a genuine placement choice.', 2),
+  level(1, 3, 'c1-03', 'Two Directions', 96326, 1, board([], [], 2), 'Choose between legal routes.', 2),
+  // CONNECT: strength, protection and a possible sever appear before special cards are taught.
+  level(1, 4, 'c1-04', 'The Clearing', 95004, 1, board([], [], 2), 'The tree anchors a connected network.', 2),
+  level(1, 5, 'c1-05', 'Higher Ground', 96501, 1, board([], [], 2), 'Numbers and strengthening, without terrain distraction.', 2),
+  level(1, 6, 'c1-06', 'Strong Branch', 96603, 2, board([], [], 2), 'Protect an expanding connection.', 2),
+  level(1, 7, 'c1-07', 'The Weak Link', 97005, 2, board([], [], 2), 'Look for a vulnerable opposing link.', 2),
+  // COMBINE: each special has an opening that actually carries the relevant cards.
+  level(1, 8, 'c1-08', 'The Open Field', 96001, 2, board([], [], 2), 'A Bomb begins in hand; use it once an enemy touches the network.', 2),
+  level(1, 9, 'c1-09', 'First Bloom', 96012, 2, board([], [], 2), 'A legal Bloom combination begins in hand.', 2),
+  level(1, 10, 'c1-10', 'The First Grove', 95010, 2, board(['-2,0'], RICH_PAIR_INNER, 2), 'Gold scores twice; a first small-board finale.', 2),
 
-  // ---------- CHAPTER II — BROKEN GROUND (11-20): learn to navigate ----------
-  // The theme: rocks make decisions, not walls. Every board keeps a wide open middle and both
-  // flanks usable, so Bloom and networks still have room; the step up is real but readable.
-  // A few pebbles beside the trail, a mirrored pair: the gentlest way into broken ground.
-  level(2, 11, 'c2-11', 'Pebble Trail', 95011, 4, board(['-1,-1', '1,1'], RICH_PAIR_Q), 'Two pebbles beside the trail; still wide open.'),
-  // A short wall flanks the centre: two ways round it — over the top or under the bottom.
-  level(2, 12, 'c2-12', 'Split Meadow', 95012, 5, board(['-1,0', '1,0', '-1,-1'], RICH_PAIR_R), 'A split down the middle; pick a lane.'),
-  // The first real detour: a four-hex arc off the centre-left to walk around.
-  level(2, 13, 'c2-13', 'The Detour', 95013, 5, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
-  // Breathing space: one lone stone, a stronger opponent, and a second gold pair to race for.
-  level(2, 14, 'c2-14', 'Open Horizon', 95014, 5, board(['0,1'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
-  // Twin crystals on opposite wings plus a central pair: two threats to answer at once.
-  level(2, 15, 'c2-15', 'Twin Stones', 95015, 6, board(['-3,1', '3,-1', '-1,0', '1,0'], RICH_PAIR_R), 'Twin flanks and a central pair.'),
-  // A broken line across the middle with two gaps: cross at the centre or slip through the notch.
-  level(2, 16, 'c2-16', 'Broken Crossing', 95016, 6, board(['-2,0', '-1,0', '2,0', '3,0'], RICH_PAIR_INNER), 'A broken wall with two crossings.'),
-  // A long wall on both inner flanks: the straight line is shut, so take the long way round.
-  level(2, 17, 'c2-17', 'The Long Way', 95017, 6, board(['-1,0', '-1,-1', '-1,-2', '1,1', '1,2'], RICH_PAIR_R), 'Both inner lanes close early; go the long way.'),
-  // Breathing space again: a thin central pair only, so the better bot has room to out-play you.
-  level(2, 18, 'c2-18', 'Quiet Clearing', 95018, 7, board(['-1,0', '1,0'], RICH_PAIR_Q), 'Open again: fewer stones, a sharper bot.'),
-  // A garden of five scattered stones, each one a small decision, none of them a wall.
-  level(2, 19, 'c2-19', 'Stone Garden', 95019, 7, board(['-3,0', '-1,-1', '0,1', '1,1', '2,0'], RICH_PAIR_R), 'Five scattered stones, five small choices.'),
-  // The chapter climax: a broken grove round the centre, the strongest Chapter II bot, five gold.
-  level(2, 20, 'c2-20', 'The Broken Grove', 95020, 7, board(['-2,0', '-1,0', '0,-1', '1,0', '2,0'], ['0,0', '-2,-1', '2,1', '0,-3', '0,3']), 'Chapter finale: a broken grove, bot 7, five gold.'),
+  // EXPLORE: the full board opens first, then stones and contested gold arrive gradually.
+  level(2, 11, 'c2-11', 'The Wider Field', 95011, 2, board([], OPEN_GOLD), 'Discover the full 37-cell board on open ground.'),
+  level(2, 12, 'c2-12', 'Split Meadow', 95012, 3, board(['-2,0'], RICH_PAIR_R), 'A rock blocks a route without closing the centre.'),
+  level(2, 13, 'c2-13', 'The Detour', 95013, 3, board(['-2,0', '-1,0'], RICH_PAIR_R), 'Go round a short rock pair.'),
+  level(2, 14, 'c2-14', 'Open Horizon', 95014, 4, board(['0,1'], RICH_PAIR_Q), 'Contest valuable territory with room to manoeuvre.'),
+  level(2, 15, 'c2-15', 'Twin Stones', 95015, 4, board(['-3,1', '3,-1', '-1,0'], RICH_PAIR_R), 'Combine expansion, strength and cuts.'),
+  // INDEPENDENT: normal interface, optional help, and a smooth climb toward Chapter III.
+  level(2, 16, 'c2-16', 'Broken Crossing', 95016, 5, board(['-2,0', '-1,0', '2,0', '3,0'], RICH_PAIR_INNER), 'Choose a crossing independently.'),
+  level(2, 17, 'c2-17', 'The Long Way', 95017, 5, board(['-1,0', '-1,-1', '-1,-2', '1,1', '1,2'], RICH_PAIR_R), 'React when an opponent takes the easier route.'),
+  level(2, 18, 'c2-18', 'Quiet Clearing', 95018, 6, board(['-1,0', '1,0'], RICH_PAIR_Q), 'Adapt to open space and a sharper opponent.'),
+  level(2, 19, 'c2-19', 'Stone Garden', 95019, 6, board(['-3,0', '-1,-1', '0,1', '1,1', '2,0'], RICH_PAIR_R), 'Use all the familiar mechanics on varied terrain.'),
+  level(2, 20, 'c2-20', 'The Broken Grove', 95020, 7, board(['-2,0', '-1,0', '0,-1', '1,0', '2,0'], ['0,0', '-2,-1', '2,1', '0,-3', '0,3']), 'Earn the first major milestone.'),
 
   // ---------- CHAPTER III — NARROW PATHS (21-30): fight for space ----------
   // The theme: contested hexes and corridors. No level leaves a single hex that decides the game:

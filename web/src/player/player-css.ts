@@ -972,4 +972,38 @@ html[data-thumb] .dock-overlays > .first-tip.teaching-compact {
 html[data-thumb] .first-tip.teaching-compact > :not(#first-tip-ok) { grid-column: 1; }
 html[data-thumb] .first-tip.teaching-compact #first-tip-ok { grid-column: 2; grid-row: 1 / span 2; }
 html[data-thumb] .first-tip.teaching-compact #first-tip-text { margin: 0; font-size: 0.8rem; line-height: 1.2; }
+
+/* Early Levels use the existing legal-target language. One current control receives a little
+   more of the same warm light; no new cursor, ring, modal or competing tutorial overlay. */
+html.futa04-information[data-campaign-focus='deck'] #deck.ready,
+html.futa04-information[data-campaign-focus='bloom'] #smart-bloom-button,
+html.futa04-information[data-campaign-focus='bomb'] #hand .card.fruit-ready {
+  filter:drop-shadow(0 0 7px rgba(246,225,186,.34));
+}
+html.futa04-information[data-campaign-focus='hand'] #hand .card.playable {
+  box-shadow:0 0 0 1px rgba(246,225,186,.48),0 0 10px rgba(246,225,186,.20);
+}
+html.futa04-information[data-campaign-focus='targets'] #board .hex-cell.target {
+  opacity:1;
+}
+#campaign-attempt {
+  position:fixed; z-index:1000; width:min(230px,calc(100vw - 24px));
+  box-sizing:border-box; padding:6px 10px; border:1px solid rgba(243,222,187,.22);
+  border-radius:8px; background:rgba(20,21,20,.92); color:#f1e4cc;
+  font:700 .73rem/1.2 'Alegreya Sans',sans-serif; letter-spacing:.075em;
+  text-align:center; pointer-events:none; opacity:0; transform:translateY(3px);
+  transition:opacity 140ms ease-out,transform 140ms ease-out;
+}
+#campaign-attempt.visible { opacity:1; transform:translateY(0); }
+html.reduce-motion #campaign-attempt { transition:none; }
+#campaign-guide {
+  position:fixed; z-index:20; transform:translateX(-50%); pointer-events:none;
+  max-width:min(260px,calc(100vw - 24px)); box-sizing:border-box;
+  padding:6px 11px; border:1px solid rgba(243,222,187,.22); border-radius:8px;
+  background:rgba(19,21,20,.91); box-shadow:0 5px 20px rgba(0,0,0,.18);
+  color:#f1e4cc; font:700 .78rem/1.2 'Alegreya Sans',sans-serif;
+  letter-spacing:.07em; text-align:center; white-space:normal;
+}
+#campaign-guide[hidden] { display:none; }
+html[data-thumb] #campaign-guide { width:min(126px,40vw); font-size:.72rem; }
 `;

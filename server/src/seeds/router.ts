@@ -49,8 +49,9 @@ export const createWorldEconomyRouter = (deps: {
     if (!Array.isArray(body.actions) || typeof body.botVersion !== 'string') throw new ApiError('INVALID_REQUEST', 'A match replay is required.');
     const actions = body.actions as Action[];
     if (path === '/v1/seeds/campaign') {
-      if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Campaign level is required.');
-      return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion) });
+      if (typeof body.levelId !== 'string') throw new ApiError('INVALID_REQUEST', 'A level is required.');
+      if (body.openingVersion !== undefined && body.openingVersion !== 1 && body.openingVersion !== 2) throw new ApiError('INVALID_REQUEST', 'Unknown level opening.');
+      return ok(200, { reward: await economy.campaign(player, body.levelId, actions, body.botVersion, (body.openingVersion ?? 1) as 1 | 2) });
     }
     if (typeof body.ticketId !== 'string') throw new ApiError('INVALID_REQUEST', 'A Training ticket is required.');
     return ok(200, { reward: await economy.training(player, body.ticketId, actions, body.botVersion) });

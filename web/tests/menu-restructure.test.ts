@@ -89,8 +89,8 @@ describe('the campaign entry reads LEVEL <n> from the player progress', () => {
     expect(mainSource).toMatch(/cmp\.textContent = MENU\.level\(current\)/);
     expect(mainSource).toMatch(/cmp\.setAttribute\('aria-label', MENU\.[A-Za-z]+\(current\)\)/);
     // And the words themselves are real, which the source pattern above cannot prove.
-    expect(MENU.levelAria(1)).toBe('Play campaign level 1');
-    expect(MENU.levelAria(25)).toBe('Play campaign level 25');
+    expect(MENU.levelAria(1)).toBe('Play level 1');
+    expect(MENU.levelAria(25)).toBe('Play level 25');
   });
 });
 

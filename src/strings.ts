@@ -534,7 +534,7 @@ export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',
   /** LEVEL <n>'s spoken label: the button starts the game, it does not open the level list. */
-  levelAria: (number: number): string => `Play campaign level ${number}`,
+  levelAria: (number: number): string => `Play level ${number}`,
   /** the one doorway to the offline modes and the duel lobby */
   play: 'Play',
   /** the PLAY screen's heading */
@@ -832,6 +832,7 @@ export const SETTINGS = Object.freeze({
   autoSkip: 'Auto-skip empty turns',
   helpGroup: 'More playing options',
   helpGroupHint: 'step guidance, placement list and weak spots',
+  guidedLevels: 'Guide me through early levels',
   placementList: 'Show the places to play',
   weakSpots: 'Show weak spots',
   weakPulse: 'Pulse my weakest link',
@@ -972,11 +973,11 @@ export const PRIVACY = Object.freeze({
  */
 export const CAMPAIGN = Object.freeze({
   /** the main menu entry that opens the campaign */
-  title: 'Campaign',
+  title: 'Levels',
   /** the main menu entry that keeps the old difficulty picker */
   classic: 'Classic vs AI',
   /** the campaign screen heading */
-  heading: 'Campaign',
+  heading: 'Levels',
   /** the prominent button that resumes an unfinished campaign match */
   resume: 'Resume',
   /** the prominent button that opens the current level when nothing is unfinished */
@@ -1009,13 +1010,13 @@ export const CAMPAIGN = Object.freeze({
    *  this is the number alone: "Level 4". */
   levelLabel: (number: number): string => `Level ${number}`,
   /** resume the campaign match exactly where it stopped */
-  resumeHint: 'Your campaign match is unfinished.',
+  resumeHint: 'Your level is unfinished.',
   /** the log line when a campaign level opens (Level N · name) */
   started: (number: number): string => `Level ${number}`,
   /** the campaign finish title after a win: "Level 6 complete" */
   levelWon: (number: number): string => `Level ${number} complete`,
   /** the finish screen's secondary way out, back to the level list */
-  back: 'Back to campaign',
+  back: 'All levels',
   /**
    * The finish screen's LEADING action after a won level (owner direction, 2026-10-16): the next
    * level starts straight away, so the player never has to walk back to the list to pick it. The

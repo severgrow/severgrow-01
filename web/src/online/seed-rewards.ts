@@ -6,10 +6,10 @@ import type { RewardResult } from '../../../server/src/seeds/types.js';
 
 export const PENDING_SEED_PROOFS_KEY = 'severgrow.seeds.pending.v1';
 export type PendingSeedProof =
-  | { kind: 'campaign'; levelId: string; actions: readonly Action[]; botVersion: string }
+  | { kind: 'campaign'; levelId: string; openingVersion?: 1 | 2; actions: readonly Action[]; botVersion: string }
   | { kind: 'training'; ticketId: string; actions: readonly Action[]; botVersion: string };
 
-const proofKey = (p: PendingSeedProof) => p.kind === 'campaign' ? `campaign:${p.levelId}` : `training:${p.ticketId}`;
+const proofKey = (p: PendingSeedProof) => p.kind === 'campaign' ? `campaign:${p.levelId}:v${p.openingVersion ?? 1}` : `training:${p.ticketId}`;
 const read = (storage: KeyValue): PendingSeedProof[] => {
   try {
     const data = JSON.parse(storage.get(PENDING_SEED_PROOFS_KEY) ?? '[]') as unknown;
@@ -35,13 +35,16 @@ export const flushSeedProofs = (storage: KeyValue, client: DuelClient, token: st
     const awarded: { key: string; reward: RewardResult }[] = [];
     for (const proof of read(storage)) {
       try {
-        const source = proof.kind === 'campaign' ? { levelId: proof.levelId } : { ticketId: proof.ticketId };
+        const source = proof.kind === 'campaign' ? { levelId: proof.levelId, openingVersion: proof.openingVersion ?? 1 } : { ticketId: proof.ticketId };
         const reward = await client.submitSeedProof(token, source, proof.actions, proof.botVersion);
         awarded.push({ key: proofKey(proof), reward });
         write(storage, read(storage).filter((v) => proofKey(v) !== proofKey(proof)));
       } catch (error) {
-        // Invalid/expired proofs cannot become valid later; transient network errors keep the
-        // locally queued replay so the next menu visit can retry it.
+        // A v2 opening can briefly reach an older server during a staggered release. Keep its
+        // replay until the verifier knows that opening; do not erase a legitimate first clear.
+        if (error instanceof DuelError && error.status === 400 && proof.kind === 'campaign' && proof.openingVersion === 2) continue;
+        // Other invalid/expired proofs cannot become valid later; transient errors retain the
+        // replay so the next menu visit can retry it.
         if (error instanceof DuelError && error.status === 400) {
           write(storage, read(storage).filter((v) => proofKey(v) !== proofKey(proof)));
         } else break;

@@ -51,6 +51,8 @@ export type Settings = {
   musicVolume: number;
   /** Quiet hand brackets for groups that can legally bloom right now. */
   bloomHints: boolean;
+  /** Contextual learning cues in Levels 1–20; never changes legal actions. */
+  guidedLevels: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -75,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sfxVolume: 80,
   musicVolume: 60,
   bloomHints: true,
+  guidedLevels: true,
 };
 
 export const SETTINGS_KEY = 'severgrow.settings.v1';
@@ -101,7 +104,7 @@ export const parseSettings = (raw: string | null, systemReduce = false): Setting
   // the old device-based "Confirm drawn moves" setting: On carries over as Always
   if (s.confirmDraw === true) out.confirmPolicy = 'always';
   if (CONFIRM_MODES.includes(s.confirmPolicy as ConfirmMode)) out.confirmPolicy = s.confirmPolicy as ConfirmMode;
-  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints'] as const) {
+  for (const k of ['sound', 'music', 'vibration', 'reduceMotion', 'weakSpots', 'largeText', 'weakPulse', 'placementList', 'eyeCandy', 'autoSkip', 'bloomHints', 'guidedLevels'] as const) {
     if (typeof s[k] === 'boolean') out[k] = s[k] as boolean;
   }
   for (const k of ['sfxVolume', 'musicVolume'] as const) {

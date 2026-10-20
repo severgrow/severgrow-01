@@ -62,9 +62,7 @@ describe('campaign levels: the definition is well formed', () => {
     expect([...checks.keys()]).toEqual(CAMPAIGN_LEVELS.map((l) => l.id));
     for (const [id, c] of checks) {
       const number = CAMPAIGN_LEVELS.find((l) => l.id === id)!.number;
-      // The small tutorial map (19 hexes) cannot hold 20 open; its floor is that minus the four
-      // hexes it may lose to rock. Levels 4-30 keep the product board's original floor of 20.
-      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 3 ? 15 : 20);
+      expect(c.openCells, id).toBeGreaterThanOrEqual(number <= 10 ? 15 : 20);
       expect(c.minHomeOpenNeighbours, id).toBeGreaterThanOrEqual(3);
     }
   });
@@ -85,14 +83,12 @@ describe('campaign levels: the definition is well formed', () => {
     }
   });
 
-  it('the authored boards match the design rock counts exactly', () => {
+  it('holds back rocks until level 10 and then introduces obstacles gradually', () => {
     const rocks = new Map(CAMPAIGN_LEVELS.map((l) => [l.number, l.config.board!.rock.length]));
     expect([...rocks.entries()]).toEqual([
-      // Chapter I (design pack): 0,0,1,0,2,1,2,0,3,3
-      [1, 0], [2, 0], [3, 1], [4, 0], [5, 2],
-      [6, 1], [7, 2], [8, 0], [9, 3], [10, 3],
-      // Chapter II (design pack): 2,3,4,1,4,4,5,2,5,5
-      [11, 2], [12, 3], [13, 4], [14, 1], [15, 4],
+      [1, 0], [2, 0], [3, 0], [4, 0], [5, 0],
+      [6, 0], [7, 0], [8, 0], [9, 0], [10, 1],
+      [11, 0], [12, 1], [13, 2], [14, 1], [15, 3],
       [16, 4], [17, 5], [18, 2], [19, 5], [20, 5],
       // Chapter III (design pack): 4,5,4,5,6,4,6,2,6,6
       [21, 4], [22, 5], [23, 4], [24, 5], [25, 6],
@@ -100,15 +96,13 @@ describe('campaign levels: the definition is well formed', () => {
     ]);
   });
 
-  it('uses gold as well as rocks across 1-30 (every level but the first has gold off the centre)', () => {
-    for (const level of CAMPAIGN_LEVELS) {
+  it('introduces gold at level 10 after the basic and special lessons', () => {
+    for (const level of CAMPAIGN_LEVELS.slice(0, 9)) expect(level.config.board!.gold).toEqual([]);
+    for (const level of CAMPAIGN_LEVELS.slice(9)) {
       expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(1);
       expect(level.config.board!.gold, level.id).toContain('0,0');
     }
-    // The refinement: every level from 2 on rewards growth on gold beyond the bare centre.
-    for (const level of CAMPAIGN_LEVELS.filter((l) => l.number > 1)) {
-      expect(level.config.board!.gold.length, level.id).toBeGreaterThanOrEqual(3);
-    }
+    expect(CAMPAIGN_LEVELS[9]!.config.board!.gold.length).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps the difficulty ramp NON-DECREASING: the bot only ever gets stronger as levels rise', () => {
@@ -128,27 +122,24 @@ describe('campaign levels: the definition is well formed', () => {
   });
 
   it('ships the approved bot ladder exactly, so the rebalance cannot be quietly undone', () => {
-    // Owner-approved 2026-10-16: L1-3 the deliberately easy intro, then short rungs of 2-6 levels,
-    // each step worth roughly 63-72% to the stronger bot, up to bot 9 at the top.
+    // The first ten teach on the smaller board; the larger map arrives without an AI spike.
     expect(CAMPAIGN_LEVELS.map((l) => l.botLevel)).toEqual([
-      1, 1, 1,
-      2, 2,
-      3, 3, 3,
-      4, 4, 4,
-      5, 5, 5,
-      6, 6, 6,
-      7, 7, 7,
+      1, 1, 1, 1, 1,
+      2, 2, 2, 2, 2, 2,
+      3, 3,
+      4, 4,
+      5, 5,
+      6, 6,
+      7,
       8, 8, 8, 8,
       9, 9, 9, 9, 9, 9,
     ]);
   });
 
-  it('levels 1-3 use the tutorial small map (radius 2); levels 4-30 the product hexagon (radius 3)', () => {
+  it('levels 1-10 use 19 hexes; levels 11-30 use the 37-hex board', () => {
     for (const level of CAMPAIGN_LEVELS) {
       const board = level.config.board!;
-      // Owner direction 2026-10-16: the first three levels are played on the SAME map the tutorial
-      // teaches on. This is a deliberate narrowing, not a range: the split is exact per level.
-      const small = level.number <= 3;
+      const small = level.number <= 10;
       const expectedRadius = small ? TUTORIAL_BOARD_RADIUS : 3;
       const expectedCells = small ? CAMPAIGN_SMALL_CELLS : CAMPAIGN_CELLS;
       const expectedHomes = small ? CAMPAIGN_SMALL_HOMES : CAMPAIGN_HOMES;
@@ -167,7 +158,7 @@ describe('campaign levels: the definition is well formed', () => {
 describe('campaign levels: the validation layer fails loudly and specifically', () => {
   // A product-board (radius 3) level as the base: these checks are about OTHER rules, so the board
   // must not trip the radius/hexagon check first.
-  const base = CAMPAIGN_LEVELS[3]!; // level 4, the product hexagon
+  const base = CAMPAIGN_LEVELS[10]!; // level 11, the product hexagon
   const withBoard = (rock: string[], gold: string[] = ['0,0'], homes = [...CAMPAIGN_HOMES] as [string, string]) => ({
     ...base,
     id: 'broken',
@@ -255,12 +246,12 @@ describe('campaign levels: reproducible', () => {
   });
 
   it('the opening is on the authored board (homes are the authored homes, rock is rock)', () => {
-    const level = CAMPAIGN_LEVELS[6]!; // First Obstacle, two rocks
+    const level = CAMPAIGN_LEVELS[9]!; // Gold and the first rock
     const s = campaignOpening(level);
-    expect(s.config.board!.rock).toEqual(['-3,0', '-3,1']);
-    expect(s.terrain['-3,0']).toBe('rock');
+    expect(s.config.board!.rock).toEqual(['-2,0']);
+    expect(s.terrain['-2,0']).toBe('rock');
     expect(s.terrain['0,0']).toBe('rich');
-    for (const home of CAMPAIGN_HOMES) {
+    for (const home of CAMPAIGN_SMALL_HOMES) {
       expect(s.board[home]?.root).toBe(true);
       expect(s.terrain[home]).toBe('normal');
     }
