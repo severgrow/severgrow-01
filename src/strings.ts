@@ -296,8 +296,8 @@ export const RESULT = Object.freeze({
   won: 'You won',
   lost: 'You lost',
   draw: 'A draw',
-  /** Offline win headline: "You beat Level 7!" */
-  beatLevel: (level: number) => `You beat Level ${level}!`,
+  /** The practice result's second line: "Practice match · Medium" (never the opponent's 1-9 level). */
+  practice: (difficulty: string) => `Practice match · ${difficulty}`,
   /** Why the game ended. */
   doubleStrangle: 'Both homes were surrounded at once.',
   strangleWon: `You surrounded ${OPP.theirs} home.`,

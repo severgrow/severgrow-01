@@ -82,7 +82,7 @@ import type { Level } from '../../src/bots/levels.js';
 // names everywhere on 2026-10-16. The module and its test remain until he decides whether to keep
 // the names for some future surface.
 import {
-  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, parseDifficultyStep, stepAfterGame, stepLevelFor,
+  DIFFICULTIES, DIFFICULTY_STEP_KEY, defaultDifficultyForLevel, matchLabel, parseDifficultyStep, stepAfterGame, stepLevelFor,
 } from './logic/difficulty.js';
 import type { DifficultyId } from './logic/difficulty.js';
 import { describe, moveSummary, resultReason, resultTitle } from './logic/log.js';
@@ -1601,7 +1601,7 @@ async function startGame(
   log = [
     campaign
       ? `${CAMPAIGN.started(campaign.number)}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`
-      : `New game against Level ${level}. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
+      : `New ${matchLabel({ campaign: null, difficulty, botLevel: level })} practice match. ${opponentStarts ? `${OPP.label} goes first.` : 'You go first.'}`,
   ];
   // A campaign match always keeps its opening as the replay base: the save must replay under the
   // LEVEL's config (its authored board), never under the default config.
@@ -2587,6 +2587,10 @@ let gameLevel: Level = 7;
  * one-game carry-over is recorded against when the game ends.
  */
 let gameDifficulty: DifficultyId | null = null;
+/** The match as the player knows it: its campaign level, or its difficulty (never the bot level). */
+function currentMatchLabel(): string {
+  return matchLabel({ campaign: campaignLevel?.number ?? null, difficulty: gameDifficulty, botLevel: gameLevel });
+}
 /**
  * The campaign level of the ACTIVE match, or null for a classic / tutorial match. It is the only
  * production source of match overrides (see `overridesForMatch`), and it is cleared by every other
@@ -4841,7 +4845,7 @@ function renderHud() {
     ? '<b>Game over</b>'
     : isOnlineDuel()
       ? ''
-      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>Level ${gameLevel}</small>`;
+      : `<b>${st.turnPlayer === HUMAN ? (watching ? `Green turn (Level ${watching.level})` : 'Your turn') : thinking ? `${OPP.Label} turn<span class="dots"><i></i><i></i><i></i></span>` : `${OPP.Label} turn`}</b><small>${currentMatchLabel()}</small>`;
   // The dock's hint line: always there (one fixed row), saying what to do next.
   const hint = dockHint(session.view);
   const hintEl = $('hint');
@@ -6340,7 +6344,7 @@ function renderGameOver() {
   // the level data, never a hardcoded count, so a worker adding levels needs no change here).
   const next = campaign && won ? nextCampaignLevel(campaign.number) : null;
   $('go-title').textContent = won
-    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.beatLevel(gameLevel)
+    ? campaign ? CAMPAIGN.levelWon(campaign.number) : RESULT.won
     : resultTitle(r, HUMAN);
   // The subtitle used to name the level ("Level 6 · Branching Out"). The owner removed level and
   // chapter NAMES everywhere (2026-10-16): the title already says which level it was, so naming it
@@ -6353,9 +6357,9 @@ function renderGameOver() {
     $('go-sub').textContent = note;
     $('go-sub').hidden = note === '';
   } else {
-    // A classic game: nothing to add. The title carries the outcome and the level number.
-    $('go-sub').textContent = '';
-    $('go-sub').hidden = true;
+    // A practice match: which difficulty it was — never the internal opponent level (owner).
+    $('go-sub').textContent = RESULT.practice(currentMatchLabel());
+    $('go-sub').hidden = false;
   }
   // What this level was teaching, said back to the player once they have won it: the "you did it,
   // and here is what you just learned" beat. Only on a guided level, only on a win. Guarded by id:
