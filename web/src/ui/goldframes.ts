@@ -1,6 +1,6 @@
 // A quiet metal rim for bonus terrain. The three supplied frame treatments
 // share one transparent atlas; a tile key picks its frame for the whole game.
-import atlasUrl from '../assets/futasaku-gold-frames.png?url';
+import atlasUrl from '../assets/futasaku-gold-frames.webp?url';
 import { el, hash, S, SQ3 } from './geom.js';
 import { getOrient } from '../logic/orient.js';
 
