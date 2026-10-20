@@ -284,6 +284,17 @@ describe('sound palette', () => {
     }
   });
 
+  it('always plays the FIRST tick, even at ctx.currentTime 0', () => {
+    const ctx = lastCtx!;
+    ctx.currentTime = 0; // the state on the player's very first tap
+    expect(run(() => s.tick()).length).toBeGreaterThan(0);
+    // ...and only then does the 30ms window start counting.
+    ctx.currentTime = 0.02;
+    expect(run(() => s.tick())).toHaveLength(0);
+    ctx.currentTime = 0.031;
+    expect(run(() => s.tick()).length).toBeGreaterThan(0);
+  });
+
   it('coalesces repeated selection ticks inside 30ms', () => {
     const ctx = lastCtx!;
     ctx.currentTime = 1;

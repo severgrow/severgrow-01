@@ -51,7 +51,11 @@ export class Sound {
   wave: Wave = 'square';
   /** End times of scheduled voices, pruned on the next play (no timers, no frames). */
   private active: number[] = [];
-  private lastTickAt = -Infinity;
+  /** When the last tick played, or `null` before the first one. A numeric sentinel would collide
+   *  with a real timestamp: `ctx.currentTime` is ~0 on the very first tap, so a `0` start made
+   *  `now - 0 < 30ms` true and swallowed the FIRST tick. `null` cannot collide, and coalescing
+   *  still applies from the second tick on. */
+  private lastTickAt: number | null = null;
   private belowBase = 1;
   private visibilityBound = false;
   private hidden = false;
@@ -160,7 +164,7 @@ export class Sound {
     this.voices = 0;
     this.counters = {};
     this.lastVariant = {};
-    this.lastTickAt = -Infinity;
+    this.lastTickAt = null;
     this.cueLog = [];
   }
 
@@ -219,7 +223,10 @@ export class Sound {
     this.active = this.active.filter((end) => end > now);
     if (this.active.length >= VOICE_CAP) return;
     if (cue === 'tick') {
-      if ((now - this.lastTickAt) * 1000 < TICK_COALESCE_MS) return;
+      // Only coalesce once a tick exists: the very first one is the player's first gesture and
+      // always plays (ctx.currentTime is ~0 there, so any numeric sentinel would eat it).
+      const prev = this.lastTickAt;
+      if (prev !== null && (now - prev) * 1000 < TICK_COALESCE_MS) return;
       this.lastTickAt = now;
     }
 

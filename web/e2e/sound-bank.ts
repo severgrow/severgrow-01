@@ -13,6 +13,7 @@ import { chromium } from 'playwright-core';
 import type { Page } from 'playwright-core';
 import { servePreview } from './helpers/preview-port.js';
 import { assertDistChannel } from './helpers/dist-channel.js';
+import { openMenuEntry } from './helpers/menu-nav.js';
 
 const { server, url: BASE } = await servePreview(4197, { logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
@@ -85,7 +86,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await instrument(page);
   await seeded(true)(page);
-  await page.goto(`${BASE}?seed=2`);
+  await page.goto(BASE); // NOT ?seed=N: that starts a game at boot and hides the menu this suite drives
   await page.waitForSelector('#menu:not([hidden])', { timeout: 40_000 });
   await assertDistChannel(page);
 
@@ -128,10 +129,18 @@ try {
   assert(opened, 'the settings sheet opened');
   await page.locator('#sheet-settings [data-close]').click();
   await page.waitForSelector('#sheet-settings', { state: 'hidden' });
-  await page.locator('#menu-new').click();
+  // Practice match lives behind the PLAY doorway on the product channels (helpers/menu-nav.ts), and
+  // then the practice tier picker opens: any tier is fine, this suite only needs a live game.
+  await openMenuEntry(page, 'menu-new');
+  await page.waitForSelector('#levels:not([hidden])', { timeout: 20_000 });
+  await page.click('#level-grid [data-difficulty], .level-grid [data-difficulty]');
   await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 20_000 });
   await page.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30_000 });
-  await page.locator('#deck').click();
+  // The deal settles a beat after the state object exists (`busy()` keeps the piles disabled), and
+  // the draw pile breathes (a 1.8s animation, so Playwright's "stable" never comes). Wait for the
+  // pile to be tappable, then tap it as a player does.
+  await page.waitForSelector('#deck:not([disabled])', { timeout: 20_000 });
+  await page.locator('#deck').click({ force: true });
   await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT', undefined, { timeout: 20_000 });
 
   // Settle -> thud: play a legal Grow (Sprout) and look for the landing pair in the cue log.
@@ -153,14 +162,16 @@ try {
   assert(afterPlay.sources > beforePlay.sources, 'voices still start');
 
   // Hidden -> suspended, return -> running and playing again.
+  // `value:` rather than a `get:` closure: tsx's keepNames pass rewrites an anonymous getter into
+  // `__name(...)`, which does not exist in the page and would throw inside evaluate.
   await page.evaluate(() => {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.waitForTimeout(80);
   assert.equal((await bank(page))?.state, 'suspended', 'a hidden document suspends the AudioContext');
   await page.evaluate(() => {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await page.waitForFunction(() => (window as any).__severgrow.soundBank()?.state === 'running', undefined, { timeout: 5_000 });
@@ -188,9 +199,11 @@ try {
   const off = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await instrument(off);
   await seeded(false)(off);
-  await off.goto(`${BASE}?seed=2`);
+  await off.goto(BASE); // again no ?seed=N: this page needs the menu
   await off.waitForSelector('#menu:not([hidden])', { timeout: 40_000 });
-  await off.locator('#menu-new').click();
+  await openMenuEntry(off, 'menu-new');
+  await off.waitForSelector('#levels:not([hidden])', { timeout: 20_000 });
+  await off.click('#level-grid [data-difficulty], .level-grid [data-difficulty]');
   await off.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 20_000 });
   await off.waitForTimeout(400);
   assert.equal((await bank(off))?.ready ?? false, false, 'Sound off builds no bank');
