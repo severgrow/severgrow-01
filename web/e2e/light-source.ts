@@ -417,8 +417,23 @@ try {
 
   /** Added light (0-255 luminance) from the bloom, and where it lands. */
   const washOf = async (p: Page, label: string): Promise<Wash> => {
-    // Freeze every animation so the two frames are the same instant (the marquee is moving).
-    await p.evaluate(() => { for (const a of document.getAnimations()) { try { a.pause(); } catch { /* already gone */ } } });
+    // RE-ARM THE NOTICE, THEN FREEZE IT. The display shows a notice for about 2.2 s and then
+    // returns to the score, so a measurement taken a moment later would photograph a different
+    // message (or the score) and the numbers would describe the wrong thing. Writing the banner's
+    // own text back is a mutation, so the notice rail re-announces it. The wait lets the 190 ms
+    // reel transition finish first: pausing mid-reel would leave the previous frame's canvas on
+    // the glass, which is exactly the kind of diff that lies about the bloom.
+    await p.evaluate(() => {
+      const banner = document.getElementById('banner');
+      if (banner) banner.textContent = banner.textContent;
+    });
+    await p.waitForTimeout(260);
+    // Freeze every animation so the two frames are the same instant (the marquee is moving), and
+    // record the state that was frozen: this is the message the pixels below belong to.
+    const scrolling = await p.evaluate(() => {
+      for (const a of document.getAnimations()) { try { a.pause(); } catch { /* already gone */ } }
+      return document.getElementById('smart-led-bloom')?.classList.contains('scrolling') === true;
+    });
     const shotWith = await p.screenshot();
     await p.evaluate(() => { (document.getElementById('smart-led-bloom') as HTMLElement).style.opacity = '0'; });
     const shotWithout = await p.screenshot();
@@ -426,7 +441,7 @@ try {
       (document.getElementById('smart-led-bloom') as HTMLElement).style.opacity = '';
       for (const a of document.getAnimations()) { try { a.play(); } catch { /* already gone */ } }
     });
-    const measured = await p.evaluate(async ({ withData, withoutData }) => {
+    const measured = await p.evaluate(async ({ withData, withoutData, scrolling }) => {
       const load = async (src: string) => {
         const image = new Image(); image.src = `data:image/png;base64,${src}`; await image.decode();
         const c = document.createElement('canvas'); c.width = image.width; c.height = image.height;
@@ -480,11 +495,11 @@ try {
         clip: { w: Math.round(clipR.width), h: Math.round(clipR.height), x: Math.round(clipR.left), y: Math.round(clipR.top) },
         led: { w: Math.round(ledR.width), h: Math.round(ledR.height), x: Math.round(ledR.left), y: Math.round(ledR.top) },
         sprite: { w: Math.round(sprite.width), h: Math.round(sprite.height), peak },
-        scrolling: bloom.classList.contains('scrolling'),
+        scrolling,
         insideMax: Math.round(insideMax), insideAt, beyond28: Math.round(beyond28),
         outsideBand: Math.round(outsideBand), uiLuma: Math.round(uiLuma),
       };
-    }, { withData: shotWith.toString('base64'), withoutData: shotWithout.toString('base64') });
+    }, { withData: shotWith.toString('base64'), withoutData: shotWithout.toString('base64'), scrolling });
     if (process.env.E2E_DEBUG === '1') console.log(`wash ${label}: ${JSON.stringify(measured)}`);
     return measured;
   };

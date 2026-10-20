@@ -41,7 +41,7 @@ try {
     check(await page.evaluate(()=>(window as any).__severgrow.settings().level)===level,`${width}: exact chosen level survives reload`);
     const resting=await restingScore(page);
     check(await page.locator('#smart-led-text').innerText()===resting,`${width}: score is resting display during Draw (${resting})`);
-    check(await page.locator('#smart-led').getAttribute('data-mode')==='score',`${width}: player/opponent score uses coloured LED mode`);
+    check(await page.locator('#smart-led').getAttribute('data-mode')==='score',`${width}: the resting face is the score mode (one neutral ink, no team colour)`);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#deck .pile-card')!).boxShadow.includes('239, 234, 220'));
     const white=await page.locator('#deck .pile-card').evaluate(el=>getComputedStyle(el).boxShadow);
     check(white.includes('239, 234, 220'),`${width}: legal deck draw has restrained white card-edge light`);
