@@ -147,6 +147,22 @@ describe('the entry ships the read-outs hidden, either side of a label that neve
     expect(styleCss).toMatch(/\.menu-territory-side \{[^}]*font-variant-numeric: lining-nums tabular-nums/);
   });
 
+  it('has NO divider between a read-out and the label (removed outright, not hidden)', () => {
+    // Owner, 2026-10-20: the small cream hairline went. It must be GONE — no pseudo-element, no
+    // leftover rule, no dead markup — because the two halves are balanced by the equal grid cells
+    // and the shared gaps alone. A hidden divider would still reserve width and drift the halves.
+    const ink = /\/\* ---------- the Territory entry's instrument read-outs[\s\S]*?@media \(max-width: 340px\)/.exec(styleCss)?.[0] ?? '';
+    expect(ink.length).toBeGreaterThan(0);
+    expect(ink).not.toContain('menu-territory-seeds::after');
+    expect(ink).not.toContain('menu-territory-tiles::before');
+    expect(ink).not.toContain('--fu-cream-22');
+    // Nothing in the entry's markup could have been the divider either.
+    const button = menuSection.slice(menuSection.indexOf('id="menu-world"'), menuSection.indexOf('id="menu-login"'));
+    expect(button).not.toMatch(/\bdivider\b|<hr\b/i);
+    // And no other rule elsewhere in the sheet still paints one on these sides.
+    expect(styleCss).not.toMatch(/\.menu-territory-(seeds|tiles)::?(?:after|before)/);
+  });
+
   it('keeps the shared big-entry height and tap floor (the numbers add no height)', () => {
     // `.btn.big` owns 56px / 44px floor; the Territory rule only changes padding and layout.
     const territory = /#menu \.menu-buttons \.btn\.menu-territory \{([^}]*)\}/.exec(styleCss)?.[1] ?? '';

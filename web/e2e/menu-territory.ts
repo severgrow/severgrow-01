@@ -84,7 +84,7 @@ const MEASURE = `(() => {
   const menu = document.getElementById('menu');
   const show = (el) => !!el && !el.hidden && el.getClientRects().length > 0;
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1), right: +r.right.toFixed(1), bottom: +r.bottom.toFixed(1), cx: +(r.x + r.width / 2).toFixed(1), cy: +(r.y + r.height / 2).toFixed(1) }; };
-  // The visible ink of a side: its glyph plus its value, ignoring the hairline rule.
+  // The visible ink of a side: its glyph plus its value (there is no divider to exclude).
   const ink = (side) => {
     if (!show(side)) return null;
     const rects = [...side.children].map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0 || r.height > 0);

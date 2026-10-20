@@ -393,8 +393,9 @@ button {
    are hidden: an unknown value must never shift "TERRITORY" sideways, and the entry must read as the
    same button whether the numbers are there or not.
    This is not a badge and not two loose numbers: each side is a quiet mono read-out with the game's
-   own glyph (the authored seed, the board's hexagon), the same 16px cell, the same baseline, and a
-   hairline rule that joins it to the label like one instrument panel. */
+   own glyph (the authored seed, the board's hexagon), the same 16px cell and the same baseline. There
+   is deliberately NO rule or divider between a read-out and the label (owner, 2026-10-20): the two
+   halves are balanced by the grid's equal cells and the shared gaps alone. */
 #menu .menu-buttons .btn.menu-territory {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -433,17 +434,6 @@ button {
    only), so a refresh never re-lays anything out. */
 .menu-territory-value { min-width: 3ch; text-align: start; }
 .menu-territory-tiles .menu-territory-value { text-align: end; }
-/* The one structural mark shared by both sides: a cream-22 hairline between number and label. */
-.menu-territory-seeds::after,
-.menu-territory-tiles::before {
-  content: '';
-  flex: none;
-  width: 1px;
-  height: 12px;
-  margin: 0 3px;
-  border-radius: 1px;
-  background: var(--fu-cream-22);
-}
 /* The smallest phones: the label and the two read-outs step down together so even a five-digit
    balance stays inside the entry. Nothing hides, and the button keeps its 44px tap floor. */
 @media (max-width: 340px) {
