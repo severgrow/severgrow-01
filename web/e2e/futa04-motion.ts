@@ -16,6 +16,9 @@ const browser = await chromium.launch({...(process.env.PW_CHROMIUM ? {executable
 const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
 try {
   await page.addInitScript(() => localStorage.setItem('main2:severgrow.settings.v1',JSON.stringify({sound:false,music:false,coach:false,autoSkip:false,reduceMotion:false,speed:'normal'})));
+  // The runner's TS transform names nested functions; the browser has no such helper. Evaluated
+  // page code that defines a callback (the pile-top sampler) needs this shim, as other suites do.
+  await page.addInitScript(() => { (window as any).__name = (fn: unknown) => fn; });
   await page.goto(`${BASE}?seed=2`);
   await page.waitForSelector('#deck.ready');
   const draw = await page.evaluate(async () => {
@@ -56,6 +59,55 @@ try {
   await page.locator('#deck').evaluate(el=>(el as HTMLElement).click()); // existing tap-to-skip path
   await page.waitForFunction(() => !(window as any).__severgrow.busy(),undefined,{timeout:30000});
   assert.equal(await page.locator('.flyer.card').count(),0,'fast-forward removes an interrupted flight');
+
+  // THE PILE TOP CHANGES ONCE, ON ARRIVAL (owner, 2026-10-20: "after throwing card ... it somewhat
+  // flashes the previous card again even new card was just placed"). Sample the physical top card
+  // every animation frame through a throw: before the card lands it must still be the OLD card,
+  // and once it has changed it must never go back. A single flip, in one direction.
+  await page.goto(`${BASE}?seed=2`);
+  await page.waitForSelector('#deck.ready');
+  await page.locator('#deck').evaluate(el=>(el as HTMLElement).click());
+  await page.waitForFunction(() => (window as any).__severgrow.state().phase==='ACT' && !(window as any).__severgrow.busy());
+  const previousId = await page.evaluate(() => {
+    const top = document.getElementById('discard-top');
+    return top?.dataset.faceKey ? Number(top.dataset.faceKey.split(':')[0]) : null;
+  });
+  await page.locator('#smart-context').click();
+  await page.waitForFunction(() => (window as any).__severgrow.state().phase==='DISCARD' && !(window as any).__severgrow.busy());
+  const throwB = await page.evaluate(() => (window as any).__severgrow.state());
+  const throwB2 = legalActions(viewFor(throwB,0)).find(action=>action.t==='Discard')!;
+  const sampled = await page.evaluate(async ({ action, previousId }) => {
+    const log: { t: number; face: string | null }[] = [];
+    const t0 = performance.now();
+    let running = true;
+    const face = () => document.getElementById('discard-top')?.dataset.faceKey ?? null;
+    const tick = () => { if (!running) return; log.push({ t: Math.round(performance.now() - t0), face: face() }); requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    document.querySelector<HTMLElement>(`#hand [data-card="${action.card}"]`)?.click();
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    (document.getElementById('discard') as HTMLElement).click();
+    await new Promise<void>((r) => setTimeout(r, 1600));
+    running = false;
+    log.push({ t: Math.round(performance.now() - t0), face: face() });
+    return { log, previousId, cardId: action.card };
+  }, { action: throwB2, previousId });
+
+  const faces = sampled.log.map((s) => s.face);
+  const thrownFace = `${sampled.cardId}:`;
+  const firstThrown = faces.findIndex((f) => !!f && f.startsWith(thrownFace));
+  assert(firstThrown >= 0, 'the thrown card reaches the pile top');
+  const after = faces.slice(firstThrown);
+  assert(after.every((f) => !!f && f.startsWith(thrownFace)),
+    `the pile top never flips back to the previous card after the new one landed (${[...new Set(after)].join(' | ')})`);
+  assert(faces.slice(0, firstThrown).every((f) => f === null || !f.startsWith(thrownFace)),
+    'the new card is not shown before it arrives');
+  assert.equal(faces.at(-1), faces[firstThrown], 'the pile top settles on the thrown card and stays there');
+  assert(previousId === null || !faces.at(-1)!.startsWith(`${previousId}:`),
+    `the settled top is not the previous card (${faces.at(-1)} vs ${previousId})`);
+  // And the count agrees with what is shown.
+  const shownCount = await page.evaluate(() => document.getElementById('discard-count')?.dataset.value ?? document.getElementById('discard-count')?.textContent ?? '');
+  const trueCount = await page.evaluate(() => (window as any).__severgrow.state().discard.length);
+  assert.equal(String(shownCount).replace(/^0+(?=\d)/, ''), String(trueCount), `the Throw pile count matches the cards it holds (${shownCount} vs ${trueCount})`);
 
   await page.goto(`${BASE}?seed=3`);
   await page.waitForSelector('#deck.ready');

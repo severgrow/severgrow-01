@@ -504,11 +504,13 @@ button {
   min-width: 1.4ch;
   text-align: center;
 }
-.score.you .num {
-  color: var(--c-you);
-}
+/* THE SCORE DIGITS ARE NEUTRAL (owner, 2026-10-20: no green and red on the points — they read
+   as good/bad or as two colour-coded teams). Both numbers take the page's own text cream, and
+   whose is whose is said by position and by the small mark beside them, never by hue. The marks
+   themselves keep the ownership colours: that is what they are for. */
+.score.you .num,
 .score.bot .num {
-  color: var(--c-bot);
+  color: var(--c-text);
 }
 .score .who {
   color: var(--c-muted);
@@ -3298,8 +3300,10 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   pointer-events: none;
   opacity: var(--op, 0.2);
 }
-/* The LIGHT contract's tint under a halo. Decoration only: it must never take a tap meant for
-   the hex beneath it (the lesson lights a tile and the player taps that tile). */
+/* Kept after the light tint's removal: the old `.top-glow-tint` halo sat over lit hexes and
+   swallowed the tap meant for the tile beneath it (the lesson lights a tile and the player taps
+   that tile). The board no longer paints that node, but the rule stays so any decoration laid
+   over a hex is inert by construction, not by luck. */
 .top-glow-tint {
   pointer-events: none;
 }

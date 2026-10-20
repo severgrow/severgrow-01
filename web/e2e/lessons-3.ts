@@ -52,6 +52,22 @@ const idle = (p: Page) => p.waitForFunction(() => { const h = (window as any).__
 
 const newPage = async (w = 390, h = 844) => {
   const page = await browser.newPage({ viewport: { width: w, height: h }, isMobile: true, hasTouch: true });
+  // No audio in a headless run: a machine without an output device raises an AudioContext
+  // pageerror, which the suite (rightly) counts, and it has nothing to do with the lessons.
+  await page.addInitScript(() => {
+    const quiet = JSON.stringify({ sound: false, music: false });
+    // ONLY the prefixes this page can actually use: /3 on a futa05 build reads `futa05-3:`, and
+    // `main2:` is the fallback a futa04 build installs. Planting `futa05:` here would write the
+    // ROOT channel's key from the /3 page and make the isolation check at the end of this suite
+    // fail on the fixture's own key rather than on anything the app did.
+    for (const prefix of ['futa05-3:', 'main2:']) {
+      const key = `${prefix}severgrow.settings.v1`;
+      try {
+        const current = JSON.parse(localStorage.getItem(key) ?? '{}');
+        localStorage.setItem(key, JSON.stringify({ ...current, ...JSON.parse(quiet) }));
+      } catch { /* a page that has not written settings yet */ }
+    }
+  });
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|127\.0\.0\.1:9/.test(m.text())) errors.push(m.text()); });
@@ -143,8 +159,6 @@ const geometry = (p: Page) => p.evaluate(GEOMETRY) as Promise<{
 }>;
 type Box = { x: number; y: number; w: number; h: number; right: number; bottom: number };
 
-const overlaps = (a: Box, b: Box) => !(a.right <= b.x || a.x >= b.right || a.bottom <= b.y || a.y >= b.bottom);
-
 /** Header is the menu and the logo. Sentences sit in the plate under the map, which is not padded. */
 const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phone: boolean) => {
   check(!g.headerTitle, `${tag}: the header has no lesson title`);
@@ -157,10 +171,9 @@ const checkCockpit = (g: Awaited<ReturnType<typeof geometry>>, tag: string, phon
     check(size >= 72, `${tag}: a hex stays full size (${g.hex.w}x${g.hex.h}, was about 43 when the window padded the map)`);
   }
   if (!g.plateHidden && g.plate && g.union) {
-    // On a phone tall enough for a free gap the box sits in it. On a short phone there is no gap
-    // at all, so it may sit over unlit hexes — but never over the lit target (checkPlateClear
-    // asserts that on every beat, at every size).
-    if (g.scroll.ih >= 800) check(!overlaps(g.plate, g.union), `${tag}: the plate sits in a gap, not over a hex`);
+    // The plate follows the lit action on a phone, so it may sit over unlit hexes; the hard rule
+    // (never over the lit target, the hand or a control) is checked on every beat by
+    // checkPlateClear. It must still stay fully on screen.
     check(g.plate.bottom <= g.scroll.ih + 1 && g.plate.y >= 0, `${tag}: the plate stays on screen`);
   }
   if (!g.plateHidden && g.plate && g.plateCss) {
@@ -286,8 +299,20 @@ const PLATE_CLEAR = `(sels) => {
   };
   const plate = document.getElementById('lesson-plate');
   const pr = plate && !plate.hidden ? plate.getBoundingClientRect() : null;
+  const cells = [...document.querySelectorAll('#board .hex-cell path.hex')].map((p) => p.getBoundingClientRect()).filter((b) => b.width > 0);
+  const board = cells.length ? {
+    x: Math.min(...cells.map((b) => b.left)), y: Math.min(...cells.map((b) => b.top)),
+    right: Math.max(...cells.map((b) => b.right)), bottom: Math.max(...cells.map((b) => b.bottom)),
+  } : null;
+  // The cockpit owns the lower part of a phone screen, and the caption may never sit on it, so a
+  // lower-half target often has no free gap below it at all. The test needs to know that.
+  const dock = document.getElementById('dock');
+  const dr = dock ? dock.getBoundingClientRect() : null;
   return {
+    layout: document.documentElement.dataset.layout ?? '',
     plate: pr ? { x: pr.left, y: pr.top, right: pr.right, bottom: pr.bottom } : null,
+    board,
+    dock: dr ? { y: dr.top } : null,
     targets: sels.map((sel) => ({ sel, box: R(document.querySelector(sel)) })).filter((t) => !!t.box),
   };
 }`;
@@ -297,7 +322,10 @@ const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
   const selectors = litSelectors(lit);
   if (!selectors.length) return;
   const r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as {
+    layout: string;
     plate: { x: number; y: number; right: number; bottom: number } | null;
+    board: { x: number; y: number; right: number; bottom: number } | null;
+    dock: { y: number } | null;
     targets: { sel: string; box: { x: number; y: number; right: number; bottom: number } }[];
   };
   if (!r.plate) return;
@@ -305,6 +333,26 @@ const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
     const b = t.box;
     const hits = r.plate.x < b.right && r.plate.right > b.x && r.plate.y < b.bottom && r.plate.bottom > b.y;
     check(!hits, `${tag}: the caption never covers ${t.sel}`);
+  }
+  // On a phone the caption follows the action: when the lit things on the map are clearly in the
+  // board's lower half, the plate is in that half too. A hex straddling the midline is not
+  // "lower" for this check (the nearest free spot can sit just above it), so the test needs a
+  // margin of one small step past the middle. The side layout keeps its own (top-band) order.
+  if (r.board && r.layout !== 'side') {
+    const midBoard = (r.board.y + r.board.bottom) / 2;
+    const clearlyLower = midBoard + 40;
+    const onBoard = r.targets.filter((t) =>
+      t.box.x < r.board!.right && t.box.right > r.board!.x && t.box.y < r.board!.bottom && t.box.bottom > r.board!.y);
+    const midPlate = (r.plate.y + r.plate.bottom) / 2;
+    // ...and only when the lower half of the map actually has a free gap: on a phone the cockpit
+    // starts well above the map's bottom edge, so a lit hex down there often has the dock, the
+    // hand or the display under it. The caption may never sit on any of those (that is the rule
+    // above), so it goes to the nearest spot that is free — which can be the top band.
+    const lowerHalfFree = !r.dock || r.dock.y > midBoard + 8;
+    if (lowerHalfFree && onBoard.length && onBoard.every((t) => (t.box.y + t.box.bottom) / 2 > clearlyLower)) {
+      check(midPlate > midBoard,
+        `${tag}: the caption follows the action into the lower half (plate ${JSON.stringify(r.plate)} board mid ${Math.round(midBoard)} plate mid ${Math.round(midPlate)})`);
+    }
   }
 };
 
@@ -956,14 +1004,39 @@ try {
         check(!!b7 && b7.lit.t === 'hex', `${tag}: picking the card lights the tile (${b7?.id})`);
         check((await page.evaluate(() => document.querySelectorAll('.tutorial-target-card').length)) === 0,
           `${tag}: no card stays lifted after the beat moves on`);
-        // 8. Place it: the score explanation; the display holds the score.
+        // 8. Place it: the explanation points at the TILE THAT WAS JUST PLACED and its number
+        // (owner, 2026-10-20: it used to light the score display, which taught the wrong thing).
+        const placedKey = b7.lit.t === 'hex' ? b7.lit.key : '';
         const tilePt = (await litPoints(page, b7.lit))[0]!;
         await tap(page, tilePt);
         await idle(page);
         await page.waitForTimeout(300);
         const b8 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the score moment explains the tile rank`);
-        check(/^\d+:\d+$/.test(await displayText(page)), `${tag}: the display shows the score (${await displayText(page)})`);
+        check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the grow moment explains the tile rank`);
+        check(!!b8 && b8.lit.t === 'hex', `${tag}: it lights the tile, not the display (${b8?.lit?.t})`);
+        check(!!b8 && b8.lit.t !== 'score', `${tag}: the score display is not the lit target`);
+        check(!!b8 && !!placedKey && b8.lit.key === placedKey,
+          `${tag}: it lights the hex that was just grown (${b8?.lit?.key} vs ${placedKey})`);
+        // The tile really carries the card's rank, right where the light points.
+        const rank = await page.evaluate((key) => {
+          const g = document.querySelector(`#board .tile[data-key="${key}"]`);
+          const num = g?.querySelector('.tile-num');
+          const r = g?.getBoundingClientRect();
+          return { text: num?.textContent?.trim() ?? '', w: r ? Math.round(r.width) : 0 };
+        }, placedKey);
+        check(/^\d+$/.test(rank.text) && rank.w > 0, `${tag}: the placed tile shows its rank (${rank.text})`);
+        // The caption never covers the number it is talking about.
+        await checkPlateClear(page, b8.lit, `${tag} grow rank`);
+        // The display is the OTHER voice: a play fact (YOU LEAD, +N) or the resting score — never
+        // the box's sentence, never a lone step word. It used to be pinned to a held score, but
+        // that hold existed only so the lesson could point at the display; this beat points at
+        // the tile now, and the sign is free to report what just happened.
+        const spoken = (await displayText(page)).trim();
+        check(spoken !== LESSON.youGrewLine, `${tag}: the explanation is not on the display (${spoken})`);
+        check(!/^(DRAW|GROW|THROW|BLOOM|BOMB|BLAST|SKIP)[!?]?$/.test(spoken), `${tag}: no lone step word on the display (${spoken})`);
+        check(/^\d+:\d+$/.test(spoken) || /LEAD|OPP|^\+\d+$|^-\d+$|^UP\d+$/.test(spoken),
+          `${tag}: the display carries the fact (score, lead or points) (${spoken})`);
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/redesign-rank-${w}x${h}.png` });
         copy.push(await boxText(page));
         // 9. Tap anywhere: nothing is left to do but end the Grow, so the game goes on to the Throw
         // by itself, as in a real game. » is never lit on the way, not even for a frame (owner,

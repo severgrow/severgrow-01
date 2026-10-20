@@ -212,9 +212,16 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     );
   }
 
-  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number) {
+  /**
+   * The human's throw: from the hand to the Throw pile. `onLand` fires once, at the instant the
+   * card is seated on the pile (the .68 stop of the flight), so the caller can advance the pile
+   * top then — NOT after the fade. The card then fades away over the identical new top, so the
+   * old card is never uncovered: that fade-over-the-old-top was the "previous card flashes again"
+   * the owner saw (2026-10-20).
+   */
+  function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number, onLand?: () => void) {
     // A hidden source has no box: there is nothing to fly from (and the scale would explode).
-    if (from.width < 1 || from.height < 1 || to.height < 1) return;
+    if (from.width < 1 || from.height < 1 || to.height < 1) { onLand?.(); return; }
     const d = document.createElement('div');
     d.className = `flyer card ${suitClass(c)}`;
     d.innerHTML = cardFace(c);
@@ -234,6 +241,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
     const duration = (IS_FUTA04 ? PINNED.throwFlight : 440) * f;
+    if (onLand && IS_FUTA04) setTimeout(onLand, duration * .68);
+    else onLand?.();
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
@@ -319,9 +328,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * that arrival, never before. A Bomb gets one brief border pulse at the reveal.
    * Reduce motion: a fade on the seat, then a fade on the pile, with no travel between them.
    */
-  function oppThrow(card: Card, seat: HTMLElement, pile: Element, f: number, quick = false): number {
+  function oppThrow(card: Card, seat: HTMLElement, pile: Element, f: number, quick = false, onLand?: () => void): number {
     const layer = flightLayer();
-    if (!layer) return 0;
+    if (!layer) { onLand?.(); return 0; }
     clearFlights(layer);
     const a = seat.getBoundingClientRect();
     const b = pile.getBoundingClientRect();
@@ -359,6 +368,9 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
           { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.97 },
           { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 0 },
         ];
+    // The pile top advances the moment the card is SEATED on it, before the last fade: the card
+    // that fades away is then the new one, so the old top is never uncovered (owner, 2026-10-20).
+    if (onLand) setTimeout(onLand, motion() === 0 ? ms * .5 : ms * .93);
     removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
     if (card.suit === null) {
       anim(d, [

@@ -57,6 +57,7 @@ const noteArtFailure = (url: string): void => {
 
 // The small home and tile images start downloading while the menu is visible.
 // Once decoded, every repeat of a variant shares the browser's image cache.
+const artDecodes: Promise<unknown>[] = [];
 if (typeof Image !== 'undefined') {
   for (const url of [...DEFAULT_ART_SPRITES, groundUrl, ...rockUrls]) {
     const img = new Image();
@@ -65,9 +66,16 @@ if (typeof Image !== 'undefined') {
     // for an intact file too, and dropping good art would be worse than the placeholder).
     img.addEventListener('error', () => noteArtFailure(url));
     img.src = url;
-    void img.decode().catch(() => undefined);
+    artDecodes.push(img.decode().catch(() => undefined));
   }
 }
+
+/**
+ * Resolves when every picture the first board composes is decoded (or has failed): the ground,
+ * both homes, the nine territory faces and the rocks. The downloads already started above, so
+ * waiting on this is a decode wait, not a second request. Never rejects.
+ */
+export const boardArtReady: Promise<void> = Promise.all(artDecodes).then(() => undefined);
 
 /** The supplied hex art's upper-right edge is its visual base. Turn that edge
  * onto the board's bottom side without rotating the board or its hitboxes. */

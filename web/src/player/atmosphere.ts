@@ -58,12 +58,18 @@ body:has(#game:not([hidden])) #futa04-board-backdrop { display: block; }
 #futa04-outcome-light { position:absolute; inset:0; pointer-events:none; opacity:0; display:none; }
 body:has(#game:not([hidden])) #futa04-outcome-light { display:block; }
 /* The outcome light speaks the same LIGHT vocabulary as the display: the tone is published on
-   the root when the result appears, so this is the display's own bloom colour. Two thin rings of
-   that ink at a fraction of its alpha: the room picks up the result, it never becomes a pane. */
+   the root when the result appears, so this is the display's own bloom colour.
+   ONE ROOM (owner, 2026-10-20: "when colour of background behind the map changes colour it
+   should change across the whole background, also under cockpit and the hand and all"). The tint
+   used to be two ellipses under the map, so the colour stopped at a soft edge halfway down the
+   screen. It is now a FULL-BLEED wash (the linear-gradient covers the box edge to edge, so there
+   is no boundary to see) plus the same soft pool around the board for depth. Both layers are the
+   same low-alpha ink: the area behind the map keeps its strength while the rest of the screen
+   picks up the same light. Still one element and one opacity animation; no per-frame work. */
 #futa04-outcome-light[data-tone='good'],
 #futa04-outcome-light[data-tone='bad'] {
-  background:radial-gradient(ellipse 59% 63% at 43% 53%,color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 62%,transparent),transparent 83%),
-             radial-gradient(ellipse 35% 48% at 79% 73%,color-mix(in srgb,var(--light-bloom,rgba(92,164,102,.30)) 40%,transparent),transparent 82%);
+  background:radial-gradient(ellipse 62% 58% at 45% 52%,color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 58%,transparent),transparent 92%),
+             linear-gradient(color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 44%,transparent),color-mix(in srgb,var(--light-bloom,rgba(89,177,107,.30)) 44%,transparent));
 }
 #futa04-map-rim { pointer-events: none; }
 #board .hex-cell.normal.futa04-empty { filter: brightness(1.15); }

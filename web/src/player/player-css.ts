@@ -504,11 +504,11 @@ html.slim-hud .game > .race .race-fill::after {
   font-size: 0.95rem;
   opacity: 0.85;
 }
-.gm-you b {
-  color: var(--c-you);
-}
+/* The pause menu's score digits are neutral too (owner, 2026-10-20). Whose number is whose is
+   said by the label under it and by which side it sits on; the turn line keeps its colours. */
+.gm-you b,
 .gm-bot b {
-  color: var(--c-bot);
+  color: var(--c-text);
 }
 .gm-turn {
   display: flex;

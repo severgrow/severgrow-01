@@ -1,6 +1,7 @@
 // UI polish pass 3, Part 1: the top-rank tile gets a slight glow only. No contour, no rim,
 // no shimmer; a faint halo in the owner's colour family; Low effects or the setting turn
 // it off; breathing only at High effects and never with Reduce motion.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { GLOW_CAP, OLD_GLOW_OPACITY, WHISPER_FROM, topGlow } from '../src/logic/topglow.js';
 import type { GlowOpts } from '../src/logic/topglow.js';
@@ -65,6 +66,19 @@ describe('the top-rank glow', () => {
     expect(hue(moss)).toBeLessThan(170);
     const h = hue(lava);
     expect(h < 25 || h > 340, `lava glow hue ${h}`).toBe(true);
+  });
+
+  it('a tile glow is the tile’s own: the board never reads the display’s light', () => {
+    // The display publishes --light-core/-bloom as it talks (amber, green, red…). A tile's glow is
+    // a property of the tile (its rank and its owner's material), so the board must not read it:
+    // otherwise every top-rank tile swings colour at the end of a turn (owner, 2026-10-20).
+    const board = readFileSync(new URL('../src/ui/board.ts', import.meta.url), 'utf8');
+    expect(board).not.toContain('--light-core');
+    expect(board).not.toContain('--light-bloom');
+    expect(board).not.toContain('light-tint');
+    expect(board).not.toContain('top-glow-tint');
+    // One halo per tile, and it is the owner's own moss/lava sprite.
+    expect(board).toContain('class: `top-glow ${kind}`');
   });
 
   it('the setting "Top-rank glow" defaults to Subtle and is saved', () => {

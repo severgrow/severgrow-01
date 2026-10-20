@@ -105,6 +105,9 @@ html.futa04-information #futa04-box #smart-led {
   grid-column:1 / 3; grid-row:1; width:calc(2 * var(--control-size) + var(--control-gap)); height:var(--control-size);
   padding:8px 6px; box-sizing:border-box; border:0; border-radius:12px;
   background:#111312; box-shadow:none; position:relative;
+  /* How far the bloom may reach BEYOND the display, in CSS px: 26 to each side, 84 above/below.
+     These are the hard bounds of the light, not a preference. */
+  --led-bloom-wing:26px; --led-bloom-lip:84px;
 }
 html.futa04-information #futa04-box #smart-led::before {
   content:''; position:absolute; inset:0; border-radius:0; pointer-events:none;
@@ -243,14 +246,33 @@ html.futa04-information #smart-panel.led-theirs #smart-led { filter:brightness(.
    tone's angle, padded so its falloff ends well before the bitmap edge. It sits over the frame
    art and the glass (z 2) and is normal-blended: low-alpha light over a dark cockpit, not a
    screen wash and not a rectangle. The sprite writes --led-bloom-pad, so the strip of dots
-   inside the bitmap lands exactly on the window's dots. */
+   inside the bitmap lands exactly on the window's dots.
+
+   THE HARD BOUNDS (owner, 2026-10-20, after a bright wash spread across the cockpit on a
+   scrolling marquee: "the light from display - that can never happen"). A marquee bakes ONE
+   sprite for the WHOLE message — thousands of px wide — and that sprite is translated along the
+   strip. Unclipped, the part of it that is outside the display painted the cockpit and the hand.
+   So the bloom now lives inside a fixed clip: the display's own box plus --led-bloom-wing beside
+   it and --led-bloom-lip above/below, feathered at the left and right ends so the bound has no
+   visible edge. The light can therefore never be wider or taller than that band, whatever the
+   message is, and it stays a bloom hugging the display. */
+html.futa04-information #smart-led-bloom-clip {
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:calc(100% + 2 * var(--led-bloom-wing,26px));
+  height:calc(100% + 2 * var(--led-bloom-lip,84px));
+  overflow:hidden; pointer-events:none; z-index:2;
+  -webkit-mask-image:linear-gradient(to right,transparent 0,#000 var(--led-bloom-wing,26px),#000 calc(100% - var(--led-bloom-wing,26px)),transparent 100%);
+  mask-image:linear-gradient(to right,transparent 0,#000 var(--led-bloom-wing,26px),#000 calc(100% - var(--led-bloom-wing,26px)),transparent 100%);
+}
 html.futa04-information #smart-led-bloom {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  pointer-events:none; z-index:2; opacity:var(--light-bloom-op,.44);
+  pointer-events:none; z-index:0; opacity:var(--light-bloom-op,.286);
   will-change:opacity, transform;
 }
+/* Scrolling: the sprite is aligned to the strip's own left edge. The clip is offset by its own
+   wing on each side, so the alignment inside it is the old alignment plus that wing. */
 html.futa04-information #smart-led-bloom.scrolling {
-  left:calc(6px - var(--led-bloom-pad,0px));
+  left:calc(6px - var(--led-bloom-pad,0px) + var(--led-bloom-wing,26px));
   transform:translate(0,-50%);
   animation:smart-led-bloom-scroll var(--led-duration,8s) linear infinite;
 }
@@ -264,9 +286,9 @@ html.futa04-information #smart-panel.hardware-reflect #smart-led-bloom {
   animation:futa04-hardware-reflect 640ms ease-out;
 }
 @keyframes futa04-hardware-reflect {
-  0%,100% { opacity:var(--light-bloom-op,.44); }
-  27% { opacity:calc(var(--light-bloom-op,.44) * 1.18); }
-  55% { opacity:calc(var(--light-bloom-op,.44) * 1.06); }
+  0%,100% { opacity:var(--light-bloom-op,.286); }
+  27% { opacity:calc(var(--light-bloom-op,.286) * 1.18); }
+  55% { opacity:calc(var(--light-bloom-op,.286) * 1.06); }
 }
 html.futa04-information.reduce-motion #smart-panel.hardware-reflect #smart-led-bloom { animation:none; }
 @media (prefers-reduced-motion:reduce) {
@@ -532,9 +554,12 @@ export function mountSmartCockpit() {
   const hot = document.createElement('canvas'); hot.id = 'smart-led-hot'; hot.setAttribute('aria-hidden','true');
   const flashEl = document.createElement('i'); flashEl.id = 'smart-led-flash'; flashEl.setAttribute('aria-hidden','true');
   // The bloom lives outside the glass (the window clips the marquee) so its falloff can pass the
-  // bezel instead of being cut into a rectangle.
+  // bezel instead of being cut into a rectangle — but inside a FIXED clip of its own, so a
+  // marquee's whole-strip sprite can never paint across the cockpit (see the CSS).
   const bloomEl = document.createElement('canvas'); bloomEl.id = 'smart-led-bloom'; bloomEl.setAttribute('aria-hidden','true');
-  windowEl.append(text,cells,hot,flashEl); led.append(windowEl,bloomEl);
+  const bloomClip = document.createElement('div'); bloomClip.id = 'smart-led-bloom-clip'; bloomClip.setAttribute('aria-hidden','true');
+  bloomClip.append(bloomEl);
+  windowEl.append(text,cells,hot,flashEl); led.append(windowEl,bloomClip);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);

@@ -1540,6 +1540,47 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   delete panel.dataset.winner;
 }
 
+/**
+ * Cold first visit only: one short, bounded wait for the board art that the first lesson composes.
+ * The pictures are already downloading from the module that draws them (the menu shows while they
+ * arrive), so this only waits for decode. It never runs twice, is capped, leaves no timer behind
+ * and is skipped entirely on a repeat visit and while the page is hidden. When the cap wins, play
+ * starts anyway: the board fills in exactly as it did before.
+ */
+const WARMED_KEY = 'severgrow.board-warmed.v1';
+const FIRST_WARM_CAP_MS = 800;
+let firstWarm: Promise<void> | null = null;
+let warmDiag: { cold: boolean; waitedMs: number } | null = null;
+
+function warmFirstBoard(): Promise<void> {
+  if (warmDiag) return firstWarm ?? Promise.resolve();
+  if (firstWarm) return firstWarm;
+  if (!defaultArt || store.get(WARMED_KEY)) {
+    warmDiag = { cold: false, waitedMs: 0 };
+    return Promise.resolve();
+  }
+  if (document.hidden) {
+    // Nothing runs while the page is hidden: the art still loads, the board just takes it as it comes.
+    warmDiag = { cold: true, waitedMs: 0 };
+    return Promise.resolve();
+  }
+  const t0 = performance.now();
+  firstWarm = new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      warmDiag = { cold: true, waitedMs: Math.round(performance.now() - t0) };
+      store.set(WARMED_KEY, '1');
+      resolve();
+    };
+    const timer = window.setTimeout(finish, FIRST_WARM_CAP_MS);
+    void defaultArt.boardArtReady.then(finish);
+  });
+  return firstWarm;
+}
+
 async function startGame(
   seed: number,
   level: Level = settings.level,
@@ -1557,6 +1598,9 @@ async function startGame(
    */
   difficulty: DifficultyId | null = null,
 ) {
+  // The first lesson board on a cold first visit waits (briefly) for its own art. Repeat visits,
+  // the side menu and every non-lesson game skip this entirely.
+  if (campaign) await warmFirstBoard();
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
   // with its local seed, but cannot claim spendable Seeds without a prior ticket.
   let ticketId: string | null = null;
@@ -3492,14 +3536,25 @@ async function playStep(step: Step, my: number) {
     }
     case 'discard': {
       // My card flies from my hand. The opponent's card has a body of its own: it turns face up
-      // on their seat, holds for a beat and arcs into the Throw pile. The pile top and its count
-      // change ON ARRIVAL (show() below), never while the card is still travelling.
+      // on their seat, holds for a beat and arcs into the Throw pile.
+      //
+      // THE PILE TOP CHANGES ON ARRIVAL (owner, 2026-10-20: "after throwing card ... it somewhat
+      // flashes the previous card again even new card was just placed"). The flight ends with a
+      // fade; if the pile only advanced after that fade, the fade uncovered the OLD top for a
+      // moment between the card leaving and the pile repainting. So both flights hand the pile
+      // over at their landing stop — before the fade — and the same card then fades over itself.
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
+      // Exactly once, and idempotent: show()/settleStep writes the same value at the step's end.
+      const land = () => {
+        if (my !== epoch || !session) return;
+        shownDiscard = [...session.view.discard];
+        paintDiscardTop();
+      };
       if (step.player === HUMAN) {
         const from = cardRects.get(step.card.id);
         if (from) {
-          flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
+          flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f, land);
           const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
           if (source) source.style.visibility = 'hidden';
         }
@@ -3510,7 +3565,7 @@ async function playStep(step: Step, my: number) {
         const seat = oppSeat();
         if (seat) {
           if (settings.sound) sound.rustle();
-          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow);
+          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow, land);
           await wait(ms, my);
           if (my !== epoch) return;
           if (settings.sound) sound.throw();
@@ -4407,6 +4462,7 @@ function placeLessonPlate() {
   if (!hud) return;
   const vw = innerWidth;
   const vh = innerHeight;
+  const sideLayout = document.documentElement.dataset.layout === 'side';
   const width = Math.round(Math.max(0, Math.min(PLATE_MAX_WIDTH, vw - 2 * PLATE_MARGIN)));
   plate.style.width = `${width}px`;
   const h = Math.ceil(plate.offsetHeight);
@@ -4439,7 +4495,19 @@ function placeLessonPlate() {
     ys.add(clamp(Math.round(spot.t - h - 2), topMin, topMax));
     ys.add(clamp(Math.round(spot.b + 2), topMin, topMax));
   }
-  let best: { x: number; y: number; hexes: number } | null = null;
+  // Follow the action: a spot's distance from the plate's centre to the nearest lit centre is the
+  // preference, with fewer covered hexes and then centred x breaking a near-tie. Hard rules are
+  // unchanged (the light and every cockpit control are rejected before this). The side layout
+  // (desktop) and a beat with no light keep the old "fewest hexes, then highest" order.
+  const followLit = !sideLayout && lit.length > 0;
+  const distToLit = (x: number, y: number) => {
+    const cx = x + width / 2;
+    const cy = y + h / 2;
+    let d = Infinity;
+    for (const s of lit) d = Math.min(d, Math.hypot(cx - (s.l + s.r) / 2, cy - (s.t + s.b) / 2));
+    return d;
+  };
+  let best: { x: number; y: number; hexes: number; dist: number } | null = null;
   for (const y of ys) {
     for (const x of xs) {
       const r = { l: x, t: y, r: x + width, b: y + h };
@@ -4447,11 +4515,18 @@ function placeLessonPlate() {
       if (controls.some((s) => boxesOverlap(r, s))) continue;
       const covered = hexes.reduce((n, s) => n + (boxesOverlap(r, s) ? 1 : 0), 0);
       const dx = Math.abs(x + width / 2 - vw / 2);
-      if (!best
-        || covered < best.hexes
-        || (covered === best.hexes && (y < best.y || (y === best.y && dx < Math.abs(best.x + width / 2 - vw / 2))))) {
-        best = { x, y, hexes: covered };
+      const dist = followLit ? distToLit(x, y) : 0;
+      if (!best) {
+        best = { x, y, hexes: covered, dist };
+        continue;
       }
+      const better = followLit
+        ? dist < best.dist - 0.5
+          || (Math.abs(dist - best.dist) <= 0.5
+            && (covered < best.hexes || (covered === best.hexes && dx < Math.abs(best.x + width / 2 - vw / 2))))
+        : covered < best.hexes
+          || (covered === best.hexes && (y < best.y || (y === best.y && dx < Math.abs(best.x + width / 2 - vw / 2))));
+      if (better) best = { x, y, hexes: covered, dist };
     }
   }
   // No free gap at all: never cover the lit target, even if that means sitting over a control or
@@ -6305,8 +6380,12 @@ let lastDeckSeen = -1;
 /** the biggest the piles have been this game (for the stack thickness) */
 let deckFull = 1;
 
-function renderPiles(v: View, advice: Advice | null) {
-  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
+/**
+ * The Throw pile's physical top card and its count — the only two things that change when a
+ * thrown card ARRIVES. Split out so a landing flight can hand them over at the landing stop,
+ * without a whole-page render mid-step (see the discard step).
+ */
+function paintDiscardTop() {
   const top = shownDiscard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
@@ -6317,13 +6396,19 @@ function renderPiles(v: View, advice: Advice | null) {
     t.innerHTML = top ? cardFace(top) : '';
     t.dataset.faceKey = faceKey;
   }
+  if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
+  else $('discard-count').textContent = String(shownDiscard.length);
+}
+
+function renderPiles(v: View, advice: Advice | null) {
+  const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
+  const top = shownDiscard.at(-1);
+  paintDiscardTop();
   if (IS_FUTA04) renderPileMeter($('deck-count'), v.deckCount);
   else $('deck-count').textContent = String(v.deckCount);
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
-  else $('discard-count').textContent = String(shownDiscard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -8343,6 +8428,8 @@ let appReady = false;
   feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
+  /** Tests: the cold-first-visit art warm (null before the first lesson board has been asked for). */
+  warm: () => (warmDiag ? { ...warmDiag } : null),
   /** tests: tutorial focus lock */
   tutorialGate: () => tutorialGate ? {
     active: tutorialGate.isActive(),

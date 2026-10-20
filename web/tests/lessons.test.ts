@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   apply, coordKey, createCards, homeCoord, isStrangled, legalActions, mulberry32, neighbors, viewFor,
 } from '../../src/engine/index.js';
-import type { Action, State } from '../../src/engine/index.js';
+import type { Action, Event, State } from '../../src/engine/index.js';
 import { botSeed } from '../../src/bots/levels.js';
 import { botFor, CURRENT_BOT_VERSION } from '../../src/bots/versions.js';
 import { SMALL_BOARD_RADIUS } from '../../src/campaign/small-board.js';
@@ -768,22 +768,46 @@ describe('the lesson’s two voices (display + info box)', () => {
   });
 });
 
-describe('level 1 teaches the score and the pile count once', () => {
-  it('right after the first Grow the score display is lit; at the last cards the Draw pile and its count are lit', () => {
+describe('level 1 teaches the tile’s rank and the pile count once', () => {
+  it('right after the first Grow the PLACED TILE is lit (not the score); at the last cards the Draw pile and its count are lit', () => {
     const l = lessonFor(1)!;
     let s = lessonOpening(l);
     const seen = new Set<string>();
     const lits: Record<string, string> = {};
+    let grewAt: { key: string; owner: number | null; strength: number; litKey: string } | null = null;
     for (let i = 0; i < 400 && s.phase !== 'GAME_OVER'; i++) {
       if (s.actor === 0) {
         const b = lessonBeat(l, s, { card: null, placing: null, throwPending: null, seen });
-        if (b?.explain) { lits[b.id] = b.lit.t; seen.add(b.id); continue; }
+        if (b?.explain) {
+          lits[b.id] = b.lit.t;
+          // The grow explanation must point at the tile that was just placed: the newest Sprout
+          // in my history. Owner, 2026-10-20: it used to light the score display instead.
+          if (b.id === '1:grew' && b.lit.t === 'hex') {
+            const sprout = [...(s.history ?? [])].reverse()
+              .find((e): e is Extract<Event, { t: 'Sprout' }> => e.t === 'Sprout' && e.player === 0);
+            const tile = s.board[b.lit.key];
+            grewAt = {
+              key: sprout ? coordKey(sprout.coord) : '',
+              owner: tile ? tile.owner : null,
+              strength: tile ? tile.strength : -1,
+              litKey: b.lit.key,
+            };
+          }
+          seen.add(b.id);
+          continue;
+        }
         const a = suggestMove(l, s);
         const legal = legalActions(viewFor(s, 0));
         s = apply(s, a ?? legal.find((x) => x.t === 'EndAct') ?? legal[0]!);
       } else s = apply(s, opponentMove(l, s));
     }
-    expect(lits['1:grew']).toBe('score');
+    expect(lits['1:grew']).toBe('hex');
+    expect(lits['1:grew']).not.toBe('score');
+    expect(grewAt).not.toBeNull();
+    // The lit hex IS the tile the Sprout placed, it is mine, and its number is the card's rank.
+    expect(grewAt!.litKey).toBe(grewAt!.key);
+    expect(grewAt!.owner).toBe(0);
+    expect(grewAt!.strength).toBeGreaterThanOrEqual(1);
     expect(lits['1:pile-low']).toBe('deckCount');
     // Only level 1 lights them: the other lessons never do.
     for (const other of LESSONS.filter((x) => x.level > 1)) {

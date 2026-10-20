@@ -58,7 +58,38 @@ const open = async (width: number, height: number, options: { reduceMotion?: boo
   await page.waitForSelector('#deck.ready');
   await page.waitForFunction(() => /^\d+:\d+$/.test(document.getElementById('smart-led-text')?.textContent ?? ''), undefined, { timeout: 8000 });
   await page.waitForTimeout(300);
-  return { page, errors };
+  // THE SCORE FACE, read at the one moment it is guaranteed to be on the glass. The sign talks
+  // through the turn (DRAW!, then its idle nudge), so a later read could catch a step word.
+  const scoreInk = await page.evaluate(() => {
+    const cells = document.getElementById('smart-led-cells') as HTMLCanvasElement;
+    const ctx = cells.getContext('2d')!;
+    const data = ctx.getImageData(0, 0, cells.width, cells.height).data;
+    const tones = new Map<string, number>();
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3]! < 250) continue;
+      const key = `${data[i]},${data[i + 1]},${data[i + 2]}`;
+      tones.set(key, (tones.get(key) ?? 0) + 1);
+    }
+    const mid = Math.floor(cells.width / 2);
+    const mainInk = (from: number, to: number) => {
+      const half = new Map<string, number>();
+      for (let y = 0; y < cells.height; y++) for (let x = from; x < to; x++) {
+        const i = (y * cells.width + x) * 4;
+        if (data[i + 3]! < 250) continue;
+        const key = `${data[i]},${data[i + 1]},${data[i + 2]}`;
+        half.set(key, (half.get(key) ?? 0) + 1);
+      }
+      return [...half.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+    };
+    return {
+      mode: document.getElementById('smart-led')!.getAttribute('data-mode'),
+      text: document.getElementById('smart-led-text')!.textContent ?? '',
+      inks: [...tones.entries()].sort((a, b) => b[1] - a[1]).map(([ink]) => ink),
+      left: mainInk(0, mid),
+      right: mainInk(mid, cells.width),
+    };
+  });
+  return { page, errors, scoreInk };
 };
 
 type Sample = { x: number; y: number; r?: number };
@@ -133,9 +164,13 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
   const cd = cctx.getImageData(0, 0, cw, ch).data;
   let sx = 0; let sy = 0; let n = 0;
   let nearest = Infinity;
+  let dotTop = Infinity; let dotBottom = -Infinity;
   for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
     if (cd[(y * cw + x) * 4 + 3]! < 40) continue;
     sx += x; sy += y; n++;
+    const by = (pad + (y / cells.height) * cellsCssH) * ratioY;
+    if (by < dotTop) dotTop = by;
+    if (by > dotBottom) dotBottom = by;
     // The bloom's brightest pixel must sit ON a lit dot, so measure to the nearest one.
     nearest = Math.min(nearest, Math.hypot(toBloomX(x) - mx, toBloomY(y) - my));
   }
@@ -171,10 +206,29 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
     return { reach, worst };
   };
   const along = walk(Math.cos(rad), Math.sin(rad));
-  const sides = [walk(0, -1, ccx, ccy), walk(0, 1, ccx, ccy), walk(1, 0, ccx, ccy), walk(-1, 0, ccx, ccy)];
+  // Up/down are measured from the LIT DOTS' own vertical centre, not the light's centre of mass:
+  // stretching the lower tail moves the centre of mass down, which would make the two sides
+  // incomparable (the same offset would sample a different distance on each).
+  const midY = Number.isFinite(dotTop) ? (dotTop + dotBottom) / 2 : ccy;
+  const up = walk(0, -1, ccx, midY);
+  const down = walk(0, 1, ccx, midY);
+  const sides = [up, down, walk(1, 0, ccx, ccy), walk(-1, 0, ccx, ccy)];
+  // Alpha at equal distances above and below the light's own centre of mass: the owner's ask is
+  // that the tail reaches further down (onto the keys under the display), not equally all round.
+  const avg = (x: number, y: number, r = 1) => {
+    let sum = 0; let n = 0;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const px = Math.round(x) + dx; const py = Math.round(y) + dy;
+      if (px < 0 || py < 0 || px >= W || py >= H) continue;
+      sum += alpha(px, py); n++;
+    }
+    return Math.round(sum / Math.max(1, n));
+  };
   return {
     W, H, max, mx, my, edgeMax, within10, nearest, dot, pad, angle,
     reach: along.reach, worstStep: along.worst,
+    upReach: up.reach, downReach: down.reach,
+    atUp: avg(ccx, midY - 16), atDown: avg(ccx, midY + 16),
     // The softest falloff is the one along the angle; every other side must also be soft.
     sideReach: Math.min(...sides.map(side => side.reach)),
     sideWorst: Math.max(...sides.map(side => side.worst)),
@@ -188,7 +242,7 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
 
 try {
   /* 1. Resting bloom: origin, cap, soft falloff, no edge, no wash. */
-  const { page, errors } = await open(390, 844);
+  const { page, errors, scoreInk } = await open(390, 844);
   const metrics = await bloomMetrics(page);
   check(metrics.W > 0 && metrics.H > 0 && metrics.dots > 0, 'the bloom is baked from the lit dots');
   check(metrics.max <= 128, `the bloom sprite is alpha-capped (peak ${metrics.max}/255)`);
@@ -202,7 +256,16 @@ try {
   check(metrics.within10 <= 6, `the outer ring carries no clipped light (max ${metrics.within10}/255 in the last 10 px)`);
   check(metrics.filter === 'none' && metrics.windowFilter === 'none', 'the bloom and the LED window carry no live filter');
   check(metrics.spill === null, 'the old masked gradient spill is gone');
-  check(metrics.opacity > 0 && metrics.opacity <= .55, `the baked bloom rests at a capped opacity (${metrics.opacity})`);
+  // Owner, 2026-10-20: intensity down by ~35% (the old amber rest was .44; x .65 = .286).
+  check(Math.abs(metrics.opacity - .286) <= .006, `the bloom rests at 65% of its old strength (${metrics.opacity}, was .44)`);
+  check(metrics.opacity < .32, `the bloom no longer rests at the old strength (${metrics.opacity})`);
+  // The tail is longer BELOW the dots: the light catches the keys under the display.
+  check(metrics.atDown > metrics.atUp,
+    `at equal distance the light is stronger below the dots than above (${metrics.atDown} below vs ${metrics.atUp} above)`);
+  check(metrics.downReach > metrics.upReach,
+    `the reach below is longer than above (${metrics.downReach} vs ${metrics.upReach} px in the sprite)`);
+  check(metrics.downReach <= metrics.upReach * 1.6 + 2,
+    `the downward stretch is a tail, not a wash (${metrics.downReach} vs ${metrics.upReach} px)`);
 
   // No screen wash: the four corners must not change when the bloom is switched off.
   const corners: Sample[] = [
@@ -286,6 +349,36 @@ try {
   }));
   check(published.core === '#f5d8a4' && published.bloom.length > 0 && published.angle === '22deg', `the root publishes one LIGHT contract (${JSON.stringify(published)})`);
 
+  /* 1a. THE SCORE'S DIGITS ARE NEUTRAL (owner, 2026-10-20).
+     The resting face reads "12:8". It used to paint your digits green and theirs red, which made
+     the points read as good/bad (or as two colour-coded teams). Both sides now use ONE cream. */
+  const IVORY = '245,234,209'; // #f5ead1, the palette's ivory
+  const AMBER = '245,216,164'; // #f5d8a4, the separator's warm punctuation
+  // (Read by `open()` at the instant the sign came to rest.)
+  check(scoreInk.mode === 'score', `the display rests on the score (mode ${scoreInk.mode}, "${scoreInk.text}")`);
+  check(/^\d+:\d+$/.test(scoreInk.text), `the resting face is the score (${scoreInk.text})`);
+  // Canvas compositing rounds a channel by a unit now and then, so inks match by proximity.
+  const nearInk = (ink: string, r: number, g: number, b: number, tol = 3) => {
+    const [ir, ig, ib] = ink.split(',').map(Number) as [number, number, number];
+    return Math.abs(ir - r) <= tol && Math.abs(ig - g) <= tol && Math.abs(ib - b) <= tol;
+  };
+  const ivory = (ink: string) => nearInk(ink, 245, 234, 209);
+  const [ir, ig, ib] = IVORY.split(',').map(Number) as [number, number, number];
+  const [ar, ag, ab] = AMBER.split(',').map(Number) as [number, number, number];
+  check(scoreInk.inks.every(ink => nearInk(ink, ir, ig, ib) || nearInk(ink, ar, ag, ab)),
+    `the score uses only the one neutral cream and its warm separator (inks: ${scoreInk.inks.join(' | ')})`);
+  check(scoreInk.inks.some(ivory), `the score digits are the ivory cream (${scoreInk.inks[0]})`);
+  // No red and no green anywhere on the score face — the exact inks the owner objected to
+  // (#a9d886 for you, #e4705e for them), matched loosely so a near-miss cannot slip through.
+  const nearGreen = (ink: string) => nearInk(ink, 169, 216, 134, 45);
+  const nearRed = (ink: string) => nearInk(ink, 228, 112, 94, 45);
+  check(!scoreInk.inks.some(ink => nearGreen(ink) || nearRed(ink)),
+    `no green or red ink on the score (${scoreInk.inks.join(' | ')})`);
+  // Both sides of the separator are the same ivory: whose number is whose is said by position.
+  check(ivory(scoreInk.left) && ivory(scoreInk.right),
+    `both players’ digits are the same ivory (left ${scoreInk.left}, right ${scoreInk.right})`);
+  await page.screenshot({ path: `${DIR}/390x844-score.png` });
+
   // A marquee's bloom is the same baked strip: same travel and duration as the glyphs.
   await page.evaluate(() => {
     const banner = document.getElementById('banner')!;
@@ -303,6 +396,152 @@ try {
   check(marquee.cells.scroll && marquee.bloom.scroll, 'the marquee bloom scrolls with the strip');
   check(marquee.cells.travel !== '' && marquee.cells.duration === marquee.bloom.duration, `same travel/duration (${marquee.cells.duration})`);
   check(marquee.bloom.animation === 'smart-led-bloom-scroll', 'the bloom travels on its own transform animation');
+
+  /* 1b. THE MARQUEE MUST NEVER WASH THE COCKPIT (owner regression, 2026-10-20).
+     A marquee bakes ONE sprite for the WHOLE message. Measured before the fix, that sprite was
+     2678 x 182 CSS px over a 92 px display and painted across the cockpit and the hand, adding up
+     to 205/255 to the screen. The bloom now lives in a fixed, feathered clip: the display plus a
+     26 px wing each side and an 84 px lip above/below. These checks are the ones that make the
+     screenshot impossible — pixels, not intent. */
+  type Wash = {
+    clip: { w: number; h: number; x: number; y: number };
+    led: { w: number; h: number; x: number; y: number };
+    sprite: { w: number; h: number; peak: number };
+    scrolling: boolean;
+    insideMax: number;
+    insideAt: { x: number; y: number } | null;
+    beyond28: number;
+    outsideBand: number;
+    uiLuma: number;
+  };
+
+  /** Added light (0-255 luminance) from the bloom, and where it lands. */
+  const washOf = async (p: Page, label: string): Promise<Wash> => {
+    // Freeze every animation so the two frames are the same instant (the marquee is moving).
+    await p.evaluate(() => { for (const a of document.getAnimations()) { try { a.pause(); } catch { /* already gone */ } } });
+    const shotWith = await p.screenshot();
+    await p.evaluate(() => { (document.getElementById('smart-led-bloom') as HTMLElement).style.opacity = '0'; });
+    const shotWithout = await p.screenshot();
+    await p.evaluate(() => {
+      (document.getElementById('smart-led-bloom') as HTMLElement).style.opacity = '';
+      for (const a of document.getAnimations()) { try { a.play(); } catch { /* already gone */ } }
+    });
+    const measured = await p.evaluate(async ({ withData, withoutData }) => {
+      const load = async (src: string) => {
+        const image = new Image(); image.src = `data:image/png;base64,${src}`; await image.decode();
+        const c = document.createElement('canvas'); c.width = image.width; c.height = image.height;
+        const g = c.getContext('2d')!; g.drawImage(image, 0, 0);
+        return { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data };
+      };
+      const [on, off] = await Promise.all([load(withData), load(withoutData)]);
+      const lum = (s: typeof on, x: number, y: number) => {
+        const i = (y * s.w + x) * 4;
+        return .2126 * s.d[i]! + .7152 * s.d[i + 1]! + .0722 * s.d[i + 2]!;
+      };
+      const clipEl = document.getElementById('smart-led-bloom-clip')!;
+      const clipR = clipEl.getBoundingClientRect();
+      const ledR = document.getElementById('smart-led')!.getBoundingClientRect();
+      // The display's own face: glyphs and the alarm blink live here, and are not part of the wash.
+      const winR = document.getElementById('smart-led-window')!.getBoundingClientRect();
+      const bloom = document.getElementById('smart-led-bloom') as HTMLCanvasElement;
+      const sprite = bloom.getBoundingClientRect();
+      const ctx = bloom.getContext('2d')!;
+      const alpha = ctx.getImageData(0, 0, bloom.width, bloom.height).data;
+      let peak = 0;
+      for (let i = 3; i < alpha.length; i += 4) peak = Math.max(peak, alpha[i]!);
+      // A pixel is "the display's own" when it is inside the glass (plus 6 px of bezel).
+      const own = (x: number, y: number) =>
+        x >= winR.left - 6 && x <= winR.right + 6 && y >= winR.top - 6 && y <= winR.bottom + 6;
+      // Distance from the display's own box (0 inside it).
+      const away = (x: number, y: number) => {
+        const dx = Math.max(winR.left - x, 0, x - winR.right);
+        const dy = Math.max(winR.top - y, 0, y - winR.bottom);
+        return Math.hypot(dx, dy);
+      };
+      let insideMax = 0; let insideAt: { x: number; y: number } | null = null;
+      let beyond28 = 0; let outsideBand = 0; let uiLuma = 0;
+      for (let y = 0; y < on.h; y++) for (let x = 0; x < on.w; x++) {
+        const add = lum(on, x, y) - lum(off, x, y);
+        if (add <= 0) continue;
+        const inBand = x >= clipR.left && x < clipR.right && y >= clipR.top && y < clipR.bottom;
+        if (!inBand) { outsideBand = Math.max(outsideBand, add); continue; }
+        if (own(x, y)) continue;
+        if (add > insideMax) { insideMax = add; insideAt = { x, y }; }
+        if (away(x, y) > 30) beyond28 = Math.max(beyond28, add);
+      }
+      // The illuminated UI next to the display: the brightest pixel of the key row below it. The
+      // bloom must stay well under it (it is light spilling on a bezel, not a lamp).
+      const keyRowTop = Math.round(ledR.bottom + 2);
+      for (let y = keyRowTop; y < Math.min(on.h, keyRowTop + 70); y++) for (let x = Math.round(clipR.left); x < Math.min(on.w, clipR.right); x++) {
+        const v = lum(off, x, y);
+        if (v > uiLuma) uiLuma = v;
+      }
+      return {
+        clip: { w: Math.round(clipR.width), h: Math.round(clipR.height), x: Math.round(clipR.left), y: Math.round(clipR.top) },
+        led: { w: Math.round(ledR.width), h: Math.round(ledR.height), x: Math.round(ledR.left), y: Math.round(ledR.top) },
+        sprite: { w: Math.round(sprite.width), h: Math.round(sprite.height), peak },
+        scrolling: bloom.classList.contains('scrolling'),
+        insideMax: Math.round(insideMax), insideAt, beyond28: Math.round(beyond28),
+        outsideBand: Math.round(outsideBand), uiLuma: Math.round(uiLuma),
+      };
+    }, { withData: shotWith.toString('base64'), withoutData: shotWithout.toString('base64') });
+    if (process.env.E2E_DEBUG === '1') console.log(`wash ${label}: ${JSON.stringify(measured)}`);
+    return measured;
+  };
+
+  const marqueeWash: Record<string, Wash> = {};
+  const shortWash: Record<string, Wash> = {};
+  for (const [w, h] of [[390, 844], [360, 640]] as const) {
+    const run = await open(w, h);
+    const tag = `${w}x${h}`;
+    // The display machine may replace the banner with its own beat after a moment, so poke the
+    // marquee until it takes and hold it there (a real marquee is exactly this state).
+    const LONG = 'THIS IS A LONG MESSAGE TO TEST THE MECHANICAL LED WINDOW';
+    let scrolling = false;
+    for (let attempt = 0; attempt < 12 && !scrolling; attempt++) {
+      await run.page.evaluate((text) => { (document.getElementById('banner') as HTMLElement).textContent = text; }, LONG);
+      await run.page.waitForTimeout(250);
+      scrolling = await run.page.evaluate(() => document.querySelector('#smart-led-cells')?.classList.contains('scrolling') === true);
+    }
+    check(scrolling, `${tag}: the marquee took (the state the owner saw)`);
+    check(await run.page.evaluate(() => document.getElementById('smart-led-text')?.textContent ?? '') === LONG,
+      `${tag}: the long message is on the display`);
+    // Freeze it here: washOf pauses the animations, and the strip must stay a marquee for the
+    // measurement (this is the state that produced the wash).
+    await run.page.evaluate(() => { for (const a of document.getAnimations()) { try { a.pause(); } catch { /* gone */ } } });
+    const long = await washOf(run.page, `${tag} marquee`);
+    marqueeWash[tag] = long;
+    check(long.scrolling, `${tag}: the marquee really is scrolling (the state the owner saw)`);
+    // (a) The hard bound: nothing at all outside the fixed band, whatever the message is.
+    check(long.outsideBand <= 1, `${tag}: no bloom light outside the display's fixed band (max +${long.outsideBand}/255)`);
+    // (b) Inside the band, beyond 30 px from the display, the light is a whisper (< 4% of white).
+    check(long.beyond28 <= 10, `${tag}: beyond 30 px from the display the bloom adds at most +${long.beyond28}/255 (limit 10)`);
+    // (c) The bloom's brightest spill stays well under the illuminated UI beside it, and is a
+    //     halo at the bezel — never a panel wash.
+    check(long.insideMax <= 30, `${tag}: the brightest bloom spill beside the glass is +${long.insideMax}/255 (limit 30)`);
+    check(long.insideMax + 20 < long.uiLuma,
+      `${tag}: the bloom stays well under the illuminated keys (spill +${long.insideMax} vs key luminance ${long.uiLuma})`);
+    // (d) The sprite is capped, and the visible band is the display plus the fixed wing/lip.
+    check(long.sprite.peak <= 91, `${tag}: the marquee sprite is alpha-capped at ${long.sprite.peak}/255 (cap .34)`);
+    check(long.clip.w === long.led.w + 52 && long.clip.h === long.led.h + 168,
+      `${tag}: the bloom is confined to the display + 26 px each side, 84 px above/below (${long.clip.w}x${long.clip.h} for a ${long.led.w}x${long.led.h} display)`);
+    await run.page.screenshot({ path: `${DIR}/${tag}-marquee.png` });
+
+    // A short message must not produce a bigger or brighter light than the long one.
+    await run.page.evaluate(() => { (document.getElementById('banner') as HTMLElement).textContent = 'TAP THE DRAW PILE'; });
+    await run.page.waitForFunction(() => !document.querySelector('#smart-led-cells')?.classList.contains('scrolling'), undefined, { timeout: 6000 });
+    await run.page.waitForTimeout(350);
+    const short = await washOf(run.page, `${tag} short`);
+    shortWash[tag] = short;
+    check(short.clip.w === long.clip.w && short.clip.h === long.clip.h,
+      `${tag}: a long marquee does not widen the light (short ${short.clip.w}x${short.clip.h}, long ${long.clip.w}x${long.clip.h})`);
+    check(short.sprite.peak === long.sprite.peak, `${tag}: a long marquee does not brighten the light (peak ${short.sprite.peak} vs ${long.sprite.peak})`);
+    check(short.beyond28 <= 10, `${tag}: the short message is just as contained (+${short.beyond28}/255 beyond 30 px)`);
+    check(short.insideMax <= 30, `${tag}: the short message's spill is a halo too (+${short.insideMax}/255)`);
+    check(run.errors.length === 0, `${tag}: no browser errors on a marquee (${run.errors.join(' | ')})`);
+    await run.page.close();
+  }
+  if (process.env.E2E_DEBUG === '1') console.log('marquee wash', JSON.stringify({ marqueeWash, shortWash }));
 
   check(errors.length === 0, `no browser errors at rest (${errors.join(' | ')})`);
 
@@ -472,26 +711,35 @@ try {
     }
   }
 
-  /* 5. Owner colours never replaced: both materials remain distinguishable under the tint. */
+  /* 5. Owner colours are never replaced, and a TILE's glow never follows the display.
+     A top-rank tile's halo belongs to the tile (its rank and its owner's moss/lava material).
+     The display's tone swings through a turn; if a tile read it, every top tile would change
+     colour at every outcome (owner, 2026-10-20: "the glow on the tiles ... looks a bit random at
+     the end of turn, esp on enemies tiles changing from red to green and back"). */
   const owners = await open(390, 844, { reduceMotion: true });
   const ownership = await owners.page.evaluate(() => {
     const tiles = [...document.querySelectorAll<SVGPathElement>('#board .l-base path.hex')].slice(0, 2);
-    const stops = [...document.querySelectorAll('#board defs radialGradient[id$="light-tint"] > stop')];
     const root = document.documentElement;
     const original = root.style.getPropertyValue('--light-core');
-    const before = stops[0] ? getComputedStyle(stops[0]).stopColor : '';
-    // Publish a different tone the way the display does, and read the consumer back.
+    // Publishing a tone must not touch anything on the board.
+    const glows = () => [...document.querySelectorAll<SVGImageElement>('#board .top-glow')];
+    const before = glows().map(glow => `${glow.getAttribute('href')}|${glow.getAttribute('style') ?? ''}`);
+    const fills = tiles.map(tile => getComputedStyle(tile).fill);
     root.style.setProperty('--light-core', '#ff0000');
-    const after = stops[0] ? getComputedStyle(stops[0]).stopColor : '';
+    const after = glows().map(glow => `${glow.getAttribute('href')}|${glow.getAttribute('style') ?? ''}`);
+    const fillsAfter = tiles.map(tile => getComputedStyle(tile).fill);
     root.style.setProperty('--light-core', original);
     // Every consumer stylesheet names the ONE contract; none invents a second light system.
     const css = [...document.styleSheets].map(sheet => {
       try { return [...sheet.cssRules].map(rule => rule.cssText).join(''); } catch { return ''; }
     }).join('');
     return {
-      tileFills: tiles.map(tile => getComputedStyle(tile).fill),
-      tintStops: stops.length,
-      before, after,
+      tileFills: fills,
+      fillsAfter,
+      tintElements: document.querySelectorAll('#board .top-glow-tint, #board radialGradient[id$="light-tint"]').length,
+      topGlowStyle: css.includes('.top-glow'),
+      glows: before.length,
+      glowsChanged: JSON.stringify(before) !== JSON.stringify(after),
       consumers: {
         bloom: css.includes('#smart-led-bloom'),
         target: css.includes('var(--light-core') && css.includes('.target.kind-grow'),
@@ -500,12 +748,104 @@ try {
       },
     };
   });
-  check(ownership.tintStops >= 3, `the top-glow tint exists and has a soft ramp (${ownership.tintStops} stops)`);
-  check(ownership.after !== ownership.before && ownership.after.includes('255, 0, 0'), `the top-glow tint reads the published --light-core (${ownership.before} → ${ownership.after})`);
+  check(ownership.tintElements === 0, `no board element follows the display's tone (${ownership.tintElements} tint nodes)`);
+  check(ownership.topGlowStyle, 'top-rank tiles keep their own halo rule');
+  check(!ownership.glowsChanged, `publishing a new display tone does not change a single tile halo (${ownership.glows} on screen)`);
+  check(JSON.stringify(ownership.tileFills) === JSON.stringify(ownership.fillsAfter), 'publishing a new display tone does not change a tile fill');
   check(ownership.tileFills.length >= 1, 'board tiles keep their own material fills');
   check(ownership.consumers.bloom && ownership.consumers.target && ownership.consumers.focus && ownership.consumers.outcome,
     `the bloom, legal-target rim, lesson pointer and outcome light all consume the contract (${JSON.stringify(ownership.consumers)})`);
   await owners.page.close();
+
+  /* 6. ONE ROOM: the result light tints the WHOLE background, behind the cockpit, the dock, the
+     hand and the board, with no seam (owner, 2026-10-20: "when colour of background behind the map
+     changes colour it should change across the whole background, also under cockpit and the hand
+     and all"). The old styling was two soft ellipses under the map, so the colour stopped at an
+     edge halfway down the screen. The element's only animated property is opacity, so setting it
+     to the beat's peak is exactly what the game paints. */
+  for (const palette of ['soil', 'moss'] as const) {
+    for (const [w, h] of [[360, 640], [390, 844]] as const) {
+      const run = await open(w, h, { palette, reduceMotion: true });
+      const tag = `${palette} ${w}x${h} room`;
+      await run.page.evaluate(() => { for (const a of document.getAnimations()) { try { a.pause(); } catch { /* gone */ } } });
+      const plain = await run.page.screenshot();
+      const points = await run.page.evaluate(() => {
+        const R = (sel: string) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; };
+        return { led: R('#smart-led'), box: R('#futa04-box'), hand: R('#hand'), card: R('#hand .card'), key: R('#smart-context'), board: R('#board') };
+      });
+      // The real element, at the peak opacity the pulse animates to.
+      await run.page.evaluate(() => {
+        const el = document.getElementById('futa04-outcome-light')!;
+        el.dataset.tone = 'good';
+        el.style.opacity = '0.3';
+      });
+      await run.page.waitForTimeout(80);
+      const lit = await run.page.screenshot();
+      await run.page.screenshot({ path: `${DIR}/${w}x${h}-${palette}-room.png` });
+      const probes = await run.page.evaluate(async ({ plainData, litData, points }) => {
+        const load = async (src: string) => {
+          const image = new Image(); image.src = `data:image/png;base64,${src}`; await image.decode();
+          const c = document.createElement('canvas'); c.width = image.width; c.height = image.height;
+          const g = c.getContext('2d')!; g.drawImage(image, 0, 0);
+          return { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data };
+        };
+        const [a, b] = await Promise.all([load(plainData), load(litData)]);
+        const rgb = (s: typeof a, x: number, y: number) => {
+          const i = (Math.round(y) * s.w + Math.round(x)) * 4;
+          return [s.d[i]!, s.d[i + 1]!, s.d[i + 2]!] as [number, number, number];
+        };
+        const delta = (x: number, y: number) => {
+          const p = rgb(a, x, y); const q = rgb(b, x, y);
+          return Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]);
+        };
+        const W = a.w; const H = a.h;
+        const spot = (x: number, y: number) => delta(Math.min(W - 2, Math.max(1, x)), Math.min(H - 2, Math.max(1, y)));
+        const corners = { tl: spot(4, 4), tr: spot(W - 5, 4), bl: spot(4, H - 5), br: spot(W - 5, H - 5) };
+        const behindCockpit = points.box && points.led ? spot(points.box.x - 8, points.led.cy) : 0;
+        const behindHand = points.hand ? spot(points.hand.cx, Math.min(H - 3, points.hand.y + points.hand.h - 2)) : 0;
+        const behindBoardTop = points.board ? spot(points.board.cx, points.board.y + 2) : 0;
+        /* WHERE THE TINT CAN ACTUALLY END. An opaque hex, the board plate or a card hides the page
+           entirely, so a walk across the screen measures those edges, not the light's (the map's
+           hexes sit right at the left margin on a tall phone). A seam is instead ruled out by the
+           layer's own geometry: ONE element over the viewport, and a full-bleed gradient in its
+           background — no shaped patch can therefore stop halfway. */
+        const layer = document.getElementById('futa04-outcome-light')!;
+        const box = layer.getBoundingClientRect();
+        const style = getComputedStyle(layer);
+        const backdrop = style.backgroundImage;
+        const fullBleed = box.width >= W - 1 && box.height >= H - 1 && box.left <= 0 && box.top <= 0;
+        const noPatch = /linear-gradient\(/.test(backdrop);
+        // The same tint in every corner, so no part of the page is left out.
+        const spread = Math.max(...Object.values(corners)) - Math.min(...Object.values(corners));
+        // The cockpit's own keys and the cards keep their own colours.
+        const keyBefore = points.key ? rgb(a, points.key.cx, points.key.cy) : null;
+        const keyAfter = points.key ? rgb(b, points.key.cx, points.key.cy) : null;
+        const cardBefore = points.card ? rgb(a, points.card.cx, points.card.cy) : null;
+        const cardAfter = points.card ? rgb(b, points.card.cx, points.card.cy) : null;
+        const drift = (x: [number, number, number] | null, y: [number, number, number] | null) =>
+          !x || !y ? 99 : Math.abs(y[0] - x[0]) + Math.abs(y[1] - x[1]) + Math.abs(y[2] - x[2]);
+        return {
+          corners, behindCockpit, behindHand, behindBoardTop, spread,
+          fullBleed, noPatch, backdrop: backdrop.slice(0, 120),
+          keyDrift: drift(keyBefore, keyAfter), cardDrift: drift(cardBefore, cardAfter),
+          size: `${W}x${H}`,
+        };
+      }, { plainData: plain.toString('base64'), litData: lit.toString('base64'), points });
+      const weakest = Math.min(...Object.values(probes.corners));
+      check(weakest > 0, `${tag}: the colour reaches all four screen corners (weakest +${weakest})`);
+      check(probes.behindCockpit > 0, `${tag}: it reaches the background behind the cockpit (+${probes.behindCockpit})`);
+      check(probes.behindHand > 0, `${tag}: it reaches the background behind the hand (+${probes.behindHand})`);
+      check(probes.fullBleed, `${tag}: the light is one layer over the whole viewport (no shaped patch)`);
+      check(probes.noPatch, `${tag}: its background is a full-bleed wash, so the colour cannot stop at an edge (${probes.backdrop})`);
+      // Summed over the three channels: a spread of 8 is under 3 per channel, invisible; the old
+      // ellipse styling left whole screen areas at 0.
+      check(probes.spread <= 8, `${tag}: the same tint in every corner, so the colour has no boundary (corner spread ${probes.spread})`);
+      check(probes.keyDrift <= 6, `${tag}: the cockpit's keys keep their own colours (rgb drift ${probes.keyDrift})`);
+      check(probes.cardDrift <= 6, `${tag}: the cards keep their own colours (rgb drift ${probes.cardDrift})`);
+      check(run.errors.length === 0, `${tag}: no browser errors (${run.errors.join(' | ')})`);
+      await run.page.close();
+    }
+  }
 
   console.log(`${checks} light-source checks passed; screenshots: ${DIR}`);
 } finally {

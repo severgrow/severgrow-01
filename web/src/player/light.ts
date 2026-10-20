@@ -2,9 +2,9 @@
  * ONE LIGHT contract for the cockpit's light.
  *
  * The display is the only emitter in the cockpit. Everything that catches its light
- * (the baked bloom around the dots, the top-rank halo tint, the legal-target rim, a
- * hover catch, the lesson pointer and the outcome light) reads the same six-tone
- * vocabulary from here, and every tone is `{ core, bloom, angle }`:
+ * (the baked bloom around the dots, the legal-target rim, a hover catch, the lesson
+ * pointer and the outcome light) reads the same six-tone vocabulary from here, and
+ * every tone is `{ core, bloom, angle }`:
  *
  *   core  the lit-dot ink (identical to the glyph fill the LED painter draws)
  *   bloom a LOW-ALPHA tint of that ink, for rims/shadows/halos — never a fill colour
@@ -15,8 +15,10 @@
  * `--light-bloom-op`). It writes only when the tone actually changes: the bloom must
  * never re-bake or change strength per frame.
  *
- * Ownership colours are never replaced. The light only ever adds a low-alpha rim or
- * tint on top of the owner's own material.
+ * Ownership colours are never replaced. The light only ever adds a low-alpha rim on top
+ * of the owner's own material. A top-rank tile's glow is NOT part of this contract: it
+ * belongs to that tile (its rank and its owner's material) and must never follow the
+ * display's tone, or every top tile would swing colour as the display talks.
  */
 import type { LedTone } from './led-cells.js';
 
@@ -34,13 +36,17 @@ export type LightSpec = {
 /** The one angle the whole light leans at: a touch clockwise, never sideways enough to smear. */
 export const LIGHT_ANGLE = 22;
 
+/* The bloom's rest strength. Owner, 2026-10-20: "the display glow is too strong right now,
+   reduce its intensity by around 35%". Each peak is the old value x 0.65 (.44->.286,
+   .46->.299, .42->.273); the colour, the angle and the falloff shape are untouched, and the
+   photosensitivity ceiling (`LIGHT_CAPS.bloomPeak`) is unchanged. */
 export const LIGHT_TONES: Record<LightTone, LightSpec> = {
-  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .44 },
-  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .46 },
-  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .44 },
-  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .42 },
-  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .42 },
-  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .42 },
+  amber: { core: '#f5d8a4', bloom: 'rgba(255,195,104,.30)', angle: LIGHT_ANGLE, peak: .286 },
+  red: { core: '#e4705e', bloom: 'rgba(234,68,48,.32)', angle: LIGHT_ANGLE, peak: .299 },
+  green: { core: '#a9d886', bloom: 'rgba(143,210,111,.28)', angle: LIGHT_ANGLE, peak: .286 },
+  ivory: { core: '#f5ead1', bloom: 'rgba(255,233,182,.26)', angle: LIGHT_ANGLE, peak: .273 },
+  pink: { core: '#edabc0', bloom: 'rgba(237,150,178,.26)', angle: LIGHT_ANGLE, peak: .273 },
+  cyan: { core: '#a7d3d0', bloom: 'rgba(132,209,206,.24)', angle: LIGHT_ANGLE, peak: .273 },
 };
 
 /**
@@ -60,6 +66,14 @@ export const LIGHT_CAPS = {
   reflect: 1.18,
   /** how far the baked bloom reaches from a lit dot, in CSS px along the angle */
   reach: 52,
+  /**
+   * The light reaches this much further BELOW a lit dot than above it (owner, 2026-10-20:
+   * "stretch it out a tiny bit more downwards - on to the undo and match intel buttons"). The
+   * reach above is unchanged, so the bloom keeps its shape and its soft rim; only the lower tail
+   * is stretched, by a quarter, so it can catch the keys under the display. Not a wash: the
+   * falloff is the same curve, just 25% longer on the way down.
+   */
+  reachDown: 1.25,
 } as const;
 
 /** The LED glyph inks. One map for the painter and the light, so they cannot drift. */

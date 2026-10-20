@@ -28,9 +28,11 @@ describe('the light on screen', () => {
     expect(litTarget({ t: 'end' }, homes).shape).toBe('pill');
     expect(litTarget({ t: 'bloom' }, homes).shape).toBe('pill');
   });
-  it('the score display and the Draw pile with its count can be lit (taught once, in level 1)', () => {
-    expect(litTarget({ t: 'score' }, homes)).toEqual({ selectors: ['#smart-led'], shape: 'pill' });
+  it('the Draw pile with its count is a pill; the score display target still resolves, but nothing points at it', () => {
     expect(litTarget({ t: 'deckCount' }, homes)).toEqual({ selectors: ['#deck .pile-card', '#deck-count'], shape: 'pill' });
+    // Kept as a reachable target (a future score beat can use it), but the level-1 grow
+    // explanation lights the placed tile instead — that assertion lives in lessons.test.ts.
+    expect(litTarget({ t: 'score' }, homes)).toEqual({ selectors: ['#smart-led'], shape: 'pill' });
   });
   it('nothing to light: no focus at all (the window speaks alone)', () => {
     expect(litTarget({ t: 'none' }, homes)).toEqual({ selectors: [], shape: 'none' });

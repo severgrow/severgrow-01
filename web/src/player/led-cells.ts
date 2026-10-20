@@ -54,6 +54,18 @@ const GLYPHS: Record<string, string> = {
 };
 
 export type LedTone = 'amber' | 'red' | 'green' | 'ivory' | 'pink' | 'cyan' | 'score';
+
+/**
+ * THE SCORE IS NEUTRAL (owner, 2026-10-20: "the owner does not like the green and red on the
+ * points"). The resting face reads "12:8"; it used to paint your digits green and theirs red, so
+ * the two numbers looked like good/bad or two colour-coded teams. Now both sides use ONE cream —
+ * the palette's own ivory, the brightest quiet ink the display has — and the two numbers are told
+ * apart by POSITION (either side of the separator) and the separator itself, never by hue.
+ * Ownership colour is untouched everywhere it means something: tiles, territory, outcome tones.
+ */
+export const SCORE_INK: LightTone = 'ivory';
+/** The separator keeps the warm amber punctuation it always had; it is not a player's colour. */
+export const SCORE_SEPARATOR_INK: LightTone = 'amber';
 export type LedMotif = 'stars' | 'heart' | 'shock' | 'scatter' | 'eyes';
 export const ledMotifFrames = (motif: LedMotif): readonly string[] => ({
   stars:['• ✦ •','✦ • ✦','• ✦ •','✦ ✦','• ✦ •'],
@@ -169,7 +181,7 @@ export function ledLayout(message: string, repeat = false, mode: LedTone = 'ambe
     const glyph = rows.split('/');
     for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++) {
       if (glyph[y]?.[x] !== '1') continue;
-      const tone: LightTone = mode === 'score' ? (i < colon ? 'green' : i > colon ? 'red' : 'amber') : mode;
+      const tone: LightTone = mode === 'score' ? (i === colon ? SCORE_SEPARATOR_INK : SCORE_INK) : mode;
       dots.push({
         x: i * advance + x * dotX + 1.1 * s,
         y: y * rowStep + originY,
@@ -226,8 +238,19 @@ const BLOOM_RES = .5;
 /** The soft stamp is an ellipse leaning along the tone's angle. */
 const STAMP_STRETCH = 1.45;
 const STAMP_FLATTEN = .9;
+/* The falloff is a little longer below the dots than above (LIGHT_CAPS.reachDown): the top edge
+   of the stamp stays exactly where it was, and only the lower tail is stretched, so the light
+   reaches the undo / Match Intel keys under the display without brightening the bezel above and
+   without moving the brightest point off the lit dots. */
+const DOWN_EXTRA = LIGHT_CAPS.reachDown - 1;
+const STAMP_DOWN_SCALE = 1 + DOWN_EXTRA / 2;
+const STAMP_DOWN_SHIFT = LIGHT_CAPS.reach * STAMP_FLATTEN * (DOWN_EXTRA / 2);
+/** The stamp's reach above and below a lit dot, in CSS px (equal horizontally by construction). */
+export const BLOOM_REACH_UP = LIGHT_CAPS.reach * STAMP_FLATTEN;
+export const BLOOM_REACH_DOWN = BLOOM_REACH_UP * LIGHT_CAPS.reachDown;
 /** CSS px of empty paper kept around the dot strip inside the sprite. It must cover the widest
- *  part of the stretched stamp, or the sprite would clip the falloff into a rectangle. */
+ *  part of the stretched stamp — the horizontal stretch; even the longer lower vertical tail
+ *  (BLOOM_REACH_DOWN) is shorter than it — or the sprite would clip the falloff into a rectangle. */
 export const BLOOM_REACH = LIGHT_CAPS.reach * STAMP_STRETCH;
 export const BLOOM_PAD = Math.ceil(BLOOM_REACH) + 2;
 /** Alpha at the centre of one dot's stamp. Hundreds of stamps sum with 'lighter', so this is the
@@ -235,8 +258,13 @@ export const BLOOM_PAD = Math.ceil(BLOOM_REACH) + 2;
  *  plateau (light stops reading as light); too low and it is invisible once the sprite's own cap
  *  and the CSS opacity are applied. */
 const DOT_ALPHA = .05;
-/** Ceiling for the whole sprite: never an opaque wash over the dots it came from. */
-export const BLOOM_ALPHA_CAP = .5;
+/**
+ * Ceiling for the whole sprite: never an opaque wash over the dots it came from. Lowered from
+ * .5 (owner, 2026-10-20: the display's light "can never" read as a panel wash). At the published
+ * rest opacity (.286) the strongest bloom pixel is ~.10 of the ink — a halo on the bezel, not a
+ * light source — and even a marquee's saturated strip stays a faint bloom.
+ */
+export const BLOOM_ALPHA_CAP = .34;
 const stampCache = new Map<LightTone, HTMLCanvasElement>();
 
 const bloomStamp = (tone: LightTone): HTMLCanvasElement | null => {
@@ -324,8 +352,11 @@ export function ledBloomSprite(
     const reach = LIGHT_CAPS.reach;
     ctx.save();
     ctx.translate(BLOOM_PAD + dot.x, BLOOM_PAD + dot.y);
+    // Straight DOWN in screen space, before the tone's lean: the tail is stretched on the way down
+    // only, and the shift keeps the stamp's top edge exactly where it was.
+    ctx.translate(0, STAMP_DOWN_SHIFT);
     ctx.rotate(angle);
-    ctx.scale(STAMP_STRETCH, STAMP_FLATTEN);
+    ctx.scale(STAMP_STRETCH, STAMP_FLATTEN * STAMP_DOWN_SCALE);
     ctx.drawImage(stamp, -reach, -reach, reach * 2, reach * 2);
     ctx.restore();
   }

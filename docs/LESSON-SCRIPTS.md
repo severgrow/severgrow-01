@@ -47,11 +47,12 @@ floating over the felt — no panel, no title, no mission, no buttons:
 - **Dismissed by a tap anywhere, or on the lit thing itself.** The same tap advances the lesson; it
   does not also play the move. A tap in the first 0.65 s is ignored, so a tap meant for the move
   that just happened never swallows the explanation unread.
-- The placement reads the hexes and cockpit controls once per beat: it prefers the band under the
-  header and above the hexes, and it **never overlaps the lit target, a control or the header**. On
-  a screen where the map leaves no gap at all (a short phone), it takes the gap with the fewest
-  hexes under it; the map is never shrunk. It runs when the beat changes, on resize, and once after
-  the camera settles — never per frame.
+- The placement reads the hexes and cockpit controls once per beat: it sits **near the lit target**
+  (closest plate centre to the nearest lit centre, centred x on a tie), and it **never overlaps the
+  lit target, a control or the header**. On desktop (side layout) and on a beat with no light it
+  keeps the older order: fewest covered hexes, then the highest gap under the header. The map is
+  never shrunk. It runs when the beat changes, on resize, and once after the camera settles — never
+  per frame.
 
 ### The display (the cockpit LED)
 
@@ -79,7 +80,7 @@ two displays never compete.
 | a pile or a button | rounded pill |
 
 - Every glow has the **same rounded corner**, whatever it outlines. SPOTLIGHT and GUIDE hold still (the lit thing already breathes); WHISPER is a gentle pulse on the target only.
-- The score display and the pile count are taught **once**, in level 1, and are left as they are everywhere else.
+- The pile count is taught **once**, in level 1, and is left as it is everywhere else. What a point is worth is taught **once, as its own beat** (level 1 step 8) — and that beat lights the tile that carries the number, not the display, because the sentence is about the tile's rank. The score display itself is readable from the first turn.
 
 ### Per-action mastery fade
 
@@ -177,8 +178,10 @@ The same in every level:
     it to select and then place on the board." | tap anywhere
   - LIT the card | DISPLAY: CHOOSE A CARD | card picked
   - LIT the tile (other legal tiles quietly) | DISPLAY: TAP THE LIT TILE | Grow played
-  - LIT the score display, which holds the score itself (1:0) | BOX: "Tiles keep the rank of the
-    card used." | tap anywhere
+  - LIT the tile that was just grown — its number stone, the rank the card gave it | BOX: "Tiles
+    keep the rank of the card used." | tap anywhere. (Owner, 2026-10-20: this used to light the
+    score display, which pointed the arrow at the score while the sentence was about the tile's
+    number. The score still shows on the display; it is simply not what this beat lights.)
   - After the Grow, when nothing else can be played, the game moves on to Throw by itself (owner,
     2026-10-20: lighting » there was redundant). **» is never lit for a moment before it does**, and
     **never while a legal Bloom, Bomb or Blast exists**.
@@ -211,7 +214,7 @@ The same in every level:
   5. LIT the suggested card | BOX: "Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board." | tap anywhere
   6. LIT the card | DISPLAY: CHOOSE A CARD | picked | TAP THE LIT ONE
   7. LIT the tile, other legal tiles quietly | DISPLAY: TAP THE LIT TILE | Grow played | CONNECT TO YOUR HOME, THAT IS THEIR HOME
-  8. LIT the score display (held at 1:0) | BOX: "Tiles keep the rank of the card used." | tap anywhere
+  8. LIT the hex that was just grown (its number stone: the rank the card gave it) | BOX: "Tiles keep the rank of the card used." | tap anywhere. The display keeps showing the score (1:0) but is not the lit target.
   9. LIT » | DISPLAY: TAP » TO THROW | tapped
   10. LIT the card | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn." | tap anywhere
   11. LIT the card, then Throw pile | DISPLAY: THROW A CARD → TAP THE THROW PILE | thrown

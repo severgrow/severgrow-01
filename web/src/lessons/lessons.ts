@@ -733,9 +733,14 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
   if (s.actor !== YOU || s.phase === 'GAME_OVER') return null;
   const once = (id: string) => !seen.has(`${lesson.level}:${id}`);
   const ev = mine(s);
-  // The score is the display's own face; the box explains what a tile keeps.
-  if (lesson.level === 1 && ev.some((e) => e.t === 'Sprout') && once('grew'))
-    return explain(`${lesson.level}:grew`, W.youGrewLine, { t: 'score' });
+  // "Tiles keep the rank of the card used" is about the NUMBER ON THE TILE that was just placed,
+  // so the light goes to that hex — not to the display (owner, 2026-10-20: it lit the score
+  // display and pointed the arrow at it, which taught the wrong thing). The newest Sprout in the
+  // history is the tile just placed; the words are unchanged, and the score keeps its own face.
+  if (lesson.level === 1 && once('grew')) {
+    const grew = [...ev].reverse().find((e): e is Extract<Event, { t: 'Sprout' }> => e.t === 'Sprout');
+    if (grew) return explain(`${lesson.level}:grew`, W.youGrewLine, { t: 'hex', key: coordKey(grew.coord) });
+  }
   if (lesson.level === 4 && goalDone({ t: 'cut', key: '1,-1' }, s) && once('withered'))
     return explain(`${lesson.level}:withered`, W.witheredLine, { t: 'led' });
   if (lesson.level === 5 && goalDone({ t: 'bloom' }, s) && once('bloomed'))
