@@ -7,7 +7,8 @@
 1. **Board size:** stay on radius 3 (37 hexes) for 31-70; terrain is the only axis. A 61-hex board
    was probed and works, but at 360 px it gives ~36 px hexes — under the 44 px tap target.
 2. **Breathers:** bot 8 is allowed on levels flagged `breather: true`, never twice in a row, at most a
-   quarter of the extension. The 1-30 ladder keeps its original rule.
+   quarter of the extension. The 1-30 ladder keeps its original rule, with one owner-requested
+   exception: level 13 is a deliberate bot-8 spike (2026-10-20), pinned by the campaign tests.
 3. **Economy:** extend the Seeds cap to 70; 25 per first clear from 41; chapter bonuses at 60 (150)
    and 70 (200). Implemented in `server/src/seeds/config.ts`, with one shared constant for the cap.
 

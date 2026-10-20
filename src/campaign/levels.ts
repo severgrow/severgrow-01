@@ -181,7 +181,9 @@ export const CAMPAIGN_LEVELS: readonly CampaignLevel[] = Object.freeze([
   // A short wall flanks the centre: two ways round it — over the top or under the bottom.
   level(2, 12, 'c2-12', 'Split Meadow', 95012, 5, board(['-1,0', '1,0', '-1,-1'], RICH_PAIR_R), 'A split down the middle; pick a lane.'),
   // The first real detour: a four-hex arc off the centre-left to walk around.
-  level(2, 13, 'c2-13', 'The Detour', 95013, 5, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
+  // Deliberate difficulty spike to bot 8 (owner request, 2026-10-20): this is the one sanctioned
+  // exception to the 1-30 ramp. Do not "fix" it back to 5 — the spike is pinned in the campaign tests.
+  level(2, 13, 'c2-13', 'The Detour', 95013, 8, board(['-2,0', '-1,0', '-1,-1', '-1,-2'], RICH_PAIR_R), 'A four-hex arc to route around.'),
   // Breathing space: one lone stone, a stronger opponent, and a second gold pair to race for.
   level(2, 14, 'c2-14', 'Open Horizon', 95014, 5, board(['0,1'], RICH_PAIR_Q), 'Open ground and a clearly better bot.'),
   // Twin crystals on opposite wings plus a central pair: two threats to answer at once.

@@ -222,17 +222,30 @@ describe('campaign levels: the definition is well formed', () => {
     }
   });
 
-  it('keeps the difficulty ramp NON-DECREASING for 1-30: the teaching ladder never slips', () => {
+  it('keeps the difficulty ramp NON-DECREASING for 1-30, apart from the one deliberate spike at 13', () => {
     const teaching = CAMPAIGN_LEVELS.filter((l) => l.number <= 30).map((l) => l.botLevel);
     // The conceptual guard. The old curve rose to bot 5 at level 20 and then dropped back to bot 4
     // at level 21 — a silently descending difficulty curve, invisible in code and obvious to a
     // player, which nothing pinned. Through the teaching levels, a bot level may never fall.
+    //
+    // ONE sanctioned exception (owner, 2026-10-20): level 13 "The Detour" is a DELIBERATE spike to
+    // bot 8, two rungs above its neighbours. It is pinned here by level number, and the ramp must
+    // resume at the rung it left: level 14 returns to level 12's bot, so only that one level is
+    // raised. Every other step still never falls — a second spike or a permanent lift fails below.
+    const SPIKE = 13;
+    expect(teaching[SPIKE - 1], 'level 13 is a deliberate spike to bot 8').toBe(8);
     for (let i = 1; i < teaching.length; i++) {
+      const levelNumber = i + 1;
+      // Skip only the two steps the spike touches: climbing into 13, and dropping back out at 14.
+      if (levelNumber === SPIKE || levelNumber === SPIKE + 1) continue;
       expect(
         teaching[i]!,
-        `level ${i + 1} (bot ${teaching[i]}) is easier than level ${i} (bot ${teaching[i - 1]})`,
+        `level ${levelNumber} (bot ${teaching[i]}) is easier than level ${i} (bot ${teaching[i - 1]})`,
       ).toBeGreaterThanOrEqual(teaching[i - 1]!);
     }
+    // The spike really is a spike (up then straight back), not the start of a raised plateau.
+    expect(teaching[SPIKE - 1]!).toBeGreaterThan(teaching[SPIKE - 2]!);
+    expect(teaching[SPIKE]!).toBe(teaching[SPIKE - 2]!);
     // Anchored at both ends: the campaign opens on the easiest bot and tops out on the hardest.
     expect(teaching[0]).toBe(1);
     expect(teaching.at(-1)).toBe(9);
@@ -264,12 +277,14 @@ describe('campaign levels: the definition is well formed', () => {
   it('ships the approved bot ladder exactly, so the rebalance cannot be quietly undone', () => {
     // Owner-approved 2026-10-16: L1-3 the deliberately easy intro, then short rungs of 2-6 levels,
     // each step worth roughly 63-72% to the stronger bot, up to bot 9 at the top.
+    // Owner exception 2026-10-20: level 13 is a deliberate spike to bot 8 (the 12-14 rung is 5,
+    // except that one level); level 14 returns to 5. The rest of the ladder is unchanged.
     expect(CAMPAIGN_LEVELS.filter((l) => l.number <= 30).map((l) => l.botLevel)).toEqual([
       1, 1, 1,
       2, 2,
       3, 3, 3,
       4, 4, 4,
-      5, 5, 5,
+      5, 8, 5,
       6, 6, 6,
       7, 7, 7,
       8, 8, 8, 8,
