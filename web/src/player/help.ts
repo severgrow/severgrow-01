@@ -258,7 +258,7 @@ export const mountHelp = (hooks: HelpHooks) => {
       if (step && progress) progress.textContent = `Tip ${step}`;
       if (hooks.onBulb) {
         trigger.title = 'Match Intel';
-        trigger.setAttribute('aria-label','Match Intel: public discard history and match facts');
+        trigger.setAttribute('aria-label','Match Intel: what went on the Throw pile, and match facts');
       } else if (hasTip && !hasCoach) {
         const topic = /bloom/i.test(tipTitle) ? 'Bloom' : tipTitle;
         trigger.title = `Learn: ${topic}`;

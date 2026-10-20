@@ -20,13 +20,20 @@ const FINISH_LINES = new Set(['wonOnPoints', 'wonByKo', 'goldDecided']);
 
 describe('lesson words', () => {
   it('the four core explanations are the owner’s sentences, exactly', () => {
-    // The owner's wording, verbatim (owner, 2026-10-19). Its "draw or discard pile" and the win
-    // line's lowercase "draw pile" are the owner's own; the display labels keep the game's names
-    // (Draw pile / Throw pile), and the mismatch is an open question for the owner.
-    expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the draw pile runs out.');
-    expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the draw or discard pile.');
+    // The owner's wording, verbatim (owner, 2026-10-19), with one decision since (2026-10-20): the
+    // two piles are the Draw pile and the Throw pile everywhere, as on the board.
+    expect(LESSON.theirHomeLine).toBe('To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.');
+    expect(LESSON.tapDrawLine).toBe('You start every turn by drawing 1 card from the Draw pile or the Throw pile.');
     expect(LESSON.growLine).toBe('Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.');
-    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to a discard pile, or double tap to discard a card and finish your turn.');
+    expect(LESSON.throwLine).toBe('Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn.');
+  });
+
+  it('two piles, two names: the Draw pile and the Throw pile, never "discard" (owner, 2026-10-20)', () => {
+    for (const [k, v] of entries) {
+      expect(v, `${k}: ${v}`).not.toMatch(/discard/i);
+      // a pile is always named in full and capitalised, as on the board
+      expect(v, `${k}: ${v}`).not.toMatch(/\b(?:draw|throw) pile\b/);
+    }
   });
 
   it('the display labels use the game’s own names: Draw pile and Throw pile', () => {

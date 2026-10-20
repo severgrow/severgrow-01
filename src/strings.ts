@@ -1197,10 +1197,10 @@ export const LESSON = Object.freeze({
   lastTurn: 'LAST TURN',
   // ---- the info box: explanations, one full sentence each ----
   yourHomeLine: 'This is your home. Place cards on the board so they connect to it.',
-  theirHomeLine: 'To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the draw pile runs out.',
-  tapDrawLine: 'You start every turn by drawing 1 card from the draw or discard pile.',
+  theirHomeLine: 'To win: surround the opponent’s home by placing cards on the board, or have more tiles on the board when the Draw pile runs out.',
+  tapDrawLine: 'You start every turn by drawing 1 card from the Draw pile or the Throw pile.',
   growLine: 'Grow: drag one of your cards from your hand onto the board, or tap it to select and then place on the board.',
-  throwLine: 'Throw: swipe up, drag it to a discard pile, or double tap to discard a card and finish your turn.',
+  throwLine: 'Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn.',
   youGrewLine: 'Tiles keep the rank of the card used.',
   biggerWinsLine: 'Bigger number wins: a stronger card can replace your own tile.',
   takeTileLine: 'Cut through: a stronger card can take an opponent’s tile next to yours.',

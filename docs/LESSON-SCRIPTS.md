@@ -120,7 +120,7 @@ label and no words. Then the lesson's explanations begin.
   - first draw: "You start every turn by drawing 1 card from the Draw pile or Throw pile."
   - Grow: "Grow: drag one of your cards from your hand onto the board, or tap it to select and then
     place on the board."
-  - Throw: "Throw: swipe up, drag it to the Throw pile, or double tap to discard a card and finish
+  - Throw: "Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish
     your turn."
 
 ### Wrong taps
@@ -182,7 +182,7 @@ The same in every level:
   - After the Grow, when nothing else can be played, the game moves on to Throw by itself (owner,
     2026-10-20: lighting » there was redundant). **» is never lit for a moment before it does**, and
     **never while a legal Bloom, Bomb or Blast exists**.
-  - LIT the card to throw | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to discard a card
+  - LIT the card to throw | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to throw a card
     and finish your turn." | tap anywhere
   - LIT the card, then Throw pile | DISPLAY: THROW A CARD → TAP THE THROW PILE | card thrown
   - their turn | DISPLAY: THEIR TURN (box on the first one: "They draw, grow and throw too.")
@@ -213,7 +213,7 @@ The same in every level:
   7. LIT the tile, other legal tiles quietly | DISPLAY: TAP THE LIT TILE | Grow played | CONNECT TO YOUR HOME, THAT IS THEIR HOME
   8. LIT the score display (held at 1:0) | BOX: "Tiles keep the rank of the card used." | tap anywhere
   9. LIT » | DISPLAY: TAP » TO THROW | tapped
-  10. LIT the card | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to discard a card and finish your turn." | tap anywhere
+  10. LIT the card | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to throw a card and finish your turn." | tap anywhere
   11. LIT the card, then Throw pile | DISPLAY: THROW A CARD → TAP THE THROW PILE | thrown
   12. their turn | DISPLAY: THEIR TURN + BOX: "They draw, grow and throw too." (first time only)
   13. Turns 2-4: the fade decides; the display carries the action (DRAW, GROW, THROW become TAP THE DRAW PILE, CHOOSE A CARD, THROW A CARD).
