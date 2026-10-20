@@ -27,8 +27,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # futa04-* suites build the product channel; the rest build the historic live channel.
-        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock]
+        # futa04-* suites and cut-severe build the product channel; lessons-3 (levels 1-10, the
+        # tutorial) builds futa05; the rest build the historic live channel.
+        suite: [smoke, painting, overhaul, monkey, emptyturn, fruitcards, propass, futa04-critical, futa04-information, futa04-tutorial-intel, futa04-tutorial-lock, futa04-motion, cut-severe, lessons-3]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -40,8 +41,14 @@ jobs:
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
       # Legacy suites target the classic live channel. Default npm run web:build is futa04.
-      - if: ${{ !startsWith(matrix.suite, 'futa04-') }}
-        run: CHANNEL=live npm run web:build
-      - if: ${{ startsWith(matrix.suite, 'futa04-') }}
-        run: CHANNEL=futa04 npm run web:build
+      - name: Build the channel this suite tests
+        run: |
+          case "${{ matrix.suite }}" in
+            futa04-*|cut-severe) CHANNEL=futa04 npm run web:build ;;
+            # futa05 requires its online endpoints at build time; these placeholders are shaped
+            # like the real ones and nothing in lessons-3 talks to them.
+            lessons-3) CHANNEL=futa05 VITE_FIND_OPPONENT=1 VITE_DUEL_API_URL=https://ci.invalid/functions/v1/duel \
+                VITE_SUPABASE_URL=https://ci.invalid VITE_SUPABASE_ANON_KEY=ci-placeholder npm run web:build ;;
+            *) CHANNEL=live npm run web:build ;;
+          esac
       - run: node --import tsx web/e2e/${{ matrix.suite }}.ts ${{ matrix.suite == 'monkey' && '--steps=200' || '' }}

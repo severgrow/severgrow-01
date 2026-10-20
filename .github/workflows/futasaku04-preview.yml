@@ -13,13 +13,41 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read # the CI gate reads this commit's CI result
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  # futasaku.com never publishes a commit whose CI failed: wait for CI (ci.yml) on this exact
+  # commit and stop here unless it passed. CI and this workflow both start on the same push, so
+  # this waits ~20 min while CI runs; a red or cancelled CI leaves the site as it was.
+  ci-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: Wait for CI to pass on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          for i in $(seq 1 150); do
+            json=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=20" || echo '{}')
+            state=$(echo "$json" | jq -r '[.workflow_runs // [] | .[]] | sort_by(.created_at) | last | if . == null then "waiting none" else "\(.status) \(.conclusion // "none")" end')
+            echo "CI on $SHA: $state"
+            case "$state" in
+              "completed success") exit 0 ;;
+              completed*) echo "::error::CI did not pass on $SHA ($state); not publishing"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::CI did not finish on $SHA in time; not publishing"; exit 1
+
   build:
+    needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

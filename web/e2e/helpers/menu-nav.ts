@@ -59,6 +59,22 @@ const waitMenuShape = (page: Page, id: string, timeout: number): Promise<void> =
 export const openMenuEntry = async (page: Page, id: string, options: MenuEntryOptions = {}): Promise<void> => {
   const timeout = options.timeout ?? 40_000;
   await waitMenuShape(page, id, timeout);
+  // The flat menu is on show for a few frames BEFORE main.ts moves the entry behind PLAY, and that
+  // frame looks exactly like a legacy flat menu. So read the route only once the shape has held
+  // still for 400 ms: where the entry lives, and whether it (or PLAY) can be tapped.
+  await page.waitForFunction((entryId) => {
+    const el = document.getElementById(entryId);
+    if (!el) return false;
+    const play = document.getElementById('play-menu');
+    const inPlay = !!play && play.contains(el);
+    const doorway = document.getElementById('menu-play');
+    const ready = inPlay ? (!play!.hidden || (!!doorway && !doorway.hidden && !!doorway.offsetParent)) : (!el.hidden && !!el.offsetParent);
+    const key = `${inPlay}:${ready}`;
+    const w = window as unknown as { __menuShape?: { key: string; since: number } };
+    const now = performance.now();
+    if (!w.__menuShape || w.__menuShape.key !== key) w.__menuShape = { key, since: now };
+    return ready && now - w.__menuShape.since >= 400;
+  }, id, { timeout, polling: 50 });
   if (await entryIsInPlayMenu(page, id)) {
     if (!(await page.locator('#play-menu').isVisible().catch(() => false))) {
       await page.waitForSelector('#menu-play:not([hidden])', { timeout });

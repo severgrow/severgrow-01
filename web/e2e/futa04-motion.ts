@@ -198,11 +198,18 @@ try {
     try {
       await p.evaluate(() => { delete document.documentElement.dataset.cutTier; });
       await recordMotion(p);
-      const t0 = Date.now();
-      await p.evaluate(a => (window as any).__severgrow.playFor(a, 0), action);
-      await p.waitForFunction(() => (window as any).__severgrow.busy(), undefined, { timeout: 3000 }).catch(() => {});
-      await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 5000 });
-      const ms = Date.now() - t0;
+      // Timed inside the page, from the move to the board being free again, frame by frame: a clock
+      // in the test process also counted its own polling round trips (+100-250 ms on a slow runner).
+      const ms = await p.evaluate(async a => {
+        const g = (window as any).__severgrow;
+        const t0 = performance.now();
+        g.playFor(a, 0);
+        const frame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
+        let now = await frame();
+        while (!g.busy() && now - t0 < 3000) now = await frame(); // the pump may start a frame late
+        while (g.busy() && now - t0 < 5000) now = await frame();
+        return Math.round(now - t0);
+      }, action);
       const tier = await p.evaluate(() => document.documentElement.dataset.cutTier ?? null);
       const m = (await readMotion(p)) as Recorded;
       assert.equal(tier, null, 'a Mega Bomb never runs the cut plan');
