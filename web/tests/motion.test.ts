@@ -32,10 +32,15 @@ describe('motion tokens', () => {
     expect(MOTION.move).toBe(TEMPO.consequence);
   });
 
+  it('the thrown card lands inside the throw step: a 320 ms flight within the 396 ms wait (fix 32359b5)', () => {
+    expect(PINNED.throwFlight).toBeLessThan(PINNED.throw);
+  });
+
   it('pins the choreography that must never drift', () => {
     expect(PINNED).toEqual({
       humanDraw: 396,
       throw: 396,
+      throwFlight: 320,
       liveReveal: 700,
       displayDwell: 1000,
       cutCap: 1800,

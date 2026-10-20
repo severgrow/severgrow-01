@@ -19,8 +19,10 @@ export const TEMPO = Object.freeze({ ack: 96, consequence: 336 });
 export const PINNED = Object.freeze({
   /** A human card leaves the pile and lands in the hand. */
   humanDraw: 396,
-  /** A human card leaves the hand and reaches the discard pile. */
+  /** A human card leaves the hand and reaches the discard pile (the step's wait). */
   throw: 396,
+  /** The thrown card's own flight, which lands inside that wait (32359b5: the snappier beat). */
+  throwFlight: 320,
   /** The shortest hold for a live enemy turn, so a quiet turn cannot blink past. */
   liveReveal: 700,
   /** The LED display's minimum dwell before another message may replace it. */
