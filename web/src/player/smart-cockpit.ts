@@ -129,14 +129,17 @@ html.futa04-information #futa04-box #smart-led-cells {
   html.futa04-information #smart-led[data-mode='score'] #smart-led-cells { scale:1.32; }
   /* The bloom is baked from the same dots, so a scaled strip needs the same scale or the
      halo would sit inside the glyphs on a wide desktop. */
-  html.futa04-information #smart-led[data-mode='score'] #smart-led-bloom { scale:1.32; }
+  html.futa04-information #smart-led[data-mode='score'] #smart-led-bloom-layer { scale:1.32; }
 }
 html.futa04-information #smart-led-cells.scrolling { position:absolute; left:0; }
 @keyframes smart-led-scroll { from { transform:translateX(0); } to { transform:translateX(calc(-1 * var(--led-travel,0px))); } }
 html.futa04-information #smart-led-cells.scrolling { animation:smart-led-scroll var(--led-duration,8s) linear infinite; }
 /* Attention pulses and impact flashes are short, one-shot and fully skipped under reduce-motion.
    Every one of them animates OPACITY on a sprite that was baked once; none of them animates a
-   filter or a shadow, so the compositor never re-rasterises the LED. */
+   filter or a shadow, so the compositor never re-rasterises the LED.
+   The movement and the light are deliberately on SEPARATE elements: animation is a shorthand,
+   so a scroll rule and a pulse rule on one element would silently drop whichever lost the
+   cascade. The layer travels, the canvas carries the light, and the two never fight. */
 html.futa04-information #smart-led-window.led-pulse #smart-led-hot { animation:smart-led-pulse 500ms ease-in-out 1; }
 /* Idle re-prompt: keep blinking with the board cues until the player starts the next move. */
 html.futa04-information #smart-led-window.led-alarm #smart-led-hot { animation:smart-led-alarm 1200ms ease-in-out infinite; }
@@ -158,12 +161,14 @@ html.futa04-information #smart-led-window.led-flash-cut #smart-led-flash { anima
 html.futa04-information #smart-led-window.led-flash-bloom #smart-led-flash { animation:smart-led-flash-bloom 60ms linear 1; }
 @keyframes smart-led-flash-cut { 0% { opacity:0; } 22% { opacity:.35; } 100% { opacity:0; } }
 @keyframes smart-led-flash-bloom { 0% { opacity:0; } 28% { opacity:.26; } 100% { opacity:0; } }
-/* The baked brightness layer: the same lit dots as the cells, one draw, opacity-only cues. */
-html.futa04-information #smart-led-hot {
+/* The baked brightness layer: the same lit dots as the cells, one draw, opacity-only cues.
+   Its LAYER is what moves with a marquee; the canvas keeps its own light. */
+html.futa04-information #smart-led-hot-layer {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  pointer-events:none; opacity:0; z-index:2;
+  pointer-events:none; z-index:2;
 }
-html.futa04-information #smart-led-window.scrolling #smart-led-hot {
+html.futa04-information #smart-led-hot { display:block; opacity:0; }
+html.futa04-information #smart-led-window.scrolling #smart-led-hot-layer {
   left:0; transform:translate(0,-50%);
   animation:smart-led-hot-scroll var(--led-duration,8s) linear infinite;
 }
@@ -243,13 +248,17 @@ html.futa04-information #smart-panel.led-theirs #smart-led { filter:brightness(.
    tone's angle, padded so its falloff ends well before the bitmap edge. It sits over the frame
    art and the glass (z 2) and is normal-blended: low-alpha light over a dark cockpit, not a
    screen wash and not a rectangle. The sprite writes --led-bloom-pad, so the strip of dots
-   inside the bitmap lands exactly on the window's dots. */
-html.futa04-information #smart-led-bloom {
+   inside the bitmap lands exactly on the window's dots. The LAYER positions/travels; the canvas
+   carries the light, so a marquee and a bezel catch can never cancel each other. */
+html.futa04-information #smart-led-bloom-layer {
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  pointer-events:none; z-index:2; opacity:var(--light-bloom-op,.44);
-  will-change:opacity, transform;
+  pointer-events:none; z-index:2;
 }
-html.futa04-information #smart-led-bloom.scrolling {
+html.futa04-information #smart-led-bloom {
+  display:block; opacity:var(--light-bloom-op,.44);
+  will-change:opacity;
+}
+html.futa04-information #smart-led-bloom-layer.scrolling {
   left:calc(6px - var(--led-bloom-pad,0px));
   transform:translate(0,-50%);
   animation:smart-led-bloom-scroll var(--led-duration,8s) linear infinite;
@@ -466,22 +475,22 @@ html.futa04-information #board .l-over :is(.selected,.ghost-tile) {
   stroke-dasharray:none; stroke-width:1.2; fill-opacity:.19; stroke-opacity:.74; pointer-events:none;
 }
 html.futa04-information #board .l-over :is(.selected,.ghost-tile):is(.kind-strengthen,.kind-bloom,.kind-grow) {
-  fill:#a6d49b; stroke:#a5d294;
+  fill:#a6d49b; stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%);
 }
 html.futa04-information #board .l-over :is(.selected,.ghost-tile).kind-replace {
-  fill:#e5a18b; stroke:#db917a;
+  fill:#e5a18b; stroke:color-mix(in srgb,#db917a 76%,var(--light-core,#f5d8a4) 24%);
 }
 /* The hexes being painted: the same flat grid, green ink and stroke as a legal well, so the
    shape you draw reads as one family with the legal-move highlights. Each hex pops softly as
    it joins the shape (the group holds the ink and its stone, so both arrive together). */
 html.futa04-information #board .l-draw .ghost-tile {
   fill:#a6d49b; fill-opacity:.19;
-  stroke:#a5d294; stroke-width:1.45; stroke-opacity:.74;
+  stroke:color-mix(in srgb,#a5d294 76%,var(--light-core,#f5d8a4) 24%); stroke-width:1.45; stroke-opacity:.74;
   stroke-dasharray:none; animation:none;
   transition:fill-opacity .18s ease-out, stroke-opacity .18s ease-out, stroke .18s ease-out;
 }
 html.futa04-information #board .l-draw .ghost.cant .ghost-tile {
-  fill:#e5a18b; stroke:#db917a;
+  fill:#e5a18b; stroke:color-mix(in srgb,#db917a 76%,var(--light-core,#f5d8a4) 24%);
 }
 html.futa04-information #board .l-draw .ghost.blocked:not(.cant) .ghost-tile { fill-opacity:.11; }
 html.futa04-information #board .l-draw .ghost {
@@ -507,8 +516,8 @@ html.futa04-information #board .l-territory-contour .territory-contour.grow-in {
 }
 html.futa04-information.reduce-motion #board .l-territory-contour .territory-contour.grow-in { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-territory-contour .territory-contour.grow-in { animation:none; } }
-@media (prefers-reduced-motion:reduce) { html.futa04-information :is(#smart-led-cells,#smart-led-bloom,#smart-led-hot).scrolling { animation:none; } }
-html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-bloom,#smart-led-hot).scrolling { animation:none; }
+@media (prefers-reduced-motion:reduce) { html.futa04-information :is(#smart-led-cells,#smart-led-bloom-layer,#smart-led-hot-layer).scrolling { animation:none; } }
+html.futa04-information.reduce-motion :is(#smart-led-cells,#smart-led-bloom-layer,#smart-led-hot-layer).scrolling { animation:none; }
 @media (prefers-reduced-motion:reduce) { html.futa04-information #board .l-over .target.kind-grow { animation:none; transition:none; } }
 html.futa04-information.reduce-motion #board .l-over .target.kind-grow { animation:none; transition:none; }
 `;
@@ -527,11 +536,15 @@ export function mountSmartCockpit() {
   const cells = document.createElement('canvas'); cells.id = 'smart-led-cells'; cells.setAttribute('aria-hidden','true');
   // The one-shot brightness layer (pulse/alarm) and the capped flash, both opacity-only.
   const hot = document.createElement('canvas'); hot.id = 'smart-led-hot'; hot.setAttribute('aria-hidden','true');
+  const hotLayer = document.createElement('div'); hotLayer.id = 'smart-led-hot-layer'; hotLayer.setAttribute('aria-hidden','true');
+  hotLayer.append(hot);
   const flashEl = document.createElement('i'); flashEl.id = 'smart-led-flash'; flashEl.setAttribute('aria-hidden','true');
   // The bloom lives outside the glass (the window clips the marquee) so its falloff can pass the
-  // bezel instead of being cut into a rectangle.
+  // bezel instead of being cut into a rectangle. Its layer travels; the canvas carries the light.
   const bloomEl = document.createElement('canvas'); bloomEl.id = 'smart-led-bloom'; bloomEl.setAttribute('aria-hidden','true');
-  windowEl.append(text,cells,hot,flashEl); led.append(windowEl,bloomEl);
+  const bloomLayer = document.createElement('div'); bloomLayer.id = 'smart-led-bloom-layer'; bloomLayer.setAttribute('aria-hidden','true');
+  bloomLayer.append(bloomEl);
+  windowEl.append(text,cells,hotLayer,flashEl); led.append(windowEl,bloomLayer);
   const context = document.createElement('button'); context.id = 'smart-context'; context.type = 'button'; context.setAttribute('aria-haspopup','menu'); context.setAttribute('aria-expanded','false');
   const selector = document.createElement('div'); selector.id = 'smart-selector'; selector.setAttribute('role','menu'); selector.hidden = true;
   context.setAttribute('aria-controls',selector.id);
@@ -685,7 +698,8 @@ export function mountSmartCockpit() {
         drawLedHot(hot,shown,scrolling,mode);
         drawLedBloom(bloomEl,shown,scrolling,mode);
       }
-      bloomEl.classList.toggle('scrolling', scrolling);
+      bloomLayer.classList.toggle('scrolling', scrolling);
+      hotLayer.classList.toggle('scrolling', scrolling);
       windowEl.classList.toggle('scrolling', scrolling);
       window.clearTimeout(flashTimer);
       windowEl.classList.remove('led-flash-cut','led-flash-bloom');

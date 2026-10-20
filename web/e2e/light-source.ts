@@ -269,10 +269,10 @@ try {
   await page.waitForFunction(() => document.querySelector('#smart-led-cells')?.classList.contains('scrolling'), undefined, { timeout: 6000 });
   const marquee = await page.evaluate(() => {
     const cells = document.getElementById('smart-led-cells') as HTMLElement;
-    const bloom = document.getElementById('smart-led-bloom') as HTMLElement;
+    const layer = document.getElementById('smart-led-bloom-layer') as HTMLElement;
     return {
       cells: { scroll: cells.classList.contains('scrolling'), travel: cells.style.getPropertyValue('--led-travel'), duration: getComputedStyle(cells).animationDuration },
-      bloom: { scroll: bloom.classList.contains('scrolling'), duration: getComputedStyle(bloom).animationDuration, animation: getComputedStyle(bloom).animationName },
+      bloom: { scroll: layer.classList.contains('scrolling'), duration: getComputedStyle(layer).animationDuration, animation: getComputedStyle(layer).animationName },
     };
   });
   check(marquee.cells.scroll && marquee.bloom.scroll, 'the marquee bloom scrolls with the strip');
@@ -281,8 +281,8 @@ try {
 
   check(errors.length === 0, `no browser errors at rest (${errors.join(' | ')})`);
 
-  /* Caps, read from the LIVE stylesheet: a flash is 60 ms and at most 35% white, and the alarm
-     keeps its 1.2 s beat. No strobe, no brightness filter. */
+  /* Caps, read from the LIVE stylesheet and from the applied animation: a flash is 60 ms and at
+     most 35% white, and the alarm keeps its 1.2 s beat. No strobe, no brightness filter. */
   const caps = await page.evaluate(() => {
     const rules: string[] = [];
     for (const sheet of [...document.styleSheets]) {
@@ -290,23 +290,47 @@ try {
     }
     const keyframes = (name: string) => rules.find(rule => rule.startsWith(`@keyframes ${name}`)) ?? '';
     const peakWhite = (name: string) => {
-      const body = keyframes(name);
-      const alphas = [...body.matchAll(/opacity:\s*([\d.]+)/g)].map(match => Number(match[1]));
+      const alphas = [...keyframes(name).matchAll(/opacity:\s*([\d.]+)/g)].map(match => Number(match[1]));
       return alphas.length ? Math.max(...alphas) : -1;
     };
+    const windowEl = document.getElementById('smart-led-window')!;
+    const flashEl = document.getElementById('smart-led-flash')!;
+    const hotEl = document.getElementById('smart-led-hot')!;
+    const measure = (cls: string, el: Element) => {
+      windowEl.classList.add(cls);
+      const seconds = getComputedStyle(el).animationDuration;
+      const plays = getComputedStyle(el).animationIterationCount;
+      windowEl.classList.remove(cls);
+      return { seconds: Number.parseFloat(seconds), plays };
+    };
     return {
-      flashCut: keyframes('smart-led-flash-cut'),
-      flashBloom: keyframes('smart-led-flash-bloom'),
+      flashCut: measure('led-flash-cut', flashEl),
+      flashBloom: measure('led-flash-bloom', flashEl),
       flashPeak: Math.max(peakWhite('smart-led-flash-cut'), peakWhite('smart-led-flash-bloom')),
-      flashDuration: (getComputedStyle(document.getElementById('smart-led-flash')!).animationDuration || '0s'),
-      alarm: keyframes('smart-led-alarm'),
-      hot: getComputedStyle(document.getElementById('smart-led-hot')!).filter,
+      alarm: measure('led-alarm', hotEl),
+      pulse: measure('led-pulse', hotEl),
+      // The regression this guards: the marquee scroll must not replace the alarm.
+      alarmDuringScroll: (() => {
+        const scrollLayer = document.getElementById('smart-led-hot-layer')!;
+        scrollLayer.classList.add('scrolling');
+        windowEl.classList.add('led-alarm');
+        const name = getComputedStyle(hotEl).animationName;
+        windowEl.classList.remove('led-alarm');
+        scrollLayer.classList.remove('scrolling');
+        return name;
+      })(),
+      hot: getComputedStyle(hotEl).filter,
       oldFilterKeyframes: rules.some(rule => /@keyframes smart-led-(pulse|alarm)/.test(rule) && /filter:/.test(rule)),
     };
   });
+  const flashMs = Math.max(caps.flashCut.seconds, caps.flashBloom.seconds) * 1000;
+  check(flashMs > 0 && flashMs <= 60, `a flash runs for ${flashMs} ms (cap ${LIGHT_FLASH_MS} ms)`);
+  check(caps.flashCut.plays === '1' && caps.flashBloom.plays === '1', 'a flash plays exactly once (no strobe)');
   check(caps.flashPeak > 0 && caps.flashPeak <= .35, `a flash is at most 35% white (peak ${caps.flashPeak})`);
-  check(/60ms/.test(caps.flashCut) && /60ms/.test(caps.flashBloom), `a flash is exactly ${LIGHT_FLASH_MS} ms or less`);
-  check(/1200ms/.test(caps.alarm), 'the alarm keeps its 1.2 s beat');
+  check(Math.abs(caps.alarm.seconds - 1.2) < 1e-6, `the alarm keeps its 1.2 s beat (${caps.alarm.seconds}s)`);
+  check(caps.alarm.plays === 'infinite' && caps.pulse.plays === '1', 'the alarm loops and the attention pulse is one-shot');
+  check(caps.pulse.seconds * 1000 <= 600, `the attention pulse stays under 600 ms (${caps.pulse.seconds * 1000} ms)`);
+  check(caps.alarmDuringScroll === 'smart-led-alarm', `a scrolling strip still alarms (its animation is ${caps.alarmDuringScroll})`);
   check(!caps.oldFilterKeyframes, 'no pulse/alarm keyframe animates a filter any more');
   check(caps.hot === 'none', 'the brightness layer itself carries no filter');
 

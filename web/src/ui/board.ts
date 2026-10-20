@@ -804,7 +804,7 @@ export class BoardView {
       const e = sprite.extent;
       // One halo for the tile: the owner's baked sprite. The light only adds a low-alpha tint
       // UNDER it in the display's tone (never a second owner-coloured halo).
-      el('circle', { cx: x, cy: y, r: S * 1.55, fill: `url(#${this.id('light-tint')})`, class: 'top-glow-tint', 'aria-hidden': 'true' }, layer);
+      el('circle', { cx: x, cy: y, r: S * 1.55, fill: `url(#${this.id('light-tint')})`, class: 'top-glow-tint', 'aria-hidden': 'true', 'pointer-events': 'none' }, layer);
       const img = el('image', { href: sprite.url, x: x - e, y: y - e, width: e * 2, height: e * 2, class: `top-glow ${kind}`, 'data-key': key, style: `--op:${Math.min(1, glow.opacity * this.glowScale).toFixed(3)}` }, layer);
       // newly at the top (a Strengthen, or a tile grown at the top rank): fade in, nothing else
       if (this.glowKeys && !this.glowKeys.has(key)) img.classList.add('glow-in');

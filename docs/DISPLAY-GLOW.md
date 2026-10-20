@@ -1,5 +1,12 @@
 # Display glow onto the keys
 
+> **SUPERSEDED (2026-10-20).** The masked `#smart-led-spill` this document describes was
+> **deleted** on `futa0.5-feel-light`. The display's light is now one baked sprite built from
+> the actual lit dots, blurred along a 22° angle, padded past the bezel and normal-blended; its
+> key-panel rims and seams are gone with the mask that painted them. See
+> [`FEEL-LIGHT.md`](FEEL-LIGHT.md). Everything below is kept as the record of what the owner
+> approved on 2026-10-13 and why — not as a description of the current build.
+
 Futasaku 0.4 cockpit — branch `futa04-display-glow` (cut from `origin/futa0.4`).
 
 This is a **product presentation** change in files shared with the locked futa0.4
