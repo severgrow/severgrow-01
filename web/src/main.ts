@@ -4435,6 +4435,36 @@ function hideLessonPlate() {
     if (example) { example.hidden = true; example.replaceChildren(); delete example.dataset.kind; }
     plate.classList.remove('example-tight');
   }
+  unwatchPlateSettle();
+}
+
+/**
+ * The camera eases after a beat, so a plate placed on the geometry of that instant can be left
+ * beside where the lit thing finally lands. The board's own viewBox is the camera: one observer,
+ * debounced, re-places the plate once the camera stops. It never measures per frame (only after a
+ * quiet spell), leaves nothing behind when the plate hides, and is the event-driven form of the
+ * "correct once the camera has settled" call that has always followed a new sentence.
+ */
+let plateWatch: MutationObserver | null = null;
+let plateSettle = 0;
+function watchPlateSettle() {
+  const svg = document.getElementById('board');
+  if (!svg || plateWatch) return;
+  plateWatch = new MutationObserver(() => {
+    if (plateSettle) clearTimeout(plateSettle);
+    plateSettle = window.setTimeout(() => {
+      plateSettle = 0;
+      const plate = document.getElementById('lesson-plate');
+      if (plate && !(plate as HTMLElement).hidden) placeLessonPlate();
+    }, 120);
+  });
+  plateWatch.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
+}
+function unwatchPlateSettle() {
+  if (plateSettle) clearTimeout(plateSettle);
+  plateSettle = 0;
+  plateWatch?.disconnect();
+  plateWatch = null;
 }
 
 /** A box for an element that is actually on screen, or null. */
@@ -4597,6 +4627,7 @@ function showLessonPlate(text: string, lift: readonly string[], example: 'bloom'
   setLessonExample(example);
   (plate as PlateEl)._avoid = lift;
   placeLessonPlate();
+  watchPlateSettle();
   // The camera eases for a moment after a beat. Correct once when it has settled.
   clearTimeout(lessonPlateTimer);
   lessonPlateTimer = window.setTimeout(placeLessonPlate, 400);

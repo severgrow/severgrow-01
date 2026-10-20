@@ -51,8 +51,10 @@ floating over the felt — no panel, no title, no mission, no buttons:
   (closest plate centre to the nearest lit centre, centred x on a tie), and it **never overlaps the
   lit target, a control or the header**. On desktop (side layout) and on a beat with no light it
   keeps the older order: fewest covered hexes, then the highest gap under the header. The map is
-  never shrunk. It runs when the beat changes, on resize, and once after the camera settles — never
-  per frame.
+  never shrunk. It runs when the beat changes, on resize, once after the camera settles (the
+  existing 400 ms follow-up) and again whenever the camera's own viewBox comes to rest, so a
+  grow's eased zoom cannot leave the caption beside the geometry it was placed against. Nothing
+  measures per frame, and the watch leaves with the caption.
 
 ### The display (the cockpit LED)
 

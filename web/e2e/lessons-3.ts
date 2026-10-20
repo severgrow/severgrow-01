@@ -321,13 +321,25 @@ const PLATE_CLEAR = `(sels) => {
 const checkPlateClear = async (p: Page, lit: Lit, tag: string) => {
   const selectors = litSelectors(lit);
   if (!selectors.length) return;
-  const r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as {
+  type PlateGeom = {
     layout: string;
     plate: { x: number; y: number; right: number; bottom: number } | null;
     board: { x: number; y: number; right: number; bottom: number } | null;
     dock: { y: number } | null;
     targets: { sel: string; box: { x: number; y: number; right: number; bottom: number } }[];
   };
+  // The camera eases after a beat and the plate follows it once it settles (the same follow-up
+  // call the game makes). Read where the caption RESTS: wait for two identical samples.
+  let r = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as PlateGeom;
+  for (let i = 0; i < 25 && r.plate; i++) {
+    const before = JSON.stringify([r.plate, r.targets.map((t) => t.box)]);
+    await p.waitForTimeout(80);
+    const next = await p.evaluate(`(${PLATE_CLEAR})(${JSON.stringify(selectors)})`) as PlateGeom;
+    if (!next.plate) return;
+    const after = JSON.stringify([next.plate, next.targets.map((t) => t.box)]);
+    r = next;
+    if (after === before) break;
+  }
   if (!r.plate) return;
   for (const t of r.targets) {
     const b = t.box;

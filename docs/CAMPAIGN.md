@@ -106,6 +106,14 @@ are unchanged. The full script of each lesson (beats, words, wrong-tap answers, 
   - then build the futa05 channel and run `npx tsx web/e2e/lessons-3.ts`: the lit-only tapper through levels 1-10, random taps, refresh, hints off, level 11.
 - These prove the levels can always be finished. They do **not** prove a beginner understands them; that needs real new players.
 
+**The first board's art.** A cold first visit waits for the pictures the first lesson composes (the
+Futa04 ground, both homes and the rocks; the same files the board module starts downloading while
+the menu is up) with an **800 ms cap**, then starts anyway. The wait shows the compose state only —
+no spinner, no extra screen. A `severgrow.board-warmed.v1` marker makes every repeat visit skip it
+entirely, and a hidden page skips it too. Measured at 390x844 with a 4x CPU throttle: +0–3 ms on
+localhost (the files are already decoded by the time the menu is tapped) and +800 ms (the cap) on
+Slow 3G; a warm reload adds 0 ms.
+
 **The old Tutorial** (menu entry unchanged) is **still available, to be retired later**. The levels do not depend on it:
 
 - the shared small-map radius lives in `src/campaign/small-board.ts`;
