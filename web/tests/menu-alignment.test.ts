@@ -125,7 +125,7 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
   it('the main menu has exactly one leading action (PLAY), and it is the cream fill', () => {
     const menu = sectionById('menu');
     // Every entry that STAYS on the main menu is quiet except PLAY. The three that main.ts moves
-    // into #play-actions (Play online / LEVEL n / Practice match) are checked in the submenu below.
+    // into #play-actions (LEVEL n / Play online / Practice match) are checked in the submenu below.
     expect(classesOf(menu, 'menu-play')).toContain('primary');
     for (const id of ['menu-login', 'menu-continue', 'menu-world', 'menu-tutorial', 'menu-settings']) {
       expect(classesOf(menu, id), `${id} must be the quiet ghost`).toContain('ghost');
@@ -141,15 +141,20 @@ describe('one leader per screen: the menu and the PLAY submenu', () => {
     expect(menu.indexOf('id="menu-world"')).toBeLessThan(menu.indexOf('id="menu-tutorial"'));
   });
 
-  it('PLAY holds Play online / LEVEL n / Practice match, in that order', () => {
+  it('PLAY holds LEVEL n, then Play online, then Practice match, in that order', () => {
     const main = read('../src/main.ts');
     const list = /const PLAY_MENU_ENTRIES = \[([^\]]*)\] as const;/.exec(main);
     expect(list, 'PLAY_MENU_ENTRIES must exist').toBeTruthy();
     // Three entries: the "Levels" list was removed (owner, 2026-10-16) so the player is not offered
     // the whole level list; LEVEL <n> opens the next uncompleted level instead.
-    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-online,menu-campaign,menu-new');
-    // Every one is a real button in the menu markup, so the move can never append a missing node.
+    // ORDER (owner, 2026-10-20): LEVEL is the FIRST entry, above Play online. The array is the DOM
+    // order (main.ts appends one by one), so this one assertion also pins what is seen and tabbed.
+    expect(list![1]!.replace(/['\s]/g, '')).toBe('menu-campaign,menu-online,menu-new');
+    // The markup that the move takes those nodes from lists them in the SAME order, so the source
+    // reads in the order the submenu shows (no CSS `order` is involved anywhere).
     const menu = sectionById('menu');
+    expect(menu.indexOf('id="menu-campaign"'), 'LEVEL must come before Play online in the markup').toBeLessThan(menu.indexOf('id="menu-online"'));
+    // Every one is a real button in the menu markup, so the move can never append a missing node.
     for (const id of ['menu-online', 'menu-campaign', 'menu-new']) expect(menu).toContain(`id="${id}"`);
     expect(menu, 'the removed Levels entry must not be in the markup at all').not.toContain('menu-levels');
   });

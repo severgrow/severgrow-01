@@ -626,7 +626,8 @@ export const HELP = Object.freeze({
 });
 
 /** FUTASAKU 0.5 main menu and its PLAY submenu (owner direction, 2026-10-15). One place for the
- *  words: LOG IN above PLAY, and PLAY holding exactly Play online / LEVEL <n> / Practice match. */
+ *  words: LOG IN above PLAY, and PLAY holding exactly LEVEL <n> / Play online / Practice match
+ *  (LEVEL leads the column since the owner's 2026-10-20 decision). */
 export const MENU = Object.freeze({
   /** the sign-in button at the top of the menu; hidden the moment the player is signed in */
   login: 'LOG IN',

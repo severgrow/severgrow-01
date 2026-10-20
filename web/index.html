@@ -114,15 +114,20 @@
           <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
           <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
-               entries (Play online / LEVEL n / Practice match) are MOVED into #play-actions at boot. -->
+               entries (LEVEL n / Play online / Practice match) are MOVED into #play-actions at boot,
+               in the order PLAY_MENU_ENTRIES lists them. -->
           <button id="menu-play" class="btn primary big" type="button" aria-label="Play" hidden>Play</button>
           <!-- Continue (the saved game resume) sits right under the leader, as a quiet ghost. -->
           <button id="menu-continue" class="btn ghost big" type="button" aria-label="Continue" hidden>Continue</button>
-          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <!-- Campaign (the primary offline mode) — revealed by main.ts on the product channels only,
                so no other channel ever shows it. Its words come from src/strings.ts, and on the
-               product menu it reads LEVEL <n> (the level the player is on). -->
+               product menu it reads LEVEL <n> (the level the player is on).
+               It sits BEFORE Play online on purpose (owner, 2026-10-20): LEVEL is the first entry
+               of the PLAY submenu, and main.ts moves these nodes in the order this markup (and
+               PLAY_MENU_ENTRIES) lists them, so the seen order, the tab order and the screen
+               reader's order are all the same. -->
           <button id="menu-campaign" class="btn primary big" type="button" aria-label="Level" hidden>Campaign</button>
+          <button id="menu-online" class="btn primary big" type="button" aria-label="Play online" hidden>Play online</button>
           <button id="menu-new" class="btn primary big" type="button" aria-label="Play offline">Play offline</button>
           <!-- DELETED (owner, 2026-10-16): the quiet "Levels" entry that opened the whole
                chapter/level list. The owner's rule is that the player does not need access to every
@@ -147,10 +152,11 @@
          menu and the campaign screen — `.levels-inner` (the shared centred column), `.levels-head`
          (the back button + display heading) and `.menu-buttons` (the same buttons the menu uses) —
          so it echoes the main menu exactly while reading as a submenu, not a second menu.
-         Its three entries — Play online / LEVEL <n> / Practice match — are MOVED into #play-actions at
+         Its three entries — LEVEL <n> / Play online / Practice match — are MOVED into #play-actions at
          boot by main.ts, so each keeps its one id, its one handler and its one set of words: no
-         second copy of the online or campaign wiring exists. Only ONE of them leads (Play online,
-         or LEVEL <n> when this build has no online endpoint); the rest recede. -->
+         second copy of the online or campaign wiring exists. LEVEL leads the column (owner,
+         2026-10-20). Only ONE of them leads visually (Play online, or LEVEL <n> when this build has
+         no online endpoint); the rest recede. -->
     <section id="play-menu" class="screen play-menu" aria-label="Play" hidden>
       <div class="levels-inner">
         <header class="levels-head">

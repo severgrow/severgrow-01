@@ -128,7 +128,7 @@ try {
       await context.close();
     }
 
-    // ---- 2. the PLAY submenu: Play online / LEVEL n / Practice match, and a way back ----
+    // ---- 2. the PLAY submenu: LEVEL n / Play online / Practice match, and a way back ----
     {
       const { context, page } = await device(vp, false, `play-${vp.key}`);
       await page.click('#menu-play');
@@ -137,8 +137,9 @@ try {
       check(`${vp.key}: the submenu takes over the menu`, !(await page.locator('#menu').isVisible()));
       check(`${vp.key}: the PLAY heading reads Play`, (await page.textContent('#play-title'))?.trim() === 'Play');
       const entries = await page.locator('#play-actions button').allTextContents();
-      check(`${vp.key}: PLAY holds Play online / LEVEL n / Practice match`, JSON.stringify(entries) === JSON.stringify(['Play online', 'LEVEL 1', 'Practice match']), entries.join(' | '));
-      check(`${vp.key}: exactly one filled button in the submenu, and it is Play online`,
+      // LEVEL leads the column (owner, 2026-10-20); Play online is second and still the only fill.
+      check(`${vp.key}: PLAY holds LEVEL n / Play online / Practice match`, JSON.stringify(entries) === JSON.stringify(['LEVEL 1', 'Play online', 'Practice match']), entries.join(' | '));
+      check(`${vp.key}: exactly one filled button in the submenu, and it is still Play online`,
         JSON.stringify(await leaders(page, '#play-menu')) === JSON.stringify(['menu-online']), (await leaders(page, '#play-menu')).join(' | '));
       const fit = await page.evaluate(() => {
         const inner = document.querySelector('#play-menu .levels-inner')!;

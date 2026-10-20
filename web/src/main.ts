@@ -7481,8 +7481,13 @@ const bind = (id: string, fn: () => void) =>
  * so each keeps its id, its existing handler and its words: the online hub's own click binding, the
  * campaign screen binding, and the training picker below. The legacy channels never see the submenu
  * and keep the flat menu they are used to, so their own tests are untouched.
+ *
+ * The ARRAY IS THE VISUAL ORDER (`append` one by one, in order), so it is also the tab order and the
+ * screen reader's order. Owner decision (2026-10-20): LEVEL is the FIRST entry, above Play online -
+ * the offline campaign is the thing a player opens most, and it leads the column. Play online keeps
+ * the cream fill (the one leader inside PLAY) exactly as before; only its position moved.
  */
-const PLAY_MENU_ENTRIES = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+const PLAY_MENU_ENTRIES = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 if (FEATURES.campaign) {
   const actions = document.getElementById('play-actions');
   if (actions) for (const id of PLAY_MENU_ENTRIES) actions.append($(id));

@@ -93,7 +93,7 @@ await page.waitForTimeout(500);
 const play = await page.evaluate(() => {
   // Three entries since the "Levels" list was removed (owner, 2026-10-16): the player is not offered
   // the whole level list, LEVEL <n> opens the next uncompleted level instead.
-  const ids = ['menu-online', 'menu-campaign', 'menu-new'];
+  const ids = ['menu-campaign', 'menu-online', 'menu-new'];
   const out: Record<string, string> = {};
   for (const id of ids) {
     const el = document.getElementById(id) as HTMLElement | null;

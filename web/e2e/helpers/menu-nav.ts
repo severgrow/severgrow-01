@@ -15,8 +15,9 @@
 // not need to know which channel it is pointed at.
 import type { Page } from 'playwright-core';
 
-/** The entries main.ts moves into the PLAY submenu on product channels (PLAY_MENU_ENTRIES). */
-export const PLAY_MENU_IDS = ['menu-online', 'menu-campaign', 'menu-new'] as const;
+/** The entries main.ts moves into the PLAY submenu on product channels (PLAY_MENU_ENTRIES), in the
+ *  order they are shown: LEVEL first, then Play online (owner, 2026-10-20). */
+export const PLAY_MENU_IDS = ['menu-campaign', 'menu-online', 'menu-new'] as const;
 
 /** True when the entry element currently lives inside the PLAY submenu in this build. */
 export const entryIsInPlayMenu = (page: Page, id: string): Promise<boolean> =>
