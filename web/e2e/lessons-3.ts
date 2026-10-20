@@ -674,7 +674,9 @@ try {
       await rm.evaluate(`localStorage.setItem('severgrow.campaign.progress.v3', ${JSON.stringify(JSON.stringify({ version: 1, unlocked: 5, completed: done, best: {} }))})`);
       await rm.reload({ waitUntil: 'networkidle' });
       await openNextLevel(rm);
-      await rm.waitForSelector('#lesson-plate:not([hidden]) .lesson-example', { timeout: 15000 });
+      // Wait for the Bloom beat itself. The example is only present when the fit rule allows it:
+      // on a tall phone the box would cover a hex, so it is deliberately dropped. Waiting for it
+      // to be visible would contradict the "never cover the map" rule.
       await rm.waitForFunction(() => (window as any).__severgrow?.lesson?.()?.beat?.id === '5:intro:bloom-cards', undefined, { timeout: 15000 });
       await rm.waitForTimeout(400);
       const rmEx = await rm.evaluate(`(() => {

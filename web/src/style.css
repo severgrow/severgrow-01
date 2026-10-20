@@ -3237,6 +3237,11 @@ html[data-onboard].reduce-motion .coach-pool { animation: none; opacity: 0.24; }
   pointer-events: none;
   opacity: var(--op, 0.2);
 }
+/* The LIGHT contract's tint under a halo. Decoration only: it must never take a tap meant for
+   the hex beneath it (the lesson lights a tile and the player taps that tile). */
+.top-glow-tint {
+  pointer-events: none;
+}
 .top-glow.glow-in {
   animation: glow-in 500ms ease-out both;
 }
