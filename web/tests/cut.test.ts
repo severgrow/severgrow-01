@@ -1,6 +1,6 @@
 // UI overhaul Part 2: the cinematic cut. Every limit in the brief, checked on the pure plan.
 import { describe, expect, it } from 'vitest';
-import { CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
+import { CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SEVERE_HITSTOP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, SHAKE_SEVERE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
 import type { CutInput, CutOptions } from '../src/logic/cut.js';
 import { buildSteps } from '../src/logic/anim.js';
 import { MOTION } from '../src/logic/motion.js';
@@ -27,13 +27,13 @@ const realCuts = (): CutInput[] => {
 };
 
 describe('tiers', () => {
-  it('Small 1-2, Medium 3-4, Big 5-7, Huge 8+ (thresholds are config values)', () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8, 12].map((n) => cutTier(n, 40))).toEqual(['small', 'small', 'medium', 'medium', 'big', 'big', 'big', 'huge', 'huge']);
-    expect(cutTier(3, 40, { ...CUT_TIERS, medium: 4 })).toBe('small');
+  it('Small 1-2, Severe 3-4, Big 5-7, Huge 8+ (thresholds are config values)', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 12].map((n) => cutTier(n, 40))).toEqual(['small', 'small', 'severe', 'severe', 'big', 'big', 'big', 'huge', 'huge']);
+    expect(cutTier(3, 40, { ...CUT_TIERS, severe: 4 })).toBe('small');
   });
   it('Huge also when it takes at least half of the victim’s tiles', () => {
     expect(cutTier(3, 6)).toBe('huge');
-    expect(cutTier(3, 7)).toBe('medium');
+    expect(cutTier(3, 7)).toBe('severe');
     expect(cutTier(1, 1)).toBe('small'); // one tile is never Huge
   });
 });
@@ -63,40 +63,84 @@ describe('the timeline limits', () => {
       }
   });
 
-  it('the impact hit-stop belongs to Big and Huge only', () => {
+  it('the impact hit-stop belongs to Severe, Big and Huge: 60ms, then the original 100ms', () => {
+    for (const n of [3, 4]) {
+      const h = cutPlan(cut(n), NORMAL).stages.find((s) => s.name === 'hitstop')!;
+      expect(h.dur).toBe(SEVERE_HITSTOP_MS);
+    }
     for (const n of [5, 8]) {
       const h = cutPlan(cut(n), NORMAL).stages.find((s) => s.name === 'hitstop')!;
       expect(h.dur).toBeGreaterThanOrEqual(HITSTOP_MS - 10);
       expect(h.dur).toBeLessThanOrEqual(HITSTOP_MS + 30);
     }
-    for (const n of [1, 3]) expect(cutPlan(cut(n), NORMAL).stages.some((s) => s.name === 'hitstop')).toBe(false);
+    for (const n of [1, 2]) expect(cutPlan(cut(n), NORMAL).stages.some((s) => s.name === 'hitstop')).toBe(false);
   });
 
-  it('only large cuts give the board one short shake, within 4px (6px huge ceiling)', () => {
-    const px = [1, 3, 5, 8].map((n) => cutPlan(cut(n), NORMAL).shakePx);
-    expect(px.slice(0,2)).toEqual([0,0]);
-    for (const p of px.slice(2)) {
-      expect(p).toBeGreaterThanOrEqual(2);
-      expect(p).toBeLessThanOrEqual(6);
+  it('only Severe and up give the board one short shake; Severe is a 2.5px shiver, Big/Huge 4/6px', () => {
+    const px = [1, 2, 3, 4, 5, 8].map((n) => cutPlan(cut(n), NORMAL).shakePx);
+    expect(px.slice(0, 2)).toEqual([0, 0]);
+    expect(px.slice(2, 4)).toEqual([SHAKE_SEVERE, SHAKE_SEVERE]);
+    for (const p of px.slice(4)) {
+      expect(p).toBeGreaterThanOrEqual(SHAKE_MAX_BIG);
+      expect(p).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
     }
-    expect(px[2]).toBeLessThanOrEqual(SHAKE_MAX_BIG);
-    expect(px[3]).toBeGreaterThan(px[2]!);
-    expect(px[3]).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
+    expect(px[4]).toBeLessThanOrEqual(SHAKE_MAX_BIG);
+    expect(px[5]).toBeGreaterThan(px[4]!);
+    expect(px[5]).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
+    expect(cutPlan(cut(3), { ...NORMAL, effects: 'high' }).shakePx).toBe(SHAKE_SEVERE);
     expect(cutPlan(cut(8), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(SHAKE_MAX_HUGE);
     expect(cutPlan(cut(5), { ...NORMAL, effects: 'high' }).shakePx).toBeLessThanOrEqual(SHAKE_MAX_BIG);
   });
 
-  it('Small and Medium never move the camera; the zoom stays ≤1.03', () => {
-    for (const n of [1, 2, 3, 4]) {
+  it('Small never moves the camera; Severe zooms 1.012, Big/Huge up to 1.03', () => {
+    for (const n of [1, 2]) {
       const p = cutPlan(cut(n), NORMAL);
       expect(p.zoom).toBe(1);
       expect(p.stages.some((s) => s.name === 'zoom')).toBe(false);
+    }
+    for (const n of [3, 4]) {
+      const p = cutPlan(cut(n), NORMAL);
+      expect(p.zoom).toBeCloseTo(1.012, 4);
+      expect(p.stages.some((s) => s.name === 'zoom')).toBe(true);
     }
     for (const n of [5, 8]) {
       const p = cutPlan(cut(n), NORMAL);
       expect(p.zoom).toBeGreaterThan(1);
       expect(p.zoom).toBeLessThanOrEqual(1.03);
+      expect(p.stages.some((s) => s.name === 'zoom')).toBe(true);
     }
+  });
+
+  it('a 3-tile cut is Severe: short beat, 60ms stop, shiver and seam flash; a 2-tile cut stays quiet', () => {
+    const three = cutPlan(cut(3), NORMAL);
+    expect(three.tier).toBe('severe');
+    expect(three.stages.find((s) => s.name === 'anticipation')!.dur).toBe(60);
+    expect(three.stages.find((s) => s.name === 'hitstop')!.dur).toBe(60);
+    expect(three.shakePx).toBe(2.5);
+    expect(three.zoom).toBeCloseTo(1.012, 4);
+    expect(three.flash.ms).toBeGreaterThan(0);
+    expect(three.flash.ms).toBeLessThanOrEqual(CUT_FLASH_MS);
+    expect(three.flash.alpha).toBeGreaterThan(0);
+    expect(three.flash.alpha).toBeLessThanOrEqual(FLASH_MAX_ALPHA);
+    expect(three.motes).toBe(0); // the drifting ash is still Big/Huge only
+    expect(three.banner).toBeNull(); // no banner for Severe
+    expect(three.total).toBeLessThanOrEqual(CUT_CAP_MS);
+
+    const two = cutPlan(cut(2), NORMAL);
+    expect(two.tier).toBe('small');
+    expect(two.stages.some((s) => s.name === 'hitstop' || s.name === 'zoom')).toBe(false);
+    expect([two.shakePx, two.zoom]).toEqual([0, 1]);
+  });
+
+  it('a 5-tile cut is unchanged: Big keeps its 140ms beat, 100ms stop, 4px shake and 1.02 zoom', () => {
+    const p = cutPlan(cut(5), NORMAL);
+    expect(p.tier).toBe('big');
+    expect(p.stages.find((s) => s.name === 'anticipation')!.dur).toBe(140);
+    expect(p.stages.find((s) => s.name === 'hitstop')!.dur).toBe(HITSTOP_MS);
+    expect(p.shakePx).toBe(SHAKE_MAX_BIG);
+    expect(p.zoom).toBeCloseTo(1.02, 4);
+    expect(p.motes).toBe(1);
+    expect(p.banner).toBe('Cut off 5!');
   });
 
   it('a Small cut dies within quick + move and folds flat, with one link flash', () => {
@@ -169,15 +213,17 @@ describe('variants', () => {
     }
   });
 
-  it('Reduce motion: one 200ms fade, no shake, flash, zoom or stagger', () => {
-    const p = cutPlan(cut(8), { ...NORMAL, reduceMotion: true });
-    expect(p.stages.map((s) => s.name)).toEqual(['fade', 'payoff']);
-    expect(p.stages.find((s) => s.name === 'fade')!.dur).toBe(REDUCE_FADE_MS);
-    expect(p.shakePx).toBe(0);
-    expect(p.flash.alpha).toBe(0);
-    expect(p.zoom).toBe(1);
-    expect(new Set(p.tiles.map((t) => t.at))).toEqual(new Set([0]));
-    expect(new Set(p.tiles.map((t) => t.dur))).toEqual(new Set([REDUCE_FADE_MS]));
+  it('Reduce motion: one 200ms fade, no shake, flash, zoom, hit-stop or stagger (Severe too)', () => {
+    for (const n of [3, 8]) {
+      const p = cutPlan(cut(n), { ...NORMAL, reduceMotion: true });
+      expect(p.stages.map((s) => s.name)).toEqual(['fade', 'payoff']);
+      expect(p.stages.find((s) => s.name === 'fade')!.dur).toBe(REDUCE_FADE_MS);
+      expect(p.shakePx).toBe(0);
+      expect(p.flash.alpha).toBe(0);
+      expect(p.zoom).toBe(1);
+      expect(new Set(p.tiles.map((t) => t.at))).toEqual(new Set([0]));
+      expect(new Set(p.tiles.map((t) => t.dur))).toEqual(new Set([REDUCE_FADE_MS]));
+    }
   });
 
   it('Effects Low: no shake, flash or zoom', () => {

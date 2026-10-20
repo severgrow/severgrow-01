@@ -22,7 +22,6 @@ const CSS = `
   color:var(--fu-cream, #e8ddc5); background:transparent; border:1px solid var(--fu-cream-28, rgba(232,221,197,.28));
   opacity:.82; transition:opacity .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease; }
 #app-window:hover { opacity:1; background:var(--fu-cream-14, rgba(232,221,197,.14)); border-color:var(--fu-cream-55, rgba(232,221,197,.55)); }
-#app-window:active { transform:translateY(1px); }
 #app-window:focus-visible { outline:2px solid var(--fu-cream, #e8ddc5); outline-offset:2px; opacity:1; }
 #app-window[hidden] { display:none; }
 `;

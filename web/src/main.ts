@@ -59,12 +59,14 @@ import { breakdownOf, raceShare, raceWords } from './logic/race.js';
 import { ambientPlan } from './logic/ambient.js';
 import { REPLAY_SPEED, actorOf, involvedKeys, nudgeToward } from './logic/opponent.js';
 import { shareCard } from './ui/sharecard.js';
-import { perfStart, perfStep } from './logic/perf.js';
+import { feel, observeLongTasks, perfStart, perfStep } from './logic/perf.js';
+import { installPress } from './logic/press.js';
+import { attachSchedulerPause, scheduler } from './logic/scheduler.js';
 import { clearTiming, mark as markTiming, timingEnabled, timingLog } from './logic/timing.js';
 import { deckMoment, splashPlan, sporesHome } from './logic/candy.js';
 import { CUT_REPLAY_SPEED, cutPlan } from './logic/cut.js';
 import type { CutInput } from './logic/cut.js';
-import { EASE, MOTION } from './logic/motion.js';
+import { EASE, MOTION, PINNED, motionAllowed } from './logic/motion.js';
 import { BOARD_MARGIN, HEIGHTS, SLIM_HUD, boardUnits, computeLayout, fanSlots, setBoardShape, setFixedBoardOrient, setSlimHud, THUMB } from './logic/layout.js';
 import type { Thumb } from './logic/layout.js';
 import { comboGroups, handOrder, nextSort } from './logic/hand.js';
@@ -285,8 +287,10 @@ let reopenGameOver = false;
 let replaySpeed = REPLAY_SPEED;
 // Reduce-motion kills movement via motion(); do not also stretch wait timers.
 const timeScale = () => speedFactor(settings.speed) * (replaying ? 1 / replaySpeed : 1);
-/** How much things move (0 when reduce motion is on). */
-const motion = () => (settings.reduceMotion ? 0 : theme().style.motion);
+/** The one motion gate: Reduce motion, or a zero time scale, means no movement. */
+const motionOn = () => motionAllowed(settings.reduceMotion, timeScale());
+/** How much things move (0 when motion is not allowed). */
+const motion = () => (motionOn() ? theme().style.motion : 0);
 /** Sequential grow: gap after each tile's land beat (legacy wave uses this as distance step). */
 const BLOOM_STAGGER_MS = 80;
 // Motion pass (owner, 2026-10-15): slow enough to see, fast enough to feel snappy. Measured with
@@ -294,9 +298,9 @@ const BLOOM_STAGGER_MS = 80;
 // tiles 1270 → ~900ms, strengthen 570 → ~420ms, Blast ≥ 640ms (was 430), turn hand-over 325 →
 // 260ms, the opponent's hidden draw 125 → 200ms (it was a blink).
 /** A multi-tile grow: the next tile starts when the previous one is this far through its pop. */
-const GROW_OVERLAP = 0.6;
+const GROW_OVERLAP = PINNED.growOverlap;
 /** After the last tile of a grow has landed, how long it holds before the next step. */
-const GROW_HOLD_MS = 160;
+const GROW_HOLD_MS = PINNED.growHold;
 const BLAST_MIN_MS = 640;
 const TURN_HANDOVER_MS = 260;
 const OPP_DRAW_MS = 200;
@@ -314,7 +318,7 @@ let revealProgress = 0;
  * The shortest the gate stays shut for a LIVE enemy turn. A turn that grew nothing (a hidden draw
  * and a discard) has almost no steps; without this it would swap the board in one frame.
  */
-const MIN_LIVE_REVEAL_MS = 700;
+const MIN_LIVE_REVEAL_MS = PINNED.liveReveal;
 /** An enemy turn is on screen right now: every input entry point must refuse until it drains. */
 const onlineReveal = (): boolean => isOnlineDuel() && getOnlineSession()?.isRevealing === true;
 /**
@@ -382,6 +386,13 @@ const TUTORIAL_PRAISE_IDS = new Set([
 let log: string[] = [];
 let queue = new AnimQueue({});
 let shownScores: [number, number] = [0, 0];
+/**
+ * The Throw pile exactly as the player has SEEN it. The engine view can already hold the
+ * opponent's discarded card while its card is still in the air; the pile top (and its count)
+ * must only change when that card arrives. `settleStep` advances this on the discard step and
+ * on the final sync, so a skipped/aborted flight still settles on the true pile.
+ */
+let shownDiscard: Card[] = [];
 const hiddenCards = new Set<number>();
 let scars: { key: string; owner: Player; age: number; tile?: Tile }[] = [];
 const removedTiles = new WeakMap<Step, Map<string, Tile>>();
@@ -437,7 +448,7 @@ const announceTurn = (player: Player, label?: string) => {
   const tone = turnTone(player, o);
   if (tone && settings.sound) sound.turn(tone.notes, tone.gain, tone.ms);
 };
-const { flash, cutFlash, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles } = createEffects(board, () => timeScale(), () => motion());
+const { flash, cutFlash, flinch, sparks, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles } = createEffects(board, () => timeScale(), () => motion());
 
 /** Pause and dim the ambient skin loops (lava, fireflies, sway) so a cut or blast reads. */
 function quietAmbient(on: boolean) {
@@ -775,6 +786,9 @@ function showScreen(name: 'menu' | 'levels' | 'campaign' | 'game') {
   }
   $('gameover').hidden = true;
   render();
+  // The seat anchor is placed whenever the map band becomes visible; from then on only a layout
+  // or resize moves it (`applyLayout` schedules it when its key changes).
+  if (name === 'game' && IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (name === 'menu') window.dispatchEvent(new Event('futasaku:menu'));
 }
 
@@ -1173,9 +1187,11 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   intelState=null;
   for (const w of [...waiters]) w();
   // A previous match may still be counting its score when New Game is tapped.
-  // Its next animation frame must never write into this match's scoreboard.
-  cancelAnimationFrame(scoreRaf);
-  scoreRaf = 0;
+  // Its next scheduler frame must never write into this match's scoreboard.
+  scoreUnsub?.();
+  scoreUnsub = null;
+  perfUnsub?.();
+  perfUnsub = null;
   for (const id of ['score-you', 'score-bot']) $(id).getAnimations().forEach(animation => animation.cancel());
   pumping = false;
   session = new Session(state, HUMAN, log, base);
@@ -1189,6 +1205,7 @@ function beginSession(state: State, c: CoachProgress | null, log: readonly Actio
   queue = new AnimQueue(state.board);
   const v = viewFor(state, HUMAN);
   shownScores = [v.score, v.opponentScore];
+  shownDiscard = [...v.discard];
   hiddenCards.clear();
   scars = [];
   inspectKey = null;
@@ -2728,6 +2745,9 @@ function settleStep(s: Step, animated: boolean) {
   if (cue && animated) outcomeLight?.pulse(cue.tone, cue.strength);
   outcomeSteps.delete(s);
   if (s.k === 'draw' && s.card) hiddenCards.delete(s.card.id);
+  // The Throw pile advances on the discard's arrival (and the closing sync catches up a skipped
+  // flight to the true pile), never on the render that starts the throw.
+  if ((s.k === 'discard' || s.k === 'sync') && session) shownDiscard = [...session.view.discard];
   if (s.k === 'sever' || s.k === 'remove' || s.k === 'megaBomb') {
     // Futa04: cut-off tiles leave no scar / remnant art — board shows live tiles only.
     if (!IS_FUTA04) {
@@ -2823,22 +2843,21 @@ async function impact(m: Moment, f: number, my: number) {
  * seconds in a row, effects drop to Low (once per device) and a one-time note offers to undo it.
  */
 let perf = perfStart();
-let perfRaf = 0;
+let perfUnsub: (() => void) | null = null;
 function watchFrames() {
   if (IS_FUTA04) return; // no automatic effect downgrade or interruption in Futasaku 0.4
-  if (perfRaf || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
+  if (perfUnsub || perf.done || settings.effects === 'low' || store.get(SMOOTH_KEY)) return;
   let last = performance.now();
-  const tick = (t: number) => {
-    const r = perfStep(perf, t - last);
+  perfUnsub = scheduler.subscribe(({ now }) => {
+    const r = perfStep(perf, now - last);
     perf = r.state;
-    last = t;
-    if (r.drop) {
-      perfRaf = 0;
-      return smootherMode();
+    last = now;
+    if (r.drop || !busy()) {
+      perfUnsub?.();
+      perfUnsub = null;
+      if (r.drop) smootherMode();
     }
-    perfRaf = busy() ? requestAnimationFrame(tick) : 0;
-  };
-  perfRaf = requestAnimationFrame(tick);
+  });
 }
 function smootherMode() {
   const before = settings.effects;
@@ -3170,15 +3189,26 @@ async function playStep(step: Step, my: number) {
                  { translate: '0 0', scale: '1.04', opacity: 1, offset:.8 },
                  { translate: '0 0', scale: '1', opacity: 1 }]
             : m === 0 ? [{ opacity: 0 }, { opacity: 1 }] : [{ translate: `${from.left - r.left}px ${from.top - r.top}px`, scale: '0.7', rotate: '-8deg', opacity: 0.3 }, { translate: `${(from.left - r.left) * 0.45}px ${(from.top - r.top) * 0.45 - 46 * m}px`, scale: '0.95', rotate: '4deg', opacity: 1, offset: 0.55 }, { translate: '0 0', scale: '1', rotate: '0deg', opacity: 1 }];
-          anim(to, frames, { duration: (IS_FUTA04 ? 396 : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
+          anim(to, frames, { duration: (IS_FUTA04 ? PINNED.humanDraw : 420) * f, fill:'backwards', easing: IS_FUTA04 ? EASE.spring : 'cubic-bezier(.3,.7,.3,1)' });
         }
         sound.draw();
-        await wait((IS_FUTA04 ? 396 : 240) * f, my);
+        await wait((IS_FUTA04 ? PINNED.humanDraw : 240) * f, my);
       } else {
-        flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
-        // The enemy's hidden draw: their card is private, so the deck flyer is the only cue.
-        // A live reveal gives it a beat of its own instead of a blink.
-        await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        // The opponent's draw: a card back leaves the Draw pile and settles on their seat. The
+        // card stays face down; the seat is an anchor placed on layout, so nothing is measured
+        // inside a frame. Keep the old deck-to-score cue as a fallback for a page without the
+        // flight layer (the material lab).
+        const seat = oppSeat();
+        const source = $('deck').querySelector<HTMLElement>('.pile-card') ?? $('deck');
+        const ms = seat ? oppDraw(source, seat, f, !!quickShow) : 0;
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          await wait(ms, my);
+        } else {
+          flyBack($('deck'), document.querySelector<HTMLElement>('.score.bot')!, f);
+          // A live reveal gives it a beat of its own instead of a blink.
+          await wait(liveReveal ? 260 * f : quickShow ? quickShow.show.draw : OPP_DRAW_MS * f, my);
+        }
       }
       return;
     }
@@ -3437,21 +3467,34 @@ async function playStep(step: Step, my: number) {
       return;
     }
     case 'discard': {
-      // The opponent's card is represented by the pile update; its old flight crossed the
-      // player's board and felt like a card thrown at the camera.
-      const from = step.player === HUMAN ? cardRects.get(step.card.id) : null;
-      if (from) {
-        flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
-        const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
-        if (source) source.style.visibility = 'hidden';
-      }
-      if (step.player === HUMAN) {
-        const hp = hapticFor('throw', settings);
-        if (hp) vibrate(true, hp as number | number[]);
-      }
+      // My card flies from my hand. The opponent's card has a body of its own: it turns face up
+      // on their seat, holds for a beat and arcs into the Throw pile. The pile top and its count
+      // change ON ARRIVAL (show() below), never while the card is still travelling.
       const cap = captionFor(step, HUMAN);
       if (cap) caption(cap, null, 'info');
-      await wait(quickShow && step.player === BOT ? quickShow.show.discard : IS_FUTA04 && from ? 396 * f : 320 * f, my);
+      if (step.player === HUMAN) {
+        const from = cardRects.get(step.card.id);
+        if (from) {
+          flyCard(step.card, from, ($('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard')).getBoundingClientRect(), f);
+          const source = document.querySelector<HTMLElement>(`#hand [data-card="${step.card.id}"]`);
+          if (source) source.style.visibility = 'hidden';
+        }
+        const hp = hapticFor('throw', settings);
+        if (hp) vibrate(true, hp as number | number[]);
+        await wait(IS_FUTA04 && from ? PINNED.throw * f : 320 * f, my);
+      } else {
+        const seat = oppSeat();
+        if (seat) {
+          if (settings.sound) sound.rustle();
+          const ms = oppThrow(step.card, seat, $('discard').querySelector<HTMLElement>('.pile-card') ?? $('discard'), f, !!quickShow);
+          await wait(ms, my);
+          if (my !== epoch) return;
+          if (settings.sound) sound.throw();
+        } else {
+          // No flight layer (the material lab): keep the old pile-only beat.
+          await wait(quickShow ? quickShow.show.discard : 320 * f, my);
+        }
+      }
       show();
       return;
     }
@@ -3581,7 +3624,7 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
   for (const s of plan.stages) {
     switch (s.name) {
       case 'anticipation': {
-        // Only Big and Huge lean the camera; small and medium cuts never move it.
+        // Only Big and Huge lean the camera into the beat; Severe keeps its weight for the impact.
         if (plan.tier === 'big' || plan.tier === 'huge') anim(wrap, [{ scale: '1' }, { scale: '0.99' }, { scale: '1' }], { duration: s.dur + 80 * f, easing: 'ease-in-out', transformOrigin: origin } as KeyframeAnimationOptions);
         // the doomed links brighten and shorten a little toward the cut origin
         const doomed = board.veinsTouching(keys);
@@ -3592,10 +3635,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         if (doomed.length) setTimeout(() => doomed.forEach((v) => v.classList.remove('straining')), s.dur + 60);
         break;
       }
-      case 'flash':
-        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius,
-          c.keys.find(key=>hexDistance(parseKey(key),parseKey(c.origin))===1)));
+      case 'flash': {
+        // the torn edge: the links that snapped. A Severe cut flashes the whole seam, so its
+        // weight reads along the cut and not just at one hex.
+        const seam = c.keys.filter((key) => hexDistance(parseKey(key), parseKey(c.origin)) === 1);
+        const edge = plan.tier === 'severe' ? seam : seam.slice(0, 1);
+        at(s.at, () => cutFlash(c.origin, plan.flash.ms, plan.flash.alpha, plan.flash.radius, edge));
         break;
+      }
       case 'zoom':
         at(s.at, () => anim(wrap, [{ scale: '1' }, { scale: String(plan.zoom), offset: 0.35 }, { scale: '1' }], { duration: s.dur * 2, easing: EASE.out, transformOrigin: origin } as KeyframeAnimationOptions));
         break;
@@ -3611,9 +3658,22 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
         at(s.at, () => {
           // one cut family, recognisable at every size; losing tiles uses the duller, lower cutMe
           const cue: 'cutSmall' | 'cutMedium' | 'cutBig' | 'cutHuge' | 'cutMe' = c.mine ? 'cutMe'
-            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'medium' ? 'cutMedium' : 'cutSmall';
+            : plan.tier === 'huge' ? 'cutHuge' : plan.tier === 'big' ? 'cutBig' : plan.tier === 'severe' ? 'cutMedium' : 'cutSmall';
           sound[cue]();
           if (plan.shakePx > 0) anim(wrap, shakeFrames(plan.shakePx), { duration: MOTION.move * Math.max(f, 0.5), easing: EASE.out });
+          // Severe: the tiles that survive beside the tear flinch toward it and dim a touch.
+          if (plan.tier === 'severe' && plan.shakePx > 0) {
+            const cutKeys = new Set(c.keys);
+            const neighbours = new Set<string>();
+            for (const key of c.keys) {
+              for (const nb of allNeighbors(parseKey(key))) {
+                const k = coordKey(nb);
+                const tile = queue.board[k];
+                if (tile && !tile.root && !cutKeys.has(k)) neighbours.add(k);
+              }
+            }
+            for (const k of neighbours) flinch(k, c.origin, s.dur);
+          }
           const hp = plan.haptic && hapticFor(plan.haptic, settings);
           if (hp && !quiet) vibrate(true, hp as number | number[]);
         });
@@ -3675,23 +3735,25 @@ let finalShown = false;
 /** the final-turns cue plays once, when the endgame shade comes on */
 let finalSoundOn = false;
 
-let scoreRaf = 0;
+let scoreUnsub: (() => void) | null = null;
 function countScores(to: [number, number]) {
   const target: [number, number] = [to[HUMAN], to[BOT]];
   const start: [number, number] = [...shownScores];
   if (start[0] === target[0] && start[1] === target[1]) return;
   const t0 = performance.now();
   const dur = 600 * Math.max(timeScale(), 0.3);
-  cancelAnimationFrame(scoreRaf);
-  const tick = (t: number) => {
-    const k = Math.min(1, (t - t0) / dur);
+  scoreUnsub?.();
+  scoreUnsub = scheduler.subscribe(({ now }) => {
+    const k = Math.min(1, (now - t0) / dur);
     shownScores = [Math.round(start[0] + (target[0] - start[0]) * k), Math.round(start[1] + (target[1] - start[1]) * k)];
     $('score-you').textContent = String(shownScores[0]);
     $('score-bot').textContent = String(shownScores[1]);
     setRace(shownScores);
-    if (k < 1) scoreRaf = requestAnimationFrame(tick);
-  };
-  scoreRaf = requestAnimationFrame(tick);
+    if (k >= 1) {
+      scoreUnsub?.();
+      scoreUnsub = null;
+    }
+  });
   // A fast tick, then a tiny bounce on the final number.
   const bounce: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.28)', offset: 0.45 }, { transform: 'scale(0.96)', offset: 0.75 }, { transform: 'scale(1)' }];
   if (target[0] !== start[0]) anim($('score-you'), bounce, { duration: 360, delay: dur });
@@ -3727,6 +3789,10 @@ const syncSessionFromOnline = (resetSelection = false) => {
   session = new Session(os.state, HUMAN, [...os.log], os.base);
   if (keptSel) session.sel = keptSel;
   if (keptPreset) session.preset(keptPreset);
+  // A catch-up that is about to replay (its steps are still pending) owns the Throw pile: keep
+  // the shown one until its discard step lands. An ordinary sync can catch the pile up now.
+  const replayQueued = (os.driver.pendingEvents?.().length ?? 0) > 0;
+  if (!os.isRevealing && !replayQueued) shownDiscard = [...session.view.discard];
 };
 
 /** Futa04's idle prompt yields for every active move, including Bloom painting without a card. */
@@ -4898,6 +4964,46 @@ function centreSideDock(): void {
   const shift = Math.min(0, Math.max(want, tiles.right + 24) - left);
   root.style.setProperty('--side-dock-shift', `${Math.round(shift)}px`);
 }
+/**
+ * The opponent's seat: a real, invisible anchor at the top-right of the map band (their side of
+ * the board on both the portrait and the wide layout). It is measured only from layout — the
+ * cached key makes repeated calls from a layout pass free, and no animation frame measures it.
+ */
+let oppSeatCache = '';
+function placeOppSeat(): void {
+  if (!IS_FUTA04) return;
+  const seat = document.getElementById('opp-seat');
+  const wrapEl = document.getElementById('board-wrap');
+  const game = document.getElementById('game');
+  if (!seat || !wrapEl || !game) return;
+  const wrap = wrapEl.getBoundingClientRect();
+  if (wrap.width < 80 || wrap.height < 80) return;
+  const card = document.querySelector<HTMLElement>('#deck .pile-card')?.getBoundingClientRect();
+  const cw = card && card.width > 0 ? card.width : 44;
+  const ch = card && card.height > 0 ? card.height : Math.round(cw * 1.42);
+  const side = document.documentElement.dataset.layout === 'side';
+  // Clear of the header, the map's right edge and (on a wide screen) the cockpit beside it.
+  const left = Math.max(wrap.left + 4, wrap.right - cw - (side ? 18 : 10));
+  const top = Math.max(wrap.top + 6, wrap.top + (side ? 18 : 8));
+  const g = game.getBoundingClientRect();
+  const key = `${g.left},${g.top},${left.toFixed(1)},${top.toFixed(1)},${cw.toFixed(1)},${ch.toFixed(1)}`;
+  if (key === oppSeatCache) return;
+  oppSeatCache = key;
+  Object.assign(seat.style, {
+    left: `${(left - g.left).toFixed(1)}px`,
+    top: `${(top - g.top).toFixed(1)}px`,
+    width: `${cw}px`,
+    height: `${ch}px`,
+  });
+}
+/** The seat, if it has a settled rect. A page that has not laid out yet gets one more try. */
+function oppSeat(): HTMLElement | null {
+  const seat = document.getElementById('opp-seat');
+  if (!seat) return null;
+  if (seat.getBoundingClientRect().width > 1) return seat;
+  placeOppSeat();
+  return seat.getBoundingClientRect().width > 1 ? seat : null;
+}
 /** Sets the layout's sizes as CSS variables; only when the viewport (or board size) changes. */
 function applyLayout() {
   const { w, h } = gameViewport();
@@ -4983,6 +5089,7 @@ function applyLayout() {
   board.svg.setAttribute('preserveAspectRatio', (l.thumb && !tutorialOnEarly) ? 'xMidYMax meet' : 'xMidYMid meet');
   fitHudNames();
   if (IS_FUTA04) requestAnimationFrame(alignDrawPiles);
+  if (IS_FUTA04) requestAnimationFrame(placeOppSeat);
   if (IS_FUTA04) sideDockStale = true;
 
 }
@@ -5992,7 +6099,7 @@ let deckFull = 1;
 
 function renderPiles(v: View, advice: Advice | null) {
   const looks = pileStates(v.phase, myTurn(), busy(), session!.legal);
-  const top = v.discard.at(-1);
+  const top = shownDiscard.at(-1);
   const t = $('discard-top');
   t.className = `pile-top${top ? ` card ${suitClass(top)}` : ' empty'}`;
   // Keep the physical top card mounted while its identity is unchanged.
@@ -6007,8 +6114,8 @@ function renderPiles(v: View, advice: Advice | null) {
   // UX pass: the last few cards: the count turns amber (the game ends when the deck runs out)
   const low = v.deckCount > 0 && v.deckCount <= 5 && v.phase !== 'GAME_OVER';
   $('deck').classList.toggle('low', low);
-  if (IS_FUTA04) renderPileMeter($('discard-count'), v.discard.length);
-  else $('discard-count').textContent = String(v.discard.length);
+  if (IS_FUTA04) renderPileMeter($('discard-count'), shownDiscard.length);
+  else $('discard-count').textContent = String(shownDiscard.length);
   // Part 3 C: the last card, and the deck running out, each get a small moment (Eye candy)
   const dm = deckMoment(lastDeckSeen, v.deckCount);
   if (lastDeckSeen >= 0 && dm && settings.eyeCandy && motion() > 0) {
@@ -6020,9 +6127,9 @@ function renderPiles(v: View, advice: Advice | null) {
   }
   lastDeckSeen = v.deckCount;
   // overhaul item 6: the stacks are as thick as the piles are big; the last card stands alone
-  deckFull = Math.max(deckFull, v.deckCount + v.discard.length);
+  deckFull = Math.max(deckFull, v.deckCount + shownDiscard.length);
   $('deck').dataset.layers = String(stackLayers(v.deckCount, deckFull));
-  $('discard').dataset.layers = String(stackLayers(v.discard.length, deckFull));
+  $('discard').dataset.layers = String(stackLayers(shownDiscard.length, deckFull));
   $('deck').dataset.count = pileCountState(v.deckCount);
   $('deck').querySelector('.pile-label')!.textContent = v.deckCount === 1 && v.phase !== 'GAME_OVER' ? PILES.lastCard : PILES.draw;
   // Tap-to-throw: with a throw waiting, the Throw pile takes it (it stays tappable for that alone).
@@ -6279,13 +6386,13 @@ function renderGameOver() {
     const els = [$('go-score').querySelector('.you')!, $('go-score').querySelector('.bot')!];
     const to = [r.scores[HUMAN], r.scores[BOT]];
     const t0 = performance.now();
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - t0) / 900);
+    const tick = ({ now }: { now: number }) => {
+      const k = Math.min(1, (now - t0) / 900);
       const e = 1 - (1 - k) ** 3;
       els.forEach((el, i) => (el.textContent = String(Math.round(to[i]! * e))));
-      if (k < 1) requestAnimationFrame(tick);
+      if (k < 1) scheduler.request('result-score', tick);
     };
-    requestAnimationFrame(tick);
+    scheduler.request('result-score', tick);
   }
   setGoExtra('go-cut', !!session?.biggestCut);
   $('go-share').textContent = RESULT.share;
@@ -7242,10 +7349,8 @@ bind('hand-sort', () => {
 });
 // overhaul item 7: legal hexes brighten softly as the finger or mouse comes near
 {
-  let raf = 0;
   let last: { x: number; y: number } | null = null;
   const glowNear = () => {
-    raf = 0;
     const targets = board.svg.querySelectorAll<SVGPathElement>('.l-over .target');
     if (!targets.length) return;
     const m = board.svg.getScreenCTM();
@@ -7259,13 +7364,14 @@ bind('hand-sort', () => {
   };
   const track = (e: PointerEvent) => {
     last = { x: e.clientX, y: e.clientY };
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    // Several pointer moves in one frame collapse into one job (coalesced, non-urgent).
+    scheduler.request('board-near', glowNear);
   };
   board.svg.addEventListener('pointermove', track);
   board.svg.addEventListener('pointerdown', track);
   board.svg.addEventListener('pointerleave', () => {
     last = null;
-    if (!raf) raf = requestAnimationFrame(glowNear);
+    scheduler.request('board-near', glowNear);
   });
 }
 // desktop: a card tilts a few degrees toward the pointer
@@ -7939,6 +8045,10 @@ document.addEventListener(
   },
   { capture: true },
 );
+// Phase 0: the one delegated press primitive and the one frame scheduler.
+installPress();
+attachSchedulerPause($('game'), $('board-wrap'));
+observeLongTasks();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.documentElement.classList.add('kbd');
 });
@@ -7976,6 +8086,8 @@ let appReady = false;
   },
   settings: () => ({ ...settings }),
   busy: () => busy(),
+  /** Test-only feel harness: press latency, frame gaps, long tasks, live animations, RAF jobs. */
+  feel: () => feel(scheduler.subscriberCount()),
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
   /** tests: tutorial focus lock */

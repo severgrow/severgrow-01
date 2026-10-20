@@ -9,7 +9,7 @@ declare const __CHANNEL__: string;
 const IS_FUTA04 = typeof __CHANNEL__ !== 'undefined' && (__CHANNEL__ === 'futa04' || __CHANNEL__ === 'futa-test' || __CHANNEL__ === 'futa05');
 import { FRUIT } from '../../../src/strings.js';
 import { ParticleBudget } from '../logic/juice.js';
-import { EASE, MOTION } from '../logic/motion.js';
+import { EASE, MOTION, PINNED } from '../logic/motion.js';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -92,17 +92,38 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     removeAfter(anim(c, [{ transform: 'scale(.3)', opacity: alpha }, { transform: `scale(${grow})`, opacity: 0 }], { duration: ms, easing: EASE.out, fill: 'forwards' }), c, ms + 60);
   }
 
-  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤38%), short. */
-  function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string) {
+  /** Part 2: the cut's impact flash: local (a few hexes), white at `alpha` (≤38%), short.
+   *  `linkTo` is the torn edge: one hex (the link that snapped), or several for a Severe cut so
+   *  the flash runs along the whole seam. */
+  function cutFlash(key: string, ms: number, alpha: number, radius: number, linkTo?: string | readonly string[]) {
     if (ms <= 0 || alpha <= 0) return;
     const { x, y } = centerOf(key);
-    const other = linkTo ? centerOf(linkTo) : null;
+    const links = linkTo === undefined ? [] : typeof linkTo === 'string' ? [linkTo] : linkTo;
     const a = Math.min(0.38, alpha * (IS_FUTA04 ? 1.12 : 1));
-    const c = IS_FUTA04 && other
-      ? el('path', { d:`M${x.toFixed(2)},${y.toFixed(2)}L${other.x.toFixed(2)},${other.y.toFixed(2)}`,
-          fill:'none',stroke:'#fff2d2','stroke-width':3.2,'stroke-linecap':'round' }, board.fx)
+    const c = IS_FUTA04 && links.length
+      ? el('path', { d: links.map((k) => {
+          const o = centerOf(k);
+          return `M${x.toFixed(2)},${y.toFixed(2)}L${o.x.toFixed(2)},${o.y.toFixed(2)}`;
+        }).join(''), fill:'none',stroke:'#fff2d2','stroke-width':3.2,'stroke-linecap':'round' }, board.fx)
       : el('circle', { cx: x, cy: y, r: S * radius * (IS_FUTA04 ? 1.08 : 1), class: 'fx-cutflash' }, board.fx);
     removeAfter(anim(c, [{ opacity: a }, { opacity: 0 }], { duration: Math.max(ms, IS_FUTA04 ? ms * 1.15 : ms), easing: EASE.out, fill: 'forwards' }), c, ms + 50);
+  }
+
+  /** A surviving tile beside a Severe cut: a 1.5px flinch toward the tear and a 6% dim, then back. */
+  function flinch(key: string, origin: string, ms: number) {
+    if (motion() === 0) return;
+    const tile = board.tile(key);
+    if (!tile || ms <= 0) return;
+    const p = centerOf(key);
+    const o = centerOf(origin);
+    const len = Math.hypot(p.x - o.x, p.y - o.y) || 1;
+    const dx = ((o.x - p.x) / len) * 1.5;
+    const dy = ((o.y - p.y) / len) * 1.5;
+    anim(tile, [
+      { transform: 'translate(0,0)', opacity: 1 },
+      { transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`, opacity: 0.94, offset: 0.45 },
+      { transform: 'translate(0,0)', opacity: 1 },
+    ], { duration: ms, easing: EASE.out });
   }
 
   /** A burst of n small sparks from a hex (a tile replaced, a big grow, a win). */
@@ -127,7 +148,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
     for (let i = 0; i < k; i++) {
       const dx = (i % 2 ? 1 : -1) * (4 + ((x + i * 7) % 9));
       const c = el('circle', { cx: x, cy: y, r: IS_FUTA04 ? 1.85 : 1.6, class: 'fx-mote' }, board.fx);
-      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * 70, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
+      particle(c, anim(c, [{ transform: 'translate(0,0)', opacity: 0.85 }, { transform: `translate(${dx}px, ${-S * 0.6}px)`, opacity: 0 }], { duration: MOTION.move * f, delay: delay + i * PINNED.ripple, easing: EASE.out, fill: 'both' }), MOTION.move * f + 240);
     }
   }
 
@@ -206,11 +227,11 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       ? [{ opacity: 1 }, { opacity: 0 }]
       : IS_FUTA04
         ? [{ transform: 'translate(0,0) scale(1)', opacity: 1 },
-          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.48 },
+          { transform: `translate(${dx * .55}px, ${dy * .55 - 20}px) scale(${(1 + sc) / 2})`, opacity: 1, offset:.52 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 1, offset: .68 },
           { transform: `translate(${dx}px, ${dy}px) scale(${land})`, opacity: 0 }]
         : [{ transform: 'translate(0,0) rotateY(0deg)' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) rotateY(90deg) scale(${(1 + sc) / 2})`, offset: 0.5 }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(${sc})` }];
-    const duration = (IS_FUTA04 ? 320 : 440) * f;
+    const duration = (IS_FUTA04 ? PINNED.throw : 440) * f;
     removeAfter(anim(d, frames, { duration, easing: IS_FUTA04 ? EASE.out : 'ease-in-out', fill: 'forwards' }), d, duration + 40);
   }
 
@@ -231,6 +252,120 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       { transform: `translate(${(tx * 0.7).toFixed(1)}px, ${(ty * 0.7).toFixed(1)}px) scale(.6)`, opacity: 1, offset: 0.65 },
       { transform: `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(.4)`, opacity: 0 },
     ], { duration: 380 * f, easing: EASE.out, fill: 'forwards' }), d, 0);
+  }
+
+  /**
+   * The opponent's cards live in one layer inside the game (see `.enemy-flight`). Its seat anchor
+   * is placed on layout/resize, so a flight only reads two rects when it starts: never per frame.
+   */
+  const flightLayer = () => document.getElementById('enemy-flight');
+  const clearFlights = (layer: HTMLElement) => {
+    for (const n of layer.querySelectorAll('.flyer.opp')) n.remove();
+  };
+  const placeFlyer = (d: HTMLElement, r: DOMRect, layer: DOMRect) => {
+    Object.assign(d.style, {
+      left: `${(r.left - layer.left).toFixed(1)}px`,
+      top: `${(r.top - layer.top).toFixed(1)}px`,
+      width: `${r.width}px`,
+      height: `${r.height}px`,
+    });
+  };
+
+  /**
+   * The opponent's hidden draw: a card back leaves the Draw pile and settles on their seat.
+   * A lift, a few degrees of tilt and a short hold; never a face. Returns how long it runs.
+   * Reduce motion keeps the card still on the seat and only fades it.
+   */
+  function oppDraw(from: HTMLElement, seat: HTMLElement, f: number, quick = false): number {
+    const layer = flightLayer();
+    if (!layer) return 0;
+    clearFlights(layer);
+    const a = from.getBoundingClientRect();
+    const b = seat.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    const d = document.createElement('div');
+    d.className = 'flyer card back opp';
+    d.setAttribute('aria-hidden', 'true');
+    placeFlyer(d, a, layerRect);
+    layer.appendChild(d);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    const sc = b.height / Math.max(a.height, 1);
+    const atSeat = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    const ms = Math.max(1, Math.round((quick ? 130 : 280) * Math.max(f, 0.1)));
+    const frames: Keyframe[] = motion() === 0
+      ? [
+          { transform: atSeat, opacity: 0 },
+          { transform: atSeat, opacity: 0.9, offset: 0.2 },
+          { transform: atSeat, opacity: 0.9, offset: 0.8 },
+          { transform: atSeat, opacity: 0 },
+        ]
+      : [
+          { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 0.96 },
+          { transform: `translate(${(dx * 0.58).toFixed(1)}px, ${(dy * 0.58 - 18).toFixed(1)}px) rotate(4deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: 0.58 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.82 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.9 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-3deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+        ];
+    removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 50);
+    return ms;
+  }
+
+  /**
+   * The opponent's throw: the real card turns face up on their seat, holds for a beat, then arcs
+   * into the Throw pile and settles. Returns how long it runs; the caller advances the pile on
+   * that arrival, never before. A Bomb gets one brief border pulse at the reveal.
+   * Reduce motion: a fade on the seat, then a fade on the pile, with no travel between them.
+   */
+  function oppThrow(card: Card, seat: HTMLElement, pile: HTMLElement, f: number, quick = false): number {
+    const layer = flightLayer();
+    if (!layer) return 0;
+    clearFlights(layer);
+    const a = seat.getBoundingClientRect();
+    const b = pile.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    const d = document.createElement('div');
+    d.className = `flyer card opp ${suitClass(card)}`;
+    d.setAttribute('aria-hidden', 'true');
+    d.innerHTML = cardFace(card);
+    placeFlyer(d, a, layerRect);
+    layer.appendChild(d);
+    const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+    const dy = b.top + b.height / 2 - (a.top + a.height / 2);
+    const sc = b.height / Math.max(a.height, 1);
+    const reveal = quick ? 70 : 130;
+    const arc = quick ? 150 : 350;
+    const ms = Math.max(1, Math.round((reveal + arc) * Math.max(f, 0.1)));
+    const hold = reveal / (reveal + arc);
+    const atSeat = 'translate(0, 0)';
+    const atPile = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${sc.toFixed(3)})`;
+    const frames: Keyframe[] = motion() === 0
+      ? [
+          { transform: atSeat, opacity: 0 },
+          { transform: atSeat, opacity: 1, offset: Math.min(0.5, hold * 0.45) },
+          { transform: atSeat, opacity: 1, offset: hold },
+          { transform: atPile, opacity: 0, offset: Math.min(0.97, hold + 0.02) },
+          { transform: atPile, opacity: 0.9, offset: Math.min(0.99, hold + 0.08) },
+          { transform: atPile, opacity: 0 },
+        ]
+      : [
+          { transform: 'translate(0, 0) rotate(0deg) scale(0.92)', opacity: 0 },
+          { transform: 'translate(0, 0) rotate(-1deg) scale(1)', opacity: 1, offset: hold * 0.7 },
+          { transform: 'translate(0, 0) rotate(0deg) scale(1)', opacity: 1, offset: hold },
+          { transform: `translate(${(dx * 0.52).toFixed(1)}px, ${(dy * 0.52 - 26).toFixed(1)}px) rotate(3deg) scale(${((1 + sc) / 2).toFixed(3)})`, opacity: 1, offset: hold + (1 - hold) * 0.55 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(-1deg) scale(${(sc * 1.04).toFixed(3)})`, opacity: 1, offset: 0.93 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 1, offset: 0.97 },
+          { transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) rotate(0deg) scale(${sc.toFixed(3)})`, opacity: 0 },
+        ];
+    removeAfter(anim(d, frames, { duration: ms, easing: EASE.out, fill: 'forwards' }), d, ms + 60);
+    if (card.suit === null) {
+      anim(d, [
+        { boxShadow: '0 0 0 0 rgba(255,225,167,0)' },
+        { boxShadow: '0 0 0 6px rgba(255,225,167,.46)', offset: 0.4 },
+        { boxShadow: '0 0 0 0 rgba(255,225,167,0)' },
+      ], { duration: Math.max(220, reveal * 2), easing: EASE.out, fill: 'none' });
+    }
+    return ms;
   }
 
   /** One quiet ring, only on the tile that just changed (bigger shine for a top rank). */
@@ -271,5 +406,5 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
       particle(c, a, 900 * f);
     }
   };
-  return { flash, cutFlash, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, particles };
+  return { flash, cutFlash, flinch, sparks, spark, drift, ring, stream, scar, boardWrapPoint, floatText, caption, banner, flyCard, flyBack, oppDraw, oppThrow, particles };
 };

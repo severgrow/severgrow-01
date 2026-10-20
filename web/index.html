@@ -422,6 +422,12 @@
           </div>
         </aside>
       </div>
+      <!-- The opponent's own card motion: one absolutely positioned flyer at a time, above the
+           board and the cockpit but below the lesson glass and highlight. pointer-events:none, so
+           it can never swallow a tap. The seat anchor is placed on layout/resize only. -->
+      <div id="enemy-flight" class="enemy-flight" aria-hidden="true">
+        <div id="opp-seat" class="opp-seat" aria-hidden="true"></div>
+      </div>
     </section>
 
     <!-- ===== Sheets and overlays ===== -->

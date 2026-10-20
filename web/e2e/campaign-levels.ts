@@ -87,7 +87,10 @@ try {
     // A DOM click: the install sheet and the room's own animations can sit over the button.
     await page.evaluate(() => (document.getElementById('menu-campaign') as HTMLButtonElement)?.click());
     await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => {
+      const lesson = (window as any).__severgrow?.lesson?.();
+      return !!lesson && !lesson.stage && lesson.handSettled;
+    }, undefined, { timeout: 15000 });
   };
 
   const results: { level: number; first: string; reason: string; winner: number | null }[] = [];
@@ -101,16 +104,20 @@ try {
       await dismissInstall();
       await page.evaluate(() => (document.getElementById('go-rematch') as HTMLButtonElement)?.click());
       await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 15000 });
-      await page.waitForTimeout(600);
+      await page.waitForFunction(() => {
+        const lesson = (window as any).__severgrow?.lesson?.();
+        return !!lesson && !lesson.stage && lesson.handSettled;
+      }, undefined, { timeout: 15000 });
     } else {
       await openLevel(1);
     }
 
     const first = await title(page);
-    // Levels 8-10 are deliberately quiet until their mechanic is on the table, so an empty window
-    // is a correct opening for them; 1-7 always say the next thing.
-    if (level.number <= 7) check(first.length > 0, `L${level.number} opens with guidance (${first})`);
-    else check(true, `L${level.number} opens quiet or with its mechanic (${first || 'quiet'})`);
+    // The info box is for one-time explanations, not a permanent phase prompt. Several lessons
+    // correctly open quiet and light the action only when its teaching moment becomes legal.
+    const activeLesson = await page.evaluate(() => (window as any).__severgrow?.lesson?.()?.level);
+    check(activeLesson === level.number, `L${level.number} has its authored lesson (${first || 'quiet opening'})`);
+    if (level.number === 1) check(first.length > 0, 'L1 explains the home before the first draw');
     const board = await page.evaluate(() => document.querySelectorAll('.hex-cell').length);
     // /3/ line (owner, 2026-10-18): levels 1-10 are the tutorial and are all played on the 19-hex map
     // as authored lessons; level 11 is the first 37-hex level (checked below). This replaces the /2/

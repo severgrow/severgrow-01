@@ -71,15 +71,23 @@ const film = async (name: string, n: number, mine: boolean, settings: Record<str
   await page.addInitScript(
     ([s, saved]) => {
       localStorage.clear();
-      localStorage.setItem('severgrow.settings.v1', s as string);
-      localStorage.setItem('severgrow.save.v7', saved as string);
-      localStorage.setItem('severgrow.tips.v1', JSON.stringify({ fruit: true, strengthen: true, draw: true }));
-      localStorage.setItem('severgrow.seen', '1');
+      // The product build installs `main2:`. Seed every prefix this harness may be served with,
+      // so the save is found whichever channel built `web/dist`.
+      for (const prefix of ['', 'main2:', 'futa05:', 'futa05-3:', 'futa04:']) {
+        localStorage.setItem(`${prefix}severgrow.settings.v1`, s as string);
+        localStorage.setItem(`${prefix}severgrow.save.v7`, saved as string);
+        localStorage.setItem(`${prefix}severgrow.tips.v1`, JSON.stringify({ fruit: true, strengthen: true, draw: true }));
+        localStorage.setItem(`${prefix}severgrow.seen`, '1');
+      }
     },
     [JSON.stringify({ sound: false, coach: false, speed: 'normal', level: 7, ...settings }), positionSave({ state, coach: doneCoach, level: 7 })],
   );
   await page.goto(BASE);
-  await page.click('#menu-continue');
+  // The product menu hides Continue (the save is offered when entering the level); the button and
+  // its listener are still there, so a test-only DOM click resumes the fixture exactly as before.
+  await page.waitForFunction(() => !!(window as unknown as { __severgrow?: unknown }).__severgrow, undefined, { timeout: 20000 });
+  await page.evaluate(() => (document.getElementById('menu-continue') as HTMLElement | null)?.click());
+  await page.waitForFunction(() => !!(window as unknown as { __severgrow?: { state?: () => unknown } }).__severgrow?.state?.(), undefined, { timeout: 20000 });
   await page.mouse.move(2, 2); // (no hover tooltip over the board)
   // the opponent's own move must not run first: for its turn the page clock is frozen from the start
   if (!mine) await page.waitForTimeout(2200);
@@ -102,8 +110,9 @@ const film = async (name: string, n: number, mine: boolean, settings: Record<str
     writeFileSync(f, Buffer.from(shot.data, 'base64'));
     files.push(f);
   }
+  const tier = await page.evaluate(() => document.documentElement.dataset.cutTier ?? null);
   await page.close();
-  return files;
+  return { files, tier };
 };
 
 const sheet = async (title: string, files: string[], out: string) => {
@@ -115,17 +124,20 @@ const sheet = async (title: string, files: string[], out: string) => {
 };
 
 const runs: [string, number, boolean, Record<string, unknown>, string][] = [
+  ['small', 2, false, {}, 'Small cut (2 tiles): quiet, no movement'],
+  ['severe-3', 3, false, {}, 'Severe cut (3 tiles): short beat, 60ms hit-stop, 2.5px shiver, 1.012 zoom, seam flash'],
+  ['severe-4', 4, false, {}, 'Severe cut (4 tiles)'],
   ['big', 6, false, {}, 'Big cut (6 tiles): my 9 replaces the weak link'],
+  ['huge-8', 8, false, {}, 'Huge cut (8 tiles)'],
   ['huge', 9, false, {}, 'Huge cut (9 tiles)'],
-  ['medium', 4, false, {}, 'Medium cut (4 tiles)'],
-  ['small', 2, false, {}, 'Small cut (2 tiles)'],
   ['opponent-cuts-me', 5, true, { frozen: true }, 'The opponent cuts 5 of mine: the calmer variant'],
   ['reduce-motion', 6, false, { reduceMotion: true }, 'Reduce motion: a fade only'],
+  ['reduce-motion-severe', 3, false, { reduceMotion: true }, 'Reduce motion, Severe (3 tiles): still a plain fade'],
 ];
 for (const [name, n, mine, s, title] of runs) {
-  const files = await film(name, n, mine, s);
+  const { files, tier } = await film(name, n, mine, s);
   await sheet(title, files, `${dir}/${name}-contact-sheet.png`);
-  console.log(`${name}: ${files.length} frames`);
+  console.log(`${name}: ${files.length} frames (tier ${tier})`);
 }
 await browser.close();
 await server.close();
