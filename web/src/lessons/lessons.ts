@@ -34,8 +34,7 @@ export type Goal =
   | { t: 'bomb'; key: string }
   | { t: 'blast'; key: string }
   | { t: 'blastGrow' }
-  | { t: 'pileBloom' }
-  | { t: 'skip' };
+  | { t: 'pileBloom' };
 
 export type Lesson = {
   level: number;
@@ -212,7 +211,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
   {
     level: 9, version: 2, locked: false, guide: 'always',
     intro: ['pile-gold'],
-    goals: [{ t: 'pileBloom' }, { t: 'skip' }],
+    goals: [{ t: 'pileBloom' }],
     newActions: [],
     position: {
       seed: 96009,
@@ -223,7 +222,7 @@ export const LESSONS: readonly Lesson[] = Object.freeze([
       discard: [[3, 1], [0, 5]],
     },
     opponent: { script: { growOn: [2] } },
-    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'SKIP GROW. SAVE CARDS.', icon: '↦' },
+    finish: { title: W.youWin, line: W.wonOnPoints, learned: 'BLOOM FROM THE THROW PILE', icon: '↦' },
   },
   {
     level: 10, version: 2, locked: false, guide: 'idle',
@@ -298,8 +297,6 @@ export const goalDone = (g: Goal, s: State): boolean => {
       const turn = myTurns(s).find((t) => t.some((e) => e.t === 'Draw' && e.from === 'discard'));
       return !!turn && turn.some((e) => e.t === 'Bloom');
     }
-    case 'skip':
-      return myTurns(s).some((t) => t.some((e) => e.t === 'Bloom') && t.some((e) => e.t === 'Discard') && !t.some((e) => GROWTH.has(e.t)));
   }
 };
 
@@ -552,12 +549,6 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
       case 'take': case 'cut': case 'gold': if (!grew) { const m = growOnto(s, legal, goal.key); if (m) return m; } break;
       case 'bloom': { const m = bestBloom(s, legal); if (m) return m; break; }
       case 'pileBloom': { const m = bestBloom(s, legal); if (m && s.drawnFromDiscard !== null) return m; break; }
-      case 'skip': {
-        // The lesson: after the Bloom, end the turn without the Grow.
-        const bloomedNow = myTurns(s).at(-1)?.some((e) => e.t === 'Bloom');
-        if (bloomedNow && !grew && end) return end;
-        break;
-      }
       case 'strangle': { const m = win ?? (!grew ? surroundStep(s, legal) : null); if (m) return m; break; }
       case 'bomb': if (!grew) { const m = legal.find((a) => a.t === 'PlayFruit' && keyOf(a.target) === goal.key); if (m) return m; } break;
       case 'blast': { const m = legal.find((a) => a.t === 'MegaBomb' && keyOf(a.target) === goal.key) ?? legal.find((a) => a.t === 'MegaBomb'); if (m) return m; break; }
@@ -566,10 +557,10 @@ const suggestRaw = (lesson: Lesson, s: State): Action | null => {
     }
   }
   if (win) return win;
-  // Never steer past a power. Outside the dedicated skip lesson, » is not the suggestion while a
-  // Bloom, Bomb or Blast is legal: the light points at the strongest power instead (or the beat
-  // goes quiet once its one-time hello has been shown — see lessonBeat).
-  if (goal?.t !== 'skip') {
+  // Never steer past a power: » is not the suggestion while a Bloom, Bomb or Blast is legal; the
+  // light points at the strongest power instead (or the beat goes quiet once its one-time hello
+  // has been shown — see lessonBeat).
+  {
     const power = bestPower(s, legal, false);
     if (power) return power;
   }
@@ -749,6 +740,13 @@ const momentBeat = (lesson: Lesson, s: State, seen: ReadonlySet<string>): Beat |
     return explain(`${lesson.level}:withered`, W.witheredLine, { t: 'led' });
   if (lesson.level === 5 && goalDone({ t: 'bloom' }, s) && once('bloomed'))
     return explain(`${lesson.level}:bloomed`, W.bloomedLine, { t: 'led' });
+  // Right after the Bloom from the Throw pile: neither the Bloom nor the Grow is ever required, and
+  // » keeps the cards. Said once, pointing at »; the light then carries on as usual (owner,
+  // 2026-10-20: taught here, never forced).
+  // (» is lit only when no power is playable: the light never points at » past a power.)
+  if (lesson.level === 9 && s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s) && once('optional'))
+    return explain(`${lesson.level}:optional`, W.optionalLine,
+      legalPowers(legalActions(viewFor(s, YOU))).length ? { t: 'none' } : { t: 'end' });
   // The clock: the Draw pile is nearly gone. The warning belongs on the display, not in the box.
   if (lesson.level === 1 && s.phase === 'DRAW' && s.deck.length > 0 && s.deck.length <= 3 && once('pile-low'))
     return { id: `${lesson.level}:pile-low`, say: W.lastCards, lit: { t: 'deckCount' }, explain: true };
@@ -781,8 +779,6 @@ const ideaBeat = (
     return explain(`${lesson.level}:idea:cut`, W.cutLinkLine, { t: 'hex', key: goal.key });
   if (lesson.level === 8 && goal?.t === 'blastGrow' && once('free-grow') && move.t === 'Sprout')
     return explain(`${lesson.level}:idea:free-grow`, W.freeGrowLine, { t: 'card', id: move.card });
-  if (lesson.level === 9 && goal?.t === 'skip' && once('skip'))
-    return explain(`${lesson.level}:idea:skip`, W.skipGrowLine, { t: 'end' });
   return null;
 };
 
@@ -837,7 +833,6 @@ const lightFor = (lesson: Lesson, s: State, ctx: BeatCtx, move: Action, legal: r
       if (ctx.placing === 'blast') return beat('blast-tile', W.tapTile, { t: 'hex', key: keyOf(move.target) });
       return beat('blast', W.tapBlast, { t: 'bloom' });
     case 'EndAct':
-      if (goal?.t === 'skip') return beat('skip', W.tapSkip, { t: 'end' });
       return beat('end', W.tapThrow, { t: 'end' });
     case 'Discard':
       if (ctx.throwPending === move.card) return beat('throw-pile', W.tapThrowPile, { t: 'discard' });

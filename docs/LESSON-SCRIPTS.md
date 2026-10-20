@@ -179,10 +179,9 @@ The same in every level:
   - LIT the tile (other legal tiles quietly) | DISPLAY: TAP THE LIT TILE | Grow played
   - LIT the score display, which holds the score itself (1:0) | BOX: "Tiles keep the rank of the
     card used." | tap anywhere
-  - LIT » after the Grow | DISPLAY: TAP » TO THROW | tapped. Shown **once per device**: the player
-    taps » themselves the first time. After that the game moves on to Throw by itself when nothing
-    else can be played. **» is never lit while a legal Bloom, Bomb or Blast exists** (the only
-    exception is the dedicated skip lesson, L9).
+  - After the Grow, when nothing else can be played, the game moves on to Throw by itself (owner,
+    2026-10-20: lighting » there was redundant). **» is never lit for a moment before it does**, and
+    **never while a legal Bloom, Bomb or Blast exists**.
   - LIT the card to throw | BOX: "Throw: swipe up, drag it to the Throw pile, or double tap to discard a card
     and finish your turn." | tap anywhere
   - LIT the card, then Throw pile | DISPLAY: THROW A CARD → TAP THE THROW PILE | card thrown
@@ -316,7 +315,7 @@ The same in every level:
   6. Then the turn. Ends on points.
 - **Finish:** YOU WIN / YOU LEARNED: BLAST A HOLE (✹)
 
-## LEVEL 9 — THROW PILE AND SKIP
+## LEVEL 9 — THROW PILE (AND » IS OPTIONAL)
 
 - **Setup:**
   - The Throw pile's top card (a 5) finishes the 3-4-5 in your hand.
@@ -326,9 +325,10 @@ The same in every level:
   2. LIT Throw pile | DISPLAY: TAP THE THROW PILE | drawn from the Throw pile
   3. LIT Bloom | DISPLAY: TAP BLOOM | Bloom picked
   4. LIT the Bloom's tiles | DISPLAY: TAP THE LIT TILES | Bloom played
-  5. LIT » | BOX: "You can end a turn without Growing to keep cards for later." | tap anywhere
-  6. LIT » | DISPLAY: TAP » TO SKIP GROW | turn ended without a Grow
-- **Finish:** YOU WIN / YOU LEARNED: SKIP GROW. SAVE CARDS. (↦)
+  5. LIT » (nothing lit while a power is still playable) | BOX: "Bloom and Grow are never forced.
+     Tap » to keep your cards for later." | tap anywhere. Once; the light then carries on as usual.
+     Skipping is taught here, never required (owner, 2026-10-20).
+- **Finish:** YOU WIN / YOU LEARNED: BLOOM FROM THE THROW PILE (↦)
 
 ## LEVEL 10 — FINALE
 

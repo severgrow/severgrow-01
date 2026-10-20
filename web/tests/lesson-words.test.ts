@@ -11,7 +11,7 @@ const entries = Object.entries(LESSON).flatMap(([k, v]) => (typeof v === 'string
  * short labels of their own.
  */
 const DISPLAY = [
-  'tapDraw', 'tapThrowPile', 'chooseCard', 'tapTile', 'tapTiles', 'throwCard', 'tapThrow', 'tapSkip',
+  'tapDraw', 'tapThrowPile', 'chooseCard', 'tapTile', 'tapTiles', 'throwCard', 'tapThrow',
   'tapBloom', 'tapBlast', 'chooseBomb', 'bombTile', 'tapTheirTile', 'tapLastSide',
   'bloomHello', 'bombHello', 'theirTurn', 'lastCards', 'lastTurn',
 ] as const;

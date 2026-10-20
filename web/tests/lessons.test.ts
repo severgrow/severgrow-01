@@ -341,13 +341,34 @@ describe('the lessons teach the rules as they are', () => {
     expect(s.board['-1,-1']).toBeFalsy();
   });
 
-  it('level 9: the Throw pile top completes a Bloom, and Skip ends the turn without the Grow', () => {
+  it('level 9: the Throw pile top completes a Bloom', () => {
     const l9 = lessonFor(9)!;
     const s = lessonOpening(l9);
     expect(suggestMove(l9, s)).toEqual({ t: 'Draw', from: 'discard' });
     const end = play(l9, (x) => suggestMove(l9, x)!);
     expect(goalDone({ t: 'pileBloom' }, end)).toBe(true);
-    expect(goalDone({ t: 'skip' }, end)).toBe(true);
+  });
+
+  it('level 9: after the Bloom, one line says Bloom and Grow are optional; nothing waits for » (owner, 2026-10-20)', () => {
+    const l9 = lessonFor(9)!;
+    expect(l9.goals).toEqual([{ t: 'pileBloom' }]); // skipping is taught, never required
+    // follow the light until the Bloom has happened this turn
+    let s = lessonOpening(l9);
+    for (let i = 0; i < 20 && !(s.phase === 'ACT' && goalDone({ t: 'pileBloom' }, s)); i++) s = apply(s, suggestMove(l9, s)!);
+    expect(goalDone({ t: 'pileBloom' }, s)).toBe(true);
+    const ctx = (seen: string[]): BeatCtx => ({ card: null, placing: null, throwPending: null, seen: new Set(seen) });
+    const first = lessonBeat(l9, s, ctx([]))!;
+    expect(first.id).toBe('9:optional');
+    expect(first.explain).toBe(true);
+    expect(first.line).toBe(LESSON.optionalLine);
+    // it points at » unless a power is still playable (then nothing is lit: never » past a power)
+    const powerLeft = legalActions(viewFor(s, 0)).some((a) => a.t === 'Bloom' || a.t === 'PlayFruit' || a.t === 'MegaBomb');
+    expect(first.lit).toEqual(powerLeft ? { t: 'none' } : { t: 'end' });
+    // once read, it never comes back, and the light does not push » while a Grow is still possible
+    const next = lessonBeat(l9, s, ctx(['9:optional']));
+    expect(next?.id).not.toBe('9:optional');
+    const canGrow = legalActions(viewFor(s, 0)).some((a) => a.t === 'Sprout');
+    if (canGrow) expect(suggestMove(l9, s)?.t).not.toBe('EndAct');
   });
 });
 
