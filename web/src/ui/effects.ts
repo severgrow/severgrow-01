@@ -213,6 +213,8 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
   }
 
   function flyCard(c: Card, from: DOMRect, to: DOMRect, f: number) {
+    // A hidden source has no box: there is nothing to fly from (and the scale would explode).
+    if (from.width < 1 || from.height < 1 || to.height < 1) return;
     const d = document.createElement('div');
     d.className = `flyer card ${suitClass(c)}`;
     d.innerHTML = cardFace(c);
@@ -317,7 +319,7 @@ export const createEffects = (board: BoardView, timeScale: () => number, motion:
    * that arrival, never before. A Bomb gets one brief border pulse at the reveal.
    * Reduce motion: a fade on the seat, then a fade on the pile, with no travel between them.
    */
-  function oppThrow(card: Card, seat: HTMLElement, pile: HTMLElement, f: number, quick = false): number {
+  function oppThrow(card: Card, seat: HTMLElement, pile: Element, f: number, quick = false): number {
     const layer = flightLayer();
     if (!layer) return 0;
     clearFlights(layer);
