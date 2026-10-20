@@ -137,11 +137,19 @@ try {
   await page.waitForFunction(() => !!(window as any).__severgrow?.state?.(), undefined, { timeout: 20_000 });
   await page.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30_000 });
   // The deal settles a beat after the state object exists (`busy()` keeps the piles disabled), and
-  // the draw pile breathes (a 1.8s animation, so Playwright's "stable" never comes). Wait for the
-  // pile to be tappable, then tap it as a player does.
+  // the draw pile breathes (a 1.8s animation, so Playwright's "stable" never comes). A finger that
+  // lands in the instant a reveal flips the pile back to disabled gets no click at all, so retry the
+  // tap until the draw commits: the assertion below is unchanged, only the tap is patient.
   await page.waitForSelector('#deck:not([disabled])', { timeout: 20_000 });
-  await page.locator('#deck').click({ force: true });
-  await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'ACT', undefined, { timeout: 20_000 });
+  let drew = false;
+  for (let i = 0; i < 40 && !drew; i++) {
+    await page.locator('#deck').click({ force: true }).catch(() => undefined);
+    drew = await page
+      .waitForFunction(() => (window as any).__severgrow.state?.().phase === 'ACT', undefined, { timeout: 500 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  assert(drew, 'the draw pile tap draws a card and opens the Grow step');
 
   // Settle -> thud: play a legal Grow (Sprout) and look for the landing pair in the cue log.
   const grow = await page.evaluate(() => {
