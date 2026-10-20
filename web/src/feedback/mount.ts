@@ -6,7 +6,6 @@ import { BETA_GUIDE, FEEDBACK } from '../../../src/strings.js';
 import { DUEL_CLIENT_VERSION, browserStorage } from '../../../server/src/client.js';
 import { CURRENT_RULES_VERSION } from '../../../src/engine/index.js';
 import { duelApiUrl, duelRegion } from '../online/config.js';
-import { FEATURES } from '../channel.js';
 import { getOnlineSession } from '../online/duel-runtime.js';
 import { IDENTITY_STORAGE_KEY } from '../online/identity.js';
 import { glassBaseCss } from '../player/glass-surface.js';
@@ -148,11 +147,15 @@ ${glassBaseCss('.fb-glass')}
 .fb-glass .fb-status { min-height:1.4em; color:#c9e4a8; }
 .fb-glass .fb-status[data-tone='bad'] { color:#e0735c; }
 .large-text .fb-glass p, .large-text .fb-glass li { font-size:16px; }
-#menu-beta { text-wrap:pretty; }
-@media (max-height: 700px) { #menu-beta { font-size:0.78rem; line-height:1.4; } }
-#menu-beta button { display:inline; min-height:0; padding:6px 2px; margin:-6px 0; border:0; background:none; color:inherit;
-  font:inherit; letter-spacing:inherit; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-#menu-beta button:focus-visible { outline:2px solid currentColor; outline-offset:2px; border-radius:4px; }
+#menu-beta { text-wrap: pretty; max-width: 44ch; margin: 0; color: var(--fu-cream-62); }
+@media (max-height: 700px) { #menu-beta { font-size: 0.78rem; line-height: 1.4; } }
+/* A real 44px tap target that costs almost no column height: the box is 44px tall and the negative
+   block margins pull it back into the text line, so the version line stays ONE quiet line while the
+   link is comfortably tappable (owner, 2026-10-20). */
+#menu-beta button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+  padding: 0 4px; margin: -13px 0; border: 0; background: none; color: inherit;
+  font: inherit; letter-spacing: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+#menu-beta button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 4px; }
 `;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
@@ -268,23 +271,23 @@ export const mountFeedback = (): void => {
   checkHash();
   window.addEventListener('hashchange', checkHash);
 
-  // ---- the beta line on the main menu (in the old tagline slot, with the tagline's own spacing) ----
-  const menuButtons = document.querySelector('#menu .menu-buttons');
+  // ---- the beta line on the main menu (between the wordmark and the buttons) ----
+  // The element is in the markup in source order (logo → beta line → PLAY …), so its seen, tab and
+  // screen-reader order is right before any JS runs. This fills it and reveals it; it is a quiet
+  // version line, not a fourth button (owner, 2026-10-20), and it is on every channel.
+  const beta = document.getElementById('menu-beta');
   let betaLink: HTMLButtonElement | null = null;
-  if (menuButtons && !document.getElementById('menu-beta')) {
-    const note = el('p', 'tagline');
-    note.id = 'menu-beta';
-    note.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
+  if (beta && !beta.querySelector('button')) {
+    beta.append(document.createTextNode(`${FEEDBACK.betaNote(FEEDBACK.betaVersion)} `));
     betaLink = el('button', '', FEEDBACK.betaLink);
     betaLink.type = 'button';
     betaLink.dataset.fb = 'menu-link';
     betaLink.addEventListener('click', () => openGuide()); // replaced by the report form below when a server exists
-    note.append(betaLink);
-    // Owner decision (2026-10-19): the product main menu is exactly PLAY, TERRITORY, SETTINGS.
-    // The beta line's button is a real interactive element, so it is HIDDEN on that menu rather
-    // than sitting under the three entries. The code stays intact for the legacy channels.
-    note.hidden = FEATURES.campaign;
-    menuButtons.before(note);
+    beta.append(betaLink);
+    beta.hidden = false;
+  } else if (beta) {
+    betaLink = beta.querySelector('button');
+    beta.hidden = false;
   }
 
   // ---- "Report a problem" ----

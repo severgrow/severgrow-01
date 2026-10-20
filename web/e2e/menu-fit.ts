@@ -46,6 +46,9 @@ const MEASURE = `(() => {
   const logo = document.getElementById('logo');
   const wordmark = document.querySelector('#menu .title');
   const buttons = [...document.querySelectorAll('#menu .menu-buttons .btn')].filter((b) => b.offsetParent !== null);
+  const betaEl = document.getElementById('menu-beta');
+  const betaBtn = betaEl ? betaEl.querySelector('button') : null;
+  const betaVisible = !!betaEl && betaEl.offsetParent !== null;
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: +r.x.toFixed(1), y: +r.y.toFixed(1), w: +r.width.toFixed(1), h: +r.height.toFixed(1), bottom: +r.bottom.toFixed(1), right: +r.right.toFixed(1) }; };
   const ib = box(inner), lb = box(logo), wb = box(wordmark);
   const bb = buttons.map((b) => ({ id: b.id, ...box(b), label: (b.textContent || '').trim().slice(0, 24) }));
@@ -56,12 +59,18 @@ const MEASURE = `(() => {
   if (ib && lb && wb) {
     gaps.push(+(lb.y - ib.y).toFixed(1));
     gaps.push(+(wb.y - lb.bottom).toFixed(1));
-    if (bb.length) gaps.push(+(bb[0].y - wb.bottom).toFixed(1));
+    // The beta line is part of the column's rhythm, so it gets its own two gaps (owner, 2026-10-20):
+    // wordmark → beta line, beta line → first entry. Measuring past it would hide a cramped gap.
+    const betaBox = betaVisible ? box(betaEl) : null;
+    if (betaBox) gaps.push(+(betaBox.y - wb.bottom).toFixed(1));
+    if (bb.length) gaps.push(+(bb[0].y - (betaBox ? betaBox.bottom : wb.bottom)).toFixed(1));
     gaps.push(+(ib.bottom - bb[bb.length - 1].bottom).toFixed(1));
   }
   return {
     vw: innerWidth, vh: innerHeight,
     inner: ib, logo: lb, wordmark: wb, buttons: bb,
+    beta: betaVisible ? { ...box(betaEl), link: box(betaBtn) } : null,
+    seen: [...(betaVisible ? ['menu-beta'] : []), ...buttons.map((b) => b.id)],
     gaps,
     menuScroll, innerScroll,
     docScroll: Math.max(0, document.documentElement.scrollHeight - innerHeight),
@@ -76,7 +85,12 @@ const MEASURE = `(() => {
 type Box = { x: number; y: number; w: number; h: number; bottom: number; right: number };
 type Measure = {
   vw: number; vh: number; inner: Box; logo: Box | null; wordmark: Box | null;
-  buttons: (Box & { id: string; label: string })[]; gaps: number[];
+  buttons: (Box & { id: string; label: string })[];
+  /** The beta line (owner, 2026-10-20): its own box and its link's 44px target. */
+  beta: (Box & { link: Box | null }) | null;
+  /** Everything the player sees in DOM (and tab) order: the beta line, then the entries. */
+  seen: string[];
+  gaps: number[];
   menuScroll: number; innerScroll: number; docScroll: number; docWide: number;
   justify: string; overflowY: string; visible: number; allIds: string[];
 };
@@ -114,6 +128,20 @@ const checkFit = (m: Measure, tag: string, tall: boolean) => {
   check(ids.includes('menu-play'), `${tag}: Play is shown`);
   check(ids.includes('menu-settings'), `${tag}: Settings is shown`);
   check(m.visible >= 3, `${tag}: the whole menu is there (${m.visible} entries)`);
+  // The beta line sits between the wordmark and the first entry, and is part of the seen/tab order.
+  check(!!m.beta, `${tag}: the beta line is shown`);
+  check(!!m.beta && !!m.wordmark && m.beta.y >= m.wordmark.bottom - 0.5, `${tag}: the beta line follows the wordmark (${m.beta?.y} vs ${m.wordmark?.bottom})`);
+  check(!!m.beta && m.buttons.length > 0 && m.beta.bottom <= m.buttons[0]!.y + 0.5, `${tag}: the beta line sits above the first entry (${m.beta?.bottom} vs ${m.buttons[0]?.y})`);
+  check(!!m.beta && m.beta.y >= -0.5 && m.beta.bottom <= m.vh + 0.5, `${tag}: the beta line is fully inside (${m.beta?.y}..${m.beta?.bottom} of ${m.vh})`);
+  check(!!m.beta && m.beta.x >= -0.5 && m.beta.right <= m.vw + 0.5, `${tag}: the beta line never runs off the side`);
+  check(!!m.beta?.link && m.beta.link.h >= 44, `${tag}: the beta link is a 44px tap target (${m.beta?.link?.h})`);
+  check(m.seen[0] === 'menu-beta', `${tag}: the beta line is first in the seen order (${m.seen.join(' → ')})`);
+  const required = ['menu-play', 'menu-world', 'menu-login', 'menu-settings'];
+  const positions = required.map((id) => m.seen.indexOf(id)).filter((i) => i >= 0);
+  check(
+    positions.length >= 2 && positions.every((p, i) => i === 0 || p > positions[i - 1]!),
+    `${tag}: the entries keep the owner's order (${m.seen.filter((id) => required.includes(id)).join(' → ')})`,
+  );
   for (const b of m.buttons) {
     check(b.y >= -0.5 && b.bottom <= m.vh + 0.5, `${tag}: ${b.id} is fully inside (${b.y}..${b.bottom} of ${m.vh})`);
     check(b.h >= 44, `${tag}: ${b.id} is at least 44px tall (${b.h})`);

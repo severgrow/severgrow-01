@@ -78,6 +78,17 @@ try {
     check(`${label}: it sits between the title and the buttons, inside the screen`, order);
     check(`${label}: every menu button stays on screen`, (await page.evaluate(`[...document.querySelectorAll('#menu .menu-buttons .btn')].filter(b => b.offsetParent).every(b => b.getBoundingClientRect().bottom <= innerHeight)`)) as boolean);
     check(`${label}: it says the current version (${FEEDBACK.betaVersion})`, (await page.locator('#menu-beta').innerText()).includes(FEEDBACK.betaVersion));
+    // Seen order is DOM order, and tab order follows DOM order: the line's link comes before every
+    // menu entry, so a keyboard user meets it right after the wordmark.
+    const seen = (await page.evaluate(`[...document.querySelectorAll('#menu .menu-buttons .btn')].filter(b => b.offsetParent).map(b => b.id)`)) as string[];
+    const required = ['menu-play', 'menu-world', 'menu-login', 'menu-settings'];
+    const expected = required.filter((id) => seen.includes(id));
+    const actual = seen.filter((id) => required.includes(id));
+    check(`${label}: the entries are in the owner's order (${actual.join(' → ')})`, JSON.stringify(actual) === JSON.stringify(expected) && expected.length >= 2);
+    await page.locator('#menu-beta button').focus();
+    await page.keyboard.press('Tab');
+    const nextFocus = (await page.evaluate('document.activeElement && document.activeElement.id')) as string;
+    check(`${label}: Tab goes from the beta link straight to the first entry (${nextFocus || 'nothing'})`, nextFocus === seen[0]);
     await shot(page, `menu-${label}`);
     await page.locator('#menu-beta button').click();
     check(`${label}: "let us know here" opens Report a problem`, await waitFor(() => page.locator('#fb-report').isVisible()));

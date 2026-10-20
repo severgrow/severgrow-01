@@ -18,13 +18,29 @@ const accountsSource = read('../src/accounts/mount.ts');
 const menuSection = html.slice(html.indexOf('<section id="menu"'), html.indexOf('</section>', html.indexOf('<section id="menu"')));
 const playSection = html.slice(html.indexOf('<section id="play-menu"'), html.indexOf('</section>', html.indexOf('<section id="play-menu"')));
 
-describe('the product menu is LOG IN above PLAY', () => {
-  it('carries LOG IN at the top, hidden until the account module reveals it', () => {
+describe('the product menu is PLAY, TERRITORY, LOG IN, Settings', () => {
+  it('carries the beta line between the wordmark and the entries, in source order', () => {
+    // Owner decision (2026-10-20): seen order (which is DOM, tab and screen-reader order) is
+    // logo → beta line → PLAY → TERRITORY → LOG IN → Settings. The beta line is a slot in the
+    // markup, empty until feedback/mount.ts fills it from FEEDBACK, and hidden until then.
+    expect(menuSection).toMatch(/<p id="menu-beta" class="tagline" hidden><\/p>/);
+    expect(menuSection.indexOf('class="title"')).toBeLessThan(menuSection.indexOf('id="menu-beta"'));
+    expect(menuSection.indexOf('id="menu-beta"')).toBeLessThan(menuSection.indexOf('class="menu-buttons"'));
+    expect(menuSection.indexOf('class="menu-buttons"')).toBeLessThan(menuSection.indexOf('id="menu-play"'));
+    // The line's words are the strings module's, never a second copy in the markup.
+    expect(menuSection).not.toContain('beta version');
+  });
+
+  it('orders the entries PLAY, TERRITORY, LOG IN, Settings', () => {
     expect(MENU.login).toBe('LOG IN');
+    expect(MENU.world).toBe('Territory');
+    const order = ['id="menu-play"', 'id="menu-world"', 'id="menu-login"', 'id="menu-settings"'];
+    for (let i = 1; i < order.length; i++) {
+      expect(menuSection.indexOf(order[i - 1]!), `${order[i - 1]} before ${order[i]}`).toBeLessThan(menuSection.indexOf(order[i]!));
+    }
+    // LOG IN still starts hidden (the accounts module reveals it to a guest); PLAY and TERRITORY
+    // are hidden until main.ts reveals them on a product channel.
     expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
-    // LOG IN comes before PLAY in the column, and PLAY before the legacy Continue.
-    expect(menuSection.indexOf('id="menu-login"')).toBeLessThan(menuSection.indexOf('id="menu-play"'));
-    expect(menuSection.indexOf('id="menu-play"')).toBeLessThan(menuSection.indexOf('id="menu-continue"'));
   });
 
   it('has PLAY, hidden until main.ts reveals it on a product channel', () => {
@@ -167,25 +183,31 @@ describe('LOG IN reuses the one Google flow and hides itself when signed in', ()
     expect(accountsSource.match(/id="menu-login"|getElementById\('menu-login'\)/g) ?? []).toHaveLength(1);
   });
 
-  it('hides LOG IN whenever signedIn() is true, and always on the product menu', () => {
-    expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = FEATURES\.campaign \|\| signedIn\(\) !== null/);
-    // The product menu is exactly PLAY, TERRITORY, SETTINGS (owner decision, 2026-10-19), so the
-    // layout pass hides LOG IN too rather than leaving it for the async accounts probe.
-    expect(mainSource).toMatch(/\$\('menu-login'\)\.hidden = FEATURES\.campaign/);
+  it('hides LOG IN whenever signedIn() is true, on every channel', () => {
+    // Owner decision (2026-10-20): the product menu carries LOG IN too (after TERRITORY), so the
+    // one state rule decides it everywhere: a guest sees it, a signed-in player does not.
+    expect(accountsSource).toMatch(/if \(menuLogin\) menuLogin\.hidden = signedIn\(\) !== null/);
+    expect(accountsSource).not.toMatch(/menuLogin\.hidden = FEATURES\.campaign/);
+    // The layout pass must not force it hidden on a product build any more (that would undo it).
+    expect(mainSource).not.toMatch(/\$\('menu-login'\)\.hidden = FEATURES\.campaign/);
   });
 });
 
-describe('the product main menu is exactly PLAY, TERRITORY, SETTINGS', () => {
-  it('hides Continue and LOG IN in the layout pass, never merely when empty', () => {
+describe('the product main menu is PLAY, TERRITORY, LOG IN, Settings', () => {
+  it('hides Continue in the layout pass, and leaves LOG IN to the accounts state', () => {
     // Owner decision (2026-10-19): no resume on the main menu. Continue is hidden even when a save
     // exists; the question belongs on entry, not here.
     expect(mainSource).toMatch(/\$\('menu-continue'\)\.hidden = FEATURES\.campaign \|\| !canContinue/);
     expect(menuSection).toMatch(/id="menu-continue"[^>]*hidden/);
     expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
-    // The three entries that DO belong are present: PLAY, the world map (TERRITORY) and Settings.
+    // The entries that DO belong are present, in owner order: PLAY, TERRITORY (the world map),
+    // LOG IN and Settings (owner, 2026-10-20).
     expect(menuSection).toMatch(/id="menu-play"[^>]*hidden/);
     expect(menuSection).toMatch(/id="menu-world"[^>]*hidden/);
+    expect(menuSection).toMatch(/id="menu-login"[^>]*hidden/);
     expect(menuSection).toMatch(/id="menu-settings"/);
+    expect(menuSection.indexOf('id="menu-login"')).toBeGreaterThan(menuSection.indexOf('id="menu-world"'));
+    expect(menuSection.indexOf('id="menu-login"')).toBeLessThan(menuSection.indexOf('id="menu-settings"'));
     expect(MENU.world).toBe('Territory');
   });
 

@@ -102,16 +102,17 @@
         <div id="terrarium" class="terrarium" aria-hidden="true"></div>
         <div id="logo" class="logo" aria-hidden="true"></div>
         <h1 class="title">FUTASAKU</h1>
-        <!-- The main-menu tagline was removed from the menu on 2026-10-14. It is deliberately NOT in
-             this markup — no hidden placeholder, no leftover gap. Restore it with ONE line,
-             SHOW_MENU_TAGLINE = true in src/strings.ts, and main.ts re-inserts the element in this
-             slot (the words live in ONLINE.tagline). See docs/DECISIONS.md. -->
+        <!-- The beta line: IN SOURCE ORDER between the wordmark and the entries, so it is seen and
+             tabbed to in that order (logo → beta line → PLAY …). feedback/mount.ts fills it from
+             FEEDBACK.betaNote / betaVersion / betaLink; it is the quiet version line, never a
+             fourth button, and its "let us know here." link opens Report a problem. The old main-menu
+             tagline stays removed (2026-10-14): this slot belongs to the beta line now. -->
+        <p id="menu-beta" class="tagline" hidden></p>
+        <!-- The entries are in SEEN order, which is also DOM and tab order. Owner decision
+             (2026-10-20): PLAY, TERRITORY, LOG IN, Settings. Entries a channel does not show
+             (Continue, Tutorial, the flat-menu extras) stay in place, hidden, so that order holds
+             for whatever is on screen. -->
         <div class="menu-buttons">
-          <!-- LOG IN (product channels only): its own button at the TOP, above PLAY, and hidden the
-               moment the player is signed in. The accounts module reveals it (and hides it again)
-               from the one Google flow it already owns — no second sign-in path lives here. It is
-               quiet (ghost): PLAY is the menu's single leading action. -->
-          <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
           <!-- PLAY (product channels only) opens the submenu below, and carries the ONE cream fill
                on this screen. Revealed by main.ts, so no other channel ever shows it. Its three
                entries (LEVEL n / Play online / Practice match) are MOVED into #play-actions at boot,
@@ -140,6 +141,11 @@
                submenu). Revealed by main.ts when the build has an online endpoint and the screen it
                opens is live, so it can never be a dead entry. -->
           <button id="menu-world" class="btn ghost big" type="button" hidden></button>
+          <!-- LOG IN (product channels only): quiet (ghost), after TERRITORY and before Settings
+               (owner, 2026-10-20: the menu reads PLAY, TERRITORY, LOG IN, Settings), and hidden the
+               moment the player is signed in. The accounts module reveals it (and hides it again)
+               from the one Google flow it already owns — no second sign-in path lives here. -->
+          <button id="menu-login" class="btn ghost big" type="button" aria-label="Log in" hidden>LOG IN</button>
           <button id="menu-tutorial" class="btn ghost" type="button" aria-label="Tutorial">Tutorial</button>
           <button id="menu-settings" class="btn ghost" type="button" aria-label="Settings">Settings</button>
         </div>

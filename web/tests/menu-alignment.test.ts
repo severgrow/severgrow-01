@@ -114,7 +114,13 @@ describe('the main menu gives the wordmark deliberate breathing room', () => {
     expect(has(styleCss, '.menu-inner', '--menu-head-gap: calc(2 * var(--menu-rhythm))')).toBe(true);
   });
 
-  it('the gap is applied to the wordmark→buttons pair only, so a restored tagline keeps its spacing', () => {
+  it('the gap is applied across the beta line, so the wordmark never crowds the actions', () => {
+    // Owner decision (2026-10-20): the beta line sits BETWEEN the wordmark and the buttons, so the
+    // head gap is carried by the beta line's step into the column (and still honoured if the line
+    // is ever absent).
+    const chain = rulesFor(styleCss, '#menu-beta + .menu-buttons');
+    expect(chain.length).toBeGreaterThan(0);
+    expect(chain.map((r) => r.body).join('\n')).toContain('--menu-head-gap');
     const pair = rulesFor(styleCss, '.title + .menu-buttons');
     expect(pair.length).toBeGreaterThan(0);
     expect(pair.map((r) => r.body).join('\n')).toContain('--menu-head-gap');

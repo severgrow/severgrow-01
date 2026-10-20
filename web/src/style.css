@@ -323,12 +323,18 @@ button {
   box-sizing: border-box;
   text-align: center;
 }
-/* The wordmark and the buttons only: the gap is `--menu-head-gap`, and since the column's own gap
-   already contributes one `--menu-rhythm`, the margin adds just the second step. A tagline, when
-   SHOW_MENU_TAGLINE re-inserts one, breaks the `+` match and keeps its own old spacing. */
-#menu .menu-inner > .title + .menu-buttons {
+/* The wordmark, the beta line and the buttons. The beta line sits BETWEEN them in source order, so
+   the `title + .menu-buttons` pair is now a chain: the wordmark keeps its own step above the beta
+   line, and the beta line carries the full head gap to the buttons. Either way the logo never
+   crowds the actions, and the beta line adds no second void. */
+#menu .menu-inner > .title + .menu-buttons,
+#menu .menu-inner > .title + #menu-beta + .menu-buttons {
   margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm));
 }
+#menu .menu-inner > .title + #menu-beta { margin-top: 0; }
+/* The beta line itself: quiet cream, one size under the entries, and never a box of its own. Its
+   link's tap target and type live in feedback/mount.ts (that module owns the line). */
+#menu .menu-inner > #menu-beta + .menu-buttons { margin-top: calc(var(--menu-head-gap) - var(--menu-rhythm)); }
 .title {
   font-size: clamp(2.6rem, 12vw, 3.6rem);
   font-weight: var(--w-num);
@@ -5998,6 +6004,29 @@ html.align-overlay::before {
   }
   #menu .menu-buttons { gap: clamp(5px, 1dvh, 8px); }
 }
+/* A phone on its side (844x390 and similar). The four entries and the beta line keep their 44px
+   taps, so the column's own parts give way: a smaller wordmark (the branding sheet's
+   `html.test-typography-v2 #menu .title` has to be named to be overridden), a tighter beta line and
+   3px steps. Never a hidden entry, never a scroll. */
+@media (max-height: 470px) {
+  #menu .menu-inner {
+    --menu-rhythm: 3px;
+    padding-block: 2px;
+  }
+  #menu .menu-buttons {
+    gap: 3px;
+  }
+  #menu .title,
+  html.test-typography-v2 #menu .title,
+  html.futa04-branding #menu .title {
+    font-size: clamp(1.75rem, 6.2vh, 2.6rem);
+  }
+  #menu-beta {
+    font-size: 0.7rem;
+    line-height: 1.26;
+  }
+}
+
 /* A very narrow phone: the wordmark steps down a touch so nothing runs off the side. */
 @media (max-width: 360px) {
   #menu .title { font-size: clamp(1.9rem, 10vw, 3.6rem); }

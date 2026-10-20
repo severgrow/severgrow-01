@@ -688,10 +688,10 @@ function layoutMenu(canContinue: boolean) {
   $('play-title').textContent = MENU.playTitle;
   $('menu-login').textContent = MENU.login;
   $('menu-login').setAttribute('aria-label', MENU.login);
-  // Owner decision (2026-10-19): the product menu is exactly PLAY, TERRITORY, SETTINGS. LOG IN is
-  // hidden here (the accounts module also refuses to reveal it on this channel), so a guest sees
-  // no sign-in entry on the menu itself; the online hub and Settings still offer the same flow.
-  $('menu-login').hidden = FEATURES.campaign;
+  // Owner decision (2026-10-20): the product menu is PLAY, TERRITORY, LOG IN, Settings, in that
+  // order. LOG IN is no longer hidden by the layout pass: the accounts module shows it to a guest
+  // and hides it again the moment the player is signed in (one entry, one flow, one place). It is
+  // left hidden here (the markup default) until that module knows Google is on.
   $('menu-world').textContent = MENU.world;
   $('menu-world').setAttribute('aria-label', MENU.world);
   // The world map is a TOP-LEVEL entry of this menu, never one of PLAY's children. It appears
