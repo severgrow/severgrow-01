@@ -36,7 +36,13 @@ const open = async (width: number, height: number, options: { reduceMotion?: boo
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript((settings) => {
     (window as any).__name = (fn: unknown) => fn;
-    localStorage.setItem('main2:severgrow.settings.v1', JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, ...settings }));
+    // The channel rewrites every storage key with its own prefix (`futa05:` at a channel root,
+    // `futa05-3:` under /3), so write the settings under every prefix the build might use. Using
+    // the old `main2:` alone silently kept Reduce motion and sound ON in these runs.
+    const value = JSON.stringify({ sound: false, music: false, coach: false, autoSkip: false, ...settings });
+    for (const prefix of ['futa05:', 'futa05-3:', 'main2:']) {
+      localStorage.setItem(`${prefix}severgrow.settings.v1`, value);
+    }
   }, { reduceMotion: !!options.reduceMotion, ...(options.palette ? { palette: options.palette } : {}) });
   if (options.hideBloom) {
     // Baseline for the 4x-CPU comparison only: the same app with the bloom layer removed.
@@ -115,8 +121,14 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
   const pad = Number.parseFloat(getComputedStyle(document.getElementById('smart-led')!).getPropertyValue('--led-bloom-pad')) || 0;
   const cellsCssW = Number.parseFloat(cells.style.width) || cells.width;
   const cellsCssH = Number.parseFloat(cells.style.height) || cells.height;
-  const toBloomX = (bitmapX: number) => pad + (bitmapX / cells.width) * cellsCssW;
-  const toBloomY = (bitmapY: number) => pad + (bitmapY / cells.height) * cellsCssH;
+  // The sprite may be baked below CSS resolution (it is a blur), so map CSS px into the
+  // sprite's own bitmap space rather than assuming one bitmap pixel per CSS pixel.
+  const canvasCssW = Number.parseFloat(canvas.style.width) || W;
+  const canvasCssH = Number.parseFloat(canvas.style.height) || H;
+  const ratioX = W / canvasCssW;
+  const ratioY = H / canvasCssH;
+  const toBloomX = (bitmapX: number) => (pad + (bitmapX / cells.width) * cellsCssW) * ratioX;
+  const toBloomY = (bitmapY: number) => (pad + (bitmapY / cells.height) * cellsCssH) * ratioY;
   const cw = cells.width; const ch = cells.height;
   const cd = cctx.getImageData(0, 0, cw, ch).data;
   let sx = 0; let sy = 0; let n = 0;
@@ -131,11 +143,22 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
   // Read the tone's angle from the root publication and walk the falloff in that direction.
   const angle = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--light-angle')) || 22;
   const rad = (angle * Math.PI) / 180;
-  const walk = (dx: number, dy: number) => {
+  // The light's centre of mass. The four side walks start here rather than at the brightest
+  // pixel: a glyph strip is full of holes, so a line drawn from a dot leaves the light through a
+  // gap and measures the lettering instead of the falloff.
+  let cxw = 0; let cyw = 0; let wt = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const a = alpha(x, y);
+    if (!a) continue;
+    cxw += x * a; cyw += y * a; wt += a;
+  }
+  const ccx = wt ? cxw / wt : mx;
+  const ccy = wt ? cyw / wt : my;
+  const walk = (dx: number, dy: number, fromX = mx, fromY = my) => {
     const steps: number[] = [];
     for (let d = 0; d < 90; d++) {
-      const x = Math.round(mx + dx * d);
-      const y = Math.round(my + dy * d);
+      const x = Math.round(fromX + dx * d);
+      const y = Math.round(fromY + dy * d);
       if (x < 0 || y < 0 || x >= W || y >= H) break;
       steps.push(alpha(x, y));
     }
@@ -148,7 +171,7 @@ const bloomMetrics = (page: Page) => page.evaluate(() => {
     return { reach, worst };
   };
   const along = walk(Math.cos(rad), Math.sin(rad));
-  const sides = [walk(0, -1), walk(0, 1), walk(1, 0), walk(-1, 0)];
+  const sides = [walk(0, -1, ccx, ccy), walk(0, 1, ccx, ccy), walk(1, 0, ccx, ccy), walk(-1, 0, ccx, ccy)];
   return {
     W, H, max, mx, my, edgeMax, within10, nearest, dot, pad, angle,
     reach: along.reach, worstStep: along.worst,
@@ -240,11 +263,13 @@ try {
   check(Object.values(geometry.onBezel).every(alpha => alpha > 0), `light is still falling on every bezel edge, so the falloff continues past it (${JSON.stringify(geometry.onBezel)})`);
 
   // And in rendered pixels: just outside the top bezel is still lighter than the same column far
-  // above it, and the boundary itself shows no jump.
+  // above it, and the boundary itself shows no jump. A 5×5 window is averaged rather than one
+  // pixel: the spill past a 44 px display is only a couple of luminance points, and a single
+  // pixel's rounding would decide the assertion instead of the light.
   const across: Sample[] = [
-    { x: led!.x + led!.width / 2, y: led!.y - 2, r: 1 },
-    { x: led!.x + led!.width / 2, y: led!.y - 34, r: 1 },
-    { x: led!.x + led!.width / 2, y: led!.y + 4, r: 1 },
+    { x: led!.x + led!.width / 2, y: led!.y - 6, r: 3 },
+    { x: led!.x + led!.width / 2, y: led!.y - 34, r: 3 },
+    { x: led!.x + led!.width / 2, y: led!.y + 4, r: 3 },
   ];
   const rendered = await sampleScreenshot(page, across);
   const near = luminance(rendered.points[0]!);
@@ -294,19 +319,28 @@ try {
       const alphas = [...body.matchAll(/opacity:\s*([\d.]+)/g)].map(match => Number(match[1]));
       return alphas.length ? Math.max(...alphas) : -1;
     };
+    // The duration lives on the rule that applies the animation, not inside the keyframes body.
+    // Browsers may serialise `animation:` as longhands, so read the rule that names the animation
+    // and take its declared duration (ms) from whichever form it uses.
+    const flashMs = (name: string): number | null => {
+      const applied = rules.find(rule => rule.includes(name) && /animation/.test(rule)) ?? '';
+      const match = applied.match(/([\d.]+)ms/);
+      return match ? Number(match[1]) : null;
+    };
     return {
-      flashCut: keyframes('smart-led-flash-cut'),
-      flashBloom: keyframes('smart-led-flash-bloom'),
+      flashCutMs: flashMs('smart-led-flash-cut'),
+      flashBloomMs: flashMs('smart-led-flash-bloom'),
       flashPeak: Math.max(peakWhite('smart-led-flash-cut'), peakWhite('smart-led-flash-bloom')),
       flashDuration: (getComputedStyle(document.getElementById('smart-led-flash')!).animationDuration || '0s'),
-      alarm: keyframes('smart-led-alarm'),
+      alarmMs: flashMs('smart-led-alarm'),
       hot: getComputedStyle(document.getElementById('smart-led-hot')!).filter,
       oldFilterKeyframes: rules.some(rule => /@keyframes smart-led-(pulse|alarm)/.test(rule) && /filter:/.test(rule)),
     };
   });
   check(caps.flashPeak > 0 && caps.flashPeak <= .35, `a flash is at most 35% white (peak ${caps.flashPeak})`);
-  check(/60ms/.test(caps.flashCut) && /60ms/.test(caps.flashBloom), `a flash is exactly ${LIGHT_FLASH_MS} ms or less`);
-  check(/1200ms/.test(caps.alarm), 'the alarm keeps its 1.2 s beat');
+  check(caps.flashCutMs !== null && caps.flashBloomMs !== null, `both flash animations are applied with a duration (cut ${caps.flashCutMs} ms, bloom ${caps.flashBloomMs} ms)`);
+  check(caps.flashCutMs === LIGHT_FLASH_MS && caps.flashBloomMs === LIGHT_FLASH_MS, `a flash is exactly ${LIGHT_FLASH_MS} ms (cut ${caps.flashCutMs}, bloom ${caps.flashBloomMs})`);
+  check(caps.alarmMs === LIGHT_CAPS.alarmMs, `the alarm keeps its ${LIGHT_CAPS.alarmMs / 1000} s beat (${caps.alarmMs} ms)`);
   check(!caps.oldFilterKeyframes, 'no pulse/alarm keyframe animates a filter any more');
   check(caps.hot === 'none', 'the brightness layer itself carries no filter');
 

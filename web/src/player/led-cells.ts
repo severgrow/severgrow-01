@@ -219,19 +219,24 @@ export function drawLedCells(
    frame), then the compositor only moves/opacity-animates the finished sprite.
    ------------------------------------------------------------------------------------------ */
 
-/** Bitmap pixels per CSS px. Deliberately low-res: this is a blur, not an image. */
-const BLOOM_RES = 1;
+/** Bitmap pixels per CSS px. Half resolution on purpose: this is a blur, not an image. The canvas
+ *  is upscaled by CSS, which both softens the falloff and quarters the pixels the compositor has
+ *  to move — at 4x CPU throttle a full-resolution sprite of this size stalled a frame by ~200 ms. */
+const BLOOM_RES = .5;
 /** The soft stamp is an ellipse leaning along the tone's angle. */
 const STAMP_STRETCH = 1.45;
 const STAMP_FLATTEN = .9;
-/** CSS px of empty paper kept around the dot strip inside the sprite. */
+/** CSS px of empty paper kept around the dot strip inside the sprite. It must cover the widest
+ *  part of the stretched stamp, or the sprite would clip the falloff into a rectangle. */
 export const BLOOM_REACH = LIGHT_CAPS.reach * STAMP_STRETCH;
 export const BLOOM_PAD = Math.ceil(BLOOM_REACH) + 2;
-/** Alpha at the centre of one dot's stamp. Many overlapping stamps sum to roughly the cap
- *  across the glyph strip, so this is small on purpose: it builds a gradient, not a wash. */
-const DOT_ALPHA = .03;
+/** Alpha at the centre of one dot's stamp. Hundreds of stamps sum with 'lighter', so this is the
+ *  slope of the gradient rather than its ceiling: too high and the sum saturates into a flat
+ *  plateau (light stops reading as light); too low and it is invisible once the sprite's own cap
+ *  and the CSS opacity are applied. */
+const DOT_ALPHA = .05;
 /** Ceiling for the whole sprite: never an opaque wash over the dots it came from. */
-export const BLOOM_ALPHA_CAP = .38;
+export const BLOOM_ALPHA_CAP = .5;
 const stampCache = new Map<LightTone, HTMLCanvasElement>();
 
 const bloomStamp = (tone: LightTone): HTMLCanvasElement | null => {
@@ -267,9 +272,9 @@ const rgbOf = (hex: string): string => {
 export type LedSprite = { canvas: HTMLCanvasElement; width: number; height: number };
 
 /**
- * The soft bloom for a message: the lit dots, stamped with a directionally stretched, radially
- * fading stamp (angle from the LIGHT contract) into a low-res sprite whose dot strip sits
- * `BLOOM_PAD` px inside every edge. Returns null where there is no canvas (tests / no DOM).
+ * The soft bloom for a message: the actual lit dots, blown up in soft layers (a baked blur) into
+ * a sprite whose dot strip sits `BLOOM_PAD` px inside every edge, so the light starts on the glyphs
+ * and fades out on all sides with no edge. Returns null where there is no canvas (tests / no DOM).
  */
 export function ledBloomSprite(
   message: string,
@@ -287,6 +292,28 @@ export function ledBloomSprite(
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
   ctx.setTransform(BLOOM_RES, 0, 0, BLOOM_RES, 0, 0);
+
+  // The source is the ACTUAL lit dots, at their real positions: this is what guarantees the
+  // brim of the light sits on the glyphs rather than between them.
+  const dots = document.createElement('canvas');
+  dots.width = Math.max(1, Math.ceil(layout.width));
+  dots.height = Math.max(1, Math.ceil(layout.height));
+  const dctx = dots.getContext('2d');
+  if (!dctx) return null;
+  for (const dot of layout.dots) {
+    const ink = INK[dot.tone];
+    dctx.beginPath();
+    dctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+    dctx.fillStyle = ink.fill;
+    dctx.fill();
+  }
+
+  // A BLUR, baked. Two parts, and both matter:
+  //  · a smooth radial field stamped at every lit dot (rotated along the tone's angle) gives the
+  //    long, even falloff — it has no glyph-shaped holes in it;
+  //  · the dots themselves, once, at full colour, pin the brightest point to a lit dot.
+  // The field's alpha is deliberately low: hundreds of stamps sum with 'lighter', and a higher
+  // value saturates into a flat plateau (which is how a "glow" stops looking like light).
   ctx.globalCompositeOperation = 'lighter';
   const stamps = new Map<LightTone, HTMLCanvasElement | null>();
   for (const dot of layout.dots) {
@@ -302,6 +329,22 @@ export function ledBloomSprite(
     ctx.drawImage(stamp, -reach, -reach, reach * 2, reach * 2);
     ctx.restore();
   }
+  // The dots again, but softened: shrunk to half size and drawn back at the strip's own size, so
+  // the peak still sits on a lit dot while the glyph edges themselves are interpolated (a sharp
+  // copy here would put a 1-px hard rim inside the falloff).
+  const coreSrc = document.createElement('canvas');
+  coreSrc.width = Math.max(1, Math.round(layout.width / 2));
+  coreSrc.height = Math.max(1, Math.round(layout.height / 2));
+  const cctx = coreSrc.getContext('2d');
+  if (cctx) {
+    cctx.imageSmoothingEnabled = true;
+    cctx.imageSmoothingQuality = 'high';
+    cctx.drawImage(dots, 0, 0, coreSrc.width, coreSrc.height);
+    ctx.globalAlpha = .30;
+    ctx.drawImage(coreSrc, BLOOM_PAD, BLOOM_PAD, layout.width, layout.height);
+    ctx.globalAlpha = 1;
+  }
+
   // No hole is cut at the dots. The halo has to start AT the lit dots, and the alpha cap
   // keeps the glyphs reading through it, so the strongest point of the glow is the dot itself.
   ctx.globalCompositeOperation = 'destination-in';

@@ -59,7 +59,7 @@ export const LIGHT_CAPS = {
   bloomPeak: .55,
   reflect: 1.18,
   /** how far the baked bloom reaches from a lit dot, in CSS px along the angle */
-  reach: 28,
+  reach: 52,
 } as const;
 
 /** The LED glyph inks. One map for the painter and the light, so they cannot drift. */
