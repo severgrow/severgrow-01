@@ -14,11 +14,12 @@ export type FeedbackEvent =
   | 'cutBig'
   | 'cutHuge'
   | 'cutMe' // the opponent cuts my tiles (calmer)
+  | 'cascade' // one ring of their cut tiles falls (the chain reaction)
   | 'finalTurns'
   | 'win'
   | 'lose';
 
-export const FEEDBACK_EVENTS: readonly FeedbackEvent[] = ['press', 'place', 'placeTop', 'undo', 'draw', 'throw', 'cutSmall', 'cutMedium', 'cutBig', 'cutHuge', 'cutMe', 'finalTurns', 'win', 'lose'];
+export const FEEDBACK_EVENTS: readonly FeedbackEvent[] = ['press', 'place', 'placeTop', 'undo', 'draw', 'throw', 'cutSmall', 'cutMedium', 'cutBig', 'cutHuge', 'cutMe', 'cascade', 'finalTurns', 'win', 'lose'];
 
 /** Vibration patterns (ms: buzz, pause, buzz...). Each one is different; none is long. */
 export const HAPTICS: Readonly<Record<FeedbackEvent, number | readonly number[]>> = Object.freeze({
@@ -33,6 +34,7 @@ export const HAPTICS: Readonly<Record<FeedbackEvent, number | readonly number[]>
   cutBig: [32, 50, 24, 50, 16],
   cutHuge: [45, 60, 30, 60, 20, 60, 12],
   cutMe: [14, 80, 10],
+  cascade: 7,
   finalTurns: [10, 120, 10],
   win: [30, 60, 30, 60, 140],
   lose: 70,

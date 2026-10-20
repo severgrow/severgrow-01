@@ -16,6 +16,8 @@ const { server, url: BASE } = await servePreview(4198, { logLevel: 'silent' });
 const browser = await chromium.launch({ ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), args: ['--no-sandbox'] });
 
 type Recorder = {
+  /** the chain reaction: one rising pop per falling ring (from __severgrow.animLog) */
+  pops: number[];
   shakes: number[];
   maxScale: number;
   flinches: number;
@@ -25,7 +27,7 @@ const record = (p: Page) => p.evaluate(() => {
   const proto = Element.prototype as unknown as {
     __m: Recorder; __mOrig?: typeof Element.prototype.animate; animate: typeof Element.prototype.animate;
   };
-  proto.__m = { shakes: [], maxScale: 1, flinches: 0, floats: [] };
+  proto.__m = { pops: [], shakes: [], maxScale: 1, flinches: 0, floats: [] };
   const orig = proto.animate;
   proto.__mOrig = orig;
   proto.animate = function (this: Element, frames: Keyframe[] | PropertyIndexedKeyframes | null, opts?: number | KeyframeAnimationOptions) {
@@ -89,7 +91,8 @@ const watchCut = async (n: number, reduceMotion = false): Promise<{ tier: string
     await p.waitForFunction(() => !(window as any).__severgrow.busy(), undefined, { timeout: 30000 });
     const tier = await p.evaluate(() => document.documentElement.dataset.cutTier ?? null);
     const m = (await readRecord(p)) as Recorder;
-    return { tier, m: { ...m, floats: [...floats] } };
+    const pops = await p.evaluate(() => ((window as any).__severgrow.animLog() as { ev: string; step: number }[]).filter((x) => x.ev === 'cascade').map((x) => x.step));
+    return { tier, m: { ...m, pops, floats: [...floats] } };
   } finally {
     await p.close();
   }
@@ -102,6 +105,7 @@ try {
   assert.equal(two.m.maxScale, 1, 'Small: no camera zoom');
   assert.equal(two.m.flinches, 0, 'Small: neighbours do not flinch');
   assert.deepEqual(two.m.floats, ['−2'], 'Small: one −N');
+  assert.deepEqual(two.m.pops, [], 'Small: no chain reaction (it stays quiet)');
 
   const three = await watchCut(3);
   assert.equal(three.tier, 'severe', 'a 3-tile cut is Severe');
@@ -110,6 +114,8 @@ try {
   assert(Math.abs(three.m.maxScale - 1.012) < 0.0005, `Severe: the camera zooms to 1.012 (${three.m.maxScale})`);
   assert(three.m.flinches >= 1, `Severe: surviving neighbours flinch (${three.m.flinches})`);
   assert.deepEqual(three.m.floats, ['−3'], 'Severe: one −N');
+  assert(three.m.pops.length >= 1, 'Severe: the chain reaction pops');
+  assert.deepEqual(three.m.pops, three.m.pops.map((_, i) => i), `Severe: one pop per ring, stepping up (${three.m.pops})`);
 
   const four = await watchCut(4);
   assert.equal(four.tier, 'severe', 'a 4-tile cut is Severe');
@@ -126,6 +132,8 @@ try {
   assert.equal(eight.tier, 'huge', 'an 8-tile cut is Huge');
   assert(Math.abs(eight.m.shakes[0]! - 6) < 0.01, `Huge: the shake is still 6px (${eight.m.shakes[0]})`);
   assert.equal(eight.m.flinches, 0, 'Huge: the Severe neighbour flinch is not added');
+  assert(eight.m.pops.length >= 2 && eight.m.pops.length <= 6, `Huge: a climbing chain of 2-6 pops (${eight.m.pops})`);
+  assert.deepEqual(eight.m.pops, eight.m.pops.map((_, i) => i), 'Huge: pops step up in order');
 
   const reduced = await watchCut(3, true);
   assert.equal(reduced.tier, 'severe', 'Reduce motion still knows a 3-tile cut is Severe');
@@ -133,6 +141,7 @@ try {
   assert.equal(reduced.m.maxScale, 1, 'Reduce motion: no zoom');
   assert.equal(reduced.m.flinches, 0, 'Reduce motion: no flinch');
   assert.deepEqual(reduced.m.floats, [], 'Reduce motion: no floating payoff');
+  assert.deepEqual(reduced.m.pops, [], 'Reduce motion: no chain reaction');
 
   // A tap during the cut fast-forwards it and the gate opens again.
   {
@@ -150,7 +159,7 @@ try {
     }
   }
 
-  console.log('Severe cut checks passed: 2 small, 3/4 severe (2.5px shiver, zoom, flinch), 5 big and 8 huge unchanged, Reduce motion a fade, tap fast-forwards');
+  console.log('Severe cut checks passed: 2 small (no pops), 3/4 severe (2.5px shiver, zoom, flinch, rising pops), 5 big and 8 huge unchanged, Reduce motion a fade, tap fast-forwards');
 } finally {
   await browser.close();
   await server.close();

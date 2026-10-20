@@ -8,6 +8,7 @@
 // die one ring at a time), the crumble with a ground scar, and the payoff (the floating number,
 // the score tally, a banner for big ones, the haptic, the audio duck).
 import { parseKey } from '../../../src/engine/index.js';
+import { HAPTICS } from './feedback.js';
 import type { FeedbackEvent } from './feedback.js';
 import { PINNED } from './motion.js';
 
@@ -32,6 +33,8 @@ export const SHAKE_MAX_BIG = 4;
 export const SHAKE_MAX_HUGE = 6;
 /** Reduce motion: one plain fade (no shake, zoom or stagger), then the payoff. */
 export const REDUCE_FADE_MS = 200;
+/** The chain reaction: one rising pop per falling ring, at most this many (a long chain stays short). */
+export const CASCADE_MAX_POPS = 6;
 /** Replays play at half speed. */
 export const CUT_REPLAY_SPEED = 0.5;
 
@@ -84,6 +87,12 @@ export type CutPlan = {
   motes: number;
   /** leave a faint scar on the cut edge after the wave */
   scar: boolean;
+  /**
+   * The chain reaction: when each ring of their tiles starts to fall, one small pop, a step higher
+   * each ring (`step` 0, 1, 2…). `buzz`: a light tick may go with it — only once the cut's own
+   * vibration has finished, because a new buzz would cut that one short.
+   */
+  pops: { at: number; step: number; buzz: boolean }[];
   /** the whole sequence, ms (at the given speed) */
   total: number;
 };
@@ -137,6 +146,7 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
       haptic,
       motes: 0,
       scar: false,
+      pops: [],
       duckMs: total,
       total,
     };
@@ -196,9 +206,21 @@ export const cutPlan = (c: CutInput, o: CutOptions, first = true): CutPlan => {
     haptic,
     motes: low ? 0 : major ? 1 : 0,
     scar: !low,
+    pops: [],
     duckMs: 0,
     total: 0,
   };
+  // The chain reaction is a reward for cutting them: 3+ tiles, never my own losses or a Fruit, and
+  // not with Low effects (the plain cut stays). Small cuts keep their quiet fold.
+  if (!calm && !fruit && !low && tier !== 'small') {
+    const ringStart = new Map<number, number>();
+    for (const x of out.tiles) if (!ringStart.has(x.ring)) ringStart.set(x.ring, x.at);
+    const snapAt = out.stages.find((s) => s.name === 'snap')?.at ?? 0;
+    const pattern = haptic ? HAPTICS[haptic] : 0;
+    const buzzFree = snapAt + (typeof pattern === 'number' ? pattern : pattern.reduce((a, b) => a + b, 0));
+    out.pops = [...ringStart.entries()].sort((a, b) => a[0] - b[0]).slice(0, CASCADE_MAX_POPS)
+      .map(([, at], step) => ({ at, step, buzz: at >= buzzFree }));
+  }
   total = Math.max(...out.stages.map((s) => s.at + s.dur), ...out.tiles.map((x) => x.at + x.dur));
   out.total = total;
   out.duckMs = total;

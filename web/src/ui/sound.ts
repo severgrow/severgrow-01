@@ -303,6 +303,14 @@ export class Sound {
     this.woodTick(b * 1.15, 0, last ? 0.062 : 0.034, last ? 0.075 : 0.045, step % 3);
   }
 
+  /** cascadePop: the chain reaction of a cut. One small wood pop per ring of their tiles falling,
+   *  each a whole tone above the last, so a long cut climbs. Quieter than a place: it rides under
+   *  the cut's own snip and settle, never over them. */
+  cascadePop(step = 0) {
+    const b = this.base * 1.35 * 2 ** ((Math.max(0, step) * 2) / 12);
+    this.woodTick(b, 0, 0.04, 0.05, 0);
+  }
+
   /** fruit: a short hollow pop. */
   fruit() {
     const { detune } = this.pick('fruit', 2);

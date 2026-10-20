@@ -1,9 +1,10 @@
 // UI overhaul Part 2: the cinematic cut. Every limit in the brief, checked on the pure plan.
 import { describe, expect, it } from 'vitest';
-import { CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SEVERE_HITSTOP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, SHAKE_SEVERE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
+import { CASCADE_MAX_POPS, CUT_CAP_MS, CUT_FLASH_MS, CUT_TIERS, FLASH_MAX_ALPHA, FLASH_MAX_MS, HITSTOP_MS, REDUCE_FADE_MS, RIPPLE_CAP_MS, RIPPLE_STEP_MS, SEVERE_HITSTOP_MS, SHAKE_MAX_BIG, SHAKE_MAX_HUGE, SHAKE_SEVERE, cutPlan, cutTier, cutTimeline } from '../src/logic/cut.js';
 import type { CutInput, CutOptions } from '../src/logic/cut.js';
 import { buildSteps } from '../src/logic/anim.js';
 import { MOTION } from '../src/logic/motion.js';
+import { HAPTICS } from '../src/logic/feedback.js';
 import { playGame } from './ui-helpers.js';
 
 const NORMAL: CutOptions = { speed: 1, reduceMotion: false, effects: 'normal' };
@@ -248,5 +249,46 @@ describe('variants', () => {
 
   it('the same cut always gives the same plan (deterministic)', () => {
     for (const c of realCuts().slice(0, 10)) expect(cutPlan(c, NORMAL)).toEqual(cutPlan({ ...c, keys: [...c.keys] }, NORMAL));
+  });
+});
+
+describe('the chain reaction: one rising pop per falling ring', () => {
+  /** n tiles in two rows from the origin, so several tiles share a ring */
+  const fan = (n: number): string[] => Array.from({ length: n }, (_, i) => `${Math.floor(i / 2) + 1},${i % 2 === 0 ? 0 : -1}`);
+  it('a cut of 3+ of their tiles pops once per ring, exactly when that ring starts to fall, stepping up', () => {
+    for (const n of [3, 4, 5, 8]) {
+      const p = cutPlan(cut(n), NORMAL);
+      const ringStarts = [...new Map(p.tiles.map((t) => [t.ring, t.at])).entries()].sort((a, b) => a[0] - b[0]);
+      expect(p.pops.map((x) => x.at)).toEqual(ringStarts.slice(0, CASCADE_MAX_POPS).map(([, at]) => at));
+      expect(p.pops.map((x) => x.step)).toEqual(p.pops.map((_, i) => i));
+    }
+    // tiles sharing a ring share one pop
+    const shared = cutPlan(cut(6, { keys: fan(6) }), NORMAL);
+    expect(shared.pops).toHaveLength(new Set(shared.tiles.map((t) => t.ring)).size);
+  });
+  it(`never more than ${CASCADE_MAX_POPS} pops, however long the chain`, () => {
+    expect(cutPlan(cut(14), NORMAL).pops).toHaveLength(CASCADE_MAX_POPS);
+  });
+  it('quiet where the cut is meant to be quiet: 1-2 tiles, my own losses, Fruit, Reduce motion, Low effects', () => {
+    expect(cutPlan(cut(2), NORMAL).pops).toEqual([]);
+    expect(cutPlan(cut(6, { mine: true }), NORMAL).pops).toEqual([]);
+    expect(cutPlan(cut(6, { mine: true, kind: 'fruit' }), NORMAL).pops).toEqual([]);
+    expect(cutPlan(cut(6), { ...NORMAL, reduceMotion: true }).pops).toEqual([]);
+    expect(cutPlan(cut(6), { ...NORMAL, effects: 'low' }).pops).toEqual([]);
+  });
+  it('a pop only buzzes once the cut’s own vibration has finished (a new buzz would cut it short)', () => {
+    for (const n of [3, 5, 8, 12]) {
+      const p = cutPlan(cut(n), NORMAL);
+      const snap = p.stages.find((s) => s.name === 'snap')!;
+      const pattern = HAPTICS[p.haptic!];
+      const ends = snap.at + (Array.isArray(pattern) ? pattern.reduce((a: number, b: number) => a + b, 0) : pattern as number);
+      for (const pop of p.pops) expect(pop.buzz).toBe(pop.at >= ends);
+    }
+  });
+  it('slower and replay speeds stretch the pops with the ripple; the plan is still deterministic', () => {
+    const slow = cutPlan(cut(8), { ...NORMAL, speed: 1.6 });
+    const ringStarts = [...new Map(slow.tiles.map((t) => [t.ring, t.at])).values()].sort((a, b) => a - b);
+    expect(slow.pops.map((x) => x.at)).toEqual(ringStarts.slice(0, CASCADE_MAX_POPS));
+    expect(cutPlan(cut(8), NORMAL)).toEqual(cutPlan(cut(8), NORMAL));
   });
 });

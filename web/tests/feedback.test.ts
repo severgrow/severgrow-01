@@ -34,6 +34,9 @@ describe('haptics', () => {
     expect(hapticFor('press', { ...on, effects: 'high' })).toBe(HAPTICS.press);
     expect(hapticFor('undo', on)).toEqual(HAPTICS.undo);
     expect(hapticFor('undo', { ...on, effects: 'low' })).toEqual(HAPTICS.undo);
+    // the chain reaction's tick: the lightest buzz there is, with Vibration on at any effects level
+    expect(hapticFor('cascade', on)).toBe(HAPTICS.cascade);
+    expect(total(HAPTICS.cascade)).toBeLessThan(total(HAPTICS.place));
   });
 });
 

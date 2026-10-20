@@ -3717,6 +3717,14 @@ async function playCut(c: CutInput, first: boolean, _chain: number, f: number, m
     anim(tileEl, frames, { duration: t.dur, delay: t.at, fill: 'forwards', easing: EASE.out, transformOrigin: 'center' } as KeyframeAnimationOptions);
     if (plan.motes) drift(t.key, t.at + t.dur * 0.5, f, plan.motes);
   }
+  // the chain reaction: as each ring of their tiles starts to fall, one pop a step higher (and a
+  // light tick once the cut's own buzz is over); logic/cut.ts decides when, and when not
+  if (!quiet) for (const pop of plan.pops) at(pop.at, () => {
+    animLog('cascade', { step: pop.step, buzz: pop.buzz });
+    sound.cascadePop(pop.step);
+    const hp = pop.buzz && hapticFor('cascade', settings);
+    if (hp) vibrate(true, hp as number);
+  });
   // after the wave: a faint scar on the cut edge for ~400ms (not on Futa04 — no leftovers)
   if (plan.scar && !IS_FUTA04) at(Math.max(0, ...plan.tiles.map((t) => t.at + t.dur)), () => scar(c.keys, f));
   await wait(plan.total, my);

@@ -156,7 +156,25 @@ const CUES: readonly [string, (s: Sound) => void][] = [
   // Listed LAST on purpose: the deterministic jitter counter walks the list in order, so a new cue
   // inserted earlier would change every cue after it and make this inventory lie about the others.
   ['seedTick', (s) => s.seedTick(2, true)],
+  ['cascadePop', (s) => s.cascadePop(2)],
 ];
+
+describe('the chain reaction', () => {
+  it('each ring pops a whole tone higher than the last, a short wooden tick', () => {
+    const s = makeSound();
+    const body = (step: number) => run(() => s.cascadePop(step)).filter((v) => v.kind === 'osc').map((v) => v.freq);
+    const freqs = [0, 1, 2, 3, 4, 5].map((i) => body(i)[0]!);
+    // every voice carries the palette's ±3% wobble, so a step is a whole tone give or take that,
+    // and always upward
+    for (let i = 1; i < freqs.length; i++) {
+      const r = freqs[i]! / freqs[i - 1]!;
+      expect(r).toBeGreaterThan(1.04);
+      expect(r).toBeLessThan(2 ** (2 / 12) * 1.07);
+    }
+    expect(freqs[5]! / freqs[0]!).toBeGreaterThan(2 ** (10 / 12) * 0.94);
+    for (const i of [0, 5]) expect(Math.max(...run(() => s.cascadePop(i)).map((v) => v.end))).toBeLessThanOrEqual(0.1);
+  });
+});
 
 describe('sound palette', () => {
   let s: Sound;
