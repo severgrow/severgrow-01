@@ -2337,7 +2337,6 @@ function flushInstallInvite() {
 
 function humanPlay(a: Action) {
   // The » step, taken once in a lesson, is taught: from then on the game moves on by itself.
-  if (a.t === 'EndAct' && lessonActive() && (lessonBeatNow?.id === 'end' || lessonBeatNow?.id === 'skip')) store.set(LESSON_DONE_KEY, '1');
   if (isOnlineDuel()) {
     void humanPlayOnline(a);
     return;
@@ -2635,8 +2634,11 @@ let lessonExplainId = '';
  * before they have seen the "tap »" line). The key keeps its old name: devices already taught stay
  * taught.
  */
-const LESSON_DONE_KEY = 'severgrow.lesson.doneTaught.v2';
-const lessonDoneTaught = () => store.get(LESSON_DONE_KEY) === '1';
+/** Only » is left this Grow and auto-skip is on: autoAdvance ends it without a tap. */
+function lessonEndsByItself(): boolean {
+  return !!session && session.view.phase === 'ACT' && myTurn()
+    && skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind === 'auto';
+}
 const lessonIdleWatch = createIdleWatch((stage) => {
   lessonIdleStage = stage;
   lessonIdle = stage > 0;
@@ -2784,8 +2786,8 @@ function autoAdvance() {
   // The tutorial's free turn plays like a real game: once only "end" is left it goes on to Throw.
   if (!session || (coach.tutorial && !tutorialFreePlayActive()) || !myTurn() || busy() || session.view.phase !== 'ACT') return;
   if (session.state === skippedFrom) return;
-  // Levels 1-10: the first time, the player taps » themselves (so they know it is there).
-  if (lessonActive() && !guidanceOff() && !lessonDoneTaught()) return;
+  // Levels 1-10: an explanation on screen is read first; dismissing it redraws and comes back here.
+  if (lessonActive() && lessonBeatNow?.explain) return;
   if (skipPlan(session.legal, session.view.hand.length, settings.autoSkip).kind !== 'auto') return;
   const end = session.legal.find((a) => a.t === 'EndAct');
   if (!end) return;
@@ -4463,6 +4465,9 @@ function renderLessonGuide(): void {
     : lessonBeat(lesson, st, lessonCtx());
   // Level 10 plays on its own: its hints wait for a quiet moment.
   if (beat?.idleOnly && !lessonIdle) beat = null;
+  // Nothing is left to do but end the Grow: the game goes on to the Throw by itself (autoAdvance),
+  // so » is never lit for the moment before it does (owner, 2026-10-20).
+  if (beat?.id === 'end' && lessonEndsByItself()) beat = null;
   if ((beat?.id ?? '') !== lessonShownBeatId) {
     // A new step: the two-wrong-tap escalation belonged to the old one.
     lessonWrongInStep = 0;

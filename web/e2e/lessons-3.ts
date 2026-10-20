@@ -837,16 +837,18 @@ try {
         check(!!b8 && b8.id === '1:grew' && (await boxText(page)) === LESSON.youGrewLine, `${tag}: the score moment explains the tile rank`);
         check(/^\d+:\d+$/.test(await displayText(page)), `${tag}: the display shows the score (${await displayText(page)})`);
         copy.push(await boxText(page));
-        // 9. Tap anywhere: the end-of-turn action is a line, never a bare word.
+        // 9. Tap anywhere: nothing is left to do but end the Grow, so the game goes on to the Throw
+        // by itself, as in a real game. » is never lit on the way, not even for a frame (owner,
+        // 2026-10-20: lighting » here was redundant, and it used to flash for a second).
         await page.waitForTimeout(750);
+        await page.evaluate(`(() => { window.__endLit = 0; const tick = () => {
+          const b = window.__severgrow.lesson()?.beat; if (b && b.id === 'end') window.__endLit++;
+          if (window.__severgrow.state().phase === 'ACT') requestAnimationFrame(tick); }; requestAnimationFrame(tick); })()`);
         await tapAnywhere(page);
-        const b9 = (await hook<any>(page, 'lesson')).beat;
-        check(!!b9 && b9.id === 'end' && b9.say === LESSON.tapThrow, `${tag}: the end action reads TAP » TO THROW`);
-        check((await displayText(page)) === LESSON.tapThrow, `${tag}: and the display says it`);
-        // 10. End the Grow: the Throw explanation, with the suggested card lifted.
-        const endPt = (await litPoints(page, b9.lit))[0]!;
-        await tap(page, endPt);
+        await page.waitForFunction(() => (window as any).__severgrow.state().phase === 'DISCARD', undefined, { timeout: 8000 });
+        await idle(page);
         await page.waitForTimeout(250);
+        check((await page.evaluate('window.__endLit')) === 0, `${tag}: » is never lit before the game moves on to the Throw`);
         const b10 = (await hook<any>(page, 'lesson')).beat;
         check(!!b10 && b10.id === '1:idea:first-throw', `${tag}: the Throw explanation follows the Grow`);
         check((await boxText(page)) === LESSON.throwLine, `${tag}: the Throw sentence is in the box`);
