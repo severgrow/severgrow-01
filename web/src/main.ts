@@ -1544,47 +1544,6 @@ async function runStarterLottery(opponentStarts: boolean): Promise<void> {
   delete panel.dataset.winner;
 }
 
-/**
- * Cold first visit only: one short, bounded wait for the board art that the first lesson composes.
- * The pictures are already downloading from the module that draws them (the menu shows while they
- * arrive), so this only waits for decode. It never runs twice, is capped, leaves no timer behind
- * and is skipped entirely on a repeat visit and while the page is hidden. When the cap wins, play
- * starts anyway: the board fills in exactly as it did before.
- */
-const WARMED_KEY = 'severgrow.board-warmed.v1';
-const FIRST_WARM_CAP_MS = 800;
-let firstWarm: Promise<void> | null = null;
-let warmDiag: { cold: boolean; waitedMs: number } | null = null;
-
-function warmFirstBoard(): Promise<void> {
-  if (warmDiag) return firstWarm ?? Promise.resolve();
-  if (firstWarm) return firstWarm;
-  if (!defaultArt || store.get(WARMED_KEY)) {
-    warmDiag = { cold: false, waitedMs: 0 };
-    return Promise.resolve();
-  }
-  if (document.hidden) {
-    // Nothing runs while the page is hidden: the art still loads, the board just takes it as it comes.
-    warmDiag = { cold: true, waitedMs: 0 };
-    return Promise.resolve();
-  }
-  const t0 = performance.now();
-  firstWarm = new Promise<void>((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      warmDiag = { cold: true, waitedMs: Math.round(performance.now() - t0) };
-      store.set(WARMED_KEY, '1');
-      resolve();
-    };
-    const timer = window.setTimeout(finish, FIRST_WARM_CAP_MS);
-    void defaultArt.boardArtReady.then(finish);
-  });
-  return firstWarm;
-}
-
 async function startGame(
   seed: number,
   level: Level = settings.level,
@@ -1604,7 +1563,7 @@ async function startGame(
 ) {
   // The first lesson board on a cold first visit waits (briefly) for its own art. Repeat visits,
   // the side menu and every non-lesson game skip this entirely.
-  if (campaign) await warmFirstBoard();
+  // The board art is decoded while the menu is on screen, so a level never waits for it here.
   // A server-issued ticket makes a new Training result verifiable. An offline start stays playable
   // with its local seed, but cannot claim spendable Seeds without a prior ticket.
   let ticketId: string | null = null;
@@ -8542,7 +8501,6 @@ let appReady = false;
   particles: () => ({ alive: particles.alive, peak: particles.peak }),
   world: () => board.worldStats,
   /** Tests: the cold-first-visit art warm (null before the first lesson board has been asked for). */
-  warm: () => (warmDiag ? { ...warmDiag } : null),
   /** tests: tutorial focus lock */
   tutorialGate: () => tutorialGate ? {
     active: tutorialGate.isActive(),
