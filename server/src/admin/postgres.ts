@@ -10,6 +10,7 @@ import { SEED_ECONOMY } from '../seeds/config.js';
 import { ApiError } from '../errors.js';
 import { playerTag } from '../../../src/player-tag.js';
 import { shapeCampaign } from './campaign.js';
+import { shapePlayers, PLAYERS_LIMIT } from './players.js';
 import type { PgPool } from '../storage/postgres.js';
 import type {
   AdminAuditEntry,
@@ -949,6 +950,71 @@ export const postgresAdminStore = (pool: PgPool): AdminStore => {
           utcDay: str(row.utc_day),
         })),
         paid.rows.map((row) => ({ sourceKey: str(row.source_key), level: nnum(row.level) })),
+      );
+    },
+    async players(now) {
+      // One row per visible player, newest first, bounded. Every sub-read is keyed by the player id
+      // (indexed on each table) and never touches match_moves or matches.state. Campaign levels are
+      // parsed from the recorded `campaign:c<chapter>-<level>` key, exactly as the world map does.
+      const { rows } = await pool.query(
+        `select p.id, p.display_name, p.kind, p.created_at, p.presence_at,
+                exists (select 1 from player_identities i where i.player_id = p.id) as google,
+                mm.played, mm.finished, mm.wins, mm.last_at as match_last_at, mm.last_status as match_last_status,
+                cp.highest as campaign_highest, cp.clears as campaign_clears, cp.last_at as campaign_last_at, cp.last_level as campaign_last_level,
+                (select count(*)::int from feedback_reports f where f.player_id = p.id) as reports,
+                (select max(f.created_at) from feedback_reports f where f.player_id = p.id) as report_last_at,
+                (select count(*)::int from world_claims c where c.owner_id = p.id) as tiles,
+                (select max(c.claimed_at) from world_claims c where c.owner_id = p.id) as tile_last_at,
+                coalesce((select w.balance from seed_wallets w where w.player_id = p.id), 0) as seeds
+           from players p
+           left join lateral (
+             select count(*)::int as played,
+                    count(*) filter (where m.status = 'finished')::int as finished,
+                    count(*) filter (where m.status = 'finished' and m.result->>'winner' = mp.seat::text)::int as wins,
+                    max(m.updated_at) as last_at,
+                    (array_agg(m.status order by m.updated_at desc))[1] as last_status
+               from match_participants mp join matches m on m.id = mp.match_id
+              where mp.player_id = p.id and ${MATCH_VISIBLE('m')}
+           ) mm on true
+           left join lateral (
+             select max((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int) as highest,
+                    count(*) filter (where r.awarded > 0)::int as clears,
+                    max(r.created_at) as last_at,
+                    (array_agg((substring(r.source_key from '^campaign:c[0-9]+-([0-9]+)$'))::int order by r.created_at desc))[1] as last_level
+               from seed_reward_receipts r
+              where r.player_id = p.id and r.mode = 'campaign'
+           ) cp on true
+          where ${NOT_TEST('p')}
+          order by p.created_at desc
+          limit ${PLAYERS_LIMIT * 5}`,
+      );
+      return shapePlayers(
+        rows.map((row) => ({
+          id: str(row.id),
+          displayName: nstr(row.display_name),
+          kind: str(row.kind) === 'account' ? ('account' as const) : ('guest' as const),
+          createdAt: num(row.created_at),
+          google: row.google === true,
+          presenceAt: nnum(row.presence_at),
+          matches: {
+            played: num(row.played),
+            finished: num(row.finished),
+            wins: num(row.wins),
+            lastAt: nnum(row.match_last_at),
+            lastStatus: nstr(row.match_last_status),
+          },
+          campaign: {
+            highest: nnum(row.campaign_highest),
+            clears: num(row.campaign_clears),
+            lastAt: nnum(row.campaign_last_at),
+            lastLevel: nnum(row.campaign_last_level),
+          },
+          reports: { count: num(row.reports), lastAt: nnum(row.report_last_at) },
+          tiles: { count: num(row.tiles), lastAt: nnum(row.tile_last_at) },
+          seeds: num(row.seeds),
+        })),
+        now,
+        PLAYERS_LIMIT,
       );
     },
   };

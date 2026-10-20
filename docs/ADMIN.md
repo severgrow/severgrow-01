@@ -73,6 +73,16 @@ ADMIN_PLAYER_IDS=37e3d4d0-a34c-45b3-bc61-992fcf392912 npm run server:dev
   never read as "allow everyone".
 - The list is printed in the server's boot line (ids are not secrets); the dashboard never shows it.
 
+### Signing in on /admin/ directly (2026-10-20)
+
+The sign-in card offers **Sign in with Google** — the game's own Google round trip
+(`web/src/accounts/core.ts`), returning to `/admin/` (allowed by the Supabase redirect list
+`https://www.futasaku.com/**`). The resulting player token is kept under the dashboard's own key
+`futasaku.admin.token.v1`; the admin API still decides server-side whether that player is an admin.
+Order of tokens: this Google sign-in, then the game's identity on the device, then a pasted token
+(under "Use a player token instead"). **Sign out** forgets only the dashboard's tokens and stops using
+the game's token in that tab — it never signs the game out.
+
 ### What the browser holds
 
 The player's **normal bearer token**, and nothing else. It is read from where the game already keeps
@@ -109,6 +119,7 @@ All routes require an allow-listed bearer token. `X` marks a mutation.
 | `GET /v1/admin/economy` | minted vs spent, per category, receipts and denials, caps in force |
 | `GET /v1/admin/world` | the map, recent claims and the day index the replay steps through |
 | `GET /v1/admin/campaign` | verified campaign clears, per opaque level id and per chapter |
+| `GET /v1/admin/players` | every visible player: kind, Google, joined, last recorded activity and what it was, online matches, highest verified campaign level, Seeds; plus the journey / where-they-left-off / highest-level summaries (`server/src/admin/players.ts`). **Needs the `duel` function redeployed**; until then the screen says so |
 
 Every list is `order by … limit …` with a hard page cap (`MAX_PAGE`, 200) and, where the table grows,
 a **keyset cursor** (`created_at|id`) rather than an offset. Nothing scans a full table:

@@ -130,6 +130,9 @@ jobs:
         working-directory: futa05
         env:
           VITE_DUEL_API_URL: ${{ vars.VITE_DUEL_API_URL || vars.FUTA05_API_URL }}
+          # Public values (the game ships the same two): "Sign in with Google" on /admin/ itself.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: |
           test -n "$VITE_DUEL_API_URL" || { echo "Missing Actions Variable VITE_DUEL_API_URL (may fall back to FUTA05_API_URL)"; exit 1; }
           npm run admin:build

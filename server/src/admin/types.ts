@@ -7,6 +7,7 @@
 // invite codes or hidden hands — the field lists below are the whole contract, and the router
 // returns exactly these.
 import type { FeedbackKind } from '../feedback/feedback.js';
+import type { AdminPlayers } from './players.js';
 
 export type AdminTriageStatus = 'new' | 'reviewing' | 'resolved';
 
@@ -290,6 +291,8 @@ export interface AdminStore {
   ledger(filter: AdminLedgerFilter): Promise<AdminPage<AdminLedgerRow>>;
   world(now: number): Promise<AdminWorld>;
   campaign(): Promise<AdminCampaign>;
+  /** Every player the server knows, with the last recorded activity of each (players.ts). */
+  players(now: number): Promise<AdminPlayers>;
 }
 
 /** Bounded scan for a tag search: the tag is a hash of the id, so it is not indexable. */

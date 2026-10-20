@@ -9,6 +9,8 @@ import { playerTag } from '../../../src/player-tag.js';
 import { WORLD_CELLS } from '../world.js';
 import { SEED_ECONOMY } from '../seeds/config.js';
 import { shapeCampaign } from './campaign.js';
+import { shapePlayers, PLAYERS_LIMIT, type PlayerFacts } from './players.js';
+import { campaignLevelOfSourceKey } from '../seeds/config.js';
 import type { MatchRecord, PlayerRecord } from '../storage/types.js';
 import type { MemoryStorage } from '../storage/memory.js';
 import type { MemoryFeedbackStore } from '../feedback/feedback.js';
@@ -589,6 +591,60 @@ export const memoryAdminStore = (sources: MemoryAdminSources): AdminStore => {
         })),
         paidLevels,
       );
+    },
+    async players(now) {
+      const all = visiblePlayers();
+      const store = economy();
+      const receipts = [...(store?.receipts.values() ?? [])];
+      const facts: PlayerFacts[] = [];
+      const matchesByPlayer = new Map<string, MatchRecord[]>();
+      const seatOf = new Map<string, number>();
+      for (const match of await visibleMatches()) {
+        for (const part of await sources.storage.participantsOf(match.id)) {
+          const list = matchesByPlayer.get(part.playerId) ?? [];
+          list.push(match);
+          matchesByPlayer.set(part.playerId, list);
+          seatOf.set(`${match.id}:${part.playerId}`, part.seat);
+        }
+      }
+      const maxOf = (values: readonly number[]): number | null => (values.length ? Math.max(...values) : null);
+      for (const player of all) {
+        const mine = (matchesByPlayer.get(player.id) ?? []).sort((a, b) => b.updatedAt - a.updatedAt);
+        const finished = mine.filter((m) => m.status === 'finished');
+        const clears = receipts
+          .filter((r) => r.input.playerId === player.id && r.input.mode === 'campaign')
+          .sort((a, b) => a.input.now - b.input.now);
+        const levels = clears.map((r) => campaignLevelOfSourceKey(r.input.sourceKey)).filter((n): n is number => n !== null);
+        const lastClear = clears[clears.length - 1] ?? null;
+        const reports = feedbackRows().filter((r) => r.playerId === player.id);
+        const claims = [...(store?.claims.values() ?? [])].filter((c) => c.ownerId === player.id);
+        facts.push({
+          id: player.id,
+          displayName: player.displayName,
+          kind: player.kind,
+          createdAt: player.createdAt,
+          google: (sources.links?.rows ?? []).some((link) => link.playerId === player.id),
+          // Live presence lives in the live-duel store, not here; the SQL store reads `presence_at`.
+          presenceAt: null,
+          matches: {
+            played: mine.length,
+            finished: finished.length,
+            wins: finished.filter((m) => m.result && m.result.winner !== null && m.result.winner === seatOf.get(`${m.id}:${player.id}`)).length,
+            lastAt: mine[0]?.updatedAt ?? null,
+            lastStatus: mine[0]?.status ?? null,
+          },
+          campaign: {
+            highest: maxOf(levels),
+            clears: clears.filter((r) => r.awarded > 0).length,
+            lastAt: lastClear?.input.now ?? null,
+            lastLevel: lastClear ? campaignLevelOfSourceKey(lastClear.input.sourceKey) : null,
+          },
+          reports: { count: reports.length, lastAt: maxOf(reports.map((r) => r.createdAt)) },
+          tiles: { count: claims.length, lastAt: maxOf(claims.map((c) => c.claimedAt)) },
+          seeds: walletOf(player.id).balance,
+        });
+      }
+      return shapePlayers(facts, now, PLAYERS_LIMIT);
     },
   };
 };

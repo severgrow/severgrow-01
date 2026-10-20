@@ -24,6 +24,7 @@ import type { PgPool } from '../src/storage/postgres.js';
 import { createAdminRouter, csvCell, reportsToCsv } from '../src/admin/router.js';
 import { normalizeBuild } from '../src/admin/types.js';
 import { shapeCampaign, chapterBoundaries, chapterOf, levelIdOfSourceKey } from '../src/admin/campaign.js';
+import { shapePlayers, type PlayerFacts } from '../src/admin/players.js';
 
 const ADMIN_ID = '37e3d4d0-a34c-45b3-bc61-992fcf392912';
 const NOW = 1_760_000_000_000;
@@ -92,6 +93,7 @@ const READ_ENDPOINTS: { method: string; path: string }[] = [
   { method: 'GET', path: '/v1/admin/economy' },
   { method: 'GET', path: '/v1/admin/world' },
   { method: 'GET', path: '/v1/admin/campaign' },
+  { method: 'GET', path: '/v1/admin/players' },
   { method: 'POST', path: '/v1/admin/seen' },
   { method: 'POST', path: '/v1/admin/reports/00000000-0000-0000-0000-000000000000/triage' },
 ];
@@ -636,5 +638,83 @@ describe('no secret or hidden state can reach an admin payload', () => {
     }
     // What it DOES report is the recorded shape: the timeline and how many events each move had.
     expect(Array.isArray(detail.moves)).toBe(true);
+  });
+});
+
+describe('the Players screen: every player, and the last thing the server recorded', () => {
+  const HOUR = 60 * 60 * 1000;
+  const base = (id: string, over: Partial<PlayerFacts> = {}): PlayerFacts => ({
+    id,
+    displayName: id,
+    kind: 'guest',
+    createdAt: NOW - 30 * 24 * HOUR,
+    google: false,
+    presenceAt: null,
+    matches: { played: 0, finished: 0, wins: 0, lastAt: null, lastStatus: null },
+    campaign: { highest: null, clears: 0, lastAt: null, lastLevel: null },
+    reports: { count: 0, lastAt: null },
+    tiles: { count: 0, lastAt: null },
+    seeds: 0,
+    ...over,
+  });
+
+  it('names the newest recorded activity, and orders players by it', () => {
+    const shaped = shapePlayers(
+      [
+        base('11111111-1111-4111-8111-111111111111'),
+        base('22222222-2222-4222-8222-222222222222', {
+          matches: { played: 3, finished: 2, wins: 1, lastAt: NOW - 2 * HOUR, lastStatus: 'active' },
+        }),
+        base('33333333-3333-4333-8333-333333333333', {
+          kind: 'account',
+          google: true,
+          campaign: { highest: 14, clears: 4, lastAt: NOW - HOUR, lastLevel: 14 },
+        }),
+      ],
+      NOW,
+    );
+    expect(shaped.rows.map((r) => [r.displayName, r.lastActivity])).toEqual([
+      ['33333333-3333-4333-8333-333333333333', 'campaign-clear'],
+      ['22222222-2222-4222-8222-222222222222', 'match-active'],
+      ['11111111-1111-4111-8111-111111111111', 'joined'],
+    ]);
+    expect(shaped.rows[0]!.lastActivityText).toBe('Cleared campaign level 14');
+    expect(shaped.rows[0]!.campaignHighest).toBe(14);
+    expect(shaped.rows[2]!.lastSeenAt).toBe(NOW - 30 * 24 * HOUR); // never earlier than joining
+    expect(shaped.summary).toMatchObject({ players: 3, accounts: 1, guests: 2, google: 1, seen24h: 2, seen7d: 2 });
+    expect(shaped.summary.funnel.map((step) => step.n)).toEqual([3, 1, 1, 1, 1, 0]);
+    expect(shaped.summary.highestLevel).toEqual([{ level: 14, n: 1 }]);
+  });
+
+  it('presence only decides the label while it is live; otherwise it just moves "last seen"', () => {
+    const live = shapePlayers([base('44444444-4444-4444-8444-444444444444', { presenceAt: NOW - 30_000 })], NOW).rows[0]!;
+    expect(live.lastActivity).toBe('online-now');
+    const stale = shapePlayers(
+      [base('55555555-5555-4555-8555-555555555555', { presenceAt: NOW - 3 * HOUR, matches: { played: 1, finished: 1, wins: 0, lastAt: NOW - 4 * HOUR, lastStatus: 'finished' } })],
+      NOW,
+    ).rows[0]!;
+    expect(stale.lastActivity).toBe('match-finished');
+    expect(stale.lastSeenAt).toBe(NOW - 3 * HOUR);
+  });
+
+  it('the endpoint lists real players from the stores, without test players or secrets', async () => {
+    const t = setup();
+    const admin = await t.makePlayer(ADMIN_ID, 'account', 'Owner');
+    const guest = await t.makePlayer('66666666-6666-4666-8666-666666666666', 'guest', 'MapleFox');
+    await t.storage.createPlayer({ id: '77777777-7777-4777-8777-777777777777', kind: 'guest', displayName: 'Probe', createdAt: NOW, upgradedAt: null, isTest: true });
+    t.links.rows.push({ provider: 'google', subject: 'g-1', playerId: ADMIN_ID, createdAt: NOW });
+    await t.economy.settle({ playerId: guest.player.id, sourceKey: 'campaign:c2-14', mode: 'campaign', now: NOW, outcome: 'win', campaignLevel: 14 } as never);
+    const res = await call(t.app, 'GET', '/v1/admin/players', admin.token);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { rows: { id: string; google: boolean; campaignHighest: number | null; lastActivity: string }[]; total: number };
+    expect(body.total).toBe(2);
+    expect(body.rows.map((r) => r.id).sort()).toEqual([ADMIN_ID, guest.player.id].sort());
+    expect(body.rows.find((r) => r.id === ADMIN_ID)!.google).toBe(true);
+    expect(body.rows.find((r) => r.id === guest.player.id)!.campaignHighest).toBe(14);
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain(admin.token);
+    expect(raw).not.toMatch(/token_?hash|tokenHash|subject/i);
+    // The normal player still gets nothing.
+    expect((await call(t.app, 'GET', '/v1/admin/players', guest.token)).status).toBe(403);
   });
 });

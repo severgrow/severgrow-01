@@ -389,6 +389,10 @@ export const createAdminRouter = (deps: AdminRouterDeps): AdminRouter => {
       return { status: 200, body: { ok: true, campaign: await deps.store.campaign(), serverNow: now } };
     }
 
+    if (req.method === 'GET' && path === '/v1/admin/players') {
+      return { status: 200, body: { ok: true, ...(await deps.store.players(now)), serverNow: now } };
+    }
+
     throw new ApiError('NOT_FOUND', 'Unknown endpoint.');
   };
 };

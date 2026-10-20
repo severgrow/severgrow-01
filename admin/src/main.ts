@@ -1,14 +1,19 @@
 // The dashboard shell: token gate, navigation, hash router.
 //
 // Order of business at boot:
-//   1. find a token (the game's own stored identity on this device, or a token pasted last time);
+//   0. if this load is Google's return trip, finish the sign-in (admin/src/google.ts);
+//   1. find a token (the dashboard's own Google sign-in, the game's stored identity on this device,
+//      or a token pasted in this tab);
 //   2. ask the API who we are (`/v1/admin/session`). Only a 200 means admin — a 401/403 shows the
 //      plain access-denied screen and STOPS. No screen is ever rendered before that answer, so a
 //      non-admin visitor never sees even the dashboard's shape.
 //
 // The route lives in the hash, so a view is linkable and the browser's back button works.
-import { AdminApi, apiBaseFromLocation, apiBaseUrl, findToken, forgetToken, rememberPastedToken, type AdminSession } from './api.js';
+import { AdminApi, apiBaseFromLocation, apiBaseUrl, clearSignedOut, findToken, forgetDeadToken, forgetToken, gameToken, rememberPastedToken, type AdminSession } from './api.js';
+import { finishGoogle, googleAvailable, startGoogle, supabaseConfig } from './google.js';
+import { renderPlayers } from './screens/players.js';
 import type { Ctx } from './ui.js';
+import type { TokenSource } from './api.js';
 import { button, el } from './ui.js';
 import { renderOverview } from './screens/overview.js';
 import { renderReports } from './screens/reports.js';
@@ -19,14 +24,16 @@ import { renderCampaign } from './screens/campaign.js';
 import { renderOps } from './screens/ops.js';
 import { formatDateTime, parseHash } from './format.js';
 
-const ROUTES: readonly { route: string; label: string }[] = [
-  { route: 'overview', label: 'Overview' },
-  { route: 'reports', label: 'Reports' },
-  { route: 'player', label: 'Player' },
-  { route: 'matches', label: 'Matches' },
-  { route: 'seeds', label: 'Seeds & world' },
-  { route: 'campaign', label: 'Campaign' },
-  { route: 'ops', label: 'Health & ops' },
+/** The sections, grouped the way the owner asks questions: who plays, what they play, what broke. */
+const ROUTES: readonly { group: string; route: string; label: string }[] = [
+  { group: 'Today', route: 'overview', label: 'Overview' },
+  { group: 'Players', route: 'players', label: 'All players' },
+  { group: 'Players', route: 'player', label: 'Look up a player' },
+  { group: 'Players', route: 'campaign', label: 'Campaign progress' },
+  { group: 'Play', route: 'matches', label: 'Online matches' },
+  { group: 'Play', route: 'seeds', label: 'Seeds & world' },
+  { group: 'Support', route: 'reports', label: 'Reports' },
+  { group: 'Support', route: 'ops', label: 'Health & ops' },
 ];
 
 const need = <T extends HTMLElement>(id: string): T => {
@@ -63,7 +70,7 @@ const showGate = (message: string): void => {
   gateInput.focus();
 };
 
-const render = (session: AdminSession, api: AdminApi): void => {
+const render = (session: AdminSession, api: AdminApi, source: TokenSource): void => {
   const ctx: Ctx = {
     api,
     session: { admin: session.admin, rulesVersion: session.rulesVersion, limits: session.limits },
@@ -75,8 +82,18 @@ const render = (session: AdminSession, api: AdminApi): void => {
   };
 
   // Navigation.
+  const groups = [...new Set(ROUTES.map((entry) => entry.group))];
   nav.replaceChildren(
-    ...ROUTES.map((entry) => el('a', { href: `#/${entry.route}`, text: entry.label, dataset: { route: entry.route } })),
+    ...groups.map((group) =>
+      el(
+        'div',
+        { class: 'nav-group' },
+        el('p', { class: 'nav-label', text: group }),
+        ...ROUTES.filter((entry) => entry.group === group).map((entry) =>
+          el('a', { href: `#/${entry.route}`, text: entry.label, dataset: { route: entry.route } }),
+        ),
+      ),
+    ),
   );
 
   const highlight = (route: string): void => {
@@ -100,6 +117,9 @@ const render = (session: AdminSession, api: AdminApi): void => {
         return;
       case 'reports':
         await renderReports(view, ctxIn, params);
+        return;
+      case 'players':
+        await renderPlayers(view, ctxIn, params);
         return;
       case 'player':
         await renderPlayer(view, ctxIn, params);
@@ -125,6 +145,7 @@ const render = (session: AdminSession, api: AdminApi): void => {
   };
 
   whoName.textContent = `${session.admin.displayName ?? '(no name)'} #${session.admin.tag}`;
+  whoName.title = source === 'google' ? 'Signed in with Google on this page' : source === 'game' ? "Using this browser's game sign-in" : 'Using a pasted token';
   whoSeen.textContent = `rules ${session.rulesVersion} · server ${formatDateTime(session.serverNow)}`;
   boot.hidden = true;
   denied.hidden = true;
@@ -135,25 +156,53 @@ const render = (session: AdminSession, api: AdminApi): void => {
   void route(ctx);
 };
 
+const supa = supabaseConfig();
+const gateGoogle = need('gate-google') as HTMLButtonElement;
+const gatePaste = need('gate-paste') as HTMLDetailsElement;
+
+const SIGN_IN = 'Sign in with the Google account you play FUTASAKU with.';
+
+/** Show the sign-in card, with the Google button when Google sign-in is switched on. */
+const askToSignIn = (message: string, notice = ''): void => {
+  showGate(message);
+  gateNotice.textContent = notice;
+  gateGoogle.hidden = true;
+  if (!supa) {
+    gatePaste.open = true;
+    return;
+  }
+  void googleAvailable(supa).then((on) => {
+    gateGoogle.hidden = !on;
+    if (on) gateGoogle.focus();
+    else gatePaste.open = true;
+  });
+};
+
 const start = async (): Promise<void> => {
   const base = apiBaseFromLocation(location.search) ?? apiBaseUrl();
   if (!base) {
     showGate('This dashboard build has no API address configured. Rebuild it with VITE_DUEL_API_URL set, or add ?api=https://… to the URL.');
     return;
   }
-  const found = findToken();
-  if (!found) {
-    showGate('This dashboard uses your normal player token. It has not been found on this device, so paste it below — or sign in to the game in this browser first.');
+  boot.hidden = false;
+  const returned = await finishGoogle(supa, base, gameToken());
+  if (returned?.ok) clearSignedOut();
+  if (returned && !returned.ok) {
+    askToSignIn(SIGN_IN, returned.message);
     return;
   }
-  boot.hidden = false;
+  const found = findToken();
+  if (!found) {
+    askToSignIn(SIGN_IN);
+    return;
+  }
   const api = new AdminApi(base, found.token);
   const session = await api.session();
   if (!session.ok) {
     if (session.status === 401) {
-      // The token is dead. Clear the pasted copy so the next attempt is a fresh paste.
-      forgetToken();
-      showGate('That token is no longer valid. Paste a current one, or sign in to the game in this browser.');
+      // That token is dead: drop it (never the game's own identity) and ask again.
+      forgetDeadToken(found.source);
+      askToSignIn('That sign-in has expired. Sign in again.');
       return;
     }
     if (session.status === 403) {
@@ -163,8 +212,18 @@ const start = async (): Promise<void> => {
     showGate(`The dashboard could not reach the API (${session.message}).`);
     return;
   }
-  render(session.data, api);
+  render(session.data, api, found.source);
 };
+
+gateGoogle.addEventListener('click', () => {
+  if (!supa) return;
+  gateGoogle.disabled = true;
+  gateNotice.textContent = 'Opening Google…';
+  startGoogle(supa).catch((error: unknown) => {
+    gateGoogle.disabled = false;
+    gateNotice.textContent = error instanceof Error ? error.message : 'Google sign-in could not start.';
+  });
+});
 
 gateInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') (document.getElementById('gate-submit') as HTMLButtonElement | null)?.click();
@@ -177,6 +236,7 @@ need('gate-submit').addEventListener('click', () => {
     return;
   }
   rememberPastedToken(token);
+  clearSignedOut();
   gateNotice.textContent = '';
   void start();
 });

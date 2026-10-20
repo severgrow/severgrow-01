@@ -430,6 +430,23 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
   check('campaign explains chapter placement', /chapter/i.test(campaignText));
   await page.screenshot({ path: `${OUT}campaign-desktop.png`, fullPage: true });
 
+  // Players: every player the server knows, and where each one left off.
+  await goto(page, '/players');
+  check('the players screen renders', await settle(page, 'All players'));
+  const playersText = await textOf(page);
+  check('players lists the seeded players', /BrambleOwl/.test(playersText), playersText.split('\n').slice(0, 8).join(' | '));
+  check('players shows the journey and where they left off', /The journey/.test(playersText) && /Where they left off/.test(playersText));
+  check('players says what it cannot see', /lessons 1-10/.test(playersText));
+  await page.locator('#ctl-q').fill('bramble');
+  await page.locator('#ctl-q').press('Enter');
+  await tick(300);
+  check('the players filter narrows the list', (await page.locator('#view tbody tr').count()) === 1, `${await page.locator('#view tbody tr').count()} rows`);
+  await page.locator('#view tbody tr').first().click();
+  check('a player row opens the full record', await settle(page, 'BrambleOwl') && /#\/player\?q=/.test(page.url()));
+  await goto(page, '/players');
+  await settle(page, 'All players');
+  await page.screenshot({ path: `${OUT}players-desktop.png`, fullPage: true });
+
   // Health and ops.
   await goto(page, '/ops');
   check('the ops screen renders', await settle(page, 'What needs me'));
@@ -470,7 +487,7 @@ const textOf = (page: Page): Promise<string> => page.evaluate(() => document.bod
 
   // Narrow width: every table must stay inside the page.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const [route, name] of [['/overview', 'overview'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
+  for (const [route, name] of [['/overview', 'overview'], ['/players', 'players'], ['/reports', 'reports'], ['/seeds', 'seeds'], ['/ops', 'ops']] as const) {
     await goto(page, route);
     await tick(500);
     const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }));
